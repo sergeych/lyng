@@ -163,4 +163,39 @@ class ScriptTest {
         assertEquals(37, context.eval("foo(3,14)").toInt())
     }
 
+    @Test
+    fun nullAndVoidTest() = runTest {
+        val context = Context()
+        assertEquals(ObjVoid,context.eval("void"))
+        assertEquals(ObjNull,context.eval("null"))
+    }
+
+    @Test
+    fun testArithmeticOperators() = runTest {
+        assertEquals(2, eval("5/2").toInt())
+        assertEquals(2.5, eval("5.0/2").toDouble())
+        assertEquals(2.5, eval("5/2.0").toDouble())
+        assertEquals(2.5, eval("5.0/2.0").toDouble())
+
+        assertEquals(1, eval("5%2").toInt())
+        assertEquals(1.0, eval("5.0%2").toDouble())
+
+        assertEquals(77, eval("11 * 7").toInt())
+
+        assertEquals(2.0, eval("floor(5.0/2)").toDouble())
+        assertEquals(3, eval("ceil(5.0/2)").toInt())
+
+        assertEquals(2.0, eval("round(4.7/2)").toDouble())
+        assertEquals(3.0, eval("round(5.1/2)").toDouble())
+    }
+
+    @Test
+    fun testArithmeticParenthesis() = runTest {
+        assertEquals(17, eval("2 + 3 * 5").toInt())
+        assertEquals(17, eval("2 + (3 * 5)").toInt())
+        assertEquals(25, eval("(2 + 3) * 5").toInt())
+        assertEquals(24, eval("(2 + 3) * 5 -1").toInt())
+    }
+
+
 }

@@ -139,32 +139,34 @@ class Compiler {
         // todoL var?
         return when (t.type) {
             Token.Type.ID -> {
-                parseVarAccess(t, tokens)
+                when (t.value) {
+                    "void" -> statement(t.pos, true) { ObjVoid }
+                    "null" -> statement(t.pos, true) { ObjNull }
+                    else -> parseVarAccess(t, tokens)
+                }
             }
-            // todoL: check if it's a function call
-            // todoL: check if it's a field access
-            // todoL: check if it's a var
-            // todoL: check if it's a const
-            // todoL: check if it's a type
-
-//            "+" -> statement { parseNumber(true,tokens) }??????
-//            "-" -> statement { parseNumber(false,tokens) }
-//            "~" -> statement(t.pos) { ObjInt( parseLong(tokens)) }
-
+            Token.Type.LPAREN -> {
+                // ( subexpr )
+                parseExpression(tokens)?.also {
+                    val tl = tokens.next()
+                    if( tl.type != Token.Type.RPAREN )
+                        throw ScriptError(t.pos, "unbalanced parenthesis: no ')' for it")
+                }
+            }
             Token.Type.PLUS -> {
                 val n = parseNumber(true, tokens)
-                statement(t.pos) { n }
+                statement(t.pos, true) { n }
             }
 
             Token.Type.MINUS -> {
                 val n = parseNumber(false, tokens)
-                statement(t.pos) { n }
+                statement(t.pos, true) { n }
             }
 
             Token.Type.INT, Token.Type.REAL, Token.Type.HEX -> {
                 tokens.previous()
                 val n = parseNumber(true, tokens)
-                statement(t.pos) { n }
+                statement(t.pos, true) { n }
             }
 
             else -> null
@@ -211,7 +213,7 @@ class Compiler {
                 } while (t.type != Token.Type.RPAREN)
 
                 statement(id.pos) { context ->
-                    val v = resolve(context).get(id.value) ?: throw ScriptError(id.pos, "Undefined variable: $id")
+                    val v = resolve(context).get(id.value) ?: throw ScriptError(id.pos, "Undefined function: ${id.value}")
                     (v.value as? Statement)?.execute(
                         context.copy(
                             Arguments(
@@ -232,7 +234,7 @@ class Compiler {
                 // just access the var
                 tokens.previous()
                 statement(id.pos) {
-                    val v = resolve(it).get(id.value) ?: throw ScriptError(id.pos, "Undefined variable: $id")
+                    val v = resolve(it).get(id.value) ?: throw ScriptError(id.pos, "Undefined variable: ${id.value}")
                     v.value ?: throw ScriptError(id.pos, "Variable $id is not initialized")
                 }
             }
@@ -393,27 +395,26 @@ class Compiler {
         )
 
         val allOps = listOf(
-//            Operator("||", 0, 2) { pos, a, b -> LogicalOrStatement(pos, a, b) })
-            Operator("&&", 1, 2) { pos, a, b ->
-                LogicalAndStatement(pos, a, b)
-            },
+            Operator("||", 0, 2) { pos, a, b -> LogicalOrStatement(pos, a, b) },
+            Operator("&&", 1, 2) { pos, a, b -> LogicalAndStatement(pos, a, b) },
             // bitwise or 2
             // bitwise and 3
             // equality/ne 4
             // relational <=,... 5
             // shuttle <=> 6
             // bitshhifts 7
-            // + - : 7
-            Operator("+", 7, 2) { pos, a, b ->
+            Operator("+", 8, 2) { pos, a, b ->
                 PlusStatement(pos, a, b)
             },
-            Operator("-", 7, 2) { pos, a, b ->
+            Operator("-", 8, 2) { pos, a, b ->
                 MinusStatement(pos, a, b)
             },
-            // * / %: 8
+            Operator("*", 9, 2) { pos, a, b -> MulStatement(pos, a, b) },
+            Operator("/", 9, 2) { pos, a, b -> DivStatement(pos, a, b) },
+            Operator("%", 9, 2) { pos, a, b -> ModStatement(pos, a, b) },
         )
-        val lastLevel = 9
-        val byLevel: List<Map<String, Operator>> = (0..<lastLevel).map { l ->
+        val lastLevel = 10
+        val byLevel: List<Map<String, Operator>> = (0..< lastLevel).map { l ->
             allOps.filter { it.priority == l }
                 .map { it.name to it }.toMap()
         }

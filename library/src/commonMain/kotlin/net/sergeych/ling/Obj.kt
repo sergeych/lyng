@@ -29,6 +29,9 @@ sealed class Obj {
     }
 }
 
+@Suppress("unused")
+inline fun <reified T> T.toObj(): Obj = Obj.from(this)
+
 @Serializable
 @SerialName("void")
 object ObjVoid: Obj() {

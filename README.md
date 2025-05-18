@@ -2,6 +2,8 @@
 
 in the form of multiplatform library.
 
+__current state of implementation and docs__: [docs/math.md].
+
 ## Why? 
 
 Designed to add scripting to kotlin multiplatform application in easy and efficient way. This is attempt to achieve what Lua is for C/++.

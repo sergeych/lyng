@@ -1,7 +1,6 @@
 package net.sergeych.ling
 
-import kotlin.math.PI
-import kotlin.math.sin
+import kotlin.math.*
 
 class Script(
     override val pos: Pos,
@@ -25,6 +24,21 @@ class Script(
                 require(args.size == 1)
                 println(args[0].asStr.value)
                 ObjVoid
+            }
+            addFn("floor") {
+                val x = args.firstAndOnly()
+                if( x is ObjInt ) x
+                else ObjReal(floor(x.toDouble()))
+            }
+            addFn("ceil") {
+                val x = args.firstAndOnly()
+                if( x is ObjInt ) x
+                else ObjReal(ceil(x.toDouble()))
+            }
+            addFn("round") {
+                val x = args.firstAndOnly()
+                if( x is ObjInt ) x
+                else ObjReal(round(x.toDouble()))
             }
             addFn("sin") {
                 sin(args.firstAndOnly().toDouble())

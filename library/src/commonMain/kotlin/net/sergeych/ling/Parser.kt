@@ -13,7 +13,7 @@ fun parseLing(source: Source): List<Token> {
     do {
         val t = p.nextToken()
         tokens += t
-    } while(t.type != Token.Type.EOF)
+    } while (t.type != Token.Type.EOF)
     return tokens
 }
 
@@ -42,28 +42,45 @@ private class Parser(fromPos: Pos) {
             ',' -> Token(",", from, Token.Type.COMMA)
             ';' -> Token(";", from, Token.Type.SEMICOLON)
             '=' -> {
-                if( pos.currentChar == '=') {
+                if (pos.currentChar == '=') {
                     advance()
                     Token("==", from, Token.Type.EQ)
-                }
-                else
+                } else
                     Token("=", from, Token.Type.ASSIGN)
             }
+
             '+' -> Token("+", from, Token.Type.PLUS)
             '-' -> Token("-", from, Token.Type.MINUS)
             '*' -> Token("*", from, Token.Type.STAR)
             '/' -> Token("/", from, Token.Type.SLASH)
+            '%' -> Token("%", from, Token.Type.PERCENT)
             '.' -> Token(".", from, Token.Type.DOT)
             '<' -> Token("<", from, Token.Type.LT)
             '>' -> Token(">", from, Token.Type.GT)
             '!' -> Token("!", from, Token.Type.NOT)
+            '|' -> {
+                if (currentChar == '|') {
+                    advance()
+                    Token("||", from, Token.Type.OR)
+                } else
+                    Token("|", from, Token.Type.BITOR)
+            }
+            '&' -> {
+                if (currentChar == '&') {
+                    advance()
+                    Token("&&", from, Token.Type.AND)
+                } else
+                    Token("&", from, Token.Type.BITAND)
+            }
+
             '"' -> loadStringToken()
             in digits -> {
                 pos.back()
                 decodeNumber(loadChars(digits), from)
             }
+
             else -> {
-                if( ch.isLetter() || ch == '_' )
+                if (ch.isLetter() || ch == '_')
                     Token(ch + loadChars(idNextChars), from, Token.Type.ID)
                 else
                     raise("can't parse token")
@@ -72,46 +89,43 @@ private class Parser(fromPos: Pos) {
     }
 
     private fun decodeNumber(p1: String, start: Pos): Token =
-        if( pos.end )
+        if (pos.end)
             Token(p1, start, Token.Type.INT)
-        else if( currentChar == '.' ) {
+        else if (currentChar == '.') {
             // could be decimal
             advance()
-            if( currentChar in digits ) {
+            if (currentChar in digits) {
                 // decimal part
                 val p2 = loadChars(digits)
                 // with exponent?
-                if( currentChar == 'e' || currentChar == 'E') {
+                if (currentChar == 'e' || currentChar == 'E') {
                     advance()
                     var negative = false
-                    if(currentChar == '+' )
+                    if (currentChar == '+')
                         advance()
-                    else if(currentChar == '-') {
+                    else if (currentChar == '-') {
                         negative = true
                         advance()
                     }
                     var p3 = loadChars(digits)
-                    if( negative ) p3 = "-$p3"
+                    if (negative) p3 = "-$p3"
                     Token("$p1.${p2}e$p3", start, Token.Type.REAL)
-                }
-                else {
+                } else {
                     // no exponent
                     Token("$p1.$p2", start, Token.Type.REAL)
                 }
-            }
-            else {
+            } else {
                 // not decimal
                 // something like 10.times, method call on integer number
                 pos.back()
                 Token(p1, start, Token.Type.INT)
             }
-        }
-        else {
+        } else {
             // could be integer, also hex:
             if (currentChar == 'x' && p1 == "0") {
                 advance()
                 Token(loadChars(hexDigits), start, Token.Type.HEX).also {
-                    if( currentChar.isLetter() )
+                    if (currentChar.isLetter())
                         raise("invalid hex literal")
                 }
             } else {
@@ -130,7 +144,7 @@ private class Parser(fromPos: Pos) {
 
         val sb = StringBuilder()
         while (currentChar != '"') {
-            if( pos.end ) raise("unterminated string")
+            if (pos.end) raise("unterminated string")
             when (currentChar) {
                 '\\' -> {
                     advance() ?: raise("unterminated string")
@@ -142,6 +156,7 @@ private class Parser(fromPos: Pos) {
                         else -> sb.append('\\').append(currentChar)
                     }
                 }
+
                 else -> {
                     sb.append(currentChar)
                     advance()
