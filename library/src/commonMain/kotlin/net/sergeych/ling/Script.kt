@@ -20,7 +20,7 @@ class Script(
     suspend fun execute() = execute(defaultContext)
 
     companion object {
-        val defaultContext: Context = Context().apply {
+        val defaultContext: Context = Context(null).apply {
             addFn("println") {
                 require(args.size == 1)
                 println(args[0].asStr.value)

@@ -3,10 +3,7 @@ package io.github.kotlin.fibonacci
 import kotlinx.coroutines.test.runTest
 import net.sergeych.ling.*
 import kotlin.math.PI
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
-import kotlin.test.assertTrue
+import kotlin.test.*
 
 class ScriptTest {
 
@@ -108,5 +105,31 @@ class ScriptTest {
         assertTrue(eval("sin(Math.PI)").toDouble() - 1 < 0.000001)
         assertTrue(eval("sin(π)").toDouble() - 1 < 0.000001)
     }
+
+    @Test
+    fun varsAndConsts() = runTest {
+        val context = Context()
+        assertEquals(ObjVoid,context.eval("""
+            val a = 17
+            var b = 3
+        """.trimIndent()))
+        assertEquals(17, context.eval("a").toInt())
+        assertEquals(20, context.eval("b + a").toInt())
+        assertFailsWith<ScriptError> {
+            context.eval("a = 10")
+        }
+        assertEquals(10, context.eval("b = a - 3 - 4; b").toInt())
+        assertEquals(10, context.eval("b").toInt())
+    }
+
+//    @Test
+//    fun functionTest() = runTest {
+//        val context = Context()
+//        context.eval("""
+//            fun foo(a, b) {
+//                a + b
+//            }
+//        """.trimIndent())
+//    }
 
 }

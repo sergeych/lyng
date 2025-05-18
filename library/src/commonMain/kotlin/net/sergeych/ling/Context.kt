@@ -1,7 +1,7 @@
 package net.sergeych.ling
 
 class Context(
-    val parent: Context? = null,
+    val parent: Context? = Script.defaultContext.copy(),
     val args: Arguments = Arguments.EMPTY
 ) {
 
@@ -57,6 +57,11 @@ class Context(
             )
         }
     }
+
+    suspend fun eval(code: String): Obj =
+        Compiler().compile(code.toSource()).execute(this)
+
+    fun containsLocal(name: String): Boolean = name in objects
 
     companion object {
         operator fun invoke() = Context()

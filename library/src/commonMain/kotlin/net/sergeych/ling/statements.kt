@@ -87,6 +87,8 @@ class MinusStatement(
 class AssignStatement(override val pos: Pos, val name: String, val value: Statement) : Statement() {
     override suspend fun execute(context: Context): Obj {
         val variable = context[name] ?: raise("can't assign: variable does not exist: $name")
+        if( !variable.isMutable )
+            throw ScriptError(pos,"can't reassign val $name")
         variable.value = value.execute(context)
         return ObjVoid
     }

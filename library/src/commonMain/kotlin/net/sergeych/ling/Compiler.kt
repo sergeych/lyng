@@ -61,38 +61,42 @@ class Compiler {
     }
 
     private fun parseStatement(tokens: ListIterator<Token>): Statement? {
-        val t = tokens.next()
-        return when (t.type) {
-            Token.Type.ID -> {
-                // could be keyword, assignment or just the expression
-                val next = tokens.next()
-                if (next.type == Token.Type.EQ) {
-                    // this _is_ assignment statement
-                    AssignStatement(
-                        t.pos, t.value,
-                        parseExpression(tokens) ?: throw ScriptError(
-                            t.pos,
-                            "Expecting expression for assignment operator"
+        while(true) {
+            val t = tokens.next()
+            return when (t.type) {
+                Token.Type.ID -> {
+                    // could be keyword, assignment or just the expression
+                    val next = tokens.next()
+                    if (next.type == Token.Type.ASSIGN) {
+                        // this _is_ assignment statement
+                        return AssignStatement(
+                            t.pos, t.value,
+                            parseExpression(tokens) ?: throw ScriptError(
+                                t.pos,
+                                "Expecting expression for assignment operator"
+                            )
                         )
-                    )
-                }
-                // not assignment, maybe keyword statement:
-                // get back the token which is not '=':
-                tokens.previous()
-                // try keyword statement
-                parseKeywordStatement(t, tokens)
-                    ?: run {
-                        tokens.previous()
-                        parseExpression(tokens)
                     }
-            }
+                    // not assignment, maybe keyword statement:
+                    // get back the token which is not '=':
+                    tokens.previous()
+                    // try keyword statement
+                    parseKeywordStatement(t, tokens)
+                        ?: run {
+                            tokens.previous()
+                            parseExpression(tokens)
+                        }
+                }
 
-            Token.Type.EOF -> null
+                Token.Type.SEMICOLON -> continue
 
-            else -> {
-                // could be expression
-                tokens.previous()
-                parseExpression(tokens)
+                Token.Type.EOF -> null
+
+                else -> {
+                    // could be expression
+                    tokens.previous()
+                    parseExpression(tokens)
+                }
             }
         }
     }
@@ -243,9 +247,37 @@ class Compiler {
      * Parse keyword-starting statenment.
      * @return parsed statement or null if, for example. [id] is not among keywords
      */
-    @Suppress("UNUSED_PARAMETER")
-    private fun parseKeywordStatement(id: Token, tokens: ListIterator<Token>): Statement? {
-        return null
+    private fun parseKeywordStatement(id: Token, tokens: ListIterator<Token>): Statement?
+    = when (id.value) {
+        "val" -> parseVarDeclaration(id.value, false, tokens)
+        "var" -> parseVarDeclaration(id.value, true, tokens)
+        else -> null
+    }
+
+    private fun parseVarDeclaration(kind: String, mutable: Boolean, tokens: ListIterator<Token>): Statement {
+        val nameToken = tokens.next()
+        if( nameToken.type != Token.Type.ID)
+            throw ScriptError(nameToken.pos, "Expected identifier after '$kind'")
+        val name = nameToken.value
+        val eqToken = tokens.next()
+        var setNull = false
+        if( eqToken.type != Token.Type.ASSIGN) {
+            if( !mutable )
+                throw ScriptError(eqToken.pos, "Expected initializator: '=' after '$kind ${name}'")
+            else {
+                tokens.previous()
+                setNull = true
+            }
+        }
+        val initialExpression = if( setNull ) null else parseExpression(tokens)
+            ?: throw ScriptError(eqToken.pos, "Expected initializer expression")
+        return statement(nameToken.pos) { context ->
+            if( context.containsLocal(name) )
+                throw ScriptError(nameToken.pos, "Variable $name is already defined")
+            val initValue = initialExpression?.execute(context) ?: ObjNull
+            context.addItem(name, mutable, initValue)
+            ObjVoid
+        }
     }
 
 //    fun parseStatement(parser: Parser): Statement? =

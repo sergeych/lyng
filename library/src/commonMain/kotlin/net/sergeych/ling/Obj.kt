@@ -69,6 +69,7 @@ fun Obj.toLong(): Long =
         ?: (this as? ObjString)?.value?.toLong()
         ?: throw IllegalArgumentException("cannot convert to double $this")
 
+fun Obj.toInt(): Int = toLong().toInt()
 
 
 @Serializable
