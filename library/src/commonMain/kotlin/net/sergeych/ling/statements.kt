@@ -12,6 +12,7 @@ fun Statement.raise(text: String): Nothing {
     throw ScriptError(pos, text)
 }
 
+@Suppress("unused")
 fun Statement.require(cond: Boolean, message: () -> String) {
     if (!cond) raise(message())
 }
@@ -19,19 +20,6 @@ fun Statement.require(cond: Boolean, message: () -> String) {
 fun statement(pos: Pos, f: suspend (Context) -> Obj): Statement = object : Statement() {
     override val pos: Pos = pos
     override suspend fun execute(context: Context): Obj = f(context)
-}
-
-class IfStatement(
-    override val pos: Pos,
-    val cond: Statement, val ifTrue: Statement, val ifFalse: Statement?
-) : Statement() {
-    override suspend fun execute(context: Context): Obj {
-        val c = cond.execute(context)
-        if (c !is ObjBool)
-            raise("if: condition must me boolean, got: $c")
-
-        return if (c.value) ifTrue.execute(context) else ifFalse?.execute(context) ?: ObjVoid
-    }
 }
 
 class LogicalAndStatement(

@@ -243,6 +243,7 @@ class Compiler {
      * Parse keyword-starting statenment.
      * @return parsed statement or null if, for example. [id] is not among keywords
      */
+    @Suppress("UNUSED_PARAMETER")
     private fun parseKeywordStatement(id: Token, tokens: ListIterator<Token>): Statement? {
         return null
     }
