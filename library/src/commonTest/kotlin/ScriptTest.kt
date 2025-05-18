@@ -2,27 +2,13 @@ package io.github.kotlin.fibonacci
 
 import kotlinx.coroutines.test.runTest
 import net.sergeych.ling.*
+import kotlin.math.PI
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class ScriptTest {
-
-    @Test
-    fun level0() = runTest {
-        val s = Script(
-            Pos.builtIn,
-            listOf(
-                CallStatement(
-                    Pos.builtIn, "println",
-                    Arguments(listOf(CallStatement(Pos.builtIn, "π", Arguments.EMPTY)))
-                )
-            )
-        )
-        s.execute(basicContext)
-    }
-
-    fun parseFirst(str: String): Token =
-        parseLing(str.toSource()).firstOrNull()!!
 
     @Test
     fun parseNumbers() {
@@ -107,6 +93,20 @@ class ScriptTest {
 
 //        assertEquals(ObjReal(3.14), eval("3.14"))
         assertEquals(ObjReal(314.0), eval("3.14e2"))
+        assertEquals(ObjReal(314.0), eval("100 3.14e2"))
+        assertEquals(ObjReal(314.0), eval("100\n 3.14e2"))
+    }
+
+    @Test
+    fun compileBuiltinCalls() = runTest {
+//        println(eval("π"))
+        val pi = eval("Math.PI")
+        assertIs<ObjReal>(pi)
+        assertTrue(pi.value - PI < 0.000001)
+        assertTrue(eval("Math.PI+1").toDouble() - PI - 1.0 < 0.000001)
+
+        assertTrue(eval("sin(Math.PI)").toDouble() - 1 < 0.000001)
+        assertTrue(eval("sin(π)").toDouble() - 1 < 0.000001)
     }
 
 }

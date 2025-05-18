@@ -9,13 +9,39 @@ sealed class Obj {
     open val asStr: ObjString by lazy {
         if( this is ObjString) this else ObjString(this.toString())
     }
+
+    companion object {
+        inline fun <reified T> from(obj: T): Obj {
+            return when(obj) {
+                is Obj -> obj
+                is Double -> ObjReal(obj)
+                is Float -> ObjReal(obj.toDouble())
+                is Int -> ObjInt(obj.toLong())
+                is Long -> ObjInt(obj)
+                is String -> ObjString(obj)
+                is CharSequence -> ObjString(obj.toString())
+                is Boolean -> ObjBool(obj)
+                Unit -> ObjVoid
+                null -> ObjNull
+                else -> throw IllegalArgumentException("cannot convert to Obj: $obj")
+            }
+        }
+    }
 }
 
 @Serializable
 @SerialName("void")
-object Void: Obj() {
+object ObjVoid: Obj() {
     override fun equals(other: Any?): Boolean {
-        return other is Void || other is Unit
+        return other is ObjVoid || other is Unit
+    }
+}
+
+@Serializable
+@SerialName("null")
+object ObjNull: Obj() {
+    override fun equals(other: Any?): Boolean {
+        return other is ObjNull || other == null
     }
 }
 
@@ -31,6 +57,19 @@ interface Numeric {
     val toObjInt: ObjInt
     val toObjReal: ObjReal
 }
+
+fun Obj.toDouble(): Double =
+    (this as? Numeric)?.doubleValue
+        ?: (this as? ObjString)?.value?.toDouble()
+        ?: throw IllegalArgumentException("cannot convert to double $this")
+
+@Suppress("unused")
+fun Obj.toLong(): Long =
+    (this as? Numeric)?.longValue
+        ?: (this as? ObjString)?.value?.toLong()
+        ?: throw IllegalArgumentException("cannot convert to double $this")
+
+
 
 @Serializable
 @SerialName("real")
@@ -56,4 +95,10 @@ data class ObjInt(val value: Long): Obj(), Numeric {
 @SerialName("bool")
 data class ObjBool(val value: Boolean): Obj() {
     override val asStr by lazy { ObjString(value.toString()) }
+}
+
+data class ObjNamespace(val name: String,val context: Context): Obj() {
+    override fun toString(): String {
+        return "namespace ${name}"
+    }
 }

@@ -55,11 +55,12 @@ private class Parser(fromPos: Pos) {
                 pos.back()
                 decodeNumber(loadChars(digits), from)
             }
-            in idFirstChars -> {
-                // it includes first char, so from current position
-                Token(ch + loadChars(idNextChars), from, Token.Type.ID)
+            else -> {
+                if( ch.isLetter() || ch == '_' )
+                    Token(ch + loadChars(idNextChars), from, Token.Type.ID)
+                else
+                    raise("can't parse token")
             }
-            else -> raise("can't parse token")
         }
     }
 

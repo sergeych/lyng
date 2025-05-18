@@ -10,11 +10,9 @@ data class Pos(val source: Source, val line: Int, val column: Int) {
         else if( line > 0) Pos(source, line-1, source.lines[line-1].length - 1)
         else throw IllegalStateException("can't go back from line 0, column 0")
 
-    val currentLine: String get() = source.lines[line]
+    val currentLine: String get() = if( end ) "EOF" else source.lines[line]
 
-    val showSource: String by lazy {
-        source.lines[line] + "\n" + "-".repeat(column - 1) + "^\n"
-    }
+    val end: Boolean get() = line >= source.lines.size
 
     companion object {
         val builtIn = Pos(Source.builtIn, 0, 0)
@@ -32,11 +30,6 @@ class MutablePos(private val from: Pos) {
 
     val end: Boolean get() =
         line == lines.size
-
-    fun reset(to: Pos) {
-        line = to.line
-        column = to.column
-    }
 
     fun toPos(): Pos = Pos(from.source, line, column)
 

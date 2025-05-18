@@ -1,27 +1,25 @@
 package net.sergeych.ling
 
-import kotlin.math.pow
-
-sealed class ObjType(name: String, val defaultValue: Obj? = null) {
-
-    class Str : ObjType("string", ObjString(""))
-    class Int : ObjType("real", ObjReal(0.0))
-
-}
-
-/**
- * Descriptor for whatever object could be used as argument, return value,
- * field, etc.
- */
-data class ObjDescriptor(
-    val type: ObjType,
-    val mutable: Boolean,
-)
-
-data class MethodDescriptor(
-    val args: Array<ObjDescriptor>,
-    val result: ObjDescriptor
-)
+//sealed class ObjType(name: String, val defaultValue: Obj? = null) {
+//
+//    class Str : ObjType("string", ObjString(""))
+//    class Int : ObjType("real", ObjReal(0.0))
+//
+//}
+//
+///**
+// * Descriptor for whatever object could be used as argument, return value,
+// * field, etc.
+// */
+//data class ObjDescriptor(
+//    val type: ObjType,
+//    val mutable: Boolean,
+//)
+//
+//data class MethodDescriptor(
+//    val args: Array<ObjDescriptor>,
+//    val result: ObjDescriptor
+//)
 
 /*
 Meta context contains map of symbols.
@@ -84,6 +82,7 @@ class Compiler {
                 // try keyword statement
                 parseKeywordStatement(t, tokens)
                     ?: run {
+                        tokens.previous()
                         parseExpression(tokens)
                     }
             }
@@ -130,6 +129,15 @@ class Compiler {
         val t = tokens.next()
         // todoL var?
         return when (t.type) {
+            Token.Type.ID -> {
+                parseVarAccess(t, tokens)
+            }
+                // todoL: check if it's a function call
+                // todoL: check if it's a field access
+                // todoL: check if it's a var
+                // todoL: check if it's a const
+                // todoL: check if it's a type
+
 //            "+" -> statement { parseNumber(true,tokens) }??????
 //            "-" -> statement { parseNumber(false,tokens) }
 //            "~" -> statement(t.pos) { ObjInt( parseLong(tokens)) }
@@ -155,16 +163,62 @@ class Compiler {
 
     }
 
+    fun parseVarAccess(id: Token, tokens: ListIterator<Token>,path: List<String> = emptyList()): Statement {
+        val nt = tokens.next()
 
-    fun parseLong(tokens: ListIterator<Token>): Long =
-        // todo: hex notation?
-        getLong(tokens)
-
-    fun getLong(tokens: ListIterator<Token>): Long {
-        val t = tokens.next()
-        if (t.type != Token.Type.INT) throw ScriptError(t.pos, "expected number here")
-        return t.value.toLong()
+        fun resolve(context: Context): Context {
+            var targetContext = context
+            for( n in path) {
+                val x = targetContext[n] ?: throw ScriptError(id.pos, "undefined symbol: $n")
+                (x.value as? ObjNamespace )?.let { targetContext = it.context }
+                    ?: throw ScriptError(id.pos, "Invalid symbolic path (wrong type of ${x.name}: ${x.value}")
+            }
+            return targetContext
+        }
+        return when(nt.type) {
+            Token.Type.DOT -> {
+                // selector
+                val t = tokens.next()
+                if( t.type== Token.Type.ID) {
+                    parseVarAccess(t,tokens,path+id.value)
+                }
+                else
+                    throw ScriptError(t.pos,"Expected identifier after '.'")
+            }
+            Token.Type.LPAREN -> {
+                // Load arg list
+                val args = mutableListOf<Statement>()
+                do {
+                    val t = tokens.next()
+                    when(t.type) {
+                        Token.Type.RPAREN, Token.Type.COMMA -> {}
+                        else -> {
+                            tokens.previous()
+                            parseExpression(tokens)?.let { args += it }
+                                ?: throw ScriptError(t.pos, "Expecting arguments list")
+                        }
+                    }
+                } while (t.type != Token.Type.RPAREN)
+                statement(id.pos) { context ->
+                    val v = resolve(context).get(id.value) ?: throw ScriptError(id.pos, "Undefined variable: $id")
+                    (v.value as? Statement)?.execute(context.copy(Arguments(args.map { it.execute(context) })))
+                        ?: throw ScriptError(id.pos, "Variable $id is not callable ($id)")
+                }
+            }
+            Token.Type.LBRACKET -> {
+                TODO("indexing")
+            }
+            else -> {
+                // just access the var
+                tokens.previous()
+                statement(id.pos) {
+                    val v = resolve(it).get(id.value) ?: throw ScriptError(id.pos, "Undefined variable: $id")
+                    v.value ?: throw ScriptError(id.pos, "Variable $id is not initialized")
+                }
+            }
+        }
     }
+
 
     fun parseNumber(isPlus: Boolean, tokens: ListIterator<Token>): Obj {
         val t = tokens.next()
@@ -241,24 +295,6 @@ class Compiler {
 
         fun compile(code: String): Script = Compiler().compile(Source("<eval>", code))
     }
-}
-
-fun buildDoubleFromParts(
-    integerPart: Long,
-    decimalPart: Long,
-    exponent: Int
-): Double {
-    // Handle zero decimal case efficiently
-    val numDecimalDigits = if (decimalPart == 0L) 0 else decimalPart.toString().length
-
-    // Calculate decimal multiplier (10^-digits)
-    val decimalMultiplier = 10.0.pow(-numDecimalDigits)
-
-    // Combine integer and decimal parts
-    val baseValue = integerPart.toDouble() + decimalPart.toDouble() * decimalMultiplier
-
-    // Apply exponent
-    return baseValue * 10.0.pow(exponent)
 }
 
 suspend fun eval(code: String) = Compiler.compile(code).execute()

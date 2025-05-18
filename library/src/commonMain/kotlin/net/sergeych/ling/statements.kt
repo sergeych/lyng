@@ -30,7 +30,7 @@ class IfStatement(
         if (c !is ObjBool)
             raise("if: condition must me boolean, got: $c")
 
-        return if (c.value) ifTrue.execute(context) else ifFalse?.execute(context) ?: Void
+        return if (c.value) ifTrue.execute(context) else ifFalse?.execute(context) ?: ObjVoid
     }
 }
 
@@ -100,18 +100,7 @@ class AssignStatement(override val pos: Pos, val name: String, val value: Statem
     override suspend fun execute(context: Context): Obj {
         val variable = context[name] ?: raise("can't assign: variable does not exist: $name")
         variable.value = value.execute(context)
-        return Void
+        return ObjVoid
     }
 }
 
-class CallStatement(
-    override val pos: Pos,
-    val name: String,
-    val args: Arguments = Arguments.EMPTY
-) : Statement() {
-    override suspend fun execute(context: Context): Obj {
-        val callee = context[name] ?: raise("Call: unknown name: $name")
-        return (callee.value as? Statement)?.execute(context.copy(pos, args))
-            ?: raise("Call: not a callable object: $callee")
-    }
-}
