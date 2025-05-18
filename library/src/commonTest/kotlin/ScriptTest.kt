@@ -122,14 +122,45 @@ class ScriptTest {
         assertEquals(10, context.eval("b").toInt())
     }
 
-//    @Test
-//    fun functionTest() = runTest {
-//        val context = Context()
-//        context.eval("""
-//            fun foo(a, b) {
-//                a + b
-//            }
-//        """.trimIndent())
-//    }
+    @Test
+    fun functionTest() = runTest {
+        val context = Context()
+        context.eval(
+            """
+            fun foo(a, b) {
+                a + b
+            }
+        """.trimIndent()
+        )
+        assertEquals(17, context.eval("foo(3,14)").toInt())
+        assertFailsWith<ScriptError> {
+            assertEquals(17, context.eval("foo(3)").toInt())
+        }
+
+        context.eval("""
+            fn bar(a, b=10) {
+                a + b + 1
+            }
+        """.trimIndent())
+        assertEquals(10, context.eval("bar(3, 6)").toInt())
+        assertEquals(14, context.eval("bar(3)").toInt())
+    }
+
+    @Test
+    fun simpleClosureTest() = runTest {
+        val context = Context()
+        context.eval(
+            """
+            var global = 10
+            
+            fun foo(a, b) {
+                global + a + b
+            }
+        """.trimIndent()
+        )
+        assertEquals(27, context.eval("foo(3,14)").toInt())
+        context.eval("global = 20")
+        assertEquals(37, context.eval("foo(3,14)").toInt())
+    }
 
 }

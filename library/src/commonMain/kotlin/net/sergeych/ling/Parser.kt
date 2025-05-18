@@ -185,8 +185,4 @@ private class Parser(fromPos: Pos) {
     }
 
     private fun advance() = pos.advance()
-
-    init {
-//        advance()
-    }
 }

@@ -39,8 +39,10 @@ class MutablePos(private val from: Pos) {
         return if (column+1 < current.length) {
             current[column++]
         } else {
-            line++
             column = 0
+            while( ++line < lines.size && lines[line].isEmpty() ) {
+                // skip empty lines
+            }
             if(line >= lines.size) null
             else lines[line][column]
         }
@@ -59,4 +61,7 @@ class MutablePos(private val from: Pos) {
 
     override fun toString() = "($line:$column)"
 
+    init {
+        if( lines[0].isEmpty()) advance()
+    }
 }

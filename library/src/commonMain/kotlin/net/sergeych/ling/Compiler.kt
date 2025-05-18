@@ -48,10 +48,10 @@ type alias has target type name. So we have to have something that denotes a _ty
 class Compiler {
 
     fun compile(source: Source): Script {
-        val tokens = parseLing(source).listIterator()
-        val start = source.startPos
-        // at this level: "global" context: just script to execute or new function
-        // declaration forming closures
+        return parseScript(source.startPos, parseLing(source).listIterator())
+    }
+
+    private fun parseScript(start: Pos, tokens: ListIterator<Token>): Script {
         val statements = mutableListOf<Statement>()
         while (parseStatement(tokens)?.also {
                 statements += it
@@ -61,7 +61,7 @@ class Compiler {
     }
 
     private fun parseStatement(tokens: ListIterator<Token>): Statement? {
-        while(true) {
+        while (true) {
             val t = tokens.next()
             return when (t.type) {
                 Token.Type.ID -> {
@@ -89,6 +89,11 @@ class Compiler {
                 }
 
                 Token.Type.SEMICOLON -> continue
+
+                Token.Type.RBRACE -> {
+                    tokens.previous()
+                    return null
+                }
 
                 Token.Type.EOF -> null
 
@@ -136,11 +141,11 @@ class Compiler {
             Token.Type.ID -> {
                 parseVarAccess(t, tokens)
             }
-                // todoL: check if it's a function call
-                // todoL: check if it's a field access
-                // todoL: check if it's a var
-                // todoL: check if it's a const
-                // todoL: check if it's a type
+            // todoL: check if it's a function call
+            // todoL: check if it's a field access
+            // todoL: check if it's a var
+            // todoL: check if it's a const
+            // todoL: check if it's a type
 
 //            "+" -> statement { parseNumber(true,tokens) }??????
 //            "-" -> statement { parseNumber(false,tokens) }
@@ -167,51 +172,62 @@ class Compiler {
 
     }
 
-    fun parseVarAccess(id: Token, tokens: ListIterator<Token>,path: List<String> = emptyList()): Statement {
+    fun parseVarAccess(id: Token, tokens: ListIterator<Token>, path: List<String> = emptyList()): Statement {
         val nt = tokens.next()
 
         fun resolve(context: Context): Context {
             var targetContext = context
-            for( n in path) {
+            for (n in path) {
                 val x = targetContext[n] ?: throw ScriptError(id.pos, "undefined symbol: $n")
-                (x.value as? ObjNamespace )?.let { targetContext = it.context }
+                (x.value as? ObjNamespace)?.let { targetContext = it.context }
                     ?: throw ScriptError(id.pos, "Invalid symbolic path (wrong type of ${x.name}: ${x.value}")
             }
             return targetContext
         }
-        return when(nt.type) {
+        return when (nt.type) {
             Token.Type.DOT -> {
                 // selector
                 val t = tokens.next()
-                if( t.type== Token.Type.ID) {
-                    parseVarAccess(t,tokens,path+id.value)
-                }
-                else
-                    throw ScriptError(t.pos,"Expected identifier after '.'")
+                if (t.type == Token.Type.ID) {
+                    parseVarAccess(t, tokens, path + id.value)
+                } else
+                    throw ScriptError(t.pos, "Expected identifier after '.'")
             }
+
             Token.Type.LPAREN -> {
+                // function call
                 // Load arg list
-                val args = mutableListOf<Statement>()
+                val args = mutableListOf<Arguments.Info>()
                 do {
                     val t = tokens.next()
-                    when(t.type) {
+                    when (t.type) {
                         Token.Type.RPAREN, Token.Type.COMMA -> {}
                         else -> {
                             tokens.previous()
-                            parseExpression(tokens)?.let { args += it }
+                            parseExpression(tokens)?.let { args += Arguments.Info(it, t.pos) }
                                 ?: throw ScriptError(t.pos, "Expecting arguments list")
                         }
                     }
                 } while (t.type != Token.Type.RPAREN)
+
                 statement(id.pos) { context ->
                     val v = resolve(context).get(id.value) ?: throw ScriptError(id.pos, "Undefined variable: $id")
-                    (v.value as? Statement)?.execute(context.copy(Arguments(args.map { it.execute(context) })))
+                    (v.value as? Statement)?.execute(
+                        context.copy(
+                            Arguments(
+                                nt.pos,
+                                args.map { Arguments.Info((it.value as Statement).execute(context), it.pos) }
+                            )
+                        )
+                    )
                         ?: throw ScriptError(id.pos, "Variable $id is not callable ($id)")
                 }
             }
+
             Token.Type.LBRACKET -> {
                 TODO("indexing")
             }
+
             else -> {
                 // just access the var
                 tokens.previous()
@@ -247,32 +263,108 @@ class Compiler {
      * Parse keyword-starting statenment.
      * @return parsed statement or null if, for example. [id] is not among keywords
      */
-    private fun parseKeywordStatement(id: Token, tokens: ListIterator<Token>): Statement?
-    = when (id.value) {
+    private fun parseKeywordStatement(id: Token, tokens: ListIterator<Token>): Statement? = when (id.value) {
         "val" -> parseVarDeclaration(id.value, false, tokens)
         "var" -> parseVarDeclaration(id.value, true, tokens)
+        "fn", "fun" -> parseFunctionDeclaration(tokens)
         else -> null
+    }
+
+    data class FnParamDef(
+        val name: String,
+        val pos: Pos,
+        val defaultValue: Statement? = null
+    )
+
+    private fun parseFunctionDeclaration(tokens: ListIterator<Token>): Statement {
+        var t = tokens.next()
+        val start = t.pos
+        val name = if (t.type != Token.Type.ID)
+            throw ScriptError(t.pos, "Expected identifier after 'fn'")
+        else t.value
+
+        t = tokens.next()
+        if (t.type != Token.Type.LPAREN)
+            throw ScriptError(t.pos, "Bad function definition: expected '(' after 'fn ${name}'")
+        val params = mutableListOf<FnParamDef>()
+        var defaultListStarted = false
+        do {
+            t = tokens.next()
+            if (t.type == Token.Type.RPAREN)
+                break
+            if (t.type != Token.Type.ID)
+                throw ScriptError(t.pos, "Expected identifier after '('")
+            val n = tokens.next()
+            val defaultValue = if (n.type == Token.Type.ASSIGN) {
+                parseExpression(tokens)?.also { defaultListStarted = true }
+                    ?: throw ScriptError(n.pos, "Expected initialization expression")
+            } else {
+                if (defaultListStarted)
+                    throw ScriptError(n.pos, "requires default value too")
+                if (n.type != Token.Type.COMMA)
+                    tokens.previous()
+                null
+            }
+            params.add(FnParamDef(t.value, t.pos, defaultValue))
+        } while (true)
+
+        println("arglist: $params")
+
+        // Here we should be at open body
+        val fnStatements = parseBlock(tokens)
+
+        val fnBody = statement(t.pos) { context ->
+            // load params
+            for ((i, d) in params.withIndex()) {
+                if (i < context.args.size)
+                    context.addItem(d.name, false, context.args.list[i].value)
+                else
+                    context.addItem(
+                        d.name,
+                        false,
+                        d.defaultValue?.execute(context)
+                            ?: throw ScriptError(context.args.callerPos, "missing required argument #${1+i}: ${d.name}")
+                    )
+            }
+
+            fnStatements.execute(context)
+        }
+        return statement(start) { context ->
+            context.addItem(name, false, fnBody)
+            fnBody
+        }
+    }
+
+    private fun parseBlock(tokens: ListIterator<Token>): Statement {
+        val t = tokens.next()
+        if (t.type != Token.Type.LBRACE)
+            throw ScriptError(t.pos, "Expected block body start: {")
+        return parseScript(t.pos, tokens).also {
+            val t1 = tokens.next()
+            if (t1.type != Token.Type.RBRACE)
+                throw ScriptError(t1.pos, "unbalanced braces: expected block body end: }")
+        }
     }
 
     private fun parseVarDeclaration(kind: String, mutable: Boolean, tokens: ListIterator<Token>): Statement {
         val nameToken = tokens.next()
-        if( nameToken.type != Token.Type.ID)
+        if (nameToken.type != Token.Type.ID)
             throw ScriptError(nameToken.pos, "Expected identifier after '$kind'")
         val name = nameToken.value
         val eqToken = tokens.next()
         var setNull = false
-        if( eqToken.type != Token.Type.ASSIGN) {
-            if( !mutable )
+        if (eqToken.type != Token.Type.ASSIGN) {
+            if (!mutable)
                 throw ScriptError(eqToken.pos, "Expected initializator: '=' after '$kind ${name}'")
             else {
                 tokens.previous()
                 setNull = true
             }
         }
-        val initialExpression = if( setNull ) null else parseExpression(tokens)
+        val initialExpression = if (setNull) null else parseExpression(tokens)
             ?: throw ScriptError(eqToken.pos, "Expected initializer expression")
         return statement(nameToken.pos) { context ->
-            if( context.containsLocal(name) )
+            if (context.containsLocal(name))
                 throw ScriptError(nameToken.pos, "Variable $name is already defined")
             val initValue = initialExpression?.execute(context) ?: ObjNull
             context.addItem(name, mutable, initValue)
