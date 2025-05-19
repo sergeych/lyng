@@ -3,11 +3,20 @@ package net.sergeych.ling
 fun String.toSource(name: String = "eval"): Source = Source(name, this)
 
 
+@Suppress("unused")
 abstract class Statement(
-    @Suppress("unused") val isStaticConst: Boolean = false
+    val isStaticConst: Boolean = false,
+    val isConst: Boolean = false,
+    val returnType: Type = Type.Any
 ) : Obj() {
+
     abstract val pos: Pos
     abstract suspend fun execute(context: Context): Obj
+
+    override fun compareTo(other: Obj): Int {
+        throw UnsupportedOperationException("not comparable")
+    }
+
 }
 
 fun Statement.raise(text: String): Nothing {

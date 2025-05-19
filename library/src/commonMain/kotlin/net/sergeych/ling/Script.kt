@@ -16,7 +16,7 @@ class Script(
         return lastResult
     }
 
-    suspend fun execute() = execute(defaultContext)
+    suspend fun execute() = execute(defaultContext.copy())
 
     companion object {
         val defaultContext: Context = Context(null).apply {

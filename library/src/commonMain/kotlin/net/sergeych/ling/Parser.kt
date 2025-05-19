@@ -55,9 +55,30 @@ private class Parser(fromPos: Pos) {
             '/' -> Token("/", from, Token.Type.SLASH)
             '%' -> Token("%", from, Token.Type.PERCENT)
             '.' -> Token(".", from, Token.Type.DOT)
-            '<' -> Token("<", from, Token.Type.LT)
-            '>' -> Token(">", from, Token.Type.GT)
-            '!' -> Token("!", from, Token.Type.NOT)
+            '<' -> {
+                if(currentChar == '=') {
+                    advance()
+                    Token("<=", from, Token.Type.LTE)
+                }
+                else
+                    Token("<", from, Token.Type.LT)
+            }
+            '>' -> {
+                if( currentChar == '=') {
+                    advance()
+                    Token(">=", from, Token.Type.GTE)
+                }
+                else
+                    Token(">", from, Token.Type.GT)
+            }
+            '!' -> {
+                if( currentChar == '=') {
+                    advance()
+                    Token("!=", from, Token.Type.NEQ)
+                }
+                else
+                    Token("!", from, Token.Type.NOT)
+            }
             '|' -> {
                 if (currentChar == '|') {
                     advance()

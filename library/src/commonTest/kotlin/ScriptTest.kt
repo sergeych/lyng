@@ -197,5 +197,36 @@ class ScriptTest {
         assertEquals(24, eval("(2 + 3) * 5 -1").toInt())
     }
 
+    @Test
+    fun testEqNeq() = runTest {
+        assertEquals(ObjBool(true), eval("val x = 2; x == 2"))
+        assertEquals(ObjBool(false), eval("val x = 3; x == 2"))
+        assertEquals(ObjBool(true), eval("val x = 3; x != 2"))
+        assertEquals(ObjBool(false), eval("val x = 3; x != 3"))
+
+        assertTrue { eval("1 == 1").toBool() }
+        assertTrue { eval("true == true").toBool() }
+        assertTrue { eval("true != false").toBool() }
+        assertFalse { eval("true == false").toBool() }
+        assertFalse { eval("false != false").toBool() }
+
+        assertTrue { eval("2 == 2 && 3 != 4").toBool() }
+    }
+
+    @Test
+    fun testGtLt() = runTest {
+        assertTrue { eval("3 > 2").toBool() }
+        assertFalse { eval("3 > 3").toBool() }
+        assertTrue { eval("3 >= 2").toBool() }
+        assertFalse { eval("3 >= 4").toBool() }
+        assertFalse { eval("3 < 2").toBool() }
+        assertFalse { eval("3 <= 2").toBool() }
+        assertTrue { eval("3 <= 3").toBool()}
+        assertTrue { eval("3 <= 4").toBool()}
+        assertTrue { eval("3 < 4").toBool()}
+        assertFalse { eval("4 < 3").toBool()}
+        assertFalse { eval("4 <= 3").toBool()}
+    }
+
 
 }

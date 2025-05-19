@@ -115,7 +115,7 @@ class Compiler {
         while (true) {
 
             val opToken = tokens.next()
-            val op = byLevel[level][opToken.value]
+            val op = byLevel[level][opToken.type]
             if (op == null) {
                 tokens.previous()
                 break
@@ -142,17 +142,21 @@ class Compiler {
                 when (t.value) {
                     "void" -> statement(t.pos, true) { ObjVoid }
                     "null" -> statement(t.pos, true) { ObjNull }
+                    "true" -> statement(t.pos, true) { ObjBool(true) }
+                    "false" -> statement(t.pos, true) { ObjBool(false) }
                     else -> parseVarAccess(t, tokens)
                 }
             }
+
             Token.Type.LPAREN -> {
                 // ( subexpr )
                 parseExpression(tokens)?.also {
                     val tl = tokens.next()
-                    if( tl.type != Token.Type.RPAREN )
+                    if (tl.type != Token.Type.RPAREN)
                         throw ScriptError(t.pos, "unbalanced parenthesis: no ')' for it")
                 }
             }
+
             Token.Type.PLUS -> {
                 val n = parseNumber(true, tokens)
                 statement(t.pos, true) { n }
@@ -213,7 +217,8 @@ class Compiler {
                 } while (t.type != Token.Type.RPAREN)
 
                 statement(id.pos) { context ->
-                    val v = resolve(context).get(id.value) ?: throw ScriptError(id.pos, "Undefined function: ${id.value}")
+                    val v =
+                        resolve(context).get(id.value) ?: throw ScriptError(id.pos, "Undefined function: ${id.value}")
                     (v.value as? Statement)?.execute(
                         context.copy(
                             Arguments(
@@ -325,7 +330,10 @@ class Compiler {
                         d.name,
                         false,
                         d.defaultValue?.execute(context)
-                            ?: throw ScriptError(context.args.callerPos, "missing required argument #${1+i}: ${d.name}")
+                            ?: throw ScriptError(
+                                context.args.callerPos,
+                                "missing required argument #${1 + i}: ${d.name}"
+                            )
                     )
             }
 
@@ -387,36 +395,43 @@ class Compiler {
 //            }
 //        }
 
+    data class Operator(
+        val tokenType: Token.Type,
+        val priority: Int, val arity: Int,
+        val generate: (Pos, Statement, Statement) -> Statement
+    )
+
     companion object {
-        data class Operator(
-            val name: String,
-            val priority: Int, val arity: Int,
-            val generate: (Pos, Statement, Statement) -> Statement
-        )
 
         val allOps = listOf(
-            Operator("||", 0, 2) { pos, a, b -> LogicalOrStatement(pos, a, b) },
-            Operator("&&", 1, 2) { pos, a, b -> LogicalAndStatement(pos, a, b) },
+            Operator(Token.Type.OR, 0, 2) { pos, a, b -> LogicalOrStatement(pos, a, b) },
+            Operator(Token.Type.AND, 1, 2) { pos, a, b -> LogicalAndStatement(pos, a, b) },
             // bitwise or 2
             // bitwise and 3
             // equality/ne 4
+            LogicalOp(Token.Type.EQ, 4) { a, b -> a == b },
+            LogicalOp(Token.Type.NEQ, 4) { a, b -> a != b },
             // relational <=,... 5
+            LogicalOp(Token.Type.LTE, 5) { a, b -> a <= b },
+            LogicalOp(Token.Type.LT, 5) { a, b -> a < b },
+            LogicalOp(Token.Type.GTE, 5) { a, b -> a >= b },
+            LogicalOp(Token.Type.GT, 5) { a, b -> a > b },
             // shuttle <=> 6
             // bitshhifts 7
-            Operator("+", 8, 2) { pos, a, b ->
+            Operator(Token.Type.PLUS, 8, 2) { pos, a, b ->
                 PlusStatement(pos, a, b)
             },
-            Operator("-", 8, 2) { pos, a, b ->
+            Operator(Token.Type.MINUS, 8, 2) { pos, a, b ->
                 MinusStatement(pos, a, b)
             },
-            Operator("*", 9, 2) { pos, a, b -> MulStatement(pos, a, b) },
-            Operator("/", 9, 2) { pos, a, b -> DivStatement(pos, a, b) },
-            Operator("%", 9, 2) { pos, a, b -> ModStatement(pos, a, b) },
+            Operator(Token.Type.STAR, 9, 2) { pos, a, b -> MulStatement(pos, a, b) },
+            Operator(Token.Type.SLASH, 9, 2) { pos, a, b -> DivStatement(pos, a, b) },
+            Operator(Token.Type.PERCENT, 9, 2) { pos, a, b -> ModStatement(pos, a, b) },
         )
         val lastLevel = 10
-        val byLevel: List<Map<String, Operator>> = (0..< lastLevel).map { l ->
+        val byLevel: List<Map<Token.Type, Operator>> = (0..<lastLevel).map { l ->
             allOps.filter { it.priority == l }
-                .map { it.name to it }.toMap()
+                .map { it.tokenType to it }.toMap()
         }
 
         fun compile(code: String): Script = Compiler().compile(Source("<eval>", code))
@@ -424,3 +439,15 @@ class Compiler {
 }
 
 suspend fun eval(code: String) = Compiler.compile(code).execute()
+
+fun LogicalOp(tokenType: Token.Type, priority: Int, f: (Obj, Obj) -> Boolean) = Compiler.Operator(
+    tokenType,
+    priority,
+    2
+) { pos, a, b ->
+    statement(pos) {
+        ObjBool(
+            f(a.execute(it), b.execute(it))
+        )
+    }
+}
