@@ -2,7 +2,10 @@
 
 in the form of multiplatform library.
 
-__current state of implementation and docs__: [math and operators](docs/math.md).
+__current state of implementation and docs__: 
+
+- [introduction and tutorial](docs/tutorial.md)
+- [math and operators](docs/math.md).
 
 ## Why? 
 
