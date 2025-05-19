@@ -75,7 +75,7 @@ class PlusStatement(
         val l = left.execute(context)
 
         if (l is ObjString)
-            return ObjString(l.toString() + right.execute(context).toString())
+            return ObjString(l.toString() + right.execute(context).asStr)
 
         if (l !is Numeric)
             raise("left operand is not number: $l")

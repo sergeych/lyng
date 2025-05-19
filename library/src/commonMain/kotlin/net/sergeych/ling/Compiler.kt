@@ -148,6 +148,8 @@ class Compiler {
                 }
             }
 
+            Token.Type.STRING -> statement(t.pos, true) { ObjString(t.value) }
+
             Token.Type.LPAREN -> {
                 // ( subexpr )
                 parseExpression(tokens)?.also {

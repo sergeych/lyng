@@ -8,7 +8,7 @@ import kotlin.test.*
 class ScriptTest {
 
     @Test
-    fun parseNumbers() {
+    fun parseNumbersTest() {
         fun check(expected: String, type: Token.Type, row: Int, col: Int, src: String, offset: Int = 0) {
             val source = src.toSource()
             assertEquals(
@@ -48,7 +48,7 @@ class ScriptTest {
     }
 
     @Test
-    fun parse0() {
+    fun parse0Test() {
         val src = """
             println("Hello")
             println( "world" )
@@ -68,7 +68,7 @@ class ScriptTest {
     }
 
     @Test
-    fun parse1() {
+    fun parse1Test() {
         val src = "2 + 7".toSource()
 
         val p = parseLing(src).listIterator()
@@ -79,7 +79,7 @@ class ScriptTest {
     }
 
     @Test
-    fun compileNumbers() = runTest {
+    fun compileNumbersTest() = runTest {
         assertEquals(ObjInt(17), eval("17"))
         assertEquals(ObjInt(17), eval("+17"))
         assertEquals(ObjInt(-17), eval("-17"))
@@ -95,7 +95,7 @@ class ScriptTest {
     }
 
     @Test
-    fun compileBuiltinCalls() = runTest {
+    fun compileBuiltinCallsTest() = runTest {
 //        println(eval("π"))
         val pi = eval("Math.PI")
         assertIs<ObjReal>(pi)
@@ -107,7 +107,7 @@ class ScriptTest {
     }
 
     @Test
-    fun varsAndConsts() = runTest {
+    fun varsAndConstsTest() = runTest {
         val context = Context()
         assertEquals(ObjVoid,context.eval("""
             val a = 17
@@ -171,7 +171,7 @@ class ScriptTest {
     }
 
     @Test
-    fun testArithmeticOperators() = runTest {
+    fun arithmeticOperatorsTest() = runTest {
         assertEquals(2, eval("5/2").toInt())
         assertEquals(2.5, eval("5.0/2").toDouble())
         assertEquals(2.5, eval("5/2.0").toDouble())
@@ -190,7 +190,7 @@ class ScriptTest {
     }
 
     @Test
-    fun testArithmeticParenthesis() = runTest {
+    fun arithmeticParenthesisTest() = runTest {
         assertEquals(17, eval("2 + 3 * 5").toInt())
         assertEquals(17, eval("2 + (3 * 5)").toInt())
         assertEquals(25, eval("(2 + 3) * 5").toInt())
@@ -198,7 +198,13 @@ class ScriptTest {
     }
 
     @Test
-    fun testEqNeq() = runTest {
+    fun stringOpTest() = runTest {
+        assertEquals("foobar", eval(""" "foo" + "bar" """).toString())
+        assertEquals("foo17", eval(""" "foo" + 17 """).toString())
+    }
+
+    @Test
+    fun eqNeqTest() = runTest {
         assertEquals(ObjBool(true), eval("val x = 2; x == 2"))
         assertEquals(ObjBool(false), eval("val x = 3; x == 2"))
         assertEquals(ObjBool(true), eval("val x = 3; x != 2"))
@@ -214,7 +220,7 @@ class ScriptTest {
     }
 
     @Test
-    fun testGtLt() = runTest {
+    fun gtLtTest() = runTest {
         assertTrue { eval("3 > 2").toBool() }
         assertFalse { eval("3 > 3").toBool() }
         assertTrue { eval("3 >= 2").toBool() }
@@ -228,5 +234,9 @@ class ScriptTest {
         assertFalse { eval("4 <= 3").toBool()}
     }
 
+    @Test
+    fun ifTest() = runTest {
+
+    }
 
 }
