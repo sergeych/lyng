@@ -52,7 +52,14 @@ private class Parser(fromPos: Pos) {
             '+' -> Token("+", from, Token.Type.PLUS)
             '-' -> Token("-", from, Token.Type.MINUS)
             '*' -> Token("*", from, Token.Type.STAR)
-            '/' -> Token("/", from, Token.Type.SLASH)
+            '/' -> {
+                if( currentChar == '/') {
+                    advance()
+                    Token(loadToEnd().trim(), from, Token.Type.SINLGE_LINE_COMMENT)
+                }
+                else
+                    Token("/", from, Token.Type.SLASH)
+            }
             '%' -> Token("%", from, Token.Type.PERCENT)
             '.' -> Token(".", from, Token.Type.DOT)
             '<' -> {
@@ -203,6 +210,31 @@ private class Parser(fromPos: Pos) {
             } else
                 break
         }
+        return result.toString()
+    }
+
+    @Suppress("unused")
+    private fun loadUntil(endChars: Set<Char>): String {
+        return if (pos.end) ""
+        else {
+            val result = StringBuilder()
+            while (!pos.end) {
+                val ch = pos.currentChar
+                if (ch in endChars) break
+                result.append(ch)
+                pos.advance()
+            }
+            result.toString()
+        }
+    }
+
+    private fun loadToEnd(): String {
+        val result = StringBuilder()
+        val l = pos.line
+        do {
+            result.append(pos.currentChar)
+            advance()
+        } while (pos.line == l)
         return result.toString()
     }
 

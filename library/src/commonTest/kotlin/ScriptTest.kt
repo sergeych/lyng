@@ -236,7 +236,66 @@ class ScriptTest {
 
     @Test
     fun ifTest() = runTest {
+        // if - single line
+        var context = Context()
+        context.eval("""
+            fn test1(n) {
+                var result = "more"
+                if( n >= 10 ) 
+                    result = "enough"
+                result
+            }
+        """.trimIndent())
+        assertEquals("enough", context.eval("test1(11)").toString())
+        assertEquals("more", context.eval("test1(1)").toString())
 
+        // if - multiline (block)
+        context = Context()
+        context.eval("""
+            fn test1(n) {
+                var prefix = "answer: "
+                var result = "more"
+                if( n >= 10 ) {
+                    var prefix = "bad:" // local prefix 
+                    prefix = "too bad:"
+                    result = "enough"
+                }
+                prefix + result
+            }
+        """.trimIndent())
+        assertEquals("answer: enough", context.eval("test1(11)").toString())
+        assertEquals("answer: more", context.eval("test1(1)").toString())
+
+        // else single line1
+        context = Context()
+        context.eval("""
+            fn test1(n) {
+                if( n >= 10 ) 
+                    "enough"
+                else
+                    "more"
+            }
+        """.trimIndent())
+        assertEquals("enough", context.eval("test1(11)").toString())
+        assertEquals("more", context.eval("test1(1)").toString())
+
+        // if/else with blocks
+        context = Context()
+        context.eval("""
+            fn test1(n) {
+                if( n > 20 ) {
+                    "too much"
+                } else if( n >= 10 ) { 
+                    "enough"
+                }
+                else {
+                    "more"
+                }
+            }
+        """.trimIndent())
+        assertEquals("enough", context.eval("test1(11)").toString())
+        assertEquals("more", context.eval("test1(1)").toString())
+        assertEquals("too much", context.eval("test1(100)").toString())
     }
 
 }

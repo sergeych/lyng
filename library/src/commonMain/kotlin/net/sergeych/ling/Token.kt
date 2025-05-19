@@ -8,6 +8,7 @@ data class Token(val value: String, val pos: Pos, val type: Type) {
         PLUS, MINUS, STAR, SLASH, ASSIGN,
         EQ, NEQ, LT, LTE, GT, GTE,
         AND, BITAND, OR, BITOR, NOT, DOT, ARROW, QUESTION, COLONCOLON, PERCENT,
+        SINLGE_LINE_COMMENT, MULTILINE_COMMENT,
         EOF,
     }
 

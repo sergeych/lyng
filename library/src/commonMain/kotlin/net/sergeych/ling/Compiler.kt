@@ -88,7 +88,14 @@ class Compiler {
                         }
                 }
 
+                Token.Type.SINLGE_LINE_COMMENT, Token.Type.MULTILINE_COMMENT -> continue
+
                 Token.Type.SEMICOLON -> continue
+
+                Token.Type.LBRACE -> {
+                    tokens.previous()
+                    parseBlock(tokens)
+                }
 
                 Token.Type.RBRACE -> {
                     tokens.previous()
@@ -276,7 +283,47 @@ class Compiler {
         "val" -> parseVarDeclaration(id.value, false, tokens)
         "var" -> parseVarDeclaration(id.value, true, tokens)
         "fn", "fun" -> parseFunctionDeclaration(tokens)
+        "if" -> parseIfStatement(tokens)
         else -> null
+    }
+
+    private fun parseIfStatement(tokens: ListIterator<Token>): Statement {
+        var t = tokens.next()
+        val start = t.pos
+        if( t.type != Token.Type.LPAREN)
+            throw ScriptError(t.pos, "Bad if statement: expected '('")
+
+        val condition = parseExpression(tokens)
+            ?: throw ScriptError(t.pos, "Bad if statement: expected expression")
+
+        t = tokens.next()
+        if( t.type != Token.Type.RPAREN)
+            throw ScriptError(t.pos, "Bad if statement: expected ')' after condition expression")
+
+        val ifBody = parseStatement(tokens) ?: throw ScriptError(t.pos, "Bad if statement: expected statement")
+
+        // could be else block:
+        val t2 = tokens.next()
+
+        // we generate different statements: optimization
+        return if( t2.type == Token.Type.ID && t2.value == "else") {
+            val elseBody = parseStatement(tokens) ?: throw ScriptError(t.pos, "Bad else statement: expected statement")
+            return statement(start) {
+                if (condition.execute(it).toBool())
+                    ifBody.execute(it)
+                else
+                    elseBody.execute(it)
+            }
+        }
+        else {
+            tokens.previous()
+            statement(start) {
+                if (condition.execute(it).toBool())
+                    ifBody.execute(it)
+                else
+                    ObjVoid
+            }
+        }
     }
 
     data class FnParamDef(
@@ -317,8 +364,6 @@ class Compiler {
             params.add(FnParamDef(t.value, t.pos, defaultValue))
         } while (true)
 
-        println("arglist: $params")
-
         // Here we should be at open body
         val fnStatements = parseBlock(tokens)
 
@@ -351,7 +396,11 @@ class Compiler {
         val t = tokens.next()
         if (t.type != Token.Type.LBRACE)
             throw ScriptError(t.pos, "Expected block body start: {")
-        return parseScript(t.pos, tokens).also {
+        val block = parseScript(t.pos, tokens)
+            return statement(t.pos) {
+                // block run on inner context:
+                block.execute(it.copy())
+            }.also {
             val t1 = tokens.next()
             if (t1.type != Token.Type.RBRACE)
                 throw ScriptError(t1.pos, "unbalanced braces: expected block body end: }")
@@ -367,7 +416,7 @@ class Compiler {
         var setNull = false
         if (eqToken.type != Token.Type.ASSIGN) {
             if (!mutable)
-                throw ScriptError(eqToken.pos, "Expected initializator: '=' after '$kind ${name}'")
+                throw ScriptError(eqToken.pos, "Expected initializer: '=' after '$kind ${name}'")
             else {
                 tokens.previous()
                 setNull = true
