@@ -34,22 +34,21 @@ data class DocTest(
     val sourceLines by lazy { code.lines() }
 
     override fun toString(): String {
-        return "DocTest:$fileName:${line+1}..${line + sourceLines.size}"
+        return "DocTest:$fileName:${line + 1}..${line + sourceLines.size}"
     }
 
     val detailedString by lazy {
         val codeWithLines = sourceLines.withIndex().map { (i, s) -> "${i + line}: $s" }.joinToString("\n")
-        "$this\n" +
-                codeWithLines + "\n" +
-                "--------expected output--------\n" +
-                expectedOutput +
-                "-----expected return value-----\n" +
-                expectedResult
+        var result = "$this\n$codeWithLines\n"
+        if (expectedOutput.isNotBlank())
+            result += "--------expected output--------\n$expectedOutput\n"
+
+        "$result-----expected return value-----\n$expectedResult"
     }
 }
 
-fun parseDocTests(name: String): Flow<DocTest> = flow {
-    val book = readAllLines(Paths.get("../docs/tutorial.md"))
+fun parseDocTests(fileName: String): Flow<DocTest> = flow {
+    val book = readAllLines(Paths.get(fileName))
     var startOffset = 0
     val block = mutableListOf<String>()
     var startIndex = 0
@@ -94,10 +93,10 @@ fun parseDocTests(name: String): Flow<DocTest> = flow {
                             if (isValid) {
                                 emit(
                                     DocTest(
-                                        name, startIndex,
+                                        fileName, startIndex,
                                         block.joinToString("\n"),
                                         if (result.size > 1)
-                                            result.dropLast(1).joinToString { it + "\n" }
+                                            result.dropLast(1).joinToString("") { it + "\n" }
                                         else "",
                                         result.last()
                                     )
@@ -149,8 +148,7 @@ suspend fun DocTest.test() {
     var error: Throwable? = null
     val result = try {
         context.eval(code)
-    }
-    catch (e: Throwable) {
+    } catch (e: Throwable) {
         error = e
         null
     }?.toString()?.replace(Regex("@\\d+"), "@...")
@@ -166,12 +164,27 @@ suspend fun DocTest.test() {
     //    println("OK: $this")
 }
 
+suspend fun runDocTests(fileName: String) {
+    parseDocTests(fileName).collect { dt ->
+        dt.test()
+    }
+
+}
+
 class BookTest {
 
     @Test
     fun testsFromTutorial() = runTest {
-        parseDocTests("../docs/tutorial.md").collect { dt ->
-            dt.test()
-        }
+        runDocTests("../docs/tutorial.md")
+    }
+
+    @Test
+    fun testsFromMath() = runTest {
+        runDocTests("../docs/math.md")
+    }
+
+    @Test
+    fun testsFromAdvanced() = runTest {
+        runDocTests("../docs/advanced_topics.md")
     }
 }

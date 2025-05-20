@@ -1,8 +1,45 @@
 package net.sergeych.ling
 
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlin.math.floor
+
+typealias InstanceMethod = (Context, Obj) -> Obj
+
+data class Item<T>(var value: T, val isMutable: Boolean = false)
+
+@Serializable
+sealed class ClassDef(
+    val className: String
+) {
+    val baseClasses: List<ClassDef> get() = emptyList()
+    private val instanceMethods: MutableMap<String, Item<InstanceMethod>> get() = mutableMapOf()
+
+    private val instanceLock = Mutex()
+
+    suspend fun addInstanceMethod(
+        name: String,
+        freeze: Boolean = false,
+        pos: Pos = Pos.builtIn,
+        body: InstanceMethod
+    ) {
+        instanceLock.withLock {
+            instanceMethods[name]?.let {
+                if( !it.isMutable )
+                    throw ScriptError(pos, "existing method $name is frozen and can't be updated")
+                it.value = body
+            } ?: instanceMethods.put(name, Item(body, freeze))
+        }
+    }
+
+    //suspend fun callInstanceMethod(context: Context, self: Obj,args: Arguments): Obj {
+//
+  //  }
+}
+
+object ObjClassDef : ClassDef("Obj")
 
 @Serializable
 sealed class Obj : Comparable<Obj> {
@@ -10,24 +47,31 @@ sealed class Obj : Comparable<Obj> {
         if (this is ObjString) this else ObjString(this.toString())
     }
 
-    open val type: Type = Type.Any
+    open val definition: ClassDef = ObjClassDef
 
     @Suppress("unused")
     enum class Type {
         @SerialName("Void")
         Void,
+
         @SerialName("Null")
         Null,
+
         @SerialName("String")
         String,
+
         @SerialName("Int")
         Int,
+
         @SerialName("Real")
         Real,
+
         @SerialName("Bool")
         Bool,
+
         @SerialName("Fn")
         Fn,
+
         @SerialName("Any")
         Any,
     }
@@ -112,7 +156,8 @@ fun Obj.toLong(): Long =
 
 fun Obj.toInt(): Int = toLong().toInt()
 
-fun Obj.toBool(): Boolean = (this as? ObjBool)?.value ?: throw IllegalArgumentException("cannot convert to boolean ${this.type}:$this")
+fun Obj.toBool(): Boolean =
+    (this as? ObjBool)?.value ?: throw IllegalArgumentException("cannot convert to boolean $this")
 
 
 @Serializable
@@ -125,7 +170,7 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
     override val toObjReal: ObjReal by lazy { ObjReal(value) }
 
     override fun compareTo(other: Obj): Int {
-        if( other !is Numeric) throw IllegalArgumentException("cannot compare $this with $other")
+        if (other !is Numeric) throw IllegalArgumentException("cannot compare $this with $other")
         return value.compareTo(other.doubleValue)
     }
 
@@ -142,7 +187,7 @@ data class ObjInt(val value: Long) : Obj(), Numeric {
     override val toObjReal: ObjReal by lazy { ObjReal(doubleValue) }
 
     override fun compareTo(other: Obj): Int {
-        if( other !is Numeric) throw IllegalArgumentException("cannot compare $this with $other")
+        if (other !is Numeric) throw IllegalArgumentException("cannot compare $this with $other")
         return value.compareTo(other.doubleValue)
     }
 
@@ -155,9 +200,10 @@ data class ObjBool(val value: Boolean) : Obj() {
     override val asStr by lazy { ObjString(value.toString()) }
 
     override fun compareTo(other: Obj): Int {
-        if( other !is ObjBool) throw IllegalArgumentException("cannot compare $this with $other")
+        if (other !is ObjBool) throw IllegalArgumentException("cannot compare $this with $other")
         return value.compareTo(other.value)
     }
+
     override fun toString(): String = value.toString()
 }
 

@@ -5,24 +5,21 @@ class Context(
     val args: Arguments = Arguments.EMPTY
 ) {
 
-    data class Item(
-        val name: String,
-        var value: Obj?,
-        val isMutable: Boolean = false
-    )
+    private val objects = mutableMapOf<String, StoredObj>()
 
-    private val objects = mutableMapOf<String, Item>()
-
-    operator fun get(name: String): Item? = objects[name] ?: parent?.get(name)
+    operator fun get(name: String): StoredObj? =
+        objects[name]
+            ?: parent?.get(name)
 
     fun copy(args: Arguments = Arguments.EMPTY): Context = Context(this, args)
 
     fun addItem(name: String, isMutable: Boolean, value: Obj?) {
-        objects.put(name, Item(name, value, isMutable))
+        println("ading item $name=$value in $this <- ${this.parent}")
+        objects.put(name, StoredObj(name, value, isMutable))
     }
 
     fun getOrCreateNamespace(name: String) =
-        (objects.getOrPut(name) { Item(name, ObjNamespace(name,copy()), isMutable = false) }.value as ObjNamespace)
+        (objects.getOrPut(name) { StoredObj(name, ObjNamespace(name,copy()), isMutable = false) }.value as ObjNamespace)
             .context
 
     inline fun <reified T> addFn(vararg names: String, crossinline fn: suspend Context.() -> T) {

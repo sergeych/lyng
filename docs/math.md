@@ -11,10 +11,10 @@ Same as in C++.
 |        2         | `+` `-`                              |
 |        3         | bit shifts (NI)                      |
 |        4         | `<=>` (NI)                           |
-|        5         | `<=` `>=` `<` `>` (NI)               |
-|        6         | `==` `!=` (NI)                       |
-|        7         | `&` (NI)                             |
-|        9         | `\|` (NI)                            |
+|        5         | `<=` `>=` `<` `>`                    |
+|        6         | `==` `!=`                            |
+|        7         | bitwise and `&` (NI)                 |
+|        9         | bitwise or `\|` (NI)                 |
 |        10        | `&&`                                 |
 |  11<br/>lowest   | `\|\|`                               |
 
@@ -22,7 +22,16 @@ Same as in C++.
 
 ## Operators
 
-`+ - * / % `: if both operand is `Int`, calculates as int. Otherwise, as real.
+`+ - * / % `: if both operand is `Int`, calculates as int. Otherwise, as real:
+
+    // integer division:
+    3 / 2
+    >>> 1
+
+but:
+
+    3 / 2.0
+    >>> 1.5
 
 ## Round and range
 
@@ -45,6 +54,11 @@ or transformed `Real` otherwise.
 |                     |         |
 |                     |         |
 |                     |         |
+
+For example: 
+
+    sin(π/2)
+    >>> 1.0
 
 ## Scientific constant
 

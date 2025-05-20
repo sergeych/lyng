@@ -154,14 +154,20 @@ Each __block has an isolated context that can be accessed from closures__. For e
     }
     >>> void
 
-As was told, `def` statement return callable for the function, it could be used as a parameter, or elsewhere
+As was told, `fun` statement return callable for the function, it could be used as a parameter, or elsewhere
 to call it:
 
+    val taskAlias = fun someTask() {
+        println("Hello")
+    }
     // call the callable stored in the var
     taskAlias()
     // or directly:
     someTask()
-    
+    >>> Hello
+    >>> Hello
+    >>> void
+
 If you need to create _unnamed_ function, use alternative syntax (TBD, like { -> } ?)
 
 # Flow control operators
@@ -276,7 +282,11 @@ We can skip the rest of the loop and restart it, as usual, with `continue` opera
 
 Notice that `total` remains 0 as the end of the outerLoop@ is not reachable: `continue` is always called and always make Ling to skip it.
 
+## Labels@
+
 The label can be any valid identifier, even a keyword, labels exist in their own, isolated world, so no risk of occasional clash. Labels are also scoped to their context and do not exist outside it.
+
+Right now labels are implemented only for the while loop. It is intended to be implemented for all loops and returns.
 
 # Comments
 
@@ -295,6 +305,8 @@ The label can be any valid identifier, even a keyword, labels exist in their own
 | Void   | no value could exist, singleton | void                |
 | Null   | missing value, singleton        | null                |
 | Fn     | callable type                   |                     |
+
+See also [math operations](math.md)
 
 ## String details
 

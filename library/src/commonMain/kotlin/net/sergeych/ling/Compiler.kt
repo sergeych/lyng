@@ -498,11 +498,16 @@ class Compiler {
         // Here we should be at open body
         val fnStatements = parseBlock(tokens)
 
-        val fnBody = statement(t.pos) { context ->
-            // load params
+        var closure: Context? = null
+
+        val fnBody = statement(t.pos) { callerContext ->
+            // remember closure where the function was defined:
+            val context = closure ?: Context()
+            // load params from caller context
+            println("calling function $name in context $context <- ${context.parent}")
             for ((i, d) in params.withIndex()) {
-                if (i < context.args.size)
-                    context.addItem(d.name, false, context.args.list[i].value)
+                if (i < callerContext.args.size)
+                    context.addItem(d.name, false, callerContext.args.list[i].value)
                 else
                     context.addItem(
                         d.name,
@@ -514,10 +519,12 @@ class Compiler {
                             )
                     )
             }
-
+            // save closure
             fnStatements.execute(context)
         }
         return statement(start) { context ->
+            println("adding function $name to context $context")
+            closure = context
             context.addItem(name, false, fnBody)
             fnBody
         }
