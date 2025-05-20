@@ -14,7 +14,6 @@ class Context(
     fun copy(args: Arguments = Arguments.EMPTY): Context = Context(this, args)
 
     fun addItem(name: String, isMutable: Boolean, value: Obj?) {
-        println("ading item $name=$value in $this <- ${this.parent}")
         objects.put(name, StoredObj(name, value, isMutable))
     }
 

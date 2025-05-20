@@ -501,10 +501,9 @@ class Compiler {
         var closure: Context? = null
 
         val fnBody = statement(t.pos) { callerContext ->
-            // remember closure where the function was defined:
+            // restore closure where the function was defined:
             val context = closure ?: Context()
             // load params from caller context
-            println("calling function $name in context $context <- ${context.parent}")
             for ((i, d) in params.withIndex()) {
                 if (i < callerContext.args.size)
                     context.addItem(d.name, false, callerContext.args.list[i].value)
@@ -523,9 +522,12 @@ class Compiler {
             fnStatements.execute(context)
         }
         return statement(start) { context ->
-            println("adding function $name to context $context")
+            // we added fn in the context. now we must save closure
+            // for the function
             closure = context
             context.addItem(name, false, fnBody)
+            // as the function can be called from anywhere, we have
+            // saved the proper context in the closure
             fnBody
         }
     }

@@ -425,7 +425,6 @@ class ScriptTest {
                 """
                 val count = 3
                 val res = if( count > 10 ) "too much" else "just " + count
-                println(res)
                 res
                 """.trimIndent()
             )
@@ -438,26 +437,10 @@ class ScriptTest {
                 val count = 3
                 var res = if( count > 10 ) "too much" else "it's " + count
                 res = if( count > 10 ) "too much" else "just " + count
-                println(res)
                 res
                 """.trimIndent()
             )
                 .toString()
         )
-    }
-    @Test
-    fun bookTest1() = runTest {
-//        assertEquals(
-//            "just 3",
-            eval(
-                """
-                val count = 3
-                println( 
-                    if( count > 10 ) "too much" else "just " + count 
-                )
-                """.trimIndent()
-            )
-//                .toString()
-//        )
     }
 }

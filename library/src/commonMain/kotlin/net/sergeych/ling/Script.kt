@@ -8,8 +8,6 @@ class Script(
 ) : Statement() {
 
     override suspend fun execute(context: Context): Obj {
-        // todo: run script
-        println("exec script in $context <- ${context.parent}")
         var lastResult: Obj = ObjVoid
         for (s in statements) {
             lastResult = s.execute(context)
