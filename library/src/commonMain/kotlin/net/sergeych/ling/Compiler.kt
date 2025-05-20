@@ -305,6 +305,7 @@ class Compiler {
         "var" -> parseVarDeclaration(id.value, true, cc)
         "while" -> parseWhileStatement(cc)
         "break" -> parseBreakStatement(id.pos, cc)
+        "continue" -> parseContinueStatement(id.pos, cc)
         "fn", "fun" -> parseFunctionDeclaration(cc)
         "if" -> parseIfStatement(cc)
         else -> null
@@ -384,6 +385,27 @@ class Compiler {
                 doContinue = false,
                 label = label,
                 result = returnValue ?: ObjVoid
+            )
+        }
+    }
+
+    private fun parseContinueStatement(start: Pos, cc: CompilerContext): Statement {
+        val t = cc.next()
+
+        val label = if (t.pos.line != start.line || t.type != Token.Type.ATLABEL) {
+            cc.previous()
+            null
+        } else {
+            t.value
+        }?.also {
+            // check that label is defined
+            cc.ensureLabelIsValid(start, it)
+        }
+
+        return statement(start) {
+            throw LoopBreakContinueException(
+                doContinue = true,
+                label = label,
             )
         }
     }

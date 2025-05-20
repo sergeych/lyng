@@ -164,33 +164,6 @@ to call it:
     
 If you need to create _unnamed_ function, use alternative syntax (TBD, like { -> } ?)
 
-# Integral data types
-
-| type   | description                     | literal samples     |
-|--------|---------------------------------|---------------------|
-| Int    | 64 bit signed                   | `1` `-22` `0x1FF`   |
-| Real   | 64 bit double                   | `1.0`, `2e-11`      |
-| Bool   | boolean                         | `true` `false`      |
-| String | unicode string, no limits       | "hello" (see below) |
-| Void   | no value could exist, singleton | void                |
-| Null   | missing value, singleton        | null                |
-| Fn     | callable type                   |                     |
-
-## String details
-
-### String operations
-
-Concatenation is a `+`: `"hello " + name` works as expected. No confusion.
-
-### Literals
-
-String literal could be multiline:
-
-    "Hello
-    World"
-
-though multiline literals is yet work in progress.
-
 # Flow control operators
 
 ## if-then-else
@@ -248,7 +221,7 @@ Why `void`? Because `break` drops out without the chute, not providing anything 
     }
     >>> too much
 
-## Breaking nested loops
+### Breaking nested loops
 
 If you have several loops and want to exit not the inner one, use labels:
 
@@ -268,6 +241,41 @@ If you have several loops and want to exit not the inner one, use labels:
     }
     >>> 5/2 situation
 
+### and continue
+
+We can skip the rest of the loop and restart it, as usual, with `continue` operator.
+
+    var count = 0
+    var countEven = 0
+    while( count < 10 ) {
+        count = count + 1
+        if( count % 2 == 1) continue
+        countEven = countEven + 1
+    }
+    "found even numbers: " + countEven
+    >>> found even numbers: 5
+
+`continue` can't "return" anything: it just restarts the loop. It can use labeled loops to restart outer ones:
+
+    var count = 0
+    var total = 0
+    // notice the label:
+    outerLoop@ while( count < 5 ) {
+        count = count + 1
+        var innerCount = 0
+        while( innerCount < 10 ) {
+            innerCount = innerCount + 1
+            if( innerCount == 10 )
+                continue@outerLoop
+        }
+        // we don't reach it because continue above restarts our loop
+        total = total + 1
+    }
+    total
+    >>> 0
+
+Notice that `total` remains 0 as the end of the outerLoop@ is not reachable: `continue` is always called and always make Ling to skip it.
+
 The label can be any valid identifier, even a keyword, labels exist in their own, isolated world, so no risk of occasional clash. Labels are also scoped to their context and do not exist outside it.
 
 # Comments
@@ -275,5 +283,32 @@ The label can be any valid identifier, even a keyword, labels exist in their own
     // single line comment
     var result = null // here we will store the result
     >>> void
+
+# Integral data types
+
+| type   | description                     | literal samples     |
+|--------|---------------------------------|---------------------|
+| Int    | 64 bit signed                   | `1` `-22` `0x1FF`   |
+| Real   | 64 bit double                   | `1.0`, `2e-11`      |
+| Bool   | boolean                         | `true` `false`      |
+| String | unicode string, no limits       | "hello" (see below) |
+| Void   | no value could exist, singleton | void                |
+| Null   | missing value, singleton        | null                |
+| Fn     | callable type                   |                     |
+
+## String details
+
+### String operations
+
+Concatenation is a `+`: `"hello " + name` works as expected. No confusion.
+
+### Literals
+
+String literal could be multiline:
+
+    "Hello
+    World"
+
+though multiline literals is yet work in progress.
 
 
