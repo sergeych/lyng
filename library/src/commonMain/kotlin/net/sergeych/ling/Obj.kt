@@ -64,6 +64,8 @@ object ObjVoid : Obj() {
     override fun compareTo(other: Obj): Int {
         return if (other === this) 0 else -1
     }
+
+    override fun toString(): String = "void"
 }
 
 @Serializable
@@ -127,6 +129,7 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
         return value.compareTo(other.doubleValue)
     }
 
+    override fun toString(): String = value.toString()
 }
 
 @Serializable
@@ -142,6 +145,8 @@ data class ObjInt(val value: Long) : Obj(), Numeric {
         if( other !is Numeric) throw IllegalArgumentException("cannot compare $this with $other")
         return value.compareTo(other.doubleValue)
     }
+
+    override fun toString(): String = value.toString()
 }
 
 @Serializable
@@ -153,7 +158,7 @@ data class ObjBool(val value: Boolean) : Obj() {
         if( other !is ObjBool) throw IllegalArgumentException("cannot compare $this with $other")
         return value.compareTo(other.value)
     }
-
+    override fun toString(): String = value.toString()
 }
 
 data class ObjNamespace(val name: String, val context: Context) : Obj() {

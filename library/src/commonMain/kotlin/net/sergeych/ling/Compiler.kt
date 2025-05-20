@@ -45,13 +45,23 @@ type alias has target type name. So we have to have something that denotes a _ty
 //}
 
 
+class CompilerContext(tokens: List<Token>) : ListIterator<Token> by tokens.listIterator() {
+    val labels = mutableSetOf<String>()
+
+    fun ensureLabelIsValid(pos: Pos, label: String) {
+        if (label !in labels)
+            throw ScriptError(pos, "Undefined label '$label'")
+    }
+}
+
+
 class Compiler {
 
     fun compile(source: Source): Script {
-        return parseScript(source.startPos, parseLing(source).listIterator())
+        return parseScript(source.startPos, CompilerContext(parseLing(source)))
     }
 
-    private fun parseScript(start: Pos, tokens: ListIterator<Token>): Script {
+    private fun parseScript(start: Pos, tokens: CompilerContext): Script {
         val statements = mutableListOf<Statement>()
         while (parseStatement(tokens)?.also {
                 statements += it
@@ -60,7 +70,7 @@ class Compiler {
         return Script(start, statements)
     }
 
-    private fun parseStatement(tokens: ListIterator<Token>): Statement? {
+    private fun parseStatement(tokens: CompilerContext): Statement? {
         while (true) {
             val t = tokens.next()
             return when (t.type) {
@@ -71,7 +81,7 @@ class Compiler {
                         // this _is_ assignment statement
                         return AssignStatement(
                             t.pos, t.value,
-                            parseExpression(tokens) ?: throw ScriptError(
+                            parseStatement(tokens) ?: throw ScriptError(
                                 t.pos,
                                 "Expecting expression for assignment operator"
                             )
@@ -88,7 +98,10 @@ class Compiler {
                         }
                 }
 
+                Token.Type.LABEL -> continue
                 Token.Type.SINLGE_LINE_COMMENT, Token.Type.MULTILINE_COMMENT -> continue
+
+                Token.Type.NEWLINE -> continue
 
                 Token.Type.SEMICOLON -> continue
 
@@ -113,7 +126,7 @@ class Compiler {
         }
     }
 
-    private fun parseExpression(tokens: ListIterator<Token>, level: Int = 0): Statement? {
+    private fun parseExpression(tokens: CompilerContext, level: Int = 0): Statement? {
         if (level == lastLevel)
             return parseTerm(tokens)
         var lvalue = parseExpression(tokens, level + 1)
@@ -136,7 +149,7 @@ class Compiler {
         return lvalue
     }
 
-    fun parseTerm(tokens: ListIterator<Token>): Statement? {
+    fun parseTerm(tokens: CompilerContext): Statement? {
         // call op
         // index op
         // unary op
@@ -187,7 +200,7 @@ class Compiler {
 
     }
 
-    fun parseVarAccess(id: Token, tokens: ListIterator<Token>, path: List<String> = emptyList()): Statement {
+    fun parseVarAccess(id: Token, tokens: CompilerContext, path: List<String> = emptyList()): Statement {
         val nt = tokens.next()
 
         fun resolve(context: Context): Context {
@@ -219,7 +232,7 @@ class Compiler {
                         Token.Type.RPAREN, Token.Type.COMMA -> {}
                         else -> {
                             tokens.previous()
-                            parseExpression(tokens)?.let { args += Arguments.Info(it, t.pos) }
+                            parseStatement(tokens)?.let { args += Arguments.Info(it, t.pos) }
                                 ?: throw ScriptError(t.pos, "Expecting arguments list")
                         }
                     }
@@ -247,6 +260,14 @@ class Compiler {
             else -> {
                 // just access the var
                 tokens.previous()
+//                val t = tokens.next()
+//                tokens.previous()
+//                println(t)
+//                if( path.isEmpty() ) {
+//                     statement?
+//                    tokens.previous()
+//                    parseStatement(tokens) ?: throw ScriptError(id.pos, "Expecting expression/statement")
+//                } else
                 statement(id.pos) {
                     val v = resolve(it).get(id.value) ?: throw ScriptError(id.pos, "Undefined variable: ${id.value}")
                     v.value ?: throw ScriptError(id.pos, "Variable $id is not initialized")
@@ -256,7 +277,7 @@ class Compiler {
     }
 
 
-    fun parseNumber(isPlus: Boolean, tokens: ListIterator<Token>): Obj {
+    fun parseNumber(isPlus: Boolean, tokens: CompilerContext): Obj {
         val t = tokens.next()
         return when (t.type) {
             Token.Type.INT, Token.Type.HEX -> {
@@ -279,43 +300,131 @@ class Compiler {
      * Parse keyword-starting statenment.
      * @return parsed statement or null if, for example. [id] is not among keywords
      */
-    private fun parseKeywordStatement(id: Token, tokens: ListIterator<Token>): Statement? = when (id.value) {
-        "val" -> parseVarDeclaration(id.value, false, tokens)
-        "var" -> parseVarDeclaration(id.value, true, tokens)
-        "fn", "fun" -> parseFunctionDeclaration(tokens)
-        "if" -> parseIfStatement(tokens)
+    private fun parseKeywordStatement(id: Token, cc: CompilerContext): Statement? = when (id.value) {
+        "val" -> parseVarDeclaration(id.value, false, cc)
+        "var" -> parseVarDeclaration(id.value, true, cc)
+        "while" -> parseWhileStatement(cc)
+        "break" -> parseBreakStatement(id.pos, cc)
+        "fn", "fun" -> parseFunctionDeclaration(cc)
+        "if" -> parseIfStatement(cc)
         else -> null
     }
 
-    private fun parseIfStatement(tokens: ListIterator<Token>): Statement {
-        var t = tokens.next()
-        val start = t.pos
-        if( t.type != Token.Type.LPAREN)
-            throw ScriptError(t.pos, "Bad if statement: expected '('")
+    fun getLabel(cc: CompilerContext, maxDepth: Int = 2): String? {
+        var cnt = 0
+        var found: String? = null
+        while (cc.hasPrevious() && cnt < maxDepth) {
+            val t = cc.previous()
+            cnt++
+            if (t.type == Token.Type.LABEL) {
+                found = t.value
+                break
+            }
+        }
+        while (cnt-- > 0) cc.next()
+        return found
+    }
+
+    private fun parseWhileStatement(cc: CompilerContext): Statement {
+        val label = getLabel(cc)?.also { cc.labels += it }
+        val start = ensureLparen(cc)
+        val condition = parseExpression(cc) ?: throw ScriptError(start, "Bad while statement: expected expression")
+        ensureRparen(cc)
+
+        val body = parseStatement(cc) ?: throw ScriptError(start, "Bad while statement: expected statement")
+        label?.also { cc.labels -= it }
+
+        return statement(body.pos) {
+            var result: Obj = ObjVoid
+            while (condition.execute(it).toBool()) {
+                try {
+                    result = body.execute(it)
+                } catch (lbe: LoopBreakContinueException) {
+                    if (lbe.label == label || lbe.label == null) {
+                        if (lbe.doContinue) continue
+                        else {
+                            result = lbe.result
+                            break
+                        }
+                    } else
+                        throw lbe
+                }
+            }
+            result
+        }
+    }
+
+    private fun parseBreakStatement(start: Pos, cc: CompilerContext): Statement {
+        var t = cc.next()
+
+        val label = if (t.pos.line != start.line || t.type != Token.Type.ATLABEL) {
+            cc.previous()
+            null
+        } else {
+            t.value
+        }?.also {
+            // check that label is defined
+            cc.ensureLabelIsValid(start, it)
+        }
+
+        // expression?
+        t = cc.next()
+        cc.previous()
+        val resultExpr = if (t.pos.line == start.line && (!t.isComment &&
+                    t.type != Token.Type.SEMICOLON &&
+                    t.type != Token.Type.NEWLINE)
+        ) {
+            // we have something on this line, could be expression
+            parseStatement(cc)
+        } else null
+
+        return statement(start) {
+            val returnValue = resultExpr?.execute(it)// ?: ObjVoid
+            throw LoopBreakContinueException(
+                doContinue = false,
+                label = label,
+                result = returnValue ?: ObjVoid
+            )
+        }
+    }
+
+    private fun ensureRparen(tokens: CompilerContext): Pos {
+        val t = tokens.next()
+        if (t.type != Token.Type.RPAREN)
+            throw ScriptError(t.pos, "expected ')'")
+        return t.pos
+    }
+
+    private fun ensureLparen(tokens: CompilerContext): Pos {
+        val t = tokens.next()
+        if (t.type != Token.Type.LPAREN)
+            throw ScriptError(t.pos, "expected '('")
+        return t.pos
+    }
+
+    private fun parseIfStatement(tokens: CompilerContext): Statement {
+        val start = ensureLparen(tokens)
 
         val condition = parseExpression(tokens)
-            ?: throw ScriptError(t.pos, "Bad if statement: expected expression")
+            ?: throw ScriptError(start, "Bad if statement: expected expression")
 
-        t = tokens.next()
-        if( t.type != Token.Type.RPAREN)
-            throw ScriptError(t.pos, "Bad if statement: expected ')' after condition expression")
+        val pos = ensureRparen(tokens)
 
-        val ifBody = parseStatement(tokens) ?: throw ScriptError(t.pos, "Bad if statement: expected statement")
+        val ifBody = parseStatement(tokens) ?: throw ScriptError(pos, "Bad if statement: expected statement")
 
         // could be else block:
         val t2 = tokens.next()
 
         // we generate different statements: optimization
-        return if( t2.type == Token.Type.ID && t2.value == "else") {
-            val elseBody = parseStatement(tokens) ?: throw ScriptError(t.pos, "Bad else statement: expected statement")
+        return if (t2.type == Token.Type.ID && t2.value == "else") {
+            val elseBody = parseStatement(tokens) ?: throw ScriptError(pos, "Bad else statement: expected statement")
             return statement(start) {
                 if (condition.execute(it).toBool())
                     ifBody.execute(it)
                 else
                     elseBody.execute(it)
             }
-        }
-        else {
+        } else {
             tokens.previous()
             statement(start) {
                 if (condition.execute(it).toBool())
@@ -332,7 +441,7 @@ class Compiler {
         val defaultValue: Statement? = null
     )
 
-    private fun parseFunctionDeclaration(tokens: ListIterator<Token>): Statement {
+    private fun parseFunctionDeclaration(tokens: CompilerContext): Statement {
         var t = tokens.next()
         val start = t.pos
         val name = if (t.type != Token.Type.ID)
@@ -392,23 +501,24 @@ class Compiler {
         }
     }
 
-    private fun parseBlock(tokens: ListIterator<Token>): Statement {
+    private fun parseBlock(tokens: CompilerContext): Statement {
         val t = tokens.next()
         if (t.type != Token.Type.LBRACE)
             throw ScriptError(t.pos, "Expected block body start: {")
         val block = parseScript(t.pos, tokens)
-            return statement(t.pos) {
-                // block run on inner context:
-                block.execute(it.copy())
-            }.also {
+        return statement(t.pos) {
+            // block run on inner context:
+            block.execute(it.copy())
+        }.also {
             val t1 = tokens.next()
             if (t1.type != Token.Type.RBRACE)
                 throw ScriptError(t1.pos, "unbalanced braces: expected block body end: }")
         }
     }
 
-    private fun parseVarDeclaration(kind: String, mutable: Boolean, tokens: ListIterator<Token>): Statement {
+    private fun parseVarDeclaration(kind: String, mutable: Boolean, tokens: CompilerContext): Statement {
         val nameToken = tokens.next()
+        val start = nameToken.pos
         if (nameToken.type != Token.Type.ID)
             throw ScriptError(nameToken.pos, "Expected identifier after '$kind'")
         val name = nameToken.value
@@ -416,13 +526,13 @@ class Compiler {
         var setNull = false
         if (eqToken.type != Token.Type.ASSIGN) {
             if (!mutable)
-                throw ScriptError(eqToken.pos, "Expected initializer: '=' after '$kind ${name}'")
+                throw ScriptError(start, "val must be initialized")
             else {
                 tokens.previous()
                 setNull = true
             }
         }
-        val initialExpression = if (setNull) null else parseExpression(tokens)
+        val initialExpression = if (setNull) null else parseStatement(tokens)
             ?: throw ScriptError(eqToken.pos, "Expected initializer expression")
         return statement(nameToken.pos) { context ->
             if (context.containsLocal(name))

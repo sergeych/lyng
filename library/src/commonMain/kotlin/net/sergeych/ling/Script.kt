@@ -21,8 +21,12 @@ class Script(
     companion object {
         val defaultContext: Context = Context(null).apply {
             addFn("println") {
-                require(args.size == 1)
-                println(args[0].asStr.value)
+                print("yn: ")
+                for( (i,a) in args.withIndex() ) {
+                    if( i > 0 ) print(' ' + a.asStr.value)
+                    else print(a.asStr.value)
+                }
+                println()
                 ObjVoid
             }
             addFn("floor") {

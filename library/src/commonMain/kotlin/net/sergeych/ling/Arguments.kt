@@ -1,6 +1,6 @@
 package net.sergeych.ling
 
-data class Arguments(val callerPos: Pos,val list: List<Info>) {
+data class Arguments(val callerPos: Pos,val list: List<Info>): Iterable<Obj> {
 
     data class Info(val value: Obj,val pos: Pos)
 
@@ -15,5 +15,9 @@ data class Arguments(val callerPos: Pos,val list: List<Info>) {
 
     companion object {
         val EMPTY = Arguments("".toSource().startPos,emptyList())
+    }
+
+    override fun iterator(): Iterator<Obj> {
+        return list.map { it.value }.iterator()
     }
 }

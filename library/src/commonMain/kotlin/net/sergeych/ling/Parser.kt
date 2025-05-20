@@ -1,11 +1,12 @@
 package net.sergeych.ling
 
-private val idFirstChars: Set<Char> = (
-        ('a'..'z') + ('A'..'Z') + '_' + ('а'..'я') + ('А'..'Я')
-        ).toSet()
-val idNextChars: Set<Char> = idFirstChars + ('0'..'9')
-val digits = ('0'..'9').toSet()
-val hexDigits = digits + ('a'..'f') + ('A'..'F')
+val digitsSet = ('0'..'9').toSet()
+val digits = { d: Char -> d in digitsSet }
+val hexDigits = digitsSet + ('a'..'f') + ('A'..'F')
+val idNextChars = { d: Char -> d.isLetter() || d == '_' || d.isDigit()}
+
+@Suppress("unused")
+val idFirstChars = { d: Char -> d.isLetter() || d == '_' }
 
 fun parseLing(source: Source): List<Token> {
     val p = Parser(fromPos = source.startPos)
@@ -100,16 +101,38 @@ private class Parser(fromPos: Pos) {
                 } else
                     Token("&", from, Token.Type.BITAND)
             }
+            '@' -> {
+                val label = loadChars(idNextChars)
+                if( label.isNotEmpty()) Token(label, from, Token.Type.ATLABEL)
+                else raise("unexpected @ character")
+            }
+            '\n' -> Token("\n", from, Token.Type.NEWLINE)
 
             '"' -> loadStringToken()
-            in digits -> {
+            in digitsSet -> {
                 pos.back()
                 decodeNumber(loadChars(digits), from)
             }
 
             else -> {
-                if (ch.isLetter() || ch == '_')
-                    Token(ch + loadChars(idNextChars), from, Token.Type.ID)
+                // Labels processing is complicated!
+                // some@ statement: label 'some', ID 'statement'
+                // statement@some: ID 'statement', LABEL 'some'!
+                if (ch.isLetter() || ch == '_') {
+                    val text = ch + loadChars(idNextChars)
+                    if( currentChar == '@') {
+                        advance()
+                        if( currentChar.isLetter()) {
+                            // break@label or like
+                            pos.back()
+                            Token(text, from, Token.Type.ID)
+                        }
+                        else
+                            Token(text, from, Token.Type.LABEL)
+                    }
+                    else
+                        Token(text, from, Token.Type.ID)
+                }
                 else
                     raise("can't parse token")
             }
@@ -122,7 +145,7 @@ private class Parser(fromPos: Pos) {
         else if (currentChar == '.') {
             // could be decimal
             advance()
-            if (currentChar in digits) {
+            if (currentChar in digitsSet) {
                 // decimal part
                 val p2 = loadChars(digits)
                 // with exponent?
@@ -152,7 +175,7 @@ private class Parser(fromPos: Pos) {
             // could be integer, also hex:
             if (currentChar == 'x' && p1 == "0") {
                 advance()
-                Token(loadChars(hexDigits), start, Token.Type.HEX).also {
+                Token(loadChars({ it in hexDigits}), start, Token.Type.HEX).also {
                     if (currentChar.isLetter())
                         raise("invalid hex literal")
                 }
@@ -197,14 +220,19 @@ private class Parser(fromPos: Pos) {
 
     /**
      * Load characters from the set until it reaches EOF or invalid character found.
-     * stop at EOF on character not in [validChars].
+     * stop at EOF on character filtered by [isValidChar].
+     *
+     * Note this function loads only on one string. Multiline texts are not supported by
+     * this method.
+     *
      * @return the string of valid characters, could be empty
      */
-    private fun loadChars(validChars: Set<Char>): String {
+    private fun loadChars(isValidChar: (Char)->Boolean): String {
+        val startLine = pos.line
         val result = StringBuilder()
-        while (!pos.end) {
+        while (!pos.end && pos.line == startLine) {
             val ch = pos.currentChar
-            if (ch in validChars) {
+            if (isValidChar(ch)) {
                 result.append(ch)
                 advance()
             } else

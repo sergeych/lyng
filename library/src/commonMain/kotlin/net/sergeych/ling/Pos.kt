@@ -36,15 +36,13 @@ class MutablePos(private val from: Pos) {
     fun advance(): Char? {
         if (end) return null
         val current = lines[line]
-        return if (column+1 < current.length) {
-            current[column++]
+        return if (column < current.length) {
+            column++
+            currentChar
         } else {
             column = 0
-            while( ++line < lines.size && lines[line].isEmpty() ) {
-                // skip empty lines
-            }
-            if(line >= lines.size) null
-            else lines[line][column]
+            if(++line >= lines.size) null
+            else currentChar
         }
     }
 
@@ -55,9 +53,12 @@ class MutablePos(private val from: Pos) {
         else throw IllegalStateException("can't go back from line 0, column 0")
     }
     val currentChar: Char
-        get() =
-            if (end) 0.toChar()
-            else lines[line][column]
+        get() {
+            if (end) return 0.toChar()
+            val current = lines[line]
+            return if (column >= current.length) '\n'
+            else current[column]
+        }
 
     override fun toString() = "($line:$column)"
 

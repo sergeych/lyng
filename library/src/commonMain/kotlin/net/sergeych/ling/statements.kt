@@ -17,6 +17,8 @@ abstract class Statement(
         throw UnsupportedOperationException("not comparable")
     }
 
+    override fun toString(): String = "Callable@${this.hashCode()}"
+
 }
 
 fun Statement.raise(text: String): Nothing {

@@ -48,6 +48,15 @@ class ScriptTest {
     }
 
     @Test
+    fun parserLabelsTest() {
+        val src = "label@ break@label".toSource()
+        val tt = parseLing(src)
+        assertEquals(Token("label", src.posAt(0, 0), Token.Type.LABEL), tt[0])
+        assertEquals(Token("break", src.posAt(0, 7), Token.Type.ID), tt[1])
+        assertEquals(Token("label", src.posAt(0, 12), Token.Type.ATLABEL), tt[2])
+    }
+
+    @Test
     fun parse0Test() {
         val src = """
             println("Hello")
@@ -109,10 +118,14 @@ class ScriptTest {
     @Test
     fun varsAndConstsTest() = runTest {
         val context = Context()
-        assertEquals(ObjVoid,context.eval("""
+        assertEquals(
+            ObjVoid, context.eval(
+                """
             val a = 17
             var b = 3
-        """.trimIndent()))
+        """.trimIndent()
+            )
+        )
         assertEquals(17, context.eval("a").toInt())
         assertEquals(20, context.eval("b + a").toInt())
         assertFailsWith<ScriptError> {
@@ -137,11 +150,13 @@ class ScriptTest {
             assertEquals(17, context.eval("foo(3)").toInt())
         }
 
-        context.eval("""
+        context.eval(
+            """
             fn bar(a, b=10) {
                 a + b + 1
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertEquals(10, context.eval("bar(3, 6)").toInt())
         assertEquals(14, context.eval("bar(3)").toInt())
     }
@@ -166,8 +181,8 @@ class ScriptTest {
     @Test
     fun nullAndVoidTest() = runTest {
         val context = Context()
-        assertEquals(ObjVoid,context.eval("void"))
-        assertEquals(ObjNull,context.eval("null"))
+        assertEquals(ObjVoid, context.eval("void"))
+        assertEquals(ObjNull, context.eval("null"))
     }
 
     @Test
@@ -227,31 +242,34 @@ class ScriptTest {
         assertFalse { eval("3 >= 4").toBool() }
         assertFalse { eval("3 < 2").toBool() }
         assertFalse { eval("3 <= 2").toBool() }
-        assertTrue { eval("3 <= 3").toBool()}
-        assertTrue { eval("3 <= 4").toBool()}
-        assertTrue { eval("3 < 4").toBool()}
-        assertFalse { eval("4 < 3").toBool()}
-        assertFalse { eval("4 <= 3").toBool()}
+        assertTrue { eval("3 <= 3").toBool() }
+        assertTrue { eval("3 <= 4").toBool() }
+        assertTrue { eval("3 < 4").toBool() }
+        assertFalse { eval("4 < 3").toBool() }
+        assertFalse { eval("4 <= 3").toBool() }
     }
 
     @Test
     fun ifTest() = runTest {
         // if - single line
         var context = Context()
-        context.eval("""
+        context.eval(
+            """
             fn test1(n) {
                 var result = "more"
                 if( n >= 10 ) 
                     result = "enough"
                 result
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertEquals("enough", context.eval("test1(11)").toString())
         assertEquals("more", context.eval("test1(1)").toString())
 
         // if - multiline (block)
         context = Context()
-        context.eval("""
+        context.eval(
+            """
             fn test1(n) {
                 var prefix = "answer: "
                 var result = "more"
@@ -262,26 +280,30 @@ class ScriptTest {
                 }
                 prefix + result
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertEquals("answer: enough", context.eval("test1(11)").toString())
         assertEquals("answer: more", context.eval("test1(1)").toString())
 
         // else single line1
         context = Context()
-        context.eval("""
+        context.eval(
+            """
             fn test1(n) {
                 if( n >= 10 ) 
                     "enough"
                 else
                     "more"
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertEquals("enough", context.eval("test1(11)").toString())
         assertEquals("more", context.eval("test1(1)").toString())
 
         // if/else with blocks
         context = Context()
-        context.eval("""
+        context.eval(
+            """
             fn test1(n) {
                 if( n > 20 ) {
                     "too much"
@@ -292,10 +314,150 @@ class ScriptTest {
                     "more"
                 }
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertEquals("enough", context.eval("test1(11)").toString())
         assertEquals("more", context.eval("test1(1)").toString())
         assertEquals("too much", context.eval("test1(100)").toString())
     }
 
+    @Test
+    fun lateInitTest() = runTest {
+        assertEquals(
+            "ok", eval(
+                """
+
+            var late
+            
+            fun init() {
+                late = "ok"
+            }
+            
+            init()
+            late
+        """.trimIndent()
+            ).toString()
+        )
+
+    }
+
+    @Test
+    fun whileTest() = runTest {
+        assertEquals(
+            5.0,
+            eval(
+                """
+                var acc = 0
+                while( acc < 5 ) acc = acc + 0.5
+                acc
+                """
+            ).toDouble()
+        )
+        assertEquals(
+            5.0,
+            eval(
+                """
+                var acc = 0
+                // return from while
+                while( acc < 5 ) {
+                    acc = acc + 0.5
+                    acc
+                }
+                """
+            ).toDouble()
+        )
+        assertEquals(
+            3.0,
+            eval(
+                """
+                var acc = 0
+                while( acc < 5 ) {
+                    acc = acc + 0.5
+                    if( acc >= 3 ) break
+                }
+
+                acc
+
+                """
+            ).toDouble()
+        )
+        assertEquals(
+            17.0,
+            eval(
+                """
+                var acc = 0
+                while( acc < 5 ) {
+                    acc = acc + 0.5
+                    if( acc >= 3 ) break 17
+                }
+                """
+            ).toDouble()
+        )
+    }
+
+    @Test
+    fun whileNonLocalBreakTest() = runTest {
+        assertEquals(
+            "ok2:3:7", eval(
+                """
+            var t1 = 10
+            outer@ while( t1 > 0 ) {
+                var t2 = 10
+                while( t2 > 0 ) {
+                    t2 = t2 - 1
+                    if( t2 == 3 && t1 == 7) {
+                        break@outer "ok2:"+t2+":"+t1
+                    }
+                }
+                t1 = t1 - 1
+                t1
+            }
+        """.trimIndent()
+            ).toString()
+        )
+    }
+
+    @Test
+    fun bookTest0() = runTest {
+        assertEquals(
+            "just 3",
+            eval(
+                """
+                val count = 3
+                val res = if( count > 10 ) "too much" else "just " + count
+                println(res)
+                res
+                """.trimIndent()
+            )
+                .toString()
+        )
+        assertEquals(
+            "just 3",
+            eval(
+                """
+                val count = 3
+                var res = if( count > 10 ) "too much" else "it's " + count
+                res = if( count > 10 ) "too much" else "just " + count
+                println(res)
+                res
+                """.trimIndent()
+            )
+                .toString()
+        )
+    }
+    @Test
+    fun bookTest1() = runTest {
+//        assertEquals(
+//            "just 3",
+            eval(
+                """
+                val count = 3
+                println( 
+                    if( count > 10 ) "too much" else "just " + count 
+                )
+                """.trimIndent()
+            )
+//                .toString()
+//        )
+    }
 }
