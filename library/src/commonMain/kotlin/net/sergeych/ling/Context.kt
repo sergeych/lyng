@@ -1,9 +1,27 @@
 package net.sergeych.ling
 
 class Context(
-    val parent: Context? = Script.defaultContext.copy(),
-    val args: Arguments = Arguments.EMPTY
+    val parent: Context?,
+    val args: Arguments = Arguments.EMPTY,
+    var pos: Pos = Pos.builtIn
 ) {
+    constructor(
+        args: Arguments = Arguments.EMPTY,
+        pos: Pos = Pos.builtIn
+    )
+            : this(Script.defaultContext, args, pos)
+
+    fun raiseNotImplemented(): Nothing = raiseError("operation not implemented")
+
+    fun raiseNPE(): Nothing = raiseError(ObjNullPointerError(this))
+
+    fun raiseError(message: String): Nothing {
+        throw ExecutionError(ObjError(this, message))
+    }
+
+    fun raiseError(obj: ObjError): Nothing {
+        throw ExecutionError(obj)
+    }
 
     private val objects = mutableMapOf<String, StoredObj>()
 
@@ -11,14 +29,20 @@ class Context(
         objects[name]
             ?: parent?.get(name)
 
-    fun copy(args: Arguments = Arguments.EMPTY): Context = Context(this, args)
+    fun copy(pos: Pos, args: Arguments = Arguments.EMPTY): Context = Context(this, args, pos)
 
     fun addItem(name: String, isMutable: Boolean, value: Obj?) {
         objects.put(name, StoredObj(name, value, isMutable))
     }
 
     fun getOrCreateNamespace(name: String) =
-        (objects.getOrPut(name) { StoredObj(name, ObjNamespace(name,copy()), isMutable = false) }.value as ObjNamespace)
+        (objects.getOrPut(name) {
+            StoredObj(
+                name,
+                ObjNamespace(name, copy(pos)),
+                isMutable = false
+            )
+        }.value as ObjNamespace)
             .context
 
     inline fun <reified T> addFn(vararg names: String, crossinline fn: suspend Context.() -> T) {
@@ -43,7 +67,7 @@ class Context(
         }
     }
 
-    inline fun <reified T> addConst(value: T,vararg names: String) {
+    inline fun <reified T> addConst(value: T, vararg names: String) {
         val obj = Obj.from(value)
         for (name in names) {
             addItem(
@@ -59,8 +83,5 @@ class Context(
 
     fun containsLocal(name: String): Boolean = name in objects
 
-    companion object {
-        operator fun invoke() = Context()
-    }
 
 }

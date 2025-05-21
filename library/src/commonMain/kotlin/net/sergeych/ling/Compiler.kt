@@ -97,6 +97,10 @@ class Compiler {
                             parseExpression(tokens)
                         }
                 }
+                Token.Type.PLUS2, Token.Type.MINUS2 -> {
+                    tokens.previous()
+                    parseExpression(tokens)
+                }
 
                 Token.Type.LABEL -> continue
                 Token.Type.SINLGE_LINE_COMMENT, Token.Type.MULTILINE_COMMENT -> continue
@@ -222,6 +226,25 @@ class Compiler {
                     throw ScriptError(t.pos, "Expected identifier after '.'")
             }
 
+            Token.Type.PLUS2 -> {
+                statement(id.pos) { context ->
+                    context.pos = id.pos
+                    val v = resolve(context).get(id.value)
+                        ?: throw ScriptError(id.pos, "Undefined symbol: ${id.value}")
+                    v.value?.getAndIncrement(context)
+                        ?: context.raiseNPE()
+                }
+            }
+
+            Token.Type.MINUS2 -> {
+                statement(id.pos) { context ->
+                    context.pos = id.pos
+                    val v = resolve(context).get(id.value)
+                        ?: throw ScriptError(id.pos, "Undefined symbol: ${id.value}")
+                    v.value?.getAndDecrement(context)
+                        ?: context.raiseNPE()
+                }
+            }
             Token.Type.LPAREN -> {
                 // function call
                 // Load arg list
@@ -243,10 +266,11 @@ class Compiler {
                         resolve(context).get(id.value) ?: throw ScriptError(id.pos, "Undefined function: ${id.value}")
                     (v.value as? Statement)?.execute(
                         context.copy(
+                            id.pos,
                             Arguments(
                                 nt.pos,
                                 args.map { Arguments.Info((it.value as Statement).execute(context), it.pos) }
-                            )
+                            ),
                         )
                     )
                         ?: throw ScriptError(id.pos, "Variable $id is not callable ($id)")
@@ -501,8 +525,9 @@ class Compiler {
         var closure: Context? = null
 
         val fnBody = statement(t.pos) { callerContext ->
+            callerContext.pos = start
             // restore closure where the function was defined:
-            val context = closure ?: Context()
+            val context = closure ?: callerContext.raiseError("bug: closure not set")
             // load params from caller context
             for ((i, d) in params.withIndex()) {
                 if (i < callerContext.args.size)
@@ -539,7 +564,7 @@ class Compiler {
         val block = parseScript(t.pos, tokens)
         return statement(t.pos) {
             // block run on inner context:
-            block.execute(it.copy())
+            block.execute(it.copy(t.pos))
         }.also {
             val t1 = tokens.next()
             if (t1.type != Token.Type.RBRACE)

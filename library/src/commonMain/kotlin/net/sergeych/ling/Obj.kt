@@ -27,7 +27,7 @@ sealed class ClassDef(
     ) {
         instanceLock.withLock {
             instanceMethods[name]?.let {
-                if( !it.isMutable )
+                if (!it.isMutable)
                     throw ScriptError(pos, "existing method $name is frozen and can't be updated")
                 it.value = body
             } ?: instanceMethods.put(name, Item(body, freeze))
@@ -36,7 +36,7 @@ sealed class ClassDef(
 
     //suspend fun callInstanceMethod(context: Context, self: Obj,args: Arguments): Obj {
 //
-  //  }
+    //  }
 }
 
 object ObjClassDef : ClassDef("Obj")
@@ -48,6 +48,18 @@ sealed class Obj : Comparable<Obj> {
     }
 
     open val definition: ClassDef = ObjClassDef
+
+    open fun plus(context: Context, other: Obj): Obj {
+        context.raiseNotImplemented()
+    }
+
+    open fun getAndIncrement(context: Context): Obj {
+        context.raiseNotImplemented()
+    }
+
+    open fun getAndDecrement(context: Context): Obj {
+        context.raiseNotImplemented()
+    }
 
     @Suppress("unused")
     enum class Type {
@@ -179,12 +191,27 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
 
 @Serializable
 @SerialName("int")
-data class ObjInt(val value: Long) : Obj(), Numeric {
-    override val asStr by lazy { ObjString(value.toString()) }
-    override val longValue: Long by lazy { value }
-    override val doubleValue: Double by lazy { value.toDouble() }
-    override val toObjInt: ObjInt by lazy { ObjInt(value) }
-    override val toObjReal: ObjReal by lazy { ObjReal(doubleValue) }
+data class ObjInt(var value: Long) : Obj(), Numeric {
+    override val asStr get() = ObjString(value.toString())
+    override val longValue get() = value
+    override val doubleValue get() = value.toDouble()
+    override val toObjInt get() = this
+    override val toObjReal = ObjReal(doubleValue)
+
+    override fun getAndIncrement(context: Context): Obj {
+        return ObjInt(value).also { value++ }
+    }
+
+    override fun getAndDecrement(context: Context): Obj {
+        return ObjInt(value).also { value-- }
+    }
+
+//    override fun plus(context: Context, other: Obj): Obj {
+//        if (other !is Numeric)
+//            context.raiseError("cannot add $this with $other")
+//        return if (other is ObjInt)
+//
+//    }
 
     override fun compareTo(other: Obj): Int {
         if (other !is Numeric) throw IllegalArgumentException("cannot compare $this with $other")
@@ -216,3 +243,12 @@ data class ObjNamespace(val name: String, val context: Context) : Obj() {
         throw IllegalArgumentException("cannot compare namespaces")
     }
 }
+
+open class ObjError(val context: Context, val message: String) : Obj() {
+    override val asStr: ObjString by lazy { ObjString("Error: $message") }
+    override fun compareTo(other: Obj): Int {
+        if (other === this) return 0 else return -1
+    }
+}
+
+class ObjNullPointerError(context: Context) : ObjError(context, "object is null")

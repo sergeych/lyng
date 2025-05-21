@@ -117,7 +117,7 @@ class ScriptTest {
 
     @Test
     fun varsAndConstsTest() = runTest {
-        val context = Context()
+        val context = Context(pos = Pos.builtIn)
         assertEquals(
             ObjVoid, context.eval(
                 """
@@ -137,7 +137,7 @@ class ScriptTest {
 
     @Test
     fun functionTest() = runTest {
-        val context = Context()
+        val context = Context(pos = Pos.builtIn)
         context.eval(
             """
             fun foo(a, b) {
@@ -163,7 +163,7 @@ class ScriptTest {
 
     @Test
     fun simpleClosureTest() = runTest {
-        val context = Context()
+        val context = Context(pos = Pos.builtIn)
         context.eval(
             """
             var global = 10
@@ -180,7 +180,7 @@ class ScriptTest {
 
     @Test
     fun nullAndVoidTest() = runTest {
-        val context = Context()
+        val context = Context(pos = Pos.builtIn)
         assertEquals(ObjVoid, context.eval("void"))
         assertEquals(ObjNull, context.eval("null"))
     }
@@ -252,7 +252,7 @@ class ScriptTest {
     @Test
     fun ifTest() = runTest {
         // if - single line
-        var context = Context()
+        var context = Context(pos = Pos.builtIn)
         context.eval(
             """
             fn test1(n) {
@@ -267,7 +267,7 @@ class ScriptTest {
         assertEquals("more", context.eval("test1(1)").toString())
 
         // if - multiline (block)
-        context = Context()
+        context = Context(pos = Pos.builtIn)
         context.eval(
             """
             fn test1(n) {
@@ -286,7 +286,7 @@ class ScriptTest {
         assertEquals("answer: more", context.eval("test1(1)").toString())
 
         // else single line1
-        context = Context()
+        context = Context(pos = Pos.builtIn)
         context.eval(
             """
             fn test1(n) {
@@ -301,7 +301,7 @@ class ScriptTest {
         assertEquals("more", context.eval("test1(1)").toString())
 
         // if/else with blocks
-        context = Context()
+        context = Context(pos = Pos.builtIn )
         context.eval(
             """
             fn test1(n) {
@@ -442,5 +442,87 @@ class ScriptTest {
             )
                 .toString()
         )
+    }
+
+    @Test
+    fun testIncr() = runTest {
+        val c = Context()
+        c.eval("var x = 10")
+        assertEquals(10, c.eval("x++").toInt())
+        assertEquals(11, c.eval("x++").toInt())
+        assertEquals(12, c.eval("x").toInt())
+
+        assertEquals(12, c.eval("x").toInt())
+        assertEquals(12, c.eval("x").toInt())
+    }
+
+    @Test
+    fun testDecr() = runTest {
+        val c = Context()
+        c.eval("var x = 9")
+        assertEquals(9, c.eval("x--").toInt())
+        assertEquals(8, c.eval("x--").toInt())
+        assertEquals(7, c.eval("x--").toInt())
+        assertEquals(6, c.eval("x--").toInt())
+        assertEquals(5, c.eval("x").toInt())
+    }
+
+    @Test
+    fun testDecrIncr() = runTest {
+        val c = Context()
+        c.eval("var x = 9")
+        assertEquals(9, c.eval("x++").toInt())
+        assertEquals(10, c.eval("x++").toInt())
+        assertEquals(11, c.eval("x").toInt())
+        assertEquals(11, c.eval("x--").toInt())
+        assertEquals(10, c.eval("x--").toInt())
+        assertEquals(9, c.eval("x--").toInt())
+        assertEquals(8, c.eval("x--").toInt())
+        assertEquals(7, c.eval("x + 0").toInt())
+    }
+
+    @Test
+    fun testDecrIncr2() = runTest {
+        val c = Context()
+        c.eval("var x = 9")
+        assertEquals(9, c.eval("x--").toInt())
+        assertEquals(8, c.eval("x--").toInt())
+        assertEquals(7, c.eval("x--").toInt())
+        assertEquals(6, c.eval("x").toInt())
+        assertEquals(6, c.eval("x++").toInt())
+        assertEquals(7, c.eval("x++").toInt())
+        assertEquals(8, c.eval("x")
+            .also {
+                println("${it.toDouble()} ${it.toInt()} ${it.toLong()} ${it.toInt()}")
+            }
+            .toInt())
+    }
+
+    @Test
+    fun testDecrIncr3() = runTest {
+        val c = Context()
+        c.eval("var x = 9")
+        assertEquals(9, c.eval("x++").toInt())
+        assertEquals(10, c.eval("x++").toInt())
+        assertEquals(11, c.eval("x++").toInt())
+        assertEquals(12, c.eval("x").toInt())
+        assertEquals(12, c.eval("x--").toInt())
+        assertEquals(11, c.eval("x").toInt())
+    }
+
+    @Test
+    fun testIncrAndDecr() = runTest {
+        val c = Context()
+        assertEquals( "8", c.eval("""
+            var x = 5
+            x-- 
+            x-- 
+            x++ 
+            x * 2
+        """).toString())
+
+        assertEquals( "4", c.eval("x").toString())
+//        assertEquals( "8", c.eval("x*2").toString())
+//        assertEquals( "4", c.eval("x+0").toString())
     }
 }

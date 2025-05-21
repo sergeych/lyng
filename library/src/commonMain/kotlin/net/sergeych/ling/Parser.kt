@@ -50,8 +50,21 @@ private class Parser(fromPos: Pos) {
                     Token("=", from, Token.Type.ASSIGN)
             }
 
-            '+' -> Token("+", from, Token.Type.PLUS)
-            '-' -> Token("-", from, Token.Type.MINUS)
+            '+' -> {
+                if( currentChar == '+') {
+                    advance()
+                    Token("+", from, Token.Type.PLUS2)
+                }
+                else
+                    Token("+", from, Token.Type.PLUS)
+            }
+            '-' -> {
+                if (currentChar == '-') {
+                    advance()
+                    Token("--", from, Token.Type.MINUS2)
+                } else
+                    Token("-", from, Token.Type.MINUS)
+            }
             '*' -> Token("*", from, Token.Type.STAR)
             '/' -> {
                 if( currentChar == '/') {

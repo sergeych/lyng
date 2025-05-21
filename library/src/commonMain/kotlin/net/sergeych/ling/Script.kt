@@ -15,10 +15,10 @@ class Script(
         return lastResult
     }
 
-    suspend fun execute() = execute(defaultContext.copy())
+    suspend fun execute() = execute(defaultContext.copy(pos))
 
     companion object {
-        val defaultContext: Context = Context(null).apply {
+        val defaultContext: Context = Context().apply {
             addFn("println") {
                 print("yn: ")
                 for( (i,a) in args.withIndex() ) {
