@@ -283,27 +283,49 @@ class Compiler {
                         operand = Accessor {
                             statement.execute(it)
                         }
+                        cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
                         cc.skipTokenOfType(Token.Type.RPAREN, "missing ')'")
                     }
                 }
 
                 Token.Type.ID -> {
-                    operand?.let { left ->
-                        // selector: <lvalue>, '.' , <id>
-                        // we replace operand with selector code, that
-                        // is RW:
-                        operand = Accessor({
-                            it.pos = t.pos
-                            left.getter(it).readField(it, t.value)
-                        }) { cxt, newValue ->
-                            cxt.pos = t.pos
-                            left.getter(cxt).writeField(cxt, t.value, newValue)
+                    // there could be terminal operators or keywords:// variable to read or like
+                    when (t.value) {
+                        "else" -> {
+                            cc.previous()
+                            return operand?.let { op -> statement(startPos) { op.getter(it) } }
                         }
-                    } ?: run {
-                        // variable to read or like
-                        cc.previous()
-                        operand = parseAccessor(cc)
+                        "if", "when", "do", "while", "return" -> {
+                            if( operand != null ) throw ScriptError(t.pos, "unexpected keyword")
+                            cc.previous()
+                            val s = parseStatement(cc) ?: throw ScriptError(t.pos, "Expecting valid statement")
+                            operand = Accessor { s.execute(it) }
+                        }
+                        "break", "continue" -> {
+                            cc.previous()
+                            return operand?.let { op -> statement(startPos) { op.getter(it) } }
+
+                        }
+                        else -> operand?.let { left ->
+                            // selector: <lvalue>, '.' , <id>
+                            // we replace operand with selector code, that
+                            // is RW:
+                            operand = Accessor({
+                                it.pos = t.pos
+                                left.getter(it).readField(it, t.value)
+                            }) { cxt, newValue ->
+                                cxt.pos = t.pos
+                                left.getter(cxt).writeField(cxt, t.value, newValue)
+                            }
+                        } ?: run {
+                            // variable to read or like
+                            cc.previous()
+                            operand = parseAccessor(cc)
+                        }
                     }
+                    // selector: <lvalue>, '.' , <id>
+                    // we replace operand with selector code, that
+                    // is RW:
                 }
 
                 Token.Type.PLUS2 -> {
