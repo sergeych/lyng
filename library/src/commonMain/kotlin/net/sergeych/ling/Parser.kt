@@ -51,19 +51,31 @@ private class Parser(fromPos: Pos) {
             }
 
             '+' -> {
-                if( currentChar == '+') {
-                    advance()
-                    Token("+", from, Token.Type.PLUS2)
+                when (currentChar) {
+                    '+' -> {
+                        advance()
+                        Token("+", from, Token.Type.PLUS2)
+                    }
+                    '=' -> {
+                        advance()
+                        Token("+", from, Token.Type.PLUSASSIGN)
+                    }
+                    else ->
+                        Token("+", from, Token.Type.PLUS)
                 }
-                else
-                    Token("+", from, Token.Type.PLUS)
             }
             '-' -> {
-                if (currentChar == '-') {
-                    advance()
-                    Token("--", from, Token.Type.MINUS2)
-                } else
-                    Token("-", from, Token.Type.MINUS)
+                when (currentChar) {
+                    '-' -> {
+                        advance()
+                        Token("--", from, Token.Type.MINUS2)
+                    }
+                    '=' -> {
+                        advance()
+                        Token("-", from, Token.Type.MINUSASSIGN)
+                    }
+                    else -> Token("-", from, Token.Type.MINUS)
+                }
             }
             '*' -> Token("*", from, Token.Type.STAR)
             '/' -> {
@@ -285,6 +297,7 @@ private class Parser(fromPos: Pos) {
     private fun skipws(): Char? {
         while (!pos.end) {
             val ch = pos.currentChar
+            if( ch == '\n') break
             if (ch.isWhitespace())
                 advance()
             else

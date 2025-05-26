@@ -8,41 +8,65 @@ import kotlin.math.floor
 
 typealias InstanceMethod = (Context, Obj) -> Obj
 
-data class Item<T>(var value: T, val isMutable: Boolean = false)
+data class WithAccess<T>(var value: T, val isMutable: Boolean)
 
-@Serializable
+data class Accessor(
+    val getter: suspend (Context) -> Obj,
+    val setterOrNull: (suspend (Context, Obj) -> Unit)?
+) {
+    constructor(getter: suspend (Context) -> Obj) : this(getter, null)
+
+    fun setter(pos: Pos) = setterOrNull ?: throw ScriptError(pos,"can't assign value")
+}
+
 sealed class ClassDef(
     val className: String
 ) {
     val baseClasses: List<ClassDef> get() = emptyList()
-    private val instanceMethods: MutableMap<String, Item<InstanceMethod>> get() = mutableMapOf()
+    protected val instanceMembers: MutableMap<String, WithAccess<Obj>> = mutableMapOf()
+    private val monitor = Mutex()
 
-    private val instanceLock = Mutex()
 
     suspend fun addInstanceMethod(
+        context: Context,
         name: String,
-        freeze: Boolean = false,
-        pos: Pos = Pos.builtIn,
-        body: InstanceMethod
+        isOpen: Boolean = false,
+        body: Obj
     ) {
-        instanceLock.withLock {
-            instanceMethods[name]?.let {
+        monitor.withLock {
+            instanceMembers[name]?.let {
                 if (!it.isMutable)
-                    throw ScriptError(pos, "existing method $name is frozen and can't be updated")
+                    context.raiseError("method $name is not open and can't be overridden")
                 it.value = body
-            } ?: instanceMethods.put(name, Item(body, freeze))
+            } ?: instanceMembers.put(name, WithAccess(body, isOpen))
         }
     }
 
-    //suspend fun callInstanceMethod(context: Context, self: Obj,args: Arguments): Obj {
-//
-    //  }
+    suspend fun getInstanceMethodOrNull(name: String): Obj? =
+        monitor.withLock { instanceMembers[name]?.value }
+
+    suspend fun getInstanceMethod(context: Context, name: String): Obj =
+        getInstanceMethodOrNull(name) ?: context.raiseError("no method found: $name")
+
+//    suspend fun callInstanceMethod(context: Context, name: String, self: Obj,args: Arguments): Obj {
+//         getInstanceMethod(context, name).invoke(context, self,args)
+//    }
 }
+
 
 object ObjClassDef : ClassDef("Obj")
 
-@Serializable
-sealed class Obj : Comparable<Obj> {
+sealed class Obj {
+    open val classDef: ClassDef = ObjClassDef
+    var isFrozen: Boolean = false
+
+    protected val instanceMethods: Map<String, WithAccess<InstanceMethod>> = mutableMapOf()
+    private val monitor = Mutex()
+
+    open suspend fun compareTo(context: Context, other: Obj): Int {
+        context.raiseNotImplemented()
+    }
+
     open val asStr: ObjString by lazy {
         if (this is ObjString) this else ObjString(this.toString())
     }
@@ -53,7 +77,24 @@ sealed class Obj : Comparable<Obj> {
         context.raiseNotImplemented()
     }
 
+    open fun assign(context: Context, other: Obj): Obj {
+        context.raiseNotImplemented()
+    }
+
+    open fun plusAssign(context: Context, other: Obj): Obj {
+        assign(context, plus(context, other))
+        return this
+    }
+
     open fun getAndIncrement(context: Context): Obj {
+        context.raiseNotImplemented()
+    }
+
+    open fun incrementAndGet(context: Context): Obj {
+        context.raiseNotImplemented()
+    }
+
+    open fun decrementAndGet(context: Context): Obj {
         context.raiseNotImplemented()
     }
 
@@ -61,31 +102,24 @@ sealed class Obj : Comparable<Obj> {
         context.raiseNotImplemented()
     }
 
-    @Suppress("unused")
-    enum class Type {
-        @SerialName("Void")
-        Void,
+    fun willMutate(context: Context) {
+        if (isFrozen) context.raiseError("attempt to mutate frozen object")
+    }
 
-        @SerialName("Null")
-        Null,
+    suspend fun getInstanceMember(context: Context, name: String): Obj? = definition.getInstanceMethodOrNull(name)
 
-        @SerialName("String")
-        String,
+    suspend fun <T> sync(block: () -> T): T = monitor.withLock { block() }
 
-        @SerialName("Int")
-        Int,
+    open suspend fun readField(context: Context, name: String): Obj {
+        context.raiseNotImplemented()
+    }
 
-        @SerialName("Real")
-        Real,
+    open suspend fun writeField(context: Context,name: String, newValue: Obj) {
+        context.raiseNotImplemented()
+    }
 
-        @SerialName("Bool")
-        Bool,
-
-        @SerialName("Fn")
-        Fn,
-
-        @SerialName("Any")
-        Any,
+    open suspend fun callOn(context: Context): Obj {
+        context.raiseNotImplemented()
     }
 
     companion object {
@@ -117,7 +151,7 @@ object ObjVoid : Obj() {
         return other is ObjVoid || other is Unit
     }
 
-    override fun compareTo(other: Obj): Int {
+    override suspend fun compareTo(context: Context, other: Obj): Int {
         return if (other === this) 0 else -1
     }
 
@@ -127,7 +161,7 @@ object ObjVoid : Obj() {
 @Serializable
 @SerialName("null")
 object ObjNull : Obj() {
-    override fun compareTo(other: Obj): Int {
+    override suspend fun compareTo(context: Context, other: Obj): Int {
         return if (other === this) 0 else -1
     }
 
@@ -140,8 +174,8 @@ object ObjNull : Obj() {
 @SerialName("string")
 data class ObjString(val value: String) : Obj() {
 
-    override fun compareTo(other: Obj): Int {
-        if (other !is ObjString) throw IllegalArgumentException("cannot compare string with $other")
+    override suspend fun compareTo(context: Context, other: Obj): Int {
+        if (other !is ObjString) context.raiseError("cannot compare string with $other")
         return this.value.compareTo(other.value)
     }
 
@@ -181,8 +215,8 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
     override val toObjInt: ObjInt by lazy { ObjInt(longValue) }
     override val toObjReal: ObjReal by lazy { ObjReal(value) }
 
-    override fun compareTo(other: Obj): Int {
-        if (other !is Numeric) throw IllegalArgumentException("cannot compare $this with $other")
+    override suspend fun compareTo(context: Context, other: Obj): Int {
+        if (other !is Numeric) context.raiseError("cannot compare $this with $other")
         return value.compareTo(other.doubleValue)
     }
 
@@ -206,15 +240,16 @@ data class ObjInt(var value: Long) : Obj(), Numeric {
         return ObjInt(value).also { value-- }
     }
 
-//    override fun plus(context: Context, other: Obj): Obj {
-//        if (other !is Numeric)
-//            context.raiseError("cannot add $this with $other")
-//        return if (other is ObjInt)
-//
-//    }
+    override fun incrementAndGet(context: Context): Obj {
+        return ObjInt(++value)
+    }
 
-    override fun compareTo(other: Obj): Int {
-        if (other !is Numeric) throw IllegalArgumentException("cannot compare $this with $other")
+    override fun decrementAndGet(context: Context): Obj {
+        return ObjInt(--value)
+    }
+
+    override suspend fun compareTo(context: Context, other: Obj): Int {
+        if (other !is Numeric) context.raiseError("cannot compare $this with $other")
         return value.compareTo(other.doubleValue)
     }
 
@@ -226,8 +261,8 @@ data class ObjInt(var value: Long) : Obj(), Numeric {
 data class ObjBool(val value: Boolean) : Obj() {
     override val asStr by lazy { ObjString(value.toString()) }
 
-    override fun compareTo(other: Obj): Int {
-        if (other !is ObjBool) throw IllegalArgumentException("cannot compare $this with $other")
+    override suspend fun compareTo(context: Context, other: Obj): Int {
+        if (other !is ObjBool) context.raiseError("cannot compare $this with $other")
         return value.compareTo(other.value)
     }
 
@@ -239,16 +274,25 @@ data class ObjNamespace(val name: String, val context: Context) : Obj() {
         return "namespace ${name}"
     }
 
-    override fun compareTo(other: Obj): Int {
-        throw IllegalArgumentException("cannot compare namespaces")
+    override suspend fun readField(callerContext: Context,name: String): Obj {
+        return context[name]?.value ?: callerContext.raiseError("not found: $name")
     }
+
 }
 
 open class ObjError(val context: Context, val message: String) : Obj() {
     override val asStr: ObjString by lazy { ObjString("Error: $message") }
-    override fun compareTo(other: Obj): Int {
-        if (other === this) return 0 else return -1
-    }
 }
 
 class ObjNullPointerError(context: Context) : ObjError(context, "object is null")
+
+class ObjClass(override val definition: ClassDef) : Obj() {
+
+    override suspend fun compareTo(context: Context, other: Obj): Int {
+//        definition.callInstanceMethod(":compareTo", context, other)?.let {
+//            it(context, this)
+//        }
+        TODO("Not yet implemented")
+    }
+
+}

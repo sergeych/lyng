@@ -8,6 +8,24 @@ import kotlin.test.*
 class ScriptTest {
 
     @Test
+    fun parseNewlines() {
+        fun check(expected: String, type: Token.Type, row: Int, col: Int, src: String, offset: Int = 0) {
+            val source = src.toSource()
+            assertEquals(
+                Token(expected, source.posAt(row, col), type),
+                parseLing(source)[offset]
+            )
+        }
+        check("1", Token.Type.INT, 0, 0, "1 + x\n2", 0)
+        check("+", Token.Type.PLUS, 0, 2, "1 + x\n2", 1)
+        check("x", Token.Type.ID, 0, 4, "1 + x\n2", 2)
+        check("\n", Token.Type.NEWLINE, 0, 5, "1 + x\n2", 3)
+//        check("2", Token.Type.INT, 1, 0, "1 + x\n2", 4)
+//        check("", Token.Type.EOF, 1, 0, "1 + x\n2", 5)
+
+    }
+
+    @Test
     fun parseNumbersTest() {
         fun check(expected: String, type: Token.Type, row: Int, col: Int, src: String, offset: Int = 0) {
             val source = src.toSource()
@@ -69,7 +87,7 @@ class ScriptTest {
         assertEquals(Token("(", src.posAt(0, 7), Token.Type.LPAREN), p.next())
         assertEquals(Token("Hello", src.posAt(0, 8), Token.Type.STRING), p.next())
         assertEquals(Token(")", src.posAt(0, 15), Token.Type.RPAREN), p.next())
-
+        assertEquals(Token("\n", src.posAt(0, 16), Token.Type.NEWLINE), p.next())
         assertEquals(Token("println", src.posAt(1, 0), Token.Type.ID), p.next())
         assertEquals(Token("(", src.posAt(1, 7), Token.Type.LPAREN), p.next())
         assertEquals(Token("world", src.posAt(1, 9), Token.Type.STRING), p.next())
@@ -290,7 +308,7 @@ class ScriptTest {
         context.eval(
             """
             fn test1(n) {
-                if( n >= 10 ) 
+                if( n >= 10 )
                     "enough"
                 else
                     "more"
@@ -301,13 +319,13 @@ class ScriptTest {
         assertEquals("more", context.eval("test1(1)").toString())
 
         // if/else with blocks
-        context = Context(pos = Pos.builtIn )
+        context = Context(pos = Pos.builtIn)
         context.eval(
             """
             fn test1(n) {
                 if( n > 20 ) {
                     "too much"
-                } else if( n >= 10 ) { 
+                } else if( n >= 10 ) {
                     "enough"
                 }
                 else {
@@ -425,6 +443,7 @@ class ScriptTest {
                 """
                 val count = 3
                 val res = if( count > 10 ) "too much" else "just " + count
+                println(res)
                 res
                 """.trimIndent()
             )
@@ -513,16 +532,21 @@ class ScriptTest {
     @Test
     fun testIncrAndDecr() = runTest {
         val c = Context()
-        assertEquals( "8", c.eval("""
+        assertEquals(
+            "8", c.eval(
+                """
             var x = 5
             x-- 
             x-- 
             x++ 
             x * 2
-        """).toString())
+        """
+            ).toString()
+        )
 
-        assertEquals( "4", c.eval("x").toString())
+        assertEquals("4", c.eval("x").toString())
 //        assertEquals( "8", c.eval("x*2").toString())
 //        assertEquals( "4", c.eval("x+0").toString())
     }
+
 }

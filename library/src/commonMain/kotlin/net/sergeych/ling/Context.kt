@@ -32,13 +32,12 @@ class Context(
     fun copy(pos: Pos, args: Arguments = Arguments.EMPTY): Context = Context(this, args, pos)
 
     fun addItem(name: String, isMutable: Boolean, value: Obj?) {
-        objects.put(name, StoredObj(name, value, isMutable))
+        objects.put(name, StoredObj(value, isMutable))
     }
 
     fun getOrCreateNamespace(name: String) =
         (objects.getOrPut(name) {
             StoredObj(
-                name,
                 ObjNamespace(name, copy(pos)),
                 isMutable = false
             )
