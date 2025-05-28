@@ -189,7 +189,13 @@ class BookTest {
     }
 
     @Test
-    fun testsFromOOPrinciples() = runTest {
+    fun testsFromOOP() = runTest {
         runDocTests("../docs/OOP.md")
     }
+
+    @Test
+    fun testFromReal() = runTest {
+        runDocTests("../docs/real.md")
+    }
+
 }

@@ -67,7 +67,7 @@ class Context(
         }
     }
 
-    inline fun <reified T> addConst(value: T, vararg names: String) {
+    inline fun <reified T> addConstWithAliases(value: T, vararg names: String) {
         val obj = Obj.from(value)
         for (name in names) {
             addItem(
@@ -77,6 +77,8 @@ class Context(
             )
         }
     }
+
+    fun addConst(name: String,value: Obj) = addItem(name, false, value)
 
     suspend fun eval(code: String): Obj =
         Compiler().compile(code.toSource()).execute(this)

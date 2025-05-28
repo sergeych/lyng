@@ -40,13 +40,27 @@ Class is the object, naturally, with class:
 
 Classes can be compared:
 
-    println(1.21::class == Math.PI::class)
-    println(3.14::class == 1::class)
-    println(π::class)
-    >>> true
-    >>> false
+    assert(1.21::class == Math.PI::class)
+    assert(3.14::class != 1::class)
+    assert(π::class == Real)
+    π::class
     >>> Real
+
+Note `Real` class: it is global variable for Real class; there are such class instances for all built-in types:
+
+    assert("Hello"::class == String)
+    assert(1970::class == Int)
+    assert(true::class == Bool)
     >>> void
+
+More complex is singleton classes, because you don't need to compare their class
+instances and generally don't need them at all, these are normally just Obj:
+
+    null::class
+    >>> Obj
+
+At this time, `Obj` can't be accessed as a class.
+
 
 ### Methods in-depth
 

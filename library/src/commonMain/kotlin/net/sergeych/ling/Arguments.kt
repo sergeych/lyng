@@ -13,6 +13,12 @@ data class Arguments(val list: List<Info>): Iterable<Obj> {
         return list.first().value
     }
 
+    inline fun <reified T: Obj>required(index: Int, context: Context): T {
+        if( list.size <= index ) context.raiseError("Expected at least ${index+1} argument, got ${list.size}")
+        return (list[index].value as? T)
+            ?: context.raiseError("Expected type ${T::class.simpleName}, got ${list[index].value::class.simpleName}")
+    }
+
     companion object {
         val EMPTY = Arguments(emptyList())
     }

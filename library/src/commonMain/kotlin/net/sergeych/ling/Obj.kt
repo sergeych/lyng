@@ -190,6 +190,13 @@ data class ObjString(val value: String) : Obj() {
     }
 
     override fun toString(): String = value
+
+    override val objClass: ObjClass
+        get() = type
+
+    companion object {
+        val type = ObjClass("String")
+    }
 }
 
 interface Numeric {
@@ -273,10 +280,14 @@ data class ObjInt(var value: Long) : Obj(), Numeric {
     }
 
     override fun toString(): String = value.toString()
+
+    override val objClass: ObjClass = type
+
+    companion object {
+        val type = ObjClass("Int")
+    }
 }
 
-@Serializable
-@SerialName("bool")
 data class ObjBool(val value: Boolean) : Obj() {
     override val asStr by lazy { ObjString(value.toString()) }
 
@@ -286,6 +297,12 @@ data class ObjBool(val value: Boolean) : Obj() {
     }
 
     override fun toString(): String = value.toString()
+
+    override val objClass: ObjClass = type
+
+    companion object {
+        val type = ObjClass("Bool")
+    }
 }
 
 data class ObjNamespace(val name: String) : Obj() {
@@ -300,3 +317,4 @@ open class ObjError(val context: Context, val message: String) : Obj() {
 
 class ObjNullPointerError(context: Context) : ObjError(context, "object is null")
 
+class ObjAssertionError(context: Context, message: String) : ObjError(context, message)
