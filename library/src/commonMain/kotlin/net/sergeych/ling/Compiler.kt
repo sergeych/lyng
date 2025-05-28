@@ -89,14 +89,14 @@ class CompilerContext(val tokens: List<Token>) : ListIterator<Token> by tokens.l
         } else true
     }
 
-    fun ifNextIs(typeId: Token.Type, f: (Token) -> Unit): IfScope {
+    fun ifNextIs(typeId: Token.Type, f: (Token) -> Unit): Boolean {
         val t = next()
         return if (t.type == typeId) {
             f(t)
-            IfScope(true)
+            true
         } else {
             previous()
-            IfScope(false)
+            false
         }
     }
 
@@ -277,22 +277,28 @@ class Compiler {
                 Token.Type.DOT -> {
                     operand?.let { left ->
                         // dotcall: calling method on the operand, if next is ID, "("
-                        cc.ifNextIs(Token.Type.ID) { methodToken ->
+                        var isCall = false
+                        val next = cc.next()
+                        if( next.type == Token.Type.ID) {
                             cc.ifNextIs(Token.Type.LPAREN) {
                                 // instance method call
                                 val args = parseArgs(cc)
+                                isCall = true
                                 operand = Accessor { context ->
-                                    context.pos = methodToken.pos
+                                    context.pos = next.pos
                                     val v = left.getter(context)
                                     v.callInstanceMethod(
                                         context,
-                                        methodToken.value,
+                                        next.value,
                                         args.toArguments()
                                     )
                                 }
                             }
-                        }.otherwise {
-                            TODO("implement member access")
+                        }
+                        if (!isCall) {
+                            operand = Accessor { context ->
+                                left.getter(context).readField(context, next.value)
+                            }
                         }
                     } ?: throw ScriptError(t.pos, "Expecting expression before dot")
                 }
@@ -489,7 +495,10 @@ class Compiler {
                     else -> {
                         Accessor({
                             it.pos = t.pos
-                            it.get(t.value)?.value ?: it.raiseError("symbol not defined: '${t.value}'")
+                            it.get(t.value)?.value?.also {
+                                println("got ${t.value} -> $it")
+                            }
+                                ?: it.raiseError("symbol not defined: '${t.value}'")
                         }) { ctx, newValue ->
                             ctx.get(t.value)?.let { stored ->
                                 ctx.pos = t.pos

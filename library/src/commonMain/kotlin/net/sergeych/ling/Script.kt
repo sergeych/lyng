@@ -50,8 +50,8 @@ class Script(
             val z = pi.objClass
             println("PI class $z")
             addConst(pi, "π")
-            getOrCreateNamespace("Math").also { ns ->
-                ns.addConst(pi, "PI")
+            getOrCreateNamespace("Math").apply {
+                addConst( "PI", pi)
             }
         }
     }

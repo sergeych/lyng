@@ -17,7 +17,7 @@ data class Accessor(
 ) {
     constructor(getter: suspend (Context) -> Obj) : this(getter, null)
 
-    fun setter(pos: Pos) = setterOrNull ?: throw ScriptError(pos,"can't assign value")
+    fun setter(pos: Pos) = setterOrNull ?: throw ScriptError(pos, "can't assign value")
 }
 
 sealed class Obj {
@@ -26,8 +26,11 @@ sealed class Obj {
     private val monitor = Mutex()
 
     // members: fields most often
-    internal val members = mutableMapOf<String, WithAccess<Obj>>()
+    private val members = mutableMapOf<String, WithAccess<Obj>>()
+
+    //    private val memberMutex = Mutex()
     private val parentInstances = listOf<Obj>()
+
 
     /**
      * Get instance member traversing the hierarchy if needed. Its meaning is different for different objects.
@@ -38,15 +41,18 @@ sealed class Obj {
         return null
     }
 
-    fun getInstanceMember(atPos: Pos, name: String): Obj = getInstanceMemberOrNull(name)
-        ?: throw ScriptError(atPos,"symbol doesn't exist: $name")
+    fun getInstanceMember(atPos: Pos, name: String): Obj =
+        getInstanceMemberOrNull(name)
+            ?: throw ScriptError(atPos, "symbol doesn't exist: $name")
 
-    suspend fun callInstanceMethod(context: Context, name: String,args: Arguments): Obj {
-        // instance _methods_ are our ObjClass instance:
+    suspend fun callInstanceMethod(context: Context, name: String, args: Arguments): Obj =
+    // instance _methods_ are our ObjClass instance:
+    // note that getInstanceMember traverses the hierarchy
+    // instance _methods_ are our ObjClass instance:
+    // note that getInstanceMember traverses the hierarchy
+// instance _methods_ are our ObjClass instance:
         // note that getInstanceMember traverses the hierarchy
-        return objClass.getInstanceMember(context.pos,name).invoke(context, this, args)
-    }
-
+        objClass.getInstanceMember(context.pos, name).invoke(context, this, args)
 
     // methods that to override
 
@@ -99,23 +105,31 @@ sealed class Obj {
 
     suspend fun <T> sync(block: () -> T): T = monitor.withLock { block() }
 
-    open suspend fun readField(context: Context, name: String): Obj {
-        context.raiseNotImplemented()
+    suspend fun readField(context: Context, name: String): Obj = getInstanceMember(context.pos, name)
+
+    suspend fun writeField(context: Context, name: String, newValue: Obj) {
+        willMutate(context)
+        members[name]?.let { if (it.isMutable) it.value = newValue }
+            ?: context.raiseError("Can't reassign member: $name")
     }
 
-    open suspend fun writeField(context: Context,name: String, newValue: Obj) {
-        context.raiseNotImplemented()
+    fun createField(name: String, initialValue: Obj, isMutable: Boolean = false, pos: Pos = Pos.builtIn) {
+        if (name in members || parentInstances.any<Obj> { name in it.members })
+            throw ScriptError(pos, "$name is already defined in $objClass or one of its supertypes")
+        members[name] = WithAccess(initialValue, isMutable)
     }
+
+    fun addConst(name: String, value: Obj) = createField(name, value, isMutable = false)
 
     open suspend fun callOn(context: Context): Obj {
         context.raiseNotImplemented()
     }
 
-    suspend fun invoke(context: Context, thisObj: Obj,args: Arguments): Obj =
-        callOn(context.copy(context.pos,args = args, newThisObj = thisObj))
+    suspend fun invoke(context: Context, thisObj: Obj, args: Arguments): Obj =
+        callOn(context.copy(context.pos, args = args, newThisObj = thisObj))
 
-    suspend fun invoke(context: Context,atPos: Pos, thisObj: Obj,args: Arguments): Obj =
-        callOn(context.copy(atPos,args = args,newThisObj = thisObj))
+    suspend fun invoke(context: Context, atPos: Pos, thisObj: Obj, args: Arguments): Obj =
+        callOn(context.copy(atPos, args = args, newThisObj = thisObj))
 
 
     companion object {
@@ -202,7 +216,6 @@ fun Obj.toBool(): Boolean =
     (this as? ObjBool)?.value ?: throw IllegalArgumentException("cannot convert to boolean $this")
 
 
-
 data class ObjReal(val value: Double) : Obj(), Numeric {
     override val asStr by lazy { ObjString(value.toString()) }
     override val longValue: Long by lazy { floor(value).toLong() }
@@ -221,11 +234,11 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
 
     companion object {
         val type: ObjClass = ObjClass("Real").apply {
-            members["roundToInt"] = WithAccess(
+            createField(
+                "roundToInt",
                 statement(Pos.builtIn) {
                     (it.thisObj as ObjReal).value.roundToLong().toObj()
                 },
-                false
             )
         }
     }
@@ -275,15 +288,10 @@ data class ObjBool(val value: Boolean) : Obj() {
     override fun toString(): String = value.toString()
 }
 
-data class ObjNamespace(val name: String, val context: Context) : Obj() {
+data class ObjNamespace(val name: String) : Obj() {
     override fun toString(): String {
         return "namespace ${name}"
     }
-
-    override suspend fun readField(callerContext: Context,name: String): Obj {
-        return context[name]?.value ?: callerContext.raiseError("not found: $name")
-    }
-
 }
 
 open class ObjError(val context: Context, val message: String) : Obj() {
@@ -291,3 +299,4 @@ open class ObjError(val context: Context, val message: String) : Obj() {
 }
 
 class ObjNullPointerError(context: Context) : ObjError(context, "object is null")
+

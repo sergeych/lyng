@@ -40,7 +40,7 @@ Class is the object, naturally, with class:
 
 Classes can be compared:
 
-    println(3.14::class == 2.21::class)
+    println(1.21::class == Math.PI::class)
     println(3.14::class == 1::class)
     println(π::class)
     >>> true

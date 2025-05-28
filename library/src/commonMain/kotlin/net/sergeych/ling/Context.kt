@@ -37,14 +37,13 @@ class Context(
         objects.put(name, StoredObj(value, isMutable))
     }
 
-    fun getOrCreateNamespace(name: String) =
+    fun getOrCreateNamespace(name: String): ObjNamespace =
         (objects.getOrPut(name) {
             StoredObj(
-                ObjNamespace(name, copy(pos)),
+                ObjNamespace(name),
                 isMutable = false
             )
         }.value as ObjNamespace)
-            .context
 
     inline fun <reified T> addFn(vararg names: String, crossinline fn: suspend Context.() -> T) {
         val newFn = object : Statement() {
