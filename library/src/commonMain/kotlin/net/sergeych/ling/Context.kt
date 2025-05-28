@@ -14,6 +14,7 @@ class Context(
 
     fun raiseNotImplemented(): Nothing = raiseError("operation not implemented")
 
+    @Suppress("unused")
     fun raiseNPE(): Nothing = raiseError(ObjNullPointerError(this))
 
     fun raiseError(message: String): Nothing {
@@ -69,17 +70,6 @@ class Context(
                 name,
                 false,
                 newFn
-            )
-        }
-    }
-
-    inline fun <reified T> addConstWithAliases(value: T, vararg names: String) {
-        val obj = Obj.from(value)
-        for (name in names) {
-            addItem(
-                name,
-                false,
-                obj
             )
         }
     }

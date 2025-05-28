@@ -11,7 +11,7 @@ data class Token(val value: String, val pos: Pos, val type: Type) {
         ASSIGN, PLUSASSIGN, MINUSASSIGN, STARASSIGN, SLASHASSIGN, PERCENTASSIGN,
         PLUS2, MINUS2,
         EQ, NEQ, LT, LTE, GT, GTE,
-        AND, BITAND, OR, BITOR, NOT, DOT, ARROW, QUESTION, COLONCOLON,
+        AND, BITAND, OR, BITOR, NOT, BITNOT, DOT, ARROW, QUESTION, COLONCOLON,
         SINLGE_LINE_COMMENT, MULTILINE_COMMENT,
         LABEL,ATLABEL, // label@ at@label
         NEWLINE,

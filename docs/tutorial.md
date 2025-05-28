@@ -4,35 +4,37 @@ Ling is a very simple language, where we take only most important and popular fe
 other scripts and languages. In particular, we adopt _principle of minimal confusion_[^1].
 In other word, the code usually works as expected when you see it. So, nothing unusual.
 
-# Expressions and blocks.
+# Expressions
 
 Everything is an expression in Ling. Even an empty block:
 
-    {
-        // empty block
-    }
+    // empty block
     >>> void
 
-Block returns it last expression as "return value":
+any block also returns it's last expression:
 
-    {
+    if( true ) {
         2 + 2
         3 + 3
     }
     >>> 6
 
-Same is without block:
-
-    3 + 3
-    >>> 6
-
 If you don't want block to return anything, use `void`:
 
-    {
-        3 + 4
+    fn voidFunction() {
+        3 + 4 // this will be ignored
         void
     }
+    voidFunction()
     >>> void
+
+otherwise, last expression will be returned:
+    
+    fn normalize(value, minValue, maxValue) {
+        (value - minValue) / (maxValue-minValue)
+    }
+    normalize( 4, 0.0, 10.0)
+    >>> 0.4
 
 Every construction is an expression that returns something (or `void`):
 
@@ -54,18 +56,47 @@ You can use blocks in if statement, as expected:
 
 When putting multiple statments in the same line it is convenient and recommended to use `;`:
 
-    var from; var to;
+    var from; var to
     from = 0; to = 100
-    >>> void
+    >>> 100
 
-Notice: returned value is `void` as assignment operator does not return its value. We might decide to change it.
-
+Notice: returned value is `100` as assignment operator returns its assigned value.
 Most often you can omit `;`, but improves readability and prevent some hardly seen bugs.
 
-So the principles are:
+## Assignments
 
-- everything is an expression returning its last calculated value or `void`
-- expression could be a `{ block }`
+Assignemnt is an expression that changes its lvalue and return assigned value:
+
+    var x = 100
+    x = 20
+    println(5 + (x=6)) // 11: x changes its value!
+    x
+    >>> 11
+    >>> 6
+
+As the assignment itself is an expression, you can use it in strange ways. Just remember
+to use parentheses as assignment operation insofar is left-associated and will not 
+allow chained assignments (we might fix it later)
+
+    var x = 0
+    var y = 0
+    x = (y = 5)
+    x + y
+    >>> 10
+
+## Modifying arithmetics
+
+There is a set of assigning operations: `+=`, `-=`, `*=`, `/=` and even `%=`. 
+
+    var x = 5
+    assert( 25 == (x*=5) )
+    assert( 25 == x)
+    assert( 24 == (x-=1) )
+    assert( 12 == (x/=2) )
+    x
+    >>> 12
+
+Notice the parentheses here: the assignment has low priority!
 
 ## Expression details
 
@@ -202,7 +233,7 @@ Regular pre-condition while loop, as expression, loop returns it's last line res
 
     var count = 0
     while( count < 5 ) {
-        count = count + 1
+        count++
         count * 10
     }
     >>> 50
@@ -212,18 +243,17 @@ We can break as usual:
     var count = 0
     while( count < 5 ) {
         if( count < 5 ) break
-        count = count + 1
-        count * 10
+        count = ++count * 10
     }
     >>> void
 
 Why `void`? Because `break` drops out without the chute, not providing anything to return. Indeed, we should provide exit value in the case:
 
     var count = 0
-    while( count < 5 ) {
+    while( count < 50 ) {
         if( count > 3 ) break "too much"
-        count = count + 1
-        count * 10
+        count = ++count * 10
+        "wrong "+count
     }
     >>> too much
 
@@ -287,6 +317,38 @@ Notice that `total` remains 0 as the end of the outerLoop@ is not reachable: `co
 The label can be any valid identifier, even a keyword, labels exist in their own, isolated world, so no risk of occasional clash. Labels are also scoped to their context and do not exist outside it.
 
 Right now labels are implemented only for the while loop. It is intended to be implemented for all loops and returns.
+
+# Self-assignments in expression
+
+There are auto-increments and auto-decrements:
+
+    var counter = 0
+    assert(counter++ * 100 == 0)
+    assert(counter == 1)
+    >>> void
+    
+but:
+
+    var counter = 0
+    assert( ++counter * 100 == 100)
+    assert(counter == 1)
+    >>> void
+
+The same with `--`:
+
+    var count = 100
+    var sum = 0
+    while( count > 0 ) sum = sum + count--
+    sum
+    >>> 5050
+
+There are self-assigning version for operators too:
+
+    var count = 100
+    var sum = 0
+    while( count > 0 ) sum += count--
+    sum
+    >>> 5050
 
 # Comments
 

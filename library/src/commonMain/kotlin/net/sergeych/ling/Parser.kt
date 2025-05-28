@@ -3,7 +3,7 @@ package net.sergeych.ling
 val digitsSet = ('0'..'9').toSet()
 val digits = { d: Char -> d in digitsSet }
 val hexDigits = digitsSet + ('a'..'f') + ('A'..'F')
-val idNextChars = { d: Char -> d.isLetter() || d == '_' || d.isDigit()}
+val idNextChars = { d: Char -> d.isLetter() || d == '_' || d.isDigit() }
 
 @Suppress("unused")
 val idFirstChars = { d: Char -> d.isLetter() || d == '_' }
@@ -56,62 +56,82 @@ private class Parser(fromPos: Pos) {
                         advance()
                         Token("+", from, Token.Type.PLUS2)
                     }
+
                     '=' -> {
                         advance()
                         Token("+", from, Token.Type.PLUSASSIGN)
                     }
+
                     else ->
                         Token("+", from, Token.Type.PLUS)
                 }
             }
+
             '-' -> {
                 when (currentChar) {
                     '-' -> {
                         advance()
                         Token("--", from, Token.Type.MINUS2)
                     }
+
                     '=' -> {
                         advance()
                         Token("-", from, Token.Type.MINUSASSIGN)
                     }
+
                     else -> Token("-", from, Token.Type.MINUS)
                 }
             }
-            '*' -> Token("*", from, Token.Type.STAR)
-            '/' -> {
-                if( currentChar == '/') {
+
+            '*' -> {
+                if (currentChar == '=') {
+                    advance()
+                    Token("*=", from, Token.Type.STARASSIGN)
+                } else
+                    Token("*", from, Token.Type.STAR)
+            }
+
+            '/' -> when (currentChar) {
+                '/' -> {
                     advance()
                     Token(loadToEnd().trim(), from, Token.Type.SINLGE_LINE_COMMENT)
                 }
-                else
-                    Token("/", from, Token.Type.SLASH)
+                '=' -> {
+                    advance()
+                    Token("/=", from, Token.Type.SLASHASSIGN)
+                }
+                else -> Token("/", from, Token.Type.SLASH)
             }
-            '%' -> Token("%", from, Token.Type.PERCENT)
+
+            '%' -> when(currentChar) {
+                '=' -> { advance(); Token("%=", from, Token.Type.PERCENTASSIGN) }
+                else -> Token("%", from, Token.Type.PERCENT) }
+
             '.' -> Token(".", from, Token.Type.DOT)
             '<' -> {
-                if(currentChar == '=') {
+                if (currentChar == '=') {
                     advance()
                     Token("<=", from, Token.Type.LTE)
-                }
-                else
+                } else
                     Token("<", from, Token.Type.LT)
             }
+
             '>' -> {
-                if( currentChar == '=') {
+                if (currentChar == '=') {
                     advance()
                     Token(">=", from, Token.Type.GTE)
-                }
-                else
+                } else
                     Token(">", from, Token.Type.GT)
             }
+
             '!' -> {
-                if( currentChar == '=') {
+                if (currentChar == '=') {
                     advance()
                     Token("!=", from, Token.Type.NEQ)
-                }
-                else
+                } else
                     Token("!", from, Token.Type.NOT)
             }
+
             '|' -> {
                 if (currentChar == '|') {
                     advance()
@@ -119,6 +139,7 @@ private class Parser(fromPos: Pos) {
                 } else
                     Token("|", from, Token.Type.BITOR)
             }
+
             '&' -> {
                 if (currentChar == '&') {
                     advance()
@@ -126,19 +147,20 @@ private class Parser(fromPos: Pos) {
                 } else
                     Token("&", from, Token.Type.BITAND)
             }
+
             '@' -> {
                 val label = loadChars(idNextChars)
-                if( label.isNotEmpty()) Token(label, from, Token.Type.ATLABEL)
+                if (label.isNotEmpty()) Token(label, from, Token.Type.ATLABEL)
                 else raise("unexpected @ character")
             }
+
             '\n' -> Token("\n", from, Token.Type.NEWLINE)
 
             ':' -> {
-                if( currentChar == ':') {
+                if (currentChar == ':') {
                     advance()
                     Token("::", from, Token.Type.COLONCOLON)
-                }
-                else
+                } else
                     Token(":", from, Token.Type.COLON)
             }
 
@@ -154,20 +176,17 @@ private class Parser(fromPos: Pos) {
                 // statement@some: ID 'statement', LABEL 'some'!
                 if (ch.isLetter() || ch == '_') {
                     val text = ch + loadChars(idNextChars)
-                    if( currentChar == '@') {
+                    if (currentChar == '@') {
                         advance()
-                        if( currentChar.isLetter()) {
+                        if (currentChar.isLetter()) {
                             // break@label or like
                             pos.back()
                             Token(text, from, Token.Type.ID)
-                        }
-                        else
+                        } else
                             Token(text, from, Token.Type.LABEL)
-                    }
-                    else
+                    } else
                         Token(text, from, Token.Type.ID)
-                }
-                else
+                } else
                     raise("can't parse token")
             }
         }
@@ -209,7 +228,7 @@ private class Parser(fromPos: Pos) {
             // could be integer, also hex:
             if (currentChar == 'x' && p1 == "0") {
                 advance()
-                Token(loadChars({ it in hexDigits}), start, Token.Type.HEX).also {
+                Token(loadChars({ it in hexDigits }), start, Token.Type.HEX).also {
                     if (currentChar.isLetter())
                         raise("invalid hex literal")
                 }
@@ -261,7 +280,7 @@ private class Parser(fromPos: Pos) {
      *
      * @return the string of valid characters, could be empty
      */
-    private fun loadChars(isValidChar: (Char)->Boolean): String {
+    private fun loadChars(isValidChar: (Char) -> Boolean): String {
         val startLine = pos.line
         val result = StringBuilder()
         while (!pos.end && pos.line == startLine) {
@@ -306,7 +325,7 @@ private class Parser(fromPos: Pos) {
     private fun skipws(): Char? {
         while (!pos.end) {
             val ch = pos.currentChar
-            if( ch == '\n') break
+            if (ch == '\n') break
             if (ch.isWhitespace())
                 advance()
             else

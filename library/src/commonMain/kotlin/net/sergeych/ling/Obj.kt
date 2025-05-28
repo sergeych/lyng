@@ -7,7 +7,7 @@ import kotlinx.serialization.Serializable
 import kotlin.math.floor
 import kotlin.math.roundToLong
 
-typealias InstanceMethod = (Context, Obj) -> Obj
+//typealias InstanceMethod = (Context, Obj) -> Obj
 
 data class WithAccess<T>(var value: T, val isMutable: Boolean)
 
@@ -70,32 +70,70 @@ sealed class Obj {
      */
     open val objClass: ObjClass by lazy { ObjClass("Obj") }
 
-    open fun plus(context: Context, other: Obj): Obj {
+    open suspend fun plus(context: Context, other: Obj): Obj {
         context.raiseNotImplemented()
     }
 
-    open fun assign(context: Context, other: Obj): Obj {
+    open suspend fun minus(context: Context, other: Obj): Obj {
         context.raiseNotImplemented()
     }
 
-    open fun plusAssign(context: Context, other: Obj): Obj {
-        assign(context, plus(context, other))
-        return this
-    }
-
-    open fun getAndIncrement(context: Context): Obj {
+    open suspend fun mul(context: Context, other: Obj): Obj {
         context.raiseNotImplemented()
     }
 
-    open fun incrementAndGet(context: Context): Obj {
+    open suspend fun div(context: Context, other: Obj): Obj {
         context.raiseNotImplemented()
     }
 
-    open fun decrementAndGet(context: Context): Obj {
+    open suspend fun mod(context: Context, other: Obj): Obj {
         context.raiseNotImplemented()
     }
 
-    open fun getAndDecrement(context: Context): Obj {
+    open suspend fun logicalNot(context: Context): Obj {
+        context.raiseNotImplemented()
+    }
+
+    open suspend fun logicalAnd(context: Context, other: Obj): Obj {
+        context.raiseNotImplemented()
+    }
+
+    open suspend fun logicalOr(context: Context, other: Obj): Obj {
+        context.raiseNotImplemented()
+    }
+
+    open suspend fun assign(context: Context, other: Obj): Obj {
+        context.raiseNotImplemented()
+    }
+
+    /**
+     * a += b
+     * if( the operation is not defined, it returns null and the compiler would try
+     * to generate it as 'this = this + other', reassigning its variable
+     */
+    open suspend fun plusAssign(context: Context, other: Obj): Obj? = null
+
+    /**
+     * `-=` operations, see [plusAssign]
+     */
+    open suspend fun minusAssign(context: Context, other: Obj): Obj? = null
+    open suspend fun mulAssign(context: Context, other: Obj): Obj? = null
+    open suspend fun divAssign(context: Context, other: Obj): Obj? = null
+    open suspend fun modAssign(context: Context, other: Obj): Obj? = null
+
+    open suspend fun getAndIncrement(context: Context): Obj {
+        context.raiseNotImplemented()
+    }
+
+    open suspend fun incrementAndGet(context: Context): Obj {
+        context.raiseNotImplemented()
+    }
+
+    open suspend fun decrementAndGet(context: Context): Obj {
+        context.raiseNotImplemented()
+    }
+
+    open suspend fun getAndDecrement(context: Context): Obj {
         context.raiseNotImplemented()
     }
 
@@ -105,9 +143,9 @@ sealed class Obj {
 
     suspend fun <T> sync(block: () -> T): T = monitor.withLock { block() }
 
-    suspend fun readField(context: Context, name: String): Obj = getInstanceMember(context.pos, name)
+    fun readField(context: Context, name: String): Obj = getInstanceMember(context.pos, name)
 
-    suspend fun writeField(context: Context, name: String, newValue: Obj) {
+    fun writeField(context: Context, name: String, newValue: Obj) {
         willMutate(context)
         members[name]?.let { if (it.isMutable) it.value = newValue }
             ?: context.raiseError("Can't reassign member: $name")
@@ -194,6 +232,10 @@ data class ObjString(val value: String) : Obj() {
     override val objClass: ObjClass
         get() = type
 
+    override suspend fun plus(context: Context, other: Obj): Obj {
+        return ObjString(value + other.asStr.value)
+    }
+
     companion object {
         val type = ObjClass("String")
     }
@@ -239,6 +281,21 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
 
     override val objClass: ObjClass = type
 
+    override suspend fun plus(context: Context, other: Obj): Obj =
+        ObjReal(this.value + other.toDouble())
+
+    override suspend fun minus(context: Context, other: Obj): Obj =
+        ObjReal(this.value - other.toDouble())
+
+    override suspend fun mul(context: Context, other: Obj): Obj =
+        ObjReal(this.value * other.toDouble())
+
+    override suspend fun div(context: Context, other: Obj): Obj =
+        ObjReal(this.value / other.toDouble())
+
+    override suspend fun mod(context: Context, other: Obj): Obj =
+        ObjReal(this.value % other.toDouble())
+
     companion object {
         val type: ObjClass = ObjClass("Real").apply {
             createField(
@@ -258,19 +315,19 @@ data class ObjInt(var value: Long) : Obj(), Numeric {
     override val toObjInt get() = this
     override val toObjReal = ObjReal(doubleValue)
 
-    override fun getAndIncrement(context: Context): Obj {
+    override suspend fun getAndIncrement(context: Context): Obj {
         return ObjInt(value).also { value++ }
     }
 
-    override fun getAndDecrement(context: Context): Obj {
+    override suspend fun getAndDecrement(context: Context): Obj {
         return ObjInt(value).also { value-- }
     }
 
-    override fun incrementAndGet(context: Context): Obj {
+    override suspend fun incrementAndGet(context: Context): Obj {
         return ObjInt(++value)
     }
 
-    override fun decrementAndGet(context: Context): Obj {
+    override suspend fun decrementAndGet(context: Context): Obj {
         return ObjInt(--value)
     }
 
@@ -282,6 +339,33 @@ data class ObjInt(var value: Long) : Obj(), Numeric {
     override fun toString(): String = value.toString()
 
     override val objClass: ObjClass = type
+
+    override suspend fun plus(context: Context, other: Obj): Obj =
+        if (other is ObjInt)
+            ObjInt(this.value + other.value)
+        else
+            ObjReal(this.doubleValue + other.toDouble())
+
+    override suspend fun minus(context: Context, other: Obj): Obj =
+        if (other is ObjInt)
+            ObjInt(this.value - other.value)
+        else
+            ObjReal(this.doubleValue - other.toDouble())
+
+    override suspend fun mul(context: Context, other: Obj): Obj =
+        if (other is ObjInt) {
+            ObjInt(this.value * other.value)
+        } else ObjReal(this.value * other.toDouble())
+
+    override suspend fun div(context: Context, other: Obj): Obj =
+        if (other is ObjInt)
+            ObjInt(this.value / other.value)
+        else ObjReal(this.value / other.toDouble())
+
+    override suspend fun mod(context: Context, other: Obj): Obj =
+        if (other is ObjInt)
+            ObjInt(this.value % other.value)
+        else ObjReal(this.value.toDouble() % other.toDouble())
 
     companion object {
         val type = ObjClass("Int")
@@ -299,6 +383,12 @@ data class ObjBool(val value: Boolean) : Obj() {
     override fun toString(): String = value.toString()
 
     override val objClass: ObjClass = type
+
+    override suspend fun logicalNot(context: Context): Obj = ObjBool(!value)
+
+    override suspend fun logicalAnd(context: Context, other: Obj): Obj = ObjBool(value && other.toBool())
+
+    override suspend fun logicalOr(context: Context, other: Obj): Obj = ObjBool(value || other.toBool())
 
     companion object {
         val type = ObjClass("Bool")

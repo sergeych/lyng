@@ -16,6 +16,7 @@ internal class CompilerContext(val tokens: List<Token>) : ListIterator<Token> by
             if (type != it.type) throw ScriptError(it.pos, message)
         }
 
+    @Suppress("unused")
     fun syntaxError(at: Pos, message: String = "Syntax error"): Nothing {
         throw ScriptError(at, message)
     }

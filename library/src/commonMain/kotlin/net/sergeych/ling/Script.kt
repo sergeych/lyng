@@ -31,17 +31,17 @@ class Script(
             addFn("floor") {
                 val x = args.firstAndOnly()
                 (if (x is ObjInt) x
-                else ObjReal(floor(x.toDouble()))) as Obj
+                else ObjReal(floor(x.toDouble())))
             }
             addFn("ceil") {
                 val x = args.firstAndOnly()
                 (if (x is ObjInt) x
-                else ObjReal(ceil(x.toDouble()))) as Obj
+                else ObjReal(ceil(x.toDouble())))
             }
             addFn("round") {
                 val x = args.firstAndOnly()
                 (if (x is ObjInt) x
-                else ObjReal(round(x.toDouble()))) as Obj
+                else ObjReal(round(x.toDouble())))
             }
             addFn("sin") {
                 ObjReal(sin(args.firstAndOnly().toDouble()))

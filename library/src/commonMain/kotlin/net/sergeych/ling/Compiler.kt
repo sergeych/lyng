@@ -29,20 +29,20 @@ class Compiler(
             return when (t.type) {
                 Token.Type.ID -> {
                     // could be keyword, assignment or just the expression
-                    val next = tokens.next()
-                    if (next.type == Token.Type.ASSIGN) {
-                        // this _is_ assignment statement
-                        return AssignStatement(
-                            t.pos, t.value,
-                            parseStatement(tokens) ?: throw ScriptError(
-                                t.pos,
-                                "Expecting expression for assignment operator"
-                            )
-                        )
-                    }
-                    // not assignment, maybe keyword statement:
-                    // get back the token which is not '=':
-                    tokens.previous()
+//                    val next = tokens.next()
+//                    if (next.type == Token.Type.ASSIGN) {
+//                         this _is_ assignment statement
+//                        return AssignStatement(
+//                            t.pos, t.value,
+//                            parseStatement(tokens) ?: throw ScriptError(
+//                                t.pos,
+//                                "Expecting expression for assignment operator"
+//                            )
+//                        )
+//                    }
+//                     not assignment, maybe keyword statement:
+//                     get back the token which is not '=':
+//                    tokens.previous()
                     // try keyword statement
                     parseKeywordStatement(t, tokens)
                         ?: run {
@@ -84,10 +84,15 @@ class Compiler(
         }
     }
 
-    private fun parseExpression(tokens: CompilerContext, level: Int = 0): Statement? {
+    private fun parseExpression(tokens: CompilerContext): Statement? {
+        val pos = tokens.currentPos()
+        return parseExpressionLevel(tokens)?.let { a -> statement(pos) { a.getter(it) } }
+    }
+
+    private fun parseExpressionLevel(tokens: CompilerContext, level: Int = 0): Accessor? {
         if (level == lastLevel)
             return parseTerm3(tokens)
-        var lvalue = parseExpression(tokens, level + 1)
+        var lvalue = parseExpressionLevel(tokens, level + 1)
         if (lvalue == null) return null
 
         while (true) {
@@ -99,7 +104,7 @@ class Compiler(
                 break
             }
 
-            val rvalue = parseExpression(tokens, level + 1)
+            val rvalue = parseExpressionLevel(tokens, level + 1)
                 ?: throw ScriptError(opToken.pos, "Expecting expression")
 
             lvalue = op.generate(opToken.pos, lvalue!!, rvalue)
@@ -167,7 +172,7 @@ class Compiler(
      *                expr-=<expr>, expr*=<expr>, expr/=<expr>
      * read expr: <expr>
      */
-    private fun parseTerm3(cc: CompilerContext): Statement? {
+    private fun parseTerm3(cc: CompilerContext): Accessor? {
         var operand: Accessor? = null
 
         while (true) {
@@ -176,7 +181,13 @@ class Compiler(
             when (t.type) {
                 Token.Type.NEWLINE, Token.Type.SEMICOLON, Token.Type.EOF -> {
                     cc.previous()
-                    return operand?.let { op -> statement(startPos) { op.getter(it) } }
+                    return operand
+                }
+
+                Token.Type.NOT -> {
+                    if( operand != null ) throw ScriptError(t.pos, "unexpected operator not '!'")
+                    val op = parseTerm3(cc) ?: throw ScriptError(t.pos, "Expecting expression")
+                    operand = Accessor { op.getter(it).logicalNot(it) }
                 }
 
                 Token.Type.DOT -> {
@@ -233,11 +244,6 @@ class Compiler(
                 Token.Type.ID -> {
                     // there could be terminal operators or keywords:// variable to read or like
                     when (t.value) {
-                        "else" -> {
-                            cc.previous()
-                            return operand?.let { op -> statement(startPos) { op.getter(it) } }
-                        }
-
                         "if", "when", "do", "while", "return" -> {
                             if (operand != null) throw ScriptError(t.pos, "unexpected keyword")
                             cc.previous()
@@ -245,9 +251,9 @@ class Compiler(
                             operand = Accessor { s.execute(it) }
                         }
 
-                        "break", "continue" -> {
+                        "else", "break", "continue" -> {
                             cc.previous()
-                            return operand?.let { op -> statement(startPos) { op.getter(it) } }
+                            return operand
 
                         }
 
@@ -307,9 +313,7 @@ class Compiler(
 
                 else -> {
                     cc.previous()
-                    operand?.let { op ->
-                        return statement(startPos) { op.getter(it) }
-                    }
+                    operand?.let { return it }
                     operand = parseAccessor(cc) ?: throw ScriptError(t.pos, "Expecting expression")
                 }
             }
@@ -713,53 +717,118 @@ class Compiler(
         }
     }
 
-//    fun parseStatement(parser: Parser): Statement? =
-//        parser.withToken {
-//            if (tokens.isEmpty()) null
-//            else {
-//                when (val token = tokens[0]) {
-//                    else -> {
-//                        rollback()
-//                        null
-//                    }
-//                }
-//            }
-//        }
-
     data class Operator(
         val tokenType: Token.Type,
-        val priority: Int, val arity: Int,
-        val generate: (Pos, Statement, Statement) -> Statement
-    )
+        val priority: Int, val arity: Int=2,
+        val generate: (Pos, Accessor, Accessor) -> Accessor
+    ) {
+//        fun isLeftAssociative() = tokenType != Token.Type.OR && tokenType != Token.Type.AND
+
+        companion object {
+            fun simple(tokenType: Token.Type, priority: Int, f: suspend (Context, Obj, Obj) -> Obj): Operator =
+                Operator(tokenType, priority, 2, { _: Pos, a: Accessor, b: Accessor ->
+                    Accessor { f(it, a.getter(it), b.getter(it)) }
+                })
+        }
+
+    }
 
     companion object {
 
+        private var lastPrty = 0
         val allOps = listOf(
-            Operator(Token.Type.OR, 0, 2) { pos, a, b -> LogicalOrStatement(pos, a, b) },
-            Operator(Token.Type.AND, 1, 2) { pos, a, b -> LogicalAndStatement(pos, a, b) },
+            // assignments
+            Operator(Token.Type.ASSIGN, lastPrty) { pos, a, b ->
+                Accessor {
+                    val value = b.getter(it)
+                    a.setter(pos)(it, value)
+                    value
+                }
+            },
+            Operator(Token.Type.PLUSASSIGN, lastPrty) { pos, a, b ->
+                Accessor {
+                    val x = a.getter(it)
+                    val y = b.getter(it)
+                    x.plusAssign(it, y) ?: run {
+                        val result = x.plus(it, y)
+                        a.setter(pos)(it, result)
+                        result
+                    }
+                }
+            },
+            Operator(Token.Type.MINUSASSIGN, lastPrty) { pos, a, b ->
+                Accessor {
+                    val x = a.getter(it)
+                    val y = b.getter(it)
+                    x.minusAssign(it, y) ?: run {
+                        val result = x.minus(it, y)
+                        a.setter(pos)(it, result)
+                        result
+                    }
+                }
+            },
+            Operator(Token.Type.STARASSIGN, lastPrty) { pos, a, b ->
+                Accessor {
+                    val x = a.getter(it)
+                    val y = b.getter(it)
+                    x.mulAssign(it, y) ?: run {
+                        val result = x.mul(it, y)
+                        a.setter(pos)(it, result)
+                        result
+
+                    }
+                }
+            },
+            Operator(Token.Type.SLASHASSIGN, lastPrty) { pos, a, b ->
+                Accessor {
+                    val x = a.getter(it)
+                    val y = b.getter(it)
+                    x.divAssign(it, y) ?: run {
+                        val result = x.div(it, y)
+                        a.setter(pos)(it, result)
+                        result
+
+                    }
+                }
+            },
+            Operator(Token.Type.PERCENTASSIGN, lastPrty) { pos, a, b ->
+                Accessor {
+                    val x = a.getter(it)
+                    val y = b.getter(it)
+                    x.modAssign(it, y) ?: run {
+                        val result = x.mod(it, y)
+                        a.setter(pos)(it, result)
+                        result
+
+                    }
+                }
+            },
+            // logical 1
+            Operator.simple(Token.Type.OR, ++lastPrty) { ctx, a, b -> a.logicalOr(ctx,b) },
+            // logical 2
+            Operator.simple(Token.Type.AND, ++lastPrty) { ctx, a, b -> a.logicalAnd(ctx,b) },
             // bitwise or 2
             // bitwise and 3
             // equality/ne 4
-            LogicalOp(Token.Type.EQ, 4) { c, a, b -> a.compareTo(c, b) == 0 },
-            LogicalOp(Token.Type.NEQ, 4) { c, a, b -> a.compareTo(c, b) != 0 },
+            Operator.simple(Token.Type.EQ, ++lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) == 0) },
+            Operator.simple(Token.Type.NEQ, lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) != 0) },
             // relational <=,... 5
-            LogicalOp(Token.Type.LTE, 5) { c, a, b -> a.compareTo(c, b) <= 0 },
-            LogicalOp(Token.Type.LT, 5) { c, a, b -> a.compareTo(c, b) < 0 },
-            LogicalOp(Token.Type.GTE, 5) { c, a, b -> a.compareTo(c, b) >= 0 },
-            LogicalOp(Token.Type.GT, 5) { c, a, b -> a.compareTo(c, b) > 0 },
+            Operator.simple(Token.Type.LTE, ++lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) <= 0) },
+            Operator.simple(Token.Type.LT, lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) < 0) },
+            Operator.simple(Token.Type.GTE, lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) >= 0) },
+            Operator.simple(Token.Type.GT, lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) > 0) },
             // shuttle <=> 6
-            // bitshhifts 7
-            Operator(Token.Type.PLUS, 8, 2) { pos, a, b ->
-                PlusStatement(pos, a, b)
-            },
-            Operator(Token.Type.MINUS, 8, 2) { pos, a, b ->
-                MinusStatement(pos, a, b)
-            },
-            Operator(Token.Type.STAR, 9, 2) { pos, a, b -> MulStatement(pos, a, b) },
-            Operator(Token.Type.SLASH, 9, 2) { pos, a, b -> DivStatement(pos, a, b) },
-            Operator(Token.Type.PERCENT, 9, 2) { pos, a, b -> ModStatement(pos, a, b) },
+            // bit shifts 7
+            Operator.simple(Token.Type.PLUS, ++lastPrty) { ctx, a, b -> a.plus(ctx,b) },
+            Operator.simple(Token.Type.MINUS, lastPrty) { ctx, a, b -> a.minus(ctx,b) },
+
+            Operator.simple(Token.Type.STAR, ++lastPrty) { ctx, a, b -> a.mul(ctx,b) },
+            Operator.simple(Token.Type.SLASH, lastPrty) { ctx, a, b -> a.div(ctx, b) },
+            Operator.simple(Token.Type.PERCENT, lastPrty) { ctx, a, b -> a.mod(ctx, b) },
         )
-        val lastLevel = 10
+
+        val lastLevel = lastPrty + 1
+
         val byLevel: List<Map<Token.Type, Operator>> = (0..<lastLevel).map { l ->
             allOps.filter { it.priority == l }
                 .map { it.tokenType to it }.toMap()
@@ -771,17 +840,3 @@ class Compiler(
 
 suspend fun eval(code: String) = Compiler.compile(code).execute()
 
-fun LogicalOp(
-    tokenType: Token.Type, priority: Int,
-    f: suspend (Context, Obj, Obj) -> Boolean
-) = Compiler.Operator(
-    tokenType,
-    priority,
-    2
-) { pos, a, b ->
-    statement(pos) {
-        ObjBool(
-            f(it, a.execute(it), b.execute(it))
-        )
-    }
-}

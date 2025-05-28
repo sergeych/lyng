@@ -223,8 +223,29 @@ class ScriptTest {
     }
 
     @Test
-    fun arithmeticParenthesisTest() = runTest {
+    fun arithmetics() = runTest {
+        // integer
         assertEquals(17, eval("2 + 3 * 5").toInt())
+        assertEquals(4, eval("5-1").toInt())
+        assertEquals(2, eval("8/4").toInt())
+        assertEquals(2, eval("8 % 3").toInt())
+
+        // int-real
+        assertEquals(9.5, eval("2 + 3 * 2.5").toDouble())
+        assertEquals(4.5, eval("5 - 0.5").toDouble())
+        assertEquals(2.5, eval("5 / 2.0").toDouble())
+        assertEquals(2.5, eval("5.0 / 2.0").toDouble())
+
+        // real
+        assertEquals(7.5, eval("2.5 + 5.0").toDouble())
+        assertEquals(4.5, eval("5.0 - 0.5").toDouble())
+        assertEquals(12.5, eval("5.0 * 2.5").toDouble())
+        assertEquals(2.5, eval("5.0 / 2.0").toDouble())
+    }
+
+    @Test
+    fun arithmeticParenthesisTest() = runTest {
+        assertEquals(17, eval("2.0 + 3 * 5").toInt())
         assertEquals(17, eval("2 + (3 * 5)").toInt())
         assertEquals(25, eval("(2 + 3) * 5").toInt())
         assertEquals(24, eval("(2 + 3) * 5 -1").toInt())
@@ -250,6 +271,22 @@ class ScriptTest {
         assertFalse { eval("false != false").toBool() }
 
         assertTrue { eval("2 == 2 && 3 != 4").toBool() }
+    }
+
+    @Test
+    fun logicTest() = runTest {
+        assertEquals(ObjBool(false), eval("true && false"))
+        assertEquals(ObjBool(false), eval("false && false"))
+        assertEquals(ObjBool(false), eval("false && true"))
+        assertEquals(ObjBool(true), eval("true && true"))
+
+        assertEquals(ObjBool(true), eval("true || false"))
+        assertEquals(ObjBool(false), eval("false || false"))
+        assertEquals(ObjBool(true), eval("false || true"))
+        assertEquals(ObjBool(true), eval("true || true"))
+
+        assertEquals(ObjBool(false), eval("!true"))
+        assertEquals(ObjBool(true), eval("!false"))
     }
 
     @Test
@@ -423,6 +460,7 @@ class ScriptTest {
                 var t2 = 10
                 while( t2 > 0 ) {
                     t2 = t2 - 1
+                    println("t2 " + t2 + " t1 " + t1)
                     if( t2 == 3 && t1 == 7) {
                         break@outer "ok2:"+t2+":"+t1
                     }
@@ -562,6 +600,36 @@ class ScriptTest {
          }
          """.trimIndent()
         eval(src)
+    }
+
+    @Test
+    fun testAssign1() = runTest {
+        assertEquals(10, eval("var x = 5; x=10; x").toInt())
+        val ctx = Context()
+        ctx.eval("""
+            var a = 1
+        """.trimIndent())
+        assertEquals(3, ctx.eval("a + a + 1").toInt())
+        assertEquals(12, ctx.eval("a + (a = 10) + 1").toInt())
+        assertEquals(10, ctx.eval("a").toInt())
+    }
+
+    @Test
+    fun testAssign2() = runTest {
+        val ctx = Context()
+        ctx.eval("var x = 10")
+        assertEquals(14, ctx.eval("x += 4").toInt())
+        assertEquals(14, ctx.eval("x").toInt())
+        assertEquals(12, ctx.eval("x -= 2").toInt())
+        assertEquals(12, ctx.eval("x").toInt())
+
+        assertEquals(24, ctx.eval("x *= 2").toInt())
+        assertEquals(24, ctx.eval("x").toInt())
+
+        assertEquals(12, ctx.eval("x /= 2").toInt())
+        assertEquals(12, ctx.eval("x").toInt())
+
+        assertEquals(2, ctx.eval("x %= 5").toInt())
     }
 
 
