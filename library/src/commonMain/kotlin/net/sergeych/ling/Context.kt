@@ -3,11 +3,12 @@ package net.sergeych.ling
 class Context(
     val parent: Context?,
     val args: Arguments = Arguments.EMPTY,
-    var pos: Pos = Pos.builtIn
+    var pos: Pos = Pos.builtIn,
+    val thisObj: Obj = ObjVoid
 ) {
     constructor(
         args: Arguments = Arguments.EMPTY,
-        pos: Pos = Pos.builtIn
+        pos: Pos = Pos.builtIn,
     )
             : this(Script.defaultContext, args, pos)
 
@@ -29,7 +30,8 @@ class Context(
         objects[name]
             ?: parent?.get(name)
 
-    fun copy(pos: Pos, args: Arguments = Arguments.EMPTY): Context = Context(this, args, pos)
+    fun copy(pos: Pos, args: Arguments = Arguments.EMPTY,newThisObj: Obj? = null): Context =
+        Context(this, args, pos, newThisObj ?: thisObj)
 
     fun addItem(name: String, isMutable: Boolean, value: Obj?) {
         objects.put(name, StoredObj(value, isMutable))

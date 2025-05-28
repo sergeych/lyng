@@ -5,6 +5,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlin.math.floor
+import kotlin.math.roundToLong
 
 typealias InstanceMethod = (Context, Obj) -> Obj
 
@@ -19,49 +20,35 @@ data class Accessor(
     fun setter(pos: Pos) = setterOrNull ?: throw ScriptError(pos,"can't assign value")
 }
 
-sealed class ClassDef(
-    val className: String
-) {
-    val baseClasses: List<ClassDef> get() = emptyList()
-    protected val instanceMembers: MutableMap<String, WithAccess<Obj>> = mutableMapOf()
-    private val monitor = Mutex()
-
-
-    suspend fun addInstanceMethod(
-        context: Context,
-        name: String,
-        isOpen: Boolean = false,
-        body: Obj
-    ) {
-        monitor.withLock {
-            instanceMembers[name]?.let {
-                if (!it.isMutable)
-                    context.raiseError("method $name is not open and can't be overridden")
-                it.value = body
-            } ?: instanceMembers.put(name, WithAccess(body, isOpen))
-        }
-    }
-
-    suspend fun getInstanceMethodOrNull(name: String): Obj? =
-        monitor.withLock { instanceMembers[name]?.value }
-
-    suspend fun getInstanceMethod(context: Context, name: String): Obj =
-        getInstanceMethodOrNull(name) ?: context.raiseError("no method found: $name")
-
-//    suspend fun callInstanceMethod(context: Context, name: String, self: Obj,args: Arguments): Obj {
-//         getInstanceMethod(context, name).invoke(context, self,args)
-//    }
-}
-
-
-object ObjClassDef : ClassDef("Obj")
-
 sealed class Obj {
-    open val classDef: ClassDef = ObjClassDef
     var isFrozen: Boolean = false
 
-    protected val instanceMethods: Map<String, WithAccess<InstanceMethod>> = mutableMapOf()
     private val monitor = Mutex()
+
+    // members: fields most often
+    internal val members = mutableMapOf<String, WithAccess<Obj>>()
+    private val parentInstances = listOf<Obj>()
+
+    /**
+     * Get instance member traversing the hierarchy if needed. Its meaning is different for different objects.
+     */
+    fun getInstanceMemberOrNull(name: String): Obj? {
+        members[name]?.let { return it.value }
+        parentInstances.forEach { parent -> parent.getInstanceMemberOrNull(name)?.let { return it } }
+        return null
+    }
+
+    fun getInstanceMember(atPos: Pos, name: String): Obj = getInstanceMemberOrNull(name)
+        ?: throw ScriptError(atPos,"symbol doesn't exist: $name")
+
+    suspend fun callInstanceMethod(context: Context, name: String,args: Arguments): Obj {
+        // instance _methods_ are our ObjClass instance:
+        // note that getInstanceMember traverses the hierarchy
+        return objClass.getInstanceMember(context.pos,name).invoke(context, this, args)
+    }
+
+
+    // methods that to override
 
     open suspend fun compareTo(context: Context, other: Obj): Int {
         context.raiseNotImplemented()
@@ -71,7 +58,11 @@ sealed class Obj {
         if (this is ObjString) this else ObjString(this.toString())
     }
 
-    open val definition: ClassDef = ObjClassDef
+    /**
+     * Class of the object: definition of member functions (top-level), etc.
+     * Note that using lazy allows to avoid endless recursion here
+     */
+    open val objClass: ObjClass by lazy { ObjClass("Obj") }
 
     open fun plus(context: Context, other: Obj): Obj {
         context.raiseNotImplemented()
@@ -106,8 +97,6 @@ sealed class Obj {
         if (isFrozen) context.raiseError("attempt to mutate frozen object")
     }
 
-    suspend fun getInstanceMember(context: Context, name: String): Obj? = definition.getInstanceMethodOrNull(name)
-
     suspend fun <T> sync(block: () -> T): T = monitor.withLock { block() }
 
     open suspend fun readField(context: Context, name: String): Obj {
@@ -121,6 +110,13 @@ sealed class Obj {
     open suspend fun callOn(context: Context): Obj {
         context.raiseNotImplemented()
     }
+
+    suspend fun invoke(context: Context, thisObj: Obj,args: Arguments): Obj =
+        callOn(context.copy(context.pos,args = args, newThisObj = thisObj))
+
+    suspend fun invoke(context: Context,atPos: Pos, thisObj: Obj,args: Arguments): Obj =
+        callOn(context.copy(atPos,args = args,newThisObj = thisObj))
+
 
     companion object {
         inline fun <reified T> from(obj: T): Obj {
@@ -206,8 +202,7 @@ fun Obj.toBool(): Boolean =
     (this as? ObjBool)?.value ?: throw IllegalArgumentException("cannot convert to boolean $this")
 
 
-@Serializable
-@SerialName("real")
+
 data class ObjReal(val value: Double) : Obj(), Numeric {
     override val asStr by lazy { ObjString(value.toString()) }
     override val longValue: Long by lazy { floor(value).toLong() }
@@ -221,10 +216,21 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
     }
 
     override fun toString(): String = value.toString()
+
+    override val objClass: ObjClass = type
+
+    companion object {
+        val type: ObjClass = ObjClass("Real").apply {
+            members["roundToInt"] = WithAccess(
+                statement(Pos.builtIn) {
+                    (it.thisObj as ObjReal).value.roundToLong().toObj()
+                },
+                false
+            )
+        }
+    }
 }
 
-@Serializable
-@SerialName("int")
 data class ObjInt(var value: Long) : Obj(), Numeric {
     override val asStr get() = ObjString(value.toString())
     override val longValue get() = value
@@ -285,14 +291,3 @@ open class ObjError(val context: Context, val message: String) : Obj() {
 }
 
 class ObjNullPointerError(context: Context) : ObjError(context, "object is null")
-
-class ObjClass(override val definition: ClassDef) : Obj() {
-
-    override suspend fun compareTo(context: Context, other: Obj): Int {
-//        definition.callInstanceMethod(":compareTo", context, other)?.let {
-//            it(context, this)
-//        }
-        TODO("Not yet implemented")
-    }
-
-}

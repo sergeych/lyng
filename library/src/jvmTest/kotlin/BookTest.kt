@@ -187,4 +187,9 @@ class BookTest {
     fun testsFromAdvanced() = runTest {
         runDocTests("../docs/advanced_topics.md")
     }
+
+    @Test
+    fun testsFromOOPrinciples() = runTest {
+        runDocTests("../docs/OOP.md")
+    }
 }

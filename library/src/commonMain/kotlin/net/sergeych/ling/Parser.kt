@@ -133,6 +133,15 @@ private class Parser(fromPos: Pos) {
             }
             '\n' -> Token("\n", from, Token.Type.NEWLINE)
 
+            ':' -> {
+                if( currentChar == ':') {
+                    advance()
+                    Token("::", from, Token.Type.COLONCOLON)
+                }
+                else
+                    Token(":", from, Token.Type.COLON)
+            }
+
             '"' -> loadStringToken()
             in digitsSet -> {
                 pos.back()

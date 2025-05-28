@@ -89,6 +89,17 @@ class CompilerContext(val tokens: List<Token>) : ListIterator<Token> by tokens.l
         } else true
     }
 
+    fun ifNextIs(typeId: Token.Type, f: (Token) -> Unit): IfScope {
+        val t = next()
+        return if (t.type == typeId) {
+            f(t)
+            IfScope(true)
+        } else {
+            previous()
+            IfScope(false)
+        }
+    }
+
 }
 
 
@@ -264,9 +275,30 @@ class Compiler {
                 }
 
                 Token.Type.DOT -> {
-                    if (operand == null)
-                        throw ScriptError(t.pos, "Expecting expression before dot")
-                    continue
+                    operand?.let { left ->
+                        // dotcall: calling method on the operand, if next is ID, "("
+                        cc.ifNextIs(Token.Type.ID) { methodToken ->
+                            cc.ifNextIs(Token.Type.LPAREN) {
+                                // instance method call
+                                val args = parseArgs(cc)
+                                operand = Accessor { context ->
+                                    context.pos = methodToken.pos
+                                    val v = left.getter(context)
+                                    v.callInstanceMethod(
+                                        context,
+                                        methodToken.value,
+                                        args.toArguments()
+                                    )
+                                }
+                            }
+                        }.otherwise {
+                            TODO("implement member access")
+                        }
+                    } ?: throw ScriptError(t.pos, "Expecting expression before dot")
+                }
+
+                Token.Type.COLONCOLON -> {
+                    operand = parseScopeOperator(operand,cc)
                 }
 
                 Token.Type.LPAREN -> {
@@ -275,7 +307,6 @@ class Compiler {
                         operand = parseFunctionCall(
                             cc,
                             left,
-                            thisObj = null,
                         )
                     } ?: run {
                         // Expression in parentheses
@@ -371,8 +402,20 @@ class Compiler {
         }
     }
 
-    fun parseFunctionCall(cc: CompilerContext, left: Accessor, thisObj: Statement?): Accessor {
-        // insofar, functions always return lvalue
+    private fun parseScopeOperator(operand: Accessor?, cc: CompilerContext): Accessor {
+        // implement global scope maybe?
+        if( operand == null ) throw ScriptError(cc.next().pos, "Expecting expression before ::")
+        val t = cc.next()
+        if( t.type != Token.Type.ID ) throw ScriptError(t.pos, "Expecting ID after ::")
+        return when(t.value) {
+            "class" -> Accessor {
+                operand.getter(it).objClass
+            }
+            else -> throw ScriptError(t.pos, "Unknown scope operation: ${t.value}")
+        }
+    }
+
+    fun parseArgs(cc: CompilerContext): List<Arguments.Info> {
         val args = mutableListOf<Arguments.Info>()
         do {
             val t = cc.next()
@@ -385,13 +428,19 @@ class Compiler {
                 }
             }
         } while (t.type != Token.Type.RPAREN)
+        return args
+    }
+
+
+    fun parseFunctionCall(cc: CompilerContext, left: Accessor): Accessor {
+        // insofar, functions always return lvalue
+        val args = parseArgs(cc)
 
         return Accessor { context ->
             val v = left.getter(context)
             v.callOn(context.copy(
                 context.pos,
                 Arguments(
-                    context.pos,
                     args.map { Arguments.Info((it.value as Statement).execute(context), it.pos) }
                 ),
             )
@@ -851,7 +900,7 @@ class Compiler {
                         false,
                         d.defaultValue?.execute(context)
                             ?: throw ScriptError(
-                                context.args.callerPos,
+                                context.pos,
                                 "missing required argument #${1 + i}: ${d.name}"
                             )
                     )

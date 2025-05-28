@@ -47,6 +47,8 @@ class Script(
                 sin(args.firstAndOnly().toDouble())
             }
             val pi = ObjReal(PI)
+            val z = pi.objClass
+            println("PI class $z")
             addConst(pi, "π")
             getOrCreateNamespace("Math").also { ns ->
                 ns.addConst(pi, "PI")
