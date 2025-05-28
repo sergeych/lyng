@@ -195,7 +195,7 @@ class BookTest {
 
     @Test
     fun testFromReal() = runTest {
-        runDocTests("../docs/real.md")
+        runDocTests("../docs/Real.md")
     }
 
 }
