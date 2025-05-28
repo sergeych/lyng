@@ -86,7 +86,7 @@ class Compiler(
 
     private fun parseExpression(tokens: CompilerContext): Statement? {
         val pos = tokens.currentPos()
-        return parseExpressionLevel(tokens)?.let { a -> statement(pos) { a.getter(it) } }
+        return parseExpressionLevel(tokens)?.let { a -> statement(pos) { a.getter(it).value } }
     }
 
     private fun parseExpressionLevel(tokens: CompilerContext, level: Int = 0): Accessor? {
@@ -185,9 +185,9 @@ class Compiler(
                 }
 
                 Token.Type.NOT -> {
-                    if( operand != null ) throw ScriptError(t.pos, "unexpected operator not '!'")
+                    if (operand != null) throw ScriptError(t.pos, "unexpected operator not '!'")
                     val op = parseTerm3(cc) ?: throw ScriptError(t.pos, "Expecting expression")
-                    operand = Accessor { op.getter(it).logicalNot(it) }
+                    operand = Accessor { op.getter(it).value.logicalNot(it).asReadonly }
                 }
 
                 Token.Type.DOT -> {
@@ -202,18 +202,20 @@ class Compiler(
                                 isCall = true
                                 operand = Accessor { context ->
                                     context.pos = next.pos
-                                    val v = left.getter(context)
-                                    v.callInstanceMethod(
-                                        context,
-                                        next.value,
-                                        args.toArguments()
+                                    val v = left.getter(context).value
+                                    WithAccess(
+                                        v.callInstanceMethod(
+                                            context,
+                                            next.value,
+                                            args.toArguments()
+                                        ), isMutable = false
                                     )
                                 }
                             }
                         }
                         if (!isCall) {
                             operand = Accessor { context ->
-                                left.getter(context).readField(context, next.value)
+                                left.getter(context).value.readField(context, next.value)
                             }
                         }
                     } ?: throw ScriptError(t.pos, "Expecting expression before dot")
@@ -234,7 +236,7 @@ class Compiler(
                         // Expression in parentheses
                         val statement = parseStatement(cc) ?: throw ScriptError(t.pos, "Expecting expression")
                         operand = Accessor {
-                            statement.execute(it)
+                            statement.execute(it).asReadonly
                         }
                         cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
                         cc.skipTokenOfType(Token.Type.RPAREN, "missing ')'")
@@ -248,7 +250,7 @@ class Compiler(
                             if (operand != null) throw ScriptError(t.pos, "unexpected keyword")
                             cc.previous()
                             val s = parseStatement(cc) ?: throw ScriptError(t.pos, "Expecting valid statement")
-                            operand = Accessor { s.execute(it) }
+                            operand = Accessor { s.execute(it).asReadonly }
                         }
 
                         "else", "break", "continue" -> {
@@ -263,10 +265,10 @@ class Compiler(
                             // is RW:
                             operand = Accessor({
                                 it.pos = t.pos
-                                left.getter(it).readField(it, t.value)
+                                left.getter(it).value.readField(it, t.value)
                             }) { cxt, newValue ->
                                 cxt.pos = t.pos
-                                left.getter(cxt).writeField(cxt, t.value, newValue)
+                                left.getter(cxt).value.writeField(cxt, t.value, newValue)
                             }
                         } ?: run {
                             // variable to read or like
@@ -284,13 +286,20 @@ class Compiler(
                     operand?.let { left ->
                         // post increment
                         left.setter(startPos)
-                        operand = Accessor({ ctx ->
-                            left.getter(ctx).getAndIncrement(ctx)
+                        operand = Accessor({ cxt ->
+                            val x = left.getter(cxt)
+                            if (x.isMutable)
+                                x.value.getAndIncrement(cxt).asReadonly
+                            else cxt.raiseError("Cannot increment immutable value")
                         })
                     } ?: run {
                         // no lvalue means pre-increment, expression to increment follows
                         val next = parseAccessor(cc) ?: throw ScriptError(t.pos, "Expecting expression")
-                        operand = Accessor({ ctx -> next.getter(ctx).incrementAndGet(ctx) })
+                        operand = Accessor({ ctx ->
+                            next.getter(ctx).also {
+                                if (!it.isMutable) ctx.raiseError("Cannot increment immutable value")
+                            }.value.incrementAndGet(ctx).asReadonly
+                        })
                     }
                 }
 
@@ -300,12 +309,18 @@ class Compiler(
                         // post decrement
                         left.setter(startPos)
                         operand = Accessor { ctx ->
-                            left.getter(ctx).getAndDecrement(ctx)
+                            left.getter(ctx).also {
+                                if (!it.isMutable) ctx.raiseError("Cannot decrement immutable value")
+                            }.value.getAndDecrement(ctx).asReadonly
                         }
                     } ?: run {
                         // no lvalue means pre-decrement, expression to decrement follows
                         val next = parseAccessor(cc) ?: throw ScriptError(t.pos, "Expecting expression")
-                        operand = Accessor { ctx -> next.getter(ctx).decrementAndGet(ctx) }
+                        operand = Accessor { ctx ->
+                            next.getter(ctx).also {
+                                if (!it.isMutable) ctx.raiseError("Cannot decrement immutable value")
+                            }.value.decrementAndGet(ctx).asReadonly
+                        }
                     }
 
                 }
@@ -327,7 +342,7 @@ class Compiler(
         if (t.type != Token.Type.ID) throw ScriptError(t.pos, "Expecting ID after ::")
         return when (t.value) {
             "class" -> Accessor {
-                operand.getter(it).objClass
+                operand.getter(it).value.objClass.asReadonly
             }
 
             else -> throw ScriptError(t.pos, "Unknown scope operation: ${t.value}")
@@ -357,13 +372,13 @@ class Compiler(
 
         return Accessor { context ->
             val v = left.getter(context)
-            v.callOn(context.copy(
+            v.value.callOn(context.copy(
                 context.pos,
                 Arguments(
                     args.map { Arguments.Info((it.value as Statement).execute(context), it.pos) }
                 ),
             )
-            )
+            ).asReadonly
         }
     }
 
@@ -374,31 +389,31 @@ class Compiler(
             Token.Type.INT, Token.Type.REAL, Token.Type.HEX -> {
                 cc.previous()
                 val n = parseNumber(true, cc)
-                Accessor({ n })
+                Accessor{ n.asReadonly }
             }
 
-            Token.Type.STRING -> Accessor({ ObjString(t.value) })
+            Token.Type.STRING -> Accessor { ObjString(t.value).asReadonly }
 
             Token.Type.PLUS -> {
                 val n = parseNumber(true, cc)
-                Accessor { n }
+                Accessor { n.asReadonly }
             }
 
             Token.Type.MINUS -> {
                 val n = parseNumber(false, cc)
-                Accessor { n }
+                Accessor { n.asReadonly }
             }
 
             Token.Type.ID -> {
                 when (t.value) {
-                    "void" -> Accessor { ObjVoid }
-                    "null" -> Accessor { ObjNull }
-                    "true" -> Accessor { ObjBool(true) }
-                    "false" -> Accessor { ObjBool(false) }
+                    "void" -> Accessor { ObjVoid.asReadonly }
+                    "null" -> Accessor { ObjNull.asReadonly }
+                    "true" -> Accessor { ObjBool(true).asReadonly }
+                    "false" -> Accessor { ObjBool(false).asReadonly }
                     else -> {
                         Accessor({
                             it.pos = t.pos
-                            it.get(t.value)?.value
+                            it.get(t.value)?.asAccess
                                 ?: it.raiseError("symbol not defined: '${t.value}'")
                         }) { ctx, newValue ->
                             ctx.get(t.value)?.let { stored ->
@@ -719,7 +734,7 @@ class Compiler(
 
     data class Operator(
         val tokenType: Token.Type,
-        val priority: Int, val arity: Int=2,
+        val priority: Int, val arity: Int = 2,
         val generate: (Pos, Accessor, Accessor) -> Accessor
     ) {
 //        fun isLeftAssociative() = tokenType != Token.Type.OR && tokenType != Token.Type.AND
@@ -727,7 +742,7 @@ class Compiler(
         companion object {
             fun simple(tokenType: Token.Type, priority: Int, f: suspend (Context, Obj, Obj) -> Obj): Operator =
                 Operator(tokenType, priority, 2, { _: Pos, a: Accessor, b: Accessor ->
-                    Accessor { f(it, a.getter(it), b.getter(it)) }
+                    Accessor { f(it, a.getter(it).value, b.getter(it).value).asReadonly }
                 })
         }
 
@@ -740,73 +755,74 @@ class Compiler(
             // assignments
             Operator(Token.Type.ASSIGN, lastPrty) { pos, a, b ->
                 Accessor {
-                    val value = b.getter(it)
-                    a.setter(pos)(it, value)
-                    value
+                    val value = b.getter(it).value
+                    val access = a.getter(it)
+                    if (!access.isMutable) throw ScriptError(pos, "cannot assign to immutable variable")
+                    if (access.value.assign(it, value) == null)
+                        a.setter(pos)(it, value)
+                    value.asReadonly
                 }
             },
             Operator(Token.Type.PLUSASSIGN, lastPrty) { pos, a, b ->
                 Accessor {
-                    val x = a.getter(it)
-                    val y = b.getter(it)
-                    x.plusAssign(it, y) ?: run {
+                    val x = a.getter(it).value
+                    val y = b.getter(it).value
+                    (x.plusAssign(it, y) ?: run {
                         val result = x.plus(it, y)
                         a.setter(pos)(it, result)
                         result
-                    }
+                    }).asReadonly
                 }
             },
             Operator(Token.Type.MINUSASSIGN, lastPrty) { pos, a, b ->
                 Accessor {
-                    val x = a.getter(it)
-                    val y = b.getter(it)
-                    x.minusAssign(it, y) ?: run {
+                    val x = a.getter(it).value
+                    val y = b.getter(it).value
+                    (x.minusAssign(it, y) ?: run {
                         val result = x.minus(it, y)
                         a.setter(pos)(it, result)
                         result
-                    }
+                    }).asReadonly
                 }
             },
             Operator(Token.Type.STARASSIGN, lastPrty) { pos, a, b ->
                 Accessor {
-                    val x = a.getter(it)
-                    val y = b.getter(it)
-                    x.mulAssign(it, y) ?: run {
+                    val x = a.getter(it).value
+                    val y = b.getter(it).value
+                    (x.mulAssign(it, y) ?: run {
                         val result = x.mul(it, y)
                         a.setter(pos)(it, result)
                         result
 
-                    }
+                    }).asReadonly
                 }
             },
             Operator(Token.Type.SLASHASSIGN, lastPrty) { pos, a, b ->
                 Accessor {
-                    val x = a.getter(it)
-                    val y = b.getter(it)
-                    x.divAssign(it, y) ?: run {
+                    val x = a.getter(it).value
+                    val y = b.getter(it).value
+                    (x.divAssign(it, y) ?: run {
                         val result = x.div(it, y)
                         a.setter(pos)(it, result)
                         result
-
-                    }
+                    }).asReadonly
                 }
             },
             Operator(Token.Type.PERCENTASSIGN, lastPrty) { pos, a, b ->
                 Accessor {
-                    val x = a.getter(it)
-                    val y = b.getter(it)
-                    x.modAssign(it, y) ?: run {
+                    val x = a.getter(it).value
+                    val y = b.getter(it).value
+                    (x.modAssign(it, y) ?: run {
                         val result = x.mod(it, y)
                         a.setter(pos)(it, result)
                         result
-
-                    }
+                    }).asReadonly
                 }
             },
             // logical 1
-            Operator.simple(Token.Type.OR, ++lastPrty) { ctx, a, b -> a.logicalOr(ctx,b) },
+            Operator.simple(Token.Type.OR, ++lastPrty) { ctx, a, b -> a.logicalOr(ctx, b) },
             // logical 2
-            Operator.simple(Token.Type.AND, ++lastPrty) { ctx, a, b -> a.logicalAnd(ctx,b) },
+            Operator.simple(Token.Type.AND, ++lastPrty) { ctx, a, b -> a.logicalAnd(ctx, b) },
             // bitwise or 2
             // bitwise and 3
             // equality/ne 4
@@ -819,10 +835,10 @@ class Compiler(
             Operator.simple(Token.Type.GT, lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) > 0) },
             // shuttle <=> 6
             // bit shifts 7
-            Operator.simple(Token.Type.PLUS, ++lastPrty) { ctx, a, b -> a.plus(ctx,b) },
-            Operator.simple(Token.Type.MINUS, lastPrty) { ctx, a, b -> a.minus(ctx,b) },
+            Operator.simple(Token.Type.PLUS, ++lastPrty) { ctx, a, b -> a.plus(ctx, b) },
+            Operator.simple(Token.Type.MINUS, lastPrty) { ctx, a, b -> a.minus(ctx, b) },
 
-            Operator.simple(Token.Type.STAR, ++lastPrty) { ctx, a, b -> a.mul(ctx,b) },
+            Operator.simple(Token.Type.STAR, ++lastPrty) { ctx, a, b -> a.mul(ctx, b) },
             Operator.simple(Token.Type.SLASH, lastPrty) { ctx, a, b -> a.div(ctx, b) },
             Operator.simple(Token.Type.PERCENT, lastPrty) { ctx, a, b -> a.mod(ctx, b) },
         )

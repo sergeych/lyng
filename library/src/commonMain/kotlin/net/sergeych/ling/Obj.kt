@@ -12,10 +12,10 @@ import kotlin.math.roundToLong
 data class WithAccess<T>(var value: T, val isMutable: Boolean)
 
 data class Accessor(
-    val getter: suspend (Context) -> Obj,
+    val getter: suspend (Context) -> WithAccess<Obj>,
     val setterOrNull: (suspend (Context, Obj) -> Unit)?
 ) {
-    constructor(getter: suspend (Context) -> Obj) : this(getter, null)
+    constructor(getter: suspend (Context) -> WithAccess<Obj>) : this(getter, null)
 
     fun setter(pos: Pos) = setterOrNull ?: throw ScriptError(pos, "can't assign value")
 }
@@ -35,13 +35,13 @@ sealed class Obj {
     /**
      * Get instance member traversing the hierarchy if needed. Its meaning is different for different objects.
      */
-    fun getInstanceMemberOrNull(name: String): Obj? {
-        members[name]?.let { return it.value }
+    fun getInstanceMemberOrNull(name: String): WithAccess<Obj>? {
+        members[name]?.let { return it }
         parentInstances.forEach { parent -> parent.getInstanceMemberOrNull(name)?.let { return it } }
         return null
     }
 
-    fun getInstanceMember(atPos: Pos, name: String): Obj =
+    fun getInstanceMember(atPos: Pos, name: String): WithAccess<Obj> =
         getInstanceMemberOrNull(name)
             ?: throw ScriptError(atPos, "symbol doesn't exist: $name")
 
@@ -52,7 +52,7 @@ sealed class Obj {
     // note that getInstanceMember traverses the hierarchy
 // instance _methods_ are our ObjClass instance:
         // note that getInstanceMember traverses the hierarchy
-        objClass.getInstanceMember(context.pos, name).invoke(context, this, args)
+        objClass.getInstanceMember(context.pos, name).value.invoke(context, this, args)
 
     // methods that to override
 
@@ -102,9 +102,7 @@ sealed class Obj {
         context.raiseNotImplemented()
     }
 
-    open suspend fun assign(context: Context, other: Obj): Obj {
-        context.raiseNotImplemented()
-    }
+    open suspend fun assign(context: Context, other: Obj): Obj? = null
 
     /**
      * a += b
@@ -143,7 +141,7 @@ sealed class Obj {
 
     suspend fun <T> sync(block: () -> T): T = monitor.withLock { block() }
 
-    fun readField(context: Context, name: String): Obj = getInstanceMember(context.pos, name)
+    fun readField(context: Context, name: String): WithAccess<Obj> = getInstanceMember(context.pos, name)
 
     fun writeField(context: Context, name: String, newValue: Obj) {
         willMutate(context)
@@ -152,7 +150,7 @@ sealed class Obj {
     }
 
     fun createField(name: String, initialValue: Obj, isMutable: Boolean = false, pos: Pos = Pos.builtIn) {
-        if (name in members || parentInstances.any<Obj> { name in it.members })
+        if (name in members || parentInstances.any { name in it.members })
             throw ScriptError(pos, "$name is already defined in $objClass or one of its supertypes")
         members[name] = WithAccess(initialValue, isMutable)
     }
@@ -168,6 +166,9 @@ sealed class Obj {
 
     suspend fun invoke(context: Context, atPos: Pos, thisObj: Obj, args: Arguments): Obj =
         callOn(context.copy(atPos, args = args, newThisObj = thisObj))
+
+    val asReadonly: WithAccess<Obj> by lazy { WithAccess(this, false) }
+    val asMutable: WithAccess<Obj> by lazy { WithAccess(this, true) }
 
 
     companion object {

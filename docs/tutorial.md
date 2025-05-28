@@ -76,13 +76,16 @@ Assignemnt is an expression that changes its lvalue and return assigned value:
 
 As the assignment itself is an expression, you can use it in strange ways. Just remember
 to use parentheses as assignment operation insofar is left-associated and will not
-allow chained assignments (we might fix it later)
+allow chained assignments (we might fix it later). Use parentheses insofar:
 
     var x = 0
     var y = 0
     x = (y = 5)
-    x + y
-    >>> 10
+    assert(x==5)
+    assert(y==5)
+    >>> void
+
+Note that assignment operator returns rvalue, it can't be assigned.
 
 ## Modifying arithmetics
 
@@ -98,6 +101,11 @@ There is a set of assigning operations: `+=`, `-=`, `*=`, `/=` and even `%=`.
 
 Notice the parentheses here: the assignment has low priority!
 
+These operators return rvalue, unmodifiable.
+
+## Assignemnt return r-value!
+
+
 ## Math
 
 It is rather simple, like everywhere else:
@@ -110,7 +118,7 @@ See [math](math.md) for more on it. Notice using Greek as identifier, all langua
 
 Logical operation could be used the same
     
-    val x = 10
+    var x = 10
     ++x >= 11
     >>> true
 
@@ -154,8 +162,15 @@ Correct pattern is:
     // now is OK:
     foo + bar
 
-This is though a rare case when you need uninitialized variables, most often you can use conditional operatorss
+This is though a rare case when you need uninitialized variables, most often you can use conditional operators
 and even loops to assign results (see below).
+
+# Constants
+
+Almost the same, using `val`:
+
+    val foo = 1
+    foo += 1 // this will throw exception
 
 # Constants
 

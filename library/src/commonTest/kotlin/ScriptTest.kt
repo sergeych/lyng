@@ -149,8 +149,9 @@ class ScriptTest {
         assertFailsWith<ScriptError> {
             context.eval("a = 10")
         }
-        assertEquals(10, context.eval("b = a - 3 - 4; b").toInt())
-        assertEquals(10, context.eval("b").toInt())
+        assertEquals(17, context.eval("a").toInt())
+        assertEquals(5, context.eval("b = a - 7 - 5").toInt())
+        assertEquals(5, context.eval("b").toInt())
     }
 
     @Test
@@ -632,5 +633,37 @@ class ScriptTest {
         assertEquals(2, ctx.eval("x %= 5").toInt())
     }
 
+    @Test
+    fun testVals() = runTest {
+        val cxt = Context()
+        cxt.eval("val x = 11")
+        assertEquals(11, cxt.eval("x").toInt())
+        assertFails { cxt.eval("x = 12") }
+        assertFails { cxt.eval("x += 12") }
+        assertFails { cxt.eval("x -= 12") }
+        assertFails { cxt.eval("x *= 2") }
+        assertFails { cxt.eval("x /= 2") }
+        assertFails { cxt.eval("x++") }
+        assertFails { cxt.eval("++x") }
+        assertFails { cxt.eval("x--") }
+        assertFails { cxt.eval("--x") }
+        assertEquals(11, cxt.eval("x").toInt())
+    }
+
+//    @Test
+//    fun testMultiAssign() = runTest {
+//        assertEquals(
+//            7,
+//            eval("""
+//                var x = 10
+//                var y = 2
+//                (x = 1) = 5
+//                println(x)
+//                println(y)
+//                x + y
+//                """.trimIndent()).toInt()
+//        )
+//    }
+//
 
 }

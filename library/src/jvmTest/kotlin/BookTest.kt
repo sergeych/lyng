@@ -38,7 +38,7 @@ data class DocTest(
     }
 
     val detailedString by lazy {
-        val codeWithLines = sourceLines.withIndex().map { (i, s) -> "${i + line}: $s" }.joinToString("\n")
+        val codeWithLines = sourceLines.withIndex().map { (i, s) -> "${i + line + 1}: $s" }.joinToString("\n")
         var result = "$this\n$codeWithLines\n"
         if (expectedOutput.isNotBlank())
             result += "--------expected output--------\n$expectedOutput\n"

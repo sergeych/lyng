@@ -6,4 +6,6 @@ package net.sergeych.ling
 data class StoredObj(
     var value: Obj?,
     val isMutable: Boolean = false
-)
+) {
+    val asAccess: WithAccess<Obj>? get() = value?.let { WithAccess(it, isMutable) }
+}
