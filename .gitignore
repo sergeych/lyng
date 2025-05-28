@@ -12,4 +12,4 @@ xcuserdata
 #So we don't accidentally commit our private keys
 *.gpg
 .gigaide
-.kotlin
+/kotlin-js-store/yarn.lock

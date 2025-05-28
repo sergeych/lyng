@@ -29,7 +29,7 @@ If you don't want block to return anything, use `void`:
     >>> void
 
 otherwise, last expression will be returned:
-    
+
     fn normalize(value, minValue, maxValue) {
         (value - minValue) / (maxValue-minValue)
     }
@@ -75,7 +75,7 @@ Assignemnt is an expression that changes its lvalue and return assigned value:
     >>> 6
 
 As the assignment itself is an expression, you can use it in strange ways. Just remember
-to use parentheses as assignment operation insofar is left-associated and will not 
+to use parentheses as assignment operation insofar is left-associated and will not
 allow chained assignments (we might fix it later)
 
     var x = 0
@@ -86,7 +86,7 @@ allow chained assignments (we might fix it later)
 
 ## Modifying arithmetics
 
-There is a set of assigning operations: `+=`, `-=`, `*=`, `/=` and even `%=`. 
+There is a set of assigning operations: `+=`, `-=`, `*=`, `/=` and even `%=`.
 
     var x = 5
     assert( 25 == (x*=5) )
@@ -98,16 +98,42 @@ There is a set of assigning operations: `+=`, `-=`, `*=`, `/=` and even `%=`.
 
 Notice the parentheses here: the assignment has low priority!
 
-## Expression details
+## Math
 
 It is rather simple, like everywhere else:
 
     val x = 2.0
-    //
     sin(x * π/4) / 2.0
     >>> 0.5
 
 See [math](math.md) for more on it. Notice using Greek as identifier, all languages are allowed.
+
+Logical operation could be used the same
+    
+    val x = 10
+    ++x >= 11
+    >>> true
+
+## Supported operators
+
+|    op    | ass | args              |
+|:--------:|-----|-------------------|
+|    +     | +=  | Int or Real       |
+|    -     | -=  | Int or Real       |
+|    *     | *=  | Int or Real       |
+|    /     | /=  | Int or Real       |
+|    %     | %=  | Int or Real       |
+|    &&    |     | Bool              |
+|   \|\|   |     | Bool              |   
+|    !x    |     | Bool              |
+|    <     |     | String, Int, Real |
+|    <=    |     | String, Int, Real |
+|    >=    |     | String, Int, Real |
+|    >     |     | String, Int, Real |
+|    ==    |     | Any               |
+|    !=    |     | Any               |
+| ++a, a++ |     | Int               |
+| --a, a-- |     | Int               |
 
 # Variables
 
@@ -137,7 +163,8 @@ Same as in kotlin:
 
     val HalfPi = π / 2
 
-Note using greek characters in identifiers! All letters allowed, but remember who might try to read your script, most likely will know some English, the rest is the pure uncertainty.
+Note using greek characters in identifiers! All letters allowed, but remember who might try to read your script, most
+likely will know some English, the rest is the pure uncertainty.
 
 # Defining functions
 
@@ -149,7 +176,7 @@ Note using greek characters in identifiers! All letters allowed, but remember wh
     }
     >>> Callable@...
 
-Notice how function definition return a value, instance of `Callable`. 
+Notice how function definition return a value, instance of `Callable`.
 
 You can use both `fn` and `fun`. Note that function declaration _is an expression returning callable_.
 
@@ -161,7 +188,9 @@ There are default parameters in Ling:
         else
             "more" 
     }
-    >>> Callable@...
+    assert( "do: more" == check(10, "do: ") )
+    check(120)
+    >>> answer: enough
 
 ## Closures
 
@@ -219,7 +248,6 @@ As everywhere else, and as expression:
 
 Notice returned value `void`: it is because of `println` have no return value, e.g., `void`.
 
-
 Or, more neat:
 
     var count = 3
@@ -227,7 +255,7 @@ Or, more neat:
     >>> just 3
     >>> void
 
-## while 
+## while
 
 Regular pre-condition while loop, as expression, loop returns it's last line result:
 
@@ -247,7 +275,8 @@ We can break as usual:
     }
     >>> void
 
-Why `void`? Because `break` drops out without the chute, not providing anything to return. Indeed, we should provide exit value in the case:
+Why `void`? Because `break` drops out without the chute, not providing anything to return. Indeed, we should provide
+exit value in the case:
 
     var count = 0
     while( count < 50 ) {
@@ -310,11 +339,13 @@ We can skip the rest of the loop and restart it, as usual, with `continue` opera
     total
     >>> 0
 
-Notice that `total` remains 0 as the end of the outerLoop@ is not reachable: `continue` is always called and always make Ling to skip it.
+Notice that `total` remains 0 as the end of the outerLoop@ is not reachable: `continue` is always called and always make
+Ling to skip it.
 
 ## Labels@
 
-The label can be any valid identifier, even a keyword, labels exist in their own, isolated world, so no risk of occasional clash. Labels are also scoped to their context and do not exist outside it.
+The label can be any valid identifier, even a keyword, labels exist in their own, isolated world, so no risk of
+occasional clash. Labels are also scoped to their context and do not exist outside it.
 
 Right now labels are implemented only for the while loop. It is intended to be implemented for all loops and returns.
 
@@ -326,7 +357,7 @@ There are auto-increments and auto-decrements:
     assert(counter++ * 100 == 0)
     assert(counter == 1)
     >>> void
-    
+
 but:
 
     var counter = 0
