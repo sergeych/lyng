@@ -30,24 +30,24 @@ class Script(
             }
             addFn("floor") {
                 val x = args.firstAndOnly()
-                if (x is ObjInt) x
-                else ObjReal(floor(x.toDouble()))
+                (if (x is ObjInt) x
+                else ObjReal(floor(x.toDouble()))) as Obj
             }
             addFn("ceil") {
                 val x = args.firstAndOnly()
-                if (x is ObjInt) x
-                else ObjReal(ceil(x.toDouble()))
+                (if (x is ObjInt) x
+                else ObjReal(ceil(x.toDouble()))) as Obj
             }
             addFn("round") {
                 val x = args.firstAndOnly()
-                if (x is ObjInt) x
-                else ObjReal(round(x.toDouble()))
+                (if (x is ObjInt) x
+                else ObjReal(round(x.toDouble()))) as Obj
             }
             addFn("sin") {
-                sin(args.firstAndOnly().toDouble())
+                ObjReal(sin(args.firstAndOnly().toDouble()))
             }
 
-            addFn("assert") {
+            addVoidFn("assert") {
                 val cond = args.required<ObjBool>(0, this)
                 if( !cond.value == true )
                     raiseError(ObjAssertionError(this,"Assertion failed"))

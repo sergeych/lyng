@@ -323,4 +323,18 @@ String literal could be multiline:
 
 though multiline literals is yet work in progress.
 
+# Built-in functions
+
+See [math functions](math.md), and:
+
+| name                                         | description                                              |
+|----------------------------------------------|----------------------------------------------------------|
+| assert(condition,message="assertion failed") | runtime code check. There will be an option to skip them |
+|                                              |                                                          |
+|                                              |                                                          |
+|                                              |                                                          |
+
+
+
+
 

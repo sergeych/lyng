@@ -564,14 +564,5 @@ class ScriptTest {
         eval(src)
     }
 
-    @Test
-    fun testCallable1() = runTest {
-        val src = """
-            val callable = {
-                println("called")
-            }
-         """.trimIndent()
-        println(eval(src).toString())
-    }
 
 }

@@ -1,109 +1,14 @@
 package net.sergeych.ling
 
-//sealed class ObjType(name: String, val defaultValue: Obj? = null) {
-//
-//    class Str : ObjType("string", ObjString(""))
-//    class Int : ObjType("real", ObjReal(0.0))
-//
-//}
-//
-///**
-// * Descriptor for whatever object could be used as argument, return value,
-// * field, etc.
-// */
-//data class ObjDescriptor(
-//    val type: ObjType,
-//    val mutable: Boolean,
-//)
-//
-//data class MethodDescriptor(
-//    val args: Array<ObjDescriptor>,
-//    val result: ObjDescriptor
-//)
-
-/*
-Meta context contains map of symbols.
-
-Each symbol can be:
-
-- a var
-- a const
-- a function
-- a type alias
-- a class definition
-
-Each have in common only its name.
-
-Var has: type, value. Const is same as var but value is fixed. Function has args and return value,
-type alias has target type name. So we have to have something that denotes a _type_
-
+/**
+ * The LING compiler.
  */
+class Compiler(
+    @Suppress("UNUSED_PARAMETER")
+    settings: Settings = Settings()
+) {
 
-
-//data class MetaContext(val symbols: MutableMap<String, > = mutableMapOf()) {
-//
-//}
-
-
-class CompilerContext(val tokens: List<Token>) : ListIterator<Token> by tokens.listIterator() {
-    val labels = mutableSetOf<String>()
-
-    fun ensureLabelIsValid(pos: Pos, label: String) {
-        if (label !in labels)
-            throw ScriptError(pos, "Undefined label '$label'")
-    }
-
-    @Suppress("unused")
-    fun requireId() = requireToken(Token.Type.ID, "identifier is required")
-
-    fun requireToken(type: Token.Type, message: String = "required ${type.name}"): Token =
-        next().also {
-            if (type != it.type) throw ScriptError(it.pos, message)
-        }
-
-    fun syntaxError(at: Pos, message: String = "Syntax error"): Nothing {
-        throw ScriptError(at, message)
-    }
-
-    fun currentPos() =
-        if (hasNext()) next().pos.also { previous() }
-        else previous().pos.also { next() }
-
-    /**
-     * Skips next token if its type is `tokenType`, returns `true` if so.
-     * @param errorMessage message to throw if next token is not `tokenType`
-     * @param isOptional if `true` and token is not of `tokenType`, just return `false` and does not skip it
-     * @return `true` if the token was skipped
-     * @throws ScriptError if [isOptional] is `false` and next token is not of [tokenType]
-     */
-    fun skipTokenOfType(tokenType: Token.Type, errorMessage: String="expected ${tokenType.name}", isOptional: Boolean = false): Boolean {
-        val t = next()
-        return if (t.type != tokenType) {
-            if (!isOptional) {
-                println("unexpected: $t (needed $tokenType)")
-                throw ScriptError(t.pos, errorMessage)
-            } else {
-                previous()
-                false
-            }
-        } else true
-    }
-
-    fun ifNextIs(typeId: Token.Type, f: (Token) -> Unit): Boolean {
-        val t = next()
-        return if (t.type == typeId) {
-            f(t)
-            true
-        } else {
-            previous()
-            false
-        }
-    }
-
-}
-
-
-class Compiler {
+    class Settings
 
     fun compile(source: Source): Script {
         return parseScript(source.startPos, CompilerContext(parseLing(source)))
@@ -262,7 +167,7 @@ class Compiler {
      *                expr-=<expr>, expr*=<expr>, expr/=<expr>
      * read expr: <expr>
      */
-    fun parseTerm3(cc: CompilerContext): Statement? {
+    private fun parseTerm3(cc: CompilerContext): Statement? {
         var operand: Accessor? = null
 
         while (true) {
@@ -279,7 +184,7 @@ class Compiler {
                         // dotcall: calling method on the operand, if next is ID, "("
                         var isCall = false
                         val next = cc.next()
-                        if( next.type == Token.Type.ID) {
+                        if (next.type == Token.Type.ID) {
                             cc.ifNextIs(Token.Type.LPAREN) {
                                 // instance method call
                                 val args = parseArgs(cc)
@@ -304,7 +209,7 @@ class Compiler {
                 }
 
                 Token.Type.COLONCOLON -> {
-                    operand = parseScopeOperator(operand,cc)
+                    operand = parseScopeOperator(operand, cc)
                 }
 
                 Token.Type.LPAREN -> {
@@ -332,17 +237,20 @@ class Compiler {
                             cc.previous()
                             return operand?.let { op -> statement(startPos) { op.getter(it) } }
                         }
+
                         "if", "when", "do", "while", "return" -> {
-                            if( operand != null ) throw ScriptError(t.pos, "unexpected keyword")
+                            if (operand != null) throw ScriptError(t.pos, "unexpected keyword")
                             cc.previous()
                             val s = parseStatement(cc) ?: throw ScriptError(t.pos, "Expecting valid statement")
                             operand = Accessor { s.execute(it) }
                         }
+
                         "break", "continue" -> {
                             cc.previous()
                             return operand?.let { op -> statement(startPos) { op.getter(it) } }
 
                         }
+
                         else -> operand?.let { left ->
                             // selector: <lvalue>, '.' , <id>
                             // we replace operand with selector code, that
@@ -388,7 +296,7 @@ class Compiler {
                         operand = Accessor { ctx ->
                             left.getter(ctx).getAndDecrement(ctx)
                         }
-                    }?: run {
+                    } ?: run {
                         // no lvalue means pre-decrement, expression to decrement follows
                         val next = parseAccessor(cc) ?: throw ScriptError(t.pos, "Expecting expression")
                         operand = Accessor { ctx -> next.getter(ctx).decrementAndGet(ctx) }
@@ -410,18 +318,19 @@ class Compiler {
 
     private fun parseScopeOperator(operand: Accessor?, cc: CompilerContext): Accessor {
         // implement global scope maybe?
-        if( operand == null ) throw ScriptError(cc.next().pos, "Expecting expression before ::")
+        if (operand == null) throw ScriptError(cc.next().pos, "Expecting expression before ::")
         val t = cc.next()
-        if( t.type != Token.Type.ID ) throw ScriptError(t.pos, "Expecting ID after ::")
-        return when(t.value) {
+        if (t.type != Token.Type.ID) throw ScriptError(t.pos, "Expecting ID after ::")
+        return when (t.value) {
             "class" -> Accessor {
                 operand.getter(it).objClass
             }
+
             else -> throw ScriptError(t.pos, "Unknown scope operation: ${t.value}")
         }
     }
 
-    fun parseArgs(cc: CompilerContext): List<Arguments.Info> {
+    private fun parseArgs(cc: CompilerContext): List<Arguments.Info> {
         val args = mutableListOf<Arguments.Info>()
         do {
             val t = cc.next()
@@ -438,7 +347,7 @@ class Compiler {
     }
 
 
-    fun parseFunctionCall(cc: CompilerContext, left: Accessor): Accessor {
+    private fun parseFunctionCall(cc: CompilerContext, left: Accessor): Accessor {
         // insofar, functions always return lvalue
         val args = parseArgs(cc)
 
@@ -454,17 +363,7 @@ class Compiler {
         }
     }
 
-//    fun parseReservedWord(word: String): Accessor? =
-//        when(word) {
-//                "true" -> Accessor { ObjBool(true) }
-//                "false" -> Accessor { ObjBool(false) }
-//                "void" -> Accessor { ObjVoid }
-//                "null" -> Accessor { ObjNull }
-//                else -> null
-//            }
-
-
-    fun parseAccessor(cc: CompilerContext): Accessor? {
+    private fun parseAccessor(cc: CompilerContext): Accessor? {
         // could be: literal
         val t = cc.next()
         return when (t.type) {
@@ -495,9 +394,7 @@ class Compiler {
                     else -> {
                         Accessor({
                             it.pos = t.pos
-                            it.get(t.value)?.value?.also {
-                                println("got ${t.value} -> $it")
-                            }
+                            it.get(t.value)?.value
                                 ?: it.raiseError("symbol not defined: '${t.value}'")
                         }) { ctx, newValue ->
                             ctx.get(t.value)?.let { stored ->
@@ -516,161 +413,7 @@ class Compiler {
         }
     }
 
-
-//    fun parseTerm(tokens: CompilerContext): Statement? {
-//        // call op
-//        // index op
-//        // unary op
-//        // parenthesis
-//        // number or string
-//        val t = tokens.next()
-//        // todoL var?
-//        return when (t.type) {
-//            Token.Type.ID -> {
-//                when (t.value) {
-//                    "void" -> statement(t.pos, true) { ObjVoid }
-//                    "null" -> statement(t.pos, true) { ObjNull }
-//                    "true" -> statement(t.pos, true) { ObjBool(true) }
-//                    "false" -> statement(t.pos, true) { ObjBool(false) }
-//                    else -> parseVarAccess(t, tokens)
-//                }
-//            }
-//
-//            Token.Type.STRING -> statement(t.pos, true) { ObjString(t.value) }
-//
-//            Token.Type.LPAREN -> {
-//                // ( subexpr )
-//                parseExpression(tokens)?.also {
-//                    val tl = tokens.next()
-//                    if (tl.type != Token.Type.RPAREN)
-//                        throw ScriptError(t.pos, "unbalanced parenthesis: no ')' for it")
-//                }
-//            }
-//
-//            Token.Type.PLUS -> {
-//                val n = parseNumber(true, tokens)
-//                statement(t.pos, true) { n }
-//            }
-//
-//            Token.Type.MINUS -> {
-//                val n = parseNumber(false, tokens)
-//                statement(t.pos, true) { n }
-//            }
-//
-//            Token.Type.INT, Token.Type.REAL, Token.Type.HEX -> {
-//                tokens.previous()
-//                val n = parseNumber(true, tokens)
-//                statement(t.pos, true) { n }
-//            }
-//
-//            else -> null
-//        }
-//
-//    }
-
-//    fun parseVarAccess(id: Token, tokens: CompilerContext, path: List<String> = emptyList()): Statement {
-//        val nt = tokens.next()
-//
-//        fun resolve(context: Context): Context {
-//            var targetContext = context
-//            for (n in path) {
-//                val x = targetContext[n] ?: throw ScriptError(id.pos, "undefined symbol: $n")
-//                (x.value as? ObjNamespace)?.let { targetContext = it.context }
-//                    ?: throw ScriptError(id.pos, "Invalid symbolic path (wrong type of ${n}: ${x.value}")
-//            }
-//            return targetContext
-//        }
-//        return when (nt.type) {
-//            Token.Type.DOT -> {
-//                // selector
-//                val t = tokens.next()
-//                if (t.type == Token.Type.ID) {
-//                    parseVarAccess(t, tokens, path + id.value)
-//                } else
-//                    throw ScriptError(t.pos, "Expected identifier after '.'")
-//            }
-//
-//            Token.Type.PLUS2 -> {
-//                statement(id.pos) { context ->
-//                    context.pos = id.pos
-//                    val v = resolve(context).get(id.value)
-//                        ?: throw ScriptError(id.pos, "Undefined symbol: ${id.value}")
-//                    v.value?.getAndIncrement(context)
-//                        ?: context.raiseNPE()
-//                }
-//            }
-//
-//            Token.Type.MINUS2 -> {
-//                statement(id.pos) { context ->
-//                    context.pos = id.pos
-//                    val v = resolve(context).get(id.value)
-//                        ?: throw ScriptError(id.pos, "Undefined symbol: ${id.value}")
-//                    v.value?.getAndDecrement(context)
-//                        ?: context.raiseNPE()
-//                }
-//            }
-//
-//            Token.Type.LPAREN -> {
-//                // function call
-//                // Load arg list
-//                val args = mutableListOf<Arguments.Info>()
-//                do {
-//                    val t = tokens.next()
-//                    when (t.type) {
-//                        Token.Type.RPAREN, Token.Type.COMMA -> {}
-//                        else -> {
-//                            tokens.previous()
-//                            parseStatement(tokens)?.let { args += Arguments.Info(it, t.pos) }
-//                                ?: throw ScriptError(t.pos, "Expecting arguments list")
-//                        }
-//                    }
-//                } while (t.type != Token.Type.RPAREN)
-//
-//                statement(id.pos) { context ->
-//                    val v =
-//                        resolve(context).get(id.value) ?: throw ScriptError(
-//                            id.pos,
-//                            "Undefined function: ${id.value}"
-//                        )
-//                    (v.value as? Statement)?.execute(
-//                        context.copy(
-//                            id.pos,
-//                            Arguments(
-//                                nt.pos,
-//                                args.map { Arguments.Info((it.value as Statement).execute(context), it.pos) }
-//                            ),
-//                        )
-//                    )
-//                        ?: throw ScriptError(id.pos, "Variable $id is not callable ($id)")
-//                }
-//            }
-//
-//            Token.Type.LBRACKET -> {
-//                TODO("indexing")
-//            }
-//
-//            else -> {
-//                // just access the var
-//                tokens.previous()
-////                val t = tokens.next()
-////                tokens.previous()
-////                println(t)
-////                if( path.isEmpty() ) {
-////                     statement?
-////                    tokens.previous()
-////                    parseStatement(tokens) ?: throw ScriptError(id.pos, "Expecting expression/statement")
-////                } else
-//                statement(id.pos) {
-//                    val v =
-//                        resolve(it).get(id.value) ?: throw ScriptError(id.pos, "Undefined variable: ${id.value}")
-//                    v.value ?: throw ScriptError(id.pos, "Variable $id is not initialized")
-//                }
-//            }
-//        }
-//    }
-//
-
-    fun parseNumber(isPlus: Boolean, tokens: CompilerContext): Obj {
+    private fun parseNumber(isPlus: Boolean, tokens: CompilerContext): Obj {
         val t = tokens.next()
         return when (t.type) {
             Token.Type.INT, Token.Type.HEX -> {
@@ -704,7 +447,7 @@ class Compiler {
         else -> null
     }
 
-    fun getLabel(cc: CompilerContext, maxDepth: Int = 2): String? {
+    private fun getLabel(cc: CompilerContext, maxDepth: Int = 2): String? {
         var cnt = 0
         var found: String? = null
         while (cc.hasPrevious() && cnt < maxDepth) {

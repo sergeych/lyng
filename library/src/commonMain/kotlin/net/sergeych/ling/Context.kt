@@ -45,14 +45,20 @@ class Context(
             )
         }.value as ObjNamespace)
 
-    inline fun <reified T> addFn(vararg names: String, crossinline fn: suspend Context.() -> T) {
+    inline fun addVoidFn(vararg names: String, crossinline fn: suspend Context.() -> Unit) {
+        addFn<ObjVoid>(*names) {
+            fn(this)
+            ObjVoid
+        }
+    }
+
+    inline fun <reified T: Obj> addFn(vararg names: String, crossinline fn: suspend Context.() -> T) {
         val newFn = object : Statement() {
             override val pos: Pos = Pos.builtIn
 
             override suspend fun execute(context: Context): Obj {
                 return try {
-                    from(context.fn())
-
+                    context.fn()
                 } catch (e: Exception) {
                     raise(e.message ?: "unexpected error")
                 }
