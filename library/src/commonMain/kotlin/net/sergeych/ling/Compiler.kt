@@ -91,7 +91,7 @@ class Compiler(
 
     private fun parseExpressionLevel(tokens: CompilerContext, level: Int = 0): Accessor? {
         if (level == lastLevel)
-            return parseTerm3(tokens)
+            return parseTerm(tokens)
         var lvalue = parseExpressionLevel(tokens, level + 1)
         if (lvalue == null) return null
 
@@ -113,80 +113,21 @@ class Compiler(
     }
 
 
-    /*
-    Term compiler
-
-    Fn calls could be:
-
-    1) Fn(...)
-    2) thisObj.method(...)
-
-    1 is a shortcut to this.Fn(...)
-
-    In general, we can assume any Fn to be of the same king, with `this` that always exist, and set by invocation.
-
-    In the case of (1), so called regular, or not bound function, it takes current this from the context.
-    In the case of (2), bound function, it creates sub-context binding thisObj to `this` in it.
-
-    Suppose we do regular parsing. THen we get lparam = statement, and parse to the `(`. Now we have to
-    compile the invocation of lparam, which can be thisObj.method or just method(). Unfortunately we
-    already compiled it and can't easily restore its type, so we have to parse it different way.
-
-    EBNF to parse term having lparam.
-
-        boundcall = "." , identifier, "("
-
-     We then call instance method bound to `lparam`.
-
-        call = "(', args, ")
-
-    we treat current lparam as callable and invoke it on the current context with current value of 'this.
-
-    Just traversing fields:
-
-        traverse = ".", not (identifier , ".")
-
-    Other cases to parse:
-
-        index = lparam, "[" , ilist , "]"
-
-
-     */
-
-    /**
-     * Lower level of expr:
-     *
-     * assigning expressions:
-     *
-     * expr = expr: assignment
-     * ++expr, expr++, --expr, expr--,
-     *
-     * update-assigns:
-     * expr += expr, ...
-     *
-     * Dot!:   expr , '.', ID
-     * Lambda: { <expr> }
-     * index: expr[ ilist ]
-     * call: <expr>( ilist )
-     * self updating: ++expr, expr++, --expr, expr--, expr+=<expr>,
-     *                expr-=<expr>, expr*=<expr>, expr/=<expr>
-     * read expr: <expr>
-     */
-    private fun parseTerm3(cc: CompilerContext): Accessor? {
+    private fun parseTerm(cc: CompilerContext): Accessor? {
         var operand: Accessor? = null
 
         while (true) {
             val t = cc.next()
             val startPos = t.pos
             when (t.type) {
-                Token.Type.NEWLINE, Token.Type.SEMICOLON, Token.Type.EOF -> {
+                Token.Type.NEWLINE, Token.Type.SEMICOLON, Token.Type.EOF, Token.Type.RBRACE, Token.Type.COMMA -> {
                     cc.previous()
                     return operand
                 }
 
                 Token.Type.NOT -> {
                     if (operand != null) throw ScriptError(t.pos, "unexpected operator not '!'")
-                    val op = parseTerm3(cc) ?: throw ScriptError(t.pos, "Expecting expression")
+                    val op = parseTerm(cc) ?: throw ScriptError(t.pos, "Expecting expression")
                     operand = Accessor { op.getter(it).value.logicalNot(it).asReadonly }
                 }
 
@@ -243,6 +184,45 @@ class Compiler(
                     }
                 }
 
+                Token.Type.LBRACKET -> {
+                    operand?.let { left ->
+                        // array access
+                        val index = parseStatement(cc) ?: throw ScriptError(t.pos, "Expecting index expression")
+                        cc.skipTokenOfType(Token.Type.RBRACKET, "missing ']' at the end of the list literal")
+                        operand = Accessor({ cxt ->
+                            val i = (index.execute(cxt) as? ObjInt)?.value?.toInt()
+                                ?: cxt.raiseError("index must be integer")
+                            left.getter(cxt).value.getAt(cxt, i).asMutable
+                        }) { cxt, newValue ->
+                            val i = (index.execute(cxt) as? ObjInt)?.value?.toInt()
+                                ?: cxt.raiseError("index must be integer")
+                            left.getter(cxt).value.putAt(cxt, i, newValue)
+                        }
+                    } ?: run {
+                        // array literal
+                        val entries = parseArrayLiteral(cc)
+                        // if it didn't throw, ot parsed ot and consumed it all
+                        operand = Accessor { cxt ->
+                            val list = mutableListOf<Obj>()
+                            for (e in entries) {
+                                when(e) {
+                                    is ListEntry.Element -> {
+                                        list += e.accessor.getter(cxt).value
+                                    }
+                                    is ListEntry.Spread -> {
+                                        val elements=e.accessor.getter(cxt).value
+                                        when {
+                                            elements is ObjList -> list.addAll(elements.list)
+                                            else -> cxt.raiseError("Spread element must be list")
+                                        }
+                                    }
+                                }
+                            }
+                            ObjList(list).asReadonly
+                        }
+                    }
+                }
+
                 Token.Type.ID -> {
                     // there could be terminal operators or keywords:// variable to read or like
                     when (t.value) {
@@ -276,9 +256,6 @@ class Compiler(
                             operand = parseAccessor(cc)
                         }
                     }
-                    // selector: <lvalue>, '.' , <id>
-                    // we replace operand with selector code, that
-                    // is RW:
                 }
 
                 Token.Type.PLUS2 -> {
@@ -330,6 +307,28 @@ class Compiler(
                     cc.previous()
                     operand?.let { return it }
                     operand = parseAccessor(cc) ?: throw ScriptError(t.pos, "Expecting expression")
+                }
+            }
+        }
+    }
+
+    private fun parseArrayLiteral(cc: CompilerContext): List<ListEntry> {
+        // it should be called after LBRACKET is consumed
+        val entries = mutableListOf<ListEntry>()
+        while(true) {
+            val t = cc.next()
+            when(t.type) {
+                Token.Type.COMMA -> {
+                    // todo: check commas sequences like [,] [,,] before, after or instead of expressions
+                }
+                Token.Type.RBRACKET -> return entries
+                Token.Type.ELLIPSIS -> {
+                    parseExpressionLevel(cc)?.let { entries += ListEntry.Spread(it) }
+                }
+                else -> {
+                    cc.previous()
+                    parseExpressionLevel(cc)?.let { entries += ListEntry.Element(it) }
+                        ?: throw ScriptError(t.pos, "invalid list literal: expecting expression")
                 }
             }
         }
@@ -389,7 +388,7 @@ class Compiler(
             Token.Type.INT, Token.Type.REAL, Token.Type.HEX -> {
                 cc.previous()
                 val n = parseNumber(true, cc)
-                Accessor{
+                Accessor {
                     n.asReadonly
                 }
             }

@@ -33,7 +33,7 @@ private class Parser(fromPos: Pos) {
         skipws()
         if (pos.end) return Token("", currentPos, Token.Type.EOF)
         val from = currentPos
-        return when (val ch = pos.currentChar.also { advance() }) {
+        return when (val ch = pos.currentChar.also { pos.advance() }) {
             '(' -> Token("(", from, Token.Type.LPAREN)
             ')' -> Token(")", from, Token.Type.RPAREN)
             '{' -> Token("{", from, Token.Type.LBRACE)
@@ -44,7 +44,7 @@ private class Parser(fromPos: Pos) {
             ';' -> Token(";", from, Token.Type.SEMICOLON)
             '=' -> {
                 if (pos.currentChar == '=') {
-                    advance()
+                    pos.advance()
                     Token("==", from, Token.Type.EQ)
                 } else
                     Token("=", from, Token.Type.ASSIGN)
@@ -53,12 +53,12 @@ private class Parser(fromPos: Pos) {
             '+' -> {
                 when (currentChar) {
                     '+' -> {
-                        advance()
+                        pos.advance()
                         Token("+", from, Token.Type.PLUS2)
                     }
 
                     '=' -> {
-                        advance()
+                        pos.advance()
                         Token("+", from, Token.Type.PLUSASSIGN)
                     }
 
@@ -70,12 +70,12 @@ private class Parser(fromPos: Pos) {
             '-' -> {
                 when (currentChar) {
                     '-' -> {
-                        advance()
+                        pos.advance()
                         Token("--", from, Token.Type.MINUS2)
                     }
 
                     '=' -> {
-                        advance()
+                        pos.advance()
                         Token("-", from, Token.Type.MINUSASSIGN)
                     }
 
@@ -85,7 +85,7 @@ private class Parser(fromPos: Pos) {
 
             '*' -> {
                 if (currentChar == '=') {
-                    advance()
+                    pos.advance()
                     Token("*=", from, Token.Type.STARASSIGN)
                 } else
                     Token("*", from, Token.Type.STAR)
@@ -93,24 +93,47 @@ private class Parser(fromPos: Pos) {
 
             '/' -> when (currentChar) {
                 '/' -> {
-                    advance()
+                    pos.advance()
                     Token(loadToEnd().trim(), from, Token.Type.SINLGE_LINE_COMMENT)
                 }
+
                 '=' -> {
-                    advance()
+                    pos.advance()
                     Token("/=", from, Token.Type.SLASHASSIGN)
                 }
+
                 else -> Token("/", from, Token.Type.SLASH)
             }
 
-            '%' -> when(currentChar) {
-                '=' -> { advance(); Token("%=", from, Token.Type.PERCENTASSIGN) }
-                else -> Token("%", from, Token.Type.PERCENT) }
+            '%' -> when (currentChar) {
+                '=' -> {
+                    pos.advance(); Token("%=", from, Token.Type.PERCENTASSIGN)
+                }
 
-            '.' -> Token(".", from, Token.Type.DOT)
+                else -> Token("%", from, Token.Type.PERCENT)
+            }
+
+            '.' -> {
+                // could be: dot, range .. or ..<, or ellipsis ...:
+                if (currentChar == '.') {
+                    pos.advance()
+                    // .. already parsed:
+                    if (currentChar == '.') {
+                        pos.advance()
+                        Token("...", from, Token.Type.ELLIPSIS)
+                    } else if (currentChar == '<') {
+                        Token("..<", from, Token.Type.DOTDOTLT)
+                    } else {
+                        pos.back()
+                        Token("..", from, Token.Type.DOTDOT)
+                    }
+                } else
+                    Token(".", from, Token.Type.DOT)
+            }
+
             '<' -> {
                 if (currentChar == '=') {
-                    advance()
+                    pos.advance()
                     Token("<=", from, Token.Type.LTE)
                 } else
                     Token("<", from, Token.Type.LT)
@@ -118,7 +141,7 @@ private class Parser(fromPos: Pos) {
 
             '>' -> {
                 if (currentChar == '=') {
-                    advance()
+                    pos.advance()
                     Token(">=", from, Token.Type.GTE)
                 } else
                     Token(">", from, Token.Type.GT)
@@ -126,7 +149,7 @@ private class Parser(fromPos: Pos) {
 
             '!' -> {
                 if (currentChar == '=') {
-                    advance()
+                    pos.advance()
                     Token("!=", from, Token.Type.NEQ)
                 } else
                     Token("!", from, Token.Type.NOT)
@@ -134,7 +157,7 @@ private class Parser(fromPos: Pos) {
 
             '|' -> {
                 if (currentChar == '|') {
-                    advance()
+                    pos.advance()
                     Token("||", from, Token.Type.OR)
                 } else
                     Token("|", from, Token.Type.BITOR)
@@ -142,7 +165,7 @@ private class Parser(fromPos: Pos) {
 
             '&' -> {
                 if (currentChar == '&') {
-                    advance()
+                    pos.advance()
                     Token("&&", from, Token.Type.AND)
                 } else
                     Token("&", from, Token.Type.BITAND)
@@ -158,7 +181,7 @@ private class Parser(fromPos: Pos) {
 
             ':' -> {
                 if (currentChar == ':') {
-                    advance()
+                    pos.advance()
                     Token("::", from, Token.Type.COLONCOLON)
                 } else
                     Token(":", from, Token.Type.COLON)
@@ -177,7 +200,7 @@ private class Parser(fromPos: Pos) {
                 if (ch.isLetter() || ch == '_') {
                     val text = ch + loadChars(idNextChars)
                     if (currentChar == '@') {
-                        advance()
+                        pos.advance()
                         if (currentChar.isLetter()) {
                             // break@label or like
                             pos.back()
@@ -197,19 +220,19 @@ private class Parser(fromPos: Pos) {
             Token(p1, start, Token.Type.INT)
         else if (currentChar == '.') {
             // could be decimal
-            advance()
+            pos.advance()
             if (currentChar in digitsSet) {
                 // decimal part
                 val p2 = loadChars(digits)
                 // with exponent?
                 if (currentChar == 'e' || currentChar == 'E') {
-                    advance()
+                    pos.advance()
                     var negative = false
                     if (currentChar == '+')
-                        advance()
+                        pos.advance()
                     else if (currentChar == '-') {
                         negative = true
-                        advance()
+                        pos.advance()
                     }
                     var p3 = loadChars(digits)
                     if (negative) p3 = "-$p3"
@@ -227,7 +250,7 @@ private class Parser(fromPos: Pos) {
         } else {
             // could be integer, also hex:
             if (currentChar == 'x' && p1 == "0") {
-                advance()
+                pos.advance()
                 Token(loadChars({ it in hexDigits }), start, Token.Type.HEX).also {
                     if (currentChar.isLetter())
                         raise("invalid hex literal")
@@ -243,15 +266,15 @@ private class Parser(fromPos: Pos) {
     private fun loadStringToken(): Token {
         var start = currentPos
 
-        if (currentChar == '"') advance()
+        if (currentChar == '"') pos.advance()
         else start = start.back()
 
         val sb = StringBuilder()
         while (currentChar != '"') {
-            if (pos.end) raise("unterminated string")
+            if (pos.end) throw ScriptError(start, "unterminated string started there")
             when (currentChar) {
                 '\\' -> {
-                    advance() ?: raise("unterminated string")
+                    pos.advance() ?: raise("unterminated string")
                     when (currentChar) {
                         'n' -> sb.append('\n')
                         'r' -> sb.append('\r')
@@ -263,11 +286,11 @@ private class Parser(fromPos: Pos) {
 
                 else -> {
                     sb.append(currentChar)
-                    advance()
+                    pos.advance()
                 }
             }
         }
-        advance()
+        pos.advance()
         return Token(sb.toString(), start, Token.Type.STRING)
     }
 
@@ -287,7 +310,7 @@ private class Parser(fromPos: Pos) {
             val ch = pos.currentChar
             if (isValidChar(ch)) {
                 result.append(ch)
-                advance()
+                pos.advance()
             } else
                 break
         }
@@ -314,7 +337,7 @@ private class Parser(fromPos: Pos) {
         val l = pos.line
         do {
             result.append(pos.currentChar)
-            advance()
+            pos.advance()
         } while (pos.line == l)
         return result.toString()
     }
@@ -327,12 +350,11 @@ private class Parser(fromPos: Pos) {
             val ch = pos.currentChar
             if (ch == '\n') break
             if (ch.isWhitespace())
-                advance()
+                pos.advance()
             else
                 return ch
         }
         return null
     }
 
-    private fun advance() = pos.advance()
 }

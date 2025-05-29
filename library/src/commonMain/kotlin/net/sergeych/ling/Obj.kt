@@ -148,12 +148,32 @@ sealed class Obj {
 
     suspend fun <T> sync(block: () -> T): T = monitor.withLock { block() }
 
-    fun readField(context: Context, name: String): WithAccess<Obj> = getInstanceMember(context.pos, name)
+    suspend fun readField(context: Context, name: String): WithAccess<Obj> {
+        // could be property or class field:
+        val obj = objClass.getInstanceMemberOrNull(name)
+        val value = obj?.value
+        return when(value) {
+            is Statement -> {
+                // readonly property, important: call it on this
+                value.execute(context.copy(context.pos, newThisObj = this)).asReadonly
+            }
+            // could be writable property naturally
+            else -> getInstanceMember(context.pos, name)
+        }
+    }
 
     fun writeField(context: Context, name: String, newValue: Obj) {
         willMutate(context)
         members[name]?.let { if (it.isMutable) it.value = newValue }
             ?: context.raiseError("Can't reassign member: $name")
+    }
+
+    open suspend fun getAt(context: Context, index: Int): Obj {
+        context.raiseNotImplemented("indexing")
+    }
+
+    open suspend fun putAt(context: Context, index: Int, newValue: Obj) {
+        context.raiseNotImplemented("indexing")
     }
 
     fun createField(name: String, initialValue: Obj, isMutable: Boolean = false, pos: Pos = Pos.builtIn) {
@@ -235,7 +255,7 @@ data class ObjString(val value: String) : Obj() {
         return this.value.compareTo(other.value)
     }
 
-    override fun toString(): String = value
+    override fun toString(): String = "\"$value\""
 
     override val objClass: ObjClass
         get() = type
@@ -415,6 +435,40 @@ data class ObjBool(val value: Boolean) : Obj() {
 
     companion object {
         val type = ObjClass("Bool")
+    }
+}
+
+//open class ObjProperty(var value: Obj =ObjVoid) {
+//    open suspend fun get(context: Context): Obj = value
+//    open suspend fun set(context: Context,newValue: Obj): Obj {
+//        return value.also { value = newValue }
+//    }
+//}
+
+class ObjList(val list: MutableList<Obj>) : Obj() {
+
+    override fun toString(): String = "[${list.joinToString(separator = ", ")}]"
+
+    override suspend fun getAt(context: Context, index: Int): Obj {
+        return list[index]
+    }
+
+    override suspend fun putAt(context: Context, index: Int, newValue: Obj) {
+        list[index] = newValue
+    }
+
+    override val objClass: ObjClass
+        get() = type
+
+    companion object {
+        val type = ObjClass("List").apply {
+            createField("size",
+                statement(Pos.builtIn) {
+                    (it.thisObj as ObjList).list.size.toObj()
+                },
+                false
+            )
+        }
     }
 }
 

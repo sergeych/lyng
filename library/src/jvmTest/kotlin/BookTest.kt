@@ -139,7 +139,7 @@ suspend fun DocTest.test() {
     val context = Context().apply {
         addFn("println") {
             for ((i, a) in args.withIndex()) {
-                if (i > 0) collectedOutput.append(' '); collectedOutput.append(a)
+                if (i > 0) collectedOutput.append(' '); collectedOutput.append(a.asStr.value)
                 collectedOutput.append('\n')
             }
             ObjVoid
@@ -196,6 +196,11 @@ class BookTest {
     @Test
     fun testFromReal() = runTest {
         runDocTests("../docs/Real.md")
+    }
+
+    @Test
+    fun testFromList() = runTest {
+        runDocTests("../docs/List.md")
     }
 
 }

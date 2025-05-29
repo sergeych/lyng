@@ -485,7 +485,8 @@ class ScriptTest {
 
     @Test
     fun testWhileBlockIsolation3() = runTest {
-            eval("""
+        eval(
+            """
                 var outer = 7
                 var sum = 0
                 var cnt1 = 0
@@ -504,7 +505,7 @@ class ScriptTest {
                 }
                 println("sum "+sum)
             """.trimIndent()
-            )
+        )
     }
 
     @Test
@@ -713,20 +714,96 @@ class ScriptTest {
         assertEquals(11, cxt.eval("x").toInt())
     }
 
+    @Test
+    fun testValVarConverting() = runTest {
+        eval(
+            """
+            val x = 5
+            var y = x
+            y = 1
+            assert(x == 5)
+        """.trimIndent()
+        )
+        assertFails {
+            eval(
+                """
+                val x = 5
+                fun fna(t) {
+                    t = 11
+                }
+                fna(1)
+        """.trimIndent()
+            )
+        }
+        eval(
+            """
+            var x = 5
+            val y = x
+            x = 10
+            assert(y == 5)
+            assert(x == 10)
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testListLiteral() = runTest {
+        eval("""
+            val list = [1,22,3]
+            assert(list[0] == 1)
+            assert(list[1] == 22)
+            assert(list[2] == 3)
+        """.trimIndent())
+
+        eval("""
+            val x0 = 100
+            val list = [x0 + 1, x0 * 10, 3]
+            assert(list[0] == 101)
+            assert(list[1] == 1000)
+            assert(list[2] == 3)
+        """.trimIndent())
+
+        eval("""
+            val x0 = 100
+            val list = [x0 + 1, x0 * 10, if(x0 < 100) "low" else "high", 5]
+            assert(list[0] == 101)
+            assert(list[1] == 1000)
+            assert(list[2] == "high")
+            assert(list[3] == 5)
+        """.trimIndent())
+
+    }
+
+    @Test
+    fun testListLiteralSpread() = runTest {
+        eval("""
+            val list1 = [1,22,3]
+            val list = ["start", ...list1, "end"]
+            assert(list[0] == "start")
+            assert(list[1] == 1)
+            assert(list[2] == 22)
+            assert(list[3] == 3)
+            assert(list[4] == "end")
+        """.trimIndent())
+    }
+
+    @Test
+    fun testListSize() = runTest {
+        eval("""
+            val a = [4,3]
+            assert(a.size == 2)
+        """.trimIndent())
+    }
+
 //    @Test
-//    fun testMultiAssign() = runTest {
-//        assertEquals(
-//            7,
-//            eval("""
-//                var x = 10
-//                var y = 2
-//                (x = 1) = 5
-//                println(x)
-//                println(y)
-//                x + y
-//                """.trimIndent()).toInt()
-//        )
+//    fun testLambda1() = runTest {
+//        val l = eval("""
+//            x = {
+//                122
+//            }
+//            x
+//        """.trimIndent())
+//        println(l)
 //    }
 //
-
 }

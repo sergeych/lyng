@@ -57,9 +57,8 @@ class Script(
             addConst("String", ObjString.type)
             addConst("Int", ObjInt.type)
             addConst("Bool", ObjBool.type)
+            addConst("List", ObjList.type)
             val pi = ObjReal(PI)
-            val z = pi.objClass
-            println("PI class $z")
             addConst("π", pi)
             getOrCreateNamespace("Math").apply {
                 addConst("PI", pi)

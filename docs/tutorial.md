@@ -103,8 +103,7 @@ Notice the parentheses here: the assignment has low priority!
 
 These operators return rvalue, unmodifiable.
 
-## Assignemnt return r-value!
-
+## Assignment return r-value!
 
 ## Math
 
@@ -205,7 +204,7 @@ There are default parameters in Ling:
     }
     assert( "do: more" == check(10, "do: ") )
     check(120)
-    >>> answer: enough
+    >>> "answer: enough"
 
 ## Closures
 
@@ -244,6 +243,43 @@ to call it:
     >>> void
 
 If you need to create _unnamed_ function, use alternative syntax (TBD, like { -> } ?)
+
+# Lists (arrays)
+
+Ling has built-in mutable array class `List` with simple literals:
+
+    [1, "two", 3.33].size
+    >>> 3
+
+Lists can contain any type of objects, lists too:
+
+    val list = [1, [2, 3], 4]
+    assert(list.size == 3)
+    // second element is a list too:
+    assert(list[1].size == 2)
+    >>> void
+
+Notice usage of indexing. 
+
+When you want to "flatten" it to single array, you can use splat syntax:
+
+    [1, ...[2,3], 4]
+    >>> [1, 2, 3, 4]
+
+Of course, you can splat from anything that is List (or list-like, but it will be defined later):
+
+    val a = ["one", "two"]
+    val b = [10.1, 20.2]
+    ["start", ...b, ...a, "end"]
+    >>> ["start", 10.1, 20.2, "one", "two", "end"]
+
+Of course, you can set any array element:
+
+    val a = [1, 2, 3]
+    a[1] = 200
+    a
+    >>> [1, 200, 3]
+
 
 # Flow control operators
 
@@ -299,7 +335,7 @@ exit value in the case:
         count = ++count * 10
         "wrong "+count
     }
-    >>> too much
+    >>> "too much"
 
 ### Breaking nested loops
 
@@ -319,7 +355,7 @@ If you have several loops and want to exit not the inner one, use labels:
         count = count + 1
         count * 10
     }
-    >>> 5/2 situation
+    >>> "5/2 situation"
 
 ### and continue
 
@@ -333,7 +369,7 @@ We can skip the rest of the loop and restart it, as usual, with `continue` opera
         countEven = countEven + 1
     }
     "found even numbers: " + countEven
-    >>> found even numbers: 5
+    >>> "found even numbers: 5"
 
 `continue` can't "return" anything: it just restarts the loop. It can use labeled loops to restart outer ones:
 

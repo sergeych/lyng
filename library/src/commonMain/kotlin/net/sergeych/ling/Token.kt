@@ -13,7 +13,8 @@ data class Token(val value: String, val pos: Pos, val type: Type) {
         EQ, NEQ, LT, LTE, GT, GTE,
         AND, BITAND, OR, BITOR, NOT, BITNOT, DOT, ARROW, QUESTION, COLONCOLON,
         SINLGE_LINE_COMMENT, MULTILINE_COMMENT,
-        LABEL,ATLABEL, // label@ at@label
+        LABEL, ATLABEL, // label@ at@label
+        ELLIPSIS, DOTDOT, DOTDOTLT,
         NEWLINE,
         EOF,
     }

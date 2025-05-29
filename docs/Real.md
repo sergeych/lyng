@@ -15,11 +15,11 @@ you can use it's class to ensure type:
 
 ## Member functions
 
-| name         | meaning                            | type |
-|--------------|------------------------------------|------|
-| `roundToInt` | round to nearest int like round(x) | Int  |
-|              |                                    |      |
-|              |                                    |      |
-|              |                                    |      |
-|              |                                    |      |
-|              |                                    |      |
+| name            | meaning                            | type |
+|-----------------|------------------------------------|------|
+| `.roundToInt()` | round to nearest int like round(x) | Int  |
+|                 |                                    |      |
+|                 |                                    |      |
+|                 |                                    |      |
+|                 |                                    |      |
+|                 |                                    |      |

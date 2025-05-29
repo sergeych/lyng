@@ -12,7 +12,7 @@ class Context(
     )
             : this(Script.defaultContext, args, pos)
 
-    fun raiseNotImplemented(): Nothing = raiseError("operation not implemented")
+    fun raiseNotImplemented(what: String = "operation"): Nothing = raiseError("$what is not implemented")
 
     @Suppress("unused")
     fun raiseNPE(): Nothing = raiseError(ObjNullPointerError(this))
