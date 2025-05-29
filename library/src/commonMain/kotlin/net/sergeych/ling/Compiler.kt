@@ -389,7 +389,9 @@ class Compiler(
             Token.Type.INT, Token.Type.REAL, Token.Type.HEX -> {
                 cc.previous()
                 val n = parseNumber(true, cc)
-                Accessor{ n.asReadonly }
+                Accessor{
+                    n.asReadonly
+                }
             }
 
             Token.Type.STRING -> Accessor { ObjString(t.value).asReadonly }
@@ -494,6 +496,8 @@ class Compiler(
             var result: Obj = ObjVoid
             while (condition.execute(it).toBool()) {
                 try {
+                    // we don't need to create new context here: if body is a block,
+                    // parse block will do it, otherwise single statement doesn't need it:
                     result = body.execute(it)
                 } catch (lbe: LoopBreakContinueException) {
                     if (lbe.label == label || lbe.label == null) {
@@ -711,6 +715,7 @@ class Compiler(
         if (nameToken.type != Token.Type.ID)
             throw ScriptError(nameToken.pos, "Expected identifier after '$kind'")
         val name = nameToken.value
+
         val eqToken = tokens.next()
         var setNull = false
         if (eqToken.type != Token.Type.ASSIGN) {
@@ -721,12 +726,18 @@ class Compiler(
                 setNull = true
             }
         }
+
         val initialExpression = if (setNull) null else parseStatement(tokens)
             ?: throw ScriptError(eqToken.pos, "Expected initializer expression")
+
         return statement(nameToken.pos) { context ->
             if (context.containsLocal(name))
                 throw ScriptError(nameToken.pos, "Variable $name is already defined")
-            val initValue = initialExpression?.execute(context) ?: ObjNull
+
+            // init value could be a val; when we init by-value type var with it, we need to
+            // create a separate copy:
+            val initValue = initialExpression?.execute(context)?.byValueCopy() ?: ObjNull
+
             context.addItem(name, mutable, initValue)
             ObjVoid
         }
@@ -842,6 +853,12 @@ class Compiler(
             Operator.simple(Token.Type.SLASH, lastPrty) { ctx, a, b -> a.div(ctx, b) },
             Operator.simple(Token.Type.PERCENT, lastPrty) { ctx, a, b -> a.mod(ctx, b) },
         )
+
+//        private val assigner = allOps.first { it.tokenType == Token.Type.ASSIGN }
+//
+//        fun performAssignment(context: Context, left: Accessor, right: Accessor) {
+//            assigner.generate(context.pos, left, right)
+//        }
 
         val lastLevel = lastPrty + 1
 

@@ -452,6 +452,62 @@ class ScriptTest {
     }
 
     @Test
+    fun testWhileBlockIsolation1() = runTest {
+        eval(
+            """
+                var x = 100
+                var cnt = 2
+                while( cnt-- > 0 ) {
+                    var x = cnt + 1
+                    assert(x == cnt + 1)
+                }
+                assert( x == 100 )
+                assert( cnt == -1 )
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testWhileBlockIsolation2() = runTest {
+        assertFails {
+            eval(
+                """
+                var cnt = 2
+                while( cnt-- > 0 ) {
+                    var inner = cnt + 1
+                    assert(inner == cnt + 1)
+                }
+                println("inner "+inner)
+            """.trimIndent()
+            )
+        }
+    }
+
+    @Test
+    fun testWhileBlockIsolation3() = runTest {
+            eval("""
+                var outer = 7
+                var sum = 0
+                var cnt1 = 0
+                val initialForCnt2 = 0
+                while( ++cnt1 < 3 ) {
+                    var cnt2 = initialForCnt2
+                 
+                    assert(cnt2 == 0)
+                    assert(outer == 7)
+                 
+                    while(++cnt2 < 5) {
+                        assert(initialForCnt2 == 0)
+                        var outer = 1
+                        sum = sum + outer
+                    }
+                }
+                println("sum "+sum)
+            """.trimIndent()
+            )
+    }
+
+    @Test
     fun whileNonLocalBreakTest() = runTest {
         assertEquals(
             "ok2:3:7", eval(
@@ -459,14 +515,18 @@ class ScriptTest {
             var t1 = 10
             outer@ while( t1 > 0 ) {
                 var t2 = 10
+                println("starting t2 = " + t2)
                 while( t2 > 0 ) {
                     t2 = t2 - 1
                     println("t2 " + t2 + " t1 " + t1)
                     if( t2 == 3 && t1 == 7) {
+                        println("will break")
                         break@outer "ok2:"+t2+":"+t1
                     }
                 }
+                println("next t1")
                 t1 = t1 - 1
+                println("t1 now "+t1)
                 t1
             }
         """.trimIndent()
@@ -607,12 +667,15 @@ class ScriptTest {
     fun testAssign1() = runTest {
         assertEquals(10, eval("var x = 5; x=10; x").toInt())
         val ctx = Context()
-        ctx.eval("""
+        ctx.eval(
+            """
             var a = 1
-        """.trimIndent())
+            var b = 1
+        """.trimIndent()
+        )
         assertEquals(3, ctx.eval("a + a + 1").toInt())
-        assertEquals(12, ctx.eval("a + (a = 10) + 1").toInt())
-        assertEquals(10, ctx.eval("a").toInt())
+        assertEquals(12, ctx.eval("a + (b = 10) + 1").toInt())
+        assertEquals(10, ctx.eval("b").toInt())
     }
 
     @Test

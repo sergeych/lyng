@@ -2,7 +2,7 @@ package net.sergeych.ling
 
 data class Pos(val source: Source, val line: Int, val column: Int) {
     override fun toString(): String {
-        return "${source.fileName}:$line:$column"
+        return "${source.fileName}:${line+1}:${column}"
     }
 
     fun back(): Pos =

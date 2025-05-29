@@ -57,13 +57,8 @@ class Context(
         val newFn = object : Statement() {
             override val pos: Pos = Pos.builtIn
 
-            override suspend fun execute(context: Context): Obj {
-                return try {
-                    context.fn()
-                } catch (e: Exception) {
-                    raise(e.message ?: "unexpected error")
-                }
-            }
+            override suspend fun execute(context: Context): Obj = context.fn()
+
         }
         for (name in names) {
             addItem(

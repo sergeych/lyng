@@ -31,6 +31,13 @@ sealed class Obj {
     //    private val memberMutex = Mutex()
     private val parentInstances = listOf<Obj>()
 
+    /**
+     * Some objects are by-value, historically [ObjInt] and [ObjReal] are usually treated as such.
+     * When initializing a var with it, by value objects must be copied. By-reference ones aren't.
+     *
+     * Almost all objects are by-reference.
+     */
+    open fun byValueCopy(): Obj = this
 
     /**
      * Get instance member traversing the hierarchy if needed. Its meaning is different for different objects.
@@ -273,6 +280,8 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
     override val toObjInt: ObjInt by lazy { ObjInt(longValue) }
     override val toObjReal: ObjReal by lazy { ObjReal(value) }
 
+    override fun byValueCopy(): Obj = ObjReal(value)
+
     override suspend fun compareTo(context: Context, other: Obj): Int {
         if (other !is Numeric) context.raiseError("cannot compare $this with $other")
         return value.compareTo(other.doubleValue)
@@ -315,6 +324,8 @@ data class ObjInt(var value: Long) : Obj(), Numeric {
     override val doubleValue get() = value.toDouble()
     override val toObjInt get() = this
     override val toObjReal = ObjReal(doubleValue)
+
+    override fun byValueCopy(): Obj = ObjInt(value)
 
     override suspend fun getAndIncrement(context: Context): Obj {
         return ObjInt(value).also { value++ }
@@ -367,6 +378,17 @@ data class ObjInt(var value: Long) : Obj(), Numeric {
         if (other is ObjInt)
             ObjInt(this.value % other.value)
         else ObjReal(this.value.toDouble() % other.toDouble())
+
+    /**
+     * We are by-value type ([byValueCopy] is implemented) so we can do in-place
+     * assignment
+     */
+    override suspend fun assign(context: Context, other: Obj): Obj? {
+        return if( other is ObjInt) {
+            value = other.value
+            this
+        } else null
+    }
 
     companion object {
         val type = ObjClass("Int")
