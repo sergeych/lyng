@@ -148,10 +148,7 @@ class Compiler(
                                         v.callInstanceMethod(
                                             context,
                                             next.value,
-                                            Arguments(args.map {
-                                                val st = it.value as Statement
-                                                Arguments.Info(st.execute(context),it.pos) }
-                                            )
+                                            args.toArguments(context)
                                         ), isMutable = false
                                     )
                                 }
@@ -275,11 +272,11 @@ class Compiler(
                     } ?: run {
                         // no lvalue means pre-increment, expression to increment follows
                         val next = parseAccessor(cc) ?: throw ScriptError(t.pos, "Expecting expression")
-                        operand = Accessor({ ctx ->
+                        operand = Accessor { ctx ->
                             next.getter(ctx).also {
                                 if (!it.isMutable) ctx.raiseError("Cannot increment immutable value")
                             }.value.incrementAndGet(ctx).asReadonly
-                        })
+                        }
                     }
                 }
 
@@ -351,15 +348,19 @@ class Compiler(
         }
     }
 
-    private fun parseArgs(cc: CompilerContext): List<Arguments.Info> {
-        val args = mutableListOf<Arguments.Info>()
+    private fun parseArgs(cc: CompilerContext): List<ParsedArgument> {
+        val args = mutableListOf<ParsedArgument>()
         do {
             val t = cc.next()
             when (t.type) {
                 Token.Type.RPAREN, Token.Type.COMMA -> {}
+                Token.Type.ELLIPSIS -> {
+                    parseStatement(cc)?.let { args += ParsedArgument(it, t.pos, isSplat = true) }
+                        ?: throw ScriptError(t.pos, "Expecting arguments list")
+                }
                 else -> {
                     cc.previous()
-                    parseStatement(cc)?.let { args += Arguments.Info(it, t.pos) }
+                    parseStatement(cc)?.let { args += ParsedArgument(it, t.pos) }
                         ?: throw ScriptError(t.pos, "Expecting arguments list")
                 }
             }
@@ -376,9 +377,10 @@ class Compiler(
             val v = left.getter(context)
             v.value.callOn(context.copy(
                 context.pos,
-                Arguments(
-                    args.map { Arguments.Info((it.value as Statement).execute(context), it.pos) }
-                ),
+                args.toArguments(context)
+//                Arguments(
+//                    args.map { Arguments.Info((it.value as Statement).execute(context), it.pos) }
+//                ),
             )
             ).asReadonly
         }

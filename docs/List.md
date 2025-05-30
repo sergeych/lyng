@@ -39,6 +39,7 @@ __Important__ negative indexes works wherever indexes are used, e.g. in insertio
     assert( [1, 2, 3] > [1, 2])
     assert( [1, 3] > [1, 2, 3])
     assert( [1, 2, 3] == [1, 2, 3])
+    assert( [1, 2, 3] != [1, 2, "three"])
     // note that in the case above objects are referentially different:
     assert( [1, 2, 3] !== [1, 2, 3])
     >>> void

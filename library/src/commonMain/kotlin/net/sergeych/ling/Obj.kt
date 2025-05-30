@@ -55,11 +55,6 @@ sealed class Obj {
             ?: throw ScriptError(atPos, "symbol doesn't exist: $name")
 
     suspend fun callInstanceMethod(context: Context, name: String, args: Arguments): Obj =
-    // instance _methods_ are our ObjClass instance:
-    // note that getInstanceMember traverses the hierarchy
-    // instance _methods_ are our ObjClass instance:
-    // note that getInstanceMember traverses the hierarchy
-// instance _methods_ are our ObjClass instance:
         // note that getInstanceMember traverses the hierarchy
         objClass.getInstanceMember(context.pos, name).value.invoke(context, this, args)
 
@@ -154,7 +149,7 @@ sealed class Obj {
         // could be property or class field:
         val obj = objClass.getInstanceMemberOrNull(name)
         val value = obj?.value
-        return when(value) {
+        return when (value) {
             is Statement -> {
                 // readonly property, important: call it on this
                 value.execute(context.copy(context.pos, newThisObj = this)).asReadonly
@@ -253,7 +248,7 @@ object ObjNull : Obj() {
 data class ObjString(val value: String) : Obj() {
 
     override suspend fun compareTo(context: Context, other: Obj): Int {
-        if (other !is ObjString) context.raiseError("cannot compare string with $other")
+        if (other !is ObjString) return -2
         return this.value.compareTo(other.value)
     }
 
@@ -311,7 +306,7 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
     override fun byValueCopy(): Obj = ObjReal(value)
 
     override suspend fun compareTo(context: Context, other: Obj): Int {
-        if (other !is Numeric) context.raiseError("cannot compare $this with $other")
+        if (other !is Numeric) return -2
         return value.compareTo(other.doubleValue)
     }
 
@@ -372,7 +367,7 @@ data class ObjInt(var value: Long) : Obj(), Numeric {
     }
 
     override suspend fun compareTo(context: Context, other: Obj): Int {
-        if (other !is Numeric) context.raiseError("cannot compare $this with $other")
+        if (other !is Numeric) return -2
         return value.compareTo(other.doubleValue)
     }
 
@@ -412,7 +407,7 @@ data class ObjInt(var value: Long) : Obj(), Numeric {
      * assignment
      */
     override suspend fun assign(context: Context, other: Obj): Obj? {
-        return if( other is ObjInt) {
+        return if (other is ObjInt) {
             value = other.value
             this
         } else null
@@ -427,7 +422,7 @@ data class ObjBool(val value: Boolean) : Obj() {
     override val asStr by lazy { ObjString(value.toString()) }
 
     override suspend fun compareTo(context: Context, other: Obj): Int {
-        if (other !is ObjBool) context.raiseError("cannot compare $this with $other")
+        if (other !is ObjBool) return -2
         return value.compareTo(other.value)
     }
 

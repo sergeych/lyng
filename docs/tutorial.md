@@ -342,6 +342,27 @@ You can insert elements at any position using `addAt`:
     assert( x == [1, "foo", "bar", 2, 3])
     >>> void
 
+Using splat arguments can simplify inserting list in list:
+
+    val x = [1, 2, 3]
+    x.addAt( 1, ...[0,100,0])
+    x
+    >>> [1, 0, 100, 0, 2, 3]
+
+Using negative indexes can insert elements as offset from the end, for example:
+    
+    val x = [1,2,3]
+    x.addAt(-1, 10)
+    x
+    >>> [1, 2, 10, 3]
+
+Note that to add to the end you still need to use `add` or positive index of the after-last element:
+
+    val x = [1,2,3]
+    x.addAt(3, 10)
+    x
+    >>> [1, 2, 3, 10]
+
 ## Removing list items
 
     val x = [1, 2, 3, 4, 5]
@@ -351,6 +372,21 @@ You can insert elements at any position using `addAt`:
     x.removeAt(1,3)    
     assert( x == [1, 5])
     >>> void
+
+Again, you can use negative indexes. For example, removing last elements like:
+
+    val x = [1, 2, 3, 4, 5]
+
+    // remove last:
+    x.removeAt(-1)
+    assert( x == [1, 2, 3, 4])
+    
+    // remove 3 last:
+    x.removeAt(-3,1)    
+    assert( x == [1])
+    >>> void
+    
+
 
 # Flow control operators
 

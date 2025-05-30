@@ -6,8 +6,9 @@ class ObjList(val list: MutableList<Obj>) : Obj() {
         list.joinToString(separator = ", ") { it.inspect() }
     }]"
 
-    fun normalize(context: Context, index: Int): Int {
+    fun normalize(context: Context, index: Int,allowInclusiveEnd: Boolean = false): Int {
         val i = if (index < 0) list.size + index else index
+        if( allowInclusiveEnd && i == list.size ) return i
         if (i !in list.indices) context.raiseError("index $index out of bounds for size ${list.size}")
         return i
     }
@@ -23,7 +24,7 @@ class ObjList(val list: MutableList<Obj>) : Obj() {
     }
 
     override suspend fun compareTo(context: Context, other: Obj): Int {
-        if (other !is ObjList) context.raiseError("cannot compare $this with $other")
+        if (other !is ObjList) return -2
         val mySize = list.size
         val otherSize = other.list.size
         val commonSize = minOf(mySize, otherSize)
@@ -72,7 +73,8 @@ class ObjList(val list: MutableList<Obj>) : Obj() {
                 statement {
                     if (args.size < 2) raiseError("addAt takes 2+ arguments")
                     val l = thisAs<ObjList>()
-                    var index = l.normalize(this, requiredArg<ObjInt>(0).value.toInt())
+                    var index = l.normalize(this, requiredArg<ObjInt>(0).value.toInt(),
+                        allowInclusiveEnd = true)
                     for (i in 1..<args.size) l.list.add(index++, args[i])
                     ObjVoid
                 }
