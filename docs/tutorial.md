@@ -4,6 +4,13 @@ Ling is a very simple language, where we take only most important and popular fe
 other scripts and languages. In particular, we adopt _principle of minimal confusion_[^1].
 In other word, the code usually works as expected when you see it. So, nothing unusual.
 
+__Other documents to read__ maybe after this one:
+
+- [Advanced topics](advanced_topics.md)
+- [OOP notes](OOP.md)
+- [math in Ling](math.md)
+- Some class references: [List](List.md), [Real](Real.md)
+
 # Expressions
 
 Everything is an expression in Ling. Even an empty block:

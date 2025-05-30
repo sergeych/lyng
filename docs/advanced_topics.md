@@ -5,6 +5,8 @@
 Each block has own scope, in which it can safely uses closures and override
 outer vars:
 
+> blocks are no-yet-ready lambda declaration so this sample will soon be altered
+
     var param = "global"
     val prefix = "param in "
     val scope1 = {
