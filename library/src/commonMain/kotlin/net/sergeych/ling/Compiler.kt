@@ -205,12 +205,13 @@ class Compiler(
                         operand = Accessor { cxt ->
                             val list = mutableListOf<Obj>()
                             for (e in entries) {
-                                when(e) {
+                                when (e) {
                                     is ListEntry.Element -> {
                                         list += e.accessor.getter(cxt).value
                                     }
+
                                     is ListEntry.Spread -> {
-                                        val elements=e.accessor.getter(cxt).value
+                                        val elements = e.accessor.getter(cxt).value
                                         when {
                                             elements is ObjList -> list.addAll(elements.list)
                                             else -> cxt.raiseError("Spread element must be list")
@@ -315,16 +316,18 @@ class Compiler(
     private fun parseArrayLiteral(cc: CompilerContext): List<ListEntry> {
         // it should be called after LBRACKET is consumed
         val entries = mutableListOf<ListEntry>()
-        while(true) {
+        while (true) {
             val t = cc.next()
-            when(t.type) {
+            when (t.type) {
                 Token.Type.COMMA -> {
                     // todo: check commas sequences like [,] [,,] before, after or instead of expressions
                 }
+
                 Token.Type.RBRACKET -> return entries
                 Token.Type.ELLIPSIS -> {
                     parseExpressionLevel(cc)?.let { entries += ListEntry.Spread(it) }
                 }
+
                 else -> {
                     cc.previous()
                     parseExpressionLevel(cc)?.let { entries += ListEntry.Element(it) }
@@ -358,6 +361,7 @@ class Compiler(
                     parseStatement(cc)?.let { args += ParsedArgument(it, t.pos, isSplat = true) }
                         ?: throw ScriptError(t.pos, "Expecting arguments list")
                 }
+
                 else -> {
                     cc.previous()
                     parseStatement(cc)?.let { args += ParsedArgument(it, t.pos) }
@@ -375,13 +379,14 @@ class Compiler(
 
         return Accessor { context ->
             val v = left.getter(context)
-            v.value.callOn(context.copy(
-                context.pos,
-                args.toArguments(context)
+            v.value.callOn(
+                context.copy(
+                    context.pos,
+                    args.toArguments(context)
 //                Arguments(
 //                    args.map { Arguments.Info((it.value as Statement).execute(context), it.pos) }
 //                ),
-            )
+                )
             ).asReadonly
         }
     }
@@ -496,6 +501,13 @@ class Compiler(
         val body = parseStatement(cc) ?: throw ScriptError(start, "Bad while statement: expected statement")
         label?.also { cc.labels -= it }
 
+        cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
+        val elseStatement = if (cc.next().let { it.type == Token.Type.ID && it.value == "else" }) {
+            parseStatement(cc)
+        } else {
+            cc.previous()
+            null
+        }
         return statement(body.pos) {
             var result: Obj = ObjVoid
             while (condition.execute(it).toBool()) {
@@ -503,6 +515,7 @@ class Compiler(
                     // we don't need to create new context here: if body is a block,
                     // parse block will do it, otherwise single statement doesn't need it:
                     result = body.execute(it)
+                    elseStatement?.let { s -> result = s.execute(it) }
                 } catch (lbe: LoopBreakContinueException) {
                     if (lbe.label == label || lbe.label == null) {
                         if (lbe.doContinue) continue

@@ -378,7 +378,7 @@ Note that to add to the end you still need to use `add` or positive index of the
     x.removeAt(2)
     assert( x == [1, 2, 4, 5])
     // or remove range (start inclusive, end exclusive):
-    x.removeAt(1,3)    
+    x.removeRangeInclusive(1,2)    
     assert( x == [1, 5])
     >>> void
 
@@ -390,9 +390,9 @@ Again, you can use negative indexes. For example, removing last elements like:
     x.removeAt(-1)
     assert( x == [1, 2, 3, 4])
     
-    // remove 3 last:
-    x.removeAt(-3,1)    
-    assert( x == [1])
+    // remove 2 last:
+    x.removeRangeInclusive(-2,-1)
+    assert( x == [1, 2])
     >>> void
 
 # Flow control operators
@@ -513,6 +513,28 @@ The label can be any valid identifier, even a keyword, labels exist in their own
 occasional clash. Labels are also scoped to their context and do not exist outside it.
 
 Right now labels are implemented only for the while loop. It is intended to be implemented for all loops and returns.
+
+## while - else statement
+
+The while loop can be followed by the else block, which is executed when the loop
+ends normally, without breaks. It allows override loop result value, for example,
+to not calculate it in every iteration. Here is the sample:
+
+### Else, labels, and break practical sample
+
+    // Get a first word that starts with a given previx and return it:
+    fun findPrefix(prefix,words) {
+        var index = 0
+        while( index < words.size ) {
+            val w = words[index++]
+            if( w.startsWith(prefix) ) break w
+        } 
+        else null
+    }
+    val words = ["hello", "world", "foobar", "end"]
+    assert( findPrefix("bad", words) == null )
+    findPrefix("foo", words )
+    >>> "foobar"
 
 # Self-assignments in expression
 

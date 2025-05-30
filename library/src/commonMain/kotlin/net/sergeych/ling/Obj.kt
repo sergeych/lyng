@@ -179,6 +179,10 @@ sealed class Obj {
         members[name] = WithAccess(initialValue, isMutable)
     }
 
+    fun addFn(name: String, isOpen: Boolean = false, code: suspend Context.()->Obj) {
+        createField(name, statement { code() }, isOpen)
+    }
+
     fun addConst(name: String, value: Obj) = createField(name, value, isMutable = false)
 
     open suspend fun callOn(context: Context): Obj {
@@ -240,35 +244,6 @@ object ObjNull : Obj() {
 
     override fun equals(other: Any?): Boolean {
         return other is ObjNull || other == null
-    }
-}
-
-@Serializable
-@SerialName("string")
-data class ObjString(val value: String) : Obj() {
-
-    override suspend fun compareTo(context: Context, other: Obj): Int {
-        if (other !is ObjString) return -2
-        return this.value.compareTo(other.value)
-    }
-
-    override fun toString(): String = value
-
-    override val asStr: ObjString by lazy { this }
-
-    override fun inspect(): String {
-        return "\"$value\""
-    }
-
-    override val objClass: ObjClass
-        get() = type
-
-    override suspend fun plus(context: Context, other: Obj): Obj {
-        return ObjString(value + other.asStr.value)
-    }
-
-    companion object {
-        val type = ObjClass("String")
     }
 }
 

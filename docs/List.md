@@ -46,11 +46,19 @@ __Important__ negative indexes works wherever indexes are used, e.g. in insertio
 
 ## Members
 
-| name                       | meaning                                      | type     |
-|----------------------------|----------------------------------------------|----------|
-| `size`                     | current size                                 | Int      |
-| `add(elements...)`         | add one or more elements to the end          | Any      |
-| `addAt(index,elements...)` | insert elements at position                  | Int, Any |
-| `removeAt(index)`          | remove element at position                   | Int      |
-| `removeAt(start,end)`      | remove range, start inclusive, end exclusive | Int, Int |
-|                            |                                              |          |
+| name                              | meaning                             | type     |
+|-----------------------------------|-------------------------------------|----------|
+| `size`                            | current size                        | Int      |
+| `add(elements...)`                | add one or more elements to the end | Any      |
+| `addAt(index,elements...)`        | insert elements at position         | Int, Any |
+| `removeAt(index)`                 | remove element at position          | Int      |
+| `removeRangeInclusive(start,end)` | remove range, inclusive (1)         | Int, Int |
+|                                   |                                     |          |
+
+(1)
+: end-inclisiveness allows to use negative indexes to, for exampe, remove several last elements, like `list.removeRangeInclusive(-2, -1)` will remove two last elements.
+
+
+# Notes
+
+Could be rewritten using array as a class but List as the interface

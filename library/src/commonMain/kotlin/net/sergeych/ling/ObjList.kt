@@ -6,9 +6,9 @@ class ObjList(val list: MutableList<Obj>) : Obj() {
         list.joinToString(separator = ", ") { it.inspect() }
     }]"
 
-    fun normalize(context: Context, index: Int,allowInclusiveEnd: Boolean = false): Int {
+    fun normalize(context: Context, index: Int, allowInclusiveEnd: Boolean = false): Int {
         val i = if (index < 0) list.size + index else index
-        if( allowInclusiveEnd && i == list.size ) return i
+        if (allowInclusiveEnd && i == list.size) return i
         if (i !in list.indices) context.raiseError("index $index out of bounds for size ${list.size}")
         return i
     }
@@ -73,23 +73,31 @@ class ObjList(val list: MutableList<Obj>) : Obj() {
                 statement {
                     if (args.size < 2) raiseError("addAt takes 2+ arguments")
                     val l = thisAs<ObjList>()
-                    var index = l.normalize(this, requiredArg<ObjInt>(0).value.toInt(),
-                        allowInclusiveEnd = true)
+                    var index = l.normalize(
+                        this, requiredArg<ObjInt>(0).value.toInt(),
+                        allowInclusiveEnd = true
+                    )
                     for (i in 1..<args.size) l.list.add(index++, args[i])
                     ObjVoid
                 }
             )
-            createField("removeAt",
-                statement {
-                    val self = thisAs<ObjList>()
-                    val start = self.normalize(this, requiredArg<ObjInt>(0).value.toInt())
-                    if (args.size == 2) {
-                        val end = requiredArg<ObjInt>(1).value.toInt()
-                        self.list.subList(start, self.normalize(this, end)).clear()
-                    } else
-                        self.list.removeAt(start)
-                    self
-                })
+            addFn("removeAt") {
+                val self = thisAs<ObjList>()
+                val start = self.normalize(this, requiredArg<ObjInt>(0).value.toInt())
+                if (args.size == 2) {
+                    val end = requireOnlyArg<ObjInt>().value.toInt()
+                    self.list.subList(start, self.normalize(this, end)).clear()
+                } else
+                    self.list.removeAt(start)
+                self
+            }
+            addFn("removeRangeInclusive") {
+                val self = thisAs<ObjList>()
+                val start = self.normalize(this, requiredArg<ObjInt>(0).value.toInt())
+                val end = self.normalize(this, requiredArg<ObjInt>(1).value.toInt()) + 1
+                self.list.subList(start, end).clear()
+                self
+            }
         }
     }
 }

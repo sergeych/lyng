@@ -33,6 +33,17 @@ class Context(
             ?: raiseClassCastError("Expected type ${T::class.simpleName}, got ${args.list[index].value::class.simpleName}")
     }
 
+    inline fun <reified T: Obj>requireOnlyArg(): T {
+        if( args.list.size != 1 ) raiseError("Expected exactly 1 argument, got ${args.list.size}")
+        return requiredArg(0)
+    }
+
+    fun requireExactCount(count: Int) {
+        if( args.list.size != count ) {
+            raiseError("Expected exactly $count arguments, got ${args.list.size}")
+        }
+    }
+
     inline fun <reified T: Obj>thisAs(): T = (thisObj as? T)
         ?: raiseClassCastError("Cannot cast ${thisObj.objClass.className} to ${T::class.simpleName}")
 
