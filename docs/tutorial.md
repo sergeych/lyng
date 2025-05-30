@@ -155,9 +155,8 @@ Logical operation could be used the same
 : comparison are based on comparison operator which can be overloaded
 
 (2)
-: referential equality means left and right operands references exactly same instance of some object. Nothe that all
-singleton object, like `null`, are referentially equal too, while string different literals even being equal are most
-likely referentially not equal:
+: referential equality means left and right operands references exactly same instance of some object. Note that all singleton object, like `null`, are referentially equal too, while string different literals even being equal are most likely referentially not equal:
+
 
     assert( null == null)  // singletons
     assert( null === null)
