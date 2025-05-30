@@ -155,7 +155,9 @@ Logical operation could be used the same
 : comparison are based on comparison operator which can be overloaded
 
 (2)
-: referential equality means left and right operands references exactly same instance of some object. Note that all singleton object, like `null`, are referentially equal too, while string different literals even being equal are most likely referentially not equal
+: referential equality means left and right operands references exactly same instance of some object. Note that all
+singleton object, like `null`, are referentially equal too, while string different literals even being equal are most
+likely referentially not equal
 
 Reference quality and object equality example:
 
@@ -357,7 +359,7 @@ Using splat arguments can simplify inserting list in list:
     >>> [1, 0, 100, 0, 2, 3]
 
 Using negative indexes can insert elements as offset from the end, for example:
-    
+
     val x = [1,2,3]
     x.addAt(-1, 10)
     x
@@ -392,8 +394,6 @@ Again, you can use negative indexes. For example, removing last elements like:
     x.removeAt(-3,1)    
     assert( x == [1])
     >>> void
-    
-
 
 # Flow control operators
 
@@ -560,6 +560,7 @@ There are self-assigning version for operators too:
 | Real   | 64 bit double                   | `1.0`, `2e-11`      |
 | Bool   | boolean                         | `true` `false`      |
 | String | unicode string, no limits       | "hello" (see below) |
+| List   | mutable list                    | [1, "two", 3]       |
 | Void   | no value could exist, singleton | void                |
 | Null   | missing value, singleton        | null                |
 | Fn     | callable type                   |                     |
@@ -583,15 +584,19 @@ though multiline literals is yet work in progress.
 
 # Built-in functions
 
-See [math functions](math.md), and:
+See [math functions](math.md). Other general purpose functions are:
 
 | name                                         | description                                              |
 |----------------------------------------------|----------------------------------------------------------|
 | assert(condition,message="assertion failed") | runtime code check. There will be an option to skip them |
-|                                              |                                                          |
-|                                              |                                                          |
-|                                              |                                                          |
+| println(args...)                             | Open for overriding, it prints to stdout.                |
 
+# Built-in constants
+
+| name                                | description                  |
+|-------------------------------------|------------------------------|
+| Real, Int, List, String, List, Bool | Class types for real numbers |
+| π                                   | See [math](math.md)          |
 
 
 
