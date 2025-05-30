@@ -31,6 +31,8 @@ sealed class Obj {
     //    private val memberMutex = Mutex()
     private val parentInstances = listOf<Obj>()
 
+    open fun inspect(): String = toString()
+
     /**
      * Some objects are by-value, historically [ObjInt] and [ObjReal] are usually treated as such.
      * When initializing a var with it, by value objects must be copied. By-reference ones aren't.
@@ -255,7 +257,13 @@ data class ObjString(val value: String) : Obj() {
         return this.value.compareTo(other.value)
     }
 
-    override fun toString(): String = "\"$value\""
+    override fun toString(): String = value
+
+    override val asStr: ObjString by lazy { this }
+
+    override fun inspect(): String {
+        return "\"$value\""
+    }
 
     override val objClass: ObjClass
         get() = type
@@ -445,33 +453,6 @@ data class ObjBool(val value: Boolean) : Obj() {
 //    }
 //}
 
-class ObjList(val list: MutableList<Obj>) : Obj() {
-
-    override fun toString(): String = "[${list.joinToString(separator = ", ")}]"
-
-    override suspend fun getAt(context: Context, index: Int): Obj {
-        return list[index]
-    }
-
-    override suspend fun putAt(context: Context, index: Int, newValue: Obj) {
-        list[index] = newValue
-    }
-
-    override val objClass: ObjClass
-        get() = type
-
-    companion object {
-        val type = ObjClass("List").apply {
-            createField("size",
-                statement(Pos.builtIn) {
-                    (it.thisObj as ObjList).list.size.toObj()
-                },
-                false
-            )
-        }
-    }
-}
-
 data class ObjNamespace(val name: String) : Obj() {
     override fun toString(): String {
         return "namespace ${name}"
@@ -485,3 +466,4 @@ open class ObjError(val context: Context, val message: String) : Obj() {
 class ObjNullPointerError(context: Context) : ObjError(context, "object is null")
 
 class ObjAssertionError(context: Context, message: String) : ObjError(context, message)
+class ObjClassCastError(context: Context, message: String) : ObjError(context, message)

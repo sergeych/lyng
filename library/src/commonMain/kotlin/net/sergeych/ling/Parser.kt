@@ -45,7 +45,12 @@ private class Parser(fromPos: Pos) {
             '=' -> {
                 if (pos.currentChar == '=') {
                     pos.advance()
-                    Token("==", from, Token.Type.EQ)
+                    if( currentChar == '=' ) {
+                        pos.advance()
+                        Token("===", from, Token.Type.REF_EQ)
+                    }
+                    else
+                        Token("==", from, Token.Type.EQ)
                 } else
                     Token("=", from, Token.Type.ASSIGN)
             }
@@ -150,7 +155,12 @@ private class Parser(fromPos: Pos) {
             '!' -> {
                 if (currentChar == '=') {
                     pos.advance()
-                    Token("!=", from, Token.Type.NEQ)
+                    if( currentChar == '=' ) {
+                        pos.advance()
+                        Token("!==", from, Token.Type.REF_NEQ)
+                    }
+                    else
+                        Token("!=", from, Token.Type.NEQ)
                 } else
                     Token("!", from, Token.Type.NOT)
             }

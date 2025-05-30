@@ -17,6 +17,8 @@ class Context(
     @Suppress("unused")
     fun raiseNPE(): Nothing = raiseError(ObjNullPointerError(this))
 
+    fun raiseClassCastError(msg: String): Nothing = raiseError(ObjClassCastError(this, msg))
+
     fun raiseError(message: String): Nothing {
         throw ExecutionError(ObjError(this, message))
     }
@@ -24,6 +26,15 @@ class Context(
     fun raiseError(obj: ObjError): Nothing {
         throw ExecutionError(obj)
     }
+
+    inline fun <reified T: Obj>requiredArg(index: Int): T {
+        if( args.list.size <= index ) raiseError("Expected at least ${index+1} argument, got ${args.list.size}")
+        return (args.list[index].value as? T)
+            ?: raiseClassCastError("Expected type ${T::class.simpleName}, got ${args.list[index].value::class.simpleName}")
+    }
+
+    inline fun <reified T: Obj>thisAs(): T = (thisObj as? T)
+        ?: raiseClassCastError("Cannot cast ${thisObj.objClass.className} to ${T::class.simpleName}")
 
     private val objects = mutableMapOf<String, StoredObj>()
 

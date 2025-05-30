@@ -45,4 +45,10 @@ fun statement(pos: Pos, isStaticConst: Boolean = false, isConst: Boolean = false
         override suspend fun execute(context: Context): Obj = f(context)
     }
 
+fun statement(isStaticConst: Boolean = false, isConst: Boolean = false, f: suspend Context.() -> Obj): Statement =
+    object : Statement(isStaticConst, isConst) {
+        override val pos: Pos = Pos.builtIn
+        override suspend fun execute(context: Context): Obj = f(context)
+    }
+
 

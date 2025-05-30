@@ -148,7 +148,10 @@ class Compiler(
                                         v.callInstanceMethod(
                                             context,
                                             next.value,
-                                            args.toArguments()
+                                            Arguments(args.map {
+                                                val st = it.value as Statement
+                                                Arguments.Info(st.execute(context),it.pos) }
+                                            )
                                         ), isMutable = false
                                     )
                                 }
@@ -838,6 +841,8 @@ class Compiler(
             // equality/ne 4
             Operator.simple(Token.Type.EQ, ++lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) == 0) },
             Operator.simple(Token.Type.NEQ, lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) != 0) },
+            Operator.simple(Token.Type.REF_EQ, lastPrty) { _, a, b -> ObjBool(a === b) },
+            Operator.simple(Token.Type.REF_NEQ, lastPrty) { _, a, b -> ObjBool(a !== b) },
             // relational <=,... 5
             Operator.simple(Token.Type.LTE, ++lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) <= 0) },
             Operator.simple(Token.Type.LT, lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) < 0) },

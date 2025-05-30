@@ -116,31 +116,49 @@ It is rather simple, like everywhere else:
 See [math](math.md) for more on it. Notice using Greek as identifier, all languages are allowed.
 
 Logical operation could be used the same
-    
+
     var x = 10
     ++x >= 11
     >>> true
 
 ## Supported operators
 
-|    op    | ass | args              |
-|:--------:|-----|-------------------|
-|    +     | +=  | Int or Real       |
-|    -     | -=  | Int or Real       |
-|    *     | *=  | Int or Real       |
-|    /     | /=  | Int or Real       |
-|    %     | %=  | Int or Real       |
-|    &&    |     | Bool              |
-|   \|\|   |     | Bool              |   
-|    !x    |     | Bool              |
-|    <     |     | String, Int, Real |
-|    <=    |     | String, Int, Real |
-|    >=    |     | String, Int, Real |
-|    >     |     | String, Int, Real |
-|    ==    |     | Any               |
-|    !=    |     | Any               |
-| ++a, a++ |     | Int               |
-| --a, a-- |     | Int               |
+|    op    | ass | args              | comments |
+|:--------:|-----|-------------------|----------|
+|    +     | +=  | Int or Real       |          |
+|    -     | -=  | Int or Real       | infix    |
+|    *     | *=  | Int or Real       |          |
+|    /     | /=  | Int or Real       |          |
+|    %     | %=  | Int or Real       |          |
+|    &&    |     | Bool              |          |
+|   \|\|   |     | Bool              |          |   
+|    !x    |     | Bool              |          |
+|    <     |     | String, Int, Real | (1)      |
+|    <=    |     | String, Int, Real | (1)      |
+|    >=    |     | String, Int, Real | (1)      |
+|    >     |     | String, Int, Real | (1)      |
+|    ==    |     | Any               | (1)      |
+|   ===    |     | Any               | (2)      |
+|   !==    |     | Any               | (2)      |
+|    !=    |     | Any               | (1)      |
+| ++a, a++ |     | Int               |          |
+| --a, a-- |     | Int               |          |
+
+(1)
+: comparison are based on comparison operator which can be overloaded
+
+(2)
+: referential equality means left and right operands references exactly same instance of some object. Nothe that all
+singleton object, like `null`, are referentially equal too, while string different literals even being equal are most
+likely referentially not equal:
+
+    assert( null == null)  // singletons
+    assert( null === null)
+    // but, for non-singletons:
+    assert( 5 == 5)
+    assert( 5 !== 5)
+    assert( "foo" !== "foo" )
+    >>> void
 
 # Variables
 
@@ -244,7 +262,7 @@ to call it:
 
 If you need to create _unnamed_ function, use alternative syntax (TBD, like { -> } ?)
 
-# Lists (arrays)
+# Lists (aka arrays)
 
 Ling has built-in mutable array class `List` with simple literals:
 
@@ -259,7 +277,7 @@ Lists can contain any type of objects, lists too:
     assert(list[1].size == 2)
     >>> void
 
-Notice usage of indexing. 
+Notice usage of indexing. You can use negative indexes to offset from the end of the list; see more in [Lists](List.md).
 
 When you want to "flatten" it to single array, you can use splat syntax:
 
@@ -273,13 +291,66 @@ Of course, you can splat from anything that is List (or list-like, but it will b
     ["start", ...b, ...a, "end"]
     >>> ["start", 10.1, 20.2, "one", "two", "end"]
 
-Of course, you can set any array element:
+Of course, you can set any list element:
 
     val a = [1, 2, 3]
     a[1] = 200
     a
     >>> [1, 200, 3]
 
+Lists are comparable, as long as their respective elements are:
+
+    assert( [1,2,3] == [1,2,3])
+    
+    // but they are _different_ objects:
+    assert( [1,2,3] !== [1,2,3])
+    
+    // when sizes are different, but common part is equal,
+    // longer is greater
+    assert( [1,2,3] > [1,2] )
+
+    // otherwise, where the common part is greater, the list is greater:
+    assert( [1,2,3] < [1,3] )
+    >>> void
+
+All comparison operators with list are working ok. Also, you can concatenate lists:
+
+    assert( [5, 4] + ["foo", 2] == [5, 4, "foo", 2])
+    >>> void
+
+To add elements to the list:
+
+    val x = [1,2]
+    x.add(3)
+    assert( x == [1,2,3])
+    // same as x += ["the", "end"] but faster:
+    x.add("the", "end")
+    assert( x == [1, 2, 3, "the", "end"])
+    >>> void
+
+Self-modifying concatenation by `+=` also works:
+
+    val x = [1, 2]
+    x += [3, 4]
+    assert( x == [1, 2, 3, 4])
+    >>> void
+
+You can insert elements at any position using `addAt`:
+
+    val x = [1,2,3]
+    x.addAt(1, "foo", "bar")
+    assert( x == [1, "foo", "bar", 2, 3])
+    >>> void
+
+## Removing list items
+
+    val x = [1, 2, 3, 4, 5]
+    x.removeAt(2)
+    assert( x == [1, 2, 4, 5])
+    // or remove range (start inclusive, end exclusive):
+    x.removeAt(1,3)    
+    assert( x == [1, 5])
+    >>> void
 
 # Flow control operators
 

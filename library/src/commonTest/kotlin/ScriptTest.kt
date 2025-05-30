@@ -795,6 +795,18 @@ class ScriptTest {
         """.trimIndent())
     }
 
+    @Test
+    fun testArrayCompare() = runTest {
+        eval("""
+            val a = [4,3]
+            val b = [4,3]
+            assert(a == b)
+            assert( a === a )
+            assert( !(a === b) )
+            assert( a !== b )
+        """.trimIndent())
+    }
+
 //    @Test
 //    fun testLambda1() = runTest {
 //        val l = eval("""

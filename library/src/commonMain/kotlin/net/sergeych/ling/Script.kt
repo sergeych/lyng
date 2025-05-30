@@ -48,7 +48,7 @@ class Script(
             }
 
             addVoidFn("assert") {
-                val cond = args.required<ObjBool>(0, this)
+                val cond = requiredArg<ObjBool>(0)
                 if( !cond.value == true )
                     raiseError(ObjAssertionError(this,"Assertion failed"))
             }

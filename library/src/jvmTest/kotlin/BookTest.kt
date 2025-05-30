@@ -151,7 +151,7 @@ suspend fun DocTest.test() {
     } catch (e: Throwable) {
         error = e
         null
-    }?.toString()?.replace(Regex("@\\d+"), "@...")
+    }?.inspect()?.replace(Regex("@\\d+"), "@...")
 
     if (error != null || expectedOutput != collectedOutput.toString() ||
         expectedResult != result
