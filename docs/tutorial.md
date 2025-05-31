@@ -603,6 +603,17 @@ Ranges could be inside other ranges:
     assert( (2..3) in (1..10) )
     >>> void
 
+There are character ranges too:
+
+    'd' in 'a'..'e'
+    >>> true
+
+and you can use ranges in for-loops:
+
+    for( x in 'a' ..< 'c' ) println(x)
+    >>> a
+    >>> b
+    >>> void
 
 See [Ranges](Range.md) for detailed documentation on it.
 
