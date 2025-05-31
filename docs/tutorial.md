@@ -9,7 +9,7 @@ __Other documents to read__ maybe after this one:
 - [Advanced topics](advanced_topics.md)
 - [OOP notes](OOP.md)
 - [math in Ling](math.md)
-- Some class references: [List](List.md), [Real](Real.md)
+- Some class references: [List](List.md), [Real](Real.md), [Range](Range.md)
 
 # Expressions
 
@@ -584,6 +584,27 @@ There are self-assigning version for operators too:
     while( count > 0 ) sum += count--
     sum
     >>> 5050
+
+# Ranges
+
+Ranges are convenient to represent the interval between two values:
+
+    5 in (0..100)
+    >>> true
+
+It could be open and closed:
+
+    assert( 5 in (1..5) )
+    assert( 5 !in (1..<5) )
+    >>> void
+
+Ranges could be inside other ranges:
+
+    assert( (2..3) in (1..10) )
+    >>> void
+
+
+See [Ranges](Range.md) for detailed documentation on it.
 
 # Comments
 
