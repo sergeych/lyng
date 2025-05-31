@@ -904,7 +904,7 @@ class ScriptTest {
             assert(r.isOpen == false)
             assert(r.start == 10)
             assert(r.end == 20)
-            assert(r.inclusiveEnd == true)
+            assert(r.isEndInclusive == true)
             assert(r.isIntRange)
             
             assert(12 in r)
@@ -938,7 +938,7 @@ class ScriptTest {
             assert(r.isOpen == false)
             assert(r.start == 10)
             assert(r.end == 20)
-            assert(r.inclusiveEnd == false)
+            assert(r.isEndInclusive == false)
             assert(r.isIntRange)
             
             assert(12 in r)

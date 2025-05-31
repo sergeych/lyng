@@ -6,9 +6,9 @@ class ObjList(val list: MutableList<Obj>) : Obj() {
         list.joinToString(separator = ", ") { it.inspect() }
     }]"
 
-    fun normalize(context: Context, index: Int, allowInclusiveEnd: Boolean = false): Int {
+    fun normalize(context: Context, index: Int, allowisEndInclusive: Boolean = false): Int {
         val i = if (index < 0) list.size + index else index
-        if (allowInclusiveEnd && i == list.size) return i
+        if (allowisEndInclusive && i == list.size) return i
         if (i !in list.indices) context.raiseError("index $index out of bounds for size ${list.size}")
         return i
     }
@@ -75,7 +75,7 @@ class ObjList(val list: MutableList<Obj>) : Obj() {
                     val l = thisAs<ObjList>()
                     var index = l.normalize(
                         this, requiredArg<ObjInt>(0).value.toInt(),
-                        allowInclusiveEnd = true
+                        allowisEndInclusive = true
                     )
                     for (i in 1..<args.size) l.list.add(index++, args[i])
                     ObjVoid

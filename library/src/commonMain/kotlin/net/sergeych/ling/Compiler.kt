@@ -303,14 +303,14 @@ class Compiler(
 
                 Token.Type.DOTDOT, Token.Type.DOTDOTLT -> {
                     // closed-range operator
-                    val inclusiveEnd = t.type == Token.Type.DOTDOT
+                    val isEndInclusive = t.type == Token.Type.DOTDOT
                     val left = operand
                     val right = parseStatement(cc)
                     operand = Accessor {
                         ObjRange(
                             left?.getter?.invoke(it)?.value ?: ObjNull,
                             right?.execute(it) ?: ObjNull,
-                            inclusiveEnd = inclusiveEnd
+                            isEndInclusive = isEndInclusive
                         ).asReadonly
                     }
                 }

@@ -52,9 +52,10 @@ sealed class Obj {
         getInstanceMemberOrNull(name)
             ?: throw ScriptError(atPos, "symbol doesn't exist: $name")
 
-    suspend fun callInstanceMethod(context: Context,
-                                   name: String,
-                                   args: Arguments = Arguments.EMPTY
+    suspend fun callInstanceMethod(
+        context: Context,
+        name: String,
+        args: Arguments = Arguments.EMPTY
     ): Obj =
         // note that getInstanceMember traverses the hierarchy
         objClass.getInstanceMember(context.pos, name).value.invoke(context, this, args)
@@ -193,7 +194,7 @@ sealed class Obj {
         members[name] = WithAccess(initialValue, isMutable)
     }
 
-    fun addFn(name: String, isOpen: Boolean = false, code: suspend Context.()->Obj) {
+    fun addFn(name: String, isOpen: Boolean = false, code: suspend Context.() -> Obj) {
         createField(name, statement { code() }, isOpen)
     }
 
@@ -208,7 +209,6 @@ sealed class Obj {
 
     suspend fun invoke(context: Context, atPos: Pos, thisObj: Obj, args: Arguments): Obj =
         callOn(context.copy(atPos, args = args, newThisObj = thisObj))
-
 
 
     val asReadonly: WithAccess<Obj> by lazy { WithAccess(this, false) }
@@ -287,36 +287,40 @@ fun Obj.toBool(): Boolean =
     (this as? ObjBool)?.value ?: throw IllegalArgumentException("cannot convert to boolean $this")
 
 
-class ObjRange(val start: Obj?, val end: Obj?,val inclusiveEnd: Boolean) : Obj() {
+class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Obj() {
 
     override val objClass: ObjClass = type
 
     override fun toString(): String {
         val result = StringBuilder()
         result.append("${start ?: '∞'} ..")
-        if( !inclusiveEnd) result.append('<')
+        if (!isEndInclusive) result.append('<')
         result.append(" ${end ?: '∞'}")
         return result.toString()
     }
 
     suspend fun containsRange(context: Context, other: ObjRange): Boolean {
-        if( start != null ) {
+        if (start != null) {
             // our start is not -∞ so other start should be GTE or is not contained:
-            if( other.start != null && start.compareTo(context, other.start) > 0) return false
+            if (other.start != null && start.compareTo(context, other.start) > 0) return false
         }
-        if( end != null ) {
+        if (end != null) {
             // same with the end: if it is open, it can't be contained in ours:
-            if( other.end == null ) return false
+            if (other.end == null) return false
             // both exists, now there could be 4 cases:
             return when {
-                other.inclusiveEnd && inclusiveEnd ->
+                other.isEndInclusive && isEndInclusive ->
                     end.compareTo(context, other.end) >= 0
-                !other.inclusiveEnd && !inclusiveEnd ->
+
+                !other.isEndInclusive && !isEndInclusive ->
                     end.compareTo(context, other.end) >= 0
-                other.inclusiveEnd && !inclusiveEnd ->
+
+                other.isEndInclusive && !isEndInclusive ->
                     end.compareTo(context, other.end) > 0
-                !other.inclusiveEnd && inclusiveEnd ->
+
+                !other.isEndInclusive && isEndInclusive ->
                     end.compareTo(context, other.end) >= 0
+
                 else -> throw IllegalStateException("unknown comparison")
             }
         }
@@ -325,7 +329,7 @@ class ObjRange(val start: Obj?, val end: Obj?,val inclusiveEnd: Boolean) : Obj()
 
     override suspend fun contains(context: Context, other: Obj): Boolean {
 
-        if( other is ObjRange)
+        if (other is ObjRange)
             return containsRange(context, other)
 
         if (start == null && end == null) return true
@@ -334,10 +338,28 @@ class ObjRange(val start: Obj?, val end: Obj?,val inclusiveEnd: Boolean) : Obj()
         }
         if (end != null) {
             val cmp = end.compareTo(context, other)
-            if (inclusiveEnd && cmp < 0 || !inclusiveEnd && cmp <= 0) return false
+            if (isEndInclusive && cmp < 0 || !isEndInclusive && cmp <= 0) return false
         }
         return true
     }
+
+    override suspend fun getAt(context: Context, index: Int): Obj {
+        if( !isIntRange ) {
+            return when (index) {
+                0 -> start ?: ObjNull
+                1 -> end ?: ObjNull
+                else -> context.raiseIndexOutOfBounds("index out of range: $index for max of 2 for non-int ranges")
+            }
+        }
+        // int range, should be finite
+        val r0 = start?.toInt() ?: context.raiseArgumentError("start is not integer")
+        var r1 = end?.toInt() ?: context.raiseArgumentError("end is not integer")
+        if( isEndInclusive ) r1++
+        val i = index + r0
+        if( i >= r1 ) context.raiseIndexOutOfBounds("index $index is not in range (${r1-r0})")
+        return ObjInt(i.toLong())
+    }
+
 
     val isIntRange: Boolean by lazy {
         start is ObjInt && end is ObjInt
@@ -345,7 +367,7 @@ class ObjRange(val start: Obj?, val end: Obj?,val inclusiveEnd: Boolean) : Obj()
 
     companion object {
         val type = ObjClass("Range").apply {
-            addFn("start" ) {
+            addFn("start") {
                 thisAs<ObjRange>().start ?: ObjNull
             }
             addFn("end") {
@@ -357,8 +379,21 @@ class ObjRange(val start: Obj?, val end: Obj?,val inclusiveEnd: Boolean) : Obj()
             addFn("isIntRange") {
                 thisAs<ObjRange>().isIntRange.toObj()
             }
-            addFn("inclusiveEnd") {
-                thisAs<ObjRange>().inclusiveEnd.toObj()
+            addFn("isEndInclusive") {
+                thisAs<ObjRange>().isEndInclusive.toObj()
+            }
+            addFn("size") {
+                val self = thisAs<ObjRange>()
+                if (self.start == null || self.end == null)
+                    raiseError("size is only available for finite ranges")
+                if (self.isIntRange) {
+                    if (self.isEndInclusive)
+                        ObjInt(self.end.toLong() - self.start.toLong() + 1)
+                    else
+                        ObjInt(self.end.toLong() - self.start.toLong())
+                } else {
+                    ObjInt(2)
+                }
             }
         }
     }
@@ -378,3 +413,5 @@ class ObjNullPointerError(context: Context) : ObjError(context, "object is null"
 
 class ObjAssertionError(context: Context, message: String) : ObjError(context, message)
 class ObjClassCastError(context: Context, message: String) : ObjError(context, message)
+class ObjIndexOutOfBoundsError(context: Context,message: String="index out of bounds") : ObjError(context,message)
+class ObjIllegalArgumentError(context: Context,message: String="illegal argument") : ObjError(context,message)

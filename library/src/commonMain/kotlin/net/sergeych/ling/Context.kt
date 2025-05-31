@@ -16,7 +16,10 @@ class Context(
 
     @Suppress("unused")
     fun raiseNPE(): Nothing = raiseError(ObjNullPointerError(this))
-
+    fun raiseIndexOutOfBounds(message: String = "Index out of bounds"): Nothing =
+        raiseError(ObjIndexOutOfBoundsError(this, message))
+    fun raiseArgumentError(message: String = "Illegal argument error"): Nothing =
+        raiseError(ObjIllegalArgumentError(this, message))
     fun raiseClassCastError(msg: String): Nothing = raiseError(ObjClassCastError(this, msg))
 
     fun raiseError(message: String): Nothing {

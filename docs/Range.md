@@ -45,17 +45,57 @@ are equal or within another, taking into account the end-inclusiveness:
     assert( (1..<3) in (1..3) )
     >>> void
 
+## Range size and indexed access
+
+This might be confusing, but the range size and limits are used with for loops
+so their meaning is special.
+
+For open ranges, size throws and exception.
+
+For Int ranges, the `size` is `end` - `start` possibly + 1 for ind-inclusive ranges, and indexing getter returns all values from start to end, probably, inclusive:
+
+    val r = 1..3
+    assert( r.size == 3 )
+    assert( r[0] == 1 )
+    assert( r[1] == 2 )
+    assert( r[2] == 3 )
+    >>> void
+
+And for end-exclusive range:
+
+    val r = 1..<3
+    assert(r.size == 2)
+    assert( r[0] == 1 )
+    assert( r[1] == 2 )
+    >>> void
+
+In spite of this you can use ranges in for loops:
+
+    for( i in 1..3 ) 
+        println(i)
+    >>> 1
+    >>> 2
+    >>> 3
+    >>> void
+
+but
+
+    for( i in 1..<3 ) 
+        println(i)
+    >>> 1
+    >>> 2
+    >>> void
 
 # Instance members
 
-| member          | description                | args          |
-|-----------------|----------------------------|---------------|
-| contains(other) | used in `in`               | Range, or Any |
-| inclusiveEnd    | true for '..'              | Bool          |
-| isOpen          | at any end                 | Bool          |
-| isIntRange      | both start and end are Int | Bool          |
-| start           |                            | Bool          |
-| end             |                            | Bool          |
-|                 |                            |               |
-|                 |                            |               |
-|                 |                            |               |
+| member          | description                  | args          |
+|-----------------|------------------------------|---------------|
+| contains(other) | used in `in`                 | Range, or Any |
+| isEndInclusive  | true for '..'                | Bool          |
+| isOpen          | at any end                   | Bool          |
+| isIntRange      | both start and end are Int   | Bool          |
+| start           |                              | Bool          |
+| end             |                              | Bool          |
+| size            | for finite ranges, see above | Long          |
+| []              | see above                    |               |
+|                 |                              |               |
