@@ -45,11 +45,10 @@ private class Parser(fromPos: Pos) {
             '=' -> {
                 if (pos.currentChar == '=') {
                     pos.advance()
-                    if( currentChar == '=' ) {
+                    if (currentChar == '=') {
                         pos.advance()
                         Token("===", from, Token.Type.REF_EQ)
-                    }
-                    else
+                    } else
                         Token("==", from, Token.Type.EQ)
                 } else
                     Token("=", from, Token.Type.ASSIGN)
@@ -127,9 +126,9 @@ private class Parser(fromPos: Pos) {
                         pos.advance()
                         Token("...", from, Token.Type.ELLIPSIS)
                     } else if (currentChar == '<') {
+                        pos.advance()
                         Token("..<", from, Token.Type.DOTDOTLT)
                     } else {
-                        pos.back()
                         Token("..", from, Token.Type.DOTDOT)
                     }
                 } else
@@ -153,16 +152,25 @@ private class Parser(fromPos: Pos) {
             }
 
             '!' -> {
-                if (currentChar == '=') {
+                if (currentChar == 'i') {
                     pos.advance()
-                    if( currentChar == '=' ) {
+                    if( currentChar == 'n') {
                         pos.advance()
-                        Token("!==", from, Token.Type.REF_NEQ)
+                        Token("!in", from, Token.Type.NOTIN)
+                    } else {
+                        pos.back()
+                        Token("!", from, Token.Type.NOT)
                     }
-                    else
-                        Token("!=", from, Token.Type.NEQ)
                 } else
-                    Token("!", from, Token.Type.NOT)
+                    if (currentChar == '=') {
+                        pos.advance()
+                        if (currentChar == '=') {
+                            pos.advance()
+                            Token("!==", from, Token.Type.REF_NEQ)
+                        } else
+                            Token("!=", from, Token.Type.NEQ)
+                    } else
+                        Token("!", from, Token.Type.NOT)
             }
 
             '|' -> {
@@ -210,7 +218,7 @@ private class Parser(fromPos: Pos) {
                 if (currentChar == '\\') {
                     value = currentChar
                     pos.advance()
-                    value = when(value) {
+                    value = when (value) {
                         'n' -> '\n'
                         'r' -> '\r'
                         't' -> '\t'
@@ -218,12 +226,13 @@ private class Parser(fromPos: Pos) {
                         else -> throw ScriptError(currentPos, "unsupported escape character: $value")
                     }
                 }
-                if( currentChar != '\'' ) throw ScriptError(currentPos, "expected end of character literal: '")
+                if (currentChar != '\'') throw ScriptError(currentPos, "expected end of character literal: '")
                 pos.advance()
                 Token(value.toString(), start, Token.Type.CHAR)
             }
 
             else -> {
+                // text infix operators:
                 // Labels processing is complicated!
                 // some@ statement: label 'some', ID 'statement'
                 // statement@some: ID 'statement', LABEL 'some'!
@@ -238,7 +247,10 @@ private class Parser(fromPos: Pos) {
                         } else
                             Token(text, from, Token.Type.LABEL)
                     } else
-                        Token(text, from, Token.Type.ID)
+                        when (text) {
+                            "in" -> Token("in", from, Token.Type.IN)
+                            else -> Token(text, from, Token.Type.ID)
+                        }
                 } else
                     raise("can't parse token")
             }

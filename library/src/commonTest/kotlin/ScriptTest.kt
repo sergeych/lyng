@@ -66,6 +66,36 @@ class ScriptTest {
     }
 
     @Test
+    fun parseRangeTest() {
+        var tt = parseLing("5 .. 4".toSource())
+
+        assertEquals(Token.Type.INT, tt[0].type)
+        assertEquals(Token.Type.DOTDOT, tt[1].type)
+        assertEquals(Token.Type.INT, tt[2].type)
+
+        tt = parseLing("5 ..< 4".toSource())
+
+        assertEquals(Token.Type.INT, tt[0].type)
+        assertEquals(Token.Type.DOTDOTLT, tt[1].type)
+        assertEquals(Token.Type.INT, tt[2].type)
+    }
+
+    @Test
+    fun parseInTest() {
+        var tt = parseLing("5 in 4".toSource())
+
+        assertEquals(Token.Type.INT, tt[0].type)
+        assertEquals(Token.Type.IN, tt[1].type)
+        assertEquals(Token.Type.INT, tt[2].type)
+
+        tt = parseLing("5 ..< 4".toSource())
+
+        assertEquals(Token.Type.INT, tt[0].type)
+        assertEquals(Token.Type.DOTDOTLT, tt[1].type)
+        assertEquals(Token.Type.INT, tt[2].type)
+    }
+
+    @Test
     fun parserLabelsTest() {
         val src = "label@ break@label".toSource()
         val tt = parseLing(src)
@@ -748,35 +778,42 @@ class ScriptTest {
 
     @Test
     fun testListLiteral() = runTest {
-        eval("""
+        eval(
+            """
             val list = [1,22,3]
             assert(list[0] == 1)
             assert(list[1] == 22)
             assert(list[2] == 3)
-        """.trimIndent())
+        """.trimIndent()
+        )
 
-        eval("""
+        eval(
+            """
             val x0 = 100
             val list = [x0 + 1, x0 * 10, 3]
             assert(list[0] == 101)
             assert(list[1] == 1000)
             assert(list[2] == 3)
-        """.trimIndent())
+        """.trimIndent()
+        )
 
-        eval("""
+        eval(
+            """
             val x0 = 100
             val list = [x0 + 1, x0 * 10, if(x0 < 100) "low" else "high", 5]
             assert(list[0] == 101)
             assert(list[1] == 1000)
             assert(list[2] == "high")
             assert(list[3] == 5)
-        """.trimIndent())
+        """.trimIndent()
+        )
 
     }
 
     @Test
     fun testListLiteralSpread() = runTest {
-        eval("""
+        eval(
+            """
             val list1 = [1,22,3]
             val list = ["start", ...list1, "end"]
             assert(list[0] == "start")
@@ -784,40 +821,48 @@ class ScriptTest {
             assert(list[2] == 22)
             assert(list[3] == 3)
             assert(list[4] == "end")
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testListSize() = runTest {
-        eval("""
+        eval(
+            """
             val a = [4,3]
             assert(a.size == 2)
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testArrayCompare() = runTest {
-        eval("""
+        eval(
+            """
             val a = [4,3]
             val b = [4,3]
             assert(a == b)
             assert( a === a )
             assert( !(a === b) )
             assert( a !== b )
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun forLoop1() = runTest {
-        eval("""
+        eval(
+            """
             var sum = 0
             for(i in [1,2,3]) {
                 println(i)
                 sum += i
             }
             assert(sum == 6)
-        """.trimIndent())
-        eval("""
+        """.trimIndent()
+        )
+        eval(
+            """
             fun test1(array) {
                 var sum = 0
                 for(i in array) {
@@ -827,13 +872,15 @@ class ScriptTest {
             }
             println("result=",test1([1,2]))
             println("result=",test1([1,2,3]))
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun forLoop2() = runTest {
-        println(eval(
-            """
+        println(
+            eval(
+                """
             fun search(haystack, needle) {    
                 for(ch in haystack) {
                     if( ch == needle) 
@@ -844,7 +891,88 @@ class ScriptTest {
             assert( search("hello", 'l') == "found")
             assert( search("hello", 'z') == null)
         """.trimIndent()
-        ).toString())
+            ).toString()
+        )
+    }
+
+    @Test
+    fun testIntOpenRangeInclusive() = runTest {
+        eval(
+            """
+            val r = 10 .. 20
+            assert( r::class == Range)
+            assert(r.isOpen == false)
+            assert(r.start == 10)
+            assert(r.end == 20)
+            assert(r.inclusiveEnd == true)
+            assert(r.isIntRange)
+            
+            assert(12 in r)
+            assert(10 in r)
+            assert(20 in r)
+            
+            assert(9 !in r)
+            assert(21 !in r)
+            
+            assert( (11..12) in r)
+            assert( (10..11) in r)
+            assert( (11..20) in r)
+            assert( (10..20) in r)
+            
+            assert( (9..12) !in r)
+            assert( (1..9) !in r)
+            assert( (17..22) !in r)
+            assert( (21..22) !in r)
+            
+//            assert(r.size == 11)
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testIntOpenRangeExclusive() = runTest {
+        eval(
+            """
+            val r = 10 ..< 20
+            assert( r::class == Range)
+            assert(r.isOpen == false)
+            assert(r.start == 10)
+            assert(r.end == 20)
+            assert(r.inclusiveEnd == false)
+            assert(r.isIntRange)
+            
+            assert(12 in r)
+            assert(10 in r)
+            assert(20 !in r)
+            
+            assert(9 !in r)
+            assert(21 !in r)
+
+            assert( (11..12) in r)
+            assert( (10..11) in r)
+            assert( (11..20) !in r)
+            assert( (10..20) !in r)
+            
+            assert( (10..<20) in r)
+            
+            assert( (9..12) !in r)
+            assert( (1..9) !in r)
+            assert( (17..22) !in r)
+            assert( (21..22) !in r)
+
+
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testIntOpenRangeInExclusive() = runTest {
+        eval(
+            """
+                assert( (1..3) !in (1..<3) )
+                assert( (1..<3) in (1..3) )
+            """.trimIndent()
+        )
     }
 
 //    @Test

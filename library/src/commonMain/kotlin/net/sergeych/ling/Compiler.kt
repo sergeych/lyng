@@ -23,9 +23,9 @@ class Compiler(
         return Script(start, statements)
     }
 
-    private fun parseStatement(tokens: CompilerContext): Statement? {
+    private fun parseStatement(cc: CompilerContext): Statement? {
         while (true) {
-            val t = tokens.next()
+            val t = cc.next()
             return when (t.type) {
                 Token.Type.ID -> {
                     // could be keyword, assignment or just the expression
@@ -44,16 +44,16 @@ class Compiler(
 //                     get back the token which is not '=':
 //                    tokens.previous()
                     // try keyword statement
-                    parseKeywordStatement(t, tokens)
+                    parseKeywordStatement(t, cc)
                         ?: run {
-                            tokens.previous()
-                            parseExpression(tokens)
+                            cc.previous()
+                            parseExpression(cc)
                         }
                 }
 
                 Token.Type.PLUS2, Token.Type.MINUS2 -> {
-                    tokens.previous()
-                    parseExpression(tokens)
+                    cc.previous()
+                    parseExpression(cc)
                 }
 
                 Token.Type.LABEL -> continue
@@ -64,12 +64,12 @@ class Compiler(
                 Token.Type.SEMICOLON -> continue
 
                 Token.Type.LBRACE -> {
-                    tokens.previous()
-                    parseBlock(tokens)
+                    cc.previous()
+                    parseBlock(cc)
                 }
 
                 Token.Type.RBRACE -> {
-                    tokens.previous()
+                    cc.previous()
                     return null
                 }
 
@@ -77,8 +77,8 @@ class Compiler(
 
                 else -> {
                     // could be expression
-                    tokens.previous()
-                    parseExpression(tokens)
+                    cc.previous()
+                    parseExpression(cc)
                 }
             }
         }
@@ -299,7 +299,20 @@ class Compiler(
                             }.value.decrementAndGet(ctx).asReadonly
                         }
                     }
+                }
 
+                Token.Type.DOTDOT, Token.Type.DOTDOTLT -> {
+                    // closed-range operator
+                    val inclusiveEnd = t.type == Token.Type.DOTDOT
+                    val left = operand
+                    val right = parseStatement(cc)
+                    operand = Accessor {
+                        ObjRange(
+                            left?.getter?.invoke(it)?.value ?: ObjNull,
+                            right?.execute(it) ?: ObjNull,
+                            inclusiveEnd = inclusiveEnd
+                        ).asReadonly
+                    }
                 }
 
 
@@ -560,7 +573,7 @@ class Compiler(
                         current = sourceObj.getAt(forContext, index)
                     }
                 }
-                if( !breakCaught && elseStatement != null) {
+                if (!breakCaught && elseStatement != null) {
                     result = elseStatement.execute(it)
                 }
                 result
@@ -859,7 +872,7 @@ class Compiler(
 
         private var lastPrty = 0
         val allOps = listOf(
-            // assignments
+            // assignments, lowest priority
             Operator(Token.Type.ASSIGN, lastPrty) { pos, a, b ->
                 Accessor {
                     val value = b.getter(it).value
@@ -942,6 +955,9 @@ class Compiler(
             Operator.simple(Token.Type.LT, lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) < 0) },
             Operator.simple(Token.Type.GTE, lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) >= 0) },
             Operator.simple(Token.Type.GT, lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) > 0) },
+            // in, is:
+            Operator.simple(Token.Type.IN, lastPrty) { c, a, b -> ObjBool(b.contains(c, a)) },
+            Operator.simple(Token.Type.NOTIN, lastPrty) { c, a, b -> ObjBool(!b.contains(c, a)) },
             // shuttle <=> 6
             // bit shifts 7
             Operator.simple(Token.Type.PLUS, ++lastPrty) { ctx, a, b -> a.plus(ctx, b) },

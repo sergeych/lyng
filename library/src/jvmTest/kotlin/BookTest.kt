@@ -205,4 +205,9 @@ class BookTest {
         runDocTests("../docs/List.md")
     }
 
+    @Test
+    fun testFromRange() = runTest {
+        runDocTests("../docs/Range.md")
+    }
+
 }

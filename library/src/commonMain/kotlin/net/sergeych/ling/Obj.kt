@@ -4,8 +4,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlin.math.floor
-import kotlin.math.roundToLong
 
 //typealias InstanceMethod = (Context, Obj) -> Obj
 
@@ -67,6 +65,10 @@ sealed class Obj {
         context.raiseNotImplemented()
     }
 
+    open suspend fun contains(context: Context, other: Obj): Boolean {
+        context.raiseNotImplemented()
+    }
+
     open val asStr: ObjString by lazy {
         if (this is ObjString) this else ObjString(this.toString())
     }
@@ -75,7 +77,16 @@ sealed class Obj {
      * Class of the object: definition of member functions (top-level), etc.
      * Note that using lazy allows to avoid endless recursion here
      */
-    open val objClass: ObjClass by lazy { ObjClass("Obj") }
+    open val objClass: ObjClass by lazy {
+        ObjClass("Obj").apply {
+            addFn("toString") {
+                thisObj.asStr
+            }
+            addFn("contains") {
+                ObjBool(thisObj.contains(this, args.firstAndOnly()))
+            }
+        }
+    }
 
     open suspend fun plus(context: Context, other: Obj): Obj {
         context.raiseNotImplemented()
@@ -198,6 +209,8 @@ sealed class Obj {
     suspend fun invoke(context: Context, atPos: Pos, thisObj: Obj, args: Arguments): Obj =
         callOn(context.copy(atPos, args = args, newThisObj = thisObj))
 
+
+
     val asReadonly: WithAccess<Obj> by lazy { WithAccess(this, false) }
     val asMutable: WithAccess<Obj> by lazy { WithAccess(this, true) }
 
@@ -274,175 +287,82 @@ fun Obj.toBool(): Boolean =
     (this as? ObjBool)?.value ?: throw IllegalArgumentException("cannot convert to boolean $this")
 
 
-data class ObjReal(val value: Double) : Obj(), Numeric {
-    override val asStr by lazy { ObjString(value.toString()) }
-    override val longValue: Long by lazy { floor(value).toLong() }
-    override val doubleValue: Double by lazy { value }
-    override val toObjInt: ObjInt by lazy { ObjInt(longValue) }
-    override val toObjReal: ObjReal by lazy { ObjReal(value) }
-
-    override fun byValueCopy(): Obj = ObjReal(value)
-
-    override suspend fun compareTo(context: Context, other: Obj): Int {
-        if (other !is Numeric) return -2
-        return value.compareTo(other.doubleValue)
-    }
-
-    override fun toString(): String = value.toString()
+class ObjRange(val start: Obj?, val end: Obj?,val inclusiveEnd: Boolean) : Obj() {
 
     override val objClass: ObjClass = type
 
-    override suspend fun plus(context: Context, other: Obj): Obj =
-        ObjReal(this.value + other.toDouble())
+    override fun toString(): String {
+        val result = StringBuilder()
+        result.append("${start ?: '∞'} ..")
+        if( !inclusiveEnd) result.append('<')
+        result.append(" ${end ?: '∞'}")
+        return result.toString()
+    }
 
-    override suspend fun minus(context: Context, other: Obj): Obj =
-        ObjReal(this.value - other.toDouble())
+    suspend fun containsRange(context: Context, other: ObjRange): Boolean {
+        if( start != null ) {
+            // our start is not -∞ so other start should be GTE or is not contained:
+            if( other.start != null && start.compareTo(context, other.start) > 0) return false
+        }
+        if( end != null ) {
+            // same with the end: if it is open, it can't be contained in ours:
+            if( other.end == null ) return false
+            // both exists, now there could be 4 cases:
+            return when {
+                other.inclusiveEnd && inclusiveEnd ->
+                    end.compareTo(context, other.end) >= 0
+                !other.inclusiveEnd && !inclusiveEnd ->
+                    end.compareTo(context, other.end) >= 0
+                other.inclusiveEnd && !inclusiveEnd ->
+                    end.compareTo(context, other.end) > 0
+                !other.inclusiveEnd && inclusiveEnd ->
+                    end.compareTo(context, other.end) >= 0
+                else -> throw IllegalStateException("unknown comparison")
+            }
+        }
+        return true
+    }
 
-    override suspend fun mul(context: Context, other: Obj): Obj =
-        ObjReal(this.value * other.toDouble())
+    override suspend fun contains(context: Context, other: Obj): Boolean {
 
-    override suspend fun div(context: Context, other: Obj): Obj =
-        ObjReal(this.value / other.toDouble())
+        if( other is ObjRange)
+            return containsRange(context, other)
 
-    override suspend fun mod(context: Context, other: Obj): Obj =
-        ObjReal(this.value % other.toDouble())
+        if (start == null && end == null) return true
+        if (start != null) {
+            if (start.compareTo(context, other) > 0) return false
+        }
+        if (end != null) {
+            val cmp = end.compareTo(context, other)
+            if (inclusiveEnd && cmp < 0 || !inclusiveEnd && cmp <= 0) return false
+        }
+        return true
+    }
+
+    val isIntRange: Boolean by lazy {
+        start is ObjInt && end is ObjInt
+    }
 
     companion object {
-        val type: ObjClass = ObjClass("Real").apply {
-            createField(
-                "roundToInt",
-                statement(Pos.builtIn) {
-                    (it.thisObj as ObjReal).value.roundToLong().toObj()
-                },
-            )
+        val type = ObjClass("Range").apply {
+            addFn("start" ) {
+                thisAs<ObjRange>().start ?: ObjNull
+            }
+            addFn("end") {
+                thisAs<ObjRange>().end ?: ObjNull
+            }
+            addFn("isOpen") {
+                thisAs<ObjRange>().let { it.start == null || it.end == null }.toObj()
+            }
+            addFn("isIntRange") {
+                thisAs<ObjRange>().isIntRange.toObj()
+            }
+            addFn("inclusiveEnd") {
+                thisAs<ObjRange>().inclusiveEnd.toObj()
+            }
         }
     }
 }
-
-data class ObjInt(var value: Long) : Obj(), Numeric {
-    override val asStr get() = ObjString(value.toString())
-    override val longValue get() = value
-    override val doubleValue get() = value.toDouble()
-    override val toObjInt get() = this
-    override val toObjReal = ObjReal(doubleValue)
-
-    override fun byValueCopy(): Obj = ObjInt(value)
-
-    override suspend fun getAndIncrement(context: Context): Obj {
-        return ObjInt(value).also { value++ }
-    }
-
-    override suspend fun getAndDecrement(context: Context): Obj {
-        return ObjInt(value).also { value-- }
-    }
-
-    override suspend fun incrementAndGet(context: Context): Obj {
-        return ObjInt(++value)
-    }
-
-    override suspend fun decrementAndGet(context: Context): Obj {
-        return ObjInt(--value)
-    }
-
-    override suspend fun compareTo(context: Context, other: Obj): Int {
-        if (other !is Numeric) return -2
-        return value.compareTo(other.doubleValue)
-    }
-
-    override fun toString(): String = value.toString()
-
-    override val objClass: ObjClass = type
-
-    override suspend fun plus(context: Context, other: Obj): Obj =
-        if (other is ObjInt)
-            ObjInt(this.value + other.value)
-        else
-            ObjReal(this.doubleValue + other.toDouble())
-
-    override suspend fun minus(context: Context, other: Obj): Obj =
-        if (other is ObjInt)
-            ObjInt(this.value - other.value)
-        else
-            ObjReal(this.doubleValue - other.toDouble())
-
-    override suspend fun mul(context: Context, other: Obj): Obj =
-        if (other is ObjInt) {
-            ObjInt(this.value * other.value)
-        } else ObjReal(this.value * other.toDouble())
-
-    override suspend fun div(context: Context, other: Obj): Obj =
-        if (other is ObjInt)
-            ObjInt(this.value / other.value)
-        else ObjReal(this.value / other.toDouble())
-
-    override suspend fun mod(context: Context, other: Obj): Obj =
-        if (other is ObjInt)
-            ObjInt(this.value % other.value)
-        else ObjReal(this.value.toDouble() % other.toDouble())
-
-    /**
-     * We are by-value type ([byValueCopy] is implemented) so we can do in-place
-     * assignment
-     */
-    override suspend fun assign(context: Context, other: Obj): Obj? {
-        return if (other is ObjInt) {
-            value = other.value
-            this
-        } else null
-    }
-
-    companion object {
-        val type = ObjClass("Int")
-    }
-}
-
-data class ObjBool(val value: Boolean) : Obj() {
-    override val asStr by lazy { ObjString(value.toString()) }
-
-    override suspend fun compareTo(context: Context, other: Obj): Int {
-        if (other !is ObjBool) return -2
-        return value.compareTo(other.value)
-    }
-
-    override fun toString(): String = value.toString()
-
-    override val objClass: ObjClass = type
-
-    override suspend fun logicalNot(context: Context): Obj = ObjBool(!value)
-
-    override suspend fun logicalAnd(context: Context, other: Obj): Obj = ObjBool(value && other.toBool())
-
-    override suspend fun logicalOr(context: Context, other: Obj): Obj = ObjBool(value || other.toBool())
-
-    companion object {
-        val type = ObjClass("Bool")
-    }
-}
-
-//open class ObjProperty(var value: Obj =ObjVoid) {
-//    open suspend fun get(context: Context): Obj = value
-//    open suspend fun set(context: Context,newValue: Obj): Obj {
-//        return value.also { value = newValue }
-//    }
-//}
-class ObjChar(val value: Char): Obj() {
-
-    override val objClass: ObjClass = type
-
-    override suspend fun compareTo(context: Context, other: Obj): Int =
-        (other as? ObjChar)?.let { value.compareTo(it.value) } ?: -1
-
-    override fun toString(): String = value.toString()
-
-    override fun inspect(): String = "'$value'"
-
-    companion object {
-        val type = ObjClass("Char").apply {
-            addFn("toInt") { ObjInt(thisAs<ObjChar>().value.code.toLong()) }
-        }
-    }
-}
-
 
 data class ObjNamespace(val name: String) : Obj() {
     override fun toString(): String {
