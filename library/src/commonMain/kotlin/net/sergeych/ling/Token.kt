@@ -5,7 +5,8 @@ data class Token(val value: String, val pos: Pos, val type: Type) {
 
     @Suppress("unused")
     enum class Type {
-        ID, INT, REAL, HEX, STRING, LPAREN, RPAREN, LBRACE, RBRACE, LBRACKET, RBRACKET, COMMA,
+        ID, INT, REAL, HEX, STRING, CHAR,
+        LPAREN, RPAREN, LBRACE, RBRACE, LBRACKET, RBRACKET, COMMA,
         SEMICOLON, COLON,
         PLUS, MINUS, STAR, SLASH, PERCENT,
         ASSIGN, PLUSASSIGN, MINUSASSIGN, STARASSIGN, SLASHASSIGN, PERCENTASSIGN,

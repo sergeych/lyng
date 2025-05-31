@@ -807,6 +807,46 @@ class ScriptTest {
         """.trimIndent())
     }
 
+    @Test
+    fun forLoop1() = runTest {
+        eval("""
+            var sum = 0
+            for(i in [1,2,3]) {
+                println(i)
+                sum += i
+            }
+            assert(sum == 6)
+        """.trimIndent())
+        eval("""
+            fun test1(array) {
+                var sum = 0
+                for(i in array) {
+                    if( i > 2 ) break "too much"
+                    sum += i
+                }
+            }
+            println("result=",test1([1,2]))
+            println("result=",test1([1,2,3]))
+        """.trimIndent())
+    }
+
+    @Test
+    fun forLoop2() = runTest {
+        println(eval(
+            """
+            fun search(haystack, needle) {    
+                for(ch in haystack) {
+                    if( ch == needle) 
+                        break "found"
+                }
+                else null
+            }
+            assert( search("hello", 'l') == "found")
+            assert( search("hello", 'z') == null)
+        """.trimIndent()
+        ).toString())
+    }
+
 //    @Test
 //    fun testLambda1() = runTest {
 //        val l = eval("""

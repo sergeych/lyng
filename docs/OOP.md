@@ -51,6 +51,7 @@ Note `Real` class: it is global variable for Real class; there are such class in
     assert("Hello"::class == String)
     assert(1970::class == Int)
     assert(true::class == Bool)
+    assert('$'::class == Char)
     >>> void
 
 More complex is singleton classes, because you don't need to compare their class

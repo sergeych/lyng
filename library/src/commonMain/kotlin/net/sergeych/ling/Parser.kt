@@ -203,6 +203,26 @@ private class Parser(fromPos: Pos) {
                 decodeNumber(loadChars(digits), from)
             }
 
+            '\'' -> {
+                val start = pos.toPos()
+                var value = currentChar
+                pos.advance()
+                if (currentChar == '\\') {
+                    value = currentChar
+                    pos.advance()
+                    value = when(value) {
+                        'n' -> '\n'
+                        'r' -> '\r'
+                        't' -> '\t'
+                        '\'', '\\' -> value
+                        else -> throw ScriptError(currentPos, "unsupported escape character: $value")
+                    }
+                }
+                if( currentChar != '\'' ) throw ScriptError(currentPos, "expected end of character literal: '")
+                pos.advance()
+                Token(value.toString(), start, Token.Type.CHAR)
+            }
+
             else -> {
                 // Labels processing is complicated!
                 // some@ statement: label 'some', ID 'statement'

@@ -507,34 +507,51 @@ We can skip the rest of the loop and restart it, as usual, with `continue` opera
 Notice that `total` remains 0 as the end of the outerLoop@ is not reachable: `continue` is always called and always make
 Ling to skip it.
 
-## Labels@
+## else statement
 
-The label can be any valid identifier, even a keyword, labels exist in their own, isolated world, so no risk of
-occasional clash. Labels are also scoped to their context and do not exist outside it.
-
-Right now labels are implemented only for the while loop. It is intended to be implemented for all loops and returns.
-
-## while - else statement
-
-The while loop can be followed by the else block, which is executed when the loop
+The while and for loops can be followed by the else block, which is executed when the loop
 ends normally, without breaks. It allows override loop result value, for example,
-to not calculate it in every iteration. Here is the sample:
+to not calculate it in every iteration. See for loop example just below.
 
-### Else, labels, and break practical sample
+## For loops
 
-    // Get a first word that starts with a given previx and return it:
-    fun findPrefix(prefix,words) {
-        var index = 0
-        while( index < words.size ) {
-            val w = words[index++]
-            if( w.startsWith(prefix) ) break w
-        } 
+For loop are intended to traverse collections, and all other objects that supports
+size and index access, like lists:
+
+    var letters = 0
+    for( w in ["hello", "wolrd"]) {
+        letters += w.length
+    }
+    "total letters: "+letters
+    >>> "total letters: 10"
+
+For loop support breaks the same as while loops above:
+
+    fun search(haystack, needle) {    
+        for(ch in haystack) {
+            if( ch == needle) 
+                break "found"
+        }
         else null
     }
-    val words = ["hello", "world", "foobar", "end"]
-    assert( findPrefix("bad", words) == null )
-    findPrefix("foo", words )
-    >>> "foobar"
+    assert( search("hello", 'l') == "found")
+    assert( search("hello", 'z') == null)
+    >>> void
+
+We can use labels too:
+
+    fun search(haystacks, needle) {    
+        exit@ for( hs in haystacks ) {
+                for(ch in hs ) {
+                    if( ch == needle) 
+                        break@exit "found"
+                }
+            }
+            else null
+    }
+    assert( search(["hello", "world"], 'l') == "found")
+    assert( search(["hello", "world"], 'z') == null)
+    >>> void
 
 # Self-assignments in expression
 
@@ -581,6 +598,7 @@ There are self-assigning version for operators too:
 | Int    | 64 bit signed                   | `1` `-22` `0x1FF`   |
 | Real   | 64 bit double                   | `1.0`, `2e-11`      |
 | Bool   | boolean                         | `true` `false`      |
+| Char   | single unicode character        | `'S'`, `'\n'`       |
 | String | unicode string, no limits       | "hello" (see below) |
 | List   | mutable list                    | [1, "two", 3]       |
 | Void   | no value could exist, singleton | void                |
@@ -588,6 +606,29 @@ There are self-assigning version for operators too:
 | Fn     | callable type                   |                     |
 
 See also [math operations](math.md)
+
+## Character details
+
+The type for the character objects is `Char`.
+
+### Char literal escapes
+
+Are the same as in string literals with little difference:
+
+| escape | ASCII value       |
+|--------|-------------------|
+| \n     | 0x10, newline     |
+| \t     | 0x07, tabulation  |
+| \\     | \ slash character |
+| \'     | ' apostrophe      |
+
+### Char instance members
+
+| member | type | meaning                        |
+|--------|------|--------------------------------|
+| code   | Int  | Unicode code for the character |
+|        |      |                                |
+
 
 ## String details
 

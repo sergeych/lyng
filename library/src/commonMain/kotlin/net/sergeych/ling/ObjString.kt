@@ -27,6 +27,10 @@ data class ObjString(val value: String) : Obj() {
         return ObjString(value + other.asStr.value)
     }
 
+    override suspend fun getAt(context: Context, index: Int): Obj {
+        return ObjChar(value[index])
+    }
+
     companion object {
         val type = ObjClass("String").apply {
             addConst("startsWith",
@@ -36,6 +40,7 @@ data class ObjString(val value: String) : Obj() {
             addConst("length",
                 statement { ObjInt(thisAs<ObjString>().value.length.toLong()) }
             )
+            addFn("size") { ObjInt(thisAs<ObjString>().value.length.toLong()) }
         }
     }
 }

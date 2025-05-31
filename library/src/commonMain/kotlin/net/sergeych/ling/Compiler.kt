@@ -112,7 +112,6 @@ class Compiler(
         return lvalue
     }
 
-
     private fun parseTerm(cc: CompilerContext): Accessor? {
         var operand: Accessor? = null
 
@@ -227,7 +226,7 @@ class Compiler(
                 Token.Type.ID -> {
                     // there could be terminal operators or keywords:// variable to read or like
                     when (t.value) {
-                        "if", "when", "do", "while", "return" -> {
+                        in stopKeywords -> {
                             if (operand != null) throw ScriptError(t.pos, "unexpected keyword")
                             cc.previous()
                             val s = parseStatement(cc) ?: throw ScriptError(t.pos, "Expecting valid statement")
@@ -405,6 +404,8 @@ class Compiler(
 
             Token.Type.STRING -> Accessor { ObjString(t.value).asReadonly }
 
+            Token.Type.CHAR -> Accessor { ObjChar(t.value[0]).asReadonly }
+
             Token.Type.PLUS -> {
                 val n = parseNumber(true, cc)
                 Accessor { n.asReadonly }
@@ -470,6 +471,7 @@ class Compiler(
         "val" -> parseVarDeclaration(id.value, false, cc)
         "var" -> parseVarDeclaration(id.value, true, cc)
         "while" -> parseWhileStatement(cc)
+        "for" -> parseForStatement(cc)
         "break" -> parseBreakStatement(id.pos, cc)
         "continue" -> parseContinueStatement(id.pos, cc)
         "fn", "fun" -> parseFunctionDeclaration(cc)
@@ -490,6 +492,83 @@ class Compiler(
         }
         while (cnt-- > 0) cc.next()
         return found
+    }
+
+    private fun parseForStatement(cc: CompilerContext): Statement {
+        val label = getLabel(cc)?.also { cc.labels += it }
+        val start = ensureLparen(cc)
+
+        // for - in?
+        val tVar = cc.next()
+        if (tVar.type != Token.Type.ID)
+            throw ScriptError(tVar.pos, "Bad for statement: expected loop variable")
+        val tOp = cc.next()
+        if (tOp.value == "in") {
+            // in loop
+            val source = parseStatement(cc) ?: throw ScriptError(start, "Bad for statement: expected expression")
+            ensureRparen(cc)
+            val body = parseStatement(cc) ?: throw ScriptError(start, "Bad for statement: expected loop body")
+
+            // possible else clause
+            cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
+            val elseStatement = if (cc.next().let { it.type == Token.Type.ID && it.value == "else" }) {
+                parseStatement(cc)
+            } else {
+                cc.previous()
+                null
+            }
+
+
+            return statement(body.pos) {
+                val forContext = it.copy(start)
+
+                // loop var: StoredObject
+                val loopSO = forContext.addItem(tVar.value, true, ObjNull)
+
+                // insofar we suggest source object is enumerable. Later we might need to add checks
+                val sourceObj = source.execute(forContext)
+                val size = runCatching { sourceObj.callInstanceMethod(forContext, "size").toInt() }
+                    .getOrElse { throw ScriptError(tOp.pos, "object is not enumerable: no size") }
+                var result: Obj = ObjVoid
+                var breakCaught = false
+                if (size > 0) {
+                    var current = runCatching { sourceObj.getAt(forContext, 0) }
+                        .getOrElse {
+                            throw ScriptError(
+                                tOp.pos,
+                                "object is not enumerable: no index access for ${sourceObj.inspect()}",
+                                it
+                            )
+                        }
+                    var index = 0
+                    while (true) {
+                        loopSO.value = current
+                        try {
+                            result = body.execute(forContext)
+                        } catch (lbe: LoopBreakContinueException) {
+                            if (lbe.label == label || lbe.label == null) {
+                                breakCaught = true
+                                if (lbe.doContinue) continue
+                                else {
+                                    result = lbe.result
+                                    break
+                                }
+                            } else
+                                throw lbe
+                        }
+                        if (++index >= size) break
+                        current = sourceObj.getAt(forContext, index)
+                    }
+                }
+                if( !breakCaught && elseStatement != null) {
+                    result = elseStatement.execute(it)
+                }
+                result
+            }
+        } else {
+            // maybe other loops?
+            throw ScriptError(tOp.pos, "Unsupported for-loop syntax")
+        }
     }
 
     private fun parseWhileStatement(cc: CompilerContext): Statement {
@@ -887,6 +966,11 @@ class Compiler(
         }
 
         fun compile(code: String): Script = Compiler().compile(Source("<eval>", code))
+
+        /**
+         * The keywords that stop processing of expression term
+         */
+        val stopKeywords = setOf("break", "continue", "return", "if", "when", "do", "while", "for")
     }
 }
 

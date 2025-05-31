@@ -54,7 +54,10 @@ sealed class Obj {
         getInstanceMemberOrNull(name)
             ?: throw ScriptError(atPos, "symbol doesn't exist: $name")
 
-    suspend fun callInstanceMethod(context: Context, name: String, args: Arguments): Obj =
+    suspend fun callInstanceMethod(context: Context,
+                                   name: String,
+                                   args: Arguments = Arguments.EMPTY
+    ): Obj =
         // note that getInstanceMember traverses the hierarchy
         objClass.getInstanceMember(context.pos, name).value.invoke(context, this, args)
 
@@ -422,6 +425,24 @@ data class ObjBool(val value: Boolean) : Obj() {
 //        return value.also { value = newValue }
 //    }
 //}
+class ObjChar(val value: Char): Obj() {
+
+    override val objClass: ObjClass = type
+
+    override suspend fun compareTo(context: Context, other: Obj): Int =
+        (other as? ObjChar)?.let { value.compareTo(it.value) } ?: -1
+
+    override fun toString(): String = value.toString()
+
+    override fun inspect(): String = "'$value'"
+
+    companion object {
+        val type = ObjClass("Char").apply {
+            addFn("toInt") { ObjInt(thisAs<ObjChar>().value.code.toLong()) }
+        }
+    }
+}
+
 
 data class ObjNamespace(val name: String) : Obj() {
     override fun toString(): String {

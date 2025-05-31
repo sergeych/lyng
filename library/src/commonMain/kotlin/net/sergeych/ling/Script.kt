@@ -57,6 +57,7 @@ class Script(
             addConst("String", ObjString.type)
             addConst("Int", ObjInt.type)
             addConst("Bool", ObjBool.type)
+            addConst("Char", ObjChar.type)
             addConst("List", ObjList.type)
             val pi = ObjReal(PI)
             addConst("π", pi)

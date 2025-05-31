@@ -158,7 +158,9 @@ suspend fun DocTest.test() {
     ) {
         println("Test failed: ${this.detailedString}")
     }
-    error?.let { fail(it.toString()) }
+    error?.let {
+        fail(it.toString(), it)
+    }
     assertEquals(expectedOutput, collectedOutput.toString(), "script output do not match")
     assertEquals(expectedResult, result.toString(), "script result does not match")
     //    println("OK: $this")

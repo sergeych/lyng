@@ -2,12 +2,13 @@
 
 package net.sergeych.ling
 
-open class ScriptError(val pos: Pos, val errorMessage: String) : Exception(
+open class ScriptError(val pos: Pos, val errorMessage: String,cause: Throwable?=null) : Exception(
     """
         $pos: Error: $errorMessage
         ${pos.currentLine}
         ${"-".repeat(pos.column)}^
-    """.trimIndent()
+    """.trimIndent(),
+    cause
 )
 
 class ExecutionError(val errorObject: ObjError) : ScriptError(errorObject.context.pos, errorObject.message)

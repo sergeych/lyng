@@ -38,6 +38,7 @@ class Context(
         return requiredArg(0)
     }
 
+    @Suppress("unused")
     fun requireExactCount(count: Int) {
         if( args.list.size != count ) {
             raiseError("Expected exactly $count arguments, got ${args.list.size}")
@@ -56,8 +57,8 @@ class Context(
     fun copy(pos: Pos, args: Arguments = Arguments.EMPTY,newThisObj: Obj? = null): Context =
         Context(this, args, pos, newThisObj ?: thisObj)
 
-    fun addItem(name: String, isMutable: Boolean, value: Obj?) {
-        objects.put(name, StoredObj(value, isMutable))
+    fun addItem(name: String, isMutable: Boolean, value: Obj?): StoredObj {
+        return StoredObj(value, isMutable).also { objects.put(name, it) }
     }
 
     fun getOrCreateNamespace(name: String): ObjNamespace =
