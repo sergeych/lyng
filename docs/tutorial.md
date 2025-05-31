@@ -645,6 +645,9 @@ Are the same as in string literals with little difference:
 
 ### Char instance members
 
+    assert( 'a'.code == 0x61 ) 
+    >>> void
+
 | member | type | meaning                        |
 |--------|------|--------------------------------|
 | code   | Int  | Unicode code for the character |

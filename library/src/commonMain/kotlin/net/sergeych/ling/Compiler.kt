@@ -541,7 +541,7 @@ class Compiler(
                 // insofar we suggest source object is enumerable. Later we might need to add checks
                 val sourceObj = source.execute(forContext)
                 val size = runCatching { sourceObj.callInstanceMethod(forContext, "size").toInt() }
-                    .getOrElse { throw ScriptError(tOp.pos, "object is not enumerable: no size") }
+                    .getOrElse { throw ScriptError(tOp.pos, "object is not enumerable: no size", it) }
                 var result: Obj = ObjVoid
                 var breakCaught = false
                 if (size > 0) {

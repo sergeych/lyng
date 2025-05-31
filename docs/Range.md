@@ -51,7 +51,6 @@ This might be confusing, but the range size and limits are used with for loops
 so their meaning is special.
 
 For open ranges, size throws and exception.
-
 For Int ranges, the `size` is `end` - `start` possibly + 1 for ind-inclusive ranges, and indexing getter returns all values from start to end, probably, inclusive:
 
     val r = 1..3
@@ -85,6 +84,27 @@ but
     >>> 1
     >>> 2
     >>> void
+
+## Character ranges
+
+You can use Char as both ends of the closed range:
+
+    val r = 'a' .. 'c'
+    assert( 'b' in r)
+    assert( 'e' !in r)
+    assert( 'c' == r[2] )
+    for( ch in r )
+        println(ch)
+    >>> a
+    >>> b
+    >>> c
+    >>> void
+
+Exclusive end char ranges are supported too:
+
+    ('a'..<'c').size
+    >>> 2
+
 
 # Instance members
 

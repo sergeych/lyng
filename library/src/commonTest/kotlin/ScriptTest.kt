@@ -975,6 +975,18 @@ class ScriptTest {
         )
     }
 
+    @Test
+    fun testCharacterRange() = runTest {
+        eval("""
+            val x = '0'..'9'
+            println(x)
+            assert( '5' in x)
+            assert( 'z' !in x)
+            for( ch in x ) 
+                println(ch)
+        """.trimIndent())
+    }
+
 //    @Test
 //    fun testLambda1() = runTest {
 //        val l = eval("""
