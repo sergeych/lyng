@@ -1,0 +1,19 @@
+package net.sergeych.ling
+
+class ObjChar(val value: Char): Obj() {
+
+    override val objClass: ObjClass = type
+
+    override suspend fun compareTo(context: Context, other: Obj): Int =
+        (other as? ObjChar)?.let { value.compareTo(it.value) } ?: -1
+
+    override fun toString(): String = value.toString()
+
+    override fun inspect(): String = "'$value'"
+
+    companion object {
+        val type = ObjClass("Char").apply {
+            addFn("code") { ObjInt(thisAs<ObjChar>().value.code.toLong()) }
+        }
+    }
+}
