@@ -4,6 +4,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import net.sergeych.synctools.ProtectedOp
 
 //typealias InstanceMethod = (Context, Obj) -> Obj
 
@@ -18,16 +19,15 @@ data class Accessor(
     fun setter(pos: Pos) = setterOrNull ?: throw ScriptError(pos, "can't assign value")
 }
 
-sealed class Obj {
+open class Obj {
     var isFrozen: Boolean = false
 
     private val monitor = Mutex()
 
-    // members: fields most often
-    private val members = mutableMapOf<String, WithAccess<Obj>>()
-
     //    private val memberMutex = Mutex()
-    private val parentInstances = listOf<Obj>()
+    internal var parentInstances: MutableList<Obj> = mutableListOf()
+
+    private val opInstances = ProtectedOp()
 
     open fun inspect(): String = toString()
 
@@ -39,26 +39,20 @@ sealed class Obj {
      */
     open fun byValueCopy(): Obj = this
 
-    /**
-     * Get instance member traversing the hierarchy if needed. Its meaning is different for different objects.
-     */
-    fun getInstanceMemberOrNull(name: String): WithAccess<Obj>? {
-        members[name]?.let { return it }
-        parentInstances.forEach { parent -> parent.getInstanceMemberOrNull(name)?.let { return it } }
-        return null
-    }
+    fun isInstanceOf(someClass: Obj) = someClass === objClass || objClass.allParentsSet.contains(someClass)
 
-    fun getInstanceMember(atPos: Pos, name: String): WithAccess<Obj> =
-        getInstanceMemberOrNull(name)
-            ?: throw ScriptError(atPos, "symbol doesn't exist: $name")
+    suspend fun invokeInstanceMethod(context: Context, name: String, vararg args: Obj): Obj =
+        invokeInstanceMethod(context, name, Arguments(args.map { Arguments.Info(it, context.pos) }))
 
-    suspend fun callInstanceMethod(
+    suspend fun invokeInstanceMethod(
         context: Context,
         name: String,
         args: Arguments = Arguments.EMPTY
     ): Obj =
         // note that getInstanceMember traverses the hierarchy
         objClass.getInstanceMember(context.pos, name).value.invoke(context, this, args)
+
+    fun getMemberOrNull(name: String): Obj? = objClass.getInstanceMemberOrNull(name)?.value
 
     // methods that to override
 
@@ -170,14 +164,15 @@ sealed class Obj {
                 value.execute(context.copy(context.pos, newThisObj = this)).asReadonly
             }
             // could be writable property naturally
-            else -> getInstanceMember(context.pos, name)
+            null -> ObjNull.asReadonly
+            else -> obj
         }
     }
 
     fun writeField(context: Context, name: String, newValue: Obj) {
         willMutate(context)
-        members[name]?.let { if (it.isMutable) it.value = newValue }
-            ?: context.raiseError("Can't reassign member: $name")
+        val field = objClass.getInstanceMemberOrNull(name) ?: context.raiseError("no such field: $name")
+        if (field.isMutable) field.value = newValue else context.raiseError("can't assign to read-only field: $name")
     }
 
     open suspend fun getAt(context: Context, index: Int): Obj {
@@ -188,24 +183,30 @@ sealed class Obj {
         context.raiseNotImplemented("indexing")
     }
 
-    fun createField(name: String, initialValue: Obj, isMutable: Boolean = false, pos: Pos = Pos.builtIn) {
-        if (name in members || parentInstances.any { name in it.members })
-            throw ScriptError(pos, "$name is already defined in $objClass or one of its supertypes")
-        members[name] = WithAccess(initialValue, isMutable)
-    }
-
-    fun addFn(name: String, isOpen: Boolean = false, code: suspend Context.() -> Obj) {
-        createField(name, statement { code() }, isOpen)
-    }
-
-    fun addConst(name: String, value: Obj) = createField(name, value, isMutable = false)
-
     open suspend fun callOn(context: Context): Obj {
         context.raiseNotImplemented()
     }
 
     suspend fun invoke(context: Context, thisObj: Obj, args: Arguments): Obj =
         callOn(context.copy(context.pos, args = args, newThisObj = thisObj))
+
+    suspend fun invoke(context: Context, thisObj: Obj, vararg args: Obj): Obj =
+        callOn(
+            context.copy(
+                context.pos,
+                args = Arguments(args.map { Arguments.Info(it, context.pos) }),
+                newThisObj = thisObj
+            )
+        )
+
+    suspend fun invoke(context: Context, thisObj: Obj): Obj =
+        callOn(
+            context.copy(
+                context.pos,
+                args = Arguments.EMPTY,
+                newThisObj = thisObj
+            )
+        )
 
     suspend fun invoke(context: Context, atPos: Pos, thisObj: Obj, args: Arguments): Obj =
         callOn(context.copy(atPos, args = args, newThisObj = thisObj))
@@ -277,7 +278,7 @@ fun Obj.toDouble(): Double =
 
 @Suppress("unused")
 fun Obj.toLong(): Long =
-    when(this) {
+    when (this) {
         is Numeric -> longValue
         is ObjString -> value.toLong()
         is ObjChar -> value.code.toLong()
@@ -306,3 +307,5 @@ class ObjAssertionError(context: Context, message: String) : ObjError(context, m
 class ObjClassCastError(context: Context, message: String) : ObjError(context, message)
 class ObjIndexOutOfBoundsError(context: Context, message: String = "index out of bounds") : ObjError(context, message)
 class ObjIllegalArgumentError(context: Context, message: String = "illegal argument") : ObjError(context, message)
+
+class ObjIterationFinishedError(context: Context) : ObjError(context, "iteration finished")

@@ -144,7 +144,7 @@ class Compiler(
                                     context.pos = next.pos
                                     val v = left.getter(context).value
                                     WithAccess(
-                                        v.callInstanceMethod(
+                                        v.invokeInstanceMethod(
                                             context,
                                             next.value,
                                             args.toArguments(context)
@@ -540,43 +540,50 @@ class Compiler(
 
                 // insofar we suggest source object is enumerable. Later we might need to add checks
                 val sourceObj = source.execute(forContext)
-                val size = runCatching { sourceObj.callInstanceMethod(forContext, "size").toInt() }
-                    .getOrElse { throw ScriptError(tOp.pos, "object is not enumerable: no size", it) }
-                var result: Obj = ObjVoid
-                var breakCaught = false
-                if (size > 0) {
-                    var current = runCatching { sourceObj.getAt(forContext, 0) }
-                        .getOrElse {
-                            throw ScriptError(
-                                tOp.pos,
-                                "object is not enumerable: no index access for ${sourceObj.inspect()}",
-                                it
-                            )
+
+                if (sourceObj.isInstanceOf(ObjIterable)) {
+                    loopIterable(forContext, sourceObj, loopSO, body, elseStatement, label)
+                } else {
+                    val size = runCatching { sourceObj.invokeInstanceMethod(forContext, "size").toInt() }
+                        .getOrElse { throw ScriptError(tOp.pos, "object is not enumerable: no size", it) }
+
+                    var result: Obj = ObjVoid
+                    var breakCaught = false
+
+                    if (size > 0) {
+                        var current = runCatching { sourceObj.getAt(forContext, 0) }
+                            .getOrElse {
+                                throw ScriptError(
+                                    tOp.pos,
+                                    "object is not enumerable: no index access for ${sourceObj.inspect()}",
+                                    it
+                                )
+                            }
+                        var index = 0
+                        while (true) {
+                            loopSO.value = current
+                            try {
+                                result = body.execute(forContext)
+                            } catch (lbe: LoopBreakContinueException) {
+                                if (lbe.label == label || lbe.label == null) {
+                                    breakCaught = true
+                                    if (lbe.doContinue) continue
+                                    else {
+                                        result = lbe.result
+                                        break
+                                    }
+                                } else
+                                    throw lbe
+                            }
+                            if (++index >= size) break
+                            current = sourceObj.getAt(forContext, index)
                         }
-                    var index = 0
-                    while (true) {
-                        loopSO.value = current
-                        try {
-                            result = body.execute(forContext)
-                        } catch (lbe: LoopBreakContinueException) {
-                            if (lbe.label == label || lbe.label == null) {
-                                breakCaught = true
-                                if (lbe.doContinue) continue
-                                else {
-                                    result = lbe.result
-                                    break
-                                }
-                            } else
-                                throw lbe
-                        }
-                        if (++index >= size) break
-                        current = sourceObj.getAt(forContext, index)
                     }
+                    if (!breakCaught && elseStatement != null) {
+                        result = elseStatement.execute(it)
+                    }
+                    result
                 }
-                if (!breakCaught && elseStatement != null) {
-                    result = elseStatement.execute(it)
-                }
-                result
             }
         } else {
             // maybe other loops?
@@ -584,10 +591,31 @@ class Compiler(
         }
     }
 
+    private suspend fun loopIterable(
+        forContext: Context, sourceObj: Obj, loopVar: StoredObj,
+        body: Statement, elseStatement: Statement?, label: String?
+    ): Obj {
+        val iterObj = sourceObj.invokeInstanceMethod(forContext, "iterator")
+        var result: Obj = ObjVoid
+        while (iterObj.invokeInstanceMethod(forContext, "hasNext").toBool()) {
+            try {
+                loopVar.value = iterObj.invokeInstanceMethod(forContext, "next")
+                result = body.execute(forContext)
+            } catch (lbe: LoopBreakContinueException) {
+                if (lbe.label == label || lbe.label == null) {
+                    if (lbe.doContinue) continue
+                }
+                return lbe.result
+            }
+        }
+        return elseStatement?.execute(forContext) ?: result
+    }
+
     private fun parseWhileStatement(cc: CompilerContext): Statement {
         val label = getLabel(cc)?.also { cc.labels += it }
         val start = ensureLparen(cc)
-        val condition = parseExpression(cc) ?: throw ScriptError(start, "Bad while statement: expected expression")
+        val condition =
+            parseExpression(cc) ?: throw ScriptError(start, "Bad while statement: expected expression")
         ensureRparen(cc)
 
         val body = parseStatement(cc) ?: throw ScriptError(start, "Bad while statement: expected statement")
@@ -958,6 +986,8 @@ class Compiler(
             // in, is:
             Operator.simple(Token.Type.IN, lastPrty) { c, a, b -> ObjBool(b.contains(c, a)) },
             Operator.simple(Token.Type.NOTIN, lastPrty) { c, a, b -> ObjBool(!b.contains(c, a)) },
+            Operator.simple(Token.Type.IS, lastPrty) { c, a, b -> ObjBool(a.isInstanceOf(b)) },
+            Operator.simple(Token.Type.NOTIS, lastPrty) { c, a, b -> ObjBool(!a.isInstanceOf(b)) },
             // shuttle <=> 6
             // bit shifts 7
             Operator.simple(Token.Type.PLUS, ++lastPrty) { ctx, a, b -> a.plus(ctx, b) },

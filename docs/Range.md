@@ -45,27 +45,12 @@ are equal or within another, taking into account the end-inclusiveness:
     assert( (1..<3) in (1..3) )
     >>> void
 
-## Range size and indexed access
+## Finite Ranges are iterable
 
-This might be confusing, but the range size and limits are used with for loops
-so their meaning is special.
+So given a range with both ends, you can assume it is [Iterable]. This automatically let
+use finite ranges in loops and convert it to lists:
 
-For open ranges, size throws and exception.
-For Int ranges, the `size` is `end` - `start` possibly + 1 for ind-inclusive ranges, and indexing getter returns all values from start to end, probably, inclusive:
-
-    val r = 1..3
-    assert( r.size == 3 )
-    assert( r[0] == 1 )
-    assert( r[1] == 2 )
-    assert( r[2] == 3 )
-    >>> void
-
-And for end-exclusive range:
-
-    val r = 1..<3
-    assert(r.size == 2)
-    assert( r[0] == 1 )
-    assert( r[1] == 2 )
+    assert( [-2, -1, 0, 1] == (-2..1).toList() )
     >>> void
 
 In spite of this you can use ranges in for loops:
@@ -102,8 +87,8 @@ You can use Char as both ends of the closed range:
 
 Exclusive end char ranges are supported too:
 
-    ('a'..<'c').size
-    >>> 2
+    ('a'..<'c').toList 
+    >>> ['a', 'b']
 
 
 # Instance members
@@ -119,3 +104,5 @@ Exclusive end char ranges are supported too:
 | size            | for finite ranges, see above | Long          |
 | []              | see above                    |               |
 |                 |                              |               |
+
+[Iterable]: Iterable.md

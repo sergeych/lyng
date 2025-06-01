@@ -13,6 +13,7 @@ dependencyResolutionManagement {
         maven("https://maven.universablockchain.com/")
         maven("https://gitea.sergeych.net/api/packages/SergeychWorks/maven")
         mavenLocal()
+        maven("https://gitea.sergeych.net/api/packages/SergeychWorks/maven")
     }
 }
 

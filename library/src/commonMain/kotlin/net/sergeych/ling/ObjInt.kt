@@ -76,3 +76,5 @@ data class ObjInt(var value: Long) : Obj(), Numeric {
         val type = ObjClass("Int")
     }
 }
+
+fun Int.toObj() = ObjInt(this.toLong())

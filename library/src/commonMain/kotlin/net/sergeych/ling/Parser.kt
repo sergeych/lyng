@@ -154,12 +154,19 @@ private class Parser(fromPos: Pos) {
             '!' -> {
                 if (currentChar == 'i') {
                     pos.advance()
-                    if( currentChar == 'n') {
-                        pos.advance()
-                        Token("!in", from, Token.Type.NOTIN)
-                    } else {
-                        pos.back()
-                        Token("!", from, Token.Type.NOT)
+                    when (currentChar) {
+                        'n' -> {
+                            pos.advance()
+                            Token("!in", from, Token.Type.NOTIN)
+                        }
+                        's' -> {
+                            pos.advance()
+                            Token("!is", from, Token.Type.NOTIS)
+                        }
+                        else -> {
+                            pos.back()
+                            Token("!", from, Token.Type.NOT)
+                        }
                     }
                 } else
                     if (currentChar == '=') {
@@ -249,6 +256,7 @@ private class Parser(fromPos: Pos) {
                     } else
                         when (text) {
                             "in" -> Token("in", from, Token.Type.IN)
+                            "is" -> Token("is", from, Token.Type.IS)
                             else -> Token(text, from, Token.Type.ID)
                         }
                 } else

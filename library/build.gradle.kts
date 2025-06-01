@@ -49,6 +49,7 @@ kotlin {
                 //put your multiplatform dependencies here
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.mp.bintools)
+                implementation("net.sergeych:mp_stools:1.5.2")
             }
         }
         val commonTest by getting {

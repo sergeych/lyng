@@ -60,6 +60,11 @@ class Script(
             addConst("Char", ObjChar.type)
             addConst("List", ObjList.type)
             addConst("Range", ObjRange.type)
+
+            // interfaces
+            addConst("Iterable", ObjIterable)
+            addConst("Array", ObjArray)
+
             val pi = ObjReal(PI)
             addConst("π", pi)
             getOrCreateNamespace("Math").apply {

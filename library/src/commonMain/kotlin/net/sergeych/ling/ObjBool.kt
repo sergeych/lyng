@@ -22,3 +22,6 @@ data class ObjBool(val value: Boolean) : Obj() {
         val type = ObjClass("Bool")
     }
 }
+
+val ObjTrue = ObjBool(true)
+val ObjFalse = ObjBool(false)

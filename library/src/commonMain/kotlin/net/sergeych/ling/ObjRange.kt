@@ -70,7 +70,7 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
         if (isEndInclusive) r1++
         val i = index + r0
         if (i >= r1) context.raiseIndexOutOfBounds("index $index is not in range (${r1 - r0})")
-        return if( isIntRange ) ObjInt(i.toLong()) else ObjChar(i.toChar())
+        return if (isIntRange) ObjInt(i.toLong()) else ObjChar(i.toChar())
     }
 
 
@@ -83,7 +83,7 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
     }
 
     companion object {
-        val type = ObjClass("Range").apply {
+        val type = ObjClass("Range", ObjIterable).apply {
             addFn("start") {
                 thisAs<ObjRange>().start ?: ObjNull
             }
@@ -102,18 +102,57 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
             addFn("isEndInclusive") {
                 thisAs<ObjRange>().isEndInclusive.toObj()
             }
-            addFn("size") {
+            addFn("iterator") {
                 val self = thisAs<ObjRange>()
-                if (self.start == null || self.end == null)
-                    raiseError("size is only available for finite ranges")
-                if (self.isIntRange || self.isCharRange) {
-                    if (self.isEndInclusive)
-                        ObjInt(self.end.toLong() - self.start.toLong() + 1)
-                    else
-                        ObjInt(self.end.toLong() - self.start.toLong())
-                } else {
-                    ObjInt(2)
-                }
+                ObjRangeIterator(self).apply { init() }
+            }
+        }
+    }
+}
+
+class ObjRangeIterator(val self: ObjRange) : Obj() {
+
+    private var nextIndex = 0
+    private var lastIndex = 0
+    private var isCharRange: Boolean = false
+
+    override val objClass: ObjClass = type
+
+    fun Context.init() {
+        if (self.start == null || self.end == null)
+            raiseError("next is only available for finite ranges")
+        isCharRange = self.isCharRange
+        lastIndex = if (self.isIntRange || self.isCharRange) {
+            if (self.isEndInclusive)
+                self.end.toInt() - self.start.toInt() + 1
+            else
+                self.end.toInt() - self.start.toInt()
+        } else {
+            raiseError("not implemented iterator for range of $this")
+        }
+    }
+
+    fun hasNext(): Boolean = nextIndex < lastIndex
+
+    fun next(context: Context): Obj =
+        if (nextIndex < lastIndex) {
+            val x = if (self.isEndInclusive)
+                self.start!!.toLong() + nextIndex++
+            else
+                self.start!!.toLong() + nextIndex++
+            if( isCharRange ) ObjChar(x.toInt().toChar()) else ObjInt(x)
+        }
+        else {
+            context.raiseError(ObjIterationFinishedError(context))
+        }
+
+    companion object {
+        val type = ObjClass("RangeIterator", ObjIterable).apply {
+            addFn("hasNext") {
+                thisAs<ObjRangeIterator>().hasNext().toObj()
+            }
+            addFn("next") {
+                thisAs<ObjRangeIterator>().next(this)
             }
         }
     }

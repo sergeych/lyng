@@ -2,6 +2,11 @@ package net.sergeych.ling
 
 class ObjList(val list: MutableList<Obj>) : Obj() {
 
+    init {
+        for( p in objClass.parents)
+            parentInstances.add( p.defaultInstance())
+    }
+
     override fun toString(): String = "[${
         list.joinToString(separator = ", ") { it.inspect() }
     }]"
@@ -42,13 +47,20 @@ class ObjList(val list: MutableList<Obj>) : Obj() {
     }
 
     override suspend fun plus(context: Context, other: Obj): Obj {
-        (other as? ObjList) ?: context.raiseError("cannot concatenate $this with $other")
+        (other as? ObjList) ?: context.raiseError("'+': can't concatenate $this with $other")
         return ObjList((list + other.list).toMutableList())
     }
 
     override suspend fun plusAssign(context: Context, other: Obj): Obj {
-        (other as? ObjList) ?: context.raiseError("cannot concatenate $this with $other")
-        list += other.list
+        // optimization
+        if( other is ObjList) {
+            list += other.list
+            return this
+        }
+        if( other.isInstanceOf(ObjIterable)) {
+            TODO("plusassign for iterable is not yet implemented")
+        }
+        list += other
         return this
     }
 
@@ -56,12 +68,23 @@ class ObjList(val list: MutableList<Obj>) : Obj() {
         get() = type
 
     companion object {
-        val type = ObjClass("List").apply {
+        val type = ObjClass("List", ObjArray).apply {
+
             createField("size",
                 statement {
                     (thisObj as ObjList).list.size.toObj()
                 }
             )
+            addFn("getAt") {
+                requireExactCount(1)
+                thisAs<ObjList>().getAt(this, requiredArg<ObjInt>(0).value.toInt())
+            }
+            addFn("putAt") {
+                requireExactCount(2)
+                val newValue = args[1]
+                thisAs<ObjList>().putAt(this, requiredArg<ObjInt>(0).value.toInt(), newValue)
+                newValue
+            }
             createField("add",
                 statement {
                     val l = thisAs<ObjList>().list

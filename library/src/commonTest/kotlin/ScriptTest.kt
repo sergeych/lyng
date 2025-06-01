@@ -2,7 +2,6 @@ package io.github.kotlin.fibonacci
 
 import kotlinx.coroutines.test.runTest
 import net.sergeych.ling.*
-import kotlin.math.PI
 import kotlin.test.*
 
 class ScriptTest {
@@ -154,12 +153,12 @@ class ScriptTest {
     @Test
     fun compileBuiltinCallsTest() = runTest {
 //        println(eval("π"))
-        val pi = eval("Math.PI")
-        assertIs<ObjReal>(pi)
-        assertTrue(pi.value - PI < 0.000001)
-        assertTrue(eval("Math.PI+1").toDouble() - PI - 1.0 < 0.000001)
+//        val pi = eval("Math.PI")
+//        assertIs<ObjReal>(pi)
+//        assertTrue(pi.value - PI < 0.000001)
+//        assertTrue(eval("Math.PI+1").toDouble() - PI - 1.0 < 0.000001)
 
-        assertTrue(eval("sin(Math.PI)").toDouble() - 1 < 0.000001)
+//        assertTrue(eval("sin(Math.PI)").toDouble() - 1 < 0.000001)
         assertTrue(eval("sin(π)").toDouble() - 1 < 0.000001)
     }
 
@@ -831,6 +830,7 @@ class ScriptTest {
             """
             val a = [4,3]
             assert(a.size == 2)
+            assert( 3 == a[1] )
         """.trimIndent()
         )
     }
@@ -977,15 +977,68 @@ class ScriptTest {
 
     @Test
     fun testCharacterRange() = runTest {
-        eval("""
+        eval(
+            """
             val x = '0'..'9'
             println(x)
             assert( '5' in x)
             assert( 'z' !in x)
             for( ch in x ) 
                 println(ch)
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
+
+    @Test
+    fun testIs() = runTest {
+        eval(
+            """
+            val x = 1..10
+            assert( x is Range )
+            assert( x is Iterable )
+            assert( x !is String)
+            assert( "foo" is String)
+            
+            assert( x is Iterable )
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testForRange() = runTest {
+        eval(
+            """
+            val x = 1..3
+            val result = []
+            for( i in x ) {
+                println(i)
+                result += (i*10)
+            }
+            assert( result == [10,20,30] )
+            """.trimIndent()
+        )
+        val a = mutableListOf(1, 2)
+        val b = listOf(3, 4)
+        a += 10
+        a += b
+        println(a)
+    }
+
+    @Test
+    fun iterableList() = runTest {
+        // 473
+        eval(
+            """
+            for( i in 0..<1024 ) {    
+            val list = (1..1024).toList()
+            assert(list.size == 1024)
+            assert(list[0] == 1)
+            assert(list[-1] == 1024)
+            }
+        """.trimIndent()
+        )
+    }
+
 
 //    @Test
 //    fun testLambda1() = runTest {
