@@ -1,7 +1,5 @@
 package net.sergeych.lyng
 
-import net.sergeych.ling.TypeDecl
-
 /**
  * The LYNG compiler.
  */
