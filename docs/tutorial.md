@@ -596,7 +596,8 @@ Lyng to skip it.
 
 The while and for loops can be followed by the else block, which is executed when the loop
 ends normally, without breaks. It allows override loop result value, for example,
-to not calculate it in every iteration. See for loop example just below.
+to not calculate it in every iteration. For example, consider this naive prime number
+test function (remember function return it's last expression result):
 
     fun naive_is_prime(candidate) {
         val x = if( candidate !is Int) candidate.toInt() else candidate
