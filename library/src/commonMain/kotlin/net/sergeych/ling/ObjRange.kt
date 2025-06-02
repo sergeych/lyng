@@ -1,4 +1,4 @@
-package net.sergeych.ling
+package net.sergeych.lyng
 
 class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Obj() {
 

@@ -1,7 +1,7 @@
 package io.github.kotlin.fibonacci
 
 import kotlinx.coroutines.test.runTest
-import net.sergeych.ling.*
+import net.sergeych.lyng.*
 import kotlin.test.*
 
 class ScriptTest {

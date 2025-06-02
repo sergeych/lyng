@@ -1,4 +1,4 @@
-package net.sergeych.ling
+package net.sergeych.lyng
 
 val digitsSet = ('0'..'9').toSet()
 val digits = { d: Char -> d in digitsSet }

@@ -3,8 +3,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.test.runTest
-import net.sergeych.ling.Context
-import net.sergeych.ling.ObjVoid
+import net.sergeych.lyng.Context
+import net.sergeych.lyng.ObjVoid
 import java.nio.file.Files.readAllLines
 import java.nio.file.Paths
 import kotlin.test.Test

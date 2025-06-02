@@ -3,7 +3,7 @@
 Class that supports double-precision math. Woks much like double in other languages. We honor no floats, so it is '
 Real'.
 
-It's class in Ling is `Real`:
+It's class in Lyng is `Real`:
 
     (π/2)::class
     >>> Real

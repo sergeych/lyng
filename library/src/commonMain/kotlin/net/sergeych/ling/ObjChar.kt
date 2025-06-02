@@ -1,4 +1,4 @@
-package net.sergeych.ling
+package net.sergeych.lyng
 
 class ObjChar(val value: Char): Obj() {
 

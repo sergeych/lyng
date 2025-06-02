@@ -1,4 +1,4 @@
-# Ling: scripting lang for kotlin multiplatform
+# Lyng: scripting lang for kotlin multiplatform
 
 in the form of multiplatform library.
 

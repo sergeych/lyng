@@ -1,4 +1,4 @@
-package net.sergeych.ling
+package net.sergeych.lyng
 
 data class Pos(val source: Source, val line: Int, val column: Int) {
     override fun toString(): String {

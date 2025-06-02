@@ -1,4 +1,4 @@
-package net.sergeych.ling
+package net.sergeych.lyng
 
 data class ParsedArgument(val value: Statement, val pos: Pos, val isSplat: Boolean = false)
 

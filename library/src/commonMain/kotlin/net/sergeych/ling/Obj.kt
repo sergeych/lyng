@@ -1,4 +1,4 @@
-package net.sergeych.ling
+package net.sergeych.lyng
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock

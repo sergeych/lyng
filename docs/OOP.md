@@ -1,4 +1,4 @@
-# OO implementation in Ling
+# OO implementation in Lyng
 
 Basic principles:
 
@@ -15,7 +15,7 @@ Basic principles:
 
 ## Instances
 
-Result of executing of any expression or statement in the Ling is the object that
+Result of executing of any expression or statement in the Lyng is the object that
 inherits `Obj`, but is not `Obj`. For example it could be Int, void, null, real, string, bool, etc.
 
 This means whatever expression returns or the variable holds, is the first-class

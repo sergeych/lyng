@@ -1,4 +1,4 @@
-package net.sergeych.ling
+package net.sergeych.lyng
 
 data class ObjBool(val value: Boolean) : Obj() {
     override val asStr by lazy { ObjString(value.toString()) }
