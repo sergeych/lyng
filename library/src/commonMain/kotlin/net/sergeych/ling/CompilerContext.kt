@@ -1,4 +1,4 @@
-package net.sergeych.lying
+package net.sergeych.ling
 
 internal class CompilerContext(val tokens: List<Token>) : ListIterator<Token> by tokens.listIterator() {
     val labels = mutableSetOf<String>()

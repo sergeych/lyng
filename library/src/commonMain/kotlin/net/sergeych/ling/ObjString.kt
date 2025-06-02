@@ -1,4 +1,4 @@
-package net.sergeych.lying
+package net.sergeych.ling
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable

@@ -1,4 +1,4 @@
-package net.sergeych.lying
+package net.sergeych.ling
 
 class ObjList(val list: MutableList<Obj>) : Obj() {
 

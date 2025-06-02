@@ -1,4 +1,4 @@
-package net.sergeych.lying
+package net.sergeych.ling
 
 /**
  * Whatever [Obj] stored somewhere

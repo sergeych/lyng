@@ -1,6 +1,6 @@
-# Lying tutorial
+# Ling tutorial
 
-Lying is a very simple language, where we take only most important and popular features from
+Ling is a very simple language, where we take only most important and popular features from
 other scripts and languages. In particular, we adopt _principle of minimal confusion_[^1].
 In other word, the code usually works as expected when you see it. So, nothing unusual.
 
@@ -8,12 +8,12 @@ __Other documents to read__ maybe after this one:
 
 - [Advanced topics](advanced_topics.md)
 - [OOP notes](OOP.md)
-- [math in Lying](math.md)
+- [math in Ling](math.md)
 - Some class references: [List](List.md), [Real](Real.md), [Range](Range.md)
 
 # Expressions
 
-Everything is an expression in Lying. Even an empty block:
+Everything is an expression in Ling. Even an empty block:
 
     // empty block
     >>> void
@@ -221,7 +221,7 @@ Notice how function definition return a value, instance of `Callable`.
 
 You can use both `fn` and `fun`. Note that function declaration _is an expression returning callable_.
 
-There are default parameters in Lying:
+There are default parameters in Ling:
 
     fn check(amount, prefix = "answer: ") {
         prefix + if( amount > 100 )
@@ -273,7 +273,7 @@ If you need to create _unnamed_ function, use alternative syntax (TBD, like { ->
 
 # Lists (aka arrays)
 
-Lying has built-in mutable array class `List` with simple literals:
+Ling has built-in mutable array class `List` with simple literals:
 
     [1, "two", 3.33].size
     >>> 3
@@ -546,7 +546,7 @@ We can skip the rest of the loop and restart it, as usual, with `continue` opera
     >>> 0
 
 Notice that `total` remains 0 as the end of the outerLoop@ is not reachable: `continue` is always called and always make
-Lying to skip it.
+Ling to skip it.
 
 ## else statement
 

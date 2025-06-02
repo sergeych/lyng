@@ -1,4 +1,4 @@
-package net.sergeych.lying
+package net.sergeych.ling
 
 data class ObjInt(var value: Long) : Obj(), Numeric {
     override val asStr get() = ObjString(value.toString())

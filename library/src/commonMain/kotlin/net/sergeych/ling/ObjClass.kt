@@ -1,4 +1,4 @@
-package net.sergeych.lying
+package net.sergeych.ling
 
 val ObjClassType by lazy { ObjClass("Class") }
 

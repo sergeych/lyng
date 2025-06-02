@@ -1,6 +1,6 @@
 @file:Suppress("CanBeParameter")
 
-package net.sergeych.lying
+package net.sergeych.ling
 
 open class ScriptError(val pos: Pos, val errorMessage: String,cause: Throwable?=null) : Exception(
     """

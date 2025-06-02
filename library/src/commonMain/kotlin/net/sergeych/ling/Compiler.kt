@@ -1,7 +1,7 @@
-package net.sergeych.lying
+package net.sergeych.ling
 
 /**
- * The LYING compiler.
+ * The LING compiler.
  */
 class Compiler(
     @Suppress("UNUSED_PARAMETER")
@@ -314,6 +314,12 @@ class Compiler(
                         ).asReadonly
                     }
                 }
+
+//                Token.Type.LBRACE -> {
+//                    if( operand != null ) {
+//                        throw ScriptError(t.pos, "syntax error: lambda expression not allowed here")
+//                    }
+//                }
 
 
                 else -> {

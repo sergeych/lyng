@@ -1,7 +1,7 @@
 package io.github.kotlin.fibonacci
 
 import kotlinx.coroutines.test.runTest
-import net.sergeych.lying.*
+import net.sergeych.ling.*
 import kotlin.test.*
 
 class ScriptTest {
@@ -1039,16 +1039,15 @@ class ScriptTest {
         )
     }
 
+    @Test
+    fun testLambda1() = runTest {
+        val l = eval("""
+            val x = {
+                122
+            }
+            x
+        """.trimIndent())
+        println(l)
+    }
 
-//    @Test
-//    fun testLambda1() = runTest {
-//        val l = eval("""
-//            x = {
-//                122
-//            }
-//            x
-//        """.trimIndent())
-//        println(l)
-//    }
-//
 }

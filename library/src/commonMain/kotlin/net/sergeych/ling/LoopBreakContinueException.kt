@@ -1,4 +1,4 @@
-package net.sergeych.lying
+package net.sergeych.ling
 
 class LoopBreakContinueException(
     val doContinue: Boolean,

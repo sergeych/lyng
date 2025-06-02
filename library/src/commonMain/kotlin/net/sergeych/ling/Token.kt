@@ -1,4 +1,4 @@
-package net.sergeych.lying
+package net.sergeych.ling
 
 data class Token(val value: String, val pos: Pos, val type: Type) {
     val isComment: Boolean by lazy { type == Type.SINLGE_LINE_COMMENT || type == Type.MULTILINE_COMMENT }

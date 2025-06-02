@@ -1,4 +1,4 @@
-package net.sergeych.lying
+package net.sergeych.ling
 
 fun String.toSource(name: String = "eval"): Source = Source(name, this)
 
