@@ -1,5 +1,7 @@
 package net.sergeych.lyng
 
+import net.sergeych.ling.TypeDecl
+
 /**
  * The LYNG compiler.
  */
@@ -28,22 +30,6 @@ class Compiler(
             val t = cc.next()
             return when (t.type) {
                 Token.Type.ID -> {
-                    // could be keyword, assignment or just the expression
-//                    val next = tokens.next()
-//                    if (next.type == Token.Type.ASSIGN) {
-//                         this _is_ assignment statement
-//                        return AssignStatement(
-//                            t.pos, t.value,
-//                            parseStatement(tokens) ?: throw ScriptError(
-//                                t.pos,
-//                                "Expecting expression for assignment operator"
-//                            )
-//                        )
-//                    }
-//                     not assignment, maybe keyword statement:
-//                     get back the token which is not '=':
-//                    tokens.previous()
-                    // try keyword statement
                     parseKeywordStatement(t, cc)
                         ?: run {
                             cc.previous()
@@ -315,11 +301,11 @@ class Compiler(
                     }
                 }
 
-//                Token.Type.LBRACE -> {
-//                    if( operand != null ) {
-//                        throw ScriptError(t.pos, "syntax error: lambda expression not allowed here")
-//                    }
-//                }
+                Token.Type.LBRACE -> {
+                    if (operand != null) {
+                        throw ScriptError(t.pos, "syntax error: lambda expression not allowed here")
+                    } else operand = parseLambdaExpression(cc)
+                }
 
 
                 else -> {
@@ -328,6 +314,56 @@ class Compiler(
                     operand = parseAccessor(cc) ?: throw ScriptError(t.pos, "Expecting expression")
                 }
             }
+        }
+    }
+
+    /**
+     * Parse lambda expression, leading '{' is already consumed
+     */
+    private fun parseLambdaExpression(cc: CompilerContext): Accessor {
+        // lambda args are different:
+        val startPos = cc.currentPos()
+        val argsDeclaration = parseArgsDeclaration(cc)
+        if (argsDeclaration != null && argsDeclaration.endTokenType != Token.Type.ARROW)
+            throw ScriptError(startPos, "lambda must have either valid arguments declaration with '->' or no arguments")
+        val pos = cc.currentPos()
+        val body = parseBlock(cc, skipLeadingBrace = true)
+        return Accessor { _ ->
+            statement {
+                val context = this.copy(pos)
+                if (argsDeclaration == null) {
+                    // no args: automatic var 'it'
+                    val l = args.values
+                    val itValue: Obj = when (l.size) {
+                        // no args: it == void
+                        0 -> ObjVoid
+                        // one args: it is this arg
+                        1 -> l[0]
+                        // more args: it is a list of args
+                        else -> ObjList(l.toMutableList())
+                    }
+                    context.addItem("it", false, itValue)
+                } else {
+                    // assign vars as declared
+                    if( args.size != argsDeclaration.args.size && !argsDeclaration.args.last().isEllipsis)
+                        raiseArgumentError("Too many arguments : called with ${args.size}, lambda accepts only ${argsDeclaration.args.size}")
+                    for ((n, a) in argsDeclaration.args.withIndex()) {
+                        if (n >= args.size) {
+                            if (a.initialValue != null)
+                                context.addItem(a.name, false, a.initialValue.execute(context))
+                            else throw ScriptError(a.pos, "argument $n is out of scope")
+                        } else {
+                            val value = if( a.isEllipsis) {
+                                ObjList(args.values.subList(n, args.values.size).toMutableList())
+                            }
+                            else
+                                args[n]
+                            context.addItem(a.name, false, value)
+                        }
+                    }
+                }
+                body.execute(context)
+            }.asReadonly
         }
     }
 
@@ -367,6 +403,89 @@ class Compiler(
 
             else -> throw ScriptError(t.pos, "Unknown scope operation: ${t.value}")
         }
+    }
+
+    data class ArgVar(
+        val name: String,
+        val type: TypeDecl = TypeDecl.Obj,
+        val pos: Pos,
+        val isEllipsis: Boolean,
+        val initialValue: Statement? = null
+    )
+
+    data class ArgsDeclaration(val args: List<ArgVar>, val endTokenType: Token.Type) {
+        init {
+            val i = args.indexOfFirst { it.isEllipsis }
+            if (i >= 0 && i != args.lastIndex) throw ScriptError(args[i].pos, "ellipsis argument must be last")
+        }
+    }
+
+    /**
+     * Parse argument declaration, used in lambda (and later in fn too)
+     * @return declaration or null if there is no valid list of arguments
+     */
+    private fun parseArgsDeclaration(cc: CompilerContext): ArgsDeclaration? {
+        val result = mutableListOf<ArgVar>()
+        var endTokenType: Token.Type? = null
+        val startPos = cc.savePos()
+
+        while (endTokenType == null) {
+            val t = cc.next()
+            when (t.type) {
+                Token.Type.NEWLINE -> {}
+                Token.Type.ID -> {
+                    var defaultValue: Statement? = null
+                    cc.ifNextIs(Token.Type.ASSIGN) {
+                        defaultValue = parseExpression(cc)
+                    }
+                    // type information
+                    val typeInfo = parseTypeDeclaration(cc)
+                    val isEllipsis = cc.skipTokenOfType(Token.Type.ELLIPSIS, isOptional = true)
+                    result += ArgVar(t.value, typeInfo, t.pos, isEllipsis, defaultValue)
+
+                    // important: valid argument list continues with ',' and ends with '->' or ')'
+                    // otherwise it is not an argument list:
+                    when (val tt = cc.next().type) {
+                        Token.Type.RPAREN -> {
+                            // end of arguments
+                            endTokenType = tt
+                        }
+
+                        Token.Type.ARROW -> {
+                            // end of arguments too
+                            endTokenType = tt
+                        }
+
+                        Token.Type.COMMA -> {
+                            // next argument, OK
+                        }
+
+                        else -> {
+                            // this is not a valid list of arguments:
+                            cc.restorePos(startPos) // for the current
+                            return null
+                        }
+                    }
+                }
+
+                else -> {
+                    // if we get here. there os also no valid list of arguments:
+                    cc.restorePos(startPos)
+                    return null
+                }
+            }
+        }
+        // arg list is valid:
+        checkNotNull(endTokenType)
+        return ArgsDeclaration(result, endTokenType)
+    }
+
+    private fun parseTypeDeclaration(cc: CompilerContext): TypeDecl {
+        val result = TypeDecl.Obj
+        cc.ifNextIs(Token.Type.COLON) {
+            TODO("parse type declaration here")
+        }
+        return result
     }
 
     private fun parseArgs(cc: CompilerContext): List<ParsedArgument> {
@@ -837,16 +956,19 @@ class Compiler(
         }
     }
 
-    private fun parseBlock(tokens: CompilerContext): Statement {
-        val t = tokens.next()
-        if (t.type != Token.Type.LBRACE)
-            throw ScriptError(t.pos, "Expected block body start: {")
-        val block = parseScript(t.pos, tokens)
-        return statement(t.pos) {
+    private fun parseBlock(cc: CompilerContext, skipLeadingBrace: Boolean = false): Statement {
+        val startPos = cc.currentPos()
+        if( !skipLeadingBrace ) {
+            val t = cc.next()
+            if (t.type != Token.Type.LBRACE)
+                throw ScriptError(t.pos, "Expected block body start: {")
+        }
+        val block = parseScript(startPos, cc)
+        return statement(startPos) {
             // block run on inner context:
-            block.execute(it.copy(t.pos))
+            block.execute(it.copy(startPos))
         }.also {
-            val t1 = tokens.next()
+            val t1 = cc.next()
             if (t1.type != Token.Type.RBRACE)
                 throw ScriptError(t1.pos, "unbalanced braces: expected block body end: }")
         }
@@ -870,7 +992,7 @@ class Compiler(
             }
         }
 
-        val initialExpression = if (setNull) null else parseStatement(tokens)
+        val initialExpression = if (setNull) null else parseExpression(tokens)
             ?: throw ScriptError(eqToken.pos, "Expected initializer expression")
 
         return statement(nameToken.pos) { context ->

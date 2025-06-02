@@ -24,6 +24,8 @@ data class Arguments(val list: List<Info>) : Iterable<Obj> {
 
     operator fun get(index: Int): Obj = list[index].value
 
+    val values: List<Obj>  by lazy { list.map { it.value } }
+
     fun firstAndOnly(): Obj {
         if (list.size != 1) throw IllegalArgumentException("Expected one argument, got ${list.size}")
         return list.first().value

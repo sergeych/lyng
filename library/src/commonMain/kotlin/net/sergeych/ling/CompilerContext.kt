@@ -1,7 +1,17 @@
 package net.sergeych.lyng
 
-internal class CompilerContext(val tokens: List<Token>) : ListIterator<Token> by tokens.listIterator() {
+internal class CompilerContext(val tokens: List<Token>) {
     val labels = mutableSetOf<String>()
+
+    var currentIndex = 0
+
+    fun hasNext() = currentIndex < tokens.size
+    fun hasPrevious() = currentIndex > 0
+    fun next() = tokens.getOrElse(currentIndex) { throw IllegalStateException("No next token") }.also { currentIndex++ }
+    fun previous() = if( !hasPrevious() ) throw IllegalStateException("No previous token") else tokens[--currentIndex]
+
+    fun  savePos() = currentIndex
+    fun restorePos(pos: Int) { currentIndex = pos }
 
     fun ensureLabelIsValid(pos: Pos, label: String) {
         if (label !in labels)

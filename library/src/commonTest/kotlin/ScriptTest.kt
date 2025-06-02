@@ -1040,14 +1040,75 @@ class ScriptTest {
     }
 
     @Test
-    fun testLambda1() = runTest {
-        val l = eval("""
+    fun testLambdaWithIt1() = runTest {
+        eval("""
             val x = {
-                122
+                it + "!" 
             }
-            x
+            val y = if( 4 < 3 ) "NG" else "OK"
+            assert( x::class == Callable)
+            assert( x is Callable)
+            assert(y == "OK")
+            assert( x("hello") == "hello!")
         """.trimIndent())
-        println(l)
     }
 
+    @Test
+    fun testLambdaWithIt2() = runTest {
+        eval("""
+            val x = {
+                assert(it == void)
+            }
+            assert( x() == void)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testLambdaWithIt3() = runTest {
+        eval("""
+            val x = {
+                assert( it == [1,2,"end"])
+            }
+            println("0----")
+            assert( x(1, 2, "end") == void)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testLambdaWithArgs() = runTest {
+        eval("""
+            val x = { x, y, z ->
+                assert( [x, y, z] == [1,2,"end"])
+            }
+            assert( x(1, 2, "end") == void)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testLambdaWithArgsEllipsis() = runTest {
+        eval("""
+            val x = { x, y... ->
+                println("-- y=",y)
+                println(":: "+y::class)
+                assert( [x, ...y] == [1,2,"end"])
+            }
+            assert( x(1, 2, "end") == void)
+            assert( x(1, ...[2, "end"]) == void)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testLambdaWithBadArgs() = runTest {
+        assertFails {
+            eval(
+                """
+            val x = { x, y ->
+                void
+            }
+            assert( x(1, 2) == void)
+            assert( x(1, ...[2, "end"]) == void)
+        """.trimIndent()
+            )
+        }
+    }
 }

@@ -83,6 +83,11 @@ private class Parser(fromPos: Pos) {
                         Token("-", from, Token.Type.MINUSASSIGN)
                     }
 
+                    '>' -> {
+                        pos.advance()
+                        Token("->", from, Token.Type.ARROW)
+                    }
+
                     else -> Token("-", from, Token.Type.MINUS)
                 }
             }

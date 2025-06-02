@@ -15,6 +15,8 @@ abstract class Statement(
     val returnType: ObjType = ObjType.Any
 ) : Obj() {
 
+    override val objClass: ObjClass = type
+
     abstract val pos: Pos
     abstract suspend fun execute(context: Context): Obj
 
@@ -27,6 +29,10 @@ abstract class Statement(
     }
 
     override fun toString(): String = "Callable@${this.hashCode()}"
+
+    companion object {
+        val type = ObjClass("Callable")
+    }
 
 }
 

@@ -219,7 +219,17 @@ likely will know some English, the rest is the pure uncertainty.
 
 Notice how function definition return a value, instance of `Callable`.
 
-You can use both `fn` and `fun`. Note that function declaration _is an expression returning callable_.
+You can use both `fn` and `fun`. Note that function declaration _is an expression returning callable_,
+but Lyng syntax requires using the __lambda syntax__ to create such.
+
+    val check = { 
+        it > 0 && it < 100
+    }
+    assert( check(1) )
+    assert( !check(101) )
+    >>> void
+
+See lambdas section below.
 
 There are default parameters in Lyng:
 
@@ -239,13 +249,16 @@ Each __block has an isolated context that can be accessed from closures__. For e
 
     var counter = 1
 
-    // this is ok: coumter is incremented
+    // this is ok: counter is incremented
     fun increment(amount=1) {
         // use counter from a closure:
         counter = counter + amount
     }
 
-    val taskAlias = fun someTask() {
+    increment(10)
+    assert( counter == 11 )
+
+    val callable = {
         // this obscures global outer var with a local one
         var counter = 0
         // ...
@@ -253,23 +266,56 @@ Each __block has an isolated context that can be accessed from closures__. For e
         // ...
         counter
     }
+
+    assert(callable() == 1)
+    // but the global counter is not changed:
+    assert(counter == 11)
     >>> void
 
-As was told, `fun` statement return callable for the function, it could be used as a parameter, or elsewhere
-to call it:
+## Lambda functions
 
-    val taskAlias = fun someTask() {
-        println("Hello")
+Lambda expression is a block with optional argument list ending with `->`. If argument list is omitted,
+the call arguments will be assigned to `it`:
+
+    lambda = {
+        it + "!"
     }
-    // call the callable stored in the var
-    taskAlias()
-    // or directly:
-    someTask()
-    >>> Hello
-    >>> Hello
+    assert( lambda is Callable)
+    assert( lambda("hello") == "hello!" )
+    void
+
+### `it` assignment rules
+
+When lambda is called with:
+
+- no arguments: `it == void`
+- exactly one argument: `it` will be assigned to it
+- more than 1 argument: `it` will be a `List` with these arguments:
+
+Here is an example:
+
+    val lambda = { it }
+    assert( lambda() == void )
+    assert( lambda("one") == "one")
+    assert( lambda("one", "two") == ["one", "two"])
     >>> void
 
 If you need to create _unnamed_ function, use alternative syntax (TBD, like { -> } ?)
+
+### Declaring parameters
+
+Parameter is a list of comma-separated names, with optional default value; last
+one could be with ellipsis that means "the rest pf arguments as List":
+
+    assert( { a -> a }(10) == 10 )
+    assert( { a, b -> [a,b] }(1,2) == [1,2])
+    assert( { a, b=-1 -> [a,b] }(1) == [1,-1])
+    assert( { a, b...-> [a,...b] }(100) == [100]) 
+    // notice that splat syntax in array literal unrills
+    // ellipsis-caught arguments back:
+    assert( { a, b...-> [a,...b] }(100, 1, 2, 3) == [100, 1, 2, 3]) 
+    void
+
 
 # Lists (aka arrays)
 

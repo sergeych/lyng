@@ -60,7 +60,8 @@ class Script(
             addConst("Char", ObjChar.type)
             addConst("List", ObjList.type)
             addConst("Range", ObjRange.type)
-
+            @Suppress("RemoveRedundantQualifierName")
+            addConst("Callable", Statement.type)
             // interfaces
             addConst("Iterable", ObjIterable)
             addConst("Array", ObjArray)
