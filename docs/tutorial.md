@@ -9,7 +9,7 @@ __Other documents to read__ maybe after this one:
 - [Advanced topics](advanced_topics.md)
 - [OOP notes](OOP.md)
 - [math in Lyng](math.md)
-- Some class references: [List](List.md), [Real](Real.md), [Range](Range.md)
+- Some class references: [List], [Real], [Range], [Iterable], [Iterator]
 
 # Expressions
 
