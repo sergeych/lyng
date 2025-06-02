@@ -611,10 +611,10 @@ flowchart TD
     E--> Check2{check}
     E--break---->V
     Check2 --false-->E
-    Check2 --true, no else-->L((last))
-    Check2 --true, else-->Else(["last = else_clause()"])
+    Check2 --true, no else--->L((last))
+    Check2 --true, else-->Else(["else_clause()"])
     Cond--false, else--->Else
-    Else --> L
+    Else --> Ele4$nr((else))
 ```
 
 So the returned value, as seen from diagram could be one of:
