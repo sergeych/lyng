@@ -77,7 +77,6 @@ You can use Char as both ends of the closed range:
     val r = 'a' .. 'c'
     assert( 'b' in r)
     assert( 'e' !in r)
-    assert( 'c' == r[2] )
     for( ch in r )
         println(ch)
     >>> a

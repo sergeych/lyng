@@ -3,8 +3,8 @@ package net.sergeych.ling
 class ObjList(val list: MutableList<Obj>) : Obj() {
 
     init {
-        for( p in objClass.parents)
-            parentInstances.add( p.defaultInstance())
+        for (p in objClass.parents)
+            parentInstances.add(p.defaultInstance())
     }
 
     override fun toString(): String = "[${
@@ -46,21 +46,32 @@ class ObjList(val list: MutableList<Obj>) : Obj() {
         }
     }
 
-    override suspend fun plus(context: Context, other: Obj): Obj {
-        (other as? ObjList) ?: context.raiseError("'+': can't concatenate $this with $other")
-        return ObjList((list + other.list).toMutableList())
-    }
+    override suspend fun plus(context: Context, other: Obj): Obj =
+        when {
+            other is ObjList ->
+                ObjList((list + other.list).toMutableList())
+
+            other.isInstanceOf(ObjIterable) -> {
+                val l = other.callMethod<ObjList>(context, "toList")
+                ObjList((list + l.list).toMutableList())
+            }
+
+            else ->
+                context.raiseError("'+': can't concatenate $this with $other")
+        }
+
 
     override suspend fun plusAssign(context: Context, other: Obj): Obj {
         // optimization
-        if( other is ObjList) {
+        if (other is ObjList) {
             list += other.list
             return this
         }
-        if( other.isInstanceOf(ObjIterable)) {
-            TODO("plusassign for iterable is not yet implemented")
-        }
-        list += other
+        if (other.isInstanceOf(ObjIterable)) {
+            val otherList = other.invokeInstanceMethod(context, "toList") as ObjList
+            list += otherList.list
+        } else
+            list += other
         return this
     }
 

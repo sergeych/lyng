@@ -30,8 +30,34 @@ __Important__ negative indexes works wherever indexes are used, e.g. in insertio
 
 ## Concatenation
 
+You can concatenate lists or iterable objects:
+
     assert( [4,5] + [1,2] == [4,5,1,2])
+    assert( [4,5] + (1..3) == [4, 5, 1, 2, 3])
     >>> void
+
+## Appending
+
+To append to lists, use `+=` with elements, lists and any [Iterable] instances, but beware it will concatenate [Iterable] objects instead of appending them. To append [Iterable] instance itself, use `list.add`:
+
+    var list = [1, 2]
+    val other = [3, 4]
+
+    // appending lists is clear:
+    list += other
+    assert( list == [1, 2, 3, 4] )
+    
+    // but appending other Iterables could be confusing:
+    list += (10..12)
+    assert( list == [1, 2, 3, 4, 10, 11, 12])
+
+    // now adding list as sublist:
+    list.add(other)
+    assert( list == [1, 2, 3, 4, 10, 11, 12, [3,4]])
+
+    >>> void
+
+
 
 ## Comparisons
 

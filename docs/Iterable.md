@@ -15,7 +15,13 @@ Just remember at this stage typed declarations are not yet supported.
 
 Having `Iterable` in base classes allows to use it in for loop. Also, each `Iterable` has some utility functions available:
 
-## toList()
+## Abstract methods
+
+    fun iterator(): Iterator
+
+## Instance methods
+
+### toList()
 
 Creates a list by iterating to the end. So, the Iterator should be finite to be used with it.
 

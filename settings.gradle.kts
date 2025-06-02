@@ -17,5 +17,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ling"
+rootProject.name = "lyng"
 include(":library")
+include(":lyng")

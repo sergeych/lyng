@@ -278,9 +278,13 @@ Ling has built-in mutable array class `List` with simple literals:
     [1, "two", 3.33].size
     >>> 3
 
+[List] is an implementation of the type `Array`, and through it `Collection` and [Iterable].
+
 Lists can contain any type of objects, lists too:
 
     val list = [1, [2, 3], 4]
+    assert( list is List )      // concrete implementatino
+    assert( list is Array )     // general interface
     assert(list.size == 3)
     // second element is a list too:
     assert(list[1].size == 2)
@@ -307,7 +311,7 @@ Of course, you can set any list element:
     a
     >>> [1, 200, 3]
 
-Lists are comparable, as long as their respective elements are:
+Lists are comparable, and it works well as long as their respective elements are:
 
     assert( [1,2,3] == [1,2,3])
     
@@ -322,10 +326,47 @@ Lists are comparable, as long as their respective elements are:
     assert( [1,2,3] < [1,3] )
     >>> void
 
-All comparison operators with list are working ok. Also, you can concatenate lists:
+The simplest way to concatenate lists is using `+` and `+=`:
 
+    // + works to concatenate iterables: 
     assert( [5, 4] + ["foo", 2] == [5, 4, "foo", 2])
+    var list = [1, 2]
+    
+    // append allow adding iterables: all elements of it:
+    list += [2, 1]      
+    // or you can append a single element:
+    list += "end"
+    assert( list == [1, 2, 2, 1, "end"])
     >>> void
+
+***Important note***: the pitfall of using `+=` is that you can't append in [Iterable] instance as an object: it will always add all its contents. Use `list.add` to add a single iterable instance:
+
+    var list = [1, 2]
+    val other = [3, 4]
+
+    // appending lists is clear:
+    list += other
+    assert( list == [1, 2, 3, 4] )
+    
+    // but appending other Iterables could be confusing:
+    list += (10..12)
+    assert( list == [1, 2, 3, 4, 10, 11, 12])
+    >>> void
+
+Use `list.add` to avoid confusion:
+
+    var list = [1, 2]
+    val other = [3, 4]
+
+    // appending lists is clear:
+    list.add(other)
+    assert( list == [1, 2, [3, 4]] )
+    
+    // but appending other Iterables could be confusing:
+    list.add(10..12)
+    assert( list == [1, 2, [3, 4], (10..12)])
+    >>> void
+
 
 To add elements to the list:
 
@@ -696,6 +737,10 @@ See [math functions](math.md). Other general purpose functions are:
 | Real, Int, List, String, List, Bool | Class types for real numbers |
 | π                                   | See [math](math.md)          |
 
-
+[List]: List.md
+[Iterable]: Iterable.md
+[Iterator]: Iterator.md
+[Real]: Real.md
+[Range]: Range.md
 
 

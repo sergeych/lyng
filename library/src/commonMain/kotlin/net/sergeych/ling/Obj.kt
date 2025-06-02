@@ -44,6 +44,12 @@ open class Obj {
     suspend fun invokeInstanceMethod(context: Context, name: String, vararg args: Obj): Obj =
         invokeInstanceMethod(context, name, Arguments(args.map { Arguments.Info(it, context.pos) }))
 
+    inline suspend fun <reified T : Obj> callMethod(
+        context: Context,
+        name: String,
+        args: Arguments = Arguments.EMPTY
+    ): T = invokeInstanceMethod(context, name, args) as T
+
     suspend fun invokeInstanceMethod(
         context: Context,
         name: String,
