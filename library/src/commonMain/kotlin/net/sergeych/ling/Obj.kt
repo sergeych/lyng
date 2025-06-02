@@ -292,8 +292,12 @@ fun Obj.toBool(): Boolean =
 
 
 data class ObjNamespace(val name: String) : Obj() {
+    override val objClass by lazy { ObjClass(name) }
+
+    override fun inspect(): String = "Ns[$name]"
+
     override fun toString(): String {
-        return "namespace ${name}"
+        return "package $name"
     }
 }
 

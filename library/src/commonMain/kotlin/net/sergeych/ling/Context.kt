@@ -64,13 +64,10 @@ class Context(
         return StoredObj(value, isMutable).also { objects.put(name, it) }
     }
 
-    fun getOrCreateNamespace(name: String): ObjNamespace =
-        (objects.getOrPut(name) {
-            StoredObj(
-                ObjNamespace(name),
-                isMutable = false
-            )
-        }.value as ObjNamespace)
+    fun getOrCreateNamespace(name: String): ObjClass {
+        val ns = objects.getOrPut(name) { StoredObj(ObjNamespace(name), isMutable = false) }.value
+        return ns!!.objClass
+    }
 
     inline fun addVoidFn(vararg names: String, crossinline fn: suspend Context.() -> Unit) {
         addFn<ObjVoid>(*names) {
