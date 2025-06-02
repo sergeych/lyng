@@ -318,6 +318,8 @@ one could be with ellipsis that means "the rest pf arguments as List":
 
 ### Using lambda as the parameter
 
+    // note that fun returns its last calculated value,
+    // in our case, result after in-place addition:
     fun mapValues(iterable, transform) {
         var result = []
         for( x in iterable ) result += transform(x)
