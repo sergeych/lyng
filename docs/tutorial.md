@@ -325,6 +325,22 @@ one could be with ellipsis that means "the rest pf arguments as List":
     assert( [11, 21, 31] == mapValues( [1,2,3], { it*10+1 }))
     >>> void
 
+### Auto last parameter
+
+When the function call is follower by the `{` in the same line, e.g. lambda immediately
+after function call, it is treated as a last argument to the call, e.g.:
+
+    fun mapValues(iterable, transform) {
+        var result = []
+        for( x in iterable ) result += transform(x)
+    }
+    val mapped = mapValues( [1,2,3]) { 
+        it*10+1 
+    }
+    assert( [11, 21, 31] == mapped)
+    >>> void
+
+
 # Lists (aka arrays)
 
 Lyng has built-in mutable array class `List` with simple literals:

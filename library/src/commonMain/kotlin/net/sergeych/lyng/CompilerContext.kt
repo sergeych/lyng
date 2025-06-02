@@ -55,6 +55,13 @@ internal class CompilerContext(val tokens: List<Token>) {
         } else true
     }
 
+    @Suppress("unused")
+    fun skipTokens(vararg tokenTypes: Token.Type) {
+        while( next().type in tokenTypes ) { /**/ }
+        previous()
+    }
+
+
     fun ifNextIs(typeId: Token.Type, f: (Token) -> Unit): Boolean {
         val t = next()
         return if (t.type == typeId) {

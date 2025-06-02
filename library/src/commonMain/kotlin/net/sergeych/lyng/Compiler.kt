@@ -343,7 +343,7 @@ class Compiler(
                     context.addItem("it", false, itValue)
                 } else {
                     // assign vars as declared
-                    if( args.size != argsDeclaration.args.size && !argsDeclaration.args.last().isEllipsis)
+                    if (args.size != argsDeclaration.args.size && !argsDeclaration.args.last().isEllipsis)
                         raiseArgumentError("Too many arguments : called with ${args.size}, lambda accepts only ${argsDeclaration.args.size}")
                     for ((n, a) in argsDeclaration.args.withIndex()) {
                         if (n >= args.size) {
@@ -351,10 +351,9 @@ class Compiler(
                                 context.addItem(a.name, false, a.initialValue.execute(context))
                             else throw ScriptError(a.pos, "argument $n is out of scope")
                         } else {
-                            val value = if( a.isEllipsis) {
+                            val value = if (a.isEllipsis) {
                                 ObjList(args.values.subList(n, args.values.size).toMutableList())
-                            }
-                            else
+                            } else
                                 args[n]
                             context.addItem(a.name, false, value)
                         }
@@ -491,7 +490,10 @@ class Compiler(
         do {
             val t = cc.next()
             when (t.type) {
-                Token.Type.RPAREN, Token.Type.COMMA -> {}
+                Token.Type.NEWLINE,
+                Token.Type.RPAREN, Token.Type.COMMA -> {
+                }
+
                 Token.Type.ELLIPSIS -> {
                     parseStatement(cc)?.let { args += ParsedArgument(it, t.pos, isSplat = true) }
                         ?: throw ScriptError(t.pos, "Expecting arguments list")
@@ -501,9 +503,25 @@ class Compiler(
                     cc.previous()
                     parseExpression(cc)?.let { args += ParsedArgument(it, t.pos) }
                         ?: throw ScriptError(t.pos, "Expecting arguments list")
+                    // Here should be a valid termination:
                 }
             }
         } while (t.type != Token.Type.RPAREN)
+        // block after?
+        val pos = cc.savePos()
+        val end = cc.next()
+        if (end.type == Token.Type.LBRACE) {
+            // last argument - callable
+            val callableAccessor = parseLambdaExpression(cc)
+            args += ParsedArgument(
+                // transform accessor to the callable:
+                statement {
+                    callableAccessor.getter(this).value
+                },
+                end.pos
+            )
+        } else
+            cc.restorePos(pos)
         return args
     }
 
@@ -771,7 +789,7 @@ class Compiler(
                         throw lbe
                 }
             }
-            if( !wasBroken ) elseStatement?.let { s -> result = s.execute(it) }
+            if (!wasBroken) elseStatement?.let { s -> result = s.execute(it) }
             result
         }
     }
@@ -958,7 +976,7 @@ class Compiler(
 
     private fun parseBlock(cc: CompilerContext, skipLeadingBrace: Boolean = false): Statement {
         val startPos = cc.currentPos()
-        if( !skipLeadingBrace ) {
+        if (!skipLeadingBrace) {
             val t = cc.next()
             if (t.type != Token.Type.LBRACE)
                 throw ScriptError(t.pos, "Expected block body start: {")
