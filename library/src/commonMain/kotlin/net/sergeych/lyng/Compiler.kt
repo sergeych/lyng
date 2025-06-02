@@ -499,7 +499,7 @@ class Compiler(
 
                 else -> {
                     cc.previous()
-                    parseStatement(cc)?.let { args += ParsedArgument(it, t.pos) }
+                    parseExpression(cc)?.let { args += ParsedArgument(it, t.pos) }
                         ?: throw ScriptError(t.pos, "Expecting arguments list")
                 }
             }

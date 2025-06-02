@@ -1138,7 +1138,8 @@ class ScriptTest {
 
     @Test
     fun testIsPrimeSampleBug() = runTest {
-        eval("""
+        eval(
+            """
                 fun naive_is_prime(candidate) {
                     val x = if( candidate !is Int) candidate.toInt() else candidate
                     var divisor = 1
@@ -1151,6 +1152,20 @@ class ScriptTest {
                 }
                 naive_is_prime(4)
     
-        """.trimIndent())
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testLambdaAsFnCallArg() = runTest {
+        eval(
+            """
+            fun mapValues(iterable, transform) {
+                var result = []
+                for( x in iterable ) result += transform(x)
+            }
+            assert( [11, 21, 31] == mapValues( if( true) [1,2,3] else [10], { it*10+1 }))
+    """.trimIndent()
+        )
     }
 }

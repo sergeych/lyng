@@ -316,6 +316,14 @@ one could be with ellipsis that means "the rest pf arguments as List":
     assert( { a, b...-> [a,...b] }(100, 1, 2, 3) == [100, 1, 2, 3]) 
     void
 
+### Using lambda as the parameter
+
+    fun mapValues(iterable, transform) {
+        var result = []
+        for( x in iterable ) result += transform(x)
+    }
+    assert( [11, 21, 31] == mapValues( [1,2,3], { it*10+1 }))
+    >>> void
 
 # Lists (aka arrays)
 
