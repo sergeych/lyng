@@ -753,23 +753,25 @@ class Compiler(
         }
         return statement(body.pos) {
             var result: Obj = ObjVoid
+            var wasBroken = false
             while (condition.execute(it).toBool()) {
                 try {
                     // we don't need to create new context here: if body is a block,
                     // parse block will do it, otherwise single statement doesn't need it:
                     result = body.execute(it)
-                    elseStatement?.let { s -> result = s.execute(it) }
                 } catch (lbe: LoopBreakContinueException) {
                     if (lbe.label == label || lbe.label == null) {
                         if (lbe.doContinue) continue
                         else {
                             result = lbe.result
+                            wasBroken = true
                             break
                         }
                     } else
                         throw lbe
                 }
             }
+            if( !wasBroken ) elseStatement?.let { s -> result = s.execute(it) }
             result
         }
     }

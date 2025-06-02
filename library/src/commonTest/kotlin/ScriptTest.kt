@@ -1041,7 +1041,8 @@ class ScriptTest {
 
     @Test
     fun testLambdaWithIt1() = runTest {
-        eval("""
+        eval(
+            """
             val x = {
                 it + "!" 
             }
@@ -1050,43 +1051,51 @@ class ScriptTest {
             assert( x is Callable)
             assert(y == "OK")
             assert( x("hello") == "hello!")
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testLambdaWithIt2() = runTest {
-        eval("""
+        eval(
+            """
             val x = {
                 assert(it == void)
             }
             assert( x() == void)
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testLambdaWithIt3() = runTest {
-        eval("""
+        eval(
+            """
             val x = {
                 assert( it == [1,2,"end"])
             }
             println("0----")
             assert( x(1, 2, "end") == void)
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testLambdaWithArgs() = runTest {
-        eval("""
+        eval(
+            """
             val x = { x, y, z ->
                 assert( [x, y, z] == [1,2,"end"])
             }
             assert( x(1, 2, "end") == void)
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testLambdaWithArgsEllipsis() = runTest {
-        eval("""
+        eval(
+            """
             val x = { x, y... ->
                 println("-- y=",y)
                 println(":: "+y::class)
@@ -1094,7 +1103,8 @@ class ScriptTest {
             }
             assert( x(1, 2, "end") == void)
             assert( x(1, ...[2, "end"]) == void)
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
@@ -1110,5 +1120,37 @@ class ScriptTest {
         """.trimIndent()
             )
         }
+    }
+
+    @Test
+    fun testWhileExecuteElseIfNotExecuted() = runTest {
+        assertEquals(
+            "ok",
+            eval(
+                """
+                while( 5 < 1 ) {
+                    "bad"
+                } else "ok"
+        """.trimIndent()
+            ).toString()
+        )
+    }
+
+    @Test
+    fun testIsPrimeSampleBug() = runTest {
+        eval("""
+                fun naive_is_prime(candidate) {
+                    val x = if( candidate !is Int) candidate.toInt() else candidate
+                    var divisor = 1
+                    println("start with ",x)
+                    while( ++divisor < x/2 && divisor != 2 ) {
+                        println("x=", x, " // ", divisor, " :: ", x % divisor)
+                        if( x % divisor == 0 ) break false
+                    }
+                    else true
+                }
+                naive_is_prime(4)
+    
+        """.trimIndent())
     }
 }

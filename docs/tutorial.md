@@ -572,17 +572,15 @@ We can skip the rest of the loop and restart it, as usual, with `continue` opera
     "found even numbers: " + countEven
     >>> "found even numbers: 5"
 
-`continue` can't "return" anything: it just restarts the loop. It can use labeled loops to restart outer ones:
+`continue` can't "return" anything: it just restarts the loop. It can use labeled loops to restart outer ones (we intentionally avoid using for loops here):
 
     var count = 0
     var total = 0
     // notice the label:
-    outerLoop@ while( count < 5 ) {
-        count = count + 1
+    outerLoop@ while( count++ < 5 ) {
         var innerCount = 0
         while( innerCount < 10 ) {
-            innerCount = innerCount + 1
-            if( innerCount == 10 )
+            if( ++innerCount == 10 )
                 continue@outerLoop
         }
         // we don't reach it because continue above restarts our loop
@@ -599,6 +597,20 @@ Lyng to skip it.
 The while and for loops can be followed by the else block, which is executed when the loop
 ends normally, without breaks. It allows override loop result value, for example,
 to not calculate it in every iteration. See for loop example just below.
+
+    fun naive_is_prime(candidate) {
+        val x = if( candidate !is Int) candidate.toInt() else candidate
+        var divisor = 1
+        while( ++divisor < x/2 || divisor == 2 ) {
+            if( x % divisor == 0 ) break false
+        }
+        else true
+    }
+    assert( !naive_is_prime(16) )
+    assert( naive_is_prime(17) )
+    assert( naive_is_prime(3) )
+    assert( !naive_is_prime(4) )
+    >>> void
 
 ## Loop return value diagram
 
