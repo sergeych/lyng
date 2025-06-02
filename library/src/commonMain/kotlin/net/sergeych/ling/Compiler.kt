@@ -1,7 +1,7 @@
-package net.sergeych.ling
+package net.sergeych.lying
 
 /**
- * The LING compiler.
+ * The LYING compiler.
  */
 class Compiler(
     @Suppress("UNUSED_PARAMETER")

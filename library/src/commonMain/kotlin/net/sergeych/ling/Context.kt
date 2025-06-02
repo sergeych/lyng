@@ -1,4 +1,4 @@
-package net.sergeych.ling
+package net.sergeych.lying
 
 class Context(
     val parent: Context?,
@@ -16,10 +16,15 @@ class Context(
 
     @Suppress("unused")
     fun raiseNPE(): Nothing = raiseError(ObjNullPointerError(this))
+
+    @Suppress("unused")
     fun raiseIndexOutOfBounds(message: String = "Index out of bounds"): Nothing =
         raiseError(ObjIndexOutOfBoundsError(this, message))
+
+    @Suppress("unused")
     fun raiseArgumentError(message: String = "Illegal argument error"): Nothing =
         raiseError(ObjIllegalArgumentError(this, message))
+
     fun raiseClassCastError(msg: String): Nothing = raiseError(ObjClassCastError(this, msg))
 
     fun raiseError(message: String): Nothing {

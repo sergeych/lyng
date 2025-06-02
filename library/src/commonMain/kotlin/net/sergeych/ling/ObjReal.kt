@@ -1,4 +1,4 @@
-package net.sergeych.ling
+package net.sergeych.lying
 
 import kotlin.math.floor
 import kotlin.math.roundToLong

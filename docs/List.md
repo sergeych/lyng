@@ -2,7 +2,7 @@
 
 Mutable list of any objects.
 
-It's class in Ling is `List`:
+It's class in Lying is `List`:
 
     [1,2,3]::class
     >>> List

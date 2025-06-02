@@ -1,4 +1,4 @@
-package net.sergeych.ling
+package net.sergeych.lying
 
 sealed class ListEntry {
     data class Element(val accessor: Accessor) : ListEntry()

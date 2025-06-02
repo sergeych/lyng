@@ -81,7 +81,7 @@ mavenPublishing {
     coordinates(group.toString(), "library", version.toString())
 
     pom {
-        name = "Ling language"
+        name = "Lying language"
         description = "Kotlin-bound scripting loanguage"
         inceptionYear = "2025"
 //        url = "https://sergeych.net"

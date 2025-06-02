@@ -1,4 +1,4 @@
-package net.sergeych.ling
+package net.sergeych.lying
 
 class ObjRangeIterator(val self: ObjRange) : Obj() {
 
