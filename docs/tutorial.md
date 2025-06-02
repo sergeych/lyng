@@ -600,6 +600,31 @@ The while and for loops can be followed by the else block, which is executed whe
 ends normally, without breaks. It allows override loop result value, for example,
 to not calculate it in every iteration. See for loop example just below.
 
+## Loop return value diagram
+
+```mermaid
+flowchart TD
+    S((start)) --> Cond{check}
+    Cond--false, no else--->V((void))
+    Cond--true-->E(["last = loop_body()" ])
+    E--break value---->BV((value))
+    E--> Check2{check}
+    E--break---->V
+    Check2 --false-->E
+    Check2 --true, no else-->L((last))
+    Check2 --true, else-->Else(["last = else_clause()"])
+    Cond--false, else--->Else
+    Else --> L
+```
+
+So the returned value, as seen from diagram could be one of:
+
+- `void`, if the loop was not executed, e.g. `condition` was initially false, and there was no `else` clause, or if the empty break was executed.
+- value returned from `break value' statement
+- value returned from the `else` clause, of the loop was not broken
+- value returned from the last execution of loop body, if there was no `break` and no `else` clause.
+
+
 ## For loops
 
 For loop are intended to traverse collections, and all other objects that supports
