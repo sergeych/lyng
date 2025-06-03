@@ -5,7 +5,7 @@ in the form of multiplatform library.
 __current state of implementation and docs__: 
 
 - [introduction and tutorial](docs/tutorial.md)
-- [math and operators](docs/math.md).
+- [Samples directory](docs/samples)
 
 ## Integration in Kotlin multiplatform
 

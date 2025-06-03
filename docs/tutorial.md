@@ -15,6 +15,8 @@ __Other documents to read__ maybe after this one:
 - [OOP notes](OOP.md)
 - [math in Lyng](math.md)
 - Some class references: [List], [Real], [Range], [Iterable], [Iterator]
+- Some samples: [combinatorics](samples/combinatorics.lyng.md)
+    See [samples folder](samples)
 
 # Expressions
 
