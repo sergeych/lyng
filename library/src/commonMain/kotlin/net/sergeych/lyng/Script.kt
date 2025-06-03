@@ -21,7 +21,6 @@ class Script(
     companion object {
         val defaultContext: Context = Context().apply {
             addFn("println") {
-                print("yn: ")
                 for ((i, a) in args.withIndex()) {
                     if (i > 0) print(' ' + a.asStr.value)
                     else print(a.asStr.value)

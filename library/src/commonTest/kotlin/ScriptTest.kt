@@ -7,6 +7,12 @@ import kotlin.test.*
 class ScriptTest {
 
     @Test
+    fun testVersion() {
+        println("--------------------------------------------")
+        println("version = ${LyngVersion}")
+    }
+
+    @Test
     fun parseNewlines() {
         fun check(expected: String, type: Token.Type, row: Int, col: Int, src: String, offset: Int = 0) {
             val source = src.toSource()

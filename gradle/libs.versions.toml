@@ -1,18 +1,24 @@
 [versions]
 agp = "8.5.2"
+clikt = "5.0.3"
 kotlin = "2.1.21"
 android-minSdk = "24"
 android-compileSdk = "34"
 kotlinx-coroutines = "1.10.1"
 mp_bintools = "0.1.12"
 firebaseCrashlyticsBuildtools = "3.0.3"
+okioVersion = "3.10.2"
 
 [libraries]
+clikt = { module = "com.github.ajalt.clikt:clikt", version.ref = "clikt" }
+clikt-markdown = { module = "com.github.ajalt.clikt:clikt-markdown", version.ref = "clikt" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 mp_bintools = { module = "net.sergeych:mp_bintools", version.ref = "mp_bintools" }
 firebase-crashlytics-buildtools = { group = "com.google.firebase", name = "firebase-crashlytics-buildtools", version.ref = "firebaseCrashlyticsBuildtools" }
+okio = { module = "com.squareup.okio:okio", version.ref = "okioVersion" }
+okio-fakefilesystem = { module = "com.squareup.okio:okio-fakefilesystem", version.ref = "okioVersion" }
 
 [plugins]
 androidLibrary = { id = "com.android.library", version.ref = "agp" }

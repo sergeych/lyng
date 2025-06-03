@@ -1,0 +1,10 @@
+#!/bin/bash
+
+set -e
+
+file=./lyng/build/bin/linuxX64/releaseExecutable/lyng.kexe
+
+./gradlew :lyng:linkReleaseExecutableLinuxX64
+strip $file
+upx   $file
+cp $file ~/bin/lyng

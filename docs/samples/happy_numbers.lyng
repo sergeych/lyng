@@ -16,4 +16,6 @@ fun naiveCountHappyNumbers() {
     count
 }
 
-assert( naiveCountHappyNumbers() == 55252 )
+val found = naiveCountHappyNumbers()
+println("Found happy numbers: "+found)
+assert( found == 55252 )
