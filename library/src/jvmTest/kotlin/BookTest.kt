@@ -5,8 +5,10 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.Context
 import net.sergeych.lyng.ObjVoid
+import java.nio.file.Files
 import java.nio.file.Files.readAllLines
 import java.nio.file.Paths
+import kotlin.io.path.extension
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.fail
@@ -29,9 +31,14 @@ data class DocTest(
     val code: String,
     val expectedOutput: String,
     val expectedResult: String,
-    val expectedError: String? = null
+    val expectedError: String? = null,
+    val bookMode: Boolean = false
 ) {
     val sourceLines by lazy { code.lines() }
+
+    val fileNamePart by lazy {
+        Paths.get(fileName).fileName.toString()
+    }
 
     override fun toString(): String {
         return "DocTest:$fileName:${line + 1}..${line + sourceLines.size}"
@@ -40,14 +47,17 @@ data class DocTest(
     val detailedString by lazy {
         val codeWithLines = sourceLines.withIndex().map { (i, s) -> "${i + line + 1}: $s" }.joinToString("\n")
         var result = "$this\n$codeWithLines\n"
-        if (expectedOutput.isNotBlank())
-            result += "--------expected output--------\n$expectedOutput\n"
+        if( !bookMode) {
+            if (expectedOutput.isNotBlank())
+                result += "--------expected output--------\n$expectedOutput\n"
 
-        "$result-----expected return value-----\n$expectedResult"
+            "$result-----expected return value-----\n$expectedResult"
+        }
+        else result
     }
 }
 
-fun parseDocTests(fileName: String): Flow<DocTest> = flow {
+fun parseDocTests(fileName: String, bookMode: Boolean = false): Flow<DocTest> = flow {
     val book = readAllLines(Paths.get(fileName))
     var startOffset = 0
     val block = mutableListOf<String>()
@@ -73,6 +83,18 @@ fun parseDocTests(fileName: String): Flow<DocTest> = flow {
                                 x = x.drop(1)
                             } while (initial - leftMargin(x) != startOffset)
                             block[i] = x
+                        }
+                        if (bookMode) {
+                            emit(
+                                DocTest(
+                                    fileName, startIndex,
+                                    block.joinToString("\n"),
+                                    "",
+                                    "",
+                                    null,
+                                    bookMode = true
+                                )
+                            )
                         }
 //                        println(block.joinToString("\n") { "${startIndex + ii++}: $it" })
                         val outStart = block.indexOfFirst { it.startsWith(">>>") }
@@ -134,13 +156,19 @@ fun parseDocTests(fileName: String): Flow<DocTest> = flow {
 }
     .flowOn(Dispatchers.IO)
 
-suspend fun DocTest.test() {
+suspend fun DocTest.test(context: Context = Context()) {
     val collectedOutput = StringBuilder()
-    val context = Context().apply {
+    val currentTest = this
+    context.apply {
         addFn("println") {
-            for ((i, a) in args.withIndex()) {
-                if (i > 0) collectedOutput.append(' '); collectedOutput.append(a.asStr.value)
-                collectedOutput.append('\n')
+            if( bookMode ) {
+                println("${currentTest.fileNamePart}:${currentTest.line}> ${args.joinToString(" "){it.asStr.value}}")
+            }
+            else {
+                for ((i, a) in args.withIndex()) {
+                    if (i > 0) collectedOutput.append(' '); collectedOutput.append(a.asStr.value)
+                    collectedOutput.append('\n')
+                }
             }
             ObjVoid
         }
@@ -153,24 +181,39 @@ suspend fun DocTest.test() {
         null
     }?.inspect()?.replace(Regex("@\\d+"), "@...")
 
-    if (error != null || expectedOutput != collectedOutput.toString() ||
-        expectedResult != result
-    ) {
-        println("Test failed: ${this.detailedString}")
+    if (bookMode) {
+        if (error != null) {
+            println("Sample failed: ${this.detailedString}")
+            fail("book sample failed", error)
+        }
+    } else {
+        if (error != null || expectedOutput != collectedOutput.toString() ||
+            expectedResult != result
+        ) {
+            println("Test failed: ${this.detailedString}")
+        }
+        error?.let {
+            fail("test failed", it)
+        }
+        assertEquals(expectedOutput, collectedOutput.toString(), "script output do not match")
+        assertEquals(expectedResult, result.toString(), "script result does not match")
+        //    println("OK: $this")
     }
-    error?.let {
-        fail(it.toString(), it)
-    }
-    assertEquals(expectedOutput, collectedOutput.toString(), "script output do not match")
-    assertEquals(expectedResult, result.toString(), "script result does not match")
-    //    println("OK: $this")
 }
 
-suspend fun runDocTests(fileName: String) {
-    parseDocTests(fileName).collect { dt ->
-        dt.test()
+suspend fun runDocTests(fileName: String, bookMode: Boolean = false) {
+    val bookContext = Context()
+    var count = 0
+    parseDocTests(fileName, bookMode).collect { dt ->
+        if (bookMode) dt.test(bookContext)
+        else dt.test()
+        count++
     }
-
+    print("completed mdtest: $fileName; ")
+    if (bookMode)
+        println("fragments processed: $count")
+    else
+        println("tests passed: $count")
 }
 
 class BookTest {
@@ -210,4 +253,12 @@ class BookTest {
         runDocTests("../docs/Range.md")
     }
 
+    @Test
+    fun testSampleBooks() = runTest {
+        for (bt in Files.list(Paths.get("../docs/samples")).toList()) {
+            if (bt.extension == "md") {
+                runDocTests(bt.toString(), bookMode = true)
+            }
+        }
+    }
 }

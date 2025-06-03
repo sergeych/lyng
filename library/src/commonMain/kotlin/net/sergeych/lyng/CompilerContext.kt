@@ -3,15 +3,31 @@ package net.sergeych.lyng
 internal class CompilerContext(val tokens: List<Token>) {
     val labels = mutableSetOf<String>()
 
+    var breakFound = false
+        private set
+
+    var loopLevel = 0
+        private set
+
+    inline fun <T> parseLoop(f: () -> T): Pair<Boolean,T> {
+        if (++loopLevel == 0) breakFound = false
+        val result = f()
+        return Pair(breakFound, result).also {
+            --loopLevel
+        }
+    }
+
     var currentIndex = 0
 
     fun hasNext() = currentIndex < tokens.size
     fun hasPrevious() = currentIndex > 0
     fun next() = tokens.getOrElse(currentIndex) { throw IllegalStateException("No next token") }.also { currentIndex++ }
-    fun previous() = if( !hasPrevious() ) throw IllegalStateException("No previous token") else tokens[--currentIndex]
+    fun previous() = if (!hasPrevious()) throw IllegalStateException("No previous token") else tokens[--currentIndex]
 
-    fun  savePos() = currentIndex
-    fun restorePos(pos: Int) { currentIndex = pos }
+    fun savePos() = currentIndex
+    fun restorePos(pos: Int) {
+        currentIndex = pos
+    }
 
     fun ensureLabelIsValid(pos: Pos, label: String) {
         if (label !in labels)
@@ -42,7 +58,11 @@ internal class CompilerContext(val tokens: List<Token>) {
      * @return `true` if the token was skipped
      * @throws ScriptError if [isOptional] is `false` and next token is not of [tokenType]
      */
-    fun skipTokenOfType(tokenType: Token.Type, errorMessage: String="expected ${tokenType.name}", isOptional: Boolean = false): Boolean {
+    fun skipTokenOfType(
+        tokenType: Token.Type,
+        errorMessage: String = "expected ${tokenType.name}",
+        isOptional: Boolean = false
+    ): Boolean {
         val t = next()
         return if (t.type != tokenType) {
             if (!isOptional) {
@@ -57,7 +77,8 @@ internal class CompilerContext(val tokens: List<Token>) {
 
     @Suppress("unused")
     fun skipTokens(vararg tokenTypes: Token.Type) {
-        while( next().type in tokenTypes ) { /**/ }
+        while (next().type in tokenTypes) { /**/
+        }
         previous()
     }
 
@@ -71,6 +92,10 @@ internal class CompilerContext(val tokens: List<Token>) {
             previous()
             false
         }
+    }
+
+    inline fun addBreak() {
+        breakFound = true
     }
 
 }

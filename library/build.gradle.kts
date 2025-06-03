@@ -72,6 +72,9 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 }
+dependencies {
+    implementation(libs.firebase.crashlytics.buildtools)
+}
 
 mavenPublishing {
     publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)

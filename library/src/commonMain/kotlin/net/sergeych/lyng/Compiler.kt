@@ -652,7 +652,6 @@ class Compiler(
         val label = getLabel(cc)?.also { cc.labels += it }
         val start = ensureLparen(cc)
 
-        // for - in?
         val tVar = cc.next()
         if (tVar.type != Token.Type.ID)
             throw ScriptError(tVar.pos, "Bad for statement: expected loop variable")
@@ -661,8 +660,10 @@ class Compiler(
             // in loop
             val source = parseStatement(cc) ?: throw ScriptError(start, "Bad for statement: expected expression")
             ensureRparen(cc)
-            val body = parseStatement(cc) ?: throw ScriptError(start, "Bad for statement: expected loop body")
 
+            val (canBreak, body) = cc.parseLoop {
+                parseStatement(cc) ?: throw ScriptError(start, "Bad for statement: expected loop body")
+            }
             // possible else clause
             cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
             val elseStatement = if (cc.next().let { it.type == Token.Type.ID && it.value == "else" }) {
@@ -683,7 +684,7 @@ class Compiler(
                 val sourceObj = source.execute(forContext)
 
                 if (sourceObj.isInstanceOf(ObjIterable)) {
-                    loopIterable(forContext, sourceObj, loopSO, body, elseStatement, label)
+                    loopIterable(forContext, sourceObj, loopSO, body, elseStatement, label, canBreak)
                 } else {
                     val size = runCatching { sourceObj.invokeInstanceMethod(forContext, "size").toInt() }
                         .getOrElse { throw ScriptError(tOp.pos, "object is not enumerable: no size", it) }
@@ -703,19 +704,22 @@ class Compiler(
                         var index = 0
                         while (true) {
                             loopSO.value = current
-                            try {
-                                result = body.execute(forContext)
-                            } catch (lbe: LoopBreakContinueException) {
-                                if (lbe.label == label || lbe.label == null) {
-                                    breakCaught = true
-                                    if (lbe.doContinue) continue
-                                    else {
-                                        result = lbe.result
-                                        break
-                                    }
-                                } else
-                                    throw lbe
+                            if (canBreak) {
+                                try {
+                                    result = body.execute(forContext)
+                                } catch (lbe: LoopBreakContinueException) {
+                                    if (lbe.label == label || lbe.label == null) {
+                                        breakCaught = true
+                                        if (lbe.doContinue) continue
+                                        else {
+                                            result = lbe.result
+                                            break
+                                        }
+                                    } else
+                                        throw lbe
+                                }
                             }
+                            else result = body.execute(forContext)
                             if (++index >= size) break
                             current = sourceObj.getAt(forContext, index)
                         }
@@ -734,19 +738,25 @@ class Compiler(
 
     private suspend fun loopIterable(
         forContext: Context, sourceObj: Obj, loopVar: StoredObj,
-        body: Statement, elseStatement: Statement?, label: String?
+        body: Statement, elseStatement: Statement?, label: String?,
+        catchBreak: Boolean
     ): Obj {
         val iterObj = sourceObj.invokeInstanceMethod(forContext, "iterator")
         var result: Obj = ObjVoid
         while (iterObj.invokeInstanceMethod(forContext, "hasNext").toBool()) {
-            try {
+            if (catchBreak)
+                try {
+                    loopVar.value = iterObj.invokeInstanceMethod(forContext, "next")
+                    result = body.execute(forContext)
+                } catch (lbe: LoopBreakContinueException) {
+                    if (lbe.label == label || lbe.label == null) {
+                        if (lbe.doContinue) continue
+                    }
+                    return lbe.result
+                }
+            else {
                 loopVar.value = iterObj.invokeInstanceMethod(forContext, "next")
                 result = body.execute(forContext)
-            } catch (lbe: LoopBreakContinueException) {
-                if (lbe.label == label || lbe.label == null) {
-                    if (lbe.doContinue) continue
-                }
-                return lbe.result
             }
         }
         return elseStatement?.execute(forContext) ?: result
@@ -818,6 +828,8 @@ class Compiler(
             parseStatement(cc)
         } else null
 
+        cc.addBreak()
+
         return statement(start) {
             val returnValue = resultExpr?.execute(it)// ?: ObjVoid
             throw LoopBreakContinueException(
@@ -840,6 +852,7 @@ class Compiler(
             // check that label is defined
             cc.ensureLabelIsValid(start, it)
         }
+        cc.addBreak()
 
         return statement(start) {
             throw LoopBreakContinueException(
@@ -943,8 +956,10 @@ class Compiler(
 
         val fnBody = statement(t.pos) { callerContext ->
             callerContext.pos = start
-            // restore closure where the function was defined:
-            val context = closure ?: callerContext.raiseError("bug: closure not set")
+            // restore closure where the function was defined, and making a copy of it
+            // for local space (otherwise it will write local stuff to closure!)
+            val context = closure?.copy() ?: callerContext.raiseError("bug: closure not set")
+
             // load params from caller context
             for ((i, d) in params.withIndex()) {
                 if (i < callerContext.args.size)

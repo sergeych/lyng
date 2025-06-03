@@ -1,0 +1,19 @@
+/*
+    Count "happy tickets": 6-digit numbers where sum of first three
+    digits is equal to those of last three. Just to demonstrate and
+    test the Lyng way. It is not meant to be effective.
+*/
+
+fun naiveCountHappyNumbers() {
+    var count = 0
+    for( n1 in 0..9 )
+        for( n2 in 0..9 )
+            for( n3 in 0..9 )
+                for( n4 in 0..9 )
+                    for( n5 in 0..9 )
+                        for( n6 in 0..9 )
+                            if( n1 + n2 + n3 == n4 + n5 + n6 ) count++
+    count
+}
+
+assert( naiveCountHappyNumbers() == 55252 )

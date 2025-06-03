@@ -1,5 +1,6 @@
 package net.sergeych.lyng
 
+import kotlinx.coroutines.delay
 import kotlin.math.*
 
 class Script(
@@ -51,6 +52,10 @@ class Script(
                 val cond = requiredArg<ObjBool>(0)
                 if( !cond.value == true )
                     raiseError(ObjAssertionError(this,"Assertion failed"))
+            }
+
+            addVoidFn("delay") {
+                delay((this.args.firstAndOnly().toDouble()/1000.0).roundToLong())
             }
 
             addConst("Real", ObjReal.type)

@@ -106,6 +106,16 @@ private class Parser(fromPos: Pos) {
                     Token(loadToEnd().trim(), from, Token.Type.SINLGE_LINE_COMMENT)
                 }
 
+                '*' -> {
+                    pos.advance()
+                    Token(
+                        loadTo("*/")?.trim()
+                            ?: throw ScriptError(from, "Unterminated multiline comment"),
+                        from,
+                        Token.Type.MULTILINE_COMMENT
+                    )
+                }
+
                 '=' -> {
                     pos.advance()
                     Token("/=", from, Token.Type.SLASHASSIGN)
@@ -164,10 +174,12 @@ private class Parser(fromPos: Pos) {
                             pos.advance()
                             Token("!in", from, Token.Type.NOTIN)
                         }
+
                         's' -> {
                             pos.advance()
                             Token("!is", from, Token.Type.NOTIS)
                         }
+
                         else -> {
                             pos.back()
                             Token("!", from, Token.Type.NOT)
@@ -394,6 +406,15 @@ private class Parser(fromPos: Pos) {
             result.append(pos.currentChar)
             pos.advance()
         } while (pos.line == l)
+        return result.toString()
+    }
+
+    private fun loadTo(str: String): String? {
+        val result = StringBuilder()
+        while (!pos.readFragment(str)) {
+            if (pos.end) return null
+            result.append(pos.currentChar); pos.advance()
+        }
         return result.toString()
     }
 

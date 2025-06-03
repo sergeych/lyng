@@ -1168,4 +1168,24 @@ class ScriptTest {
     """.trimIndent()
         )
     }
+
+    @Test
+    fun testSpoilArgsBug() = runTest {
+        eval(
+            """
+        fun fnb(a,b) { a + b }
+        
+        fun fna(a, b) {
+            val a0 = a
+            val b0 = b
+            fnb(a + 1, b + 1)
+            assert( a0 == a )
+            assert( b0 == b )
+        }
+        
+        fna(5,6)
+        """
+        )
+
+    }
 }

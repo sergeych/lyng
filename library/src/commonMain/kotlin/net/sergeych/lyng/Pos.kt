@@ -46,12 +46,15 @@ class MutablePos(private val from: Pos) {
         }
     }
 
+    fun resetTo(pos: Pos) { line = pos.line; column = pos.column }
+
     fun back() {
         if (column > 0) column--
         else if (line > 0)
             column = lines[--line].length - 1
         else throw IllegalStateException("can't go back from line 0, column 0")
     }
+
     val currentChar: Char
         get() {
             if (end) return 0.toChar()
@@ -59,6 +62,18 @@ class MutablePos(private val from: Pos) {
             return if (column >= current.length) '\n'
             else current[column]
         }
+
+    /**
+     * If the next characters are equal to the fragment, advances the position and returns true.
+     * Otherwise, does nothing and returns false.
+     */
+    fun readFragment(fragment: String): Boolean {
+        val mark = toPos()
+        for(ch in fragment)
+            if( currentChar != ch ) { resetTo(mark); return false }
+            else advance()
+        return true
+    }
 
     override fun toString() = "($line:$column)"
 

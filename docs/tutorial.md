@@ -2,6 +2,7 @@
 gitea: none
 include_toc: true
 ---
+
 # Lyng tutorial
 
 Lyng is a very simple language, where we take only most important and popular features from
