@@ -1,6 +1,10 @@
 # Lyng: scripting lang for kotlin multiplatform
 
-in the form of multiplatform library.
+in the form of multiplatform library. Key benefits:
+
+- async and multithreaded (on JVM and native) out of the box
+- easy and efficient kotlin integration
+- dynamic types yet with good checks
 
 __current state of implementation and docs__: 
 
