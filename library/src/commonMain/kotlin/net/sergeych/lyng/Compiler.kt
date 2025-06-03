@@ -683,7 +683,14 @@ class Compiler(
                 // insofar we suggest source object is enumerable. Later we might need to add checks
                 val sourceObj = source.execute(forContext)
 
-                if (sourceObj.isInstanceOf(ObjIterable)) {
+                if (sourceObj is ObjRange && sourceObj.isIntRange) {
+                    loopIntRange(
+                        forContext,
+                        sourceObj.start!!.toInt(),
+                        if (sourceObj.isEndInclusive) sourceObj.end!!.toInt() + 1 else sourceObj.end!!.toInt(),
+                        loopSO, body, elseStatement, label, canBreak
+                    )
+                } else if (sourceObj.isInstanceOf(ObjIterable)) {
                     loopIterable(forContext, sourceObj, loopSO, body, elseStatement, label, canBreak)
                 } else {
                     val size = runCatching { sourceObj.invokeInstanceMethod(forContext, "size").toInt() }
@@ -718,8 +725,7 @@ class Compiler(
                                     } else
                                         throw lbe
                                 }
-                            }
-                            else result = body.execute(forContext)
+                            } else result = body.execute(forContext)
                             if (++index >= size) break
                             current = sourceObj.getAt(forContext, index)
                         }
@@ -734,6 +740,31 @@ class Compiler(
             // maybe other loops?
             throw ScriptError(tOp.pos, "Unsupported for-loop syntax")
         }
+    }
+
+    private suspend fun loopIntRange(
+        forContext: Context, start: Int, end: Int, loopVar: StoredObj,
+        body: Statement, elseStatement: Statement?, label: String?, catchBreak: Boolean
+    ): Obj {
+        var result: Obj = ObjVoid
+        val iVar = ObjInt(0)
+        loopVar.value = iVar
+        for( i in start ..< end) {
+            iVar.value = i.toLong()
+            if (catchBreak)
+                try {
+                    result = body.execute(forContext)
+                } catch (lbe: LoopBreakContinueException) {
+                    if (lbe.label == label || lbe.label == null) {
+                        if (lbe.doContinue) continue
+                    }
+                    return lbe.result
+                }
+            else {
+                result = body.execute(forContext)
+            }
+        }
+        return elseStatement?.execute(forContext) ?: result
     }
 
     private suspend fun loopIterable(
