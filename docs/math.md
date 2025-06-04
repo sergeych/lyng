@@ -18,11 +18,12 @@ Same as in C++.
 |        10        | `&&`                                 |
 |  11<br/>lowest   | `\|\|`                               |
 
-(NI) 
+(NI)
 : not yet implemented.
 
 (1)
-: Shuttle operator: `a <=> b` returns 0 if a == b, negative Int if a < b and positive Int otherwise. It is necessary to override shuttle operator to make a class comparable. 
+: Shuttle operator: `a <=> b` returns 0 if a == b, negative Int if a < b and positive Int otherwise. It is necessary to
+override shuttle operator to make a class comparable.
 
 ## Operators
 
@@ -42,15 +43,14 @@ but:
 The following functions return its argument if it is `Int`,
 or transformed `Real` otherwise.
 
-| name     | description                                            |
-|----------|--------------------------------------------------------|
-| floor(x) | Computes the largest integer value not greater than x  |
-| ceil(x)  | Computes the least integer value value not less than x |
-| round(x) | Rounds x                                               |
-| abs(x)   | absolute value, Int for integer x, Real otherwise      |
-|          |                                                        |
+| name           | description                                            |
+|----------------|--------------------------------------------------------|
+| floor(x)       | Computes the largest integer value not greater than x  |
+| ceil(x)        | Computes the least integer value value not less than x |
+| round(x)       | Rounds x                                               |
+| x.roundToInt() | shortcut to `round(x).toInt()`                         |
 
-## Mathematical functions
+## Lyng math functions
 
 | name      | meaning                                              |
 |-----------|------------------------------------------------------|
@@ -72,7 +72,6 @@ or transformed `Real` otherwise.
 | pow(x, y) | ${x^y}$                                              |
 | sqrt(x)   | $ \sqrt {x}$                                         |
 | abs(x)    | absolute value of x. Int if x is Int, Real otherwise |
-
 
 For example:
 
