@@ -1192,6 +1192,52 @@ class ScriptTest {
         fna(5,6)
         """
         )
+    }
+
+    @Test
+    fun testSpoilLamdaArgsBug() = runTest {
+        eval(
+            """
+        val fnb = { a,b -> a + b }
+        
+         val fna = { a, b ->
+            val a0 = a
+            val b0 = b
+            fnb(a + 1, b + 1)
+            assert( a0 == a )
+            assert( b0 == b )
+        }
+       
+        fna(5,6)
+        """
+        )
+    }
+
+    @Test
+    fun commentBlocksShouldNotAlterBehavior() = runTest {
+        eval(
+            """
+            fun test() {    
+                10
+                /*
+                */
+                //val x = 11
+            }
+            assert( test() == 10 )
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testShuttle() = runTest {
+        eval(
+            """
+            assert( 5 <=> 3 > 0 )
+            assert( 0 < 5 <=> 3  )
+            assert( 5 <=> 5 == 0 )
+            assert( 5 <=> 7 < 0 )
+        """.trimIndent()
+        )
 
     }
 }

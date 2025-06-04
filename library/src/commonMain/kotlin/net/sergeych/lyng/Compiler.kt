@@ -749,9 +749,9 @@ class Compiler(
         var result: Obj = ObjVoid
         val iVar = ObjInt(0)
         loopVar.value = iVar
-        for( i in start ..< end) {
-            iVar.value = i.toLong()
-            if (catchBreak)
+        if( catchBreak) {
+            for (i in start..<end) {
+                iVar.value = i.toLong()
                 try {
                     result = body.execute(forContext)
                 } catch (lbe: LoopBreakContinueException) {
@@ -760,7 +760,10 @@ class Compiler(
                     }
                     return lbe.result
                 }
-            else {
+            }
+        } else {
+            for (i in start.toLong()..<end.toLong()) {
+                iVar.value = i
                 result = body.execute(forContext)
             }
         }
@@ -1181,6 +1184,8 @@ class Compiler(
             Operator.simple(Token.Type.IS, lastPrty) { c, a, b -> ObjBool(a.isInstanceOf(b)) },
             Operator.simple(Token.Type.NOTIS, lastPrty) { c, a, b -> ObjBool(!a.isInstanceOf(b)) },
             // shuttle <=> 6
+            Operator.simple(Token.Type.SHUTTLE, ++lastPrty) { c, a, b ->
+                ObjInt(a.compareTo(c, b).toLong()) },
             // bit shifts 7
             Operator.simple(Token.Type.PLUS, ++lastPrty) { ctx, a, b -> a.plus(ctx, b) },
             Operator.simple(Token.Type.MINUS, lastPrty) { ctx, a, b -> a.minus(ctx, b) },

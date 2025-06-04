@@ -14,13 +14,12 @@ suspend fun executeSampleTests(fileName: String) {
     }
     runBlocking {
         val c = Context()
-        for( i in 1..1) {
             val start = Clock.System.now()
             c.eval(sample)
             val time = Clock.System.now() - start
             println("$time: $fileName")
 //            delay(100)
-        }
+//        }
     }
 }
 

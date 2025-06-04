@@ -153,7 +153,13 @@ private class Parser(fromPos: Pos) {
             '<' -> {
                 if (currentChar == '=') {
                     pos.advance()
-                    Token("<=", from, Token.Type.LTE)
+                    if( currentChar == '>' ) {
+                        pos.advance()
+                        Token("<=>", from, Token.Type.SHUTTLE)
+                    }
+                    else {
+                        Token("<=", from, Token.Type.LTE)
+                    }
                 } else
                     Token("<", from, Token.Type.LT)
             }

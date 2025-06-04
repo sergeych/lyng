@@ -16,6 +16,9 @@ fun naiveCountHappyNumbers() {
     count
 }
 
+//
+// After all optimizations it takes ~120ms.
+//
 val found = naiveCountHappyNumbers()
 println("Found happy numbers: "+found)
 assert( found == 55252 )
