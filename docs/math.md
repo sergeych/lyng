@@ -57,15 +57,15 @@ or transformed `Real` otherwise.
 | sin(x)    | sine                                                 |
 | cos(x)    | cosine                                               |
 | tan(x)    | tangent                                              |
-| asin(x)   | $sin^-1(x)$                                          |
-| acos(x)   | $cos^-1(x)$                                          |
-| atan(x)   | $tg^-1(x)$                                           |
+| asin(x)   | $sin^{-1}(x)$                                          |
+| acos(x)   | $cos^{-1}(x)$                                          |
+| atan(x)   | $tg^{-1}(x)$                                           |
 | sinh(x)   | hyperbolic sine                                      |
 | cosh(x)   | hyperbolic cosine                                    |
 | tanh(x)   | hyperbolic tangent                                   |
-| asinh(x)  | $sinh^-1(x)$                                         |
-| acosh(x)  | $cosh^-1(x)$                                         |
-| atanh(x)  | $tgh^-1(x)$                                          |
+| asinh(x)  | $sinh^{-1}(x)$                                         |
+| acosh(x)  | $cosh^{-1}(x)$                                         |
+| atanh(x)  | $tgh^{-1}(x)$                                          |
 | ln(x)     | $ln(x)$, $ log_e(x) $                                |
 | exp(x)    | $e^x$                                                |
 | log10(x)  | $log_{10}(x)$                                        |
@@ -78,6 +78,10 @@ For example:
     assert( sin(π/2) == 1.0)
     assert( cos(π/2) < 0.000001)
     assert( abs(ln(exp(1))) - 1 < 0.00001)
+
+    // abs() keeps the argument type:
+    assert( abs(-1) is Int)
+    assert( abs(-2.21) == 2.21 )
     >>> void
 
 ## Scientific constant
