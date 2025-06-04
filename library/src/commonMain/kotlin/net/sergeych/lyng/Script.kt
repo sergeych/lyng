@@ -43,8 +43,74 @@ class Script(
                 (if (x is ObjInt) x
                 else ObjReal(round(x.toDouble())))
             }
+
             addFn("sin") {
                 ObjReal(sin(args.firstAndOnly().toDouble()))
+            }
+            addFn("cos") {
+                ObjReal(cos(args.firstAndOnly().toDouble()))
+            }
+            addFn("tan") {
+                ObjReal(tan(args.firstAndOnly().toDouble()))
+            }
+            addFn("asin") {
+                ObjReal(asin(args.firstAndOnly().toDouble()))
+            }
+            addFn("acos") {
+                ObjReal(acos(args.firstAndOnly().toDouble()))
+            }
+            addFn("atan") {
+                ObjReal(atan(args.firstAndOnly().toDouble()))
+            }
+
+            addFn("sinh") {
+                ObjReal(sinh(args.firstAndOnly().toDouble()))
+            }
+            addFn("cosh") {
+                ObjReal(cosh(args.firstAndOnly().toDouble()))
+            }
+            addFn("tanh") {
+                ObjReal(tanh(args.firstAndOnly().toDouble()))
+            }
+            addFn("asinh") {
+                ObjReal(asinh(args.firstAndOnly().toDouble()))
+            }
+            addFn("acosh") {
+                ObjReal(acosh(args.firstAndOnly().toDouble()))
+            }
+            addFn("atanh") {
+                ObjReal(atanh(args.firstAndOnly().toDouble()))
+            }
+
+            addFn("exp") {
+                ObjReal(exp(args.firstAndOnly().toDouble()))
+            }
+            addFn("ln") {
+                ObjReal(ln(args.firstAndOnly().toDouble()))
+            }
+
+            addFn("log10") {
+                ObjReal(log10(args.firstAndOnly().toDouble()))
+            }
+
+            addFn("log2") {
+                ObjReal(log2(args.firstAndOnly().toDouble()))
+            }
+
+            addFn("pow") {
+                requireExactCount(2)
+                ObjReal(
+                    (args[0].toDouble()).pow(args[1].toDouble())
+                )
+            }
+            addFn("sqrt") {
+                ObjReal(
+                    sqrt(args.firstAndOnly().toDouble())
+                )
+            }
+            addFn( "abs" ) {
+                val x = args.firstAndOnly()
+                if( x is ObjInt ) ObjInt( x.value.absoluteValue ) else ObjReal( x.toDouble().absoluteValue )
             }
 
             addVoidFn("assert") {
