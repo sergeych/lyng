@@ -47,7 +47,7 @@ One interesting way of using closure isolation is to keep state of the functions
     >>> 0
     >>> 1
     >>> 2
-    >>> void
+    >> void
 
 Inner `counter` is not accessible from outside, no way; still it is kept 
 between calls in the closure, as inner function `doit`, returned from the
@@ -75,3 +75,15 @@ The example above could be rewritten using inner lambda, too:
     >>> 1
     >>> 2
     >>> void
+
+Lambda functions remember their scopes, so it will work the same as previous:
+
+    var counter = 200
+    fun createLambda() {
+        var counter = 0
+        { counter += 1 }
+    }
+    val c = createLambda()
+    println(c)
+    >> 1
+    >> void

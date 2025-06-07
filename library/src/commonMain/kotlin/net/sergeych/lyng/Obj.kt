@@ -8,7 +8,11 @@ import net.sergeych.synctools.ProtectedOp
 
 //typealias InstanceMethod = (Context, Obj) -> Obj
 
-data class WithAccess<T>(var value: T, val isMutable: Boolean)
+data class WithAccess<T>(
+    var value: T,
+    val isMutable: Boolean,
+    val visibility: Compiler.Visibility = Compiler.Visibility.Public
+)
 
 data class Accessor(
     val getter: suspend (Context) -> WithAccess<Obj>,

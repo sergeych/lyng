@@ -70,3 +70,18 @@ Regular methods are called on instances as usual `instance.method()`. The method
 1. this instance methods;
 2. parents method: no guarantee but we enumerate parents in order of appearance;
 3. possible extension methods (scoped)
+
+# Defining a new class
+
+The class is a some data record with named fields and fixed order, in fact. To define a class,
+just Provide a name and a record like this:
+
+    class Vec2(x,y)
+
+This way, you have created a _constructor_, so calling `Vec2( 10, 20 )` would create an _instane_ of `Vec2` class:
+
+    class Vec2(x,y)
+    Vec2(10,20)
+    >> eee
+
+TBD

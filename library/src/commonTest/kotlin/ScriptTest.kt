@@ -1167,6 +1167,7 @@ class ScriptTest {
         eval(
             """
             fun mapValues(iterable, transform) {
+                println("start: ", transform)
                 var result = []
                 for( x in iterable ) result += transform(x)
             }
@@ -1236,6 +1237,17 @@ class ScriptTest {
             assert( 0 < 5 <=> 3  )
             assert( 5 <=> 5 == 0 )
             assert( 5 <=> 7 < 0 )
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun simpleClassDelaration() = runTest {
+        eval( """
+//            class Vec2(x,y)
+//             println(Vec2(1,2)::class)
+            println("---------------------")
+            println(Int::class)
         """.trimIndent()
         )
 

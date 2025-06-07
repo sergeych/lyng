@@ -4,8 +4,14 @@ val ObjClassType by lazy { ObjClass("Class") }
 
 class ObjClass(
     val className: String,
+    val constructorArgs: List<Compiler.ArgVar> = emptyList(),
     vararg val parents: ObjClass,
 ) : Obj() {
+    constructor(
+        className: String,
+        vararg parents: ObjClass,
+    ) : this(className, emptyList(), *parents)
+
 
     val allParentsSet: Set<ObjClass> = parents.flatMap {
         listOf(it) + it.allParentsSet
@@ -22,7 +28,7 @@ class ObjClass(
 
 //    private var initInstanceHandler: (suspend (Context, List<Obj>) -> Obj)? = null
 
-//    suspend fun newInstance(context: Context, vararg args: Obj): Obj =
+    //    suspend fun newInstance(context: Context, vararg args: Obj): Obj =
 //        initInstanceHandler?.invoke(context, args.toList())
 //            ?: context.raiseError("No initInstance handler for $this")
 //
@@ -70,24 +76,26 @@ class ObjClass(
 /**
  * Abstract class that must provide `iterator` method that returns [ObjIterator] instance.
  */
-val ObjIterable by lazy { ObjClass("Iterable").apply {
+val ObjIterable by lazy {
+    ObjClass("Iterable").apply {
 
-    addFn("toList") {
-        val result = mutableListOf<Obj>()
-        val iterator = thisObj.invokeInstanceMethod(this, "iterator")
+        addFn("toList") {
+            val result = mutableListOf<Obj>()
+            val iterator = thisObj.invokeInstanceMethod(this, "iterator")
 
-        while( iterator.invokeInstanceMethod(this, "hasNext").toBool() )
-            result += iterator.invokeInstanceMethod(this, "next")
+            while (iterator.invokeInstanceMethod(this, "hasNext").toBool())
+                result += iterator.invokeInstanceMethod(this, "next")
 
 
 //        val next = iterator.getMemberOrNull("next")!!
 //        val hasNext = iterator.getMemberOrNull("hasNext")!!
 //        while( hasNext.invoke(this, iterator).toBool() )
 //            result += next.invoke(this, iterator)
-        ObjList(result)
-    }
+            ObjList(result)
+        }
 
-} }
+    }
+}
 
 /**
  * Collection is an iterator with `size`]
@@ -123,7 +131,7 @@ class ObjArrayIterator(val array: Obj) : Obj() {
                 }
                 addFn("hasNext") {
                     val self = thisAs<ObjArrayIterator>()
-                    if (self.nextIndex  < self.lastIndex) ObjTrue else ObjFalse
+                    if (self.nextIndex < self.lastIndex) ObjTrue else ObjFalse
                 }
             }
         }
@@ -142,6 +150,10 @@ val ObjArray by lazy {
         addFn("iterator") {
             ObjArrayIterator(thisObj).also { it.init(this) }
         }
-        addFn("isample") { "ok".toObj()}
+        addFn("isample") { "ok".toObj() }
     }
+}
+
+class ObjInstance(override val objClass: ObjClass): Obj() {
+
 }

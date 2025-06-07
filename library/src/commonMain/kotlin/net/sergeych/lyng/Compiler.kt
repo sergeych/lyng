@@ -326,41 +326,47 @@ class Compiler(
             throw ScriptError(startPos, "lambda must have either valid arguments declaration with '->' or no arguments")
         val pos = cc.currentPos()
         val body = parseBlock(cc, skipLeadingBrace = true)
-        return Accessor { _ ->
-            statement {
-                val context = this.copy(pos)
-                if (argsDeclaration == null) {
-                    // no args: automatic var 'it'
-                    val l = args.values
-                    val itValue: Obj = when (l.size) {
-                        // no args: it == void
-                        0 -> ObjVoid
-                        // one args: it is this arg
-                        1 -> l[0]
-                        // more args: it is a list of args
-                        else -> ObjList(l.toMutableList())
-                    }
-                    context.addItem("it", false, itValue)
-                } else {
-                    // assign vars as declared
-                    if (args.size != argsDeclaration.args.size && !argsDeclaration.args.last().isEllipsis)
-                        raiseArgumentError("Too many arguments : called with ${args.size}, lambda accepts only ${argsDeclaration.args.size}")
-                    for ((n, a) in argsDeclaration.args.withIndex()) {
-                        if (n >= args.size) {
-                            if (a.initialValue != null)
-                                context.addItem(a.name, false, a.initialValue.execute(context))
-                            else throw ScriptError(a.pos, "argument $n is out of scope")
-                        } else {
-                            val value = if (a.isEllipsis) {
-                                ObjList(args.values.subList(n, args.values.size).toMutableList())
-                            } else
-                                args[n]
-                            context.addItem(a.name, false, value)
-                        }
+
+        var closure: Context? = null
+
+        val callStatement = statement {
+            val context = closure!!.copy(pos, args)
+            if (argsDeclaration == null) {
+                // no args: automatic var 'it'
+                val l = args.values
+                val itValue: Obj = when (l.size) {
+                    // no args: it == void
+                    0 -> ObjVoid
+                    // one args: it is this arg
+                    1 -> l[0]
+                    // more args: it is a list of args
+                    else -> ObjList(l.toMutableList())
+                }
+                context.addItem("it", false, itValue)
+            } else {
+                // assign vars as declared
+                if (args.size != argsDeclaration.args.size && !argsDeclaration.args.last().isEllipsis)
+                    raiseArgumentError("Too many arguments : called with ${args.size}, lambda accepts only ${argsDeclaration.args.size}")
+                for ((n, a) in argsDeclaration.args.withIndex()) {
+                    if (n >= args.size) {
+                        if (a.initialValue != null)
+                            context.addItem(a.name, false, a.initialValue.execute(context))
+                        else throw ScriptError(a.pos, "argument $n is out of scope")
+                    } else {
+                        val value = if (a.isEllipsis) {
+                            ObjList(args.values.subList(n, args.values.size).toMutableList())
+                        } else
+                            args[n]
+                        context.addItem(a.name, false, value)
                     }
                 }
-                body.execute(context)
-            }.asReadonly
+            }
+            body.execute(context)
+        }
+
+        return Accessor { x ->
+            if( closure == null ) closure = x
+            callStatement.asReadonly
         }
     }
 
@@ -402,12 +408,22 @@ class Compiler(
         }
     }
 
+    enum class AccessType {
+        Val, Var, Default
+    }
+
+    enum class Visibility {
+        Default, Public, Private, Protected, Internal
+    }
+
     data class ArgVar(
         val name: String,
         val type: TypeDecl = TypeDecl.Obj,
         val pos: Pos,
         val isEllipsis: Boolean,
-        val initialValue: Statement? = null
+        val initialValue: Statement? = null,
+        val accessType: AccessType = AccessType.Default,
+        val visibility: Visibility = Visibility.Default
     )
 
     data class ArgsDeclaration(val args: List<ArgVar>, val endTokenType: Token.Type) {
@@ -421,16 +437,73 @@ class Compiler(
      * Parse argument declaration, used in lambda (and later in fn too)
      * @return declaration or null if there is no valid list of arguments
      */
-    private fun parseArgsDeclaration(cc: CompilerContext): ArgsDeclaration? {
+    private fun parseArgsDeclaration(cc: CompilerContext, isClassDeclaration: Boolean = false): ArgsDeclaration? {
         val result = mutableListOf<ArgVar>()
         var endTokenType: Token.Type? = null
         val startPos = cc.savePos()
 
         while (endTokenType == null) {
-            val t = cc.next()
+            var t = cc.next()
             when (t.type) {
                 Token.Type.NEWLINE -> {}
                 Token.Type.ID -> {
+                    // visibility
+                    val visibility = when (t.value) {
+                        "private" -> {
+                            if (!isClassDeclaration) {
+                                cc.restorePos(startPos); return null
+                            }
+                            t = cc.next()
+                            Visibility.Private
+                        }
+
+                        "protected" -> {
+                            if (!isClassDeclaration) {
+                                cc.restorePos(startPos); return null
+                            }
+                            t = cc.next()
+                            Visibility.Protected
+                        }
+
+                        "internal" -> {
+                            if (!isClassDeclaration) {
+                                cc.restorePos(startPos); return null
+                            }
+                            t = cc.next()
+                            Visibility.Internal
+                        }
+
+                        "public" -> {
+                            if (!isClassDeclaration) {
+                                cc.restorePos(startPos); return null
+                            }
+                            t = cc.next()
+                            Visibility.Public
+                        }
+
+                        else -> Visibility.Default
+                    }
+                    // val/var?
+                    val access = when (t.value) {
+                        "val" -> {
+                            if (!isClassDeclaration) {
+                                cc.restorePos(startPos); return null
+                            }
+                            t = cc.next()
+                            AccessType.Val
+                        }
+
+                        "var" -> {
+                            if (!isClassDeclaration) {
+                                cc.restorePos(startPos); return null
+                            }
+                            t = cc.next()
+                            AccessType.Var
+                        }
+
+                        else -> AccessType.Default
+                    }
+
                     var defaultValue: Statement? = null
                     cc.ifNextIs(Token.Type.ASSIGN) {
                         defaultValue = parseExpression(cc)
@@ -438,7 +511,7 @@ class Compiler(
                     // type information
                     val typeInfo = parseTypeDeclaration(cc)
                     val isEllipsis = cc.skipTokenOfType(Token.Type.ELLIPSIS, isOptional = true)
-                    result += ArgVar(t.value, typeInfo, t.pos, isEllipsis, defaultValue)
+                    result += ArgVar(t.value, typeInfo, t.pos, isEllipsis, defaultValue, access, visibility)
 
                     // important: valid argument list continues with ',' and ends with '->' or ')'
                     // otherwise it is not an argument list:
@@ -630,8 +703,35 @@ class Compiler(
         "continue" -> parseContinueStatement(id.pos, cc)
         "fn", "fun" -> parseFunctionDeclaration(cc)
         "if" -> parseIfStatement(cc)
+        "class" -> parseClassDeclaration(cc, false)
+        "struct" -> parseClassDeclaration(cc, true)
         else -> null
     }
+
+    private fun parseClassDeclaration(cc: CompilerContext, isStruct: Boolean): Statement {
+        val nameToken = cc.requireToken(Token.Type.ID)
+        val parsedArgs = parseArgsDeclaration(cc)
+        cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
+        val t = cc.next()
+        if (t.type == Token.Type.LBRACE) {
+            // parse body
+        }
+        // create class
+        val className = nameToken.value
+
+//        val constructorCode = statement {
+//            val classContext = copy()
+//        }
+
+
+        val newClass = ObjClass(className, parsedArgs?.args ?: emptyList())
+//        statement {
+//            addConst(nameToken.value, )
+//        }
+//        }
+        TODO()
+    }
+
 
     private fun getLabel(cc: CompilerContext, maxDepth: Int = 2): String? {
         var cnt = 0
@@ -749,7 +849,7 @@ class Compiler(
         var result: Obj = ObjVoid
         val iVar = ObjInt(0)
         loopVar.value = iVar
-        if( catchBreak) {
+        if (catchBreak) {
             for (i in start..<end) {
                 iVar.value = i.toLong()
                 try {
@@ -1185,7 +1285,8 @@ class Compiler(
             Operator.simple(Token.Type.NOTIS, lastPrty) { c, a, b -> ObjBool(!a.isInstanceOf(b)) },
             // shuttle <=> 6
             Operator.simple(Token.Type.SHUTTLE, ++lastPrty) { c, a, b ->
-                ObjInt(a.compareTo(c, b).toLong()) },
+                ObjInt(a.compareTo(c, b).toLong())
+            },
             // bit shifts 7
             Operator.simple(Token.Type.PLUS, ++lastPrty) { ctx, a, b -> a.plus(ctx, b) },
             Operator.simple(Token.Type.MINUS, lastPrty) { ctx, a, b -> a.minus(ctx, b) },
@@ -1213,7 +1314,7 @@ class Compiler(
         /**
          * The keywords that stop processing of expression term
          */
-        val stopKeywords = setOf("break", "continue", "return", "if", "when", "do", "while", "for")
+        val stopKeywords = setOf("break", "continue", "return", "if", "when", "do", "while", "for", "class", "struct")
     }
 }
 

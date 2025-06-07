@@ -8,6 +8,7 @@ import net.sergeych.lyng.ObjVoid
 import java.nio.file.Files
 import java.nio.file.Files.readAllLines
 import java.nio.file.Paths
+import kotlin.io.path.absolutePathString
 import kotlin.io.path.extension
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -41,7 +42,8 @@ data class DocTest(
     }
 
     override fun toString(): String {
-        return "DocTest:$fileName:${line + 1}..${line + sourceLines.size}"
+        val absPath = Paths.get(fileName).absolutePathString()
+        return "DocTest: $absPath:${line + 1}"
     }
 
     val detailedString by lazy {
@@ -190,7 +192,7 @@ suspend fun DocTest.test(context: Context = Context()) {
         if (error != null || expectedOutput != collectedOutput.toString() ||
             expectedResult != result
         ) {
-            println("Test failed: ${this.detailedString}")
+            System.err.println("\nfailed: ${this.detailedString}")
         }
         error?.let {
             fail("test failed", it)
