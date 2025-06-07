@@ -16,14 +16,14 @@ class Compiler(
 
     private fun parseScript(start: Pos, tokens: CompilerContext): Script {
         val statements = mutableListOf<Statement>()
-        while (parseStatement(tokens)?.also {
+        while (parseStatement(tokens,braceMeansLambda = true)?.also {
                 statements += it
             } != null) {/**/
         }
         return Script(start, statements)
     }
 
-    private fun parseStatement(cc: CompilerContext): Statement? {
+    private fun parseStatement(cc: CompilerContext,braceMeansLambda: Boolean = false): Statement? {
         while (true) {
             val t = cc.next()
             return when (t.type) {
@@ -49,7 +49,10 @@ class Compiler(
 
                 Token.Type.LBRACE -> {
                     cc.previous()
-                    parseBlock(cc)
+                    if( braceMeansLambda )
+                        parseExpression(cc)
+                    else
+                        parseBlock(cc)
                 }
 
                 Token.Type.RBRACE -> {

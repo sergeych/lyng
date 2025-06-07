@@ -47,7 +47,7 @@ One interesting way of using closure isolation is to keep state of the functions
     >>> 0
     >>> 1
     >>> 2
-    >> void
+    >>> void
 
 Inner `counter` is not accessible from outside, no way; still it is kept 
 between calls in the closure, as inner function `doit`, returned from the
