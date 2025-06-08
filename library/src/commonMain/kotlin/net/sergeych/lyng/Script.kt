@@ -125,6 +125,20 @@ class Script(
                 if( a.compareTo(this, b) != 0 )
                     raiseError(ObjAssertionError(this,"Assertion failed: ${a.inspect()} == ${b.inspect()}"))
             }
+            addFn("assertThrows") {
+                val code = requireOnlyArg<Statement>()
+                val result =try {
+                    code.execute(this)
+                    null
+                }
+                catch( e: ExecutionError ) {
+                    e.errorObject
+                }
+                catch (e: ScriptError) {
+                    ObjNull
+                }
+                result ?: raiseError(ObjAssertionError(this,"Expected exception but nothing was thrown"))
+            }
 
             addVoidFn("delay") {
                 delay((this.args.firstAndOnly().toDouble()/1000.0).roundToLong())

@@ -8,6 +8,13 @@ data class ArgsDeclaration(val args: List<Item>, val endTokenType: Token.Type) {
     init {
         val i = args.count { it.isEllipsis }
         if (i > 1) throw ScriptError(args[i].pos, "there can be only one argument")
+        val start = args.indexOfFirst { it.defaultValue != null }
+        if (start >= 0)
+            for (j in start + 1 until args.size)
+                if (args[j].defaultValue == null) throw ScriptError(
+                    args[j].pos,
+                    "required argument can't follow default one"
+                )
     }
 
     /**
@@ -61,7 +68,7 @@ data class ArgsDeclaration(val args: List<Item>, val endTokenType: Token.Type) {
         fun processEllipsis(index: Int, toFromIndex: Int) {
             val a = args[index]
             val l = if (index > toFromIndex) ObjList()
-            else ObjList( fromArgs.values.subList(index, toFromIndex+1).toMutableList())
+            else ObjList(fromArgs.values.subList(index, toFromIndex + 1).toMutableList())
             assign(a, l)
         }
 
@@ -69,9 +76,8 @@ data class ArgsDeclaration(val args: List<Item>, val endTokenType: Token.Type) {
         if (leftIndex < args.size) {
             val end = processTail(leftIndex)
             processEllipsis(leftIndex, end)
-        }
-        else {
-            if( leftIndex < fromArgs.size)
+        } else {
+            if (leftIndex < fromArgs.size)
                 context.raiseArgumentError("too many arguments for the call")
         }
     }

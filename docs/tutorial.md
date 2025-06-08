@@ -238,6 +238,8 @@ but Lyng syntax requires using the __lambda syntax__ to create such.
 
 See lambdas section below.
 
+## Declaring arguments
+
 There are default parameters in Lyng:
 
     fn check(amount, prefix = "answer: ") {
@@ -249,6 +251,17 @@ There are default parameters in Lyng:
     assert( "do: more" == check(10, "do: ") )
     check(120)
     >>> "answer: enough"
+
+It is possible to define also vararg using ellipsis:
+
+    fun sum(args...) {
+        var result = args[0]
+        for( i in 1 ..< args.size ) result += args[i]
+    }
+    sum(10,20,30)
+    >>> 60
+
+See the [arguments reference](declaring_arguments.md) for more details.
 
 ## Closures
 

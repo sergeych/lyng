@@ -195,7 +195,7 @@ suspend fun DocTest.test(context: Context = Context()) {
             System.err.println("\nfailed: ${this.detailedString}")
         }
         error?.let {
-            fail("test failed", it)
+            fail(it.message, it)
         }
         assertEquals(expectedOutput, collectedOutput.toString(), "script output do not match")
         assertEquals(expectedResult, result.toString(), "script result does not match")
@@ -262,5 +262,10 @@ class BookTest {
                 runDocTests(bt.toString(), bookMode = true)
             }
         }
+    }
+
+    @Test
+    fun testArgumentBooks() = runTest {
+        runDocTests("../docs/declaring_arguments.md")
     }
 }
