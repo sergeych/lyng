@@ -347,22 +347,8 @@ class Compiler(
                 }
                 context.addItem("it", false, itValue)
             } else {
-                // assign vars as declared
-                if (args.size != argsDeclaration.args.size && !argsDeclaration.args.last().isEllipsis)
-                    raiseArgumentError("Too many arguments : called with ${args.size}, lambda accepts only ${argsDeclaration.args.size}")
-                for ((n, a) in argsDeclaration.args.withIndex()) {
-                    if (n >= args.size) {
-                        if (a.initialValue != null)
-                            context.addItem(a.name, false, a.initialValue.execute(context))
-                        else throw ScriptError(a.pos, "argument $n is out of scope")
-                    } else {
-                        val value = if (a.isEllipsis) {
-                            ObjList(args.values.subList(n, args.values.size).toMutableList())
-                        } else
-                            args[n]
-                        context.addItem(a.name, false, value)
-                    }
-                }
+                // assign vars as declared the standard way
+                argsDeclaration.assignToContext(context)
             }
             body.execute(context)
         }
@@ -411,29 +397,12 @@ class Compiler(
         }
     }
 
-    enum class AccessType {
-        Val, Var, Default
+    enum class AccessType(val isMutable: Boolean) {
+        Val(false), Var(true), Initialization(false)
     }
 
     enum class Visibility {
-        Default, Public, Private, Protected, Internal
-    }
-
-    data class ArgVar(
-        val name: String,
-        val type: TypeDecl = TypeDecl.Obj,
-        val pos: Pos,
-        val isEllipsis: Boolean,
-        val initialValue: Statement? = null,
-        val accessType: AccessType = AccessType.Default,
-        val visibility: Visibility = Visibility.Default
-    )
-
-    data class ArgsDeclaration(val args: List<ArgVar>, val endTokenType: Token.Type) {
-        init {
-            val i = args.indexOfFirst { it.isEllipsis }
-            if (i >= 0 && i != args.lastIndex) throw ScriptError(args[i].pos, "ellipsis argument must be last")
-        }
+        Public, Private, Protected, Internal
     }
 
     /**
@@ -441,7 +410,7 @@ class Compiler(
      * @return declaration or null if there is no valid list of arguments
      */
     private fun parseArgsDeclaration(cc: CompilerContext, isClassDeclaration: Boolean = false): ArgsDeclaration? {
-        val result = mutableListOf<ArgVar>()
+        val result = mutableListOf<ArgsDeclaration.Item>()
         var endTokenType: Token.Type? = null
         val startPos = cc.savePos()
 
@@ -484,7 +453,7 @@ class Compiler(
                             Visibility.Public
                         }
 
-                        else -> Visibility.Default
+                        else -> null
                     }
                     // val/var?
                     val access = when (t.value) {
@@ -504,7 +473,7 @@ class Compiler(
                             AccessType.Var
                         }
 
-                        else -> AccessType.Default
+                        else -> null
                     }
 
                     var defaultValue: Statement? = null
@@ -514,7 +483,15 @@ class Compiler(
                     // type information
                     val typeInfo = parseTypeDeclaration(cc)
                     val isEllipsis = cc.skipTokenOfType(Token.Type.ELLIPSIS, isOptional = true)
-                    result += ArgVar(t.value, typeInfo, t.pos, isEllipsis, defaultValue, access, visibility)
+                    result += ArgsDeclaration.Item(
+                        t.value,
+                        typeInfo,
+                        t.pos,
+                        isEllipsis,
+                        defaultValue,
+                        access,
+                        visibility
+                    )
 
                     // important: valid argument list continues with ',' and ends with '->' or ')'
                     // otherwise it is not an argument list:
@@ -714,24 +691,45 @@ class Compiler(
     private fun parseClassDeclaration(cc: CompilerContext, isStruct: Boolean): Statement {
         val nameToken = cc.requireToken(Token.Type.ID)
         val parsedArgs = parseArgsDeclaration(cc)
+
+        if( parsedArgs != null && parsedArgs.endTokenType != Token.Type.RPAREN)
+            throw ScriptError(nameToken.pos, "Bad class declaration: expected ')' at the end of the primary constructor")
+
         cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
         val t = cc.next()
-        if (t.type == Token.Type.LBRACE) {
+
+        var extraInit: Statement? = null
+        val bodyInit: Statement? = if (t.type == Token.Type.LBRACE) {
             // parse body
-        }
+            TODO("parse body")
+        } else null
+
         // create class
         val className = nameToken.value
+        lateinit var classContext: Context
 
-//        val constructorCode = statement {
-//            val classContext = copy()
-//        }
+        val defaultAccess = if (isStruct) AccessType.Var else AccessType.Initialization
+        val defaultVisibility = Visibility.Public
 
+        // create instance constructor
+        // create custom objClass with all fields and instance constructor
 
-        val newClass = ObjClass(className, parsedArgs?.args ?: emptyList())
-//        statement {
-//            addConst(nameToken.value, )
-//        }
-//        }
+        val constructorCode = statement {
+            // constructor code is registered with class instance and is called over
+            // new `thisObj` already set by class to ObjInstance
+            thisObj as ObjInstance
+            // the context now is a "class creation context", we must use its args to initialize
+            // fields. Note that 'this' is already set by class
+//            parsedArgs?.let { pa ->
+//                pa.extractArgs { (def, value) ->
+//                val access = def.accessType ?: defaultAccess
+//                val visibility = def.visibility ?: defaultVisibility
+//                addItem(def.name, access.isMutable, value)
+//            }
+//
+            thisObj
+
+        }
         TODO()
     }
 

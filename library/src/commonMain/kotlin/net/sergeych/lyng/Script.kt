@@ -119,6 +119,13 @@ class Script(
                     raiseError(ObjAssertionError(this,"Assertion failed"))
             }
 
+            addVoidFn("assertEquals") {
+                val a = requiredArg<Obj>(0)
+                val b = requiredArg<Obj>(1)
+                if( a.compareTo(this, b) != 0 )
+                    raiseError(ObjAssertionError(this,"Assertion failed: ${a.inspect()} == ${b.inspect()}"))
+            }
+
             addVoidFn("delay") {
                 delay((this.args.firstAndOnly().toDouble()/1000.0).roundToLong())
             }

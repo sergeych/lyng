@@ -4,7 +4,7 @@ val ObjClassType by lazy { ObjClass("Class") }
 
 class ObjClass(
     val className: String,
-    val constructorArgs: List<Compiler.ArgVar> = emptyList(),
+    val constructorArgs: List<ArgsDeclaration.Item> = emptyList(),
     vararg val parents: ObjClass,
 ) : Obj() {
     constructor(

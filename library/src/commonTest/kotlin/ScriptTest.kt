@@ -487,6 +487,136 @@ class ScriptTest {
     }
 
     @Test
+    fun testAssignArgumentsNoEllipsis() = runTest {
+        // equal args, no ellipsis, no defaults, ok
+        val ttEnd = Token.Type.RBRACE
+        var pa = ArgsDeclaration(listOf(
+            ArgsDeclaration.Item("a"),
+            ArgsDeclaration.Item("b"),
+            ArgsDeclaration.Item("c"),
+        ), ttEnd)
+        var c = Context(pos = Pos.builtIn, args = Arguments.from(listOf(1,2,3).map { it.toObj() }))
+        pa.assignToContext(c)
+        assertEquals( ObjInt(1), c["a"]?.value)
+        assertEquals( ObjInt(2), c["b"]?.value)
+        assertEquals( ObjInt(3), c["c"]?.value)
+        // less args: error
+        c = Context(pos = Pos.builtIn, args = Arguments.from(listOf(1,2).map { it.toObj() }))
+        assertFailsWith<ScriptError> {
+            pa.assignToContext(c)
+        }
+        // less args, no ellipsis, defaults, ok
+        pa = ArgsDeclaration(listOf(
+            ArgsDeclaration.Item("a"),
+            ArgsDeclaration.Item("b"),
+            ArgsDeclaration.Item("c", defaultValue = statement { ObjInt(100) }),
+        ), ttEnd)
+        pa.assignToContext(c)
+        assertEquals( ObjInt(1), c["a"]?.value)
+        assertEquals( ObjInt(2), c["b"]?.value)
+        assertEquals( ObjInt(100), c["c"]?.value)
+        // enough args. default value is ignored:
+        c = Context(pos = Pos.builtIn, args = Arguments.from(listOf(10, 2, 5).map { it.toObj() }))
+        pa.assignToContext(c)
+        assertEquals( ObjInt(10), c["a"]?.value)
+        assertEquals( ObjInt(2), c["b"]?.value)
+        assertEquals( ObjInt(5), c["c"]?.value)
+    }
+
+    @Test
+    fun testAssignArgumentsEndEllipsis() = runTest {
+        // equal args,
+        // less args, no ellipsis, defaults, ok
+        val ttEnd = Token.Type.RBRACE
+        var pa = ArgsDeclaration(listOf(
+            ArgsDeclaration.Item("a"),
+            ArgsDeclaration.Item("b", isEllipsis = true),
+        ), ttEnd)
+        var c = Context(args = Arguments.from(listOf(1,2,3).map { it.toObj() }))
+        pa.assignToContext(c)
+        c.eval("assert( a == 1 ); println(b)")
+        c.eval("assert( b == [2,3] )")
+
+        c = Context(args = Arguments.from(listOf(1,2).map { it.toObj() }))
+        pa.assignToContext(c)
+        c.eval("assertEquals( a, 1 ); println(b)")
+        c.eval("assertEquals( b, [2] )")
+
+        c = Context(args = Arguments.from(listOf(1).map { it.toObj() }))
+        pa.assignToContext(c)
+        c.eval("assert( a == 1 ); println(b)")
+        c.eval("assert( b == [] )")
+    }
+
+    @Test
+    fun testAssignArgumentsStartEllipsis() = runTest {
+        val ttEnd = Token.Type.RBRACE
+        var pa = ArgsDeclaration(listOf(
+            ArgsDeclaration.Item("a", isEllipsis = true),
+            ArgsDeclaration.Item("b"),
+            ArgsDeclaration.Item("c"),
+        ), ttEnd)
+        var c = Context(args = Arguments.from(listOf(0,1,2,3).map { it.toObj() }))
+        pa.assignToContext(c)
+        c.eval("assertEquals( a,[0,1] )")
+        c.eval("assertEquals( b, 2 )")
+        c.eval("assertEquals( c, 3 )")
+
+        c = Context(args = Arguments.from(listOf(1,2,3).map { it.toObj() }))
+        pa.assignToContext(c)
+        c.eval("assertEquals( a,[1] )")
+        c.eval("assertEquals( b, 2 )")
+        c.eval("assertEquals( c, 3 )")
+
+        c = Context(args = Arguments.from(listOf(2,3).map { it.toObj() }))
+        pa.assignToContext(c)
+        c.eval("assertEquals( a,[] )")
+        c.eval("assertEquals( b, 2 )")
+        c.eval("assertEquals( c, 3 )")
+
+        c = Context(args = Arguments.from(listOf(3).map { it.toObj() }))
+        assertFailsWith<ExecutionError> {
+            pa.assignToContext(c)
+        }
+    }
+
+    @Test
+    fun testAssignArgumentsmiddleEllipsis() = runTest {
+        val ttEnd = Token.Type.RBRACE
+        var pa = ArgsDeclaration(listOf(
+            ArgsDeclaration.Item("i"),
+            ArgsDeclaration.Item("a", isEllipsis = true),
+            ArgsDeclaration.Item("b"),
+            ArgsDeclaration.Item("c"),
+        ), ttEnd)
+        var c = Context(args = Arguments.from(listOf(-1,0,1,2,3).map { it.toObj() }))
+        pa.assignToContext(c)
+        c.eval("assertEquals( i, -1 )")
+        c.eval("assertEquals( a,[0,1] )")
+        c.eval("assertEquals( b, 2 )")
+        c.eval("assertEquals( c, 3 )")
+
+        c = Context(args = Arguments.from(listOf(0, 1,2,3).map { it.toObj() }))
+        pa.assignToContext(c)
+        c.eval("assertEquals( i, 0 )")
+        c.eval("assertEquals( a,[1] )")
+        c.eval("assertEquals( b, 2 )")
+        c.eval("assertEquals( c, 3 )")
+
+        c = Context(args = Arguments.from(listOf(1,2,3).map { it.toObj() }))
+        pa.assignToContext(c)
+        c.eval("assertEquals( i, 1)")
+        c.eval("assertEquals( a,[] )")
+        c.eval("assertEquals( b, 2 )")
+        c.eval("assertEquals( c, 3 )")
+
+        c = Context(args = Arguments.from(listOf(2,3).map { it.toObj() }))
+        assertFailsWith<ExecutionError> {
+            pa.assignToContext(c)
+        }
+    }
+
+    @Test
     fun testWhileBlockIsolation1() = runTest {
         eval(
             """

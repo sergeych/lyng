@@ -33,6 +33,7 @@ data class Arguments(val list: List<Info>) : Iterable<Obj> {
 
     companion object {
         val EMPTY = Arguments(emptyList())
+        fun from(values: Collection<Obj>) = Arguments(values.map { Info(it, Pos.UNKNOWN) })
     }
 
     override fun iterator(): Iterator<Obj> {

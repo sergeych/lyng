@@ -6,6 +6,7 @@ class Source(val fileName: String, text: String) {
 
     companion object {
         val builtIn: Source by lazy { Source("built-in", "") }
+        val UNKNOWN: Source by lazy { Source("UNKNOWN", "") }
     }
 
     val startPos: Pos = Pos(this, 0, 0)

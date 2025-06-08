@@ -16,6 +16,7 @@ data class Pos(val source: Source, val line: Int, val column: Int) {
 
     companion object {
         val builtIn = Pos(Source.builtIn, 0, 0)
+        val UNKNOWN = Pos(Source.UNKNOWN, -1, -1)
     }
 
 }

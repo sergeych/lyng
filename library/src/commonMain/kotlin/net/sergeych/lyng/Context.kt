@@ -65,6 +65,9 @@ class Context(
     fun copy(pos: Pos, args: Arguments = Arguments.EMPTY,newThisObj: Obj? = null): Context =
         Context(this, args, pos, newThisObj ?: thisObj)
 
+    fun copy(args: Arguments = Arguments.EMPTY,newThisObj: Obj? = null): Context =
+        Context(this, args, pos, newThisObj ?: thisObj)
+
     fun copy() = Context(this, args, pos, thisObj)
 
     fun addItem(name: String, isMutable: Boolean, value: Obj?): StoredObj {

@@ -1,6 +1,6 @@
 package net.sergeych.lyng
 
-class ObjList(val list: MutableList<Obj>) : Obj() {
+class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
 
     init {
         for (p in objClass.parents)
