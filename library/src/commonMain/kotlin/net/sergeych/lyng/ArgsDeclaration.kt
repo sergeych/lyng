@@ -4,15 +4,15 @@ package net.sergeych.lyng
  * List of argument declarations in the __definition__ of the lambda, class constructor,
  * function, etc. It is created by [Compiler.parseArgsDeclaration]
  */
-data class ArgsDeclaration(val args: List<Item>, val endTokenType: Token.Type) {
+data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type) {
     init {
-        val i = args.count { it.isEllipsis }
-        if (i > 1) throw ScriptError(args[i].pos, "there can be only one argument")
-        val start = args.indexOfFirst { it.defaultValue != null }
+        val i = params.count { it.isEllipsis }
+        if (i > 1) throw ScriptError(params[i].pos, "there can be only one argument")
+        val start = params.indexOfFirst { it.defaultValue != null }
         if (start >= 0)
-            for (j in start + 1 until args.size)
-                if (args[j].defaultValue == null) throw ScriptError(
-                    args[j].pos,
+            for (j in start + 1 until params.size)
+                if (params[j].defaultValue == null) throw ScriptError(
+                    params[j].pos,
                     "required argument can't follow default one"
                 )
     }
@@ -31,8 +31,8 @@ data class ArgsDeclaration(val args: List<Item>, val endTokenType: Token.Type) {
 
         suspend fun processHead(index: Int): Int {
             var i = index
-            while (i != args.size) {
-                val a = args[i]
+            while (i != params.size) {
+                val a = params[i]
                 if (a.isEllipsis) break
                 val value = when {
                     i < fromArgs.size -> fromArgs[i]
@@ -46,10 +46,10 @@ data class ArgsDeclaration(val args: List<Item>, val endTokenType: Token.Type) {
         }
 
         suspend fun processTail(index: Int): Int {
-            var i = args.size - 1
+            var i = params.size - 1
             var j = fromArgs.size - 1
             while (i > index) {
-                val a = args[i]
+                val a = params[i]
                 if (a.isEllipsis) break
                 val value = when {
                     j >= index -> {
@@ -66,14 +66,14 @@ data class ArgsDeclaration(val args: List<Item>, val endTokenType: Token.Type) {
         }
 
         fun processEllipsis(index: Int, toFromIndex: Int) {
-            val a = args[index]
+            val a = params[index]
             val l = if (index > toFromIndex) ObjList()
             else ObjList(fromArgs.values.subList(index, toFromIndex + 1).toMutableList())
             assign(a, l)
         }
 
         val leftIndex = processHead(0)
-        if (leftIndex < args.size) {
+        if (leftIndex < params.size) {
             val end = processTail(leftIndex)
             processEllipsis(leftIndex, end)
         } else {

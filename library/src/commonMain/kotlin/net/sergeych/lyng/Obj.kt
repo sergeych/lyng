@@ -170,8 +170,7 @@ open class Obj {
         val value = obj?.value
         return when (value) {
             is Statement -> {
-                // readonly property, important: call it on this
-                value.execute(context.copy(context.pos, newThisObj = this)).asReadonly
+                WithAccess(value.execute(context.copy(context.pos, newThisObj = this)), obj.isMutable)
             }
             // could be writable property naturally
             null -> ObjNull.asReadonly

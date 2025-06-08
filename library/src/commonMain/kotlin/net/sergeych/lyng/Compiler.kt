@@ -16,14 +16,14 @@ class Compiler(
 
     private fun parseScript(start: Pos, tokens: CompilerContext): Script {
         val statements = mutableListOf<Statement>()
-        while (parseStatement(tokens,braceMeansLambda = true)?.also {
+        while (parseStatement(tokens, braceMeansLambda = true)?.also {
                 statements += it
             } != null) {/**/
         }
         return Script(start, statements)
     }
 
-    private fun parseStatement(cc: CompilerContext,braceMeansLambda: Boolean = false): Statement? {
+    private fun parseStatement(cc: CompilerContext, braceMeansLambda: Boolean = false): Statement? {
         while (true) {
             val t = cc.next()
             return when (t.type) {
@@ -49,7 +49,7 @@ class Compiler(
 
                 Token.Type.LBRACE -> {
                     cc.previous()
-                    if( braceMeansLambda )
+                    if (braceMeansLambda)
                         parseExpression(cc)
                     else
                         parseBlock(cc)
@@ -141,8 +141,10 @@ class Compiler(
                             }
                         }
                         if (!isCall) {
-                            operand = Accessor { context ->
+                            operand = Accessor({ context ->
                                 left.getter(context).value.readField(context, next.value)
+                            }) { cc, newValue ->
+                                left.getter(cc).value.writeField(cc, next.value, newValue)
                             }
                         }
                     } ?: throw ScriptError(t.pos, "Expecting expression before dot")
@@ -354,7 +356,7 @@ class Compiler(
         }
 
         return Accessor { x ->
-            if( closure == null ) closure = x
+            if (closure == null) closure = x
             callStatement.asReadonly
         }
     }
@@ -695,10 +697,16 @@ class Compiler(
 
     private fun parseClassDeclaration(cc: CompilerContext, isStruct: Boolean): Statement {
         val nameToken = cc.requireToken(Token.Type.ID)
-        val parsedArgs = parseArgsDeclaration(cc)
+        val constructorArgsDeclaration =
+            if (cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true))
+                parseArgsDeclaration(cc)
+            else null
 
-        if( parsedArgs != null && parsedArgs.endTokenType != Token.Type.RPAREN)
-            throw ScriptError(nameToken.pos, "Bad class declaration: expected ')' at the end of the primary constructor")
+        if (constructorArgsDeclaration != null && constructorArgsDeclaration.endTokenType != Token.Type.RPAREN)
+            throw ScriptError(
+                nameToken.pos,
+                "Bad class declaration: expected ')' at the end of the primary constructor"
+            )
 
         cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
         val t = cc.next()
@@ -707,7 +715,10 @@ class Compiler(
         val bodyInit: Statement? = if (t.type == Token.Type.LBRACE) {
             // parse body
             TODO("parse body")
-        } else null
+        } else {
+            cc.previous()
+            null
+        }
 
         // create class
         val className = nameToken.value
@@ -721,21 +732,45 @@ class Compiler(
 
         val constructorCode = statement {
             // constructor code is registered with class instance and is called over
-            // new `thisObj` already set by class to ObjInstance
+            // new `thisObj` already set by class to ObjInstance.instanceContext
             thisObj as ObjInstance
+
             // the context now is a "class creation context", we must use its args to initialize
             // fields. Note that 'this' is already set by class
-//            parsedArgs?.let { pa ->
-//                pa.extractArgs { (def, value) ->
-//                val access = def.accessType ?: defaultAccess
-//                val visibility = def.visibility ?: defaultVisibility
-//                addItem(def.name, access.isMutable, value)
-//            }
-//
-            thisObj
+            constructorArgsDeclaration?.let { cad ->
+                cad.assignToContext(this)
+                // note that accessors are created in ObjClass instance, not during instance
+                // initialization (not here)
+            }
 
+            thisObj
         }
-        TODO()
+        // inheritance must alter this code:
+        val newClass = ObjClass(className).apply {
+            instanceConstructor = constructorCode
+            constructorArgsDeclaration?.let { cad ->
+                // we need accessors for all fields:
+                for (f in cad.params) {
+                    createField(
+                        f.name,
+                        statement {
+                            val context = (thisObj as ObjInstance).instanceContext
+                            println("called on $thisObj")
+                            context[f.name]?.value ?: raiseError("field is not initialized: ${f.name}")
+                        },
+                        true,
+//                        (f.accessType ?: defaultAccess).isMutable,
+                    )
+                }
+            }
+        }
+
+        return statement {
+            // the main statement should create custom ObjClass instance with field
+            // accessors, constructor registration, etc.
+            addItem(className, false, newClass)
+            newClass
+        }
     }
 
 
@@ -1063,8 +1098,11 @@ class Compiler(
             throw ScriptError(t.pos, "Bad function definition: expected '(' after 'fn ${name}'")
 
         val argsDeclaration = parseArgsDeclaration(tokens)
-        if( argsDeclaration == null || argsDeclaration.endTokenType != Token.Type.RPAREN)
-            throw ScriptError(t.pos, "Bad function definition: expected valid argument declaration or () after 'fn ${name}'")
+        if (argsDeclaration == null || argsDeclaration.endTokenType != Token.Type.RPAREN)
+            throw ScriptError(
+                t.pos,
+                "Bad function definition: expected valid argument declaration or () after 'fn ${name}'"
+            )
 
         // Here we should be at open body
         val fnStatements = parseBlock(tokens)

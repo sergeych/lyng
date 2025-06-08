@@ -76,12 +76,36 @@ Regular methods are called on instances as usual `instance.method()`. The method
 The class is a some data record with named fields and fixed order, in fact. To define a class,
 just Provide a name and a record like this:
 
-    class Vec2(x,y)
+    // creating new class with main constructor
+    // with all fields public and mutable:
 
-This way, you have created a _constructor_, so calling `Vec2( 10, 20 )` would create an _instane_ of `Vec2` class:
+    struct Point(x,y)
+    assert( Point is Class )
+    
+    // now we can create instance
+    val p1 = Point(3,4)
 
-    class Vec2(x,y)
-    Vec2(10,20)
-    >> eee
+    // is is of the newly created type:
+    assert( p1 is Point )
+
+    // we can read and write its fields:
+    assert( p1.x == 3 )
+    assert( p1.y == 4 )
+
+    p1.y++ 
+    assert( p1.y == 5 )
+
+    >>> void
+    
+Let's see in details. The statement `struct Point(x,y)` creates a struct, or public class,
+with two field, which are mutable and publicly visible, because it is _struct_. `(x,y)` here 
+is the [argument list], same as when defining a function. All together creates a class with
+a _constructor_ that requires two parameters for fields. So when creating it with
+`Point(10, 20)` we say _calling Point constructor_ with these parameters.
+
+Such declaration is identical to `class Point(var x,var y)` which does exactly the same.
+
 
 TBD
+
+[argument list](declaring_arguments.md)

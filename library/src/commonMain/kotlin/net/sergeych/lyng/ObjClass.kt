@@ -4,14 +4,10 @@ val ObjClassType by lazy { ObjClass("Class") }
 
 class ObjClass(
     val className: String,
-    val constructorArgs: List<ArgsDeclaration.Item> = emptyList(),
     vararg val parents: ObjClass,
 ) : Obj() {
-    constructor(
-        className: String,
-        vararg parents: ObjClass,
-    ) : this(className, emptyList(), *parents)
 
+    var instanceConstructor: Statement? = null
 
     val allParentsSet: Set<ObjClass> = parents.flatMap {
         listOf(it) + it.allParentsSet
@@ -26,27 +22,28 @@ class ObjClass(
 
     override suspend fun compareTo(context: Context, other: Obj): Int = if (other === this) 0 else -1
 
-//    private var initInstanceHandler: (suspend (Context, List<Obj>) -> Obj)? = null
+    override suspend fun callOn(context: Context): Obj {
+        println("callOn $this constructing....")
+        println("on context: $context")
+        val instance = ObjInstance(this)
+        instance.instanceContext = context.copy(newThisObj = instance,args = context.args)
+        if (instanceConstructor != null) {
+            instanceConstructor!!.execute(instance.instanceContext)
+        }
+        return instance
+    }
 
-    //    suspend fun newInstance(context: Context, vararg args: Obj): Obj =
-//        initInstanceHandler?.invoke(context, args.toList())
-//            ?: context.raiseError("No initInstance handler for $this")
-//
-//    fun buildInstance(f: suspend Context.(List<Obj>) -> Obj) {
-//        if (initInstanceHandler != null) throw IllegalStateException("initInstance already set")
-//        initInstanceHandler = f
-//    }
-//
-//    fun addParent(context: Context, parent: Obj) {
-//        val self = context.thisObj
-//        self.parentInstances.add(parent)
-//    }
-//
     fun defaultInstance(): Obj = object : Obj() {
         override val objClass: ObjClass = this@ObjClass
     }
 
-    fun createField(name: String, initialValue: Obj, isMutable: Boolean = false, pos: Pos = Pos.builtIn) {
+    fun createField(
+        name: String,
+        initialValue: Obj,
+        isMutable: Boolean = false,
+        visibility: Compiler.Visibility = Compiler.Visibility.Public,
+        pos: Pos = Pos.builtIn
+    ) {
         if (name in members || allParentsSet.any { name in it.members } == true)
             throw ScriptError(pos, "$name is already defined in $objClass or one of its supertypes")
         members[name] = WithAccess(initialValue, isMutable)
@@ -154,6 +151,7 @@ val ObjArray by lazy {
     }
 }
 
-class ObjInstance(override val objClass: ObjClass): Obj() {
+class ObjInstance(override val objClass: ObjClass) : Obj() {
 
+    internal lateinit var instanceContext: Context
 }

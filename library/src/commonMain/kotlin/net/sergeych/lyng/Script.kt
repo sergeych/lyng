@@ -156,6 +156,8 @@ class Script(
             // interfaces
             addConst("Iterable", ObjIterable)
             addConst("Array", ObjArray)
+            addConst("Class", ObjClassType)
+            addConst("Object", Obj().objClass)
 
             val pi = ObjReal(PI)
             addConst("π", pi)

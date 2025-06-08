@@ -1383,14 +1383,36 @@ class ScriptTest {
     }
 
     @Test
-    fun simpleClassDelaration() = runTest {
-        eval( """
-//            class Vec2(x,y)
-//             println(Vec2(1,2)::class)
-            println("---------------------")
-            println(Int::class)
-        """.trimIndent()
-        )
+    fun testSimpleStruct() = runTest {
+        val c = Context()
+        c.eval("""
+            struct Point(x,y)
+            assert( Point::class is Class )
+            val p = Point(2,3)
+            assert(p is Point)
+            println(p)
+            println(p.x)
+            assert( p.x == 2 )
+            assert( p.y == 3 )
+            
+            val p2 = Point(p.x+1,p.y+1)
+            p.x = 0
+            assertEquals( 0, p.x )
+        """.trimIndent())
+    }
 
+    @Test
+    fun testNonAssignalbeFieldInStruct() = runTest {
+        val c = Context()
+        c.eval("""
+            struct Point(x,y)
+            val p = Point("2",3)
+            assert(p is Point)
+            assert( p.x == "2" )
+            assert( p.y == 3 )
+            
+            p.x = 0
+            assertEquals( 0, p.x )
+        """.trimIndent())
     }
 }
