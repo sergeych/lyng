@@ -70,7 +70,31 @@ destructuring arrays when calling functions and lambdas:
     fun getFirstAndLast(first, args..., last) {
         [ first, last ]
     }
-    getFirstAndLast( ...(1..10).toList() )
+    getFirstAndLast( ...(1..10) ) // see "splats" section below
     >>> [1, 10]
+
+# Splats
+
+Ellipsis allows to convert argument lists to lists. The inversa algorithm that converts [List],
+or whatever implementing [Iterable], is called _splats_. Here is how we use it:
+
+    fun testSplat(data...) {
+        println(data)
+    }
+    val array = [1,2,3]
+    testSplat("start", ...array, "end")
+    >>> ["start", 1, 2, 3, "end"]
+    >>> void
+
+There could be any number of splats at any positions. You can splat any other [Iterable] type:
+
+    fun testSplat(data...) {
+        println(data)
+    }
+    val range = 1..3
+    testSplat("start", ...range, "end")
+    >>> ["start", 1, 2, 3, "end"]
+    >>> void
+    
 
 [tutorial]: tutorial.md

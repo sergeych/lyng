@@ -8,8 +8,18 @@ suspend fun Collection<ParsedArgument>.toArguments(context: Context): Arguments 
     for (x in this) {
         val value = x.value.execute(context)
         if (x.isSplat) {
-            (value as? ObjList) ?: context.raiseClassCastError("expected list of objects for splat argument")
-            for (subitem in value.list) list.add(Arguments.Info(subitem, x.pos))
+            when {
+                value is ObjList -> {
+                    for (subitem in value.list) list.add(Arguments.Info(subitem, x.pos))
+                }
+
+                value.isInstanceOf(ObjIterable) -> {
+                    val i = (value.invokeInstanceMethod(context, "toList") as ObjList).list
+                    i.forEach { list.add(Arguments.Info(it, x.pos)) }
+                }
+
+                else -> context.raiseClassCastError("expected list of objects for splat argument")
+            }
         } else
             list.add(Arguments.Info(value, x.pos))
     }
