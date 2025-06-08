@@ -348,7 +348,7 @@ class Compiler(
                 context.addItem("it", false, itValue)
             } else {
                 // assign vars as declared the standard way
-                argsDeclaration.assignToContext(context)
+                argsDeclaration.assignToContext(context, defaultAccessType = AccessType.Val)
             }
             body.execute(context)
         }
@@ -417,6 +417,11 @@ class Compiler(
         while (endTokenType == null) {
             var t = cc.next()
             when (t.type) {
+                Token.Type.RPAREN, Token.Type.ARROW -> {
+                    // empty list?
+                    endTokenType = t.type
+                }
+
                 Token.Type.NEWLINE -> {}
                 Token.Type.ID -> {
                     // visibility
@@ -1046,12 +1051,6 @@ class Compiler(
         }
     }
 
-    data class FnParamDef(
-        val name: String,
-        val pos: Pos,
-        val defaultValue: Statement? = null
-    )
-
     private fun parseFunctionDeclaration(tokens: CompilerContext): Statement {
         var t = tokens.next()
         val start = t.pos
@@ -1062,27 +1061,10 @@ class Compiler(
         t = tokens.next()
         if (t.type != Token.Type.LPAREN)
             throw ScriptError(t.pos, "Bad function definition: expected '(' after 'fn ${name}'")
-        val params = mutableListOf<FnParamDef>()
-        var defaultListStarted = false
-        do {
-            t = tokens.next()
-            if (t.type == Token.Type.RPAREN)
-                break
-            if (t.type != Token.Type.ID)
-                throw ScriptError(t.pos, "Expected identifier after '('")
-            val n = tokens.next()
-            val defaultValue = if (n.type == Token.Type.ASSIGN) {
-                parseExpression(tokens)?.also { defaultListStarted = true }
-                    ?: throw ScriptError(n.pos, "Expected initialization expression")
-            } else {
-                if (defaultListStarted)
-                    throw ScriptError(n.pos, "requires default value too")
-                if (n.type != Token.Type.COMMA)
-                    tokens.previous()
-                null
-            }
-            params.add(FnParamDef(t.value, t.pos, defaultValue))
-        } while (true)
+
+        val argsDeclaration = parseArgsDeclaration(tokens)
+        if( argsDeclaration == null || argsDeclaration.endTokenType != Token.Type.RPAREN)
+            throw ScriptError(t.pos, "Bad function definition: expected valid argument declaration or () after 'fn ${name}'")
 
         // Here we should be at open body
         val fnStatements = parseBlock(tokens)
@@ -1096,21 +1078,7 @@ class Compiler(
             val context = closure?.copy() ?: callerContext.raiseError("bug: closure not set")
 
             // load params from caller context
-            for ((i, d) in params.withIndex()) {
-                if (i < callerContext.args.size)
-                    context.addItem(d.name, false, callerContext.args.list[i].value)
-                else
-                    context.addItem(
-                        d.name,
-                        false,
-                        d.defaultValue?.execute(context)
-                            ?: throw ScriptError(
-                                context.pos,
-                                "missing required argument #${1 + i}: ${d.name}"
-                            )
-                    )
-            }
-            // save closure
+            argsDeclaration.assignToContext(context, callerContext.args, defaultAccessType = AccessType.Val)
             fnStatements.execute(context)
         }
         return statement(start) { context ->

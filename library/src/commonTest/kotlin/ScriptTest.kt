@@ -528,7 +528,7 @@ class ScriptTest {
         // equal args,
         // less args, no ellipsis, defaults, ok
         val ttEnd = Token.Type.RBRACE
-        var pa = ArgsDeclaration(listOf(
+        val pa = ArgsDeclaration(listOf(
             ArgsDeclaration.Item("a"),
             ArgsDeclaration.Item("b", isEllipsis = true),
         ), ttEnd)
@@ -551,7 +551,7 @@ class ScriptTest {
     @Test
     fun testAssignArgumentsStartEllipsis() = runTest {
         val ttEnd = Token.Type.RBRACE
-        var pa = ArgsDeclaration(listOf(
+        val pa = ArgsDeclaration(listOf(
             ArgsDeclaration.Item("a", isEllipsis = true),
             ArgsDeclaration.Item("b"),
             ArgsDeclaration.Item("c"),
@@ -583,7 +583,7 @@ class ScriptTest {
     @Test
     fun testAssignArgumentsmiddleEllipsis() = runTest {
         val ttEnd = Token.Type.RBRACE
-        var pa = ArgsDeclaration(listOf(
+        val pa = ArgsDeclaration(listOf(
             ArgsDeclaration.Item("i"),
             ArgsDeclaration.Item("a", isEllipsis = true),
             ArgsDeclaration.Item("b"),
@@ -1303,6 +1303,17 @@ class ScriptTest {
             }
             assert( [11, 21, 31] == mapValues( if( true) [1,2,3] else [10], { it*10+1 }))
     """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testNewFnParser() = runTest {
+        eval(
+            """
+                fun f1(a,b) { a + b }
+                println(f1(1,2))
+                assertEquals( 7, f1(3,4) )
+        """.trimIndent()
         )
     }
 
