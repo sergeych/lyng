@@ -69,7 +69,7 @@ open class Obj {
         args: Arguments = Arguments.EMPTY
     ): T = invokeInstanceMethod(context, name, args) as T
 
-    suspend fun invokeInstanceMethod(
+    open suspend fun invokeInstanceMethod(
         context: Context,
         name: String,
         args: Arguments = Arguments.EMPTY

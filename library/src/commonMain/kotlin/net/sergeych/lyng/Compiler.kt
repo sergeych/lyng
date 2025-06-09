@@ -402,7 +402,9 @@ class Compiler(
     }
 
     enum class AccessType(val isMutable: Boolean) {
-        Val(false), Var(true), Initialization(false)
+        Val(false), Var(true),
+        @Suppress("unused")
+        Initialization(false)
     }
 
     enum class Visibility {
@@ -728,8 +730,8 @@ class Compiler(
         val className = nameToken.value
         lateinit var classContext: Context
 
-        val defaultAccess = if (isStruct) AccessType.Var else AccessType.Initialization
-        val defaultVisibility = Visibility.Public
+        @Suppress("UNUSED_VARIABLE") val defaultAccess = if (isStruct) AccessType.Var else AccessType.Initialization
+        @Suppress("UNUSED_VARIABLE") val defaultVisibility = Visibility.Public
 
         // create instance constructor
         // create custom objClass with all fields and instance constructor
@@ -741,14 +743,11 @@ class Compiler(
 
             // the context now is a "class creation context", we must use its args to initialize
             // fields. Note that 'this' is already set by class
-            constructorArgsDeclaration?.let { cad ->
-                cad.assignToContext(this)
-                // note that accessors are created in ObjClass instance, not during instance
-                // initialization (not here)
-            }
+            constructorArgsDeclaration?.assignToContext(this)
             bodyInit?.execute(this)
             // export public
             for( (name,record) in objects ) {
+                println("-- $name $record")
                 when(record.visibility) {
                     Visibility.Public -> {
                         thisObj.publicFields += name

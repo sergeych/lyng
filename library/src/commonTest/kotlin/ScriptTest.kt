@@ -1435,4 +1435,22 @@ class ScriptTest {
             assert( p.length == 5 )
             """.trimIndent())
     }
+
+    @Test
+    fun testStructBodyFun() = runTest {
+        val c = Context()
+        c.eval("""
+            struct Point(x,y) {
+                fun length() { 
+                    sqrt(x*x+y*y) 
+                }
+                var foo = "zero"
+            }
+            val p = Point(3,4)
+            assertEquals(5, p.length())
+            p.y = 10
+            println(p.length())
+            assertEquals(sqrt(109), p.length())
+            """.trimIndent())
+    }
 }
