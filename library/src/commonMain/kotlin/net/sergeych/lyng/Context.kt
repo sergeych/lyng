@@ -35,47 +35,47 @@ class Context(
         throw ExecutionError(obj)
     }
 
-    inline fun <reified T: Obj>requiredArg(index: Int): T {
-        if( args.list.size <= index ) raiseError("Expected at least ${index+1} argument, got ${args.list.size}")
+    inline fun <reified T : Obj> requiredArg(index: Int): T {
+        if (args.list.size <= index) raiseError("Expected at least ${index + 1} argument, got ${args.list.size}")
         return (args.list[index].value as? T)
             ?: raiseClassCastError("Expected type ${T::class.simpleName}, got ${args.list[index].value::class.simpleName}")
     }
 
-    inline fun <reified T: Obj>requireOnlyArg(): T {
-        if( args.list.size != 1 ) raiseError("Expected exactly 1 argument, got ${args.list.size}")
+    inline fun <reified T : Obj> requireOnlyArg(): T {
+        if (args.list.size != 1) raiseError("Expected exactly 1 argument, got ${args.list.size}")
         return requiredArg(0)
     }
 
     @Suppress("unused")
     fun requireExactCount(count: Int) {
-        if( args.list.size != count ) {
+        if (args.list.size != count) {
             raiseError("Expected exactly $count arguments, got ${args.list.size}")
         }
     }
 
-    inline fun <reified T: Obj>thisAs(): T = (thisObj as? T)
+    inline fun <reified T : Obj> thisAs(): T = (thisObj as? T)
         ?: raiseClassCastError("Cannot cast ${thisObj.objClass.className} to ${T::class.simpleName}")
 
-    private val objects = mutableMapOf<String, StoredObj>()
+    private val objects = mutableMapOf<String, ObjRecord>()
 
-    operator fun get(name: String): StoredObj? =
+    operator fun get(name: String): ObjRecord? =
         objects[name]
             ?: parent?.get(name)
 
-    fun copy(pos: Pos, args: Arguments = Arguments.EMPTY,newThisObj: Obj? = null): Context =
+    fun copy(pos: Pos, args: Arguments = Arguments.EMPTY, newThisObj: Obj? = null): Context =
         Context(this, args, pos, newThisObj ?: thisObj)
 
-    fun copy(args: Arguments = Arguments.EMPTY,newThisObj: Obj? = null): Context =
+    fun copy(args: Arguments = Arguments.EMPTY, newThisObj: Obj? = null): Context =
         Context(this, args, pos, newThisObj ?: thisObj)
 
     fun copy() = Context(this, args, pos, thisObj)
 
-    fun addItem(name: String, isMutable: Boolean, value: Obj?): StoredObj {
-        return StoredObj(value, isMutable).also { objects.put(name, it) }
+    fun addItem(name: String, isMutable: Boolean, value: Obj): ObjRecord {
+        return ObjRecord(value, isMutable).also { objects.put(name, it) }
     }
 
     fun getOrCreateNamespace(name: String): ObjClass {
-        val ns = objects.getOrPut(name) { StoredObj(ObjNamespace(name), isMutable = false) }.value
+        val ns = objects.getOrPut(name) { ObjRecord(ObjNamespace(name), isMutable = false) }.value
         return ns!!.objClass
     }
 
@@ -86,7 +86,7 @@ class Context(
         }
     }
 
-    inline fun <reified T: Obj> addFn(vararg names: String, crossinline fn: suspend Context.() -> T) {
+    inline fun <reified T : Obj> addFn(vararg names: String, crossinline fn: suspend Context.() -> T) {
         val newFn = object : Statement() {
             override val pos: Pos = Pos.builtIn
 
@@ -102,7 +102,7 @@ class Context(
         }
     }
 
-    fun addConst(name: String,value: Obj) = addItem(name, false, value)
+    fun addConst(name: String, value: Obj) = addItem(name, false, value)
 
     suspend fun eval(code: String): Obj =
         Compiler().compile(code.toSource()).execute(this)

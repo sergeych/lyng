@@ -16,7 +16,7 @@ class ObjClass(
     override val objClass: ObjClass by lazy { ObjClassType }
 
     // members: fields most often
-    private val members = mutableMapOf<String, WithAccess<Obj>>()
+    private val members = mutableMapOf<String, ObjRecord>()
 
     override fun toString(): String = className
 
@@ -46,7 +46,7 @@ class ObjClass(
     ) {
         if (name in members || allParentsSet.any { name in it.members } == true)
             throw ScriptError(pos, "$name is already defined in $objClass or one of its supertypes")
-        members[name] = WithAccess(initialValue, isMutable)
+        members[name] = ObjRecord(initialValue, isMutable)
     }
 
     fun addFn(name: String, isOpen: Boolean = false, code: suspend Context.() -> Obj) {
@@ -59,13 +59,13 @@ class ObjClass(
     /**
      * Get instance member traversing the hierarchy if needed. Its meaning is different for different objects.
      */
-    fun getInstanceMemberOrNull(name: String): WithAccess<Obj>? {
+    fun getInstanceMemberOrNull(name: String): ObjRecord? {
         members[name]?.let { return it }
         allParentsSet.forEach { parent -> parent.getInstanceMemberOrNull(name)?.let { return it } }
         return null
     }
 
-    fun getInstanceMember(atPos: Pos, name: String): WithAccess<Obj> =
+    fun getInstanceMember(atPos: Pos, name: String): ObjRecord =
         getInstanceMemberOrNull(name)
             ?: throw ScriptError(atPos, "symbol doesn't exist: $name")
 }

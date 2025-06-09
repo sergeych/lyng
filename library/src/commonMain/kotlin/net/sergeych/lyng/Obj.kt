@@ -6,20 +6,35 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import net.sergeych.synctools.ProtectedOp
 
-//typealias InstanceMethod = (Context, Obj) -> Obj
-
-data class WithAccess<T>(
-    var value: T,
+/**
+ * Record to store object with access rules, e.g. [isMutable] and access level [visibility].
+ */
+data class ObjRecord(
+    var value: Obj,
     val isMutable: Boolean,
     val visibility: Compiler.Visibility = Compiler.Visibility.Public
 )
 
+/**
+ * When we need read-write access to an object in some abstract storage, we need Accessor,
+ * as in-site assigning is not always sufficient, in general case we need to replace the object
+ * in the storage.
+ *
+ * Note that assigning new value is more complex than just replacing the object, see how assignment
+ * operator is implemented in [Compiler.allOps].
+ */
 data class Accessor(
-    val getter: suspend (Context) -> WithAccess<Obj>,
+    val getter: suspend (Context) -> ObjRecord,
     val setterOrNull: (suspend (Context, Obj) -> Unit)?
 ) {
-    constructor(getter: suspend (Context) -> WithAccess<Obj>) : this(getter, null)
+    /**
+     * Simplified constructor for immutable stores.
+     */
+    constructor(getter: suspend (Context) -> ObjRecord) : this(getter, null)
 
+    /**
+     * Get the setter or throw.
+     */
     fun setter(pos: Pos) = setterOrNull ?: throw ScriptError(pos, "can't assign value")
 }
 
@@ -164,13 +179,13 @@ open class Obj {
 
     suspend fun <T> sync(block: () -> T): T = monitor.withLock { block() }
 
-    suspend fun readField(context: Context, name: String): WithAccess<Obj> {
+    suspend fun readField(context: Context, name: String): ObjRecord {
         // could be property or class field:
         val obj = objClass.getInstanceMemberOrNull(name)
         val value = obj?.value
         return when (value) {
             is Statement -> {
-                WithAccess(value.execute(context.copy(context.pos, newThisObj = this)), obj.isMutable)
+                ObjRecord(value.execute(context.copy(context.pos, newThisObj = this)), obj.isMutable)
             }
             // could be writable property naturally
             null -> ObjNull.asReadonly
@@ -221,8 +236,8 @@ open class Obj {
         callOn(context.copy(atPos, args = args, newThisObj = thisObj))
 
 
-    val asReadonly: WithAccess<Obj> by lazy { WithAccess(this, false) }
-    val asMutable: WithAccess<Obj> by lazy { WithAccess(this, true) }
+    val asReadonly: ObjRecord by lazy { ObjRecord(this, false) }
+    val asMutable: ObjRecord by lazy { ObjRecord(this, true) }
 
 
     companion object {

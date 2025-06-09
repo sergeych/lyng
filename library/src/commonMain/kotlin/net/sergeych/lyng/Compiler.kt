@@ -132,7 +132,7 @@ class Compiler(
                                 operand = Accessor { context ->
                                     context.pos = next.pos
                                     val v = left.getter(context).value
-                                    WithAccess(
+                                    ObjRecord(
                                         v.invokeInstanceMethod(
                                             context,
                                             next.value,
@@ -641,7 +641,7 @@ class Compiler(
                     else -> {
                         Accessor({
                             it.pos = t.pos
-                            it.get(t.value)?.asAccess
+                            it.get(t.value)
                                 ?: it.raiseError("symbol not defined: '${t.value}'")
                         }) { ctx, newValue ->
                             ctx.get(t.value)?.let { stored ->
@@ -886,7 +886,7 @@ class Compiler(
     }
 
     private suspend fun loopIntRange(
-        forContext: Context, start: Int, end: Int, loopVar: StoredObj,
+        forContext: Context, start: Int, end: Int, loopVar: ObjRecord,
         body: Statement, elseStatement: Statement?, label: String?, catchBreak: Boolean
     ): Obj {
         var result: Obj = ObjVoid
@@ -914,7 +914,7 @@ class Compiler(
     }
 
     private suspend fun loopIterable(
-        forContext: Context, sourceObj: Obj, loopVar: StoredObj,
+        forContext: Context, sourceObj: Obj, loopVar: ObjRecord,
         body: Statement, elseStatement: Statement?, label: String?,
         catchBreak: Boolean
     ): Obj {
