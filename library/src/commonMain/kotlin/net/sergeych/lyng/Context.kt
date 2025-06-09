@@ -27,6 +27,8 @@ class Context(
 
     fun raiseClassCastError(msg: String): Nothing = raiseError(ObjClassCastError(this, msg))
 
+    fun raiseSymbolNotFound(name: String): Nothing = raiseError(ObjSymbolNotDefinedError(this, "symbol is not defined: $name"))
+
     fun raiseError(message: String): Nothing {
         throw ExecutionError(ObjError(this, message))
     }
@@ -56,7 +58,7 @@ class Context(
     inline fun <reified T : Obj> thisAs(): T = (thisObj as? T)
         ?: raiseClassCastError("Cannot cast ${thisObj.objClass.className} to ${T::class.simpleName}")
 
-    private val objects = mutableMapOf<String, ObjRecord>()
+    internal val objects = mutableMapOf<String, ObjRecord>()
 
     operator fun get(name: String): ObjRecord? =
         objects[name]

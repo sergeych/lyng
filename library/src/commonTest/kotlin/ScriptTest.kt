@@ -1415,4 +1415,24 @@ class ScriptTest {
             assertEquals( 0, p.x )
         """.trimIndent())
     }
+
+    @Test
+    fun testStructBodyVal() = runTest {
+        val c = Context()
+        c.eval("""
+            struct Point(x,y) {
+                val length = sqrt(x*x+y*y)
+                var foo = "zero"
+            }
+            val p = Point(3,4)
+            assertEquals(5, p.length)
+            assertEquals("zero", p.foo)
+            p.y = 10
+            p.foo = "bar"
+            assert( p.y == 10 )
+            assert( p.foo == "bar")
+            // length is a val, is shoud not change
+            assert( p.length == 5 )
+            """.trimIndent())
+    }
 }

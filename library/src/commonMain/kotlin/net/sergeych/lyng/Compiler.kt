@@ -716,7 +716,9 @@ class Compiler(
         var extraInit: Statement? = null
         val bodyInit: Statement? = if (t.type == Token.Type.LBRACE) {
             // parse body
-            TODO("parse body")
+            parseScript(t.pos, cc).also {
+                cc.skipTokens(Token.Type.RBRACE)
+            }
         } else {
             cc.previous()
             null
@@ -743,6 +745,20 @@ class Compiler(
                 cad.assignToContext(this)
                 // note that accessors are created in ObjClass instance, not during instance
                 // initialization (not here)
+            }
+            bodyInit?.execute(this)
+            // export public
+            for( (name,record) in objects ) {
+                when(record.visibility) {
+                    Visibility.Public -> {
+                        thisObj.publicFields += name
+                        thisObj.protectedFields += name
+                    }
+                    Visibility.Protected ->
+                        thisObj.protectedFields += name
+                    else -> {
+                    }
+                }
             }
 
             thisObj

@@ -179,21 +179,21 @@ open class Obj {
 
     suspend fun <T> sync(block: () -> T): T = monitor.withLock { block() }
 
-    suspend fun readField(context: Context, name: String): ObjRecord {
+    suspend open fun readField(context: Context, name: String): ObjRecord {
         // could be property or class field:
-        val obj = objClass.getInstanceMemberOrNull(name)
-        val value = obj?.value
+        val obj = objClass.getInstanceMemberOrNull(name) ?: context.raiseError("no such field: $name")
+        val value = obj.value
         return when (value) {
             is Statement -> {
                 ObjRecord(value.execute(context.copy(context.pos, newThisObj = this)), obj.isMutable)
             }
             // could be writable property naturally
-            null -> ObjNull.asReadonly
+//            null -> ObjNull.asReadonly
             else -> obj
         }
     }
 
-    fun writeField(context: Context, name: String, newValue: Obj) {
+    open suspend fun writeField(context: Context, name: String, newValue: Obj) {
         willMutate(context)
         val field = objClass.getInstanceMemberOrNull(name) ?: context.raiseError("no such field: $name")
         if (field.isMutable) field.value = newValue else context.raiseError("can't assign to read-only field: $name")
@@ -327,6 +327,10 @@ data class ObjNamespace(val name: String) : Obj() {
 
 open class ObjError(val context: Context, val message: String) : Obj() {
     override val asStr: ObjString by lazy { ObjString("Error: $message") }
+
+    fun raise(): Nothing {
+        throw ExecutionError(this)
+    }
 }
 
 class ObjNullPointerError(context: Context) : ObjError(context, "object is null")
@@ -335,5 +339,6 @@ class ObjAssertionError(context: Context, message: String) : ObjError(context, m
 class ObjClassCastError(context: Context, message: String) : ObjError(context, message)
 class ObjIndexOutOfBoundsError(context: Context, message: String = "index out of bounds") : ObjError(context, message)
 class ObjIllegalArgumentError(context: Context, message: String = "illegal argument") : ObjError(context, message)
-
+class ObjIllegalAssignmentError(context: Context, message: String = "illegal assignment") : ObjError(context, message)
+class ObjSymbolNotDefinedError(context: Context, message: String = "symbol is not defined") : ObjError(context, message)
 class ObjIterationFinishedError(context: Context) : ObjError(context, "iteration finished")
