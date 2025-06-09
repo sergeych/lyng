@@ -1,6 +1,40 @@
 # OO implementation in Lyng
 
-Basic principles:
+Short introduction
+
+    class Point(x,y) {
+        fun length() { sqrt(x*x + y*y) } 
+    }
+
+    assert( Point is Class )
+    val p = Point(3,4)
+    assert(p is Point)
+    assertEquals(5, p.length())
+    
+    // we can access the fields:
+    assert( p.x == 3 )
+    assert( p.y == 4 )
+    
+    // we can assign new values to fields:
+    p.x = 1
+    p.y = 1
+    assertEquals(sqrt(2), p.length())
+    >>> void
+
+
+Let's see in details. The statement `class Point(x,y)` creates a class,
+with two field, which are mutable and publicly visible.`(x,y)` here
+is the [argument list], same as when defining a function. All together creates a class with
+a _constructor_ that requires two parameters for fields. So when creating it with
+`Point(10, 20)` we say _calling Point constructor_ with these parameters.
+
+Form now on `Point` is a class, it's type is `Class`, and we can create instances with it as in the
+example above.
+
+Class point has a _method_, or a _member function_ `length()` that uses its _fields_ `x` and `y` to
+calculate the magnitude.
+
+## Basic principles:
 
 - Everything is an instance of some class
 - Every class except Obj has at least one parent
@@ -70,41 +104,6 @@ Regular methods are called on instances as usual `instance.method()`. The method
 1. this instance methods;
 2. parents method: no guarantee but we enumerate parents in order of appearance;
 3. possible extension methods (scoped)
-
-# Defining a new class
-
-The class is a some data record with named fields and fixed order, in fact. To define a class,
-just Provide a name and a record like this:
-
-    // creating new class with main constructor
-    // with all fields public and mutable:
-
-    struct Point(x,y)
-    assert( Point is Class )
-    
-    // now we can create instance
-    val p1 = Point(3,4)
-
-    // is is of the newly created type:
-    assert( p1 is Point )
-
-    // we can read and write its fields:
-    assert( p1.x == 3 )
-    assert( p1.y == 4 )
-
-    p1.y++ 
-    assert( p1.y == 5 )
-
-    >>> void
-    
-Let's see in details. The statement `struct Point(x,y)` creates a struct, or public class,
-with two field, which are mutable and publicly visible, because it is _struct_. `(x,y)` here 
-is the [argument list], same as when defining a function. All together creates a class with
-a _constructor_ that requires two parameters for fields. So when creating it with
-`Point(10, 20)` we say _calling Point constructor_ with these parameters.
-
-Such declaration is identical to `class Point(var x,var y)` which does exactly the same.
-
 
 TBD
 

@@ -745,7 +745,6 @@ class Compiler(
             bodyInit?.execute(this)
             // export public
             for( (name,record) in objects ) {
-                println("-- $name $record")
                 when(record.visibility) {
                     Visibility.Public -> {
                         thisObj.publicFields += name
@@ -770,7 +769,6 @@ class Compiler(
                         f.name,
                         statement {
                             val context = (thisObj as ObjInstance).instanceContext
-                            println("called on $thisObj")
                             context[f.name]?.value ?: raiseError("field is not initialized: ${f.name}")
                         },
                         true,

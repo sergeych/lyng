@@ -1,17 +1,40 @@
+import com.codingfeline.buildkonfig.compiler.FieldSpec.Type.STRING
 import com.vanniktech.maven.publish.SonatypeHost
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+group = "net.sergeych"
+version = "0.2.1-SNAPSHOT"
+
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.4.0")
+        classpath("com.codingfeline.buildkonfig:buildkonfig-gradle-plugin:latest_version")
+    }
+}
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidLibrary)
     alias(libs.plugins.vanniktech.mavenPublish)
     kotlin("plugin.serialization") version "2.1.20"
+    id("com.codingfeline.buildkonfig") version "0.17.1"
 }
 
-group = "net.sergeych"
-version = "0.2.0-SNAPSHOT"
+buildkonfig {
+    packageName = "net.sergeych.lyng"
+    // objectName = "YourAwesomeConfig"
+    // exposeObjectWithName = "YourAwesomePublicConfig"
+
+    defaultConfigs {
+        buildConfigField(STRING, "bcprovider", "codingfeline")
+        buildConfigField(STRING, "version", version.toString())
+    }
+}
 
 kotlin {
     jvm()
@@ -110,40 +133,40 @@ mavenPublishing {
         }
     }
 }
-
-val projectVersion  by project.extra(provider {
-    // Compute value lazily
-    (version as String)
-})
-
-val generateBuildConfig by tasks.registering {
-    // Declare outputs safely
-    val outputDir = layout.buildDirectory.dir("generated/buildConfig/commonMain/kotlin")
-    outputs.dir(outputDir)
-
-    val version = projectVersion.get()
-
-    // Inputs: Version is tracked as an input
-    inputs.property("version", version)
-
-    doLast {
-        val packageName = "net.sergeych.lyng.buildconfig"
-        val packagePath = packageName.replace('.', '/')
-        val buildConfigFile = outputDir.get().file("$packagePath/BuildConfig.kt").asFile
-
-        buildConfigFile.parentFile?.mkdirs()
-        buildConfigFile.writeText(
-            """
-            |package $packageName
-            |
-            |object BuildConfig {
-            |    const val VERSION = "$version"
-            |}
-            """.trimMargin()
-        )
-    }
-}
-
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-    dependsOn(generateBuildConfig)
-}
+//
+//val projectVersion  by project.extra(provider {
+//    // Compute value lazily
+//    (version as String)
+//})
+//
+//val generateBuildConfig by tasks.registering {
+//    // Declare outputs safely
+//    val outputDir = layout.buildDirectory.dir("generated/buildConfig/commonMain/kotlin")
+//    outputs.dir(outputDir)
+//
+//    val version = projectVersion.get()
+//
+//    // Inputs: Version is tracked as an input
+//    inputs.property("version", version)
+//
+//    doLast {
+//        val packageName = "net.sergeych.lyng.buildconfig"
+//        val packagePath = packageName.replace('.', '/')
+//        val buildConfigFile = outputDir.get().file("$packagePath/BuildConfig.kt").asFile
+//
+//        buildConfigFile.parentFile?.mkdirs()
+//        buildConfigFile.writeText(
+//            """
+//            |package $packageName
+//            |
+//            |object BuildConfig {
+//            |    const val VERSION = "$version"
+//            |}
+//            """.trimMargin()
+//        )
+//    }
+//}
+//
+//tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+//    dependsOn(generateBuildConfig)
+//}

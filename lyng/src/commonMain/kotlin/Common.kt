@@ -24,7 +24,7 @@ val baseContext = Context().apply {
     }
 }
 
-class LyngCLI(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() {
+class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() {
 
     override val printHelpOnEmptyArgs = true
 

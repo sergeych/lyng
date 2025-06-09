@@ -23,8 +23,6 @@ class ObjClass(
     override suspend fun compareTo(context: Context, other: Obj): Int = if (other === this) 0 else -1
 
     override suspend fun callOn(context: Context): Obj {
-        println("callOn $this constructing....")
-        println("on context: $context")
         val instance = ObjInstance(this)
         instance.instanceContext = context.copy(newThisObj = instance,args = context.args)
         if (instanceConstructor != null) {
