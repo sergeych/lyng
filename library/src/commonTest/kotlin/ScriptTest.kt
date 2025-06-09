@@ -18,7 +18,7 @@ class ScriptTest {
             val source = src.toSource()
             assertEquals(
                 Token(expected, source.posAt(row, col), type),
-                parseLing(source)[offset]
+                parseLyng(source)[offset]
             )
         }
         check("1", Token.Type.INT, 0, 0, "1 + x\n2", 0)
@@ -36,7 +36,7 @@ class ScriptTest {
             val source = src.toSource()
             assertEquals(
                 Token(expected, source.posAt(row, col), type),
-                parseLing(source)[offset]
+                parseLyng(source)[offset]
             )
         }
         check("1", Token.Type.INT, 0, 0, "1")
@@ -72,13 +72,13 @@ class ScriptTest {
 
     @Test
     fun parseRangeTest() {
-        var tt = parseLing("5 .. 4".toSource())
+        var tt = parseLyng("5 .. 4".toSource())
 
         assertEquals(Token.Type.INT, tt[0].type)
         assertEquals(Token.Type.DOTDOT, tt[1].type)
         assertEquals(Token.Type.INT, tt[2].type)
 
-        tt = parseLing("5 ..< 4".toSource())
+        tt = parseLyng("5 ..< 4".toSource())
 
         assertEquals(Token.Type.INT, tt[0].type)
         assertEquals(Token.Type.DOTDOTLT, tt[1].type)
@@ -87,13 +87,13 @@ class ScriptTest {
 
     @Test
     fun parseInTest() {
-        var tt = parseLing("5 in 4".toSource())
+        var tt = parseLyng("5 in 4".toSource())
 
         assertEquals(Token.Type.INT, tt[0].type)
         assertEquals(Token.Type.IN, tt[1].type)
         assertEquals(Token.Type.INT, tt[2].type)
 
-        tt = parseLing("5 ..< 4".toSource())
+        tt = parseLyng("5 ..< 4".toSource())
 
         assertEquals(Token.Type.INT, tt[0].type)
         assertEquals(Token.Type.DOTDOTLT, tt[1].type)
@@ -103,7 +103,7 @@ class ScriptTest {
     @Test
     fun parserLabelsTest() {
         val src = "label@ break@label".toSource()
-        val tt = parseLing(src)
+        val tt = parseLyng(src)
         assertEquals(Token("label", src.posAt(0, 0), Token.Type.LABEL), tt[0])
         assertEquals(Token("break", src.posAt(0, 7), Token.Type.ID), tt[1])
         assertEquals(Token("label", src.posAt(0, 12), Token.Type.ATLABEL), tt[2])
@@ -116,7 +116,7 @@ class ScriptTest {
             println( "world" )
         """.trimIndent().toSource()
 
-        val p = parseLing(src).listIterator()
+        val p = parseLyng(src).listIterator()
 
         assertEquals(Token("println", src.posAt(0, 0), Token.Type.ID), p.next())
         assertEquals(Token("(", src.posAt(0, 7), Token.Type.LPAREN), p.next())
@@ -133,7 +133,7 @@ class ScriptTest {
     fun parse1Test() {
         val src = "2 + 7".toSource()
 
-        val p = parseLing(src).listIterator()
+        val p = parseLyng(src).listIterator()
 
         assertEquals(Token("2", src.posAt(0, 0), Token.Type.INT), p.next())
         assertEquals(Token("+", src.posAt(0, 2), Token.Type.PLUS), p.next())

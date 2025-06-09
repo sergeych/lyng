@@ -8,7 +8,7 @@ val idNextChars = { d: Char -> d.isLetter() || d == '_' || d.isDigit() }
 @Suppress("unused")
 val idFirstChars = { d: Char -> d.isLetter() || d == '_' }
 
-fun parseLing(source: Source): List<Token> {
+fun parseLyng(source: Source): List<Token> {
     val p = Parser(fromPos = source.startPos)
     val tokens = mutableListOf<Token>()
     do {

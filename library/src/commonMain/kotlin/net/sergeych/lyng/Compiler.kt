@@ -11,12 +11,14 @@ class Compiler(
     class Settings
 
     fun compile(source: Source): Script {
-        return parseScript(source.startPos, CompilerContext(parseLing(source)))
+        return parseScript(source.startPos,
+            CompilerContext(parseLyng(source))
+        )
     }
 
-    private fun parseScript(start: Pos, tokens: CompilerContext): Script {
+    private fun parseScript(start: Pos, cc: CompilerContext): Script {
         val statements = mutableListOf<Statement>()
-        while (parseStatement(tokens, braceMeansLambda = true)?.also {
+        while (parseStatement(cc, braceMeansLambda = true)?.also {
                 statements += it
             } != null) {/**/
         }
