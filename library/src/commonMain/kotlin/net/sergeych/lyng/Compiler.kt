@@ -715,7 +715,6 @@ class Compiler(
         cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
         val t = cc.next()
 
-        var extraInit: Statement? = null
         val bodyInit: Statement? = if (t.type == Token.Type.LBRACE) {
             // parse body
             parseScript(t.pos, cc).also {
@@ -728,7 +727,6 @@ class Compiler(
 
         // create class
         val className = nameToken.value
-        lateinit var classContext: Context
 
         @Suppress("UNUSED_VARIABLE") val defaultAccess = if (isStruct) AccessType.Var else AccessType.Initialization
         @Suppress("UNUSED_VARIABLE") val defaultVisibility = Visibility.Public

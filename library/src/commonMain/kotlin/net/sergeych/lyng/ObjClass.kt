@@ -46,7 +46,7 @@ class ObjClass(
     ) {
         if (name in members || allParentsSet.any { name in it.members } == true)
             throw ScriptError(pos, "$name is already defined in $objClass or one of its supertypes")
-        members[name] = ObjRecord(initialValue, isMutable)
+        members[name] = ObjRecord(initialValue, isMutable, visibility)
     }
 
     fun addFn(name: String, isOpen: Boolean = false, code: suspend Context.() -> Obj) {

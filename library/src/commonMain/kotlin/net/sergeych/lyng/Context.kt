@@ -27,6 +27,7 @@ class Context(
 
     fun raiseClassCastError(msg: String): Nothing = raiseError(ObjClassCastError(this, msg))
 
+    @Suppress("unused")
     fun raiseSymbolNotFound(name: String): Nothing = raiseError(ObjSymbolNotDefinedError(this, "symbol is not defined: $name"))
 
     fun raiseError(message: String): Nothing {
@@ -78,7 +79,7 @@ class Context(
 
     fun getOrCreateNamespace(name: String): ObjClass {
         val ns = objects.getOrPut(name) { ObjRecord(ObjNamespace(name), isMutable = false) }.value
-        return ns!!.objClass
+        return ns.objClass
     }
 
     inline fun addVoidFn(vararg names: String, crossinline fn: suspend Context.() -> Unit) {
