@@ -769,12 +769,12 @@ class Compiler(
             for ((name, record) in objects) {
                 when (record.visibility) {
                     Visibility.Public -> {
-                        thisObj.publicFields += name
-                        thisObj.protectedFields += name
+                        thisObj.objClass.publicFields += name
+                        thisObj.objClass.protectedFields += name
                     }
 
                     Visibility.Protected ->
-                        thisObj.protectedFields += name
+                        thisObj.objClass.protectedFields += name
 
                     Visibility.Private -> {
                         //println("private field: $name")

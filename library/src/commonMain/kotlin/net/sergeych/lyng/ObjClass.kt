@@ -7,6 +7,9 @@ class ObjClass(
     vararg val parents: ObjClass,
 ) : Obj() {
 
+    internal val publicFields = mutableSetOf<String>()
+    internal val protectedFields = mutableSetOf<String>()
+
     var instanceConstructor: Statement? = null
 
     val allParentsSet: Set<ObjClass> = parents.flatMap {
