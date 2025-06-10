@@ -1,12 +1,19 @@
 # OO implementation in Lyng
 
-Short introduction
+## Declaration 
+
+The class clause looks like
+
+    class Point(x,y)
+    assert( Point is Class ) 
+    >>> void
+
+It creates new `Class` with two fields. Here is the more practical sample:
 
     class Point(x,y) {
         fun length() { sqrt(x*x + y*y) } 
     }
 
-    assert( Point is Class )
     val p = Point(3,4)
     assert(p is Point)
     assertEquals(5, p.length())
@@ -32,7 +39,111 @@ Form now on `Point` is a class, it's type is `Class`, and we can create instance
 example above.
 
 Class point has a _method_, or a _member function_ `length()` that uses its _fields_ `x` and `y` to
-calculate the magnitude.
+calculate the magnitude. Length is called
+
+### default values in constructor
+
+Constructor arguments are the same as function arguments except visibility
+statements discussed later, there could be default values, ellipsis, etc.
+
+    class Point(x=0,y=0) 
+    val p = Point()
+    assert( p.x == 0 && p.y == 0 )
+    >>> void
+
+## Methods
+
+Functions defined inside a class body are methods, and unless declared
+`private` are available to be called from outside the class:
+
+    class Point(x,y) {
+        // public method declaration:
+        fun length() { sqrt(d2()) }
+
+        // private method:
+        private fun d2() {x*x + y*y}
+    }
+    val p = Point(3,4)
+    // private called from inside public: OK
+    assertEquals( 5, p.length() )
+    // but us not available directly
+    assertThrows() { p.d2() }
+    void
+    >>> void
+
+## fields and visibility
+
+It is possible to add non-constructor fields:
+
+    class Point(x,y) {
+        fun length() { sqrt(x*x + y*y) } 
+    
+        // set at construction time:   
+        val initialLength = length()
+    }
+    val p = Point(3,4)
+    p.x = 3
+    p.y = 0
+    assertEquals( 3, p.length() )
+    // but initial length could not be changed after as declard val:
+    assert( p.initialLength == 5 )
+    >>> void
+
+### Mutable fields
+
+Are declared with var
+
+    class Point(x,y) {
+        var isSpecial = false
+    }
+    val p = Point(0,0)
+    assert( p.isSpecial == false )
+
+    p.isSpecial = true
+    assert( p.isSpecial == true )
+    >>> void
+
+### Private fields
+
+Private fields are visible only _inside the class instance_:
+
+    class SecretCounter {
+        private var count = 0
+        
+        fun increment() {
+            count++
+            void // hide counter
+        }
+        
+        fun isEnough() {
+            count > 10
+        }
+    }
+    val c = SecretCounter()
+    assert( c.isEnough() == false )
+    assert( c.increment() == void )
+    for( i in 0..10 ) c.increment()
+    assert( c.isEnough() )
+
+    // but the count is not available outside:
+    assertThrows() { c.count }
+    void
+    >>> void
+
+It is possible to provide private constructor parameters so they can be
+set at construction but not available outside the class:
+
+    class SecretCounter(private var count = 0) {
+        // ...
+    }
+    val c = SecretCounter(10)
+    assertThrows() { c.count }
+    void
+    >>> void
+
+
+
+# Theory
 
 ## Basic principles:
 

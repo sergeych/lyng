@@ -28,7 +28,8 @@ class Context(
     fun raiseClassCastError(msg: String): Nothing = raiseError(ObjClassCastError(this, msg))
 
     @Suppress("unused")
-    fun raiseSymbolNotFound(name: String): Nothing = raiseError(ObjSymbolNotDefinedError(this, "symbol is not defined: $name"))
+    fun raiseSymbolNotFound(name: String): Nothing =
+        raiseError(ObjSymbolNotDefinedError(this, "symbol is not defined: $name"))
 
     fun raiseError(message: String): Nothing {
         throw ExecutionError(ObjError(this, message))
@@ -73,8 +74,13 @@ class Context(
 
     fun copy() = Context(this, args, pos, thisObj)
 
-    fun addItem(name: String, isMutable: Boolean, value: Obj): ObjRecord {
-        return ObjRecord(value, isMutable).also { objects.put(name, it) }
+    fun addItem(
+        name: String,
+        isMutable: Boolean,
+        value: Obj,
+        visibility: Compiler.Visibility = Compiler.Visibility.Public
+    ): ObjRecord {
+        return ObjRecord(value, isMutable, visibility).also { objects.put(name, it) }
     }
 
     fun getOrCreateNamespace(name: String): ObjClass {

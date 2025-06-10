@@ -9,7 +9,7 @@ internal class CompilerContext(val tokens: List<Token>) {
     var loopLevel = 0
         private set
 
-    inline fun <T> parseLoop(f: () -> T): Pair<Boolean,T> {
+    inline fun <T> parseLoop(f: () -> T): Pair<Boolean, T> {
         if (++loopLevel == 0) breakFound = false
         val result = f()
         return Pair(breakFound, result).also {
@@ -96,6 +96,42 @@ internal class CompilerContext(val tokens: List<Token>) {
 
     inline fun addBreak() {
         breakFound = true
+    }
+
+    /**
+     * Return value of the next token if it is an identifier, null otherwise.
+     * Does not change position.
+     */
+    fun nextIdValue(): String? {
+        return if (hasNext()) {
+            val nt = tokens[currentIndex]
+            if (nt.type == Token.Type.ID)
+                nt.value
+            else null
+        } else null
+    }
+
+    @Suppress("unused")
+    fun current(): Token = tokens[currentIndex]
+
+    /**
+     * If the token at current position plus offset (could be negative) exists, returns it, otherwise returns null.
+     */
+    fun atOffset(offset: Int): Token? =
+        if (currentIndex + offset in tokens.indices) tokens[currentIndex + offset] else null
+
+    /**
+     * Scan backwards as deep as specified looking for visibility token. Does not change position.
+     */
+    fun getVisibility(default: Compiler.Visibility = Compiler.Visibility.Public, depths: Int = 2): Compiler.Visibility {
+        for( i in -depths .. -1) {
+            when( atOffset(i)?.type) {
+                Token.Type.PROTECTED -> return Compiler.Visibility.Protected
+                Token.Type.PRIVATE -> return Compiler.Visibility.Private
+                else -> {}
+            }
+        }
+        return default
     }
 
 }

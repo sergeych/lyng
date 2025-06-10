@@ -13,3 +13,4 @@ xcuserdata
 *.gpg
 .gigaide
 /kotlin-js-store/yarn.lock
+/test.lyng

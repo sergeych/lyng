@@ -37,6 +37,13 @@ class Compiler(
                         }
                 }
 
+                Token.Type.PRIVATE, Token.Type.PROTECTED -> {
+                    if(cc.nextIdValue() in setOf("var", "val", "class", "fun", "fn")) {
+                        continue
+                    } else
+                        throw ScriptError(t.pos, "unexpected keyword ${t.value}")
+                }
+
                 Token.Type.PLUS2, Token.Type.MINUS2 -> {
                     cc.previous()
                     parseExpression(cc)
@@ -408,7 +415,7 @@ class Compiler(
     }
 
     enum class Visibility {
-        Public, Private, Protected, Internal
+        Public, Private, Protected//, Internal
     }
 
     /**
@@ -429,43 +436,16 @@ class Compiler(
                 }
 
                 Token.Type.NEWLINE -> {}
+                Token.Type.PROTECTED, Token.Type.PRIVATE -> {
+                    if (!isClassDeclaration) {
+                        cc.restorePos(startPos); return null
+                    }
+                }
                 Token.Type.ID -> {
                     // visibility
-                    val visibility = when (t.value) {
-                        "private" -> {
-                            if (!isClassDeclaration) {
-                                cc.restorePos(startPos); return null
-                            }
-                            t = cc.next()
-                            Visibility.Private
-                        }
-
-                        "protected" -> {
-                            if (!isClassDeclaration) {
-                                cc.restorePos(startPos); return null
-                            }
-                            t = cc.next()
-                            Visibility.Protected
-                        }
-
-                        "internal" -> {
-                            if (!isClassDeclaration) {
-                                cc.restorePos(startPos); return null
-                            }
-                            t = cc.next()
-                            Visibility.Internal
-                        }
-
-                        "public" -> {
-                            if (!isClassDeclaration) {
-                                cc.restorePos(startPos); return null
-                            }
-                            t = cc.next()
-                            Visibility.Public
-                        }
-
-                        else -> null
-                    }
+                    val visibility = if( isClassDeclaration )
+                        cc.getVisibility(Visibility.Public)
+                    else Visibility.Public
                     // val/var?
                     val access = when (t.value) {
                         "val" -> {
@@ -703,7 +683,7 @@ class Compiler(
         val nameToken = cc.requireToken(Token.Type.ID)
         val constructorArgsDeclaration =
             if (cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true))
-                parseArgsDeclaration(cc)
+                parseArgsDeclaration(cc, isClassDeclaration = true)
             else null
 
         if (constructorArgsDeclaration != null && constructorArgsDeclaration.endTokenType != Token.Type.RPAREN)
@@ -752,7 +732,9 @@ class Compiler(
                     }
                     Visibility.Protected ->
                         thisObj.protectedFields += name
-                    else -> {
+
+                    Visibility.Private -> {
+                        //println("private field: $name")
                     }
                 }
             }
@@ -762,20 +744,6 @@ class Compiler(
         // inheritance must alter this code:
         val newClass = ObjClass(className).apply {
             instanceConstructor = constructorCode
-            constructorArgsDeclaration?.let { cad ->
-                // we need accessors for all fields:
-                for (f in cad.params) {
-                    createField(
-                        f.name,
-                        statement {
-                            val context = (thisObj as ObjInstance).instanceContext
-                            context[f.name]?.value ?: raiseError("field is not initialized: ${f.name}")
-                        },
-                        true,
-//                        (f.accessType ?: defaultAccess).isMutable,
-                    )
-                }
-            }
         }
 
         return statement {
@@ -1100,6 +1068,8 @@ class Compiler(
     }
 
     private fun parseFunctionDeclaration(tokens: CompilerContext): Statement {
+        val visibility = tokens.getVisibility()
+
         var t = tokens.next()
         val start = t.pos
         val name = if (t.type != Token.Type.ID)
@@ -1136,7 +1106,7 @@ class Compiler(
             // we added fn in the context. now we must save closure
             // for the function
             closure = context
-            context.addItem(name, false, fnBody)
+            context.addItem(name, false, fnBody, visibility)
             // as the function can be called from anywhere, we have
             // saved the proper context in the closure
             fnBody
@@ -1162,6 +1132,14 @@ class Compiler(
     }
 
     private fun parseVarDeclaration(kind: String, mutable: Boolean, tokens: CompilerContext): Statement {
+        // we are just after var/val, visibility if exists is 2 steps behind
+        val visibility = when( tokens.atOffset(-2)?.type ) {
+            Token.Type.PRIVATE ->
+                Visibility.Private
+            Token.Type.PROTECTED -> Visibility.Protected
+            else -> Visibility.Public
+        }
+
         val nameToken = tokens.next()
         val start = nameToken.pos
         if (nameToken.type != Token.Type.ID)
@@ -1190,7 +1168,7 @@ class Compiler(
             // create a separate copy:
             val initValue = initialExpression?.execute(context)?.byValueCopy() ?: ObjNull
 
-            context.addItem(name, mutable, initValue)
+            context.addItem(name, mutable, initValue, visibility)
             ObjVoid
         }
     }

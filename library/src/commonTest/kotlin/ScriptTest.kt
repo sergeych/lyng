@@ -1453,4 +1453,15 @@ class ScriptTest {
             assertEquals(sqrt(109), p.length())
             """.trimIndent())
     }
+
+    @Test
+    fun testPrivateConstructorParams() = runTest {
+        val c = Context()
+        c.eval("""
+            class Point(private var x,y)
+            val p = Point(1,2)
+            p.y = 101
+            assertThrows() { p.x = 10 }
+            """)
+    }
 }

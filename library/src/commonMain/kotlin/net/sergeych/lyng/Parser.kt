@@ -280,6 +280,8 @@ private class Parser(fromPos: Pos) {
                         when (text) {
                             "in" -> Token("in", from, Token.Type.IN)
                             "is" -> Token("is", from, Token.Type.IS)
+                            "protected" -> Token("protected", from, Token.Type.PROTECTED)
+                            "private" -> Token("private", from, Token.Type.PRIVATE)
                             else -> Token(text, from, Token.Type.ID)
                         }
                 } else
