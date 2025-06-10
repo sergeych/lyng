@@ -123,15 +123,23 @@ internal class CompilerContext(val tokens: List<Token>) {
     /**
      * Scan backwards as deep as specified looking for visibility token. Does not change position.
      */
-    fun getVisibility(default: Compiler.Visibility = Compiler.Visibility.Public, depths: Int = 2): Compiler.Visibility {
+    fun getVisibility(default: Visibility = Visibility.Public, depths: Int = 2): Visibility {
         for( i in -depths .. -1) {
             when( atOffset(i)?.type) {
-                Token.Type.PROTECTED -> return Compiler.Visibility.Protected
-                Token.Type.PRIVATE -> return Compiler.Visibility.Private
+                Token.Type.PROTECTED -> return Visibility.Protected
+                Token.Type.PRIVATE -> return Visibility.Private
                 else -> {}
             }
         }
         return default
     }
+
+//    data class ReturnScope(val needCatch: Boolean = false)
+
+//    private val
+
+//    fun startReturnScope(): ReturnScope {
+//        return ReturnScope()
+//    }
 
 }

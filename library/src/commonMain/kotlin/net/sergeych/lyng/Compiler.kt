@@ -19,11 +19,12 @@ class Compiler(
 
     private fun parseScript(start: Pos, cc: CompilerContext): Script {
         val statements = mutableListOf<Statement>()
+//        val returnScope = cc.startReturnScope()
         while (parseStatement(cc, braceMeansLambda = true)?.also {
                 statements += it
             } != null) {/**/
         }
-        return Script(start, statements)
+        return Script(start, statements)//returnScope.needCatch)
     }
 
     private fun parseStatement(cc: CompilerContext, braceMeansLambda: Boolean = false): Statement? {
@@ -439,17 +440,6 @@ class Compiler(
         }
     }
 
-    enum class AccessType(val isMutable: Boolean) {
-        Val(false), Var(true),
-
-        @Suppress("unused")
-        Initialization(false)
-    }
-
-    enum class Visibility {
-        Public, Private, Protected//, Internal
-    }
-
     /**
      * Parse argument declaration, used in lambda (and later in fn too)
      * @return declaration or null if there is no valid list of arguments
@@ -765,22 +755,6 @@ class Compiler(
             // fields. Note that 'this' is already set by class
             constructorArgsDeclaration?.assignToContext(this)
             bodyInit?.execute(this)
-            // export public
-            for ((name, record) in objects) {
-                when (record.visibility) {
-                    Visibility.Public -> {
-                        thisObj.objClass.publicFields += name
-                        thisObj.objClass.protectedFields += name
-                    }
-
-                    Visibility.Protected ->
-                        thisObj.objClass.protectedFields += name
-
-                    Visibility.Private -> {
-                        //println("private field: $name")
-                    }
-                }
-            }
 
             thisObj
         }

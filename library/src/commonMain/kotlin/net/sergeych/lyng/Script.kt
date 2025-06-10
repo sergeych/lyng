@@ -6,6 +6,7 @@ import kotlin.math.*
 class Script(
     override val pos: Pos,
     private val statements: List<Statement> = emptyList(),
+//    private val catchReturn: Boolean = false,
 ) : Statement() {
 
     override suspend fun execute(context: Context): Obj {

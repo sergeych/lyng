@@ -39,22 +39,5 @@ We can just put the code into the module code:
 
 ## class initialization
 
-    class foo {
-        
-        private static var instanceCounter = 0
-        
-        val instanceId = instanceCounter
-        
-        fun close() {
-            instanceCounter--
-        }
-
-        // instance initializatino could be as this:
-        if( instanceId > 100 )
-            throw Exception("Too many instances")
-
-        static {
-            // static, one-per-class initializer could be posted here
-            instanceCounter = 1
-        }
-    }
+already done using `ObjInstance` class and instance-bound context with local
+context stored in ObjInstance and class constructor statement in ObjClass.

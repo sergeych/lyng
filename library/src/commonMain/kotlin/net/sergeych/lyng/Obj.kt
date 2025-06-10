@@ -12,7 +12,7 @@ import net.sergeych.synctools.ProtectedOp
 data class ObjRecord(
     var value: Obj,
     val isMutable: Boolean,
-    val visibility: Compiler.Visibility = Compiler.Visibility.Public
+    val visibility: Visibility = Visibility.Public
 )
 
 /**
@@ -342,3 +342,4 @@ class ObjIllegalArgumentError(context: Context, message: String = "illegal argum
 class ObjIllegalAssignmentError(context: Context, message: String = "illegal assignment") : ObjError(context, message)
 class ObjSymbolNotDefinedError(context: Context, message: String = "symbol is not defined") : ObjError(context, message)
 class ObjIterationFinishedError(context: Context) : ObjError(context, "iteration finished")
+class ObjAccessError(context: Context, message: String = "access not allowed error") : ObjError(context, message)

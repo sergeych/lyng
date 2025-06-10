@@ -23,8 +23,8 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
     suspend fun assignToContext(
         context: Context,
         fromArgs: Arguments = context.args,
-        defaultAccessType: Compiler.AccessType = Compiler.AccessType.Var,
-        defaultVisibility: Compiler.Visibility = Compiler.Visibility.Public
+        defaultAccessType: AccessType = AccessType.Var,
+        defaultVisibility: Visibility = Visibility.Public
     ) {
         fun assign(a: Item, value: Obj) {
             context.addItem(a.name, (a.accessType ?: defaultAccessType).isMutable, value,
@@ -100,7 +100,7 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
          * So it is a [Statement] that must be executed on __caller context__.
          */
         val defaultValue: Statement? = null,
-        val accessType: Compiler.AccessType? = null,
-        val visibility: Compiler.Visibility? = null,
+        val accessType: AccessType? = null,
+        val visibility: Visibility? = null,
     )
 }

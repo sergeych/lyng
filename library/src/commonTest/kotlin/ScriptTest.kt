@@ -1513,4 +1513,11 @@ class ScriptTest {
             assert( Point(1,2) < Point(1,3) )
         """.trimIndent())
     }
+
+    @Test
+    fun testAccessShortcuts() {
+        assertTrue( Visibility.Public.isPublic )
+        assertFalse( Visibility.Private.isPublic )
+        assertFalse( Visibility.Protected.isPublic )
+    }
 }

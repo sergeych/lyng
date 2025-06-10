@@ -78,7 +78,7 @@ class Context(
         name: String,
         isMutable: Boolean,
         value: Obj,
-        visibility: Compiler.Visibility = Compiler.Visibility.Public
+        visibility: Visibility = Visibility.Public
     ): ObjRecord {
         return ObjRecord(value, isMutable, visibility).also { objects.put(name, it) }
     }

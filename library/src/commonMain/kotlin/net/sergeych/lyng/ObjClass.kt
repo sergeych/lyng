@@ -7,9 +7,6 @@ class ObjClass(
     vararg val parents: ObjClass,
 ) : Obj() {
 
-    internal val publicFields = mutableSetOf<String>()
-    internal val protectedFields = mutableSetOf<String>()
-
     var instanceConstructor: Statement? = null
 
     val allParentsSet: Set<ObjClass> = parents.flatMap {
@@ -42,10 +39,10 @@ class ObjClass(
         name: String,
         initialValue: Obj,
         isMutable: Boolean = false,
-        visibility: Compiler.Visibility = Compiler.Visibility.Public,
+        visibility: Visibility = Visibility.Public,
         pos: Pos = Pos.builtIn
     ) {
-        if (name in members || allParentsSet.any { name in it.members } == true)
+        if (name in members || allParentsSet.any { name in it.members })
             throw ScriptError(pos, "$name is already defined in $objClass or one of its supertypes")
         members[name] = ObjRecord(initialValue, isMutable, visibility)
     }

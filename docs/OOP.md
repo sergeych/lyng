@@ -158,7 +158,7 @@ For example, for our class Point:
     assert( Point(1,2) < Point(2,2) )
     assert( Point(1,2) < Point(1,3) )
     Point(1,1+1)
-    >>> Point(1, 2)
+    >>> Point(x=1,y=2)
 
 # Theory
 
