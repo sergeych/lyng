@@ -11,7 +11,8 @@ class Compiler(
     class Settings
 
     fun compile(source: Source): Script {
-        return parseScript(source.startPos,
+        return parseScript(
+            source.startPos,
             CompilerContext(parseLyng(source))
         )
     }
@@ -38,7 +39,7 @@ class Compiler(
                 }
 
                 Token.Type.PRIVATE, Token.Type.PROTECTED -> {
-                    if(cc.nextIdValue() in setOf("var", "val", "class", "fun", "fn")) {
+                    if (cc.nextIdValue() in setOf("var", "val", "class", "fun", "fn")) {
                         continue
                     } else
                         throw ScriptError(t.pos, "unexpected keyword ${t.value}")
@@ -132,21 +133,49 @@ class Compiler(
                         var isCall = false
                         val next = cc.next()
                         if (next.type == Token.Type.ID) {
-                            cc.ifNextIs(Token.Type.LPAREN) {
-                                // instance method call
-                                val args = parseArgs(cc)
-                                isCall = true
-                                operand = Accessor { context ->
-                                    context.pos = next.pos
-                                    val v = left.getter(context).value
-                                    ObjRecord(
-                                        v.invokeInstanceMethod(
-                                            context,
-                                            next.value,
-                                            args.toArguments(context)
-                                        ), isMutable = false
-                                    )
+                            // could be () call or obj.method {} call
+                            val nt = cc.current()
+                            when (nt.type) {
+                                Token.Type.LPAREN -> {
+                                    cc.next()
+                                    // instance method call
+                                    val args = parseArgs(cc)
+                                    isCall = true
+                                    operand = Accessor { context ->
+                                        context.pos = next.pos
+                                        val v = left.getter(context).value
+                                        ObjRecord(
+                                            v.invokeInstanceMethod(
+                                                context,
+                                                next.value,
+                                                args.toArguments(context)
+                                            ), isMutable = false
+                                        )
+                                    }
                                 }
+
+                                Token.Type.LBRACE -> {
+                                    // single lambda arg, like assertTrows { ... }
+                                    cc.next()
+                                    isCall = true
+                                    val lambda =
+                                        parseExpression(cc) ?: throw ScriptError(t.pos, "expected valid lambda here")
+                                    println(cc.current())
+                                    cc.skipTokenOfType(Token.Type.RBRACE)
+                                    operand = Accessor { context ->
+                                        context.pos = next.pos
+                                        val v = left.getter(context).value
+                                        ObjRecord(
+                                            v.invokeInstanceMethod(
+                                                context,
+                                                next.value,
+                                                Arguments(listOf(Arguments.Info(lambda, t.pos)))
+                                            ), isMutable = false
+                                        )
+                                    }
+                                }
+
+                                else -> {}
                             }
                         }
                         if (!isCall) {
@@ -169,6 +198,7 @@ class Compiler(
                         operand = parseFunctionCall(
                             cc,
                             left,
+                            false,
                         )
                     } ?: run {
                         // Expression in parentheses
@@ -314,9 +344,10 @@ class Compiler(
                 }
 
                 Token.Type.LBRACE -> {
-                    if (operand != null) {
-                        throw ScriptError(t.pos, "syntax error: lambda expression not allowed here")
-                    } else operand = parseLambdaExpression(cc)
+                    operand = operand?.let { left ->
+                        cc.previous()
+                        parseFunctionCall(cc, left, blockArgument = true)
+                    } ?: parseLambdaExpression(cc)
                 }
 
 
@@ -410,6 +441,7 @@ class Compiler(
 
     enum class AccessType(val isMutable: Boolean) {
         Val(false), Var(true),
+
         @Suppress("unused")
         Initialization(false)
     }
@@ -441,9 +473,10 @@ class Compiler(
                         cc.restorePos(startPos); return null
                     }
                 }
+
                 Token.Type.ID -> {
                     // visibility
-                    val visibility = if( isClassDeclaration )
+                    val visibility = if (isClassDeclaration)
                         cc.getVisibility(Visibility.Public)
                     else Visibility.Public
                     // val/var?
@@ -530,6 +563,7 @@ class Compiler(
     }
 
     private fun parseArgs(cc: CompilerContext): List<ParsedArgument> {
+
         val args = mutableListOf<ParsedArgument>()
         do {
             val t = cc.next()
@@ -570,9 +604,17 @@ class Compiler(
     }
 
 
-    private fun parseFunctionCall(cc: CompilerContext, left: Accessor): Accessor {
+    private fun parseFunctionCall(cc: CompilerContext, left: Accessor, blockArgument: Boolean): Accessor {
         // insofar, functions always return lvalue
-        val args = parseArgs(cc)
+        val args = if (blockArgument) {
+            val blockArg = ParsedArgument(
+                parseExpression(cc)
+                    ?: throw ScriptError(cc.currentPos(), "lambda body expected"), cc.currentPos()
+            )
+            listOf(blockArg)
+        } else {
+            parseArgs(cc)
+        }
 
         return Accessor { context ->
             val v = left.getter(context)
@@ -724,12 +766,13 @@ class Compiler(
             constructorArgsDeclaration?.assignToContext(this)
             bodyInit?.execute(this)
             // export public
-            for( (name,record) in objects ) {
-                when(record.visibility) {
+            for ((name, record) in objects) {
+                when (record.visibility) {
                     Visibility.Public -> {
                         thisObj.publicFields += name
                         thisObj.protectedFields += name
                     }
+
                     Visibility.Protected ->
                         thisObj.protectedFields += name
 
@@ -1133,9 +1176,10 @@ class Compiler(
 
     private fun parseVarDeclaration(kind: String, mutable: Boolean, tokens: CompilerContext): Statement {
         // we are just after var/val, visibility if exists is 2 steps behind
-        val visibility = when( tokens.atOffset(-2)?.type ) {
+        val visibility = when (tokens.atOffset(-2)?.type) {
             Token.Type.PRIVATE ->
                 Visibility.Private
+
             Token.Type.PROTECTED -> Visibility.Protected
             else -> Visibility.Public
         }

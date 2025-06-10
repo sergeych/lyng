@@ -1461,7 +1461,30 @@ class ScriptTest {
             class Point(private var x,y)
             val p = Point(1,2)
             p.y = 101
-            assertThrows() { p.x = 10 }
+            assertThrows { p.x = 10 }
             """)
+    }
+
+    @Test
+    fun testLBraceMethodCall() = runTest {
+        eval("""
+            class Foo() {
+                fun cond(block) { 
+                    block()
+                }
+            }
+            val f = Foo()
+            assertEquals( 1, f.cond { 1 } )
+        """.trimIndent())
+    }
+
+    @Test
+    fun testLBraceFnCall() = runTest {
+        eval("""
+            fun cond(block) { 
+                block()
+            }
+            assertEquals( 1, cond { 1 } )
+        """.trimIndent())
     }
 }

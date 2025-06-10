@@ -67,7 +67,7 @@ Functions defined inside a class body are methods, and unless declared
     // private called from inside public: OK
     assertEquals( 5, p.length() )
     // but us not available directly
-    assertThrows() { p.d2() }
+    assertThrows { p.d2() }
     void
     >>> void
 
@@ -126,7 +126,7 @@ Private fields are visible only _inside the class instance_:
     assert( c.isEnough() )
 
     // but the count is not available outside:
-    assertThrows() { c.count }
+    assertThrows { c.count }
     void
     >>> void
 
@@ -137,7 +137,7 @@ set at construction but not available outside the class:
         // ...
     }
     val c = SecretCounter(10)
-    assertThrows() { c.count }
+    assertThrows { c.count }
     void
     >>> void
 
