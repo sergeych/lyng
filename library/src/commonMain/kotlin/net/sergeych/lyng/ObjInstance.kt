@@ -26,4 +26,23 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         if( name in publicFields ) return instanceContext[name]!!.value.invoke(context, this, args)
         return super.invokeInstanceMethod(context, name, args)
     }
+
+    override fun toString(): String {
+        val fields = publicFields.map {
+                instanceContext[it]?.value?.toString() ?: "??"
+        }.joinToString(", ")
+        return "${objClass.className}($fields)"
+    }
+
+    override suspend fun compareTo(context: Context, other: Obj): Int {
+        if( other !is ObjInstance ) return -1
+        if( other.objClass != objClass ) return -1
+        for( f in publicFields ) {
+            val a = instanceContext[f]!!.value
+            val b = other.instanceContext[f]!!.value
+            val d = a.compareTo(context, b)
+            if (d != 0) return d
+        }
+        return 0
+    }
 }

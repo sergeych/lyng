@@ -1386,7 +1386,7 @@ class ScriptTest {
     fun testSimpleStruct() = runTest {
         val c = Context()
         c.eval("""
-            struct Point(x,y)
+            class Point(x,y)
             assert( Point::class is Class )
             val p = Point(2,3)
             assert(p is Point)
@@ -1405,7 +1405,7 @@ class ScriptTest {
     fun testNonAssignalbeFieldInStruct() = runTest {
         val c = Context()
         c.eval("""
-            struct Point(x,y)
+            class Point(x,y)
             val p = Point("2",3)
             assert(p is Point)
             assert( p.x == "2" )
@@ -1420,7 +1420,7 @@ class ScriptTest {
     fun testStructBodyVal() = runTest {
         val c = Context()
         c.eval("""
-            struct Point(x,y) {
+            class Point(x,y) {
                 val length = sqrt(x*x+y*y)
                 var foo = "zero"
             }
@@ -1440,7 +1440,7 @@ class ScriptTest {
     fun testStructBodyFun() = runTest {
         val c = Context()
         c.eval("""
-            struct Point(x,y) {
+            class Point(x,y) {
                 fun length() { 
                     sqrt(x*x+y*y) 
                 }
@@ -1485,6 +1485,32 @@ class ScriptTest {
                 block()
             }
             assertEquals( 1, cond { 1 } )
+        """.trimIndent())
+    }
+
+    @Test
+    fun testClasstoString() = runTest {
+        eval("""
+            class Point {
+                var x
+                var y
+            }
+            val p = Point()
+            p.x = 1
+            p.y = 2
+            println(p)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testClassDefaultCompare() = runTest {
+        eval("""
+            class Point(x,y)
+            assert( Point(1,2) == Point(1,2) )
+            assert( Point(1,2) !== Point(1,2) )
+            assert( Point(1,2) != Point(1,3) )
+            assert( Point(1,2) < Point(2,2) )
+            assert( Point(1,2) < Point(1,3) )
         """.trimIndent())
     }
 }

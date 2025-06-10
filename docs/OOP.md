@@ -141,7 +141,24 @@ set at construction but not available outside the class:
     void
     >>> void
 
+## Default class methods
 
+In many cases it is necessary to implement custom comparison and `toString`, still
+each class is provided with default implementations:
+
+- default toString outputs class name and its _public_ fields.
+- default comparison compares compares all public fields in order of appearance.
+
+For example, for our class Point:
+
+    class Point(x,y)
+    assert( Point(1,2) == Point(1,2) )
+    assert( Point(1,2) !== Point(1,2) )
+    assert( Point(1,2) != Point(1,3) )
+    assert( Point(1,2) < Point(2,2) )
+    assert( Point(1,2) < Point(1,3) )
+    Point(1,1+1)
+    >>> Point(1, 2)
 
 # Theory
 

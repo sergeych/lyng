@@ -1,7 +1,7 @@
 # Declaring arguments in Lyng
 
 It is a common thing that occurs in many places in Lyng, function declarations, 
-lambdas, struct and class declarations.
+lambdas and class declarations.
 
 ## Regular
 
