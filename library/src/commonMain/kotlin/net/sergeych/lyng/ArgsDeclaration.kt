@@ -53,7 +53,11 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
                 val value = when {
                     i < callArgs.size -> callArgs[i]
                     a.defaultValue != null -> a.defaultValue.execute(context)
-                    else -> context.raiseArgumentError("too few arguments for the call")
+                    else -> {
+                        println("callArgs: ${callArgs.joinToString()}")
+                        println("tailBlockMode: ${arguments.tailBlockMode}")
+                        context.raiseArgumentError("too few arguments for the call")
+                    }
                 }
                 assign(a, value)
                 i++

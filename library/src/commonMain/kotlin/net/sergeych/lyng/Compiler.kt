@@ -140,7 +140,7 @@ class Compiler(
                                 Token.Type.LPAREN -> {
                                     cc.next()
                                     // instance method call
-                                    val args = parseArgs(cc)
+                                    val args = parseArgs(cc).first
                                     isCall = true
                                     operand = Accessor { context ->
                                         context.pos = next.pos
@@ -552,7 +552,11 @@ class Compiler(
         return result
     }
 
-    private fun parseArgs(cc: CompilerContext): List<ParsedArgument> {
+    /**
+     * Parse arguments list during the call and detect last block argument
+     * _following the parenthesis_ call: `(1,2) { ... }`
+     */
+    private fun parseArgs(cc: CompilerContext): Pair<List<ParsedArgument>, Boolean> {
 
         val args = mutableListOf<ParsedArgument>()
         do {
@@ -578,6 +582,7 @@ class Compiler(
         // block after?
         val pos = cc.savePos()
         val end = cc.next()
+        var lastBlockArgument = false
         if (end.type == Token.Type.LBRACE) {
             // last argument - callable
             val callableAccessor = parseLambdaExpression(cc)
@@ -588,14 +593,16 @@ class Compiler(
                 },
                 end.pos
             )
+            lastBlockArgument = true
         } else
             cc.restorePos(pos)
-        return args
+        return args to lastBlockArgument
     }
 
 
     private fun parseFunctionCall(cc: CompilerContext, left: Accessor, blockArgument: Boolean): Accessor {
         // insofar, functions always return lvalue
+        var detectedBlockArgument = blockArgument
         val args = if (blockArgument) {
             val blockArg = ParsedArgument(
                 parseExpression(cc)
@@ -603,7 +610,9 @@ class Compiler(
             )
             listOf(blockArg)
         } else {
-            parseArgs(cc)
+            val r = parseArgs(cc)
+            detectedBlockArgument = r.second
+            r.first
         }
 
         return Accessor { context ->
@@ -611,7 +620,7 @@ class Compiler(
             v.value.callOn(
                 context.copy(
                     context.pos,
-                    args.toArguments(context, blockArgument)
+                    args.toArguments(context, detectedBlockArgument)
 //                Arguments(
 //                    args.map { Arguments.Info((it.value as Statement).execute(context), it.pos) }
 //                ),

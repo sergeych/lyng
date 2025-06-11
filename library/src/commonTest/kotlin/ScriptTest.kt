@@ -1640,4 +1640,49 @@ class ScriptTest {
         """.trimIndent())
 
     }
+
+    @Test
+    fun nationalCharsTest() = runTest {
+        eval("""
+            fun сумма_ряда(x, погрешность=0.0001, f) {
+                var сумма = 0
+                for( n in 1..100000) {
+                    val следующая_сумма = сумма + f(x, n)
+                    if( n > 1 && abs(следующая_сумма - сумма) < погрешность )
+                        break следующая_сумма
+                    сумма = следующая_сумма
+                }
+                else null
+            }
+            val x = сумма_ряда(1) { x, n -> 
+                val sign = if( n % 2 == 1 ) 1 else -1
+                sign * pow(x, n) / n
+            }
+            assert( x - ln(2) < 0.001 )
+        """.trimIndent())
+    }
+//
+//    @Test
+//    fun customIteratorTest() = runTest {
+//        eval("""
+//            fun сумма_ряда2(погрешность=0.0001, iterator) {
+//                var сумма = 0
+//                for( n in 1..100000) {
+//                    if( !iterator.hasNext() ) break сумма
+//                    val следующая_сумма = сумма + iterator.next()
+//                    if( n > 1 && abs(следующая_сумма - сумма) < погрешность )
+//                        break следующая_сумма
+//                    сумма = следующая_сумма
+//                }
+//                else null
+//            }
+//            val
+//            val x = сумма_ряда2(1) { x, n ->
+//                val sign = if( n % 2 == 1 ) 1 else -1
+//                sign * pow(x, n) / n
+//            }
+//            assert( x - ln(2) < 0.001 )
+//        """.trimIndent())
+//    }
+
 }
