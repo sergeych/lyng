@@ -170,7 +170,7 @@ class Compiler(
                                             v.invokeInstanceMethod(
                                                 context,
                                                 next.value,
-                                                Arguments(listOf(Arguments.Info(lambda, t.pos)))
+                                                Arguments(listOf(lambda))
                                             ), isMutable = false
                                         )
                                     }

@@ -61,7 +61,7 @@ open class Obj {
     fun isInstanceOf(someClass: Obj) = someClass === objClass || objClass.allParentsSet.contains(someClass)
 
     suspend fun invokeInstanceMethod(context: Context, name: String, vararg args: Obj): Obj =
-        invokeInstanceMethod(context, name, Arguments(args.map { Arguments.Info(it, context.pos) }))
+        invokeInstanceMethod(context, name, Arguments(args.toList()))
 
     inline suspend fun <reified T : Obj> callMethod(
         context: Context,
@@ -218,7 +218,7 @@ open class Obj {
         callOn(
             context.copy(
                 context.pos,
-                args = Arguments(args.map { Arguments.Info(it, context.pos) }),
+                args = Arguments(args.toList()),
                 newThisObj = thisObj
             )
         )

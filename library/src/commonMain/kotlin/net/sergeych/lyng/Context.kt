@@ -41,8 +41,8 @@ class Context(
 
     inline fun <reified T : Obj> requiredArg(index: Int): T {
         if (args.list.size <= index) raiseError("Expected at least ${index + 1} argument, got ${args.list.size}")
-        return (args.list[index].value as? T)
-            ?: raiseClassCastError("Expected type ${T::class.simpleName}, got ${args.list[index].value::class.simpleName}")
+        return (args.list[index] as? T)
+            ?: raiseClassCastError("Expected type ${T::class.simpleName}, got ${args.list[index]::class.simpleName}")
     }
 
     inline fun <reified T : Obj> requireOnlyArg(): T {
@@ -80,7 +80,7 @@ class Context(
         value: Obj,
         visibility: Visibility = Visibility.Public
     ): ObjRecord {
-        return ObjRecord(value, isMutable, visibility).also { objects.put(name, it) }
+        return ObjRecord(value, isMutable, visibility).also { objects[name] = it }
     }
 
     fun getOrCreateNamespace(name: String): ObjClass {
