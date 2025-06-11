@@ -57,6 +57,8 @@ class ScriptTest {
         check("17.2e22", Token.Type.REAL, 0, 0, "17.2E+22")
         check("17.2e22", Token.Type.REAL, 0, 0, "17.2E22")
         check("17.2e-22", Token.Type.REAL, 0, 0, "17.2E-22")
+        check("17.2e-22", Token.Type.REAL, 0, 0, "17.2E-22")
+        check("1e-22", Token.Type.REAL, 0, 0, "1E-22")
 
         // hex
         check("1", Token.Type.HEX, 0, 0, "0x1")
@@ -490,37 +492,41 @@ class ScriptTest {
     fun testAssignArgumentsNoEllipsis() = runTest {
         // equal args, no ellipsis, no defaults, ok
         val ttEnd = Token.Type.RBRACE
-        var pa = ArgsDeclaration(listOf(
-            ArgsDeclaration.Item("a"),
-            ArgsDeclaration.Item("b"),
-            ArgsDeclaration.Item("c"),
-        ), ttEnd)
-        var c = Context(pos = Pos.builtIn, args = Arguments.from(listOf(1,2,3).map { it.toObj() }))
+        var pa = ArgsDeclaration(
+            listOf(
+                ArgsDeclaration.Item("a"),
+                ArgsDeclaration.Item("b"),
+                ArgsDeclaration.Item("c"),
+            ), ttEnd
+        )
+        var c = Context(pos = Pos.builtIn, args = Arguments.from(listOf(1, 2, 3).map { it.toObj() }))
         pa.assignToContext(c)
-        assertEquals( ObjInt(1), c["a"]?.value)
-        assertEquals( ObjInt(2), c["b"]?.value)
-        assertEquals( ObjInt(3), c["c"]?.value)
+        assertEquals(ObjInt(1), c["a"]?.value)
+        assertEquals(ObjInt(2), c["b"]?.value)
+        assertEquals(ObjInt(3), c["c"]?.value)
         // less args: error
-        c = Context(pos = Pos.builtIn, args = Arguments.from(listOf(1,2).map { it.toObj() }))
+        c = Context(pos = Pos.builtIn, args = Arguments.from(listOf(1, 2).map { it.toObj() }))
         assertFailsWith<ScriptError> {
             pa.assignToContext(c)
         }
         // less args, no ellipsis, defaults, ok
-        pa = ArgsDeclaration(listOf(
-            ArgsDeclaration.Item("a"),
-            ArgsDeclaration.Item("b"),
-            ArgsDeclaration.Item("c", defaultValue = statement { ObjInt(100) }),
-        ), ttEnd)
+        pa = ArgsDeclaration(
+            listOf(
+                ArgsDeclaration.Item("a"),
+                ArgsDeclaration.Item("b"),
+                ArgsDeclaration.Item("c", defaultValue = statement { ObjInt(100) }),
+            ), ttEnd
+        )
         pa.assignToContext(c)
-        assertEquals( ObjInt(1), c["a"]?.value)
-        assertEquals( ObjInt(2), c["b"]?.value)
-        assertEquals( ObjInt(100), c["c"]?.value)
+        assertEquals(ObjInt(1), c["a"]?.value)
+        assertEquals(ObjInt(2), c["b"]?.value)
+        assertEquals(ObjInt(100), c["c"]?.value)
         // enough args. default value is ignored:
         c = Context(pos = Pos.builtIn, args = Arguments.from(listOf(10, 2, 5).map { it.toObj() }))
         pa.assignToContext(c)
-        assertEquals( ObjInt(10), c["a"]?.value)
-        assertEquals( ObjInt(2), c["b"]?.value)
-        assertEquals( ObjInt(5), c["c"]?.value)
+        assertEquals(ObjInt(10), c["a"]?.value)
+        assertEquals(ObjInt(2), c["b"]?.value)
+        assertEquals(ObjInt(5), c["c"]?.value)
     }
 
     @Test
@@ -528,16 +534,18 @@ class ScriptTest {
         // equal args,
         // less args, no ellipsis, defaults, ok
         val ttEnd = Token.Type.RBRACE
-        val pa = ArgsDeclaration(listOf(
-            ArgsDeclaration.Item("a"),
-            ArgsDeclaration.Item("b", isEllipsis = true),
-        ), ttEnd)
-        var c = Context(args = Arguments.from(listOf(1,2,3).map { it.toObj() }))
+        val pa = ArgsDeclaration(
+            listOf(
+                ArgsDeclaration.Item("a"),
+                ArgsDeclaration.Item("b", isEllipsis = true),
+            ), ttEnd
+        )
+        var c = Context(args = Arguments.from(listOf(1, 2, 3).map { it.toObj() }))
         pa.assignToContext(c)
         c.eval("assert( a == 1 ); println(b)")
         c.eval("assert( b == [2,3] )")
 
-        c = Context(args = Arguments.from(listOf(1,2).map { it.toObj() }))
+        c = Context(args = Arguments.from(listOf(1, 2).map { it.toObj() }))
         pa.assignToContext(c)
         c.eval("assertEquals( a, 1 ); println(b)")
         c.eval("assertEquals( b, [2] )")
@@ -551,24 +559,26 @@ class ScriptTest {
     @Test
     fun testAssignArgumentsStartEllipsis() = runTest {
         val ttEnd = Token.Type.RBRACE
-        val pa = ArgsDeclaration(listOf(
-            ArgsDeclaration.Item("a", isEllipsis = true),
-            ArgsDeclaration.Item("b"),
-            ArgsDeclaration.Item("c"),
-        ), ttEnd)
-        var c = Context(args = Arguments.from(listOf(0,1,2,3).map { it.toObj() }))
+        val pa = ArgsDeclaration(
+            listOf(
+                ArgsDeclaration.Item("a", isEllipsis = true),
+                ArgsDeclaration.Item("b"),
+                ArgsDeclaration.Item("c"),
+            ), ttEnd
+        )
+        var c = Context(args = Arguments.from(listOf(0, 1, 2, 3).map { it.toObj() }))
         pa.assignToContext(c)
         c.eval("assertEquals( a,[0,1] )")
         c.eval("assertEquals( b, 2 )")
         c.eval("assertEquals( c, 3 )")
 
-        c = Context(args = Arguments.from(listOf(1,2,3).map { it.toObj() }))
+        c = Context(args = Arguments.from(listOf(1, 2, 3).map { it.toObj() }))
         pa.assignToContext(c)
         c.eval("assertEquals( a,[1] )")
         c.eval("assertEquals( b, 2 )")
         c.eval("assertEquals( c, 3 )")
 
-        c = Context(args = Arguments.from(listOf(2,3).map { it.toObj() }))
+        c = Context(args = Arguments.from(listOf(2, 3).map { it.toObj() }))
         pa.assignToContext(c)
         c.eval("assertEquals( a,[] )")
         c.eval("assertEquals( b, 2 )")
@@ -583,34 +593,36 @@ class ScriptTest {
     @Test
     fun testAssignArgumentsmiddleEllipsis() = runTest {
         val ttEnd = Token.Type.RBRACE
-        val pa = ArgsDeclaration(listOf(
-            ArgsDeclaration.Item("i"),
-            ArgsDeclaration.Item("a", isEllipsis = true),
-            ArgsDeclaration.Item("b"),
-            ArgsDeclaration.Item("c"),
-        ), ttEnd)
-        var c = Context(args = Arguments.from(listOf(-1,0,1,2,3).map { it.toObj() }))
+        val pa = ArgsDeclaration(
+            listOf(
+                ArgsDeclaration.Item("i"),
+                ArgsDeclaration.Item("a", isEllipsis = true),
+                ArgsDeclaration.Item("b"),
+                ArgsDeclaration.Item("c"),
+            ), ttEnd
+        )
+        var c = Context(args = Arguments.from(listOf(-1, 0, 1, 2, 3).map { it.toObj() }))
         pa.assignToContext(c)
         c.eval("assertEquals( i, -1 )")
         c.eval("assertEquals( a,[0,1] )")
         c.eval("assertEquals( b, 2 )")
         c.eval("assertEquals( c, 3 )")
 
-        c = Context(args = Arguments.from(listOf(0, 1,2,3).map { it.toObj() }))
+        c = Context(args = Arguments.from(listOf(0, 1, 2, 3).map { it.toObj() }))
         pa.assignToContext(c)
         c.eval("assertEquals( i, 0 )")
         c.eval("assertEquals( a,[1] )")
         c.eval("assertEquals( b, 2 )")
         c.eval("assertEquals( c, 3 )")
 
-        c = Context(args = Arguments.from(listOf(1,2,3).map { it.toObj() }))
+        c = Context(args = Arguments.from(listOf(1, 2, 3).map { it.toObj() }))
         pa.assignToContext(c)
         c.eval("assertEquals( i, 1)")
         c.eval("assertEquals( a,[] )")
         c.eval("assertEquals( b, 2 )")
         c.eval("assertEquals( c, 3 )")
 
-        c = Context(args = Arguments.from(listOf(2,3).map { it.toObj() }))
+        c = Context(args = Arguments.from(listOf(2, 3).map { it.toObj() }))
         assertFailsWith<ExecutionError> {
             pa.assignToContext(c)
         }
@@ -1385,7 +1397,8 @@ class ScriptTest {
     @Test
     fun testSimpleStruct() = runTest {
         val c = Context()
-        c.eval("""
+        c.eval(
+            """
             class Point(x,y)
             assert( Point::class is Class )
             val p = Point(2,3)
@@ -1398,13 +1411,15 @@ class ScriptTest {
             val p2 = Point(p.x+1,p.y+1)
             p.x = 0
             assertEquals( 0, p.x )
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testNonAssignalbeFieldInStruct() = runTest {
         val c = Context()
-        c.eval("""
+        c.eval(
+            """
             class Point(x,y)
             val p = Point("2",3)
             assert(p is Point)
@@ -1413,13 +1428,15 @@ class ScriptTest {
             
             p.x = 0
             assertEquals( 0, p.x )
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testStructBodyVal() = runTest {
         val c = Context()
-        c.eval("""
+        c.eval(
+            """
             class Point(x,y) {
                 val length = sqrt(x*x+y*y)
                 var foo = "zero"
@@ -1433,13 +1450,15 @@ class ScriptTest {
             assert( p.foo == "bar")
             // length is a val, is shoud not change
             assert( p.length == 5 )
-            """.trimIndent())
+            """.trimIndent()
+        )
     }
 
     @Test
     fun testStructBodyFun() = runTest {
         val c = Context()
-        c.eval("""
+        c.eval(
+            """
             class Point(x,y) {
                 fun length() { 
                     sqrt(x*x+y*y) 
@@ -1451,23 +1470,27 @@ class ScriptTest {
             p.y = 10
             println(p.length())
             assertEquals(sqrt(109), p.length())
-            """.trimIndent())
+            """.trimIndent()
+        )
     }
 
     @Test
     fun testPrivateConstructorParams() = runTest {
         val c = Context()
-        c.eval("""
+        c.eval(
+            """
             class Point(private var x,y)
             val p = Point(1,2)
             p.y = 101
             assertThrows { p.x = 10 }
-            """)
+            """
+        )
     }
 
     @Test
     fun testLBraceMethodCall() = runTest {
-        eval("""
+        eval(
+            """
             class Foo() {
                 fun cond(block) { 
                     block()
@@ -1475,22 +1498,26 @@ class ScriptTest {
             }
             val f = Foo()
             assertEquals( 1, f.cond { 1 } )
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testLBraceFnCall() = runTest {
-        eval("""
+        eval(
+            """
             fun cond(block) { 
                 block()
             }
             assertEquals( 1, cond { 1 } )
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testClasstoString() = runTest {
-        eval("""
+        eval(
+            """
             class Point {
                 var x
                 var y
@@ -1499,25 +1526,75 @@ class ScriptTest {
             p.x = 1
             p.y = 2
             println(p)
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testClassDefaultCompare() = runTest {
-        eval("""
+        eval(
+            """
             class Point(x,y)
             assert( Point(1,2) == Point(1,2) )
             assert( Point(1,2) !== Point(1,2) )
             assert( Point(1,2) != Point(1,3) )
             assert( Point(1,2) < Point(2,2) )
             assert( Point(1,2) < Point(1,3) )
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testAccessShortcuts() {
-        assertTrue( Visibility.Public.isPublic )
-        assertFalse( Visibility.Private.isPublic )
-        assertFalse( Visibility.Protected.isPublic )
+        assertTrue(Visibility.Public.isPublic)
+        assertFalse(Visibility.Private.isPublic)
+        assertFalse(Visibility.Protected.isPublic)
     }
+
+    @Test
+    fun segfault1Test() = runTest {
+        eval(
+            """
+            
+            fun findSumLimit(f) {
+                var sum = 0.0
+                for( n in 1..1000000 ) {
+                    val s0 = sum
+                    sum += f(n)
+                    if( abs(sum - s0) < 0.00001 ) { 
+                        println("limit reached after "+n+" rounds")
+                        break sum
+                    }
+                    n++
+                }
+                else {
+                    println("limit not reached")
+                    null
+                }
+            }
+
+            val limit = findSumLimit { n -> 1.0/n/n }
+            
+            println("Result: "+limit)
+        """
+        )
+    }
+
+    @Test
+    fun testIntExponentRealForm() = runTest {
+        assertEquals("1.0E-6", eval("1e-6").toString())
+    }
+
+//    @Test
+//    fun testLambdaLastArgAfterDetault() = runTest {
+//        val c = Context()
+//        eval("""
+//            // this means last is lambda:
+//            fun f(e=1, f) {
+//                "e="+e+"f="+f()
+//            }
+//            assertEquals("e=1f=xx", f { "xx" })
+//        """.trimIndent())
+//
+//    }
 }

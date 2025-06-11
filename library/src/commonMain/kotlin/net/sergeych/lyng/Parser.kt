@@ -293,7 +293,19 @@ private class Parser(fromPos: Pos) {
     private fun decodeNumber(p1: String, start: Pos): Token =
         if (pos.end)
             Token(p1, start, Token.Type.INT)
-        else if (currentChar == '.') {
+        else if( currentChar == 'e' || currentChar == 'E' ) {
+            pos.advance()
+            var negative = false
+            if (currentChar == '+')
+                pos.advance()
+            else if (currentChar == '-') {
+                negative = true
+                pos.advance()
+            }
+            var p3 = loadChars(digits)
+            if (negative) p3 = "-$p3"
+            Token("${p1}e$p3", start, Token.Type.REAL)
+        } else if (currentChar == '.') {
             // could be decimal
             pos.advance()
             if (currentChar in digitsSet) {

@@ -1330,7 +1330,7 @@ class Compiler(
         /**
          * The keywords that stop processing of expression term
          */
-        val stopKeywords = setOf("break", "continue", "return", "if", "when", "do", "while", "for", "class", "struct")
+        val stopKeywords = setOf("do", "break", "continue", "return", "if", "when", "do", "while", "for", "class", "struct")
     }
 }
 

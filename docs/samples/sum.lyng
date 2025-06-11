@@ -1,0 +1,26 @@
+/*
+    Calculate the limit of Sum( f(n) )
+    until it reaches asymptotic limit 0.00001% change
+
+    return null or found limit
+*/
+fun findSumLimit(f) {
+    var sum = 0.0
+    for( n in 1..1000000 ) {
+        val s0 = sum
+        sum += f(n)
+        if( abs(sum - s0) / abs(sum) < 1.0e-6 ) {
+            println("limit reached after "+n+" rounds")
+            break sum
+        }
+        n++
+    }
+    else {
+        println("limit not reached")
+        null
+    }
+}
+
+val limit = findSumLimit { n -> 1.0/n/n }
+
+println("Result: "+limit)

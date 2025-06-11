@@ -11,7 +11,8 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
         val start = params.indexOfFirst { it.defaultValue != null }
         if (start >= 0)
             for (j in start + 1 until params.size)
-                if (params[j].defaultValue == null) throw ScriptError(
+                // last non-default could be lambda:
+                if (params[j].defaultValue == null && j != params.size - 1) throw ScriptError(
                     params[j].pos,
                     "required argument can't follow default one"
                 )
@@ -22,7 +23,7 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
      */
     suspend fun assignToContext(
         context: Context,
-        fromArgs: Arguments = context.args,
+        _fromArgs: Arguments = context.args,
         defaultAccessType: AccessType = AccessType.Var,
         defaultVisibility: Visibility = Visibility.Public
     ) {
@@ -30,6 +31,9 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
             context.addItem(a.name, (a.accessType ?: defaultAccessType).isMutable, value,
                 a.visibility ?: defaultVisibility)
         }
+
+        // will be used with last lambda arg fix
+        val fromArgs = _fromArgs
 
         suspend fun processHead(index: Int): Int {
             var i = index
