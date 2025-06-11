@@ -379,7 +379,7 @@ class Compiler(
             val context = closure!!.copy(pos, args)
             if (argsDeclaration == null) {
                 // no args: automatic var 'it'
-                val l = args.values
+                val l = args.list
                 val itValue: Obj = when (l.size) {
                     // no args: it == void
                     0 -> ObjVoid

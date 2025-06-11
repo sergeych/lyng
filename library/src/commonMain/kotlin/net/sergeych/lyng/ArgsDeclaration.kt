@@ -74,7 +74,7 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
         fun processEllipsis(index: Int, toFromIndex: Int) {
             val a = params[index]
             val l = if (index > toFromIndex) ObjList()
-            else ObjList(fromArgs.values.subList(index, toFromIndex + 1).toMutableList())
+            else ObjList(fromArgs.list.subList(index, toFromIndex + 1).toMutableList())
             assign(a, l)
         }
 

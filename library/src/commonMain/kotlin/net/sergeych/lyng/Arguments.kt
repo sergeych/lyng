@@ -28,12 +28,8 @@ suspend fun Collection<ParsedArgument>.toArguments(context: Context): Arguments 
 
 data class Arguments(val list: List<Obj>) : List<Obj> by list {
 
-    data class Info(val value: Obj, val pos: Pos)
-
-    val values = list
-
-    fun firstAndOnly(): Obj {
-        if (list.size != 1) throw IllegalArgumentException("Expected one argument, got ${list.size}")
+    fun firstAndOnly(pos: Pos = Pos.UNKNOWN): Obj {
+        if (list.size != 1) throw ScriptError(pos, "expected one argument, got ${list.size}")
         return list.first()
     }
 
