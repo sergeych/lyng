@@ -1585,16 +1585,59 @@ class ScriptTest {
         assertEquals("1.0E-6", eval("1e-6").toString())
     }
 
-//    @Test
-//    fun testLambdaLastArgAfterDetault() = runTest {
-//        val c = Context()
-//        eval("""
-//            // this means last is lambda:
-//            fun f(e=1, f) {
-//                "e="+e+"f="+f()
-//            }
-//            assertEquals("e=1f=xx", f { "xx" })
-//        """.trimIndent())
-//
-//    }
+    @Test
+    fun testCallLastBlockAfterDetault() = runTest {
+        eval("""
+            // this means last is lambda:
+            fun f(e=1, f) {
+                "e="+e+"f="+f()
+            }
+            assertEquals("e=1f=xx", f { "xx" })
+        """.trimIndent())
+
+    }
+
+    @Test
+    fun testCallLastBlockWithEllipsis() = runTest {
+        eval("""
+            // this means last is lambda:
+            fun f(e..., f) {
+                "e="+e+"f="+f()
+            }
+            assertEquals("e=[]f=xx", f { "xx" })
+            assertEquals("e=[1, 2]f=xx", f(1,2) { "xx" })
+        """.trimIndent())
+
+    }
+
+    @Test
+    fun testMethodCallLastBlockAfterDefault() = runTest {
+        eval("""
+            class Foo {
+                // this means last is lambda:
+                fun f(e=1, f) {
+                    "e="+e+"f="+f()
+                }
+            }
+            val f = Foo()
+            assertEquals("e=1f=xx", f.f { "xx" })
+        """.trimIndent())
+
+    }
+
+    @Test
+    fun testMethodCallLastBlockWithEllipsis() = runTest {
+        eval("""
+            class Foo {
+                // this means last is lambda:
+                fun f(e..., f) {
+                    "e="+e+"f="+f()
+                }
+            }
+            val f = Foo()
+            assertEquals("e=[]f=xx", f.f { "xx" })
+            assertEquals("e=[1, 2]f=xx", f.f(1,2) { "xx" })
+        """.trimIndent())
+
+    }
 }

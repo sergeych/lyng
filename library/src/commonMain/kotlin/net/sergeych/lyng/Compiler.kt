@@ -149,7 +149,7 @@ class Compiler(
                                             v.invokeInstanceMethod(
                                                 context,
                                                 next.value,
-                                                args.toArguments(context)
+                                                args.toArguments(context,false)
                                             ), isMutable = false
                                         )
                                     }
@@ -157,7 +157,7 @@ class Compiler(
 
                                 Token.Type.LBRACE -> {
                                     // single lambda arg, like assertTrows { ... }
-                                    cc.next()
+                                   cc.next()
                                     isCall = true
                                     val lambda =
                                         parseExpression(cc) ?: throw ScriptError(t.pos, "expected valid lambda here")
@@ -170,7 +170,7 @@ class Compiler(
                                             v.invokeInstanceMethod(
                                                 context,
                                                 next.value,
-                                                Arguments(listOf(lambda))
+                                                Arguments(listOf(lambda),true)
                                             ), isMutable = false
                                         )
                                     }
@@ -611,7 +611,7 @@ class Compiler(
             v.value.callOn(
                 context.copy(
                     context.pos,
-                    args.toArguments(context)
+                    args.toArguments(context, blockArgument)
 //                Arguments(
 //                    args.map { Arguments.Info((it.value as Statement).execute(context), it.pos) }
 //                ),

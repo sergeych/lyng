@@ -2,7 +2,7 @@ package net.sergeych.lyng
 
 data class ParsedArgument(val value: Statement, val pos: Pos, val isSplat: Boolean = false)
 
-suspend fun Collection<ParsedArgument>.toArguments(context: Context): Arguments {
+suspend fun Collection<ParsedArgument>.toArguments(context: Context,tailBlockMode: Boolean): Arguments {
     val list = mutableListOf<Obj>()
 
     for (x in this) {
@@ -23,10 +23,10 @@ suspend fun Collection<ParsedArgument>.toArguments(context: Context): Arguments 
         } else
             list.add(value)
     }
-    return Arguments(list)
+    return Arguments(list,tailBlockMode)
 }
 
-data class Arguments(val list: List<Obj>) : List<Obj> by list {
+data class Arguments(val list: List<Obj>,val tailBlockMode: Boolean = false) : List<Obj> by list {
 
     fun firstAndOnly(pos: Pos = Pos.UNKNOWN): Obj {
         if (list.size != 1) throw ScriptError(pos, "expected one argument, got ${list.size}")

@@ -23,7 +23,7 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
      */
     suspend fun assignToContext(
         context: Context,
-        _fromArgs: Arguments = context.args,
+        arguments: Arguments = context.args,
         defaultAccessType: AccessType = AccessType.Var,
         defaultVisibility: Visibility = Visibility.Public
     ) {
@@ -33,15 +33,25 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
         }
 
         // will be used with last lambda arg fix
-        val fromArgs = _fromArgs
+        val callArgs: List<Obj>
+        val paramsSize: Int
+
+        if( arguments.tailBlockMode ) {
+            paramsSize = params.size - 1
+            assign(params.last(), arguments.list.last())
+            callArgs = arguments.list.dropLast(1)
+        } else {
+            paramsSize = params.size
+            callArgs = arguments.list
+        }
 
         suspend fun processHead(index: Int): Int {
             var i = index
-            while (i != params.size) {
+            while (i != paramsSize) {
                 val a = params[i]
                 if (a.isEllipsis) break
                 val value = when {
-                    i < fromArgs.size -> fromArgs[i]
+                    i < callArgs.size -> callArgs[i]
                     a.defaultValue != null -> a.defaultValue.execute(context)
                     else -> context.raiseArgumentError("too few arguments for the call")
                 }
@@ -52,14 +62,14 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
         }
 
         suspend fun processTail(index: Int): Int {
-            var i = params.size - 1
-            var j = fromArgs.size - 1
+            var i = paramsSize - 1
+            var j = callArgs.size - 1
             while (i > index) {
                 val a = params[i]
                 if (a.isEllipsis) break
                 val value = when {
                     j >= index -> {
-                        fromArgs[j--]
+                        callArgs[j--]
                     }
 
                     a.defaultValue != null -> a.defaultValue.execute(context)
@@ -74,16 +84,16 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
         fun processEllipsis(index: Int, toFromIndex: Int) {
             val a = params[index]
             val l = if (index > toFromIndex) ObjList()
-            else ObjList(fromArgs.list.subList(index, toFromIndex + 1).toMutableList())
+            else ObjList(callArgs.subList(index, toFromIndex + 1).toMutableList())
             assign(a, l)
         }
 
         val leftIndex = processHead(0)
-        if (leftIndex < params.size) {
+        if (leftIndex < paramsSize) {
             val end = processTail(leftIndex)
             processEllipsis(leftIndex, end)
         } else {
-            if (leftIndex < fromArgs.size)
+            if (leftIndex < callArgs.size)
                 context.raiseArgumentError("too many arguments for the call")
         }
     }
