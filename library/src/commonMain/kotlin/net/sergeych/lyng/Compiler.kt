@@ -725,7 +725,9 @@ class Compiler(
     private fun parseThrowStatement(cc: CompilerContext): Statement {
         val throwStatement = parseStatement(cc) ?: throw ScriptError(cc.currentPos(), "throw object expected")
         return statement {
-            val errorObject = throwStatement.execute(this)
+            var errorObject = throwStatement.execute(this)
+            if( errorObject is ObjString )
+                errorObject = ObjException(this, errorObject.value)
             if( errorObject is ObjException )
                 raiseError(errorObject)
             else raiseError("this is not an exception object: $errorObject")
@@ -816,11 +818,10 @@ class Compiler(
                     for (exceptionClassName in cdata.classNames) {
                         val exObj = ObjException.getErrorClass(exceptionClassName)
                             ?: raiseSymbolNotFound("error clas not exists: $exceptionClassName")
-                        println("exObj: $exObj")
-                        println("objException: ${objException.objClass}")
-                        if( objException.isInstanceOf(exObj) )
+                        if( objException.isInstanceOf(exObj) ) {
                             exceptionObject = objException
                             break
+                        }
                     }
                     if( exceptionObject != null ) {
                         val catchContext = this.copy(pos = cdata.catchVar.pos)

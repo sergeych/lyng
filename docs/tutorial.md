@@ -12,7 +12,7 @@ In other word, the code usually works as expected when you see it. So, nothing u
 __Other documents to read__ maybe after this one:
 
 - [Advanced topics](advanced_topics.md), [declaring arguments](declaring_arguments.md)
-- [OOP notes](OOP.md)
+- [OOP notes](OOP.md), [exception handling](exceptions_handling.md)
 - [math in Lyng](math.md)
 - Some class references: [List], [Real], [Range], [Iterable], [Iterator]
 - Some samples: [combinatorics](samples/combinatorics.lyng.md), national vars and loops: [сумма ряда](samples/сумма_ряда.lyng.md). More at [samples folder](samples)

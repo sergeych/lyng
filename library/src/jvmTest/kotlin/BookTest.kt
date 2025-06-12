@@ -268,4 +268,9 @@ class BookTest {
     fun testArgumentBooks() = runTest {
         runDocTests("../docs/declaring_arguments.md")
     }
+
+    @Test
+    fun testExceptionsBooks() = runTest {
+        runDocTests("../docs/exceptions_handling.md")
+    }
 }

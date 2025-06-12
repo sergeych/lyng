@@ -347,13 +347,16 @@ open class ObjException(exceptionClass: ExceptionClass, val context: Context, va
 
         class ExceptionClass(val name: String,vararg parents: ObjClass) : ObjClass(name, *parents) {
             override suspend fun callOn(context: Context): Obj {
-                return ObjException(this, context, name).apply {
-                    println(">>>> "+this)
-                }
+                val message = context.args.getOrNull(0)?.toString() ?: name
+                return ObjException(this, context, message)
             }
             override fun toString(): String = "ExceptionClass[$name]@${hashCode().encodeToHex()}"
         }
-        val Root = ExceptionClass("Throwable")
+        val Root = ExceptionClass("Throwable").apply {
+            addConst("message", statement {
+                (thisObj as ObjException).message.toObj()
+            })
+        }
 
         private val op = ProtectedOp()
         private val existingErrorClasses = mutableMapOf<String, ExceptionClass>()

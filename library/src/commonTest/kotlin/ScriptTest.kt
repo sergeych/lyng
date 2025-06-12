@@ -1813,4 +1813,24 @@ class ScriptTest {
         """.trimIndent())
     }
 
+    @Test
+    fun testAccessEHData() = runTest {
+        eval("""
+            val x = IllegalArgumentException("test")
+            val m = try {
+                throw x
+                null
+            }
+            catch(e) {
+                println(e)
+                println(e::class)
+                println(e.message)
+                println("--------------")
+                e.message    
+            }
+            println(m)
+            assert( m == "test" )
+            """.trimIndent())
+    }
+
 }
