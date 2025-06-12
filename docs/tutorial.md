@@ -803,7 +803,10 @@ And even shortest, for the Lying lang tradition, missing var is `it`:
     >>> void
 
 It is possible to catch several exceptions in the same block too, use 
-`catch( varName: ExceptionClass1, ExceptionClass2)`, etc.
+`catch( varName: ExceptionClass1, ExceptionClass2)`, etc, use short form of throw and
+many more.
+
+- see [exception handling](exceptions_handling.md) for detailed exceptions tutorial and reference.
 
 
 # Self-assignments in expression
