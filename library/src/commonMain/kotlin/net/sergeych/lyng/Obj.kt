@@ -286,6 +286,8 @@ object ObjNull : Obj() {
     override fun equals(other: Any?): Boolean {
         return other is ObjNull || other == null
     }
+
+    override fun toString(): String = "null"
 }
 
 interface Numeric {

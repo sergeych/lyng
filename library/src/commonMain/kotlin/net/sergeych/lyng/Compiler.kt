@@ -710,6 +710,7 @@ class Compiler(
         "val" -> parseVarDeclaration(id.value, false, cc)
         "var" -> parseVarDeclaration(id.value, true, cc)
         "while" -> parseWhileStatement(cc)
+        "do" -> parseDoWhileStatement(cc)
         "for" -> parseForStatement(cc)
         "break" -> parseBreakStatement(id.pos, cc)
         "continue" -> parseContinueStatement(id.pos, cc)
@@ -944,6 +945,59 @@ class Compiler(
         return elseStatement?.execute(forContext) ?: result
     }
 
+    @Suppress("UNUSED_VARIABLE")
+    private fun parseDoWhileStatement(cc: CompilerContext): Statement {
+        val label = getLabel(cc)?.also { cc.labels += it }
+        val (breakFound, body) = cc.parseLoop {
+            parseStatement(cc) ?: throw ScriptError(cc.currentPos(), "Bad while statement: expected statement")
+        }
+        label?.also { cc.labels -= it }
+
+        cc.skipTokens(Token.Type.NEWLINE)
+
+        val t = cc.next()
+        if( t.type != Token.Type.ID && t.value != "while" )
+        cc.skipTokenOfType(Token.Type.LPAREN, "expected '(' here")
+
+        val conditionStart = ensureLparen(cc)
+        val condition =
+            parseExpression(cc) ?: throw ScriptError(conditionStart, "Bad while statement: expected expression")
+        ensureRparen(cc)
+
+        cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
+        val elseStatement = if (cc.next().let { it.type == Token.Type.ID && it.value == "else" }) {
+            parseStatement(cc)
+        } else {
+            cc.previous()
+            null
+        }
+
+
+        return statement(body.pos) {
+            var wasBroken = false
+            var result: Obj = ObjVoid
+            lateinit var doContext: Context
+            do {
+                doContext = it.copy().apply { skipContextCreation = true }
+                try {
+                    result = body.execute(doContext)
+                }
+                catch( e: LoopBreakContinueException) {
+                    if( e.label == label || e.label == null ) {
+                        if( e.doContinue ) continue
+                        else {
+                            result = e.result
+                            wasBroken = true
+                            break
+                        }
+                    }
+                }
+            } while( condition.execute(doContext).toBool() )
+            if( !wasBroken ) elseStatement?.let { s -> result = s.execute(it) }
+            result
+        }
+    }
+
     private fun parseWhileStatement(cc: CompilerContext): Statement {
         val label = getLabel(cc)?.also { cc.labels += it }
         val start = ensureLparen(cc)
@@ -1149,7 +1203,7 @@ class Compiler(
         val block = parseScript(startPos, cc)
         return statement(startPos) {
             // block run on inner context:
-            block.execute(it.copy(startPos))
+            block.execute(if( it.skipContextCreation ) it else it.copy(startPos))
         }.also {
             val t1 = cc.next()
             if (t1.type != Token.Type.RBRACE)
@@ -1184,7 +1238,7 @@ class Compiler(
             }
         }
 
-        val initialExpression = if (setNull) null else parseExpression(tokens)
+        val initialExpression = if (setNull) null else parseStatement(tokens, true)
             ?: throw ScriptError(eqToken.pos, "Expected initializer expression")
 
         return statement(nameToken.pos) { context ->
@@ -1196,7 +1250,7 @@ class Compiler(
             val initValue = initialExpression?.execute(context)?.byValueCopy() ?: ObjNull
 
             context.addItem(name, mutable, initValue, visibility)
-            ObjVoid
+            initValue
         }
     }
 

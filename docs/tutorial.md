@@ -554,16 +554,16 @@ Or, more neat:
 
 ## while
 
-Regular pre-condition while loop, as expression, loop returns it's last line result:
+Regular pre-condition while loop, as expression, loop returns the last expression as everything else:
 
     var count = 0
-    while( count < 5 ) {
-        count++
-        count * 10
-    }
-    >>> 50
+    val result = while( count < 5 ) count++
+    result
+    >>> 4
 
-We can break as usual:
+Notice it _is 4 because when count became 5, the loop body was not executed!_.
+
+We can break while as usual:
 
     var count = 0
     while( count < 5 ) {
@@ -682,6 +682,36 @@ So the returned value, as seen from diagram could be one of:
 - value returned from the `else` clause, of the loop was not broken
 - value returned from the last execution of loop body, if there was no `break` and no `else` clause.
 
+## do-while loops
+
+There works exactly as while loops but the body is executed prior to checking the while condition:
+
+    var i = 0
+    do { i++ } while( i < 1 )
+    i
+    >>> 1
+
+The important feature of the do-while loop is that the condition expression is
+evaluated on the body scope, e.g., variables, intruduced in the loop body are
+available in the condition:
+
+    do {
+        var continueLoop = false
+        "OK"
+    } while( continueLoop )
+    >>> "OK"
+
+This is sometimes convenient when condition is complex and has to be calculated inside the loop body. Notice the value returning by the loop:
+
+    fun readLine() { "done: result" }
+    val result = do {
+        val line = readLine()
+    } while( !line.startsWith("done:") )
+    result.drop(6)
+    >>> "result"
+
+Suppose readLine() here reads some stream of lines.
+
 
 ## For loops
 
@@ -791,7 +821,7 @@ See [Ranges](Range.md) for detailed documentation on it.
 
     // single line comment
     var result = null // here we will store the result
-    >>> void
+    >>> null
 
 # Integral data types
 
@@ -837,9 +867,35 @@ Are the same as in string literals with little difference:
 
 ## String details
 
+Strings are much like Kotlin ones:
+
+    "Hello".length
+    >>> 5
+And supports growing set of kotlin-borrowed operations, see below, for example:
+
+    assertEquals("Hell", "Hello".dropLast(1))
+    >>> void
+
 ### String operations
 
 Concatenation is a `+`: `"hello " + name` works as expected. No confusion.
+
+Typical set of String functions includes:
+
+| fun/prop         | description / notes                                        |
+|------------------|------------------------------------------------------------|
+| lower()          | change case to unicode upper                               |
+| upper()          | change case to unicode lower                               |
+| startsWith(prefix) | true if starts with a prefix                               |
+| take(n)          | get a new string from up to n first characters             |
+| takeLast(n)      | get a new string from up to n last characters              |
+| drop(n)          | get a new string dropping n first chars, or empty string   |
+| dropLast(n)      | get a new string dropping n last chars, or empty string    |
+| size             | size in characters like `length` because String is [Array] |
+
+
+
+
 
 ### Literals
 

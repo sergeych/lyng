@@ -174,7 +174,7 @@ class ScriptTest {
     fun varsAndConstsTest() = runTest {
         val context = Context(pos = Pos.builtIn)
         assertEquals(
-            ObjVoid, context.eval(
+            ObjInt(3L), context.eval(
                 """
             val a = 17
             var b = 3
@@ -432,6 +432,16 @@ class ScriptTest {
             ).toString()
         )
 
+    }
+
+    @Test
+    fun whileAssignTest() = runTest {
+        eval("""
+            var t = 0
+            val x = while( t < 5 ) { t++ }
+            // last returned value is 4 - when t was 5 body was not executed
+            assertEquals( 4, x )
+        """.trimIndent())
     }
 
     @Test
@@ -1659,6 +1669,30 @@ class ScriptTest {
                 sign * pow(x, n) / n
             }
             assert( x - ln(2) < 0.001 )
+        """.trimIndent())
+    }
+
+    @Test
+    fun doWhileSimpleTest() = runTest {
+        eval("""
+            var sum = 0
+            var x = do {
+                val s = sum
+                sum += 1
+            } while( s < 10 )
+            assertEquals(11, x)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testFailDoWhileSample1() = runTest {
+        eval("""
+            fun readLine() { "done: result" }
+            val result = do {
+                val line = readLine()
+            } while( !line.startsWith("done:") )
+            assertEquals("result", result.drop(6))
+            result
         """.trimIndent())
     }
 

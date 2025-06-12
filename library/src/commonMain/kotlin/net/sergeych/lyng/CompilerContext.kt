@@ -134,6 +134,13 @@ internal class CompilerContext(val tokens: List<Token>) {
         return default
     }
 
+//    fun expectKeyword(vararg keyword: String): String {
+//        val t = next()
+//        if (t.type != Token.Type.ID && t.value !in keyword) {
+//            throw ScriptError(t.pos, "expected one of ${keyword.joinToString()}")
+//
+//    }
+
 //    data class ReturnScope(val needCatch: Boolean = false)
 
 //    private val

@@ -4,7 +4,8 @@ class Context(
     val parent: Context?,
     val args: Arguments = Arguments.EMPTY,
     var pos: Pos = Pos.builtIn,
-    val thisObj: Obj = ObjVoid
+    val thisObj: Obj = ObjVoid,
+    var skipContextCreation: Boolean = false,
 ) {
     constructor(
         args: Arguments = Arguments.EMPTY,

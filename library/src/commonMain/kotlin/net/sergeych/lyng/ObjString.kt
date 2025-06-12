@@ -40,6 +40,32 @@ data class ObjString(val value: String) : Obj() {
             addConst("length",
                 statement { ObjInt(thisAs<ObjString>().value.length.toLong()) }
             )
+            addFn("takeLast") {
+                thisAs<ObjString>().value.takeLast(
+                    requiredArg<ObjInt>(0).toInt()
+                ).let(::ObjString)
+            }
+            addFn("take") {
+                thisAs<ObjString>().value.take(
+                    requiredArg<ObjInt>(0).toInt()
+                ).let(::ObjString)
+            }
+            addFn("drop") {
+                thisAs<ObjString>().value.drop(
+                    requiredArg<ObjInt>(0).toInt()
+                ).let(::ObjString)
+            }
+            addFn("dropLast") {
+                thisAs<ObjString>().value.dropLast(
+                    requiredArg<ObjInt>(0).toInt()
+                ).let(::ObjString)
+            }
+            addFn("lower") {
+                thisAs<ObjString>().value.lowercase().let(::ObjString)
+            }
+            addFn("upper") {
+                thisAs<ObjString>().value.uppercase().let(::ObjString)
+            }
             addFn("size") { ObjInt(thisAs<ObjString>().value.length.toLong()) }
         }
     }
