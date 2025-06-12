@@ -790,14 +790,15 @@ class Compiler(
                 t = cc.next()
             }
         }
-        if( catches.isEmpty() )
-            throw ScriptError(cc.currentPos(), "try block must have at least one catch clause")
         val finallyClause = if( t.value == "finally" ) {
             parseBlock(cc)
         } else {
             cc.previous()
             null
         }
+
+        if( catches.isEmpty() && finallyClause == null )
+            throw ScriptError(cc.currentPos(), "try block must have either catch or finally clause or both")
 
         return statement {
             var result: Obj = ObjVoid

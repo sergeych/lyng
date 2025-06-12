@@ -106,6 +106,22 @@ This way, in turn, can also be shortened, as it is overly popular:
 The trick, though, works with strings only, and always provide `Exception` instances, which is good for debugging but
 most often not enough.
 
+## finally block
+
+If `finally` block present, it will be executed after body (until first exception)
+and catch block, if any will match. finally statement is executed even if the
+exception will be thrown and not caught locally. It does not alter try/catch block result:
+
+    try {
+    }
+    finally {
+        println("called finally")
+    }
+    >>> called finally
+    >>> void
+
+- and yes, there could be try-finally block, no catching, but perform some guaranteed cleanup.
+
 # Custom error classes
 
 _this functionality is not yet released_
