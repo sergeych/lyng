@@ -16,27 +16,27 @@ class Context(
     fun raiseNotImplemented(what: String = "operation"): Nothing = raiseError("$what is not implemented")
 
     @Suppress("unused")
-    fun raiseNPE(): Nothing = raiseError(ObjNullPointerError(this))
+    fun raiseNPE(): Nothing = raiseError(ObjNullPointerException(this))
 
     @Suppress("unused")
     fun raiseIndexOutOfBounds(message: String = "Index out of bounds"): Nothing =
-        raiseError(ObjIndexOutOfBoundsError(this, message))
+        raiseError(ObjIndexOutOfBoundsException(this, message))
 
     @Suppress("unused")
     fun raiseArgumentError(message: String = "Illegal argument error"): Nothing =
-        raiseError(ObjIllegalArgumentError(this, message))
+        raiseError(ObjIllegalArgumentException(this, message))
 
-    fun raiseClassCastError(msg: String): Nothing = raiseError(ObjClassCastError(this, msg))
+    fun raiseClassCastError(msg: String): Nothing = raiseError(ObjClassCastException(this, msg))
 
     @Suppress("unused")
     fun raiseSymbolNotFound(name: String): Nothing =
-        raiseError(ObjSymbolNotDefinedError(this, "symbol is not defined: $name"))
+        raiseError(ObjSymbolNotDefinedException(this, "symbol is not defined: $name"))
 
     fun raiseError(message: String): Nothing {
-        throw ExecutionError(ObjError(this, message))
+        throw ExecutionError(ObjException(this, message))
     }
 
-    fun raiseError(obj: ObjError): Nothing {
+    fun raiseError(obj: ObjException): Nothing {
         throw ExecutionError(obj)
     }
 

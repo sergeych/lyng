@@ -21,6 +21,7 @@ class Script(
 
     companion object {
         val defaultContext: Context = Context().apply {
+            ObjException.addExceptionsToContext(this)
             addFn("println") {
                 for ((i, a) in args.withIndex()) {
                     if (i > 0) print(' ' + a.asStr.value)
@@ -117,14 +118,14 @@ class Script(
             addVoidFn("assert") {
                 val cond = requiredArg<ObjBool>(0)
                 if( !cond.value == true )
-                    raiseError(ObjAssertionError(this,"Assertion failed"))
+                    raiseError(ObjAssertionFailedException(this,"Assertion failed"))
             }
 
             addVoidFn("assertEquals") {
                 val a = requiredArg<Obj>(0)
                 val b = requiredArg<Obj>(1)
                 if( a.compareTo(this, b) != 0 )
-                    raiseError(ObjAssertionError(this,"Assertion failed: ${a.inspect()} == ${b.inspect()}"))
+                    raiseError(ObjAssertionFailedException(this,"Assertion failed: ${a.inspect()} == ${b.inspect()}"))
             }
             addFn("assertThrows") {
                 val code = requireOnlyArg<Statement>()
@@ -138,7 +139,7 @@ class Script(
                 catch (e: ScriptError) {
                     ObjNull
                 }
-                result ?: raiseError(ObjAssertionError(this,"Expected exception but nothing was thrown"))
+                result ?: raiseError(ObjAssertionFailedException(this,"Expected exception but nothing was thrown"))
             }
 
             addVoidFn("delay") {

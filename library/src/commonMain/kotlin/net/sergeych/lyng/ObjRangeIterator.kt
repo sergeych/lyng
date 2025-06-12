@@ -33,7 +33,7 @@ class ObjRangeIterator(val self: ObjRange) : Obj() {
             if( isCharRange ) ObjChar(x.toInt().toChar()) else ObjInt(x)
         }
         else {
-            context.raiseError(ObjIterationFinishedError(context))
+            context.raiseError(ObjIterationFinishedException(context))
         }
 
     companion object {

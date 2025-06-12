@@ -5,7 +5,7 @@ import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 group = "net.sergeych"
-version = "0.4.0-SNAPSHOT"
+version = "0.5.0-SNAPSHOT"
 
 buildscript {
     repositories {
@@ -62,6 +62,7 @@ kotlin {
     sourceSets {
         all {
             languageSettings.optIn("kotlinx.coroutines.ExperimentalCoroutinesApi")
+            languageSettings.optIn("kotlin.contracts.ExperimentalContracts::class")
             languageSettings.optIn("kotlin.ExperimentalUnsignedTypes")
             languageSettings.optIn("kotlin.coroutines.DelicateCoroutinesApi")
         }

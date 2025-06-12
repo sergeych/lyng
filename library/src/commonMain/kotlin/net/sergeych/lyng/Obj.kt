@@ -4,7 +4,10 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import net.sergeych.bintools.encodeToHex
 import net.sergeych.synctools.ProtectedOp
+import net.sergeych.synctools.withLock
+import kotlin.contracts.ExperimentalContracts
 
 /**
  * Record to store object with access rules, e.g. [isMutable] and access level [visibility].
@@ -63,7 +66,7 @@ open class Obj {
     suspend fun invokeInstanceMethod(context: Context, name: String, vararg args: Obj): Obj =
         invokeInstanceMethod(context, name, Arguments(args.toList()))
 
-    inline suspend fun <reified T : Obj> callMethod(
+    suspend inline fun <reified T : Obj> callMethod(
         context: Context,
         name: String,
         args: Arguments = Arguments.EMPTY
@@ -179,11 +182,10 @@ open class Obj {
 
     suspend fun <T> sync(block: () -> T): T = monitor.withLock { block() }
 
-    suspend open fun readField(context: Context, name: String): ObjRecord {
+    open suspend fun readField(context: Context, name: String): ObjRecord {
         // could be property or class field:
         val obj = objClass.getInstanceMemberOrNull(name) ?: context.raiseError("no such field: $name")
-        val value = obj.value
-        return when (value) {
+        return when (val value = obj.value) {
             is Statement -> {
                 ObjRecord(value.execute(context.copy(context.pos, newThisObj = this)), obj.isMutable)
             }
@@ -327,21 +329,97 @@ data class ObjNamespace(val name: String) : Obj() {
     }
 }
 
-open class ObjError(val context: Context, val message: String) : Obj() {
-    override val asStr: ObjString by lazy { ObjString("Error: $message") }
+open class ObjException(exceptionClass: ExceptionClass, val context: Context, val message: String) : Obj() {
+    constructor(name: String,context: Context, message: String) : this(getOrCreateExceptionClass(name), context, message)
+    constructor(context: Context, message: String) : this(Root, context, message)
 
     fun raise(): Nothing {
         throw ExecutionError(this)
     }
+
+    override val objClass: ObjClass = exceptionClass
+
+    override fun toString(): String {
+        return "ObjException:${objClass.className}:${context.pos}@${hashCode().encodeToHex()}"
+    }
+
+    companion object {
+
+        class ExceptionClass(val name: String,vararg parents: ObjClass) : ObjClass(name, *parents) {
+            override suspend fun callOn(context: Context): Obj {
+                return ObjException(this, context, name).apply {
+                    println(">>>> "+this)
+                }
+            }
+            override fun toString(): String = "ExceptionClass[$name]@${hashCode().encodeToHex()}"
+        }
+        val Root = ExceptionClass("Throwable")
+
+        private val op = ProtectedOp()
+        private val existingErrorClasses = mutableMapOf<String, ExceptionClass>()
+
+
+        @OptIn(ExperimentalContracts::class)
+        protected fun getOrCreateExceptionClass(name: String): ExceptionClass {
+            return op.withLock {
+                existingErrorClasses.getOrPut(name) {
+                    ExceptionClass(name, Root)
+                }
+            }
+        }
+
+        /**
+         * Get [ObjClass] for error class by name if exists.
+         */
+        @OptIn(ExperimentalContracts::class)
+        fun getErrorClass(name: String): ObjClass? = op.withLock {
+            existingErrorClasses[name]
+        }
+
+        fun addExceptionsToContext(context: Context) {
+            context.addConst("Exception", Root)
+            existingErrorClasses["Exception"] = Root
+            for (name in listOf(
+                "NullPointerException",
+                "AssertionFailedException",
+                "ClassCastException",
+                "IndexOutOfBoundsException",
+                "IllegalArgumentException",
+                "IllegalAssignmentException",
+                "SymbolNotDefinedException",
+                "IterationEndException",
+                "AccessException",
+                "UnknownException",
+            )) {
+                context.addConst(name, getOrCreateExceptionClass(name))
+            }
+        }
+    }
 }
 
-class ObjNullPointerError(context: Context) : ObjError(context, "object is null")
+class ObjNullPointerException(context: Context) : ObjException("NullPointerException", context, "object is null")
 
-class ObjAssertionError(context: Context, message: String) : ObjError(context, message)
-class ObjClassCastError(context: Context, message: String) : ObjError(context, message)
-class ObjIndexOutOfBoundsError(context: Context, message: String = "index out of bounds") : ObjError(context, message)
-class ObjIllegalArgumentError(context: Context, message: String = "illegal argument") : ObjError(context, message)
-class ObjIllegalAssignmentError(context: Context, message: String = "illegal assignment") : ObjError(context, message)
-class ObjSymbolNotDefinedError(context: Context, message: String = "symbol is not defined") : ObjError(context, message)
-class ObjIterationFinishedError(context: Context) : ObjError(context, "iteration finished")
-class ObjAccessError(context: Context, message: String = "access not allowed error") : ObjError(context, message)
+class ObjAssertionFailedException(context: Context, message: String) :
+    ObjException("AssertionFailedException", context, message)
+
+class ObjClassCastException(context: Context, message: String) : ObjException("ClassCastException", context, message)
+class ObjIndexOutOfBoundsException(context: Context, message: String = "index out of bounds") :
+    ObjException("IndexOutOfBoundsException", context, message)
+
+class ObjIllegalArgumentException(context: Context, message: String = "illegal argument") :
+    ObjException("IllegalArgumentException", context, message)
+
+class ObjIllegalAssignmentException(context: Context, message: String = "illegal assignment") :
+    ObjException("IllegalAssignmentException", context, message)
+
+class ObjSymbolNotDefinedException(context: Context, message: String = "symbol is not defined") :
+    ObjException("SymbolNotDefinedException", context, message)
+
+class ObjIterationFinishedException(context: Context) :
+    ObjException("IterationEndException", context, "iteration finished")
+
+class ObjAccessException(context: Context, message: String = "access not allowed error") :
+    ObjException("AccessException", context, message)
+
+class ObjUnknownException(context: Context, message: String = "access not allowed error") :
+    ObjException("UnknownException", context, message)

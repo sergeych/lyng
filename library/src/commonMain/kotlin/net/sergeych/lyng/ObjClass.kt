@@ -2,7 +2,7 @@ package net.sergeych.lyng
 
 val ObjClassType by lazy { ObjClass("Class") }
 
-class ObjClass(
+open class ObjClass(
     val className: String,
     vararg val parents: ObjClass,
 ) : Obj() {
@@ -122,7 +122,7 @@ class ObjArrayIterator(val array: Obj) : Obj() {
                     val self = thisAs<ObjArrayIterator>()
                     if (self.nextIndex < self.lastIndex) {
                         self.array.invokeInstanceMethod(this, "getAt", (self.nextIndex++).toObj())
-                    } else raiseError(ObjIterationFinishedError(this))
+                    } else raiseError(ObjIterationFinishedException(this))
                 }
                 addFn("hasNext") {
                     val self = thisAs<ObjArrayIterator>()

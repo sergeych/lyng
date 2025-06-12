@@ -1748,4 +1748,36 @@ class ScriptTest {
         """
         )
     }
+
+    @Test
+    fun testThrowExisting()= runTest {
+        eval("""
+            val x = IllegalArgumentException("test")
+            println("instance class",x::class)
+            println("instance", x)
+            println("Exception object",Exception)
+            println("... and it's class",Exception::class)
+            assert( x is Exception )
+            println(x)
+
+            var t = 0
+            var finallyCaught = false
+            try {
+                t = 1
+                throw x
+                t = 2
+            }
+            catch( e: SymbolNotDefinedException ) {
+                t = 101
+            }
+            catch( e: IllegalArgumentException ) {
+                t = 3
+            }
+            finally {
+                finallyCaught = true
+            }
+            assertEquals(3, t)
+            assert(finallyCaught)
+        """.trimIndent())
+    }
 }

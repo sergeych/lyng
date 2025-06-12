@@ -753,6 +753,34 @@ We can use labels too:
     assert( search(["hello", "world"], 'z') == null)
     >>> void
 
+# Exception handling
+
+Very much like in Kotlin. Try block returns its body block result, if no exception was cauht, or the result from the catch block that caught the exception:
+
+    var error = "not caught"
+    var finallyCaught = false
+    val result = try {
+        throw IllegalArgumentException()
+        "invalid"
+    }
+    catch(nd: SymbolNotDefinedException) {
+        error = "bad catch"
+    }
+    catch(x: IllegalArgumentException) {
+        error = "no error"
+        "OK"
+    }
+    finally {
+        // finally does not affect returned value
+        "too bad"
+    }
+    assertEquals( "no error", error)
+    assertEquals( "OK", result)
+    >>> void
+
+It is possible to catch several exceptions in the same block (TBD)
+
+
 # Self-assignments in expression
 
 There are auto-increments and auto-decrements:

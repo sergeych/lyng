@@ -9,7 +9,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             if (it.visibility.isPublic)
                 it
             else
-                context.raiseError(ObjAccessError(context, "can't access non-public field $name"))
+                context.raiseError(ObjAccessException(context, "can't access non-public field $name"))
         }
             ?: super.readField(context, name)
     }
@@ -17,8 +17,8 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
     override suspend fun writeField(context: Context, name: String, newValue: Obj) {
         instanceContext[name]?.let { f ->
             if (!f.visibility.isPublic)
-                ObjIllegalAssignmentError(context, "can't assign to non-public field $name")
-            if (!f.isMutable) ObjIllegalAssignmentError(context, "can't reassign val $name").raise()
+                ObjIllegalAssignmentException(context, "can't assign to non-public field $name")
+            if (!f.isMutable) ObjIllegalAssignmentException(context, "can't reassign val $name").raise()
             if (f.value.assign(context, newValue) == null)
                 f.value = newValue
         } ?: super.writeField(context, name, newValue)
@@ -29,7 +29,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             if (it.visibility.isPublic)
                 it.value.invoke(context, this, args)
             else
-                context.raiseError(ObjAccessError(context, "can't invoke non-public method $name"))
+                context.raiseError(ObjAccessException(context, "can't invoke non-public method $name"))
         }
             ?: super.invokeInstanceMethod(context, name, args)
 

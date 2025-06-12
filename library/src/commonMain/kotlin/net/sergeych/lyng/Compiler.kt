@@ -717,8 +717,113 @@ class Compiler(
         "fn", "fun" -> parseFunctionDeclaration(cc)
         "if" -> parseIfStatement(cc)
         "class" -> parseClassDeclaration(cc, false)
-        "struct" -> parseClassDeclaration(cc, true)
+        "try" -> parseTryStatement(cc)
+        "throw" -> parseThrowStatement(cc)
         else -> null
+    }
+
+    private fun parseThrowStatement(cc: CompilerContext): Statement {
+        val throwStatement = parseStatement(cc) ?: throw ScriptError(cc.currentPos(), "throw object expected")
+        return statement {
+            val errorObject = throwStatement.execute(this)
+            if( errorObject is ObjException )
+                raiseError(errorObject)
+            else raiseError("this is not an exception object: $errorObject")
+        }
+    }
+
+    private data class CatchBlockData(
+        val catchVar: Token,
+        val classNames: List<String>,
+        val block: Statement
+    )
+
+    private fun parseTryStatement(cc: CompilerContext): Statement {
+        val body = parseBlock(cc)
+        val catches = mutableListOf<CatchBlockData>()
+        cc.skipTokens(Token.Type.NEWLINE)
+        var t = cc.next()
+        while( t.value == "catch" ) {
+            ensureLparen(cc)
+            t = cc.next()
+            if( t.type != Token.Type.ID ) throw ScriptError(t.pos, "expected catch variable")
+            val catchVar = t
+            cc.skipTokenOfType(Token.Type.COLON)
+            // load list of exception classes
+            val exClassNames = mutableListOf<String>()
+            do {
+                t = cc.next()
+                if( t.type != Token.Type.ID )
+                    throw ScriptError(t.pos, "expected exception class name")
+                exClassNames += t.value
+                t = cc.next()
+                when(t.type) {
+                    Token.Type.COMMA -> {
+                        continue
+                    }
+                    Token.Type.RPAREN -> {
+                        break
+                    }
+                    else -> throw ScriptError(t.pos, "syntax error: expected ',' or ')'")
+                }
+            } while(true)
+            val block = parseBlock(cc)
+            catches += CatchBlockData(catchVar, exClassNames, block)
+            cc.skipTokens(Token.Type.NEWLINE)
+            t = cc.next()
+        }
+        if( catches.isEmpty() )
+            throw ScriptError(cc.currentPos(), "try block must have at least one catch clause")
+        val finallyClause = if( t.value == "finally" ) {
+            parseBlock(cc)
+        } else {
+            cc.previous()
+            null
+        }
+
+        return statement {
+            var result: Obj = ObjVoid
+            try {
+                // body is a parsed block, it already has separate context
+                result = body.execute(this)
+            }
+            catch (e: Exception) {
+                // convert to appropriate exception
+                val objException = when(e) {
+                    is ExecutionError -> e.errorObject
+                    else -> ObjUnknownException(this, e.message ?: e.toString())
+                }
+                // let's see if we should catch it:
+                var isCaught = false
+                for( cdata in catches ) {
+                    var exceptionObject: ObjException? = null
+                    for (exceptionClassName in cdata.classNames) {
+                        val exObj = ObjException.getErrorClass(exceptionClassName)
+                            ?: raiseSymbolNotFound("error clas not exists: $exceptionClassName")
+                        println("exObj: $exObj")
+                        println("objException: ${objException.objClass}")
+                        if( objException.objClass == exObj )
+                            exceptionObject = objException
+                            break
+                    }
+                    if( exceptionObject != null ) {
+                        val catchContext = this.copy(pos = cdata.catchVar.pos)
+                        catchContext.addItem(cdata.catchVar.value, false, objException)
+                        result = cdata.block.execute(catchContext)
+                        isCaught = true
+                        break
+                    }
+                }
+                // rethrow if not caught this exception
+                if( !isCaught )
+                    throw e
+            }
+            finally {
+                // finally clause does not alter result!
+                finallyClause?.execute(this)
+            }
+            result
+        }
     }
 
     private fun parseClassDeclaration(cc: CompilerContext, isStruct: Boolean): Statement {
