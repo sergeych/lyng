@@ -1696,4 +1696,16 @@ class ScriptTest {
         """.trimIndent())
     }
 
+    @Test
+    fun testForContinue() = runTest {
+        eval("""
+            var x = 0
+            for( i in 1..10 ) {
+                if( i % 2 == 0 ) continue
+                println(i)
+                x++
+            }
+            assertEquals(5, x)
+        """.trimIndent())
+    }
 }
