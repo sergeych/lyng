@@ -778,7 +778,32 @@ Very much like in Kotlin. Try block returns its body block result, if no excepti
     assertEquals( "OK", result)
     >>> void
 
-It is possible to catch several exceptions in the same block (TBD)
+There is shorter form of catch block when you want to catch any exception:
+
+    var caught = null
+    try {
+        throw IllegalArgumentException()
+    }
+    catch(t) { // same as catch(t: Exception), but simpler
+        caught = t
+    }
+    assert( caught is IllegalArgumentException )
+    >>> void
+
+And even shortest, for the Lying lang tradition, missing var is `it`:
+
+    var caught = null
+    try {
+        throw IllegalArgumentException()
+    }
+    catch { // same as catch(it: Exception), but simpler
+        caught = it
+    }
+    assert( caught is IllegalArgumentException )
+    >>> void
+
+It is possible to catch several exceptions in the same block too, use 
+`catch( varName: ExceptionClass1, ExceptionClass2)`, etc.
 
 
 # Self-assignments in expression

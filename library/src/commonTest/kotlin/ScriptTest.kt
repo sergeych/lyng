@@ -1753,12 +1753,7 @@ class ScriptTest {
     fun testThrowExisting()= runTest {
         eval("""
             val x = IllegalArgumentException("test")
-            println("instance class",x::class)
-            println("instance", x)
-            println("Exception object",Exception)
-            println("... and it's class",Exception::class)
             assert( x is Exception )
-            println(x)
 
             var t = 0
             var finallyCaught = false
@@ -1780,4 +1775,42 @@ class ScriptTest {
             assert(finallyCaught)
         """.trimIndent())
     }
+
+    @Test
+    fun testCatchShort1()= runTest {
+        eval("""
+            val x = IllegalArgumentException("test")
+            var t = 0
+            var finallyCaught = false
+            try {
+                t = 1
+                throw x
+                t = 2
+            }
+            catch(e) {
+                t = 31
+            }
+            finally {
+                finallyCaught = true
+            }
+            assertEquals(31, t)
+            assert(finallyCaught)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testCatchShort2()= runTest {
+        eval("""
+            val x = IllegalArgumentException("test")
+            var caught = null
+            try {
+                throw x
+            }
+            catch {
+                caught = it
+            }
+            assert( caught is IllegalArgumentException )
+        """.trimIndent())
+    }
+
 }

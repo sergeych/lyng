@@ -744,33 +744,49 @@ class Compiler(
         cc.skipTokens(Token.Type.NEWLINE)
         var t = cc.next()
         while( t.value == "catch" ) {
-            ensureLparen(cc)
-            t = cc.next()
-            if( t.type != Token.Type.ID ) throw ScriptError(t.pos, "expected catch variable")
-            val catchVar = t
-            cc.skipTokenOfType(Token.Type.COLON)
-            // load list of exception classes
-            val exClassNames = mutableListOf<String>()
-            do {
+
+            if (cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true)) {
                 t = cc.next()
-                if( t.type != Token.Type.ID )
-                    throw ScriptError(t.pos, "expected exception class name")
-                exClassNames += t.value
-                t = cc.next()
-                when(t.type) {
-                    Token.Type.COMMA -> {
-                        continue
-                    }
-                    Token.Type.RPAREN -> {
-                        break
-                    }
-                    else -> throw ScriptError(t.pos, "syntax error: expected ',' or ')'")
+                if (t.type != Token.Type.ID) throw ScriptError(t.pos, "expected catch variable")
+                val catchVar = t
+
+                val exClassNames = mutableListOf<String>()
+                if (cc.skipTokenOfType(Token.Type.COLON, isOptional = true)) {
+                    // load list of exception classes
+                    do {
+                        t = cc.next()
+                        if (t.type != Token.Type.ID)
+                            throw ScriptError(t.pos, "expected exception class name")
+                        exClassNames += t.value
+                        t = cc.next()
+                        when (t.type) {
+                            Token.Type.COMMA -> {
+                                continue
+                            }
+
+                            Token.Type.RPAREN -> {
+                                break
+                            }
+
+                            else -> throw ScriptError(t.pos, "syntax error: expected ',' or ')'")
+                        }
+                    } while (true)
+                } else {
+                    // no type!
+                    exClassNames += "Exception"
+                    cc.skipTokenOfType(Token.Type.RPAREN)
                 }
-            } while(true)
-            val block = parseBlock(cc)
-            catches += CatchBlockData(catchVar, exClassNames, block)
-            cc.skipTokens(Token.Type.NEWLINE)
-            t = cc.next()
+                val block = parseBlock(cc)
+                catches += CatchBlockData(catchVar, exClassNames, block)
+                cc.skipTokens(Token.Type.NEWLINE)
+                t = cc.next()
+            } else {
+                // no (e: Exception) block: should be shortest variant `catch { ... }`
+                cc.skipTokenOfType(Token.Type.LBRACE, "expected catch(...) or catch { ... } here")
+                catches += CatchBlockData(Token("it", cc.currentPos(), Token.Type.ID), listOf("Exception"),
+                    parseBlock(cc,true))
+                t = cc.next()
+            }
         }
         if( catches.isEmpty() )
             throw ScriptError(cc.currentPos(), "try block must have at least one catch clause")
@@ -802,7 +818,7 @@ class Compiler(
                             ?: raiseSymbolNotFound("error clas not exists: $exceptionClassName")
                         println("exObj: $exObj")
                         println("objException: ${objException.objClass}")
-                        if( objException.objClass == exObj )
+                        if( objException.isInstanceOf(exObj) )
                             exceptionObject = objException
                             break
                     }
