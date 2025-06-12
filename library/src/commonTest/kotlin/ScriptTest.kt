@@ -436,12 +436,14 @@ class ScriptTest {
 
     @Test
     fun whileAssignTest() = runTest {
-        eval("""
+        eval(
+            """
             var t = 0
             val x = while( t < 5 ) { t++ }
             // last returned value is 4 - when t was 5 body was not executed
             assertEquals( 4, x )
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
@@ -1597,32 +1599,37 @@ class ScriptTest {
 
     @Test
     fun testCallLastBlockAfterDetault() = runTest {
-        eval("""
+        eval(
+            """
             // this means last is lambda:
             fun f(e=1, f) {
                 "e="+e+"f="+f()
             }
             assertEquals("e=1f=xx", f { "xx" })
-        """.trimIndent())
+        """.trimIndent()
+        )
 
     }
 
     @Test
     fun testCallLastBlockWithEllipsis() = runTest {
-        eval("""
+        eval(
+            """
             // this means last is lambda:
             fun f(e..., f) {
                 "e="+e+"f="+f()
             }
             assertEquals("e=[]f=xx", f { "xx" })
             assertEquals("e=[1, 2]f=xx", f(1,2) { "xx" })
-        """.trimIndent())
+        """.trimIndent()
+        )
 
     }
 
     @Test
     fun testMethodCallLastBlockAfterDefault() = runTest {
-        eval("""
+        eval(
+            """
             class Foo {
                 // this means last is lambda:
                 fun f(e=1, f) {
@@ -1631,13 +1638,15 @@ class ScriptTest {
             }
             val f = Foo()
             assertEquals("e=1f=xx", f.f { "xx" })
-        """.trimIndent())
+        """.trimIndent()
+        )
 
     }
 
     @Test
     fun testMethodCallLastBlockWithEllipsis() = runTest {
-        eval("""
+        eval(
+            """
             class Foo {
                 // this means last is lambda:
                 fun f(e..., f) {
@@ -1647,13 +1656,15 @@ class ScriptTest {
             val f = Foo()
             assertEquals("e=[]f=xx", f.f { "xx" })
             assertEquals("e=[1, 2]f=xx", f.f(1,2) { "xx" })
-        """.trimIndent())
+        """.trimIndent()
+        )
 
     }
 
     @Test
     fun nationalCharsTest() = runTest {
-        eval("""
+        eval(
+            """
             fun сумма_ряда(x, погрешность=0.0001, f) {
                 var сумма = 0
                 for( n in 1..100000) {
@@ -1669,36 +1680,42 @@ class ScriptTest {
                 sign * pow(x, n) / n
             }
             assert( x - ln(2) < 0.001 )
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun doWhileSimpleTest() = runTest {
-        eval("""
+        eval(
+            """
             var sum = 0
             var x = do {
                 val s = sum
                 sum += 1
             } while( s < 10 )
             assertEquals(11, x)
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testFailDoWhileSample1() = runTest {
-        eval("""
+        eval(
+            """
             fun readLine() { "done: result" }
             val result = do {
                 val line = readLine()
             } while( !line.startsWith("done:") )
             assertEquals("result", result.drop(6))
             result
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testForContinue() = runTest {
-        eval("""
+        eval(
+            """
             var x = 0
             for( i in 1..10 ) {
                 if( i % 2 == 0 ) continue
@@ -1706,6 +1723,29 @@ class ScriptTest {
                 x++
             }
             assertEquals(5, x)
-        """.trimIndent())
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testForLabelNreakTest() = runTest {
+        eval(
+            """
+            var x = 0
+            var y = 0
+            FOR0@ for( i in 1..10 ) {
+                x = i
+                for( j in 1..20 ) {
+                    y = j
+                    if( i == 3 && j == 5 ) {
+                        println("bb")
+                        break@FOR0
+                    }
+                }
+            }
+            assertEquals( 5, y )
+            assertEquals( 3, x )
+        """
+        )
     }
 }

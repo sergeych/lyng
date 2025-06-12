@@ -906,8 +906,9 @@ class Compiler(
                 } catch (lbe: LoopBreakContinueException) {
                     if (lbe.label == label || lbe.label == null) {
                         if (lbe.doContinue) continue
+                        return lbe.result
                     }
-                    return lbe.result
+                    throw lbe
                 }
             }
         } else {
@@ -934,8 +935,9 @@ class Compiler(
                 } catch (lbe: LoopBreakContinueException) {
                     if (lbe.label == label || lbe.label == null) {
                         if (lbe.doContinue) continue
+                        return lbe.result
                     }
-                    return lbe.result
+                    throw lbe
                 }
             else {
                 loopVar.value = iterObj.invokeInstanceMethod(forContext, "next")
@@ -991,6 +993,7 @@ class Compiler(
                             break
                         }
                     }
+                    throw e
                 }
             } while( condition.execute(doContext).toBool() )
             if( !wasBroken ) elseStatement?.let { s -> result = s.execute(it) }
