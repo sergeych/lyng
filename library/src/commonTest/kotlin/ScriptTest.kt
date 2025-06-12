@@ -1833,4 +1833,25 @@ class ScriptTest {
             """.trimIndent())
     }
 
+    @Test
+    fun testTryFinally() = runTest {
+        val c = Context()
+        assertFails {
+            c.eval(
+                """
+                var resource = "used"
+                try {
+                    throw "test"
+                }
+                finally {
+                    resource = "freed"
+                }
+            """.trimIndent()
+            )
+        }
+        c.eval("""
+            assertEquals("freed", resource)
+        """.trimIndent())
+    }
+
 }
