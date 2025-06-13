@@ -93,8 +93,10 @@ Lambda functions remember their scopes, so it will work the same as previous:
 With ellipsis and splats you can create partial functions, manipulate
 arguments list in almost arbitrary ways. For example:
 
-    // Swap first and last arguments in the call
-    fun swap_args(first, others..., last, f) { f(last, ...others, first) }
+    // Swap first and last arguments for call
+    fun swap_args(first, others..., last, f) { 
+        f(last, ...others, first) 
+    }
 
     fun glue(args...) {
         var result = ""
