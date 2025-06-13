@@ -65,7 +65,12 @@ Now you can import lyng and use it:
 ```kotlin
 import net.sergeyh.lyng.*
 
-println(eval(""" "hello, " + "Lyng" """))
+// we need a coroutine to start, as Lyng
+// is a coroutine based language, async topdown
+runBlocking {
+    assert(5 == eval(""" 3*3 - 4 """).toInt())
+    eval(""" println("Hello, Lyng!") """)
+}
 ```
 
 ### Exchanging information
@@ -135,12 +140,26 @@ Ready features:
 
 Under way: 
 
-- [ ] maps and sequences (flows?)
+- [ ] maps, sets and sequences (flows?)
 - [ ] regular exceptions
+- [ ] modules
 - [ ] string interpolation and more string tools
 - [ ] multiple inheritance for user classes
 - [ ] launch, deferred, coroutineScope, mutex, etc.
 - [ ] site with integrated interpreter to give a try
 - [ ] kotlin part public API good docs, integration focused
+- [ ] better stack reporting
 
-## 
+## v1.1+
+
+Planned features.
+
+- [ ] type specifications
+- [ ] source docs and maybe lyng.md to a standard
+- [ ] moacro-style kotlin integration or something else to simplify it
+
+Further
+
+- [ ] client with GUI support based on compose multiplatform somehow
+- [ ] notebook - style workbooks with graphs, formulaes, etc.
+- [ ] language server or compose-based lyng-aware editor
