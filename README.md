@@ -110,22 +110,37 @@ Designed to add scripting to kotlin multiplatform application in easy and effici
 
 # Language 
 
-- dynamic 
-- async
-- multithreaded (coroutines could be dispatched using threads on appropriate platforms, automatically)
+- Javascript, WasmJS, native, JVM, android - batteries included.
+- dynamic types in most elegant and concise way
+- async, 100% coroutines, supports multiple cores where platofrm supports thread
+- good for functional an object-oriented style
 
-## By-stage
+# Language Roadmap
 
-Here are plans to develop it:
+## v1.0.0
 
-### First stage
+Planned autumn 2025. Complete dynamic language with sufficient standard library:
 
-Interpreted, precompiled into threaded code, actually. Dynamic types.
+Ready features:
 
-### Second stage
+- [x] Language platform and independent command-line launcher
+- [x] Integral types and user classes, variables and constants, functions
+- [x] lambdas and closures, coroutines for all callables
+- [x] while-else, do-while-else, for-else loops with break-continue returning values and labels support
+- [x] ranges, lists, strings, interfaces: Iterable, Iterator, Collection, Array
+- [x] when(value), if-then-else
+- [x] exception handling: throw, try-catch-finally, exception classes.
+- [x] multiplatform maven publication
+- [x] documentation for the current state
 
-Will add:
+Under way: 
 
-- optimizations
-- p-code serialization
-- static typing
+- [ ] maps and sequences (flows?)
+- [ ] regular exceptions
+- [ ] string interpolation and more string tools
+- [ ] multiple inheritance for user classes
+- [ ] launch, deferred, coroutineScope, mutex, etc.
+- [ ] site with integrated interpreter to give a try
+- [ ] kotlin part public API good docs, integration focused
+
+## 
