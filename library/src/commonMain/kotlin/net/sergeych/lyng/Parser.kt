@@ -137,14 +137,18 @@ private class Parser(fromPos: Pos) {
                 if (currentChar == '.') {
                     pos.advance()
                     // .. already parsed:
-                    if (currentChar == '.') {
-                        pos.advance()
-                        Token("...", from, Token.Type.ELLIPSIS)
-                    } else if (currentChar == '<') {
-                        pos.advance()
-                        Token("..<", from, Token.Type.DOTDOTLT)
-                    } else {
-                        Token("..", from, Token.Type.DOTDOT)
+                    when (currentChar) {
+                        '.' -> {
+                            pos.advance()
+                            Token("...", from, Token.Type.ELLIPSIS)
+                        }
+                        '<' -> {
+                            pos.advance()
+                            Token("..<", from, Token.Type.DOTDOTLT)
+                        }
+                        else -> {
+                            Token("..", from, Token.Type.DOTDOT)
+                        }
                     }
                 } else
                     Token(".", from, Token.Type.DOT)
@@ -280,8 +284,6 @@ private class Parser(fromPos: Pos) {
                         when (text) {
                             "in" -> Token("in", from, Token.Type.IN)
                             "is" -> Token("is", from, Token.Type.IS)
-                            "protected" -> Token("protected", from, Token.Type.PROTECTED)
-                            "private" -> Token("private", from, Token.Type.PRIVATE)
                             else -> Token(text, from, Token.Type.ID)
                         }
                 } else
@@ -338,7 +340,7 @@ private class Parser(fromPos: Pos) {
             // could be integer, also hex:
             if (currentChar == 'x' && p1 == "0") {
                 pos.advance()
-                Token(loadChars({ it in hexDigits }), start, Token.Type.HEX).also {
+                Token(loadChars { it in hexDigits }, start, Token.Type.HEX).also {
                     if (currentChar.isLetter())
                         raise("invalid hex literal")
                 }

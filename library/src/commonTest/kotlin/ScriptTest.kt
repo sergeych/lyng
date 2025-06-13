@@ -1876,4 +1876,23 @@ class ScriptTest {
         """.trimIndent())
     }
 
+    @Test
+    fun testReturnValue1() = runTest {
+        val r = eval("""
+            class Point(x,y) {
+                println("1")
+                fun length() { sqrt(d2()) }
+                println("2")
+                private fun d2() {x*x + y*y}
+                println("3")
+            }
+            println("Helluva")
+            val p = Point(3,4)
+//            assertEquals( 5, p.length() )
+//            assertThrows { p.d2() }
+            "111"        
+        """.trimIndent())
+        assertEquals("111", r.toString())
+    }
+
 }

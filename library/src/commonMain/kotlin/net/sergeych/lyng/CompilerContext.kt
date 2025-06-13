@@ -102,6 +102,7 @@ internal class CompilerContext(val tokens: List<Token>) {
      * Return value of the next token if it is an identifier, null otherwise.
      * Does not change position.
      */
+    @Suppress("unused")
     fun nextIdValue(): String? {
         return if (hasNext()) {
             val nt = tokens[currentIndex]
@@ -117,21 +118,31 @@ internal class CompilerContext(val tokens: List<Token>) {
     /**
      * If the token at current position plus offset (could be negative) exists, returns it, otherwise returns null.
      */
+    @Suppress("unused")
     fun atOffset(offset: Int): Token? =
         if (currentIndex + offset in tokens.indices) tokens[currentIndex + offset] else null
 
-    /**
-     * Scan backwards as deep as specified looking for visibility token. Does not change position.
-     */
-    fun getVisibility(default: Visibility = Visibility.Public, depths: Int = 2): Visibility {
-        for( i in -depths .. -1) {
-            when( atOffset(i)?.type) {
-                Token.Type.PROTECTED -> return Visibility.Protected
-                Token.Type.PRIVATE -> return Visibility.Private
-                else -> {}
+    fun matchQualifiers(keyword: String, vararg qualifiers: String): Boolean {
+        val pos = savePos()
+        var count = 0
+        while( count < qualifiers.size) {
+            val t = next()
+            when(t.type) {
+                Token.Type.ID -> {
+                    if( t.value in qualifiers ) count++
+                    else { restorePos(pos); return false }
+                }
+                Token.Type.MULTILINE_COMMENT, Token.Type.SINLGE_LINE_COMMENT, Token.Type.NEWLINE -> {}
+                else -> { restorePos(pos); return false }
             }
         }
-        return default
+        val t = next()
+        if( t.type == Token.Type.ID && t.value == keyword ) {
+            return true
+        } else {
+            restorePos(pos)
+            return false
+        }
     }
 
 //    fun expectKeyword(vararg keyword: String): String {

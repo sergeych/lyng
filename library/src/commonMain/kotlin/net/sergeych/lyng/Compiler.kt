@@ -39,13 +39,6 @@ class Compiler(
                         }
                 }
 
-                Token.Type.PRIVATE, Token.Type.PROTECTED -> {
-                    if (cc.nextIdValue() in setOf("var", "val", "class", "fun", "fn")) {
-                        continue
-                    } else
-                        throw ScriptError(t.pos, "unexpected keyword ${t.value}")
-                }
-
                 Token.Type.PLUS2, Token.Type.MINUS2 -> {
                     cc.previous()
                     parseExpression(cc)
@@ -149,7 +142,7 @@ class Compiler(
                                             v.invokeInstanceMethod(
                                                 context,
                                                 next.value,
-                                                args.toArguments(context,false)
+                                                args.toArguments(context, false)
                                             ), isMutable = false
                                         )
                                     }
@@ -157,7 +150,7 @@ class Compiler(
 
                                 Token.Type.LBRACE -> {
                                     // single lambda arg, like assertTrows { ... }
-                                   cc.next()
+                                    cc.next()
                                     isCall = true
                                     val lambda =
                                         parseExpression(cc) ?: throw ScriptError(t.pos, "expected valid lambda here")
@@ -170,7 +163,7 @@ class Compiler(
                                             v.invokeInstanceMethod(
                                                 context,
                                                 next.value,
-                                                Arguments(listOf(lambda),true)
+                                                Arguments(listOf(lambda), true)
                                             ), isMutable = false
                                         )
                                     }
@@ -458,17 +451,14 @@ class Compiler(
                 }
 
                 Token.Type.NEWLINE -> {}
-                Token.Type.PROTECTED, Token.Type.PRIVATE -> {
-                    if (!isClassDeclaration) {
-                        cc.restorePos(startPos); return null
-                    }
-                }
 
                 Token.Type.ID -> {
                     // visibility
-                    val visibility = if (isClassDeclaration)
-                        cc.getVisibility(Visibility.Public)
-                    else Visibility.Public
+                    val visibility = if( isClassDeclaration && t.value == "private" ) {
+                        t = cc.next()
+                        Visibility.Private
+                    } else Visibility.Public
+
                     // val/var?
                     val access = when (t.value) {
                         "val" -> {
@@ -707,8 +697,8 @@ class Compiler(
      * @return parsed statement or null if, for example. [id] is not among keywords
      */
     private fun parseKeywordStatement(id: Token, cc: CompilerContext): Statement? = when (id.value) {
-        "val" -> parseVarDeclaration(id.value, false, cc)
-        "var" -> parseVarDeclaration(id.value, true, cc)
+        "val" -> parseVarDeclaration(false, Visibility.Public, cc)
+        "var" -> parseVarDeclaration(true, Visibility.Public, cc)
         "while" -> parseWhileStatement(cc)
         "do" -> parseDoWhileStatement(cc)
         "for" -> parseForStatement(cc)
@@ -719,16 +709,33 @@ class Compiler(
         "class" -> parseClassDeclaration(cc, false)
         "try" -> parseTryStatement(cc)
         "throw" -> parseThrowStatement(cc)
-        else -> null
+        else -> {
+            // triples
+            cc.previous()
+            when {
+                cc.matchQualifiers("fun", "private") -> parseFunctionDeclaration(cc, Visibility.Private)
+                cc.matchQualifiers("fn", "private") -> parseFunctionDeclaration(cc, Visibility.Private)
+                cc.matchQualifiers("fun", "open") -> parseFunctionDeclaration(cc, isOpen = true)
+                cc.matchQualifiers("fn", "open") -> parseFunctionDeclaration(cc, isOpen = true)
+                cc.matchQualifiers("val", "private") -> parseVarDeclaration(false, Visibility.Private, cc)
+                cc.matchQualifiers("var", "private") -> parseVarDeclaration(true, Visibility.Private, cc)
+                cc.matchQualifiers("val", "open") -> parseVarDeclaration(false, Visibility.Private, cc, true)
+                cc.matchQualifiers("var", "open") -> parseVarDeclaration(true, Visibility.Private, cc, true)
+                else -> {
+                    cc.next()
+                    null
+                }
+            }
+        }
     }
 
     private fun parseThrowStatement(cc: CompilerContext): Statement {
         val throwStatement = parseStatement(cc) ?: throw ScriptError(cc.currentPos(), "throw object expected")
         return statement {
             var errorObject = throwStatement.execute(this)
-            if( errorObject is ObjString )
+            if (errorObject is ObjString)
                 errorObject = ObjException(this, errorObject.value)
-            if( errorObject is ObjException )
+            if (errorObject is ObjException)
                 raiseError(errorObject)
             else raiseError("this is not an exception object: $errorObject")
         }
@@ -745,7 +752,7 @@ class Compiler(
         val catches = mutableListOf<CatchBlockData>()
         cc.skipTokens(Token.Type.NEWLINE)
         var t = cc.next()
-        while( t.value == "catch" ) {
+        while (t.value == "catch") {
 
             if (cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true)) {
                 t = cc.next()
@@ -785,19 +792,21 @@ class Compiler(
             } else {
                 // no (e: Exception) block: should be shortest variant `catch { ... }`
                 cc.skipTokenOfType(Token.Type.LBRACE, "expected catch(...) or catch { ... } here")
-                catches += CatchBlockData(Token("it", cc.currentPos(), Token.Type.ID), listOf("Exception"),
-                    parseBlock(cc,true))
+                catches += CatchBlockData(
+                    Token("it", cc.currentPos(), Token.Type.ID), listOf("Exception"),
+                    parseBlock(cc, true)
+                )
                 t = cc.next()
             }
         }
-        val finallyClause = if( t.value == "finally" ) {
+        val finallyClause = if (t.value == "finally") {
             parseBlock(cc)
         } else {
             cc.previous()
             null
         }
 
-        if( catches.isEmpty() && finallyClause == null )
+        if (catches.isEmpty() && finallyClause == null)
             throw ScriptError(cc.currentPos(), "try block must have either catch or finally clause or both")
 
         return statement {
@@ -805,26 +814,25 @@ class Compiler(
             try {
                 // body is a parsed block, it already has separate context
                 result = body.execute(this)
-            }
-            catch (e: Exception) {
+            } catch (e: Exception) {
                 // convert to appropriate exception
-                val objException = when(e) {
+                val objException = when (e) {
                     is ExecutionError -> e.errorObject
                     else -> ObjUnknownException(this, e.message ?: e.toString())
                 }
                 // let's see if we should catch it:
                 var isCaught = false
-                for( cdata in catches ) {
+                for (cdata in catches) {
                     var exceptionObject: ObjException? = null
                     for (exceptionClassName in cdata.classNames) {
                         val exObj = ObjException.getErrorClass(exceptionClassName)
                             ?: raiseSymbolNotFound("error clas not exists: $exceptionClassName")
-                        if( objException.isInstanceOf(exObj) ) {
+                        if (objException.isInstanceOf(exObj)) {
                             exceptionObject = objException
                             break
                         }
                     }
-                    if( exceptionObject != null ) {
+                    if (exceptionObject != null) {
                         val catchContext = this.copy(pos = cdata.catchVar.pos)
                         catchContext.addItem(cdata.catchVar.value, false, objException)
                         result = cdata.block.execute(catchContext)
@@ -833,10 +841,9 @@ class Compiler(
                     }
                 }
                 // rethrow if not caught this exception
-                if( !isCaught )
+                if (!isCaught)
                     throw e
-            }
-            finally {
+            } finally {
                 // finally clause does not alter result!
                 finallyClause?.execute(this)
             }
@@ -1081,8 +1088,8 @@ class Compiler(
         cc.skipTokens(Token.Type.NEWLINE)
 
         val t = cc.next()
-        if( t.type != Token.Type.ID && t.value != "while" )
-        cc.skipTokenOfType(Token.Type.LPAREN, "expected '(' here")
+        if (t.type != Token.Type.ID && t.value != "while")
+            cc.skipTokenOfType(Token.Type.LPAREN, "expected '(' here")
 
         val conditionStart = ensureLparen(cc)
         val condition =
@@ -1106,10 +1113,9 @@ class Compiler(
                 doContext = it.copy().apply { skipContextCreation = true }
                 try {
                     result = body.execute(doContext)
-                }
-                catch( e: LoopBreakContinueException) {
-                    if( e.label == label || e.label == null ) {
-                        if( e.doContinue ) continue
+                } catch (e: LoopBreakContinueException) {
+                    if (e.label == label || e.label == null) {
+                        if (e.doContinue) continue
                         else {
                             result = e.result
                             wasBroken = true
@@ -1118,8 +1124,8 @@ class Compiler(
                     }
                     throw e
                 }
-            } while( condition.execute(doContext).toBool() )
-            if( !wasBroken ) elseStatement?.let { s -> result = s.execute(it) }
+            } while (condition.execute(doContext).toBool())
+            if (!wasBroken) elseStatement?.let { s -> result = s.execute(it) }
             result
         }
     }
@@ -1273,9 +1279,11 @@ class Compiler(
         }
     }
 
-    private fun parseFunctionDeclaration(tokens: CompilerContext): Statement {
-        val visibility = tokens.getVisibility()
-
+    private fun parseFunctionDeclaration(
+        tokens: CompilerContext,
+        visibility: Visibility = Visibility.Public,
+        @Suppress("UNUSED_PARAMETER") isOpen: Boolean = false
+    ): Statement {
         var t = tokens.next()
         val start = t.pos
         val name = if (t.type != Token.Type.ID)
@@ -1329,7 +1337,7 @@ class Compiler(
         val block = parseScript(startPos, cc)
         return statement(startPos) {
             // block run on inner context:
-            block.execute(if( it.skipContextCreation ) it else it.copy(startPos))
+            block.execute(if (it.skipContextCreation) it else it.copy(startPos))
         }.also {
             val t1 = cc.next()
             if (t1.type != Token.Type.RBRACE)
@@ -1337,26 +1345,22 @@ class Compiler(
         }
     }
 
-    private fun parseVarDeclaration(kind: String, mutable: Boolean, tokens: CompilerContext): Statement {
-        // we are just after var/val, visibility if exists is 2 steps behind
-        val visibility = when (tokens.atOffset(-2)?.type) {
-            Token.Type.PRIVATE ->
-                Visibility.Private
-
-            Token.Type.PROTECTED -> Visibility.Protected
-            else -> Visibility.Public
-        }
-
+    private fun parseVarDeclaration(
+        isMutable: Boolean,
+        visibility: Visibility,
+        tokens: CompilerContext,
+        @Suppress("UNUSED_PARAMETER") isOpen: Boolean = false
+    ): Statement {
         val nameToken = tokens.next()
         val start = nameToken.pos
         if (nameToken.type != Token.Type.ID)
-            throw ScriptError(nameToken.pos, "Expected identifier after '$kind'")
+            throw ScriptError(nameToken.pos, "Expected identifier here")
         val name = nameToken.value
 
         val eqToken = tokens.next()
         var setNull = false
         if (eqToken.type != Token.Type.ASSIGN) {
-            if (!mutable)
+            if (!isMutable)
                 throw ScriptError(start, "val must be initialized")
             else {
                 tokens.previous()
@@ -1375,7 +1379,7 @@ class Compiler(
             // create a separate copy:
             val initValue = initialExpression?.execute(context)?.byValueCopy() ?: ObjNull
 
-            context.addItem(name, mutable, initValue, visibility)
+            context.addItem(name, isMutable, initValue, visibility)
             initValue
         }
     }
@@ -1519,7 +1523,8 @@ class Compiler(
         /**
          * The keywords that stop processing of expression term
          */
-        val stopKeywords = setOf("do", "break", "continue", "return", "if", "when", "do", "while", "for", "class", "struct")
+        val stopKeywords =
+            setOf("do", "break", "continue", "return", "if", "when", "do", "while", "for", "class", "struct")
     }
 }
 
