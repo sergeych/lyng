@@ -131,7 +131,7 @@ _this functionality is not yet released_
 | class                      | notes                                                 |
 |----------------------------|-------------------------------------------------------|
 | Exception                  | root of al throwable objects                          |
-| NullPointerException       |                                                       |
+| NullReferenceException       |                                                       |
 | AssertionFailedException   |                                                       | 
 | ClassCastException         |                                                       |
 | IndexOutOfBoundsException  |                                                       |

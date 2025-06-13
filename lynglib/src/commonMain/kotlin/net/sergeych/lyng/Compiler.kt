@@ -121,7 +121,8 @@ class Compiler(
                     operand = Accessor { op.getter(it).value.logicalNot(it).asReadonly }
                 }
 
-                Token.Type.DOT -> {
+                Token.Type.DOT, Token.Type.NULL_COALESCE -> {
+                    var isOptional = t.type == Token.Type.NULL_COALESCE
                     operand?.let { left ->
                         // dotcall: calling method on the operand, if next is ID, "("
                         var isCall = false
@@ -138,17 +139,22 @@ class Compiler(
                                     operand = Accessor { context ->
                                         context.pos = next.pos
                                         val v = left.getter(context).value
-                                        ObjRecord(
-                                            v.invokeInstanceMethod(
-                                                context,
-                                                next.value,
-                                                args.toArguments(context, false)
-                                            ), isMutable = false
-                                        )
+                                        if (v == ObjNull && isOptional)
+                                            ObjNull.asReadonly
+                                        else
+                                            ObjRecord(
+                                                v.invokeInstanceMethod(
+                                                    context,
+                                                    next.value,
+                                                    args.toArguments(context, false)
+                                                ), isMutable = false
+                                            )
                                     }
                                 }
 
-                                Token.Type.LBRACE -> {
+
+                                Token.Type.LBRACE, Token.Type.NULL_COALESCE_BLOCKINVOKE -> {
+                                    isOptional = nt.type == Token.Type.NULL_COALESCE_BLOCKINVOKE
                                     // single lambda arg, like assertTrows { ... }
                                     cc.next()
                                     isCall = true
@@ -159,13 +165,16 @@ class Compiler(
                                     operand = Accessor { context ->
                                         context.pos = next.pos
                                         val v = left.getter(context).value
-                                        ObjRecord(
-                                            v.invokeInstanceMethod(
-                                                context,
-                                                next.value,
-                                                Arguments(listOf(lambda), true)
-                                            ), isMutable = false
-                                        )
+                                        if (v == ObjNull && isOptional)
+                                            ObjNull.asReadonly
+                                        else
+                                            ObjRecord(
+                                                v.invokeInstanceMethod(
+                                                    context,
+                                                    next.value,
+                                                    Arguments(listOf(lambda), true)
+                                                ), isMutable = false
+                                            )
                                     }
                                 }
 
@@ -174,25 +183,30 @@ class Compiler(
                         }
                         if (!isCall) {
                             operand = Accessor({ context ->
-                                left.getter(context).value.readField(context, next.value)
+                                val x = left.getter(context).value
+                                if (x == ObjNull && isOptional) ObjNull.asReadonly
+                                else x.readField(context, next.value)
                             }) { cc, newValue ->
                                 left.getter(cc).value.writeField(cc, next.value, newValue)
                             }
                         }
-                    } ?: throw ScriptError(t.pos, "Expecting expression before dot")
+                    }
+
+                        ?: throw ScriptError(t.pos, "Expecting expression before dot")
                 }
 
                 Token.Type.COLONCOLON -> {
                     operand = parseScopeOperator(operand, cc)
                 }
 
-                Token.Type.LPAREN -> {
+                Token.Type.LPAREN, Token.Type.NULL_COALESCE_INVOKE -> {
                     operand?.let { left ->
                         // this is function call from <left>
                         operand = parseFunctionCall(
                             cc,
                             left,
                             false,
+                            t.type == Token.Type.NULL_COALESCE_INVOKE
                         )
                     } ?: run {
                         // Expression in parentheses
@@ -205,15 +219,18 @@ class Compiler(
                     }
                 }
 
-                Token.Type.LBRACKET -> {
+                Token.Type.LBRACKET, Token.Type.NULL_COALESCE_INDEX -> {
                     operand?.let { left ->
                         // array access
+                        val isOptional = t.type == Token.Type.NULL_COALESCE_INDEX
                         val index = parseStatement(cc) ?: throw ScriptError(t.pos, "Expecting index expression")
                         cc.skipTokenOfType(Token.Type.RBRACKET, "missing ']' at the end of the list literal")
                         operand = Accessor({ cxt ->
                             val i = (index.execute(cxt) as? ObjInt)?.value?.toInt()
                                 ?: cxt.raiseError("index must be integer")
-                            left.getter(cxt).value.getAt(cxt, i).asMutable
+                            val x = left.getter(cxt).value
+                            if( x == ObjNull && isOptional) ObjNull.asReadonly
+                            else x.getAt(cxt, i).asMutable
                         }) { cxt, newValue ->
                             val i = (index.execute(cxt) as? ObjInt)?.value?.toInt()
                                 ?: cxt.raiseError("index must be integer")
@@ -337,10 +354,15 @@ class Compiler(
                     }
                 }
 
-                Token.Type.LBRACE -> {
+                Token.Type.LBRACE, Token.Type.NULL_COALESCE_BLOCKINVOKE -> {
                     operand = operand?.let { left ->
                         cc.previous()
-                        parseFunctionCall(cc, left, blockArgument = true)
+                        parseFunctionCall(
+                            cc,
+                            left,
+                            blockArgument = true,
+                            t.type == Token.Type.NULL_COALESCE_BLOCKINVOKE
+                        )
                     } ?: parseLambdaExpression(cc)
                 }
 
@@ -590,7 +612,12 @@ class Compiler(
     }
 
 
-    private fun parseFunctionCall(cc: CompilerContext, left: Accessor, blockArgument: Boolean): Accessor {
+    private fun parseFunctionCall(
+        cc: CompilerContext,
+        left: Accessor,
+        blockArgument: Boolean,
+        isOptional: Boolean
+    ): Accessor {
         // insofar, functions always return lvalue
         var detectedBlockArgument = blockArgument
         val args = if (blockArgument) {
@@ -607,6 +634,7 @@ class Compiler(
 
         return Accessor { context ->
             val v = left.getter(context)
+            if (v.value == ObjNull && isOptional) return@Accessor v.value.asReadonly
             v.value.callOn(
                 context.copy(
                     context.pos,
@@ -1600,6 +1628,9 @@ class Compiler(
             Operator.simple(Token.Type.NOTIN, lastPrty) { c, a, b -> ObjBool(!b.contains(c, a)) },
             Operator.simple(Token.Type.IS, lastPrty) { c, a, b -> ObjBool(a.isInstanceOf(b)) },
             Operator.simple(Token.Type.NOTIS, lastPrty) { c, a, b -> ObjBool(!a.isInstanceOf(b)) },
+
+            Operator.simple(Token.Type.ELVIS, ++lastPrty) { c, a, b -> if( a == ObjNull) b else a },
+
             // shuttle <=> 6
             Operator.simple(Token.Type.SHUTTLE, ++lastPrty) { c, a, b ->
                 ObjInt(a.compareTo(c, b).toLong())

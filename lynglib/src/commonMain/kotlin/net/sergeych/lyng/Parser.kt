@@ -267,6 +267,21 @@ private class Parser(fromPos: Pos) {
                 Token(value.toString(), start, Token.Type.CHAR)
             }
 
+            '?' -> {
+                when(currentChar.also { pos.advance() }) {
+                    ':' -> Token("??", from, Token.Type.ELVIS)
+                    '?' -> Token("??", from, Token.Type.ELVIS)
+                    '.' -> Token("?.", from, Token.Type.NULL_COALESCE)
+                    '[' -> Token("?(", from, Token.Type.NULL_COALESCE_INDEX)
+                    '(' -> Token("?(", from, Token.Type.NULL_COALESCE_INVOKE)
+                    '{' -> Token("?{", from, Token.Type.NULL_COALESCE_BLOCKINVOKE)
+                    else -> {
+                        pos.back()
+                        Token("?", from, Token.Type.QUESTION)
+                    }
+                }
+            }
+
             else -> {
                 // text infix operators:
                 // Labels processing is complicated!

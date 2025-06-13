@@ -21,6 +21,11 @@ data class Token(val value: String, val pos: Pos, val type: Type) {
         ELLIPSIS, DOTDOT, DOTDOTLT,
         NEWLINE,
         EOF,
+        NULL_COALESCE,
+        ELVIS,
+        NULL_COALESCE_INDEX,
+        NULL_COALESCE_INVOKE,
+        NULL_COALESCE_BLOCKINVOKE,
     }
 
     companion object {

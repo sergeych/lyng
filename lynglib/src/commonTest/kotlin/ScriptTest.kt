@@ -2113,4 +2113,24 @@ class ScriptTest {
     """.trimIndent()
         )
     }
+
+    @Test
+    fun testNull1() = runTest {
+        eval("""
+            var s = null
+            assertThrows { s.length }
+            assertThrows { s.size() }
+            
+            assertEquals( null, s?.size() )
+            assertEquals( null, s?.length )
+            assertEquals( null, s?.length ?{ "test" } )
+            assertEquals( null, s?[1] )
+            assertEquals( null, s ?{ "test" } )
+            assertEquals( null, s.test ?{ "test" } )
+            
+            s = "xx"
+            assert(s.lower().size == 2)
+            assert(s.length == 2)
+        """.trimIndent())
+    }
 }

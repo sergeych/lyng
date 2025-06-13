@@ -16,7 +16,7 @@ class Context(
     fun raiseNotImplemented(what: String = "operation"): Nothing = raiseError("$what is not implemented")
 
     @Suppress("unused")
-    fun raiseNPE(): Nothing = raiseError(ObjNullPointerException(this))
+    fun raiseNPE(): Nothing = raiseError(ObjNullReferenceException(this))
 
     @Suppress("unused")
     fun raiseIndexOutOfBounds(message: String = "Index out of bounds"): Nothing =

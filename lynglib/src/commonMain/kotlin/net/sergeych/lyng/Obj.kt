@@ -289,6 +289,26 @@ object ObjNull : Obj() {
         return other is ObjNull || other == null
     }
 
+    override suspend fun readField(context: Context, name: String): ObjRecord {
+        context.raiseNPE()
+    }
+
+    override suspend fun invokeInstanceMethod(context: Context, name: String, args: Arguments): Obj {
+        context.raiseNPE()
+    }
+
+    override suspend fun getAt(context: Context, index: Int): Obj {
+        context.raiseNPE()
+    }
+
+    override suspend fun putAt(context: Context, index: Int, newValue: Obj) {
+        context.raiseNPE()
+    }
+
+    override suspend fun callOn(context: Context): Obj {
+        context.raiseNPE()
+    }
+
     override fun toString(): String = "null"
 }
 
@@ -383,7 +403,7 @@ open class ObjException(exceptionClass: ExceptionClass, val context: Context, va
             context.addConst("Exception", Root)
             existingErrorClasses["Exception"] = Root
             for (name in listOf(
-                "NullPointerException",
+                "NullReferenceException",
                 "AssertionFailedException",
                 "ClassCastException",
                 "IndexOutOfBoundsException",
@@ -400,7 +420,7 @@ open class ObjException(exceptionClass: ExceptionClass, val context: Context, va
     }
 }
 
-class ObjNullPointerException(context: Context) : ObjException("NullPointerException", context, "object is null")
+class ObjNullReferenceException(context: Context) : ObjException("NullReferenceException", context, "object is null")
 
 class ObjAssertionFailedException(context: Context, message: String) :
     ObjException("AssertionFailedException", context, message)

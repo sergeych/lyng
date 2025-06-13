@@ -118,6 +118,51 @@ These operators return rvalue, unmodifiable.
 
 ## Assignment return r-value!
 
+Naturally, assignment returns its value:
+
+    var x
+    x = 11
+    >>> 11
+
+rvalue means you cant assign the result if the assignment
+
+    var x
+    assertThrows { (x = 11) = 5 }
+    void
+    >>> void
+
+This also prevents chain assignments so use parentheses:
+
+    var x
+    var y
+    x = (y = 1)
+    >>> 1
+
+## Nullability
+
+When the value is `null`, it might throws `NullReferenceException`, the name is somewhat a tradition. To avoid it
+one can check it against null or use _null coalescing_. The null coalescing means, if the operand (left) is null,
+the operation won't be performed and the result will be null. Here is the difference:
+
+    val ref = null
+    assertThrows {  ref.field }
+    assertThrows {  ref.method() }
+    assertThrows {  ref.array[1] }
+    assertThrows {  ref[1] }
+    assertThrows {  ref() }
+    
+    assert( ref?.field == null )
+    assert( ref?.method() == null )
+    assert( ref?.array?[1] == null )
+    assert( ref?[1] == null )
+    assert( ref?() == null )
+    >>> void
+
+There is also "elvis operator", null-coalesce infix operator '?:' that returns rvalue if lvalue is `null`:
+
+    null ?: "nothing"
+    >>> "nothing"
+
 ## Math
 
 It is rather simple, like everywhere else:
