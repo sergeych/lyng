@@ -1854,4 +1854,26 @@ class ScriptTest {
         """.trimIndent())
     }
 
+    @Test
+    fun testThrowFromKotlin() = runTest {
+        val c = Context()
+        c.addFn("callThrow") {
+            raiseArgumentError("fromKotlin")
+        }
+        c.eval("""
+            val result = try {
+                callThrow()
+                "fail"
+            }
+            catch(e) {
+                println("caught:"+e)
+                println(e.message)
+                assert( e is IllegalArgumentException )
+                assertEquals("fromKotlin", e.message)
+                "ok"
+            }
+            assertEquals(result, "ok")
+        """.trimIndent())
+    }
+
 }
