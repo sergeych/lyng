@@ -142,10 +142,12 @@ private class Parser(fromPos: Pos) {
                             pos.advance()
                             Token("...", from, Token.Type.ELLIPSIS)
                         }
+
                         '<' -> {
                             pos.advance()
                             Token("..<", from, Token.Type.DOTDOTLT)
                         }
+
                         else -> {
                             Token("..", from, Token.Type.DOTDOT)
                         }
@@ -157,11 +159,10 @@ private class Parser(fromPos: Pos) {
             '<' -> {
                 if (currentChar == '=') {
                     pos.advance()
-                    if( currentChar == '>' ) {
+                    if (currentChar == '>') {
                         pos.advance()
                         Token("<=>", from, Token.Type.SHUTTLE)
-                    }
-                    else {
+                    } else {
                         Token("<=", from, Token.Type.LTE)
                     }
                 } else
@@ -240,6 +241,7 @@ private class Parser(fromPos: Pos) {
             }
 
             '"' -> loadStringToken()
+
             in digitsSet -> {
                 pos.back()
                 decodeNumber(loadChars(digits), from)
@@ -295,7 +297,7 @@ private class Parser(fromPos: Pos) {
     private fun decodeNumber(p1: String, start: Pos): Token =
         if (pos.end)
             Token(p1, start, Token.Type.INT)
-        else if( currentChar == 'e' || currentChar == 'E' ) {
+        else if (currentChar == 'e' || currentChar == 'E') {
             pos.advance()
             var negative = false
             if (currentChar == '+')
@@ -353,10 +355,11 @@ private class Parser(fromPos: Pos) {
     private val currentChar: Char get() = pos.currentChar
 
     private fun loadStringToken(): Token {
-        var start = currentPos
+        val start = currentPos
 
-        if (currentChar == '"') pos.advance()
-        else start = start.back()
+//        if (currentChar == '"') pos.advance()
+//        else start = start.back()
+//        start = start.back()
 
         val sb = StringBuilder()
         while (currentChar != '"') {

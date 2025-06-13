@@ -87,3 +87,19 @@ Lambda functions remember their scopes, so it will work the same as previous:
     println(c)
     >> 1
     >> void
+
+# Elements of functional programming
+
+With ellipsis and splats you can create partial functions, manipulate
+arguments list in almost arbitrary ways. For example:
+
+    // Swap first and last arguments in the call
+    fun swap_args(first, others..., last, f) { f(last, ...others, first) }
+
+    assertEquals( 
+        "321", 
+        swap_args( 1, 2, 3 ) { a, b, c -> "" + a + b + c }
+    )
+    >>> void
+
+,
