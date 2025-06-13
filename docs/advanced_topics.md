@@ -94,6 +94,7 @@ With ellipsis and splats you can create partial functions, manipulate
 arguments list in almost arbitrary ways. For example:
 
     // Swap first and last arguments for call
+
     fun swap_args(first, others..., last, f) { 
         f(last, ...others, first) 
     }
@@ -104,8 +105,8 @@ arguments list in almost arbitrary ways. For example:
     }
 
     assertEquals( 
-        "321", 
-        swap_args( 1, 2, 3, glue)
+        "4231", 
+        swap_args( 1, 2, 3, 4, glue)
     )
     >>> void
 
