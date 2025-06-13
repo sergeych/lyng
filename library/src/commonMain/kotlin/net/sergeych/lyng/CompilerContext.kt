@@ -21,7 +21,11 @@ internal class CompilerContext(val tokens: List<Token>) {
 
     fun hasNext() = currentIndex < tokens.size
     fun hasPrevious() = currentIndex > 0
-    fun next() = tokens.getOrElse(currentIndex) { throw IllegalStateException("No next token") }.also { currentIndex++ }
+    fun next() =
+        if( currentIndex < tokens.size ) tokens[currentIndex++]
+        else Token("", tokens.last().pos, Token.Type.EOF)
+//        throw IllegalStateException("No more tokens")
+
     fun previous() = if (!hasPrevious()) throw IllegalStateException("No previous token") else tokens[--currentIndex]
 
     fun savePos() = currentIndex
@@ -47,9 +51,7 @@ internal class CompilerContext(val tokens: List<Token>) {
         throw ScriptError(at, message)
     }
 
-    fun currentPos() =
-        if (hasNext()) next().pos.also { previous() }
-        else previous().pos.also { next() }
+    fun currentPos(): Pos = tokens[currentIndex].pos
 
     /**
      * Skips next token if its type is `tokenType`, returns `true` if so.
@@ -145,19 +147,16 @@ internal class CompilerContext(val tokens: List<Token>) {
         }
     }
 
-//    fun expectKeyword(vararg keyword: String): String {
-//        val t = next()
-//        if (t.type != Token.Type.ID && t.value !in keyword) {
-//            throw ScriptError(t.pos, "expected one of ${keyword.joinToString()}")
-//
-//    }
+    /**
+     * Skip newlines and comments. Returns (and reads) first non-whitespace token.
+     * Note that [Token.Type.EOF] is not considered a whitespace token.
+     */
+    fun skipWsTokens(): Token {
+        while( current().type in wstokens ) next()
+        return next()
+    }
 
-//    data class ReturnScope(val needCatch: Boolean = false)
-
-//    private val
-
-//    fun startReturnScope(): ReturnScope {
-//        return ReturnScope()
-//    }
-
+    companion object {
+        val wstokens = setOf(Token.Type.NEWLINE, Token.Type.MULTILINE_COMMENT, Token.Type.SINLGE_LINE_COMMENT)
+    }
 }

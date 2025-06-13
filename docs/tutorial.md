@@ -552,6 +552,89 @@ Or, more neat:
     >>> just 3
     >>> void
 
+## When
+
+It is very much like the kotlin's:
+
+    fun type(x) {
+        when(x) {
+            in 'a'..'z', in 'A'..'Z' -> "letter"
+            in '0'..'9' -> "digit"
+            '$' -> "dollar"
+            "EUR" -> "crap"
+            in ['@', '#', '^'] -> "punctuation1"
+            in "*&.," -> "punctuation2"
+            else -> "unknown"
+        }
+    }
+    assertEquals("digit", type('3'))
+    assertEquals("dollar", type('$'))
+    assertEquals("crap", type("EUR"))
+    >>> void
+
+Notice, several conditions can be grouped with a comma.
+Also, you can check the type too:
+
+    fun type(x) {
+        when(x) {
+            "42", 42 -> "answer to the great question"
+            is Real, is Int -> "number"
+            is String -> {
+                for( d in x ) {
+                    if( d !in '0'..'9' ) 
+                        break "unknown"
+                }
+                else "number"
+            }
+        }
+    }
+    assertEquals("number", type(5))
+    assertEquals("number", type("153"))
+    assertEquals("number", type(π/2))
+    assertEquals("unknown", type("12%"))
+    assertEquals("answer to the great question", type(42))
+    assertEquals("answer to the great question", type("42"))
+    >>> void
+
+### supported when conditions:
+
+#### Contains: 
+
+You can thest that _when expression_ is _contained_, or not contained, in some object using `in container` and `!in container`. The container is any object that provides `contains` method, otherwise the runtime exception will be thrown.
+
+Typical builtin types that are containers (e.g. support `conain`):
+
+| class      | notes                                      |
+|------------|--------------------------------------------|
+| Collection | contains an element (1)                    |
+| Array      | faster maybe that Collection's             |
+| List       | faster than Array's                        |
+| String     | character in string or substring in string |
+| Range      | object is included in the range (2)        |
+
+(1)
+: Iterable is not the container as it can be infinite
+
+(2)
+: Depending on the inclusivity and open/closed range parameters. BE careful here: String range is allowed, but it is usually not what you expect of it:
+
+    assert( "more" in "a".."z") // string range ok
+    assert( 'x' !in "a".."z") // char in string range: probably error
+    assert( 'x' in 'a'..'z') // character range: ok
+    assert( "x" !in 'a'..'z') // string in character range: could be error
+    >>> void
+
+So we recommend not to mix characters and string ranges; use `ch in str` that works
+as expected:
+
+    "foo" in "foobar"
+    >>> true
+
+and also character inclusion:
+
+    'o' in "foobar"
+    >>> true
+
 ## while
 
 Regular pre-condition while loop, as expression, loop returns the last expression as everything else:

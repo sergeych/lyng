@@ -454,7 +454,7 @@ class Compiler(
 
                 Token.Type.ID -> {
                     // visibility
-                    val visibility = if( isClassDeclaration && t.value == "private" ) {
+                    val visibility = if (isClassDeclaration && t.value == "private") {
                         t = cc.next()
                         Visibility.Private
                     } else Visibility.Public
@@ -650,7 +650,7 @@ class Compiler(
                     "void" -> Accessor { ObjVoid.asReadonly }
                     "null" -> Accessor { ObjNull.asReadonly }
                     "true" -> Accessor { ObjBool(true).asReadonly }
-                    "false" -> Accessor { ObjBool(false).asReadonly }
+                    "false" -> Accessor { ObjFalse.asReadonly }
                     else -> {
                         Accessor({
                             it.pos = t.pos
@@ -709,6 +709,7 @@ class Compiler(
         "class" -> parseClassDeclaration(cc, false)
         "try" -> parseTryStatement(cc)
         "throw" -> parseThrowStatement(cc)
+        "when" -> parseWhenStatement(cc)
         else -> {
             // triples
             cc.previous()
@@ -726,6 +727,113 @@ class Compiler(
                     null
                 }
             }
+        }
+    }
+
+    data class WhenCase(val condition: Statement, val block: Statement)
+
+    private fun parseWhenStatement(cc: CompilerContext): Statement {
+        // has a value, when(value) ?
+        var t = cc.skipWsTokens()
+        return if (t.type == Token.Type.LPAREN) {
+            // when(value)
+            val value = parseStatement(cc) ?: throw ScriptError(cc.currentPos(), "when(value) expected")
+            cc.skipTokenOfType(Token.Type.RPAREN)
+            t = cc.next()
+            if (t.type != Token.Type.LBRACE) throw ScriptError(t.pos, "when { ... } expected")
+            val cases = mutableListOf<WhenCase>()
+            var elseCase: Statement? = null
+            lateinit var whenValue: Obj
+
+            // there could be 0+ then clauses
+            // condition could be a value, in and is clauses:
+            // parse several conditions for one then clause
+
+            // loop cases
+            outer@ while (true) {
+
+                var skipParseBody = false
+                val currentCondition = mutableListOf<Statement>()
+
+                // loop conditions
+                while (true) {
+                    t = cc.skipWsTokens()
+
+                    when (t.type) {
+                        Token.Type.IN,
+                        Token.Type.NOTIN -> {
+                            // we need a copy in the closure:
+                            val isIn = t.type == Token.Type.IN
+                            val container = parseExpression(cc) ?: throw ScriptError(cc.currentPos(), "type expected")
+                            currentCondition += statement {
+                                val r = container.execute(this).contains(this, whenValue)
+                                ObjBool(if (isIn) r else !r)
+                            }
+                        }
+
+                        Token.Type.IS, Token.Type.NOTIS -> {
+                            // we need a copy in the closure:
+                            val isIn = t.type == Token.Type.IS
+                            val caseType = parseExpression(cc) ?: throw ScriptError(cc.currentPos(), "type expected")
+                            currentCondition += statement {
+                                val r = whenValue.isInstanceOf(caseType.execute(this))
+                                ObjBool(if (isIn) r else !r)
+                            }
+                        }
+
+                        Token.Type.COMMA ->
+                            continue
+
+                        Token.Type.ARROW ->
+                            break
+
+                        Token.Type.RBRACE ->
+                            break@outer
+
+                        else -> {
+                            if (t.value == "else") {
+                                cc.skipTokens(Token.Type.ARROW)
+                                if (elseCase != null) throw ScriptError(
+                                    cc.currentPos(),
+                                    "when else block already defined"
+                                )
+                                elseCase =
+                                    parseStatement(cc) ?: throw ScriptError(cc.currentPos(), "when else block expected")
+                                skipParseBody = true
+                            } else {
+                                cc.previous()
+                                val x = parseExpression(cc)
+                                    ?: throw ScriptError(cc.currentPos(), "when case condition expected")
+                                currentCondition += statement {
+                                    ObjBool(x.execute(this).compareTo(this, whenValue) == 0)
+                                }
+                            }
+                        }
+                    }
+                }
+                // parsed conditions?
+                if (!skipParseBody) {
+                    val block = parseStatement(cc) ?: throw ScriptError(cc.currentPos(), "when case block expected")
+                    for (c in currentCondition) cases += WhenCase(c, block)
+                }
+            }
+            statement {
+                var result: Obj = ObjVoid
+                // in / is and like uses whenValue from closure:
+                whenValue = value.execute(this)
+                var found = false
+                for (c in cases)
+                    if (c.condition.execute(this).toBool()) {
+                        result = c.block.execute(this)
+                        found = true
+                        break
+                    }
+                if (!found && elseCase != null) result = elseCase.execute(this)
+                result
+            }
+        } else {
+            // when { cond -> ... }
+            TODO("when without object is not yet implemented")
         }
     }
 

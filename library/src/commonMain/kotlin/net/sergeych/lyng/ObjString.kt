@@ -31,6 +31,14 @@ data class ObjString(val value: String) : Obj() {
         return ObjChar(value[index])
     }
 
+    override suspend fun contains(context: Context, other: Obj): Boolean {
+        return if (other is ObjString)
+            value.contains(other.value)
+        else if (other is ObjChar)
+            value.contains(other.value)
+        else context.raiseArgumentError("String.contains can't take $other")
+    }
+
     companion object {
         val type = ObjClass("String").apply {
             addConst("startsWith",

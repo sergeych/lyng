@@ -42,7 +42,8 @@ open class ObjClass(
         visibility: Visibility = Visibility.Public,
         pos: Pos = Pos.builtIn
     ) {
-        if (name in members || allParentsSet.any { name in it.members })
+        val existing = members[name] ?: allParentsSet.firstNotNullOfOrNull { it.members[name] }
+        if( existing?.isMutable == false)
             throw ScriptError(pos, "$name is already defined in $objClass or one of its supertypes")
         members[name] = ObjRecord(initialValue, isMutable, visibility)
     }
@@ -97,7 +98,19 @@ val ObjIterable by lazy {
  */
 val ObjCollection by lazy {
     val i: ObjClass = ObjIterable
-    ObjClass("Collection", i)
+    ObjClass("Collection", i).apply {
+        // it is not effective, but it is open:
+        addFn("contains", isOpen = true) {
+            val obj = args.firstAndOnly()
+            val it = thisObj.invokeInstanceMethod(this, "iterator")
+            while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
+                if( obj.compareTo(this, it.invokeInstanceMethod(this, "next")) == 0 )
+                    return@addFn ObjTrue
+            }
+            ObjFalse
+        }
+
+    }
 }
 
 val ObjIterator by lazy { ObjClass("Iterator") }
@@ -145,6 +158,15 @@ val ObjArray by lazy {
         addFn("iterator") {
             ObjArrayIterator(thisObj).also { it.init(this) }
         }
+
+        addFn("contains", isOpen = true) {
+            val obj = args.firstAndOnly()
+            for( i in 0..< thisObj.invokeInstanceMethod(this, "size").toInt()) {
+                if( thisObj.getAt(this, i).compareTo(this, obj) == 0 ) return@addFn ObjTrue
+            }
+            ObjFalse
+        }
+
         addFn("isample") { "ok".toObj() }
     }
 }

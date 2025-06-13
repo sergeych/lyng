@@ -89,7 +89,7 @@ open class Obj {
     }
 
     open suspend fun contains(context: Context, other: Obj): Boolean {
-        context.raiseNotImplemented()
+        return invokeInstanceMethod(context, "contains", other).toBool()
     }
 
     open val asStr: ObjString by lazy {

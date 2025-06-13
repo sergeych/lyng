@@ -298,9 +298,9 @@ class ScriptTest {
     @Test
     fun eqNeqTest() = runTest {
         assertEquals(ObjBool(true), eval("val x = 2; x == 2"))
-        assertEquals(ObjBool(false), eval("val x = 3; x == 2"))
+        assertEquals(ObjFalse, eval("val x = 3; x == 2"))
         assertEquals(ObjBool(true), eval("val x = 3; x != 2"))
-        assertEquals(ObjBool(false), eval("val x = 3; x != 3"))
+        assertEquals(ObjFalse, eval("val x = 3; x != 3"))
 
         assertTrue { eval("1 == 1").toBool() }
         assertTrue { eval("true == true").toBool() }
@@ -313,17 +313,17 @@ class ScriptTest {
 
     @Test
     fun logicTest() = runTest {
-        assertEquals(ObjBool(false), eval("true && false"))
-        assertEquals(ObjBool(false), eval("false && false"))
-        assertEquals(ObjBool(false), eval("false && true"))
+        assertEquals(ObjFalse, eval("true && false"))
+        assertEquals(ObjFalse, eval("false && false"))
+        assertEquals(ObjFalse, eval("false && true"))
         assertEquals(ObjBool(true), eval("true && true"))
 
         assertEquals(ObjBool(true), eval("true || false"))
-        assertEquals(ObjBool(false), eval("false || false"))
+        assertEquals(ObjFalse, eval("false || false"))
         assertEquals(ObjBool(true), eval("false || true"))
         assertEquals(ObjBool(true), eval("true || true"))
 
-        assertEquals(ObjBool(false), eval("!true"))
+        assertEquals(ObjFalse, eval("!true"))
         assertEquals(ObjBool(true), eval("!false"))
     }
 
@@ -1977,6 +1977,140 @@ class ScriptTest {
             assertEquals("found 11/5", result)
             assertEquals( 4, count3)
             """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testSimpleWhen() = runTest {
+        eval(
+            """
+            var result = when("a") {
+                "a" -> "ok"
+                else -> "fail"
+            }
+            assertEquals(result, "ok")
+            result = when(5) {
+                3 -> "fail1"
+                4 -> "fail2"
+                else -> "ok2"
+            }
+            assert(result == "ok2")
+            result = when(5) {
+                3 -> "fail"
+                4 -> "fail2"
+            }
+            assert(result == void)
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testWhenIs() = runTest {
+        eval(
+            """
+            var result = when("a") {
+                is Int -> "fail2"
+                is String -> "ok"
+                else -> "fail"
+            }
+            assertEquals(result, "ok")
+            result = when(5) {
+                3 -> "fail1"
+                4 -> "fail2"
+                else -> "ok2"
+            }
+            assert(result == "ok2")
+            result = when(5) {
+                3 -> "fail"
+                4 -> "fail2"
+            }
+            assert(result == void)
+            result = when(5) {
+                !is String -> "ok"
+                4 -> "fail2"
+            }
+            assert(result == "ok")
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testWhenIn() = runTest {
+        eval(
+            """
+            var result = when('e') {
+                in 'a'..'c' -> "fail2"
+                in 'a'..'z' -> "ok"
+                else -> "fail"
+            }
+//            assertEquals(result, "ok")
+            result = when(5) {
+                in [1,2,3,4,6] -> "fail1"
+                in [7, 0, 9] -> "fail2"
+                else -> "ok2"
+            }
+            assert(result == "ok2")
+            result = when(5) {
+                in [1,2,3,4,6] -> "fail1"
+                in [7, 0, 9] -> "fail2"
+                in [-1, 5, 11] -> "ok3"
+                else -> "fail3"
+            }
+            assert(result == "ok3")
+            result = when(5) {
+                !in [1,2,3,4,6, 5] -> "fail1"
+                !in [7, 0, 9, 5] -> "fail2"
+                !in [-1, 15, 11] -> "ok4"
+                else -> "fail3"
+            }
+            assert(result == "ok4")
+            result = when(5) {
+                in [1,3] -> "fail"
+                in 2..4 -> "fail2"
+            }
+            assert(result == void)
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testWhenSample1() = runTest {
+        eval(
+            """
+            fun type(x) {
+                when(x) {
+                    in 'a'..'z', in 'A'..'Z' -> "letter"
+                    in '0'..'9' -> "digit"
+                    in "$%&" -> "hate char"
+                    else -> "unknown"
+                }
+            }
+            assertEquals("digit", type('3'))
+            assertEquals("letter", type('E'))
+            assertEquals("hate char", type('%'))
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testWhenSample2() = runTest {
+        eval(
+            """
+            fun type(x) {
+                when(x) {
+                    "42", 42 -> "answer to the great question"
+                    is Real, is Int -> "number"
+                    is String -> {
+                        for( d in x ) {
+                            if( d !in '0'..'9' ) 
+                                break "unknown"
+                        }
+                        else "number"
+                    }
+                }
+            }
+            assertEquals("number", type(5))
+    """.trimIndent()
         )
     }
 }

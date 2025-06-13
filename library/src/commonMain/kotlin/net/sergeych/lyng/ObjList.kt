@@ -75,6 +75,10 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
         return this
     }
 
+    override suspend fun contains(context: Context, other: Obj): Boolean {
+        return list.contains(other)
+    }
+
     override val objClass: ObjClass
         get() = type
 
