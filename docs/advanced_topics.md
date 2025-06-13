@@ -96,9 +96,14 @@ arguments list in almost arbitrary ways. For example:
     // Swap first and last arguments in the call
     fun swap_args(first, others..., last, f) { f(last, ...others, first) }
 
+    fun glue(args...) {
+        var result = ""
+        for( a in args ) result += a
+    }
+
     assertEquals( 
         "321", 
-        swap_args( 1, 2, 3 ) { a, b, c -> "" + a + b + c }
+        swap_args( 1, 2, 3, glue)
     )
     >>> void
 
