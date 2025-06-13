@@ -1,0 +1,3 @@
+#!/usr/bin/env lyng
+
+println("Hello from lyng!")

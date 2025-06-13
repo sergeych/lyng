@@ -17,11 +17,28 @@ import okio.use
 
 expect fun exit(code: Int)
 
+expect class ShellCommandExecutor {
+    fun executeCommand(command: String): CommandResult
+
+    companion object {
+        fun create(): ShellCommandExecutor
+    }
+}
+
+data class CommandResult(
+    val exitCode: Int,
+    val output: String,
+    val error: String
+)
+
 val baseContext = Context().apply {
     addFn("exit") {
         exit(requireOnlyArg<ObjInt>().toInt())
         ObjVoid
     }
+//    ObjString.type.addFn("shell") {
+//
+//    }
 }
 
 class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() {
@@ -90,10 +107,15 @@ class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() {
 }
 
 suspend fun executeFile(fileName: String) {
-    val text = FileSystem.SYSTEM.source(fileName.toPath()).use { fileSource ->
+    var text = FileSystem.SYSTEM.source(fileName.toPath()).use { fileSource ->
         fileSource.buffer().use { bs ->
             bs.readUtf8()
         }
+    }
+    if( text.startsWith("#!") ) {
+        // skip shebang
+        val pos = text.indexOf('\n')
+        text = text.substring(pos + 1)
     }
     processErrors {
         Compiler().compile(Source(fileName, text)).execute(baseContext)
