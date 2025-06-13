@@ -1750,8 +1750,9 @@ class ScriptTest {
     }
 
     @Test
-    fun testThrowExisting()= runTest {
-        eval("""
+    fun testThrowExisting() = runTest {
+        eval(
+            """
             val x = IllegalArgumentException("test")
             assert( x is Exception )
 
@@ -1773,12 +1774,14 @@ class ScriptTest {
             }
             assertEquals(3, t)
             assert(finallyCaught)
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
-    fun testCatchShort1()= runTest {
-        eval("""
+    fun testCatchShort1() = runTest {
+        eval(
+            """
             val x = IllegalArgumentException("test")
             var t = 0
             var finallyCaught = false
@@ -1795,12 +1798,14 @@ class ScriptTest {
             }
             assertEquals(31, t)
             assert(finallyCaught)
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
-    fun testCatchShort2()= runTest {
-        eval("""
+    fun testCatchShort2() = runTest {
+        eval(
+            """
             val x = IllegalArgumentException("test")
             var caught = null
             try {
@@ -1810,12 +1815,14 @@ class ScriptTest {
                 caught = it
             }
             assert( caught is IllegalArgumentException )
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testAccessEHData() = runTest {
-        eval("""
+        eval(
+            """
             val x = IllegalArgumentException("test")
             val m = try {
                 throw x
@@ -1830,7 +1837,8 @@ class ScriptTest {
             }
             println(m)
             assert( m == "test" )
-            """.trimIndent())
+            """.trimIndent()
+        )
     }
 
     @Test
@@ -1849,9 +1857,11 @@ class ScriptTest {
             """.trimIndent()
             )
         }
-        c.eval("""
+        c.eval(
+            """
             assertEquals("freed", resource)
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
@@ -1860,7 +1870,8 @@ class ScriptTest {
         c.addFn("callThrow") {
             raiseArgumentError("fromKotlin")
         }
-        c.eval("""
+        c.eval(
+            """
             val result = try {
                 callThrow()
                 "fail"
@@ -1873,12 +1884,14 @@ class ScriptTest {
                 "ok"
             }
             assertEquals(result, "ok")
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testReturnValue1() = runTest {
-        val r = eval("""
+        val r = eval(
+            """
             class Point(x,y) {
                 println("1")
                 fun length() { sqrt(d2()) }
@@ -1891,8 +1904,79 @@ class ScriptTest {
 //            assertEquals( 5, p.length() )
 //            assertThrows { p.d2() }
             "111"        
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertEquals("111", r.toString())
     }
 
+    @Test
+    fun doWhileValuesTest() = runTest {
+        eval(
+            """
+            var count = 0    
+            val result = do {
+                count++
+                if( count < 10 )
+                    continue
+                if( count % 2 == 1 )
+                    break "found "+count
+            } while(count < 100)
+            else "no"
+            assertEquals("found 11", result)
+            """.trimIndent()
+        )
+        eval(
+            """
+            var count = 0    
+            val result = do {
+                count++
+                if( count < 10 )
+                    continue
+                if( count % 2 == 1 )
+                    break "found "+count
+            } while(count < 5)
+            else "no"
+            assertEquals("no", result)
+            """.trimIndent()
+        )
+        eval(
+            """
+            var count = 0    
+            val result = do {
+                count++
+                if( count % 2 == 3 )
+                    break "found "+count
+                "proc "+count    
+            } while(count < 5)
+            assertEquals("proc 5", result)
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun doWhileValuesLabelTest() = runTest {
+        eval(
+            """
+            var count = 0 
+            var count2 = 0
+               var count3 = 0
+            val result = outer@ do {
+                count2++
+                count = 0
+                do {
+                    count++
+                    if( count < 10 || count2 < 5 ) {
+                        continue
+                    }
+                    if( count % 2 == 1 )
+                        break@outer "found "+count + "/" + count2
+                } while(count < 14)
+                count3++
+            } while( count2 < 100 )
+            else "no"
+            assertEquals("found 11/5", result)
+            assertEquals( 4, count3)
+            """.trimIndent()
+        )
+    }
 }
