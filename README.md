@@ -9,6 +9,10 @@ class Point(x,y) {
    fun dist() { sqrt(x*x + y*y) } 
 }
 Point(3,4).dist() //< 5
+
+fun swapEnds(first, args..., last, f) {
+    f( last, ...args, first)
+} 
 ```
 
 - extremely simple Kotlin integration on any platform
@@ -31,16 +35,37 @@ and it is multithreaded on platforms supporting it (automatically, no code chang
 
 ## Integration in Kotlin multiplatform
 
-### Add library
+### Add dependency to your project
 
-TBD
+```kotlin
+// update to current please:
+val lyngVersion = "0.6.1-SNAPSHOT"
+
+repositories {
+    // ...
+    maven("https://gitea.sergeych.net/api/packages/SergeychWorks/maven")
+}
+```
+
+And add dependency to the proper place in your project, it could look like:
+
+```kotlin
+comminMain by getting {
+    dependencies {
+        // ...
+        implementation("net.sergeych:lynglib:$lyngVersion")
+    }
+}
+```
+
+Now you can import lyng and use it:
 
 ### Execute script:
 
 ```kotlin
-assertEquals("hello, world", eval(""" 
-    "hello, " + "world" 
-    """).toString())
+import net.sergeyh.lyng.*
+
+println(eval(""" "hello, " + "Lyng" """))
 ```
 
 ### Exchanging information
@@ -49,6 +74,8 @@ Script is executed over some `Context`. Create instance of the context,
 add your specific vars and functions to it, an call over it:
 
 ```kotlin
+import new.sergeych.lyng.* 
+
 // simple function
 val context = Context().apply {
     addFn("addArgs") {

@@ -1,5 +1,4 @@
 import com.codingfeline.buildkonfig.compiler.FieldSpec.Type.STRING
-import com.vanniktech.maven.publish.SonatypeHost
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -20,9 +19,10 @@ buildscript {
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidLibrary)
-    alias(libs.plugins.vanniktech.mavenPublish)
+//    alias(libs.plugins.vanniktech.mavenPublish)
     kotlin("plugin.serialization") version "2.1.20"
     id("com.codingfeline.buildkonfig") version "0.17.1"
+    `maven-publish`
 }
 
 buildkonfig {
@@ -62,7 +62,7 @@ kotlin {
     sourceSets {
         all {
             languageSettings.optIn("kotlinx.coroutines.ExperimentalCoroutinesApi")
-            languageSettings.optIn("kotlin.contracts.ExperimentalContracts::class")
+            languageSettings.optIn("kotlin.contracts.ExperimentalContracts")
             languageSettings.optIn("kotlin.ExperimentalUnsignedTypes")
             languageSettings.optIn("kotlin.coroutines.DelicateCoroutinesApi")
         }
@@ -101,73 +101,54 @@ dependencies {
     implementation(libs.firebase.crashlytics.buildtools)
 }
 
-mavenPublishing {
-    publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
-
-    signAllPublications()
-
-    coordinates(group.toString(), "library", version.toString())
-
-    pom {
-        name = "Lyng language"
-        description = "Kotlin-bound scripting loanguage"
-        inceptionYear = "2025"
-//        url = "https://sergeych.net"
-        licenses {
-            license {
-                name = "XXX"
-                url = "YYY"
-                distribution = "ZZZ"
+publishing {
+    val mavenToken by lazy {
+        File("${System.getProperty("user.home")}/.gitea_token").readText()
+    }
+    repositories {
+        maven {
+            credentials(HttpHeaderCredentials::class) {
+                name = "Authorization"
+                value = mavenToken
             }
-        }
-        developers {
-            developer {
-                id = "XXX"
-                name = "YYY"
-                url = "ZZZ"
+            url = uri("https://gitea.sergeych.net/api/packages/SergeychWorks/maven")
+            authentication {
+                create("Authorization", HttpHeaderAuthentication::class)
             }
-        }
-        scm {
-            url = "XXX"
-            connection = "YYY"
-            developerConnection = "ZZZ"
         }
     }
 }
+
+//mavenPublishing {
+//    publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
 //
-//val projectVersion  by project.extra(provider {
-//    // Compute value lazily
-//    (version as String)
-//})
+//    signAllPublications()
 //
-//val generateBuildConfig by tasks.registering {
-//    // Declare outputs safely
-//    val outputDir = layout.buildDirectory.dir("generated/buildConfig/commonMain/kotlin")
-//    outputs.dir(outputDir)
+//    coordinates(group.toString(), "library", version.toString())
 //
-//    val version = projectVersion.get()
-//
-//    // Inputs: Version is tracked as an input
-//    inputs.property("version", version)
-//
-//    doLast {
-//        val packageName = "net.sergeych.lyng.buildconfig"
-//        val packagePath = packageName.replace('.', '/')
-//        val buildConfigFile = outputDir.get().file("$packagePath/BuildConfig.kt").asFile
-//
-//        buildConfigFile.parentFile?.mkdirs()
-//        buildConfigFile.writeText(
-//            """
-//            |package $packageName
-//            |
-//            |object BuildConfig {
-//            |    const val VERSION = "$version"
-//            |}
-//            """.trimMargin()
-//        )
+//    pom {
+//        name = "Lyng language"
+//        description = "Kotlin-bound scripting loanguage"
+//        inceptionYear = "2025"
+////        url = "https://sergeych.net"
+//        licenses {
+//            license {
+//                name = "XXX"
+//                url = "YYY"
+//                distribution = "ZZZ"
+//            }
+//        }
+//        developers {
+//            developer {
+//                id = "XXX"
+//                name = "YYY"
+//                url = "ZZZ"
+//            }
+//        }
+//        scm {
+//            url = "XXX"
+//            connection = "YYY"
+//            developerConnection = "ZZZ"
+//        }
 //    }
-//}
-//
-//tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-//    dependsOn(generateBuildConfig)
 //}

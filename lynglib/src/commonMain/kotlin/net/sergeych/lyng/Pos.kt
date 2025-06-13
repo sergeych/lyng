@@ -5,6 +5,7 @@ data class Pos(val source: Source, val line: Int, val column: Int) {
         return "${source.fileName}:${line+1}:${column}"
     }
 
+    @Suppress("unused")
     fun back(): Pos =
         if( column > 0) Pos(source, line, column-1)
         else if( line > 0) Pos(source, line-1, source.lines[line-1].length - 1)
