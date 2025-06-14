@@ -36,6 +36,13 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
     override suspend fun mod(context: Context, other: Obj): Obj =
         ObjReal(this.value % other.toDouble())
 
+    /**
+     * Returns unboxed Double value
+     */
+    override suspend fun toKotlin(context: Context): Any {
+        return value
+    }
+
     companion object {
         val type: ObjClass = ObjClass("Real").apply {
             createField(

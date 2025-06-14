@@ -1051,13 +1051,54 @@ Are the same as in string literals with little difference:
 
 ## String details
 
-Strings are much like Kotlin ones:
+Strings are arrays of Unicode characters. It can be indexed, and indexing will
+return a valid Unicode character at position. No utf hassle:
 
-    "Hello".length
+    "Парашют"[5]
+    >>> 'ю'
+
+Its length is, of course, in characters:
+
+    "разум".length
     >>> 5
+
 And supports growing set of kotlin-borrowed operations, see below, for example:
 
     assertEquals("Hell", "Hello".dropLast(1))
+    >>> void
+
+To format a string use sprintf-style modifiers like:
+
+    val a = "hello"
+    val b = 11
+    assertEquals( "hello:11", "%s:%d"(a, b) )
+    assertEquals( " hello:    11", "%6s:%6d"(a, b) )
+    assertEquals( "hello :11    ", "%-6s:%-6d"(a, b) )
+    >>> void
+
+List of format specifiers closely resembles C sprintf() one. See [format specifiers](https://github.com/sergeych/mp_stools?tab=readme-ov-file#sprintf-syntax-summary), this is doe using [mp_stools kotlin multiplatform library](https://github.com/sergeych/mp_stools). Currently supported Lyng types are `String`, `Int`, `Real`, `Bool`, the rest are displayed using their `toString()` representation.
+
+This list will be extended.
+
+To get the substring use:
+
+    assertEquals("pult", "catapult".takeLast(4))
+    assertEquals("cat", "catapult".take(3))
+    assertEquals("cat", "catapult".dropLast(5))
+    assertEquals("pult", "catapult".drop(4))
+    >>> void
+
+And to get a portion you can slice it with range as the index:
+
+    assertEquals( "tap", "catapult"[ 2 .. 4 ])
+    assertEquals( "tap", "catapult"[ 2 ..< 5 ])
+    >>> void
+
+Open-ended ranges could be used to get start and end too:
+
+    assertEquals( "cat", "catapult"[ ..< 3 ])
+    assertEquals( "cat", "catapult"[ .. 2 ])
+    assertEquals( "pult", "catapult"[ 4.. ])
     >>> void
 
 ### String operations
@@ -1066,16 +1107,23 @@ Concatenation is a `+`: `"hello " + name` works as expected. No confusion.
 
 Typical set of String functions includes:
 
-| fun/prop         | description / notes                                        |
-|------------------|------------------------------------------------------------|
-| lower()          | change case to unicode upper                               |
-| upper()          | change case to unicode lower                               |
+| fun/prop           | description / notes                                        |
+|--------------------|------------------------------------------------------------|
+| lower()            | change case to unicode upper                               |
+| upper()            | change case to unicode lower                               |
 | startsWith(prefix) | true if starts with a prefix                               |
-| take(n)          | get a new string from up to n first characters             |
-| takeLast(n)      | get a new string from up to n last characters              |
-| drop(n)          | get a new string dropping n first chars, or empty string   |
-| dropLast(n)      | get a new string dropping n last chars, or empty string    |
-| size             | size in characters like `length` because String is [Array] |
+| endsWith(prefix)   | true if ends with a prefix                                 |
+| take(n)            | get a new string from up to n first characters             |
+| takeLast(n)        | get a new string from up to n last characters              |
+| drop(n)            | get a new string dropping n first chars, or empty string   |
+| dropLast(n)        | get a new string dropping n last chars, or empty string    |
+| size               | size in characters like `length` because String is [Array] |
+| (args...)          | sprintf-like formatting, see [string formatting]           |
+| [index]            | character at index                                         | 
+| [Range]            | substring at range                                         |
+| s1 + s2            | concatenation                                              |
+| s1 += s2           | self-modifying concatenation                               |
+
 
 
 
@@ -1111,5 +1159,5 @@ See [math functions](math.md). Other general purpose functions are:
 [Iterator]: Iterator.md
 [Real]: Real.md
 [Range]: Range.md
-
-
+[String]: String.md
+[string formatting]: https://github.com/sergeych/mp_stools?tab=readme-ov-file#sprintf-syntax-summary

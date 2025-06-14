@@ -2,10 +2,19 @@ package net.sergeych.lyng
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import net.sergeych.sprintf.sprintf
 
 @Serializable
 @SerialName("string")
 data class ObjString(val value: String) : Obj() {
+
+//    fun normalize(context: Context, index: Int, allowsEndInclusive: Boolean = false): Int {
+//        val i = if (index < 0) value.length + index else index
+//        if (allowsEndInclusive && i == value.length) return i
+//        if (i !in value.indices) context.raiseError("index $index out of bounds for length ${value.length} of \"$value\"")
+//        return i
+//    }
+
 
     override suspend fun compareTo(context: Context, other: Obj): Int {
         if (other !is ObjString) return -2
@@ -27,8 +36,21 @@ data class ObjString(val value: String) : Obj() {
         return ObjString(value + other.asStr.value)
     }
 
-    override suspend fun getAt(context: Context, index: Int): Obj {
-        return ObjChar(value[index])
+    override suspend fun getAt(context: Context, index: Obj): Obj {
+        if( index is ObjInt ) return ObjChar(value[index.toInt()])
+        if( index is ObjRange ) {
+            val start = if(index.start == null || index.start.isNull) 0 else  index.start.toInt()
+            val end = if( index.end  == null || index.end.isNull ) value.length else  {
+                val e = index.end.toInt()
+                if( index.isEndInclusive) e + 1 else e
+            }
+            return ObjString(value.substring(start, end))
+        }
+        context.raiseArgumentError("String index must be Int or Range")
+    }
+
+    override suspend fun callOn(context: Context): Obj {
+        return ObjString(this.value.sprintf(*context.args.toKotlinList(context).toTypedArray()))
     }
 
     override suspend fun contains(context: Context, other: Obj): Boolean {
@@ -41,10 +63,12 @@ data class ObjString(val value: String) : Obj() {
 
     companion object {
         val type = ObjClass("String").apply {
-            addConst("startsWith",
-                statement {
-                    ObjBool(thisAs<ObjString>().value.startsWith(requiredArg<ObjString>(0).value))
-                })
+            addFn("startsWith") {
+                ObjBool(thisAs<ObjString>().value.startsWith(requiredArg<ObjString>(0).value))
+            }
+            addFn("endsWith") {
+                ObjBool(thisAs<ObjString>().value.endsWith(requiredArg<ObjString>(0).value))
+            }
             addConst("length",
                 statement { ObjInt(thisAs<ObjString>().value.length.toLong()) }
             )

@@ -33,6 +33,13 @@ data class Arguments(val list: List<Obj>,val tailBlockMode: Boolean = false) : L
         return list.first()
     }
 
+    /**
+     * Convert to list of kotlin objects, see [Obj.toKotlin].
+     */
+    suspend fun toKotlinList(context: Context): List<Any?> {
+        return list.map { it.toKotlin(context) }
+    }
+
     companion object {
         val EMPTY = Arguments(emptyList())
         fun from(values: Collection<Obj>) = Arguments(values.toList())

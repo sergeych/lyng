@@ -42,6 +42,9 @@ data class Accessor(
 }
 
 open class Obj {
+
+    val isNull by lazy { this === ObjNull }
+
     var isFrozen: Boolean = false
 
     private val monitor = Mutex()
@@ -176,6 +179,13 @@ open class Obj {
         context.raiseNotImplemented()
     }
 
+    /**
+     * Convert Lyng object to its Kotlin counterpart
+     */
+    open suspend fun toKotlin(context: Context): Any? {
+        return toString()
+    }
+
     fun willMutate(context: Context) {
         if (isFrozen) context.raiseError("attempt to mutate frozen object")
     }
@@ -201,7 +211,7 @@ open class Obj {
         if (field.isMutable) field.value = newValue else context.raiseError("can't assign to read-only field: $name")
     }
 
-    open suspend fun getAt(context: Context, index: Int): Obj {
+    open suspend fun getAt(context: Context, index: Obj): Obj {
         context.raiseNotImplemented("indexing")
     }
 
@@ -297,7 +307,7 @@ object ObjNull : Obj() {
         context.raiseNPE()
     }
 
-    override suspend fun getAt(context: Context, index: Int): Obj {
+    override suspend fun getAt(context: Context, index: Obj): Obj {
         context.raiseNPE()
     }
 
@@ -310,6 +320,10 @@ object ObjNull : Obj() {
     }
 
     override fun toString(): String = "null"
+
+    override suspend fun toKotlin(context: Context): Any? {
+        return null
+    }
 }
 
 interface Numeric {

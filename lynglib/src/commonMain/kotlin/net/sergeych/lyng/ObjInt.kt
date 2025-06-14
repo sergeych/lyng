@@ -72,6 +72,10 @@ data class ObjInt(var value: Long) : Obj(), Numeric {
         } else null
     }
 
+    override suspend fun toKotlin(context: Context): Any {
+        return value
+    }
+
     companion object {
         val type = ObjClass("Int")
     }

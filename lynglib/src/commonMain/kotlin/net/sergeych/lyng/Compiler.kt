@@ -59,7 +59,7 @@ class Compiler(
                         parseBlock(cc)
                 }
 
-                Token.Type.RBRACE -> {
+                Token.Type.RBRACE, Token.Type.RBRACKET -> {
                     cc.previous()
                     return null
                 }
@@ -226,8 +226,7 @@ class Compiler(
                         val index = parseStatement(cc) ?: throw ScriptError(t.pos, "Expecting index expression")
                         cc.skipTokenOfType(Token.Type.RBRACKET, "missing ']' at the end of the list literal")
                         operand = Accessor({ cxt ->
-                            val i = (index.execute(cxt) as? ObjInt)?.value?.toInt()
-                                ?: cxt.raiseError("index must be integer")
+                            val i = index.execute(cxt)
                             val x = left.getter(cxt).value
                             if( x == ObjNull && isOptional) ObjNull.asReadonly
                             else x.getAt(cxt, i).asMutable
@@ -341,10 +340,10 @@ class Compiler(
                 }
 
                 Token.Type.DOTDOT, Token.Type.DOTDOTLT -> {
-                    // closed-range operator
+                    // range operator
                     val isEndInclusive = t.type == Token.Type.DOTDOT
                     val left = operand
-                    val right = parseStatement(cc)
+                    val right = parseExpression(cc)
                     operand = Accessor {
                         ObjRange(
                             left?.getter?.invoke(it)?.value ?: ObjNull,
@@ -366,11 +365,15 @@ class Compiler(
                     } ?: parseLambdaExpression(cc)
                 }
 
+                Token.Type.RBRACKET -> {
+                    cc.previous()
+                    return operand
+                }
 
                 else -> {
                     cc.previous()
                     operand?.let { return it }
-                    operand = parseAccessor(cc) ?: throw ScriptError(t.pos, "Expecting expression")
+                    operand = parseAccessor(cc) ?: return null //throw ScriptError(t.pos, "Expecting expression")
                 }
             }
         }
@@ -1115,7 +1118,7 @@ class Compiler(
                     var breakCaught = false
 
                     if (size > 0) {
-                        var current = runCatching { sourceObj.getAt(forContext, 0) }
+                        var current = runCatching { sourceObj.getAt(forContext, ObjInt(0)) }
                             .getOrElse {
                                 throw ScriptError(
                                     tOp.pos,
@@ -1142,7 +1145,7 @@ class Compiler(
                                 }
                             } else result = body.execute(forContext)
                             if (++index >= size) break
-                            current = sourceObj.getAt(forContext, index)
+                            current = sourceObj.getAt(forContext, ObjInt(index.toLong()))
                         }
                     }
                     if (!breakCaught && elseStatement != null) {

@@ -162,7 +162,7 @@ val ObjArray by lazy {
         addFn("contains", isOpen = true) {
             val obj = args.firstAndOnly()
             for( i in 0..< thisObj.invokeInstanceMethod(this, "size").toInt()) {
-                if( thisObj.getAt(this, i).compareTo(this, obj) == 0 ) return@addFn ObjTrue
+                if( thisObj.getAt(this, ObjInt(i.toLong())).compareTo(this, obj) == 0 ) return@addFn ObjTrue
             }
             ObjFalse
         }

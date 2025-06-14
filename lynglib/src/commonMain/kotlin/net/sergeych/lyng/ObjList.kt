@@ -11,15 +11,15 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
         list.joinToString(separator = ", ") { it.inspect() }
     }]"
 
-    fun normalize(context: Context, index: Int, allowisEndInclusive: Boolean = false): Int {
+    fun normalize(context: Context, index: Int, allowsEndInclusive: Boolean = false): Int {
         val i = if (index < 0) list.size + index else index
-        if (allowisEndInclusive && i == list.size) return i
+        if (allowsEndInclusive && i == list.size) return i
         if (i !in list.indices) context.raiseError("index $index out of bounds for size ${list.size}")
         return i
     }
 
-    override suspend fun getAt(context: Context, index: Int): Obj {
-        val i = normalize(context, index)
+    override suspend fun getAt(context: Context, index: Obj): Obj {
+        val i = normalize(context, index.toInt())
         return list[i]
     }
 
@@ -82,6 +82,10 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
     override val objClass: ObjClass
         get() = type
 
+    override suspend fun toKotlin(context: Context): Any {
+        return list.map { it.toKotlin(context) }
+    }
+
     companion object {
         val type = ObjClass("List", ObjArray).apply {
 
@@ -92,7 +96,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
             )
             addFn("getAt") {
                 requireExactCount(1)
-                thisAs<ObjList>().getAt(this, requiredArg<ObjInt>(0).value.toInt())
+                thisAs<ObjList>().getAt(this, requiredArg<Obj>(0))
             }
             addFn("putAt") {
                 requireExactCount(2)
@@ -113,7 +117,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                     val l = thisAs<ObjList>()
                     var index = l.normalize(
                         this, requiredArg<ObjInt>(0).value.toInt(),
-                        allowisEndInclusive = true
+                        allowsEndInclusive = true
                     )
                     for (i in 1..<args.size) l.list.add(index++, args[i])
                     ObjVoid

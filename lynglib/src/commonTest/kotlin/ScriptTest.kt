@@ -1056,7 +1056,7 @@ class ScriptTest {
     }
 
     @Test
-    fun testIntOpenRangeInclusive() = runTest {
+    fun testIntClosedRangeInclusive() = runTest {
         eval(
             """
             val r = 10 .. 20
@@ -1090,7 +1090,7 @@ class ScriptTest {
     }
 
     @Test
-    fun testIntOpenRangeExclusive() = runTest {
+    fun testIntClosedRangeExclusive() = runTest {
         eval(
             """
             val r = 10 ..< 20
@@ -1126,13 +1126,46 @@ class ScriptTest {
     }
 
     @Test
-    fun testIntOpenRangeInExclusive() = runTest {
+    fun testIntClosedRangeInExclusive() = runTest {
         eval(
             """
                 assert( (1..3) !in (1..<3) )
                 assert( (1..<3) in (1..3) )
             """.trimIndent()
         )
+    }
+
+    @Test
+    fun testOpenStartRanges() = runTest {
+        eval("""
+            var r = ..5
+            assert( r::class == Range)
+            assert( r.start == null)
+            assert( r.end == 5)
+            assert( r.isEndInclusive)
+            
+            r = ..< 5
+            assert( r::class == Range)
+            assert( r.start == null)
+            assert( r.end == 5)
+            assert( !r.isEndInclusive)
+            
+            assert( r.start == null)
+            
+            assert( (-2..3) in r)
+            assert( (-2..12) !in r)
+            
+        """.trimIndent())
+    }
+
+    @Test
+    fun testOpenEndRanges() = runTest {
+        eval("""
+            var r = 5..
+            assert( r::class == Range)
+            assert( r.end == null)
+            assert( r.start == 5)
+        """.trimIndent())
     }
 
     @Test
@@ -2133,4 +2166,23 @@ class ScriptTest {
             assert(s.length == 2)
         """.trimIndent())
     }
+
+    @Test
+    fun testSprintf() = runTest {
+        eval(""" 
+            assertEquals( "123.45", "%3.2f"(123.451678) )
+            assertEquals( "123.45: hello", "%3.2f: %s"(123.451678, "hello") )
+            assertEquals( "123.45: true", "%3.2f: %s"(123.451678, true) )
+        """.trimIndent())
+    }
+
+    @Test
+    fun testSubstringRangeFailure() = runTest {
+        eval(""" 
+            assertEquals("pult", "catapult"[4..])
+            assertEquals("cat", "catapult"[..2])
+            """.trimIndent()
+        )
+    }
+
 }

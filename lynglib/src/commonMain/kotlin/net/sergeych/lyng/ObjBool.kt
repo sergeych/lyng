@@ -18,6 +18,10 @@ data class ObjBool(val value: Boolean) : Obj() {
 
     override suspend fun logicalOr(context: Context, other: Obj): Obj = ObjBool(value || other.toBool())
 
+    override suspend fun toKotlin(context: Context): Any {
+        return value
+    }
+
     companion object {
         val type = ObjClass("Bool")
     }
