@@ -161,13 +161,26 @@ val ObjArray by lazy {
 
         addFn("contains", isOpen = true) {
             val obj = args.firstAndOnly()
-            for( i in 0..< thisObj.invokeInstanceMethod(this, "size").toInt()) {
-                if( thisObj.getAt(this, ObjInt(i.toLong())).compareTo(this, obj) == 0 ) return@addFn ObjTrue
+            for (i in 0..<thisObj.invokeInstanceMethod(this, "size").toInt()) {
+                if (thisObj.getAt(this, ObjInt(i.toLong())).compareTo(this, obj) == 0) return@addFn ObjTrue
             }
             ObjFalse
         }
 
-        addFn("isample") { "ok".toObj() }
+        addFn("last") {
+            thisObj.invokeInstanceMethod(
+                this,
+                "getAt",
+                (thisObj.invokeInstanceMethod(this, "size").toInt() - 1).toObj()
+            )
+        }
+
+        addFn("lastIndex") { (thisObj.invokeInstanceMethod(this, "size").toInt() - 1).toObj() }
+
+        addFn("indices") {
+            ObjRange(0.toObj(), thisObj.invokeInstanceMethod(this, "size"), false)
+        }
+
     }
 }
 

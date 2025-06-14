@@ -365,7 +365,7 @@ class Compiler(
                     } ?: parseLambdaExpression(cc)
                 }
 
-                Token.Type.RBRACKET -> {
+                Token.Type.RBRACKET, Token.Type.RPAREN -> {
                     cc.previous()
                     return operand
                 }

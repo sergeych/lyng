@@ -2,6 +2,9 @@ package net.sergeych.lyng
 
 class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Obj() {
 
+    val isOpenStart by lazy { start == null || start.isNull }
+    val isOpenEnd by lazy { end == null || end.isNull }
+
     override val objClass: ObjClass = type
 
     override fun toString(): String {

@@ -20,11 +20,11 @@ indexing is zero-based, as in C/C++/Java/Kotlin, etc.
     list[1]
     >>> 20
 
-Using negative indexes has a special meaning: _offset from the end of the list_:
+There is a shortcut for the last:
 
     val list = [10, 20, 30]
-    list[-1]
-    >>> 30
+    [list.last, list.lastIndex]
+    >>> [30, 2]
 
 __Important__ negative indexes works wherever indexes are used, e.g. in insertion and removal methods too.
 
@@ -38,7 +38,8 @@ You can concatenate lists or iterable objects:
 
 ## Appending
 
-To append to lists, use `+=` with elements, lists and any [Iterable] instances, but beware it will concatenate [Iterable] objects instead of appending them. To append [Iterable] instance itself, use `list.add`:
+To append to lists, use `+=` with elements, lists and any [Iterable] instances, but beware it will
+concatenate [Iterable] objects instead of appending them. To append [Iterable] instance itself, use `list.add`:
 
     var list = [1, 2]
     val other = [3, 4]
@@ -57,7 +58,28 @@ To append to lists, use `+=` with elements, lists and any [Iterable] instances, 
 
     >>> void
 
+## Removing elements
 
+List is mutable, so it is possible to remove its contents. To remove a single element
+by index use:
+
+    assertEquals( [1,2,3].removeAt(1), [1,3] )
+    assertEquals( [1,2,3].removeAt(0), [2,3] )
+    assertEquals( [1,2,3].removeLast(), [1,2] )
+    >>> void
+
+There is a way to remove a range (see [Range] for more on ranges):
+
+    assertEquals( [1, 4], [1,2,3,4].removeRange(1..2))
+    assertEquals( [1, 4], [1,2,3,4].removeRange(1..<3))
+    >>> void
+
+Open end ranges remove head and tail elements:
+
+    assertEquals( [3, 4, 5], [1,2,3,4,5].removeRange(..1))
+    assertEquals( [3, 4, 5], [1,2,3,4,5].removeRange(..<2))
+    assertEquals( [1, 2], [1,2,3,4,5].removeRange( (2..) ))
+    >>> void
 
 ## Comparisons
 
@@ -72,19 +94,44 @@ To append to lists, use `+=` with elements, lists and any [Iterable] instances, 
 
 ## Members
 
-| name                              | meaning                             | type     |
-|-----------------------------------|-------------------------------------|----------|
-| `size`                            | current size                        | Int      |
-| `add(elements...)`                | add one or more elements to the end | Any      |
-| `addAt(index,elements...)`        | insert elements at position         | Int, Any |
-| `removeAt(index)`                 | remove element at position          | Int      |
-| `removeRangeInclusive(start,end)` | remove range, inclusive (1)         | Int, Int |
-|                                   |                                     |          |
+| name                          | meaning                               | type        |
+|-------------------------------|---------------------------------------|-------------|
+| `size`                        | current size                          | Int         |
+| `add(elements...)`            | add one or more elements to the end   | Any         |
+| `insertAt(index,elements...)` | insert elements at position           | Int, Any    |
+| `removeAt(index)`             | remove element at position            | Int         |
+| `remove(from,toNonInclusive)` | remove range from (incl) to (nonincl) | Int, Int    |
+| `remove(Range)`               | remove range                          | Range       |
+| `removeLast()`                | remove last element                   |             |
+| `removeLast(n)`               | remove n last elements                | Int         |
+| `contains(element)`           | check the element is in the list (1)  |             |
+| `[index]`                     | get or set element at index           | Int         |
+| `[Range]`                     | get slice of the array (copy)         | Range       |
+| `+=`                          | append element(s)                     | List or Obj |
 
 (1)
-: end-inclisiveness allows to use negative indexes to, for exampe, remove several last elements, like `list.removeRangeInclusive(-2, -1)` will remove two last elements.
+: optimized implementation that override `Array` one
 
+(2)
+: `+=` append either a single element, or all elements if the List or other Iterable
+instance is appended. If you want to append an Iterable object itself, use `add` instead.
+
+## Member inherited from Array
+
+| name             | meaning                        | type  |
+|------------------|--------------------------------|-------|
+| `last`           | last element (throws if empty) |       |
+| `lastOrNull`     | last element or null           |       |
+| `lastIndex`      |                                | Int   |
+| `indices`        | range of indexes               | Range |
+| `contains(item)` | test that item is in the list  |       |
+
+(1)
+: end-inclisiveness allows to use negative indexes to, for exampe, remove several last elements, like
+`list.removeRangeInclusive(-2, -1)` will remove two last elements.
 
 # Notes
 
 Could be rewritten using array as a class but List as the interface
+
+[Range]: Range.md

@@ -514,39 +514,40 @@ To add elements to the list:
     assert( x == [1, 2, 3, "the", "end"])
     >>> void
 
-Self-modifying concatenation by `+=` also works:
+Self-modifying concatenation by `+=` also works (also with single elements):
 
     val x = [1, 2]
     x += [3, 4]
-    assert( x == [1, 2, 3, 4])
+    x += 5
+    assert( x == [1, 2, 3, 4, 5])
     >>> void
 
-You can insert elements at any position using `addAt`:
+You can insert elements at any position using `insertAt`:
 
     val x = [1,2,3]
-    x.addAt(1, "foo", "bar")
+    x.insertAt(1, "foo", "bar")
     assert( x == [1, "foo", "bar", 2, 3])
     >>> void
 
 Using splat arguments can simplify inserting list in list:
 
     val x = [1, 2, 3]
-    x.addAt( 1, ...[0,100,0])
+    x.insertAt( 1, ...[0,100,0])
     x
     >>> [1, 0, 100, 0, 2, 3]
 
-Using negative indexes can insert elements as offset from the end, for example:
-
-    val x = [1,2,3]
-    x.addAt(-1, 10)
-    x
-    >>> [1, 2, 10, 3]
 
 Note that to add to the end you still need to use `add` or positive index of the after-last element:
 
     val x = [1,2,3]
-    x.addAt(3, 10)
+    x.insertAt(3, 10)
     x
+    >>> [1, 2, 3, 10]
+
+but it is much simpler, and we recommend to use '+='
+
+    val x = [1,2,3]
+    x += 10
     >>> [1, 2, 3, 10]
 
 ## Removing list items
@@ -555,21 +556,31 @@ Note that to add to the end you still need to use `add` or positive index of the
     x.removeAt(2)
     assert( x == [1, 2, 4, 5])
     // or remove range (start inclusive, end exclusive):
-    x.removeRangeInclusive(1,2)    
+    x.removeRange(1..2)    
     assert( x == [1, 5])
     >>> void
 
-Again, you can use negative indexes. For example, removing last elements like:
+There is a shortcut to remove the last elements:
 
     val x = [1, 2, 3, 4, 5]
 
     // remove last:
-    x.removeAt(-1)
+    x.removeLast()
     assert( x == [1, 2, 3, 4])
     
     // remove 2 last:
-    x.removeRangeInclusive(-2,-1)
-    assert( x == [1, 2])
+    x.removeLast(2)
+    assertEquals( [1, 2], x)
+    >>> void
+
+You can get ranges to extract a portion from a list:
+
+    val list = [1, 2, 3, 4, 5]
+    assertEquals( [1,2,3], list[..2])
+    assertEquals( [1,2,], list[..<2])
+    assertEquals( [4,5], list[3..])
+    assertEquals( [2,3], list[1..2])
+    assertEquals( [2,3], list[1..<3])
     >>> void
 
 # Flow control operators

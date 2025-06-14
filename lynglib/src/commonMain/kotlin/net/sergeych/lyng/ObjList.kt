@@ -11,20 +11,48 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
         list.joinToString(separator = ", ") { it.inspect() }
     }]"
 
-    fun normalize(context: Context, index: Int, allowsEndInclusive: Boolean = false): Int {
-        val i = if (index < 0) list.size + index else index
-        if (allowsEndInclusive && i == list.size) return i
-        if (i !in list.indices) context.raiseError("index $index out of bounds for size ${list.size}")
-        return i
-    }
-
     override suspend fun getAt(context: Context, index: Obj): Obj {
-        val i = normalize(context, index.toInt())
-        return list[i]
+        return when (index) {
+            is ObjInt -> {
+                list[index.toInt()]
+            }
+
+            is ObjRange -> {
+                when {
+                    index.start is ObjInt && index.end is ObjInt -> {
+                        if (index.isEndInclusive)
+                            ObjList(list.subList(index.start.toInt(), index.end.toInt() + 1).toMutableList())
+                        else
+                            ObjList(list.subList(index.start.toInt(), index.end.toInt()).toMutableList())
+                    }
+
+                    index.isOpenStart && !index.isOpenEnd -> {
+                        if (index.isEndInclusive)
+                            ObjList(list.subList(0, index.end!!.toInt() + 1).toMutableList())
+                        else
+                            ObjList(list.subList(0, index.end!!.toInt()).toMutableList())
+                    }
+
+                    index.isOpenEnd && !index.isOpenStart -> {
+                        ObjList(list.subList(index.start!!.toInt(), list.size).toMutableList())
+                    }
+
+                    index.isOpenStart && index.isOpenEnd -> {
+                        ObjList(list.toMutableList())
+                    }
+
+                    else -> {
+                        throw RuntimeException("Can't apply range for index: $index")
+                    }
+                }
+            }
+
+            else -> context.raiseArgumentError("Illegal index object for a list: ${index.inspect()}")
+        }
     }
 
     override suspend fun putAt(context: Context, index: Int, newValue: Obj) {
-        val i = normalize(context, index)
+        val i = index
         list[i] = newValue
     }
 
@@ -111,33 +139,74 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                     ObjVoid
                 }
             )
-            createField("addAt",
-                statement {
-                    if (args.size < 2) raiseError("addAt takes 2+ arguments")
-                    val l = thisAs<ObjList>()
-                    var index = l.normalize(
-                        this, requiredArg<ObjInt>(0).value.toInt(),
-                        allowsEndInclusive = true
-                    )
-                    for (i in 1..<args.size) l.list.add(index++, args[i])
-                    ObjVoid
-                }
-            )
+            addFn("insertAt") {
+                if (args.size < 2) raiseError("addAt takes 2+ arguments")
+                val l = thisAs<ObjList>()
+                var index = requiredArg<ObjInt>(0).value.toInt()
+                for (i in 1..<args.size) l.list.add(index++, args[i])
+                ObjVoid
+            }
+
             addFn("removeAt") {
                 val self = thisAs<ObjList>()
-                val start = self.normalize(this, requiredArg<ObjInt>(0).value.toInt())
+                val start = requiredArg<ObjInt>(0).value.toInt()
                 if (args.size == 2) {
                     val end = requireOnlyArg<ObjInt>().value.toInt()
-                    self.list.subList(start, self.normalize(this, end)).clear()
+                    self.list.subList(start, end).clear()
                 } else
                     self.list.removeAt(start)
                 self
             }
-            addFn("removeRangeInclusive") {
+
+            addFn("removeLast") {
                 val self = thisAs<ObjList>()
-                val start = self.normalize(this, requiredArg<ObjInt>(0).value.toInt())
-                val end = self.normalize(this, requiredArg<ObjInt>(1).value.toInt()) + 1
-                self.list.subList(start, end).clear()
+                if (args.isNotEmpty()) {
+                    val count = requireOnlyArg<ObjInt>().value.toInt()
+                    val size = self.list.size
+                    if (count >= size) self.list.clear()
+                    else self.list.subList(size - count, size).clear()
+                } else self.list.removeLast()
+                self
+            }
+
+            addFn("removeRange") {
+                val self = thisAs<ObjList>()
+                val list = self.list
+                val range = requiredArg<Obj>(0)
+                if (range is ObjRange) {
+                    val index = range
+                    when {
+                        index.start is ObjInt && index.end is ObjInt -> {
+                            if (index.isEndInclusive)
+                                list.subList(index.start.toInt(), index.end.toInt() + 1)
+                            else
+                                list.subList(index.start.toInt(), index.end.toInt())
+                        }
+
+                        index.isOpenStart && !index.isOpenEnd -> {
+                            if (index.isEndInclusive)
+                                list.subList(0, index.end!!.toInt() + 1)
+                            else
+                                list.subList(0, index.end!!.toInt())
+                        }
+
+                        index.isOpenEnd && !index.isOpenStart -> {
+                            list.subList(index.start!!.toInt(), list.size)
+                        }
+
+                        index.isOpenStart && index.isOpenEnd -> {
+                            list
+                        }
+
+                        else -> {
+                            throw RuntimeException("Can't apply range for index: $index")
+                        }
+                    }.clear()
+                } else {
+                    val start = range.toInt()
+                    val end = requiredArg<ObjInt>(1).value.toInt() + 1
+                    self.list.subList(start, end).clear()
+                }
                 self
             }
         }

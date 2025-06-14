@@ -1137,7 +1137,8 @@ class ScriptTest {
 
     @Test
     fun testOpenStartRanges() = runTest {
-        eval("""
+        eval(
+            """
             var r = ..5
             assert( r::class == Range)
             assert( r.start == null)
@@ -1155,17 +1156,20 @@ class ScriptTest {
             assert( (-2..3) in r)
             assert( (-2..12) !in r)
             
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testOpenEndRanges() = runTest {
-        eval("""
+        eval(
+            """
             var r = 5..
             assert( r::class == Range)
             assert( r.end == null)
             assert( r.start == 5)
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
@@ -1226,7 +1230,7 @@ class ScriptTest {
             val list = (1..1024).toList()
             assert(list.size == 1024)
             assert(list[0] == 1)
-            assert(list[-1] == 1024)
+            assert(list.last == 1024)
             }
         """.trimIndent()
         )
@@ -2149,7 +2153,8 @@ class ScriptTest {
 
     @Test
     fun testNull1() = runTest {
-        eval("""
+        eval(
+            """
             var s = null
             assertThrows { s.length }
             assertThrows { s.size() }
@@ -2164,23 +2169,39 @@ class ScriptTest {
             s = "xx"
             assert(s.lower().size == 2)
             assert(s.length == 2)
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testSprintf() = runTest {
-        eval(""" 
+        eval(
+            """ 
             assertEquals( "123.45", "%3.2f"(123.451678) )
             assertEquals( "123.45: hello", "%3.2f: %s"(123.451678, "hello") )
             assertEquals( "123.45: true", "%3.2f: %s"(123.451678, true) )
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testSubstringRangeFailure() = runTest {
-        eval(""" 
+        eval(
+            """ 
             assertEquals("pult", "catapult"[4..])
             assertEquals("cat", "catapult"[..2])
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun passingOpenEndedRangeAsParam() = runTest {
+        eval(
+            """
+                fun test(r) {
+                    assert( r is Range ) 
+                }
+                test( 1.. )
             """.trimIndent()
         )
     }
