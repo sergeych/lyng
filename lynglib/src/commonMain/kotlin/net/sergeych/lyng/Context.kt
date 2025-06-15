@@ -23,7 +23,11 @@ class Context(
         raiseError(ObjIndexOutOfBoundsException(this, message))
 
     @Suppress("unused")
-    fun raiseArgumentError(message: String = "Illegal argument error"): Nothing =
+    fun raiseIllegalArgument(message: String = "Illegal argument error"): Nothing =
+        raiseError(ObjIllegalArgumentException(this, message))
+
+    @Suppress("unused")
+    fun raiseNoSuchElement(message: String = "No such element"): Nothing =
         raiseError(ObjIllegalArgumentException(this, message))
 
     fun raiseClassCastError(msg: String): Nothing = raiseError(ObjClassCastException(this, msg))

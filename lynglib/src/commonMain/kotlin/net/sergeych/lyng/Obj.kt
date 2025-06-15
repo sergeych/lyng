@@ -254,6 +254,7 @@ open class Obj {
 
     companion object {
         inline fun <reified T> from(obj: T): Obj {
+            @Suppress("UNCHECKED_CAST")
             return when (obj) {
                 is Obj -> obj
                 is Double -> ObjReal(obj)
@@ -263,6 +264,7 @@ open class Obj {
                 is String -> ObjString(obj)
                 is CharSequence -> ObjString(obj.toString())
                 is Boolean -> ObjBool(obj)
+                is Set<*> -> ObjSet((obj as Set<Obj>).toMutableSet())
                 Unit -> ObjVoid
                 null -> ObjNull
                 is Iterator<*> -> ObjKotlinIterator(obj)
@@ -423,6 +425,7 @@ open class ObjException(exceptionClass: ExceptionClass, val context: Context, va
                 "ClassCastException",
                 "IndexOutOfBoundsException",
                 "IllegalArgumentException",
+                "NoSuchElementException",
                 "IllegalAssignmentException",
                 "SymbolNotDefinedException",
                 "IterationEndException",
@@ -447,8 +450,11 @@ class ObjIndexOutOfBoundsException(context: Context, message: String = "index ou
 class ObjIllegalArgumentException(context: Context, message: String = "illegal argument") :
     ObjException("IllegalArgumentException", context, message)
 
+class ObjNoSuchElementException(context: Context, message: String = "no such element") :
+    ObjException("IllegalArgumentException", context, message)
+
 class ObjIllegalAssignmentException(context: Context, message: String = "illegal assignment") :
-    ObjException("IllegalAssignmentException", context, message)
+    ObjException("NoSuchElementException", context, message)
 
 class ObjSymbolNotDefinedException(context: Context, message: String = "symbol is not defined") :
     ObjException("SymbolNotDefinedException", context, message)

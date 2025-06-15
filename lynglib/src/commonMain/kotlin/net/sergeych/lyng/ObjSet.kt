@@ -44,12 +44,12 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
         return if (other is ObjSet) {
             ObjSet(set.intersect(other.set).toMutableSet())
         } else
-            context.raiseArgumentError("set operator * requires another set")
+            context.raiseIllegalArgument("set operator * requires another set")
     }
 
     override suspend fun minus(context: Context, other: Obj): Obj {
         if (other !is ObjSet)
-            context.raiseArgumentError("set operator - requires another set")
+            context.raiseIllegalArgument("set operator - requires another set")
         return ObjSet(set.minus(other.set).toMutableSet())
     }
 
@@ -66,6 +66,8 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
     }
 
     companion object {
+
+
         val type = object : ObjClass("Set", ObjCollection) {
             override suspend fun callOn(context: Context): Obj {
                 return ObjSet(context.args.list.toMutableSet())

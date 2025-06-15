@@ -46,7 +46,11 @@ data class ObjString(val value: String) : Obj() {
             }
             return ObjString(value.substring(start, end))
         }
-        context.raiseArgumentError("String index must be Int or Range")
+        context.raiseIllegalArgument("String index must be Int or Range")
+    }
+
+    override fun hashCode(): Int {
+        return value.hashCode()
     }
 
     override suspend fun callOn(context: Context): Obj {
@@ -58,7 +62,7 @@ data class ObjString(val value: String) : Obj() {
             value.contains(other.value)
         else if (other is ObjChar)
             value.contains(other.value)
-        else context.raiseArgumentError("String.contains can't take $other")
+        else context.raiseIllegalArgument("String.contains can't take $other")
     }
 
     companion object {

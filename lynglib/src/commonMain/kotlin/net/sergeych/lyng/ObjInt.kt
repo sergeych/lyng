@@ -9,6 +9,10 @@ data class ObjInt(var value: Long) : Obj(), Numeric {
 
     override fun byValueCopy(): Obj = ObjInt(value)
 
+    override fun hashCode(): Int {
+        return value.hashCode()
+    }
+
     override suspend fun getAndIncrement(context: Context): Obj {
         return ObjInt(value).also { value++ }
     }
@@ -77,6 +81,8 @@ data class ObjInt(var value: Long) : Obj(), Numeric {
     }
 
     companion object {
+        val Zero = ObjInt(0)
+        val One = ObjInt(1)
         val type = ObjClass("Int")
     }
 }

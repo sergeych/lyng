@@ -1890,7 +1890,7 @@ class ScriptTest {
     fun testThrowFromKotlin() = runTest {
         val c = Context()
         c.addFn("callThrow") {
-            raiseArgumentError("fromKotlin")
+            raiseIllegalArgument("fromKotlin")
         }
         c.eval(
             """

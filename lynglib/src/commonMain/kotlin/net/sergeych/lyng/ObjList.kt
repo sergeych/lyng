@@ -47,7 +47,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 }
             }
 
-            else -> context.raiseArgumentError("Illegal index object for a list: ${index.inspect()}")
+            else -> context.raiseIllegalArgument("Illegal index object for a list: ${index.inspect()}")
         }
     }
 
@@ -112,6 +112,11 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
 
     override suspend fun toKotlin(context: Context): Any {
         return list.map { it.toKotlin(context) }
+    }
+
+    override fun hashCode(): Int {
+        // check?
+        return list.hashCode()
     }
 
     companion object {

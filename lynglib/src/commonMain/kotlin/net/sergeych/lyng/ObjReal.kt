@@ -10,6 +10,8 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
     override val toObjInt: ObjInt by lazy { ObjInt(longValue) }
     override val toObjReal: ObjReal by lazy { ObjReal(value) }
 
+    override val objClass: ObjClass = type
+
     override fun byValueCopy(): Obj = ObjReal(value)
 
     override suspend fun compareTo(context: Context, other: Obj): Int {
@@ -19,7 +21,9 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
 
     override fun toString(): String = value.toString()
 
-    override val objClass: ObjClass = type
+    override fun hashCode(): Int {
+        return value.hashCode()
+    }
 
     override suspend fun plus(context: Context, other: Obj): Obj =
         ObjReal(this.value + other.toDouble())

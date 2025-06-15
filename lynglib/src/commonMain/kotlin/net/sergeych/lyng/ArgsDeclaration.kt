@@ -56,7 +56,7 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
                     else -> {
                         println("callArgs: ${callArgs.joinToString()}")
                         println("tailBlockMode: ${arguments.tailBlockMode}")
-                        context.raiseArgumentError("too few arguments for the call")
+                        context.raiseIllegalArgument("too few arguments for the call")
                     }
                 }
                 assign(a, value)
@@ -77,7 +77,7 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
                     }
 
                     a.defaultValue != null -> a.defaultValue.execute(context)
-                    else -> context.raiseArgumentError("too few arguments for the call")
+                    else -> context.raiseIllegalArgument("too few arguments for the call")
                 }
                 assign(a, value)
                 i--
@@ -98,7 +98,7 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
             processEllipsis(leftIndex, end)
         } else {
             if (leftIndex < callArgs.size)
-                context.raiseArgumentError("too many arguments for the call")
+                context.raiseIllegalArgument("too many arguments for the call")
         }
     }
 
