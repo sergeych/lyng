@@ -80,6 +80,15 @@ data class ObjInt(var value: Long) : Obj(), Numeric {
         return value
     }
 
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other == null || this::class != other::class) return false
+
+        other as ObjInt
+
+        return value == other.value
+    }
+
     companion object {
         val Zero = ObjInt(0)
         val One = ObjInt(1)

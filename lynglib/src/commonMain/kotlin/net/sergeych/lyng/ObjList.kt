@@ -119,6 +119,15 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
         return list.hashCode()
     }
 
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other == null || this::class != other::class) return false
+
+        other as ObjList
+
+        return list == other.list
+    }
+
     companion object {
         val type = ObjClass("List", ObjArray).apply {
 

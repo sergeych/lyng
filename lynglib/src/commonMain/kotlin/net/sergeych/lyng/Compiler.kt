@@ -1616,6 +1616,8 @@ class Compiler(
             // bitwise or 2
             // bitwise and 3
             // equality/ne 4
+            Operator.simple(Token.Type.EQARROW, ++lastPrty) { c, a, b -> ObjMapEntry(a,b) },
+            //
             Operator.simple(Token.Type.EQ, ++lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) == 0) },
             Operator.simple(Token.Type.NEQ, lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) != 0) },
             Operator.simple(Token.Type.REF_EQ, lastPrty) { _, a, b -> ObjBool(a === b) },

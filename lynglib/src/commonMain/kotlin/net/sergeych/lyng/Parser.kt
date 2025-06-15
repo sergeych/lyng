@@ -45,12 +45,18 @@ private class Parser(fromPos: Pos) {
             '=' -> {
                 if (pos.currentChar == '=') {
                     pos.advance()
-                    if (currentChar == '=') {
-                        pos.advance()
-                        Token("===", from, Token.Type.REF_EQ)
-                    } else
-                        Token("==", from, Token.Type.EQ)
-                } else
+                    when (currentChar) {
+                        '=' -> {
+                            pos.advance()
+                            Token("===", from, Token.Type.REF_EQ)
+                        }
+                        else -> Token("==", from, Token.Type.EQ)
+                    }
+                } else if( currentChar == '>' ) {
+                    pos.advance()
+                    Token("=>", from, Token.Type.EQARROW)
+                }
+                else
                     Token("=", from, Token.Type.ASSIGN)
             }
 

@@ -65,6 +65,15 @@ data class ObjString(val value: String) : Obj() {
         else context.raiseIllegalArgument("String.contains can't take $other")
     }
 
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other == null || this::class != other::class) return false
+
+        other as ObjString
+
+        return value == other.value
+    }
+
     companion object {
         val type = ObjClass("String").apply {
             addFn("startsWith") {

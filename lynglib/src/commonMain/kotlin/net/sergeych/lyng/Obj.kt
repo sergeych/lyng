@@ -253,7 +253,7 @@ open class Obj {
 
 
     companion object {
-        inline fun <reified T> from(obj: T): Obj {
+        inline fun from(obj: Any?): Obj {
             @Suppress("UNCHECKED_CAST")
             return when (obj) {
                 is Obj -> obj
@@ -268,6 +268,10 @@ open class Obj {
                 Unit -> ObjVoid
                 null -> ObjNull
                 is Iterator<*> -> ObjKotlinIterator(obj)
+                is Map.Entry<*, *> -> {
+                    obj as MutableMap.MutableEntry<Obj, Obj>
+                    ObjMapEntry(obj.key, obj.value)
+                }
                 else -> throw IllegalArgumentException("cannot convert to Obj: $obj")
             }
         }
@@ -450,6 +454,7 @@ class ObjIndexOutOfBoundsException(context: Context, message: String = "index ou
 class ObjIllegalArgumentException(context: Context, message: String = "illegal argument") :
     ObjException("IllegalArgumentException", context, message)
 
+@Suppress("unused")
 class ObjNoSuchElementException(context: Context, message: String = "no such element") :
     ObjException("IllegalArgumentException", context, message)
 

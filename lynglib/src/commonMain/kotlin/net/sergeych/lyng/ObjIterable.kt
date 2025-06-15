@@ -47,6 +47,15 @@ val ObjIterable by lazy {
             ObjSet(result)
         }
 
+        addFn("toMap") {
+            val result = mutableListOf<Obj>()
+            val it = thisObj.invokeInstanceMethod(this, "iterator")
+            while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
+                result += it.invokeInstanceMethod(this, "next")
+            }
+            ObjMap(ObjMap.listToMap(this, result))
+        }
+
         addFn("forEach", isOpen = true) {
             val it = thisObj.invokeInstanceMethod(this, "iterator")
             val fn = requiredArg<Statement>(0)

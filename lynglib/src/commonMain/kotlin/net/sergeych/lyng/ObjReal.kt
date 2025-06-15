@@ -47,6 +47,15 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
         return value
     }
 
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other == null || this::class != other::class) return false
+
+        other as ObjReal
+
+        return value == other.value
+    }
+
     companion object {
         val type: ObjClass = ObjClass("Real").apply {
             createField(

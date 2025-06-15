@@ -155,6 +155,7 @@ class Script(
             addConst("Set", ObjSet.type)
             addConst("Range", ObjRange.type)
             addConst("Map", ObjMap.type)
+            addConst("MapEntry", ObjMapEntry.type)
             @Suppress("RemoveRedundantQualifierName")
             addConst("Callable", Statement.type)
             // interfaces

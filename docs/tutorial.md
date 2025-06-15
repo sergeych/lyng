@@ -14,7 +14,7 @@ __Other documents to read__ maybe after this one:
 - [Advanced topics](advanced_topics.md), [declaring arguments](declaring_arguments.md)
 - [OOP notes](OOP.md), [exception handling](exceptions_handling.md)
 - [math in Lyng](math.md)
-- Some class references: [List], [Real], [Range], [Iterable], [Iterator]
+- Some class references: [List], [Set], [Map], [Real], [Range], [Iterable], [Iterator]
 - Some samples: [combinatorics](samples/combinatorics.lyng.md), national vars and loops: [сумма ряда](samples/сумма_ряда.lyng.md). More at [samples folder](samples)
 
 # Expressions
@@ -582,6 +582,28 @@ You can get ranges to extract a portion from a list:
     assertEquals( [2,3], list[1..2])
     assertEquals( [2,3], list[1..<3])
     >>> void
+
+# Sets
+
+Set are unordered collection of unique elements, see [Set]. Sets are [Iterable] but have no indexing access.
+
+    assertEquals( Set(3, 2, 1), Set( 1, 2, 3))
+    assert( 5 !in Set(1, 2, 6) )
+    >>> void
+
+Please see [Set] for detailed description.
+
+# Maps
+
+Maps are unordered collection of key-value pairs, where keys are unique. See [Map] for details. Map also
+are [Iterable]:
+
+    val m = Map( "foo" => 77, "bar" => "buzz" )
+    assertEquals( m["foo"], 77 )
+    >>> void
+
+Please see [Map] reference for detailed description on using Maps.
+
 
 # Flow control operators
 
@@ -1172,3 +1194,5 @@ See [math functions](math.md). Other general purpose functions are:
 [Range]: Range.md
 [String]: String.md
 [string formatting]: https://github.com/sergeych/mp_stools?tab=readme-ov-file#sprintf-syntax-summary
+[Set]: Set.md
+[Map]: Map.md
