@@ -265,6 +265,7 @@ open class Obj {
                 is Boolean -> ObjBool(obj)
                 Unit -> ObjVoid
                 null -> ObjNull
+                is Iterator<*> -> ObjKotlinIterator(obj)
                 else -> throw IllegalArgumentException("cannot convert to Obj: $obj")
             }
         }

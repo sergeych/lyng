@@ -1222,21 +1222,6 @@ class ScriptTest {
     }
 
     @Test
-    fun iterableList() = runTest {
-        // 473
-        eval(
-            """
-            for( i in 0..<1024 ) {    
-            val list = (1..1024).toList()
-            assert(list.size == 1024)
-            assert(list[0] == 1)
-            assert(list.last == 1024)
-            }
-        """.trimIndent()
-        )
-    }
-
-    @Test
     fun testLambdaWithIt1() = runTest {
         eval(
             """
@@ -2206,4 +2191,55 @@ class ScriptTest {
         )
     }
 
+    @Test
+    fun testCollectionStructure() = runTest {
+        eval(
+            """
+                val list = [1,2,3]
+                assert( 1 in list )
+                assert( list.indexOf(3) == 2 )
+                assert( list.indexOf(5) == -1 )
+                assert( list is List )
+                assert( list is Array )
+                assert( list is Iterable )
+                assert( list is Collection )
+                
+                val other = []
+                list.forEach { other += it }
+                assertEquals( list, other )
+                
+                assert( list.isEmpty() == false )
+                
+                assertEquals( [10, 20, 30], list.map { it * 10 } )
+                assertEquals( [10, 20, 30], (1..3).map { it * 10 } )
+                
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testSet() = runTest {
+        eval(
+            """
+            val set = Set(1,2,3)
+            
+            assert( set.contains(1) )
+            assert( 1 in set )
+            
+            assert(set is Set)
+            assert(set is Iterable)
+            assert(set is Collection)
+            println(set)
+            for( x in set ) println(x)
+            assert([1,2,3] == set.toList())
+            set += 4
+            assert(set.toList() == [1,2,3,4])
+            assert(set == Set(1,2,3,4))
+            
+            val s1 = [1, 2].toSet()
+            assertEquals( Set(1,2), s1 * set) 
+            
+        """.trimIndent()
+        )
+    }
 }

@@ -116,6 +116,8 @@ Open end ranges remove head and tail elements:
 : `+=` append either a single element, or all elements if the List or other Iterable
 instance is appended. If you want to append an Iterable object itself, use `add` instead.
 
+It inherits from [Iterable] too.
+
 ## Member inherited from Array
 
 | name             | meaning                        | type  |
@@ -130,8 +132,6 @@ instance is appended. If you want to append an Iterable object itself, use `add`
 : end-inclisiveness allows to use negative indexes to, for exampe, remove several last elements, like
 `list.removeRangeInclusive(-2, -1)` will remove two last elements.
 
-# Notes
-
-Could be rewritten using array as a class but List as the interface
 
 [Range]: Range.md
+[Iterable]: Iterable.md

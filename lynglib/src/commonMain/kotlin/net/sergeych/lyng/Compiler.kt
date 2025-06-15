@@ -159,9 +159,8 @@ class Compiler(
                                     cc.next()
                                     isCall = true
                                     val lambda =
-                                        parseExpression(cc) ?: throw ScriptError(t.pos, "expected valid lambda here")
+                                        parseLambdaExpression(cc)
                                     println(cc.current())
-                                    cc.skipTokenOfType(Token.Type.RBRACE)
                                     operand = Accessor { context ->
                                         context.pos = next.pos
                                         val v = left.getter(context).value
@@ -172,7 +171,7 @@ class Compiler(
                                                 v.invokeInstanceMethod(
                                                     context,
                                                     next.value,
-                                                    Arguments(listOf(lambda), true)
+                                                    Arguments(listOf(lambda.getter(context).value), true)
                                                 ), isMutable = false
                                             )
                                     }

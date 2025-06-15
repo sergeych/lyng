@@ -152,11 +152,13 @@ class Script(
             addConst("Bool", ObjBool.type)
             addConst("Char", ObjChar.type)
             addConst("List", ObjList.type)
+            addConst("Set", ObjSet.type)
             addConst("Range", ObjRange.type)
             @Suppress("RemoveRedundantQualifierName")
             addConst("Callable", Statement.type)
             // interfaces
             addConst("Iterable", ObjIterable)
+            addConst("Collection", ObjCollection)
             addConst("Array", ObjArray)
             addConst("Class", ObjClassType)
             addConst("Object", Obj().objClass)

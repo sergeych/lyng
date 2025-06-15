@@ -256,6 +256,11 @@ class BookTest {
     }
 
     @Test
+    fun testSet() = runTest {
+        runDocTests("../docs/Set.md")
+    }
+
+    @Test
     fun testSampleBooks() = runTest {
         for (bt in Files.list(Paths.get("../docs/samples")).toList()) {
             if (bt.extension == "md") {
