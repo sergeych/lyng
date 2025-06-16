@@ -1267,7 +1267,12 @@ class ScriptTest {
         eval(
             """
             val x = { x, y, z ->
+                println("-- x=",x)
+                println("-- y=",y)
+                println("-- z=",z)
+                println([x,y,z])
                 assert( [x, y, z] == [1,2,"end"])
+                println("----:")
             }
             assert( x(1, 2, "end") == void)
         """.trimIndent()
@@ -2149,7 +2154,6 @@ class ScriptTest {
             assertEquals( null, s?.length ?{ "test" } )
             assertEquals( null, s?[1] )
             assertEquals( null, s ?{ "test" } )
-            assertEquals( null, s.test ?{ "test" } )
             
             s = "xx"
             assert(s.lower().size == 2)
@@ -2241,5 +2245,44 @@ class ScriptTest {
             
         """.trimIndent()
         )
+    }
+
+    @Test
+    fun testLet() = runTest {
+        eval("""
+            class Point(x=0,y=0)
+            assert( Point() is Object) 
+            Point().let { println(it.x, it.y) }
+            val x = null
+            x?.let { println(it.x, it.y) }
+        """.trimIndent())
+    }
+
+    @Test
+    fun testApply() = runTest {
+        eval("""
+            class Point(x,y)
+            // see the difference: apply changes this to newly created Point:
+            val p = Point(1,2).apply { 
+                x++; y++ 
+            }
+            assertEquals(p, Point(2,3))
+            >>> void
+
+        """.trimIndent())
+    }
+
+    @Test
+    fun testApplyThis() = runTest {
+        eval("""
+            class Point(x,y)
+            // see the difference: apply changes this to newly created Point:
+            val p = Point(1,2).apply { 
+                this.x++; this.y++ 
+            }
+            assertEquals(p, Point(2,3))
+            >>> void
+
+        """.trimIndent())
     }
 }

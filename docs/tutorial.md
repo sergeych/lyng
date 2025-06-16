@@ -163,6 +163,64 @@ There is also "elvis operator", null-coalesce infix operator '?:' that returns r
     null ?: "nothing"
     >>> "nothing"
 
+## Utility functions
+
+The following functions simplify nullable values processing and
+allow to improve code look and readability. There are borrowed from Kotlin:
+
+### let 
+
+`value.let {}` passes to the block value as the single parameter (by default it is assigned to `it`) and return block's returned value. It is useful dealing with null or to
+get a snapshot of some externally varying value, or with `?.` to process nullable value in a safe manner:
+
+    // this state is changed from parallel processes
+    class GlobalState(nullableParam)
+    
+    val state = GlobalState(null)
+
+    fun sample() {
+        state.nullableParam?.let { "it's not null: "+it} ?: "it's null"
+    }
+    assertEquals(sample(), "it's null")
+    state.nullableParam = 5
+    assertEquals(sample(), "it's not null: 5")
+    >>> void
+
+This is the same as:
+
+    fun sample() {
+        val it = state.nullableParam
+        if( it != null )  "it's not null: "+it else "it's null"
+    }
+
+The important is that nullableParam got a local copy that can't be changed from any
+parallel thread/coroutine. Remember: Lyng _is __not__ a single-threaded language_.
+
+## Also
+
+Much like let, but it does not alter returned value:
+
+    assert( "test".also { println( it + "!") } == "test" )
+    >>> test!
+    >>> void
+
+While it is not altering return value, the source object could be changed:
+
+    class Point(x,y)
+    val p = Point(1,2).also { it.x++ }
+    assertEquals(p.x, 2)
+    >>> void
+
+## apply
+
+It works much like `also`, but is executed in the context of the source object:
+
+    class Point(x,y)
+    // see the difference: apply changes this to newly created Point:
+    val p = Point(1,2).apply { x++; y++ }
+    assertEquals(p, Point(2,3))
+    >>> void
+
 ## Math
 
 It is rather simple, like everywhere else:

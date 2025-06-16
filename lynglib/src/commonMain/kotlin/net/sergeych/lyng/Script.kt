@@ -146,6 +146,7 @@ class Script(
                 delay((this.args.firstAndOnly().toDouble()/1000.0).roundToLong())
             }
 
+            addConst("Object", rootObjectType)
             addConst("Real", ObjReal.type)
             addConst("String", ObjString.type)
             addConst("Int", ObjInt.type)
@@ -163,13 +164,14 @@ class Script(
             addConst("Collection", ObjCollection)
             addConst("Array", ObjArray)
             addConst("Class", ObjClassType)
-            addConst("Object", Obj().objClass)
 
             val pi = ObjReal(PI)
             addConst("π", pi)
             getOrCreateNamespace("Math").apply {
                 addConst("PI", pi)
             }
+
+
         }
     }
 }

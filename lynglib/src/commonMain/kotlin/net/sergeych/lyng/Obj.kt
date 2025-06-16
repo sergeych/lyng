@@ -64,7 +64,11 @@ open class Obj {
      */
     open fun byValueCopy(): Obj = this
 
-    fun isInstanceOf(someClass: Obj) = someClass === objClass || objClass.allParentsSet.contains(someClass)
+    @Suppress("SuspiciousEqualsCombination")
+    fun isInstanceOf(someClass: Obj) = someClass === objClass ||
+            objClass.allParentsSet.contains(someClass) ||
+            someClass == rootObjectType
+
 
     suspend fun invokeInstanceMethod(context: Context, name: String, vararg args: Obj): Obj =
         invokeInstanceMethod(context, name, Arguments(args.toList()))
@@ -103,16 +107,7 @@ open class Obj {
      * Class of the object: definition of member functions (top-level), etc.
      * Note that using lazy allows to avoid endless recursion here
      */
-    open val objClass: ObjClass by lazy {
-        ObjClass("Obj").apply {
-            addFn("toString") {
-                thisObj.asStr
-            }
-            addFn("contains") {
-                ObjBool(thisObj.contains(this, args.firstAndOnly()))
-            }
-        }
-    }
+    open val objClass: ObjClass = rootObjectType
 
     open suspend fun plus(context: Context, other: Obj): Obj {
         context.raiseNotImplemented()
@@ -253,6 +248,31 @@ open class Obj {
 
 
     companion object {
+
+        val rootObjectType = ObjClass("Obj").apply {
+                addFn("toString") {
+                    thisObj.asStr
+                }
+                addFn("contains") {
+                    ObjBool(thisObj.contains(this, args.firstAndOnly()))
+                }
+                // utilities
+                addFn("let") {
+                    args.firstAndOnly().callOn(copy(Arguments(thisObj)))
+                }
+                addFn("apply") {
+                    val newContext = ( thisObj as? ObjInstance)?.instanceContext ?: this
+                    args.firstAndOnly()
+                        .callOn(newContext)
+                    thisObj
+                }
+                addFn("also") {
+                    args.firstAndOnly().callOn(copy(Arguments(thisObj)))
+                    thisObj
+                }
+            }
+
+
         inline fun from(obj: Any?): Obj {
             @Suppress("UNCHECKED_CAST")
             return when (obj) {
@@ -272,6 +292,7 @@ open class Obj {
                     obj as MutableMap.MutableEntry<Obj, Obj>
                     ObjMapEntry(obj.key, obj.value)
                 }
+
                 else -> throw IllegalArgumentException("cannot convert to Obj: $obj")
             }
         }
@@ -371,7 +392,12 @@ data class ObjNamespace(val name: String) : Obj() {
 }
 
 open class ObjException(exceptionClass: ExceptionClass, val context: Context, val message: String) : Obj() {
-    constructor(name: String,context: Context, message: String) : this(getOrCreateExceptionClass(name), context, message)
+    constructor(name: String, context: Context, message: String) : this(
+        getOrCreateExceptionClass(name),
+        context,
+        message
+    )
+
     constructor(context: Context, message: String) : this(Root, context, message)
 
     fun raise(): Nothing {
@@ -386,13 +412,15 @@ open class ObjException(exceptionClass: ExceptionClass, val context: Context, va
 
     companion object {
 
-        class ExceptionClass(val name: String,vararg parents: ObjClass) : ObjClass(name, *parents) {
+        class ExceptionClass(val name: String, vararg parents: ObjClass) : ObjClass(name, *parents) {
             override suspend fun callOn(context: Context): Obj {
                 val message = context.args.getOrNull(0)?.toString() ?: name
                 return ObjException(this, context, message)
             }
+
             override fun toString(): String = "ExceptionClass[$name]@${hashCode().encodeToHex()}"
         }
+
         val Root = ExceptionClass("Throwable").apply {
             addConst("message", statement {
                 (thisObj as ObjException).message.toObj()

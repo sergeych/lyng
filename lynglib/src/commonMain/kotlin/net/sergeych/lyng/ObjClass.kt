@@ -9,9 +9,10 @@ open class ObjClass(
 
     var instanceConstructor: Statement? = null
 
-    val allParentsSet: Set<ObjClass> = parents.flatMap {
-        listOf(it) + it.allParentsSet
-    }.toSet()
+    val allParentsSet: Set<ObjClass> =
+        parents.flatMap {
+            listOf(it) + it.allParentsSet
+        }.toMutableSet()
 
     override val objClass: ObjClass by lazy { ObjClassType }
 
@@ -61,7 +62,7 @@ open class ObjClass(
     fun getInstanceMemberOrNull(name: String): ObjRecord? {
         members[name]?.let { return it }
         allParentsSet.forEach { parent -> parent.getInstanceMemberOrNull(name)?.let { return it } }
-        return null
+        return rootObjectType.members[name]
     }
 
     fun getInstanceMember(atPos: Pos, name: String): ObjRecord =

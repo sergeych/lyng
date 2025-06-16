@@ -28,6 +28,8 @@ suspend fun Collection<ParsedArgument>.toArguments(context: Context,tailBlockMod
 
 data class Arguments(val list: List<Obj>,val tailBlockMode: Boolean = false) : List<Obj> by list {
 
+    constructor(vararg values: Obj) : this(values.toList())
+
     fun firstAndOnly(pos: Pos = Pos.UNKNOWN): Obj {
         if (list.size != 1) throw ScriptError(pos, "expected one argument, got ${list.size}")
         return list.first()

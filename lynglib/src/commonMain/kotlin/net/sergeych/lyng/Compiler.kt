@@ -122,7 +122,7 @@ class Compiler(
                 }
 
                 Token.Type.DOT, Token.Type.NULL_COALESCE -> {
-                    var isOptional = t.type == Token.Type.NULL_COALESCE
+                    val isOptional = t.type == Token.Type.NULL_COALESCE
                     operand?.let { left ->
                         // dotcall: calling method on the operand, if next is ID, "("
                         var isCall = false
@@ -154,7 +154,7 @@ class Compiler(
 
 
                                 Token.Type.LBRACE, Token.Type.NULL_COALESCE_BLOCKINVOKE -> {
-                                    isOptional = nt.type == Token.Type.NULL_COALESCE_BLOCKINVOKE
+//                                    isOptional = nt.type == Token.Type.NULL_COALESCE_BLOCKINVOKE
                                     // single lambda arg, like assertTrows { ... }
                                     cc.next()
                                     isCall = true
@@ -393,7 +393,8 @@ class Compiler(
         var closure: Context? = null
 
         val callStatement = statement {
-            val context = closure!!.copy(pos, args)
+            // and the source closure of the lambda which might have other thisObj.
+            val context = closure!!.copy(pos, args).applyContext(this)
             if (argsDeclaration == null) {
                 // no args: automatic var 'it'
                 val l = args.list
@@ -1667,7 +1668,7 @@ class Compiler(
          * The keywords that stop processing of expression term
          */
         val stopKeywords =
-            setOf("do", "break", "continue", "return", "if", "when", "do", "while", "for", "class", "struct")
+            setOf("do", "break", "continue", "return", "if", "when", "do", "while", "for", "class")
     }
 }
 

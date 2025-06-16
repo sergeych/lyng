@@ -4,7 +4,7 @@ class Context(
     val parent: Context?,
     val args: Arguments = Arguments.EMPTY,
     var pos: Pos = Pos.builtIn,
-    val thisObj: Obj = ObjVoid,
+    var thisObj: Obj = ObjVoid,
     var skipContextCreation: Boolean = false,
 ) {
     constructor(
@@ -12,6 +12,15 @@ class Context(
         pos: Pos = Pos.builtIn,
     )
             : this(Script.defaultContext, args, pos)
+
+    /**
+     * Making this context priority one
+     */
+    fun applyContext(other: Context): Context {
+        if (other.thisObj != ObjVoid) thisObj = other.thisObj
+        appliedContext = other
+        return this
+    }
 
     fun raiseNotImplemented(what: String = "operation"): Nothing = raiseError("$what is not implemented")
 
@@ -65,11 +74,16 @@ class Context(
     inline fun <reified T : Obj> thisAs(): T = (thisObj as? T)
         ?: raiseClassCastError("Cannot cast ${thisObj.objClass.className} to ${T::class.simpleName}")
 
+    internal var appliedContext: Context? = null
     internal val objects = mutableMapOf<String, ObjRecord>()
 
     operator fun get(name: String): ObjRecord? =
-        objects[name]
-            ?: parent?.get(name)
+        if (name == "this") thisObj.asReadonly
+        else {
+            objects[name]
+                ?: parent?.get(name)
+                ?: appliedContext?.get(name)
+        }
 
     fun copy(pos: Pos, args: Arguments = Arguments.EMPTY, newThisObj: Obj? = null): Context =
         Context(this, args, pos, newThisObj ?: thisObj)
