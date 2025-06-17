@@ -54,6 +54,20 @@ internal class CompilerContext(val tokens: List<Token>) {
     fun currentPos(): Pos = tokens[currentIndex].pos
 
     /**
+     * If the next token is identifier `name`, skip it and return `true`.
+     * else leave where it is and return `false`
+     */
+    fun skipId(name: String): Boolean {
+        current().let { t ->
+            if( t.type == Token.Type.ID && t.value == name ) {
+                next()
+                return true
+            }
+        }
+        return false
+    }
+
+    /**
      * Skips next token if its type is `tokenType`, returns `true` if so.
      * @param errorMessage message to throw if next token is not `tokenType`
      * @param isOptional if `true` and token is not of `tokenType`, just return `false` and does not skip it
@@ -96,7 +110,6 @@ internal class CompilerContext(val tokens: List<Token>) {
         }
     }
 
-    @Suppress("NOTHING_TO_INLINE")
     inline fun addBreak() {
         breakFound = true
     }

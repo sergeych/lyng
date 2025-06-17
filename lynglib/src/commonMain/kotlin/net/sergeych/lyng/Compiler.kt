@@ -227,7 +227,7 @@ class Compiler(
                         operand = Accessor({ cxt ->
                             val i = index.execute(cxt)
                             val x = left.getter(cxt).value
-                            if( x == ObjNull && isOptional) ObjNull.asReadonly
+                            if (x == ObjNull && isOptional) ObjNull.asReadonly
                             else x.getAt(cxt, i).asMutable
                         }) { cxt, newValue ->
                             val i = (index.execute(cxt) as? ObjInt)?.value?.toInt()
@@ -394,7 +394,7 @@ class Compiler(
 
         val callStatement = statement {
             // and the source closure of the lambda which might have other thisObj.
-            val context = AppliedContext(closure!!,args,this)
+            val context = AppliedContext(closure!!, args, this)
             if (argsDeclaration == null) {
                 // no args: automatic var 'it'
                 val l = args.list
@@ -560,11 +560,11 @@ class Compiler(
     }
 
     private fun parseTypeDeclaration(cc: CompilerContext): TypeDecl {
-        val result = TypeDecl.Obj
-        cc.ifNextIs(Token.Type.COLON) {
-            TODO("parse type declaration here")
-        }
-        return result
+        return if (cc.skipTokenOfType(Token.Type.COLON, isOptional = true)) {
+            val tt = cc.requireToken(Token.Type.ID, "type name or type expression required")
+            val isNullable = cc.skipTokenOfType(Token.Type.QUESTION, isOptional = true)
+            TypeDecl.Simple(tt.value, isNullable)
+        } else TypeDecl.TypeAny
     }
 
     /**
@@ -590,6 +590,8 @@ class Compiler(
                     cc.previous()
                     parseExpression(cc)?.let { args += ParsedArgument(it, t.pos) }
                         ?: throw ScriptError(t.pos, "Expecting arguments list")
+                    if (cc.current().type == Token.Type.COLON)
+                        parseTypeDeclaration(cc)
                     // Here should be a valid termination:
                 }
             }
@@ -724,7 +726,7 @@ class Compiler(
     }
 
     /**
-     * Parse keyword-starting statenment.
+     * Parse keyword-starting statement.
      * @return parsed statement or null if, for example. [id] is not among keywords
      */
     private fun parseKeywordStatement(id: Token, cc: CompilerContext): Statement? = when (id.value) {
@@ -735,7 +737,6 @@ class Compiler(
         "for" -> parseForStatement(cc)
         "break" -> parseBreakStatement(id.pos, cc)
         "continue" -> parseContinueStatement(id.pos, cc)
-        "fn", "fun" -> parseFunctionDeclaration(cc)
         "if" -> parseIfStatement(cc)
         "class" -> parseClassDeclaration(cc, false)
         "try" -> parseTryStatement(cc)
@@ -744,11 +745,16 @@ class Compiler(
         else -> {
             // triples
             cc.previous()
+            val isExtern = cc.skipId("extern")
             when {
-                cc.matchQualifiers("fun", "private") -> parseFunctionDeclaration(cc, Visibility.Private)
-                cc.matchQualifiers("fn", "private") -> parseFunctionDeclaration(cc, Visibility.Private)
-                cc.matchQualifiers("fun", "open") -> parseFunctionDeclaration(cc, isOpen = true)
-                cc.matchQualifiers("fn", "open") -> parseFunctionDeclaration(cc, isOpen = true)
+                cc.matchQualifiers("fun", "private") -> parseFunctionDeclaration(cc, Visibility.Private, isExtern)
+                cc.matchQualifiers("fn", "private") -> parseFunctionDeclaration(cc, Visibility.Private, isExtern)
+                cc.matchQualifiers("fun", "open") -> parseFunctionDeclaration(cc, isOpen = true, isExtern = isExtern)
+                cc.matchQualifiers("fn", "open") -> parseFunctionDeclaration(cc, isOpen = true, isExtern = isExtern)
+
+                cc.matchQualifiers("fun") -> parseFunctionDeclaration(cc, isOpen = false, isExtern = isExtern)
+                cc.matchQualifiers("fn") -> parseFunctionDeclaration(cc, isOpen = false, isExtern = isExtern)
+
                 cc.matchQualifiers("val", "private") -> parseVarDeclaration(false, Visibility.Private, cc)
                 cc.matchQualifiers("var", "private") -> parseVarDeclaration(true, Visibility.Private, cc)
                 cc.matchQualifiers("val", "open") -> parseVarDeclaration(false, Visibility.Private, cc, true)
@@ -1419,29 +1425,35 @@ class Compiler(
     }
 
     private fun parseFunctionDeclaration(
-        tokens: CompilerContext,
+        cc: CompilerContext,
         visibility: Visibility = Visibility.Public,
-        @Suppress("UNUSED_PARAMETER") isOpen: Boolean = false
+        @Suppress("UNUSED_PARAMETER") isOpen: Boolean = false,
+        isExtern: Boolean = false
     ): Statement {
-        var t = tokens.next()
+        var t = cc.next()
         val start = t.pos
         val name = if (t.type != Token.Type.ID)
             throw ScriptError(t.pos, "Expected identifier after 'fn'")
         else t.value
 
-        t = tokens.next()
+        t = cc.next()
         if (t.type != Token.Type.LPAREN)
             throw ScriptError(t.pos, "Bad function definition: expected '(' after 'fn ${name}'")
 
-        val argsDeclaration = parseArgsDeclaration(tokens)
+        val argsDeclaration = parseArgsDeclaration(cc)
         if (argsDeclaration == null || argsDeclaration.endTokenType != Token.Type.RPAREN)
             throw ScriptError(
                 t.pos,
                 "Bad function definition: expected valid argument declaration or () after 'fn ${name}'"
             )
 
+        if (cc.current().type == Token.Type.COLON) parseTypeDeclaration(cc)
+
         // Here we should be at open body
-        val fnStatements = parseBlock(tokens)
+        val fnStatements = if (isExtern)
+            statement { raiseError("extern function not provided: $name") }
+        else
+            parseBlock(cc)
 
         var closure: Context? = null
 
@@ -1617,7 +1629,7 @@ class Compiler(
             // bitwise or 2
             // bitwise and 3
             // equality/ne 4
-            Operator.simple(Token.Type.EQARROW, ++lastPrty) { c, a, b -> ObjMapEntry(a,b) },
+            Operator.simple(Token.Type.EQARROW, ++lastPrty) { c, a, b -> ObjMapEntry(a, b) },
             //
             Operator.simple(Token.Type.EQ, ++lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) == 0) },
             Operator.simple(Token.Type.NEQ, lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) != 0) },
@@ -1634,7 +1646,7 @@ class Compiler(
             Operator.simple(Token.Type.IS, lastPrty) { c, a, b -> ObjBool(a.isInstanceOf(b)) },
             Operator.simple(Token.Type.NOTIS, lastPrty) { c, a, b -> ObjBool(!a.isInstanceOf(b)) },
 
-            Operator.simple(Token.Type.ELVIS, ++lastPrty) { c, a, b -> if( a == ObjNull) b else a },
+            Operator.simple(Token.Type.ELVIS, ++lastPrty) { c, a, b -> if (a == ObjNull) b else a },
 
             // shuttle <=> 6
             Operator.simple(Token.Type.SHUTTLE, ++lastPrty) { c, a, b ->

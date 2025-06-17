@@ -110,7 +110,7 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
      */
     data class Item(
         val name: String,
-        val type: TypeDecl = TypeDecl.Obj,
+        val type: TypeDecl = TypeDecl.TypeAny,
         val pos: Pos = Pos.builtIn,
         val isEllipsis: Boolean = false,
         /**
