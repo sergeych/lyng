@@ -387,14 +387,14 @@ class Compiler(
         val argsDeclaration = parseArgsDeclaration(cc)
         if (argsDeclaration != null && argsDeclaration.endTokenType != Token.Type.ARROW)
             throw ScriptError(startPos, "lambda must have either valid arguments declaration with '->' or no arguments")
-        val pos = cc.currentPos()
+
         val body = parseBlock(cc, skipLeadingBrace = true)
 
         var closure: Context? = null
 
         val callStatement = statement {
             // and the source closure of the lambda which might have other thisObj.
-            val context = closure!!.copy(pos, args).applyContext(this)
+            val context = AppliedContext(closure!!,args,this)
             if (argsDeclaration == null) {
                 // no args: automatic var 'it'
                 val l = args.list

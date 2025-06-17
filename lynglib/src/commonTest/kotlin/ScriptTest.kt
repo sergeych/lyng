@@ -1,4 +1,3 @@
-package io.github.kotlin.fibonacci
 
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.*
