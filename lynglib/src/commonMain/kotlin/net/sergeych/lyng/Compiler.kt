@@ -1432,11 +1432,22 @@ class Compiler(
     ): Statement {
         var t = cc.next()
         val start = t.pos
-        val name = if (t.type != Token.Type.ID)
-            throw ScriptError(t.pos, "Expected identifier after 'fn'")
+        var extTypeName: String? = null
+        var name = if (t.type != Token.Type.ID)
+            throw ScriptError(t.pos, "Expected identifier after 'fun'")
         else t.value
 
         t = cc.next()
+        // Is extension?
+        if( t.type == Token.Type.DOT) {
+           extTypeName = name
+           t = cc.next()
+           if( t.type != Token.Type.ID)
+               throw ScriptError(t.pos, "illegal extension format: expected function name")
+            name = t.value
+            t = cc.next()
+        }
+
         if (t.type != Token.Type.LPAREN)
             throw ScriptError(t.pos, "Bad function definition: expected '(' after 'fn ${name}'")
 
@@ -1465,13 +1476,25 @@ class Compiler(
 
             // load params from caller context
             argsDeclaration.assignToContext(context, callerContext.args, defaultAccessType = AccessType.Val)
+            if( extTypeName != null ) {
+                context.thisObj = callerContext.thisObj
+            }
             fnStatements.execute(context)
         }
         return statement(start) { context ->
             // we added fn in the context. now we must save closure
             // for the function
             closure = context
-            context.addItem(name, false, fnBody, visibility)
+            extTypeName?.let { typeName ->
+                // class extension method
+                val type = context.get(typeName)?.value ?: context.raiseSymbolNotFound("class $typeName not found")
+                if( type !is ObjClass ) context.raiseClassCastError("$typeName is not the class instance")
+                type.addFn( name, isOpen = true) {
+                    fnBody.execute(this)
+                }
+            }
+                // regular function/method
+                ?: context.addItem(name, false, fnBody, visibility)
             // as the function can be called from anywhere, we have
             // saved the proper context in the closure
             fnBody

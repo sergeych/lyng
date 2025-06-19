@@ -72,6 +72,7 @@ open class Context(
         else {
             objects[name]
                 ?: parent?.get(name)
+                ?: thisObj.objClass.getInstanceMemberOrNull(name)
         }
 
     fun copy(pos: Pos, args: Arguments = Arguments.EMPTY, newThisObj: Obj? = null): Context =

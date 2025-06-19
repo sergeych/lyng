@@ -64,6 +64,9 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
                     (it.thisObj as ObjReal).value.roundToLong().toObj()
                 },
             )
+            addFn("toInt") {
+                ObjInt(thisAs<ObjReal>().value.toLong())
+            }
         }
     }
 }

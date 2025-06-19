@@ -160,6 +160,40 @@ For example, for our class Point:
     Point(1,1+1)
     >>> Point(x=1,y=2)
 
+# Extending classes
+
+It sometimes happen that the class is missing some particular functionality that can be _added to it_ without rewriting its inner logic and using its private state. In this case _extension methods_ could be used, for example. we want to create an extension method
+that would test if some object of unknown type contains something that can be interpreted
+as an integer. In this case we _extend_ class `Object`, as it is the parent class for any instance of any type:
+
+        fun Object.isInteger() {
+            when(this) {
+                // already Int?
+                is Int -> true
+
+                // real, but with no declimal part?
+                is Real -> toInt() == this
+
+                // string with int or real reuusig code above
+                is String -> toReal().isInteger()
+                
+                // otherwise, no:
+                else -> false
+            }
+        }
+
+        // Let's test:        
+        assert( 12.isInteger() == true )
+        assert( 12.1.isInteger() == false )
+        assert( "5".isInteger() )
+        assert( ! "5.2".isInteger() )
+        >>> void
+
+__Important note__ as for version 0.6.9, extensions are in __global scope__. It means, that once applied to a global type (Int in our sample), they will be available for _all_ contexts, even new created, 
+as they are modifying the type, not the context.
+
+Beware of it. We might need to reconsider it later.
+
 # Theory
 
 ## Basic principles:

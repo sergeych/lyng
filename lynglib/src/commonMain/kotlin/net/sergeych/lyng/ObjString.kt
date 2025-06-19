@@ -112,6 +112,7 @@ data class ObjString(val value: String) : Obj() {
                 thisAs<ObjString>().value.uppercase().let(::ObjString)
             }
             addFn("size") { ObjInt(thisAs<ObjString>().value.length.toLong()) }
+            addFn("toReal") { ObjReal(thisAs<ObjString>().value.toDouble())}
         }
     }
 }

@@ -1214,6 +1214,9 @@ Typical set of String functions includes:
 | [Range]            | substring at range                                         |
 | s1 + s2            | concatenation                                              |
 | s1 += s2           | self-modifying concatenation                               |
+| toReal()           | attempts to parse string as a Real value                   |
+|                    |                                                            |
+|                    |                                                            |
 
 
 

@@ -2284,4 +2284,31 @@ class ScriptTest {
 
         """.trimIndent())
     }
+
+    @Test
+    fun testExtend() = runTest() {
+        eval("""
+            
+            fun Int.isEven() {
+                this % 2 == 0
+            }
+            
+            fun Object.isInteger() {
+                when(this) {
+                    is Int -> true
+                    is Real -> toInt() == this
+                    is String -> toReal().isInteger()
+                    else -> false
+                }
+            }
+            
+            assert( 4.isEven() )
+            assert( !5.isEven() )
+            
+            assert( 12.isInteger() == true )
+            assert( 12.1.isInteger() == false )
+            assert( "5".isInteger() )
+            assert( ! "5.2".isInteger() )
+        """.trimIndent())
+    }
 }
