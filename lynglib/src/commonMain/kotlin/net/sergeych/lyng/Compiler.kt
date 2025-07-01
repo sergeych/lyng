@@ -83,8 +83,7 @@ class Compiler(
     private fun parseExpressionLevel(tokens: CompilerContext, level: Int = 0): Accessor? {
         if (level == lastLevel)
             return parseTerm(tokens)
-        var lvalue = parseExpressionLevel(tokens, level + 1)
-        if (lvalue == null) return null
+        var lvalue: Accessor? = parseExpressionLevel(tokens, level + 1) ?: return null
 
         while (true) {
 
@@ -124,7 +123,7 @@ class Compiler(
                 Token.Type.DOT, Token.Type.NULL_COALESCE -> {
                     val isOptional = t.type == Token.Type.NULL_COALESCE
                     operand?.let { left ->
-                        // dotcall: calling method on the operand, if next is ID, "("
+                        // dot call: calling method on the operand, if next is ID, "("
                         var isCall = false
                         val next = cc.next()
                         if (next.type == Token.Type.ID) {
@@ -154,7 +153,6 @@ class Compiler(
 
 
                                 Token.Type.LBRACE, Token.Type.NULL_COALESCE_BLOCKINVOKE -> {
-//                                    isOptional = nt.type == Token.Type.NULL_COALESCE_BLOCKINVOKE
                                     // single lambda arg, like assertTrows { ... }
                                     cc.next()
                                     isCall = true
@@ -300,12 +298,12 @@ class Compiler(
                     operand?.let { left ->
                         // post increment
                         left.setter(startPos)
-                        operand = Accessor({ cxt ->
+                        operand = Accessor { cxt ->
                             val x = left.getter(cxt)
                             if (x.isMutable)
                                 x.value.getAndIncrement(cxt).asReadonly
                             else cxt.raiseError("Cannot increment immutable value")
-                        })
+                        }
                     } ?: run {
                         // no lvalue means pre-increment, expression to increment follows
                         val next = parseAccessor(cc) ?: throw ScriptError(t.pos, "Expecting expression")
@@ -421,7 +419,7 @@ class Compiler(
     }
 
     private fun parseArrayLiteral(cc: CompilerContext): List<ListEntry> {
-        // it should be called after LBRACKET is consumed
+        // it should be called after Token.Type.LBRACKET is consumed
         val entries = mutableListOf<ListEntry>()
         while (true) {
             val t = cc.next()
@@ -554,8 +552,6 @@ class Compiler(
                 }
             }
         }
-        // arg list is valid:
-        checkNotNull(endTokenType)
         return ArgsDeclaration(result, endTokenType)
     }
 
@@ -687,10 +683,10 @@ class Compiler(
                     else -> {
                         Accessor({
                             it.pos = t.pos
-                            it.get(t.value)
+                            it[t.value]
                                 ?: it.raiseError("symbol not defined: '${t.value}'")
                         }) { ctx, newValue ->
-                            ctx.get(t.value)?.let { stored ->
+                            ctx[t.value]?.let { stored ->
                                 ctx.pos = t.pos
                                 if (stored.isMutable)
                                     stored.value = newValue
@@ -935,7 +931,7 @@ class Compiler(
                 cc.skipTokens(Token.Type.NEWLINE)
                 t = cc.next()
             } else {
-                // no (e: Exception) block: should be shortest variant `catch { ... }`
+                // no (e: Exception) block: should be the shortest variant `catch { ... }`
                 cc.skipTokenOfType(Token.Type.LBRACE, "expected catch(...) or catch { ... } here")
                 catches += CatchBlockData(
                     Token("it", cc.currentPos(), Token.Type.ID), listOf("Exception"),
@@ -1098,8 +1094,8 @@ class Compiler(
             }
 
 
-            return statement(body.pos) {
-                val forContext = it.copy(start)
+            return statement(body.pos) { ctx ->
+                val forContext = ctx.copy(start)
 
                 // loop var: StoredObject
                 val loopSO = forContext.addItem(tVar.value, true, ObjNull)
@@ -1155,7 +1151,7 @@ class Compiler(
                         }
                     }
                     if (!breakCaught && elseStatement != null) {
-                        result = elseStatement.execute(it)
+                        result = elseStatement.execute(ctx)
                     }
                     result
                 }
@@ -1487,7 +1483,7 @@ class Compiler(
             closure = context
             extTypeName?.let { typeName ->
                 // class extension method
-                val type = context.get(typeName)?.value ?: context.raiseSymbolNotFound("class $typeName not found")
+                val type = context[typeName]?.value ?: context.raiseSymbolNotFound("class $typeName not found")
                 if( type !is ObjClass ) context.raiseClassCastError("$typeName is not the class instance")
                 type.addFn( name, isOpen = true) {
                     fnBody.execute(this)
@@ -1549,7 +1545,7 @@ class Compiler(
             if (context.containsLocal(name))
                 throw ScriptError(nameToken.pos, "Variable $name is already defined")
 
-            // init value could be a val; when we init by-value type var with it, we need to
+            // init value could be a val; when we initialize by-value type var with it, we need to
             // create a separate copy:
             val initValue = initialExpression?.execute(context)?.byValueCopy() ?: ObjNull
 
@@ -1567,19 +1563,19 @@ class Compiler(
 
         companion object {
             fun simple(tokenType: Token.Type, priority: Int, f: suspend (Context, Obj, Obj) -> Obj): Operator =
-                Operator(tokenType, priority, 2, { _: Pos, a: Accessor, b: Accessor ->
+                Operator(tokenType, priority, 2) { _: Pos, a: Accessor, b: Accessor ->
                     Accessor { f(it, a.getter(it).value, b.getter(it).value).asReadonly }
-                })
+                }
         }
 
     }
 
     companion object {
 
-        private var lastPrty = 0
+        private var lastPriority = 0
         val allOps = listOf(
             // assignments, lowest priority
-            Operator(Token.Type.ASSIGN, lastPrty) { pos, a, b ->
+            Operator(Token.Type.ASSIGN, lastPriority) { pos, a, b ->
                 Accessor {
                     val value = b.getter(it).value
                     val access = a.getter(it)
@@ -1589,7 +1585,7 @@ class Compiler(
                     value.asReadonly
                 }
             },
-            Operator(Token.Type.PLUSASSIGN, lastPrty) { pos, a, b ->
+            Operator(Token.Type.PLUSASSIGN, lastPriority) { pos, a, b ->
                 Accessor {
                     val x = a.getter(it).value
                     val y = b.getter(it).value
@@ -1600,7 +1596,7 @@ class Compiler(
                     }).asReadonly
                 }
             },
-            Operator(Token.Type.MINUSASSIGN, lastPrty) { pos, a, b ->
+            Operator(Token.Type.MINUSASSIGN, lastPriority) { pos, a, b ->
                 Accessor {
                     val x = a.getter(it).value
                     val y = b.getter(it).value
@@ -1611,7 +1607,7 @@ class Compiler(
                     }).asReadonly
                 }
             },
-            Operator(Token.Type.STARASSIGN, lastPrty) { pos, a, b ->
+            Operator(Token.Type.STARASSIGN, lastPriority) { pos, a, b ->
                 Accessor {
                     val x = a.getter(it).value
                     val y = b.getter(it).value
@@ -1623,7 +1619,7 @@ class Compiler(
                     }).asReadonly
                 }
             },
-            Operator(Token.Type.SLASHASSIGN, lastPrty) { pos, a, b ->
+            Operator(Token.Type.SLASHASSIGN, lastPriority) { pos, a, b ->
                 Accessor {
                     val x = a.getter(it).value
                     val y = b.getter(it).value
@@ -1634,7 +1630,7 @@ class Compiler(
                     }).asReadonly
                 }
             },
-            Operator(Token.Type.PERCENTASSIGN, lastPrty) { pos, a, b ->
+            Operator(Token.Type.PERCENTASSIGN, lastPriority) { pos, a, b ->
                 Accessor {
                     val x = a.getter(it).value
                     val y = b.getter(it).value
@@ -1646,42 +1642,42 @@ class Compiler(
                 }
             },
             // logical 1
-            Operator.simple(Token.Type.OR, ++lastPrty) { ctx, a, b -> a.logicalOr(ctx, b) },
+            Operator.simple(Token.Type.OR, ++lastPriority) { ctx, a, b -> a.logicalOr(ctx, b) },
             // logical 2
-            Operator.simple(Token.Type.AND, ++lastPrty) { ctx, a, b -> a.logicalAnd(ctx, b) },
+            Operator.simple(Token.Type.AND, ++lastPriority) { ctx, a, b -> a.logicalAnd(ctx, b) },
             // bitwise or 2
             // bitwise and 3
-            // equality/ne 4
-            Operator.simple(Token.Type.EQARROW, ++lastPrty) { c, a, b -> ObjMapEntry(a, b) },
+            // equality/not equality 4
+            Operator.simple(Token.Type.EQARROW, ++lastPriority) { _, a, b -> ObjMapEntry(a, b) },
             //
-            Operator.simple(Token.Type.EQ, ++lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) == 0) },
-            Operator.simple(Token.Type.NEQ, lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) != 0) },
-            Operator.simple(Token.Type.REF_EQ, lastPrty) { _, a, b -> ObjBool(a === b) },
-            Operator.simple(Token.Type.REF_NEQ, lastPrty) { _, a, b -> ObjBool(a !== b) },
+            Operator.simple(Token.Type.EQ, ++lastPriority) { c, a, b -> ObjBool(a.compareTo(c, b) == 0) },
+            Operator.simple(Token.Type.NEQ, lastPriority) { c, a, b -> ObjBool(a.compareTo(c, b) != 0) },
+            Operator.simple(Token.Type.REF_EQ, lastPriority) { _, a, b -> ObjBool(a === b) },
+            Operator.simple(Token.Type.REF_NEQ, lastPriority) { _, a, b -> ObjBool(a !== b) },
             // relational <=,... 5
-            Operator.simple(Token.Type.LTE, ++lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) <= 0) },
-            Operator.simple(Token.Type.LT, lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) < 0) },
-            Operator.simple(Token.Type.GTE, lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) >= 0) },
-            Operator.simple(Token.Type.GT, lastPrty) { c, a, b -> ObjBool(a.compareTo(c, b) > 0) },
+            Operator.simple(Token.Type.LTE, ++lastPriority) { c, a, b -> ObjBool(a.compareTo(c, b) <= 0) },
+            Operator.simple(Token.Type.LT, lastPriority) { c, a, b -> ObjBool(a.compareTo(c, b) < 0) },
+            Operator.simple(Token.Type.GTE, lastPriority) { c, a, b -> ObjBool(a.compareTo(c, b) >= 0) },
+            Operator.simple(Token.Type.GT, lastPriority) { c, a, b -> ObjBool(a.compareTo(c, b) > 0) },
             // in, is:
-            Operator.simple(Token.Type.IN, lastPrty) { c, a, b -> ObjBool(b.contains(c, a)) },
-            Operator.simple(Token.Type.NOTIN, lastPrty) { c, a, b -> ObjBool(!b.contains(c, a)) },
-            Operator.simple(Token.Type.IS, lastPrty) { c, a, b -> ObjBool(a.isInstanceOf(b)) },
-            Operator.simple(Token.Type.NOTIS, lastPrty) { c, a, b -> ObjBool(!a.isInstanceOf(b)) },
+            Operator.simple(Token.Type.IN, lastPriority) { c, a, b -> ObjBool(b.contains(c, a)) },
+            Operator.simple(Token.Type.NOTIN, lastPriority) { c, a, b -> ObjBool(!b.contains(c, a)) },
+            Operator.simple(Token.Type.IS, lastPriority) { _, a, b -> ObjBool(a.isInstanceOf(b)) },
+            Operator.simple(Token.Type.NOTIS, lastPriority) { _, a, b -> ObjBool(!a.isInstanceOf(b)) },
 
-            Operator.simple(Token.Type.ELVIS, ++lastPrty) { c, a, b -> if (a == ObjNull) b else a },
+            Operator.simple(Token.Type.ELVIS, ++lastPriority) { _, a, b -> if (a == ObjNull) b else a },
 
             // shuttle <=> 6
-            Operator.simple(Token.Type.SHUTTLE, ++lastPrty) { c, a, b ->
+            Operator.simple(Token.Type.SHUTTLE, ++lastPriority) { c, a, b ->
                 ObjInt(a.compareTo(c, b).toLong())
             },
             // bit shifts 7
-            Operator.simple(Token.Type.PLUS, ++lastPrty) { ctx, a, b -> a.plus(ctx, b) },
-            Operator.simple(Token.Type.MINUS, lastPrty) { ctx, a, b -> a.minus(ctx, b) },
+            Operator.simple(Token.Type.PLUS, ++lastPriority) { ctx, a, b -> a.plus(ctx, b) },
+            Operator.simple(Token.Type.MINUS, lastPriority) { ctx, a, b -> a.minus(ctx, b) },
 
-            Operator.simple(Token.Type.STAR, ++lastPrty) { ctx, a, b -> a.mul(ctx, b) },
-            Operator.simple(Token.Type.SLASH, lastPrty) { ctx, a, b -> a.div(ctx, b) },
-            Operator.simple(Token.Type.PERCENT, lastPrty) { ctx, a, b -> a.mod(ctx, b) },
+            Operator.simple(Token.Type.STAR, ++lastPriority) { ctx, a, b -> a.mul(ctx, b) },
+            Operator.simple(Token.Type.SLASH, lastPriority) { ctx, a, b -> a.div(ctx, b) },
+            Operator.simple(Token.Type.PERCENT, lastPriority) { ctx, a, b -> a.mod(ctx, b) },
         )
 
 //        private val assigner = allOps.first { it.tokenType == Token.Type.ASSIGN }
@@ -1690,11 +1686,10 @@ class Compiler(
 //            assigner.generate(context.pos, left, right)
 //        }
 
-        val lastLevel = lastPrty + 1
+        val lastLevel = lastPriority + 1
 
         val byLevel: List<Map<Token.Type, Operator>> = (0..<lastLevel).map { l ->
-            allOps.filter { it.priority == l }
-                .map { it.tokenType to it }.toMap()
+            allOps.filter { it.priority == l }.associateBy { it.tokenType }
         }
 
         fun compile(code: String): Script = Compiler().compile(Source("<eval>", code))
