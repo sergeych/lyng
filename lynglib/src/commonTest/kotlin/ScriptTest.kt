@@ -1,4 +1,6 @@
 
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.*
 import kotlin.test.*
@@ -2310,5 +2312,24 @@ class ScriptTest {
             assert( "5".isInteger() )
             assert( ! "5.2".isInteger() )
         """.trimIndent())
+    }
+
+    @Test
+    fun testToFlow() = runTest() {
+        val c = Context()
+        val arr = c.eval("[1,2,3]")
+        // array is iterable so we can:
+        assertEquals(listOf(1,2,3),  arr.toFlow(c).map { it.toInt() }.toList())
+    }
+
+    @Test
+    fun testAssociateBy() = runTest() {
+        eval("""
+            val m = [123, 456].associateBy { "k:%s"(it) }
+            println(m)
+            assertEquals(123, m["k:123"])
+            assertEquals(456, m["k:456"])
+            """)
+        listOf(1,2,3).associateBy { it * 10 }
     }
 }

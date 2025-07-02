@@ -2,6 +2,9 @@
 
 package net.sergeych.lyng
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+
 /**
  * Iterator wrapper to allow Kotlin collections to be returned from Lyng objects;
  * each object is converted to a Lyng object.
@@ -35,5 +38,20 @@ class ObjKotlinObjIterator(val iterator: Iterator<Obj>) : Obj() {
             addFn("hasNext") { thisAs<ObjKotlinIterator>().iterator.hasNext().toObj() }
         }
 
+    }
+}
+
+/**
+ * Convert Lyng's Iterable to Kotlin's Flow.
+ *
+ * As Lyng is totally asynchronous, its iterator can't be trivially converted to Kotlin's synchronous iterator.
+ * It is, though, trivially convertible to Kotlin's Flow.
+ */
+fun Obj.toFlow(context: Context): Flow<Obj> = flow {
+    val iterator = invokeInstanceMethod(context, "iterator")
+    val hasNext = iterator.getInstanceMethod(context, "hasNext")
+    val next = iterator.getInstanceMethod(context, "next")
+    while (hasNext.invoke(context, iterator).toBool()) {
+        emit(next.invoke(context, iterator))
     }
 }

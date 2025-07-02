@@ -48,12 +48,20 @@ val ObjIterable by lazy {
         }
 
         addFn("toMap") {
-            val result = mutableListOf<Obj>()
-            val it = thisObj.invokeInstanceMethod(this, "iterator")
-            while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
-                result += it.invokeInstanceMethod(this, "next")
+            val result = ObjMap()
+            thisObj.toFlow(this).collect { pair ->
+                result.map[pair.getAt(this,0)] = pair.getAt(this, 1)
             }
-            ObjMap(ObjMap.listToMap(this, result))
+            result
+        }
+
+        addFn("associateBy") {
+            val association = requireOnlyArg<Statement>()
+            val result = ObjMap()
+            thisObj.toFlow(this).collect {
+                result.map[association.call(this, it)] = it
+            }
+            result
         }
 
         addFn("forEach", isOpen = true) {
@@ -67,12 +75,10 @@ val ObjIterable by lazy {
         }
 
         addFn("map", isOpen = true) {
-            val it = thisObj.invokeInstanceMethod(this, "iterator")
             val fn = requiredArg<Statement>(0)
             val result = mutableListOf<Obj>()
-            while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
-                val x = it.invokeInstanceMethod(this, "next")
-                result += fn.execute(this.copy(Arguments(listOf(x))))
+            thisObj.toFlow(this).collect {
+                result += fn.call(this, it)
             }
             ObjList(result)
         }

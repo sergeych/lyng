@@ -76,6 +76,9 @@ data class ObjString(val value: String) : Obj() {
 
     companion object {
         val type = ObjClass("String").apply {
+            addFn("toInt") {
+                ObjInt(thisAs<ObjString>().value.toLong())
+            }
             addFn("startsWith") {
                 ObjBool(thisAs<ObjString>().value.startsWith(requiredArg<ObjString>(0).value))
             }

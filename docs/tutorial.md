@@ -1215,7 +1215,7 @@ Typical set of String functions includes:
 | s1 + s2            | concatenation                                              |
 | s1 += s2           | self-modifying concatenation                               |
 | toReal()           | attempts to parse string as a Real value                   |
-|                    |                                                            |
+| toInt()            | parse string to Int value                                  |
 |                    |                                                            |
 
 

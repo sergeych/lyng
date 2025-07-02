@@ -87,6 +87,14 @@ open class Obj {
         // note that getInstanceMember traverses the hierarchy
         objClass.getInstanceMember(context.pos, name).value.invoke(context, this, args)
 
+    open suspend fun getInstanceMethod(
+        context: Context,
+        name: String,
+        args: Arguments = Arguments.EMPTY
+    ): Obj =
+        // note that getInstanceMember traverses the hierarchy
+        objClass.getInstanceMember(context.pos, name).value
+
     fun getMemberOrNull(name: String): Obj? = objClass.getInstanceMemberOrNull(name)?.value
 
     // methods that to override
@@ -209,6 +217,8 @@ open class Obj {
     open suspend fun getAt(context: Context, index: Obj): Obj {
         context.raiseNotImplemented("indexing")
     }
+
+    suspend fun getAt(context: Context, index: Int): Obj = getAt(context, ObjInt(index.toLong()))
 
     open suspend fun putAt(context: Context, index: Int, newValue: Obj) {
         context.raiseNotImplemented("indexing")

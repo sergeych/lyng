@@ -34,7 +34,7 @@ class ObjMapEntry(val key: Obj, val value: Obj) : Obj() {
     }
 }
 
-class ObjMap(val map: MutableMap<Obj, Obj>) : Obj() {
+class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
 
     override val objClass = type
 

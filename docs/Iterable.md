@@ -21,6 +21,20 @@ Having `Iterable` in base classes allows to use it in for loop. Also, each `Iter
 
 ## Instance methods
 
+| fun/method      | description                                                                     |
+|-----------------|---------------------------------------------------------------------------------|
+| toList()        | create a list from iterable                                                     |
+| toSet()         | create a set from iterable                                                      |
+| contains(i)     | check that iterable contains `i`                                                |
+| `i in iterator` | same as `contains(i)`                                                           |
+| isEmpty()       | check iterable is empty                                                         |
+| forEach(f)      | call f for each element                                                         |
+| toMap()         | create a map from list of key-value pairs (arrays of 2 items or like)           |
+| map(f)          | create a list of values returned by `f` called for each element of the iterable |
+| indexOf(i)      | return index if the first encounter of i or a negative value if not found       |
+| associateBy(kf) | create a map where keys are returned by kf that will be called for each element |
+
+
     fun Iterable.toList(): List
     fun Iterable.toSet(): Set
     fun Iterable.indexOf(element): Int
@@ -28,6 +42,7 @@ Having `Iterable` in base classes allows to use it in for loop. Also, each `Iter
     fun Iterable.isEmpty(element): Bool
     fun Iterable.forEach(block: (Any?)->Void ): Void
     fun Iterable.map(block: (Any?)->Void ): List
+    fun Iterable.associateBy( keyMaker: (Any?)->Any): Map
     
 
 ## Abstract methods

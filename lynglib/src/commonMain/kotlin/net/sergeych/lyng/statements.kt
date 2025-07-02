@@ -34,6 +34,8 @@ abstract class Statement(
         val type = ObjClass("Callable")
     }
 
+    suspend fun call(context: Context,vararg args: Obj) = execute(context.copy(args =  Arguments(*args)))
+
 }
 
 fun Statement.raise(text: String): Nothing {

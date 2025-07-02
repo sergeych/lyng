@@ -158,7 +158,6 @@ class Compiler(
                                     isCall = true
                                     val lambda =
                                         parseLambdaExpression(cc)
-                                    println(cc.current())
                                     operand = Accessor { context ->
                                         context.pos = next.pos
                                         val v = left.getter(context).value
