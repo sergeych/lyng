@@ -1,5 +1,14 @@
 package net.sergeych.lyng
 
+/**
+ * Scope is where local variables and methods are stored. Scope is also a parent scope for other scopes.
+ * Each block usually creates a scope. Accessing Lyng closures usually is done via a scope.
+ *
+ * There are special types of scopes:
+ *
+ * - [Script.defaultScope] - root scope for a script, safe one
+ * - [AppliedScope] - scope used to apply a closure to some thisObj scope
+ */
 open class Scope(
     val parent: Scope?,
     val args: Arguments = Arguments.EMPTY,
@@ -125,6 +134,19 @@ open class Scope(
     suspend fun eval(code: String): Obj =
         Compiler.compile(code.toSource()).execute(this)
 
+    suspend fun eval(source: Source): Obj =
+        Compiler.compile(
+            source,
+            (this as? ModuleScope)?.pacman?.also { println("pacman found: $pacman")} ?: Pacman.emptyAllowAll
+            ).execute(this)
+
     fun containsLocal(name: String): Boolean = name in objects
 
+    open suspend fun checkImport(pos: Pos, name: String, symbols: Map<String, String>? = null) {
+        throw ImportException(pos, "Import is not allowed here: $name")
+    }
+
+    open suspend fun importInto(scope: Scope, name: String, symbols: Map<String, String>? = null) {
+        scope.raiseError(ObjIllegalOperationException(scope,"Import is not allowed here: import $name"))
+    }
 }

@@ -5,24 +5,69 @@ package net.sergeych.lyng
  */
 class Compiler(
     val cc: CompilerContext,
+    val pacman: Pacman = Pacman.emptyAllowAll,
     @Suppress("UNUSED_PARAMETER")
     settings: Settings = Settings()
 ) {
+    var packageName: String? = null
 
     class Settings
 
-    private fun parseScript(): Script {
+    private suspend fun parseScript(): Script {
         val statements = mutableListOf<Statement>()
         val start = cc.currentPos()
 //        val returnScope = cc.startReturnScope()
-        while (parseStatement( braceMeansLambda = true)?.also {
+        // package level declarations
+        do {
+            val t = cc.current()
+            if (t.type == Token.Type.ID) {
+                when (t.value) {
+                    "package" -> {
+                        cc.next()
+                        val name = loadQualifiedName()
+                        if (name.isEmpty()) throw ScriptError(cc.currentPos(), "Expecting package name here")
+                        if (packageName != null) throw ScriptError(
+                            cc.currentPos(),
+                            "package name redefined, already set to $packageName"
+                        )
+                        packageName = name
+                        continue
+                    }
+                    "import" -> {
+                        cc.next()
+                        val pos = cc.currentPos()
+                        val name = loadQualifiedName()
+                        pacman.prepareImport(pos, name, null)
+                        statements += statement {
+                            pacman.performImport(this,name,null)
+                            ObjVoid
+                        }
+                    }
+                }
+            }
+            parseStatement(braceMeansLambda = true)?.also {
                 statements += it
-            } != null) {/**/
-        }
+            } ?: break
+
+        } while (true)
         return Script(start, statements)//returnScope.needCatch)
     }
 
-    private fun parseStatement(braceMeansLambda: Boolean = false): Statement? {
+    fun loadQualifiedName(): String {
+        val result = StringBuilder()
+        var t = cc.next()
+        while (t.type == Token.Type.ID) {
+            result.append(t.value)
+            t = cc.next()
+            if (t.type == Token.Type.DOT) {
+                result.append('.')
+                t = cc.next()
+            }
+        }
+        return result.toString()
+    }
+
+    private suspend fun parseStatement(braceMeansLambda: Boolean = false): Statement? {
         while (true) {
             val t = cc.next()
             return when (t.type) {
@@ -70,15 +115,15 @@ class Compiler(
         }
     }
 
-    private fun parseExpression(): Statement? {
+    private suspend fun parseExpression(): Statement? {
         val pos = cc.currentPos()
         return parseExpressionLevel()?.let { a -> statement(pos) { a.getter(it).value } }
     }
 
-    private fun parseExpressionLevel(level: Int = 0): Accessor? {
+    private suspend fun parseExpressionLevel(level: Int = 0): Accessor? {
         if (level == lastLevel)
             return parseTerm()
-        var lvalue: Accessor? = parseExpressionLevel( level + 1) ?: return null
+        var lvalue: Accessor? = parseExpressionLevel(level + 1) ?: return null
 
         while (true) {
 
@@ -89,7 +134,7 @@ class Compiler(
                 break
             }
 
-            val rvalue = parseExpressionLevel( level + 1)
+            val rvalue = parseExpressionLevel(level + 1)
                 ?: throw ScriptError(opToken.pos, "Expecting expression")
 
             lvalue = op.generate(opToken.pos, lvalue!!, rvalue)
@@ -97,7 +142,7 @@ class Compiler(
         return lvalue
     }
 
-    private fun parseTerm(): Accessor? {
+    private suspend fun parseTerm(): Accessor? {
         var operand: Accessor? = null
 
         while (true) {
@@ -178,7 +223,7 @@ class Compiler(
                                 if (x == ObjNull && isOptional) ObjNull.asReadonly
                                 else x.readField(context, next.value)
                             }) { cxt, newValue ->
-                                left.getter(cxt).value.writeField(cxt,  next.value, newValue)
+                                left.getter(cxt).value.writeField(cxt, next.value, newValue)
                             }
                         }
                     }
@@ -371,12 +416,15 @@ class Compiler(
     /**
      * Parse lambda expression, leading '{' is already consumed
      */
-    private fun parseLambdaExpression(): Accessor {
+    private suspend fun parseLambdaExpression(): Accessor {
         // lambda args are different:
         val startPos = cc.currentPos()
         val argsDeclaration = parseArgsDeclaration()
         if (argsDeclaration != null && argsDeclaration.endTokenType != Token.Type.ARROW)
-            throw ScriptError(startPos, "lambda must have either valid arguments declaration with '->' or no arguments")
+            throw ScriptError(
+                startPos,
+                "lambda must have either valid arguments declaration with '->' or no arguments"
+            )
 
         val body = parseBlock(skipLeadingBrace = true)
 
@@ -410,7 +458,7 @@ class Compiler(
         }
     }
 
-    private fun parseArrayLiteral(): List<ListEntry> {
+    private suspend fun parseArrayLiteral(): List<ListEntry> {
         // it should be called after Token.Type.LBRACKET is consumed
         val entries = mutableListOf<ListEntry>()
         while (true) {
@@ -452,7 +500,7 @@ class Compiler(
      * Parse argument declaration, used in lambda (and later in fn too)
      * @return declaration or null if there is no valid list of arguments
      */
-    private fun parseArgsDeclaration(isClassDeclaration: Boolean = false): ArgsDeclaration? {
+    private suspend fun parseArgsDeclaration(isClassDeclaration: Boolean = false): ArgsDeclaration? {
         val result = mutableListOf<ArgsDeclaration.Item>()
         var endTokenType: Token.Type? = null
         val startPos = cc.savePos()
@@ -559,7 +607,7 @@ class Compiler(
      * Parse arguments list during the call and detect last block argument
      * _following the parenthesis_ call: `(1,2) { ... }`
      */
-    private fun parseArgs(): Pair<List<ParsedArgument>, Boolean> {
+    private suspend fun parseArgs(): Pair<List<ParsedArgument>, Boolean> {
 
         val args = mutableListOf<ParsedArgument>()
         do {
@@ -605,7 +653,7 @@ class Compiler(
     }
 
 
-    private fun parseFunctionCall(
+    private suspend fun parseFunctionCall(
         left: Accessor,
         blockArgument: Boolean,
         isOptional: Boolean
@@ -716,7 +764,7 @@ class Compiler(
      * Parse keyword-starting statement.
      * @return parsed statement or null if, for example. [id] is not among keywords
      */
-    private fun parseKeywordStatement(id: Token): Statement? = when (id.value) {
+    private suspend fun parseKeywordStatement(id: Token): Statement? = when (id.value) {
         "val" -> parseVarDeclaration(false, Visibility.Public)
         "var" -> parseVarDeclaration(true, Visibility.Public)
         "while" -> parseWhileStatement()
@@ -734,13 +782,13 @@ class Compiler(
             cc.previous()
             val isExtern = cc.skipId("extern")
             when {
-                cc.matchQualifiers("fun", "private") -> parseFunctionDeclaration( Visibility.Private, isExtern)
-                cc.matchQualifiers("fn", "private") -> parseFunctionDeclaration( Visibility.Private, isExtern)
-                cc.matchQualifiers("fun", "open") -> parseFunctionDeclaration( isOpen = true, isExtern = isExtern)
-                cc.matchQualifiers("fn", "open") -> parseFunctionDeclaration( isOpen = true, isExtern = isExtern)
+                cc.matchQualifiers("fun", "private") -> parseFunctionDeclaration(Visibility.Private, isExtern)
+                cc.matchQualifiers("fn", "private") -> parseFunctionDeclaration(Visibility.Private, isExtern)
+                cc.matchQualifiers("fun", "open") -> parseFunctionDeclaration(isOpen = true, isExtern = isExtern)
+                cc.matchQualifiers("fn", "open") -> parseFunctionDeclaration(isOpen = true, isExtern = isExtern)
 
-                cc.matchQualifiers("fun") -> parseFunctionDeclaration( isOpen = false, isExtern = isExtern)
-                cc.matchQualifiers("fn") -> parseFunctionDeclaration( isOpen = false, isExtern = isExtern)
+                cc.matchQualifiers("fun") -> parseFunctionDeclaration(isOpen = false, isExtern = isExtern)
+                cc.matchQualifiers("fn") -> parseFunctionDeclaration(isOpen = false, isExtern = isExtern)
 
                 cc.matchQualifiers("val", "private") -> parseVarDeclaration(false, Visibility.Private)
                 cc.matchQualifiers("var", "private") -> parseVarDeclaration(true, Visibility.Private)
@@ -756,7 +804,7 @@ class Compiler(
 
     data class WhenCase(val condition: Statement, val block: Statement)
 
-    private fun parseWhenStatement(): Statement {
+    private suspend fun parseWhenStatement(): Statement {
         // has a value, when(value) ?
         var t = cc.skipWsTokens()
         return if (t.type == Token.Type.LPAREN) {
@@ -822,7 +870,10 @@ class Compiler(
                                     "when else block already defined"
                                 )
                                 elseCase =
-                                    parseStatement() ?: throw ScriptError(cc.currentPos(), "when else block expected")
+                                    parseStatement() ?: throw ScriptError(
+                                        cc.currentPos(),
+                                        "when else block expected"
+                                    )
                                 skipParseBody = true
                             } else {
                                 cc.previous()
@@ -861,7 +912,7 @@ class Compiler(
         }
     }
 
-    private fun parseThrowStatement(): Statement {
+    private suspend fun parseThrowStatement(): Statement {
         val throwStatement = parseStatement() ?: throw ScriptError(cc.currentPos(), "throw object expected")
         return statement {
             var errorObject = throwStatement.execute(this)
@@ -879,7 +930,7 @@ class Compiler(
         val block: Statement
     )
 
-    private fun parseTryStatement(): Statement {
+    private suspend fun parseTryStatement(): Statement {
         val body = parseBlock()
         val catches = mutableListOf<CatchBlockData>()
         cc.skipTokens(Token.Type.NEWLINE)
@@ -983,11 +1034,11 @@ class Compiler(
         }
     }
 
-    private fun parseClassDeclaration(isStruct: Boolean): Statement {
+    private suspend fun parseClassDeclaration(isStruct: Boolean): Statement {
         val nameToken = cc.requireToken(Token.Type.ID)
         val constructorArgsDeclaration =
             if (cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true))
-                parseArgsDeclaration( isClassDeclaration = true)
+                parseArgsDeclaration(isClassDeclaration = true)
             else null
 
         if (constructorArgsDeclaration != null && constructorArgsDeclaration.endTokenType != Token.Type.RPAREN)
@@ -1059,7 +1110,7 @@ class Compiler(
         return found
     }
 
-    private fun parseForStatement(): Statement {
+    private suspend fun parseForStatement(): Statement {
         val label = getLabel()?.also { cc.labels += it }
         val start = ensureLparen()
 
@@ -1210,7 +1261,7 @@ class Compiler(
     }
 
     @Suppress("UNUSED_VARIABLE")
-    private fun parseDoWhileStatement(): Statement {
+    private suspend fun parseDoWhileStatement(): Statement {
         val label = getLabel()?.also { cc.labels += it }
         val (breakFound, body) = cc.parseLoop {
             parseStatement() ?: throw ScriptError(cc.currentPos(), "Bad while statement: expected statement")
@@ -1262,7 +1313,7 @@ class Compiler(
         }
     }
 
-    private fun parseWhileStatement(): Statement {
+    private suspend fun parseWhileStatement(): Statement {
         val label = getLabel()?.also { cc.labels += it }
         val start = ensureLparen()
         val condition =
@@ -1304,7 +1355,7 @@ class Compiler(
         }
     }
 
-    private fun parseBreakStatement(start: Pos): Statement {
+    private suspend fun parseBreakStatement(start: Pos): Statement {
         var t = cc.next()
 
         val label = if (t.pos.line != start.line || t.type != Token.Type.ATLABEL) {
@@ -1376,7 +1427,7 @@ class Compiler(
         return t.pos
     }
 
-    private fun parseIfStatement(): Statement {
+    private suspend fun parseIfStatement(): Statement {
         val start = ensureLparen()
 
         val condition = parseExpression()
@@ -1411,7 +1462,7 @@ class Compiler(
         }
     }
 
-    private fun parseFunctionDeclaration(
+    private suspend fun parseFunctionDeclaration(
         visibility: Visibility = Visibility.Public,
         @Suppress("UNUSED_PARAMETER") isOpen: Boolean = false,
         isExtern: Boolean = false
@@ -1425,11 +1476,11 @@ class Compiler(
 
         t = cc.next()
         // Is extension?
-        if( t.type == Token.Type.DOT) {
-           extTypeName = name
-           t = cc.next()
-           if( t.type != Token.Type.ID)
-               throw ScriptError(t.pos, "illegal extension format: expected function name")
+        if (t.type == Token.Type.DOT) {
+            extTypeName = name
+            t = cc.next()
+            if (t.type != Token.Type.ID)
+                throw ScriptError(t.pos, "illegal extension format: expected function name")
             name = t.value
             t = cc.next()
         }
@@ -1462,7 +1513,7 @@ class Compiler(
 
             // load params from caller context
             argsDeclaration.assignToContext(context, callerContext.args, defaultAccessType = AccessType.Val)
-            if( extTypeName != null ) {
+            if (extTypeName != null) {
                 context.thisObj = callerContext.thisObj
             }
             fnStatements.execute(context)
@@ -1474,12 +1525,12 @@ class Compiler(
             extTypeName?.let { typeName ->
                 // class extension method
                 val type = context[typeName]?.value ?: context.raiseSymbolNotFound("class $typeName not found")
-                if( type !is ObjClass ) context.raiseClassCastError("$typeName is not the class instance")
-                type.addFn( name, isOpen = true) {
+                if (type !is ObjClass) context.raiseClassCastError("$typeName is not the class instance")
+                type.addFn(name, isOpen = true) {
                     fnBody.execute(this)
                 }
             }
-                // regular function/method
+            // regular function/method
                 ?: context.addItem(name, false, fnBody, visibility)
             // as the function can be called from anywhere, we have
             // saved the proper context in the closure
@@ -1487,7 +1538,7 @@ class Compiler(
         }
     }
 
-    private fun parseBlock(skipLeadingBrace: Boolean = false): Statement {
+    private suspend fun parseBlock(skipLeadingBrace: Boolean = false): Statement {
         val startPos = cc.currentPos()
         if (!skipLeadingBrace) {
             val t = cc.next()
@@ -1505,7 +1556,7 @@ class Compiler(
         }
     }
 
-    private fun parseVarDeclaration(
+    private suspend fun parseVarDeclaration(
         isMutable: Boolean,
         visibility: Visibility,
         @Suppress("UNUSED_PARAMETER") isOpen: Boolean = false
@@ -1527,7 +1578,7 @@ class Compiler(
             }
         }
 
-        val initialExpression = if (setNull) null else parseStatement( true)
+        val initialExpression = if (setNull) null else parseStatement(true)
             ?: throw ScriptError(eqToken.pos, "Expected initializer expression")
 
         return statement(nameToken.pos) { context ->
@@ -1561,8 +1612,15 @@ class Compiler(
 
     companion object {
 
-        fun compile(source: Source): Script {
-            return Compiler(CompilerContext(parseLyng(source))).parseScript()
+        suspend fun compile(source: Source,pacman: Pacman = Pacman.emptyAllowAll): Script {
+            return Compiler(CompilerContext(parseLyng(source)),pacman).parseScript()
+        }
+
+        suspend fun compilePackage(source: Source): Pair<String, Script> {
+            val c = Compiler(CompilerContext(parseLyng(source)))
+            val script = c.parseScript()
+            if (c.packageName == null) throw ScriptError(source.startPos, "package not set")
+            return c.packageName!! to script
         }
 
         private var lastPriority = 0
@@ -1685,7 +1743,7 @@ class Compiler(
             allOps.filter { it.priority == l }.associateBy { it.tokenType }
         }
 
-        fun compile(code: String): Script = compile(Source("<eval>", code))
+        suspend fun compile(code: String): Script = compile(Source("<eval>", code))
 
         /**
          * The keywords that stop processing of expression term

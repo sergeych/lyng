@@ -510,3 +510,6 @@ class ObjAccessException(scope: Scope, message: String = "access not allowed err
 
 class ObjUnknownException(scope: Scope, message: String = "access not allowed error") :
     ObjException("UnknownException", scope, message)
+
+class ObjIllegalOperationException(scope: Scope, message: String = "Operation is illegal") :
+    ObjException("IllegalOperationException", scope, message)

@@ -97,7 +97,7 @@ class CompilerContext(val tokens: List<Token>) {
     }
 
 
-    fun ifNextIs(typeId: Token.Type, f: (Token) -> Unit): Boolean {
+    inline fun ifNextIs(typeId: Token.Type, f: (Token) -> Unit): Boolean {
         val t = next()
         return if (t.type == typeId) {
             f(t)

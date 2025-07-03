@@ -2332,4 +2332,37 @@ class ScriptTest {
             """)
         listOf(1,2,3).associateBy { it * 10 }
     }
+
+    @Test
+    fun testImports1() = runTest() {
+        val foosrc = """
+            package lyng.foo
+            
+            fun foo() { "foo1" }
+            """.trimIndent()
+        val pm = InlineSourcesPacman(Pacman.emptyAllowAll, listOf(Source("foosrc", foosrc)))
+        assertNotNull(pm.modules.await()["lyng.foo"])
+        assertIs<ModuleScope>(pm.modules.await()["lyng.foo"]!!.await())
+
+        assertEquals("foo1", pm.modules.await()["lyng.foo"]!!.await().eval("foo()").toString())
+    }
+
+    @Test
+    fun testImports2() = runTest() {
+        val foosrc = """
+            package lyng.foo
+            
+            fun foo() { "foo1" }
+            """.trimIndent()
+        val pm = InlineSourcesPacman(Pacman.emptyAllowAll, listOf(Source("foosrc", foosrc)))
+
+        val src = """
+            import lyng.foo
+            
+            foo()
+            """.trimIndent().toSource("test")
+
+        val scope = ModuleScope(pm, src)
+        assertEquals("foo1", scope.eval(src).toString())
+    }
 }
