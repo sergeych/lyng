@@ -173,55 +173,55 @@ class ScriptTest {
 
     @Test
     fun varsAndConstsTest() = runTest {
-        val context = Context(pos = Pos.builtIn)
+        val scope = Scope(pos = Pos.builtIn)
         assertEquals(
-            ObjInt(3L), context.eval(
+            ObjInt(3L), scope.eval(
                 """
             val a = 17
             var b = 3
         """.trimIndent()
             )
         )
-        assertEquals(17, context.eval("a").toInt())
-        assertEquals(20, context.eval("b + a").toInt())
+        assertEquals(17, scope.eval("a").toInt())
+        assertEquals(20, scope.eval("b + a").toInt())
         assertFailsWith<ScriptError> {
-            context.eval("a = 10")
+            scope.eval("a = 10")
         }
-        assertEquals(17, context.eval("a").toInt())
-        assertEquals(5, context.eval("b = a - 7 - 5").toInt())
-        assertEquals(5, context.eval("b").toInt())
+        assertEquals(17, scope.eval("a").toInt())
+        assertEquals(5, scope.eval("b = a - 7 - 5").toInt())
+        assertEquals(5, scope.eval("b").toInt())
     }
 
     @Test
     fun functionTest() = runTest {
-        val context = Context(pos = Pos.builtIn)
-        context.eval(
+        val scope = Scope(pos = Pos.builtIn)
+        scope.eval(
             """
             fun foo(a, b) {
                 a + b
             }
         """.trimIndent()
         )
-        assertEquals(17, context.eval("foo(3,14)").toInt())
+        assertEquals(17, scope.eval("foo(3,14)").toInt())
         assertFailsWith<ScriptError> {
-            assertEquals(17, context.eval("foo(3)").toInt())
+            assertEquals(17, scope.eval("foo(3)").toInt())
         }
 
-        context.eval(
+        scope.eval(
             """
             fn bar(a, b=10) {
                 a + b + 1
             }
         """.trimIndent()
         )
-        assertEquals(10, context.eval("bar(3, 6)").toInt())
-        assertEquals(14, context.eval("bar(3)").toInt())
+        assertEquals(10, scope.eval("bar(3, 6)").toInt())
+        assertEquals(14, scope.eval("bar(3)").toInt())
     }
 
     @Test
     fun simpleClosureTest() = runTest {
-        val context = Context(pos = Pos.builtIn)
-        context.eval(
+        val scope = Scope(pos = Pos.builtIn)
+        scope.eval(
             """
             var global = 10
             
@@ -230,16 +230,16 @@ class ScriptTest {
             }
         """.trimIndent()
         )
-        assertEquals(27, context.eval("foo(3,14)").toInt())
-        context.eval("global = 20")
-        assertEquals(37, context.eval("foo(3,14)").toInt())
+        assertEquals(27, scope.eval("foo(3,14)").toInt())
+        scope.eval("global = 20")
+        assertEquals(37, scope.eval("foo(3,14)").toInt())
     }
 
     @Test
     fun nullAndVoidTest() = runTest {
-        val context = Context(pos = Pos.builtIn)
-        assertEquals(ObjVoid, context.eval("void"))
-        assertEquals(ObjNull, context.eval("null"))
+        val scope = Scope(pos = Pos.builtIn)
+        assertEquals(ObjVoid, scope.eval("void"))
+        assertEquals(ObjNull, scope.eval("null"))
     }
 
     @Test
@@ -346,8 +346,8 @@ class ScriptTest {
     @Test
     fun ifTest() = runTest {
         // if - single line
-        var context = Context(pos = Pos.builtIn)
-        context.eval(
+        var scope = Scope(pos = Pos.builtIn)
+        scope.eval(
             """
             fn test1(n) {
                 var result = "more"
@@ -357,12 +357,12 @@ class ScriptTest {
             }
         """.trimIndent()
         )
-        assertEquals("enough", context.eval("test1(11)").toString())
-        assertEquals("more", context.eval("test1(1)").toString())
+        assertEquals("enough", scope.eval("test1(11)").toString())
+        assertEquals("more", scope.eval("test1(1)").toString())
 
         // if - multiline (block)
-        context = Context(pos = Pos.builtIn)
-        context.eval(
+        scope = Scope(pos = Pos.builtIn)
+        scope.eval(
             """
             fn test1(n) {
                 var prefix = "answer: "
@@ -376,12 +376,12 @@ class ScriptTest {
             }
         """.trimIndent()
         )
-        assertEquals("answer: enough", context.eval("test1(11)").toString())
-        assertEquals("answer: more", context.eval("test1(1)").toString())
+        assertEquals("answer: enough", scope.eval("test1(11)").toString())
+        assertEquals("answer: more", scope.eval("test1(1)").toString())
 
         // else single line1
-        context = Context(pos = Pos.builtIn)
-        context.eval(
+        scope = Scope(pos = Pos.builtIn)
+        scope.eval(
             """
             fn test1(n) {
                 if( n >= 10 )
@@ -391,12 +391,12 @@ class ScriptTest {
             }
         """.trimIndent()
         )
-        assertEquals("enough", context.eval("test1(11)").toString())
-        assertEquals("more", context.eval("test1(1)").toString())
+        assertEquals("enough", scope.eval("test1(11)").toString())
+        assertEquals("more", scope.eval("test1(1)").toString())
 
         // if/else with blocks
-        context = Context(pos = Pos.builtIn)
-        context.eval(
+        scope = Scope(pos = Pos.builtIn)
+        scope.eval(
             """
             fn test1(n) {
                 if( n > 20 ) {
@@ -410,9 +410,9 @@ class ScriptTest {
             }
         """.trimIndent()
         )
-        assertEquals("enough", context.eval("test1(11)").toString())
-        assertEquals("more", context.eval("test1(1)").toString())
-        assertEquals("too much", context.eval("test1(100)").toString())
+        assertEquals("enough", scope.eval("test1(11)").toString())
+        assertEquals("more", scope.eval("test1(1)").toString())
+        assertEquals("too much", scope.eval("test1(100)").toString())
     }
 
     @Test
@@ -512,13 +512,13 @@ class ScriptTest {
                 ArgsDeclaration.Item("c"),
             ), ttEnd
         )
-        var c = Context(pos = Pos.builtIn, args = Arguments.from(listOf(1, 2, 3).map { it.toObj() }))
+        var c = Scope(pos = Pos.builtIn, args = Arguments.from(listOf(1, 2, 3).map { it.toObj() }))
         pa.assignToContext(c)
         assertEquals(ObjInt(1), c["a"]?.value)
         assertEquals(ObjInt(2), c["b"]?.value)
         assertEquals(ObjInt(3), c["c"]?.value)
         // less args: error
-        c = Context(pos = Pos.builtIn, args = Arguments.from(listOf(1, 2).map { it.toObj() }))
+        c = Scope(pos = Pos.builtIn, args = Arguments.from(listOf(1, 2).map { it.toObj() }))
         assertFailsWith<ScriptError> {
             pa.assignToContext(c)
         }
@@ -535,7 +535,7 @@ class ScriptTest {
         assertEquals(ObjInt(2), c["b"]?.value)
         assertEquals(ObjInt(100), c["c"]?.value)
         // enough args. default value is ignored:
-        c = Context(pos = Pos.builtIn, args = Arguments.from(listOf(10, 2, 5).map { it.toObj() }))
+        c = Scope(pos = Pos.builtIn, args = Arguments.from(listOf(10, 2, 5).map { it.toObj() }))
         pa.assignToContext(c)
         assertEquals(ObjInt(10), c["a"]?.value)
         assertEquals(ObjInt(2), c["b"]?.value)
@@ -553,17 +553,17 @@ class ScriptTest {
                 ArgsDeclaration.Item("b", isEllipsis = true),
             ), ttEnd
         )
-        var c = Context(args = Arguments.from(listOf(1, 2, 3).map { it.toObj() }))
+        var c = Scope(args = Arguments.from(listOf(1, 2, 3).map { it.toObj() }))
         pa.assignToContext(c)
         c.eval("assert( a == 1 ); println(b)")
         c.eval("assert( b == [2,3] )")
 
-        c = Context(args = Arguments.from(listOf(1, 2).map { it.toObj() }))
+        c = Scope(args = Arguments.from(listOf(1, 2).map { it.toObj() }))
         pa.assignToContext(c)
         c.eval("assertEquals( a, 1 ); println(b)")
         c.eval("assertEquals( b, [2] )")
 
-        c = Context(args = Arguments.from(listOf(1).map { it.toObj() }))
+        c = Scope(args = Arguments.from(listOf(1).map { it.toObj() }))
         pa.assignToContext(c)
         c.eval("assert( a == 1 ); println(b)")
         c.eval("assert( b == [] )")
@@ -579,25 +579,25 @@ class ScriptTest {
                 ArgsDeclaration.Item("c"),
             ), ttEnd
         )
-        var c = Context(args = Arguments.from(listOf(0, 1, 2, 3).map { it.toObj() }))
+        var c = Scope(args = Arguments.from(listOf(0, 1, 2, 3).map { it.toObj() }))
         pa.assignToContext(c)
         c.eval("assertEquals( a,[0,1] )")
         c.eval("assertEquals( b, 2 )")
         c.eval("assertEquals( c, 3 )")
 
-        c = Context(args = Arguments.from(listOf(1, 2, 3).map { it.toObj() }))
+        c = Scope(args = Arguments.from(listOf(1, 2, 3).map { it.toObj() }))
         pa.assignToContext(c)
         c.eval("assertEquals( a,[1] )")
         c.eval("assertEquals( b, 2 )")
         c.eval("assertEquals( c, 3 )")
 
-        c = Context(args = Arguments.from(listOf(2, 3).map { it.toObj() }))
+        c = Scope(args = Arguments.from(listOf(2, 3).map { it.toObj() }))
         pa.assignToContext(c)
         c.eval("assertEquals( a,[] )")
         c.eval("assertEquals( b, 2 )")
         c.eval("assertEquals( c, 3 )")
 
-        c = Context(args = Arguments.from(listOf(3).map { it.toObj() }))
+        c = Scope(args = Arguments.from(listOf(3).map { it.toObj() }))
         assertFailsWith<ExecutionError> {
             pa.assignToContext(c)
         }
@@ -614,28 +614,28 @@ class ScriptTest {
                 ArgsDeclaration.Item("c"),
             ), ttEnd
         )
-        var c = Context(args = Arguments.from(listOf(-1, 0, 1, 2, 3).map { it.toObj() }))
+        var c = Scope(args = Arguments.from(listOf(-1, 0, 1, 2, 3).map { it.toObj() }))
         pa.assignToContext(c)
         c.eval("assertEquals( i, -1 )")
         c.eval("assertEquals( a,[0,1] )")
         c.eval("assertEquals( b, 2 )")
         c.eval("assertEquals( c, 3 )")
 
-        c = Context(args = Arguments.from(listOf(0, 1, 2, 3).map { it.toObj() }))
+        c = Scope(args = Arguments.from(listOf(0, 1, 2, 3).map { it.toObj() }))
         pa.assignToContext(c)
         c.eval("assertEquals( i, 0 )")
         c.eval("assertEquals( a,[1] )")
         c.eval("assertEquals( b, 2 )")
         c.eval("assertEquals( c, 3 )")
 
-        c = Context(args = Arguments.from(listOf(1, 2, 3).map { it.toObj() }))
+        c = Scope(args = Arguments.from(listOf(1, 2, 3).map { it.toObj() }))
         pa.assignToContext(c)
         c.eval("assertEquals( i, 1)")
         c.eval("assertEquals( a,[] )")
         c.eval("assertEquals( b, 2 )")
         c.eval("assertEquals( c, 3 )")
 
-        c = Context(args = Arguments.from(listOf(2, 3).map { it.toObj() }))
+        c = Scope(args = Arguments.from(listOf(2, 3).map { it.toObj() }))
         assertFailsWith<ExecutionError> {
             pa.assignToContext(c)
         }
@@ -756,7 +756,7 @@ class ScriptTest {
 
     @Test
     fun testIncr() = runTest {
-        val c = Context()
+        val c = Scope()
         c.eval("var x = 10")
         assertEquals(10, c.eval("x++").toInt())
         assertEquals(11, c.eval("x++").toInt())
@@ -768,7 +768,7 @@ class ScriptTest {
 
     @Test
     fun testDecr() = runTest {
-        val c = Context()
+        val c = Scope()
         c.eval("var x = 9")
         assertEquals(9, c.eval("x--").toInt())
         assertEquals(8, c.eval("x--").toInt())
@@ -779,7 +779,7 @@ class ScriptTest {
 
     @Test
     fun testDecrIncr() = runTest {
-        val c = Context()
+        val c = Scope()
         c.eval("var x = 9")
         assertEquals(9, c.eval("x++").toInt())
         assertEquals(10, c.eval("x++").toInt())
@@ -793,7 +793,7 @@ class ScriptTest {
 
     @Test
     fun testDecrIncr2() = runTest {
-        val c = Context()
+        val c = Scope()
         c.eval("var x = 9")
         assertEquals(9, c.eval("x--").toInt())
         assertEquals(8, c.eval("x--").toInt())
@@ -810,7 +810,7 @@ class ScriptTest {
 
     @Test
     fun testDecrIncr3() = runTest {
-        val c = Context()
+        val c = Scope()
         c.eval("var x = 9")
         assertEquals(9, c.eval("x++").toInt())
         assertEquals(10, c.eval("x++").toInt())
@@ -822,7 +822,7 @@ class ScriptTest {
 
     @Test
     fun testIncrAndDecr() = runTest {
-        val c = Context()
+        val c = Scope()
         assertEquals(
             "8", c.eval(
                 """
@@ -857,7 +857,7 @@ class ScriptTest {
     @Test
     fun testAssign1() = runTest {
         assertEquals(10, eval("var x = 5; x=10; x").toInt())
-        val ctx = Context()
+        val ctx = Scope()
         ctx.eval(
             """
             var a = 1
@@ -871,7 +871,7 @@ class ScriptTest {
 
     @Test
     fun testAssign2() = runTest {
-        val ctx = Context()
+        val ctx = Scope()
         ctx.eval("var x = 10")
         assertEquals(14, ctx.eval("x += 4").toInt())
         assertEquals(14, ctx.eval("x").toInt())
@@ -889,7 +889,7 @@ class ScriptTest {
 
     @Test
     fun testVals() = runTest {
-        val cxt = Context()
+        val cxt = Scope()
         cxt.eval("val x = 11")
         assertEquals(11, cxt.eval("x").toInt())
         assertFails { cxt.eval("x = 12") }
@@ -1436,7 +1436,7 @@ class ScriptTest {
 
     @Test
     fun testSimpleStruct() = runTest {
-        val c = Context()
+        val c = Scope()
         c.eval(
             """
             class Point(x,y)
@@ -1457,7 +1457,7 @@ class ScriptTest {
 
     @Test
     fun testNonAssignalbeFieldInStruct() = runTest {
-        val c = Context()
+        val c = Scope()
         c.eval(
             """
             class Point(x,y)
@@ -1474,7 +1474,7 @@ class ScriptTest {
 
     @Test
     fun testStructBodyVal() = runTest {
-        val c = Context()
+        val c = Scope()
         c.eval(
             """
             class Point(x,y) {
@@ -1496,7 +1496,7 @@ class ScriptTest {
 
     @Test
     fun testStructBodyFun() = runTest {
-        val c = Context()
+        val c = Scope()
         c.eval(
             """
             class Point(x,y) {
@@ -1516,7 +1516,7 @@ class ScriptTest {
 
     @Test
     fun testPrivateConstructorParams() = runTest {
-        val c = Context()
+        val c = Scope()
         c.eval(
             """
             class Point(private var x,y)
@@ -1871,7 +1871,7 @@ class ScriptTest {
 
     @Test
     fun testTryFinally() = runTest {
-        val c = Context()
+        val c = Scope()
         assertFails {
             c.eval(
                 """
@@ -1894,7 +1894,7 @@ class ScriptTest {
 
     @Test
     fun testThrowFromKotlin() = runTest {
-        val c = Context()
+        val c = Scope()
         c.addFn("callThrow") {
             raiseIllegalArgument("fromKotlin")
         }
@@ -2316,7 +2316,7 @@ class ScriptTest {
 
     @Test
     fun testToFlow() = runTest() {
-        val c = Context()
+        val c = Scope()
         val arr = c.eval("[1,2,3]")
         // array is iterable so we can:
         assertEquals(listOf(1,2,3),  arr.toFlow(c).map { it.toInt() }.toList())

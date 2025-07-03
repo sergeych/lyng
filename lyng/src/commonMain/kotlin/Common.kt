@@ -31,7 +31,7 @@ data class CommandResult(
     val error: String
 )
 
-val baseContext = Context().apply {
+val baseScope = Scope().apply {
     addFn("exit") {
         exit(requireOnlyArg<ObjInt>().toInt())
         ObjVoid
@@ -74,7 +74,7 @@ class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() {
                 val objargs = mutableListOf<String>()
                 script?.let { objargs += it }
                 objargs += args
-                baseContext.addConst(
+                baseScope.addConst(
                     "ARGV", ObjList(
                         objargs.map { ObjString(it) }.toMutableList()
                     )
@@ -82,7 +82,7 @@ class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() {
                 launcher {
                     // there is no script name, it is a first argument instead:
                     processErrors {
-                        baseContext.eval(execute!!)
+                        baseScope.eval(execute!!)
                     }
                 }
             }
@@ -98,7 +98,7 @@ class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() {
                     )
                     echoFormattedHelp()
                 } else {
-                    baseContext.addConst("ARGV", ObjList(args.map { ObjString(it) }.toMutableList()))
+                    baseScope.addConst("ARGV", ObjList(args.map { ObjString(it) }.toMutableList()))
                     launcher { executeFile(script!!) }
                 }
             }
@@ -118,7 +118,7 @@ suspend fun executeFile(fileName: String) {
         text = text.substring(pos + 1)
     }
     processErrors {
-        Compiler.compile(Source(fileName, text)).execute(baseContext)
+        Compiler.compile(Source(fileName, text)).execute(baseScope)
     }
 }
 

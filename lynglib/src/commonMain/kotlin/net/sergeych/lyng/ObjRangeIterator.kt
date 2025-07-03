@@ -8,7 +8,7 @@ class ObjRangeIterator(val self: ObjRange) : Obj() {
 
     override val objClass: ObjClass = type
 
-    fun Context.init() {
+    fun Scope.init() {
         if (self.start == null || self.end == null)
             raiseError("next is only available for finite ranges")
         isCharRange = self.isCharRange
@@ -24,7 +24,7 @@ class ObjRangeIterator(val self: ObjRange) : Obj() {
 
     fun hasNext(): Boolean = nextIndex < lastIndex
 
-    fun next(context: Context): Obj =
+    fun next(scope: Scope): Obj =
         if (nextIndex < lastIndex) {
             val x = if (self.isEndInclusive)
                 self.start!!.toLong() + nextIndex++
@@ -33,7 +33,7 @@ class ObjRangeIterator(val self: ObjRange) : Obj() {
             if( isCharRange ) ObjChar(x.toInt().toChar()) else ObjInt(x)
         }
         else {
-            context.raiseError(ObjIterationFinishedException(context))
+            scope.raiseError(ObjIterationFinishedException(scope))
         }
 
     companion object {

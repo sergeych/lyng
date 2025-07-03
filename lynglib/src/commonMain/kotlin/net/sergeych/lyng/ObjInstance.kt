@@ -2,52 +2,52 @@ package net.sergeych.lyng
 
 class ObjInstance(override val objClass: ObjClass) : Obj() {
 
-    internal lateinit var instanceContext: Context
+    internal lateinit var instanceScope: Scope
 
-    override suspend fun readField(context: Context, name: String): ObjRecord {
-        return instanceContext[name]?.let {
+    override suspend fun readField(scope: Scope, name: String): ObjRecord {
+        return instanceScope[name]?.let {
             if (it.visibility.isPublic)
                 it
             else
-                context.raiseError(ObjAccessException(context, "can't access non-public field $name"))
+                scope.raiseError(ObjAccessException(scope, "can't access non-public field $name"))
         }
-            ?: super.readField(context, name)
+            ?: super.readField(scope, name)
     }
 
-    override suspend fun writeField(context: Context, name: String, newValue: Obj) {
-        instanceContext[name]?.let { f ->
+    override suspend fun writeField(scope: Scope, name: String, newValue: Obj) {
+        instanceScope[name]?.let { f ->
             if (!f.visibility.isPublic)
-                ObjIllegalAssignmentException(context, "can't assign to non-public field $name")
-            if (!f.isMutable) ObjIllegalAssignmentException(context, "can't reassign val $name").raise()
-            if (f.value.assign(context, newValue) == null)
+                ObjIllegalAssignmentException(scope, "can't assign to non-public field $name")
+            if (!f.isMutable) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
+            if (f.value.assign(scope, newValue) == null)
                 f.value = newValue
-        } ?: super.writeField(context, name, newValue)
+        } ?: super.writeField(scope, name, newValue)
     }
 
-    override suspend fun invokeInstanceMethod(context: Context, name: String, args: Arguments): Obj =
-        instanceContext[name]?.let {
+    override suspend fun invokeInstanceMethod(scope: Scope, name: String, args: Arguments): Obj =
+        instanceScope[name]?.let {
             if (it.visibility.isPublic)
-                it.value.invoke(context, this, args)
+                it.value.invoke(scope, this, args)
             else
-                context.raiseError(ObjAccessException(context, "can't invoke non-public method $name"))
+                scope.raiseError(ObjAccessException(scope, "can't invoke non-public method $name"))
         }
-            ?: super.invokeInstanceMethod(context, name, args)
+            ?: super.invokeInstanceMethod(scope, name, args)
 
     private val publicFields: Map<String, ObjRecord>
-        get() = instanceContext.objects.filter { it.value.visibility.isPublic }
+        get() = instanceScope.objects.filter { it.value.visibility.isPublic }
 
     override fun toString(): String {
         val fields = publicFields.map { "${it.key}=${it.value.value}" }.joinToString(",")
         return "${objClass.className}($fields)"
     }
 
-    override suspend fun compareTo(context: Context, other: Obj): Int {
+    override suspend fun compareTo(scope: Scope, other: Obj): Int {
         if (other !is ObjInstance) return -1
         if (other.objClass != objClass) return -1
         for (f in publicFields) {
             val a = f.value.value
-            val b = other.instanceContext[f.key]!!.value
-            val d = a.compareTo(context, b)
+            val b = other.instanceScope[f.key]!!.value
+            val d = a.compareTo(scope, b)
             if (d != 0) return d
         }
         return 0

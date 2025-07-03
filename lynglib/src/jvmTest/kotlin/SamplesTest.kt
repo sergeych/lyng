@@ -2,7 +2,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
-import net.sergeych.lyng.Context
+import net.sergeych.lyng.Scope
 import java.nio.file.Files
 import java.nio.file.Paths
 import kotlin.io.path.extension
@@ -13,7 +13,7 @@ suspend fun executeSampleTests(fileName: String) {
         Files.readString(Paths.get(fileName))
     }
     runBlocking {
-        val c = Context()
+        val c = Scope()
             val start = Clock.System.now()
             c.eval(sample)
             val time = Clock.System.now() - start

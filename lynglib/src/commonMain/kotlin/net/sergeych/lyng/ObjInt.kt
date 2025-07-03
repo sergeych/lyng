@@ -13,23 +13,23 @@ data class ObjInt(var value: Long) : Obj(), Numeric {
         return value.hashCode()
     }
 
-    override suspend fun getAndIncrement(context: Context): Obj {
+    override suspend fun getAndIncrement(scope: Scope): Obj {
         return ObjInt(value).also { value++ }
     }
 
-    override suspend fun getAndDecrement(context: Context): Obj {
+    override suspend fun getAndDecrement(scope: Scope): Obj {
         return ObjInt(value).also { value-- }
     }
 
-    override suspend fun incrementAndGet(context: Context): Obj {
+    override suspend fun incrementAndGet(scope: Scope): Obj {
         return ObjInt(++value)
     }
 
-    override suspend fun decrementAndGet(context: Context): Obj {
+    override suspend fun decrementAndGet(scope: Scope): Obj {
         return ObjInt(--value)
     }
 
-    override suspend fun compareTo(context: Context, other: Obj): Int {
+    override suspend fun compareTo(scope: Scope, other: Obj): Int {
         if (other !is Numeric) return -2
         return value.compareTo(other.doubleValue)
     }
@@ -38,29 +38,29 @@ data class ObjInt(var value: Long) : Obj(), Numeric {
 
     override val objClass: ObjClass = type
 
-    override suspend fun plus(context: Context, other: Obj): Obj =
+    override suspend fun plus(scope: Scope, other: Obj): Obj =
         if (other is ObjInt)
             ObjInt(this.value + other.value)
         else
             ObjReal(this.doubleValue + other.toDouble())
 
-    override suspend fun minus(context: Context, other: Obj): Obj =
+    override suspend fun minus(scope: Scope, other: Obj): Obj =
         if (other is ObjInt)
             ObjInt(this.value - other.value)
         else
             ObjReal(this.doubleValue - other.toDouble())
 
-    override suspend fun mul(context: Context, other: Obj): Obj =
+    override suspend fun mul(scope: Scope, other: Obj): Obj =
         if (other is ObjInt) {
             ObjInt(this.value * other.value)
         } else ObjReal(this.value * other.toDouble())
 
-    override suspend fun div(context: Context, other: Obj): Obj =
+    override suspend fun div(scope: Scope, other: Obj): Obj =
         if (other is ObjInt)
             ObjInt(this.value / other.value)
         else ObjReal(this.value / other.toDouble())
 
-    override suspend fun mod(context: Context, other: Obj): Obj =
+    override suspend fun mod(scope: Scope, other: Obj): Obj =
         if (other is ObjInt)
             ObjInt(this.value % other.value)
         else ObjReal(this.value.toDouble() % other.toDouble())
@@ -69,14 +69,14 @@ data class ObjInt(var value: Long) : Obj(), Numeric {
      * We are by-value type ([byValueCopy] is implemented) so we can do in-place
      * assignment
      */
-    override suspend fun assign(context: Context, other: Obj): Obj? {
+    override suspend fun assign(scope: Scope, other: Obj): Obj? {
         return if (other is ObjInt) {
             value = other.value
             this
         } else null
     }
 
-    override suspend fun toKotlin(context: Context): Any {
+    override suspend fun toKotlin(scope: Scope): Any {
         return value
     }
 

@@ -11,7 +11,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
         list.joinToString(separator = ", ") { it.inspect() }
     }]"
 
-    override suspend fun getAt(context: Context, index: Obj): Obj {
+    override suspend fun getAt(scope: Scope, index: Obj): Obj {
         return when (index) {
             is ObjInt -> {
                 list[index.toInt()]
@@ -47,23 +47,23 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 }
             }
 
-            else -> context.raiseIllegalArgument("Illegal index object for a list: ${index.inspect()}")
+            else -> scope.raiseIllegalArgument("Illegal index object for a list: ${index.inspect()}")
         }
     }
 
-    override suspend fun putAt(context: Context, index: Int, newValue: Obj) {
+    override suspend fun putAt(scope: Scope, index: Int, newValue: Obj) {
         val i = index
         list[i] = newValue
     }
 
-    override suspend fun compareTo(context: Context, other: Obj): Int {
+    override suspend fun compareTo(scope: Scope, other: Obj): Int {
         if (other !is ObjList) return -2
         val mySize = list.size
         val otherSize = other.list.size
         val commonSize = minOf(mySize, otherSize)
         for (i in 0..<commonSize) {
-            if (list[i].compareTo(context, other.list[i]) != 0) {
-                return list[i].compareTo(context, other.list[i])
+            if (list[i].compareTo(scope, other.list[i]) != 0) {
+                return list[i].compareTo(scope, other.list[i])
             }
         }
         // equal so far, longer is greater:
@@ -74,44 +74,44 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
         }
     }
 
-    override suspend fun plus(context: Context, other: Obj): Obj =
+    override suspend fun plus(scope: Scope, other: Obj): Obj =
         when {
             other is ObjList ->
                 ObjList((list + other.list).toMutableList())
 
             other.isInstanceOf(ObjIterable) -> {
-                val l = other.callMethod<ObjList>(context, "toList")
+                val l = other.callMethod<ObjList>(scope, "toList")
                 ObjList((list + l.list).toMutableList())
             }
 
             else ->
-                context.raiseError("'+': can't concatenate $this with $other")
+                scope.raiseError("'+': can't concatenate $this with $other")
         }
 
 
-    override suspend fun plusAssign(context: Context, other: Obj): Obj {
+    override suspend fun plusAssign(scope: Scope, other: Obj): Obj {
         // optimization
         if (other is ObjList) {
             list += other.list
             return this
         }
         if (other.isInstanceOf(ObjIterable)) {
-            val otherList = other.invokeInstanceMethod(context, "toList") as ObjList
+            val otherList = other.invokeInstanceMethod(scope, "toList") as ObjList
             list += otherList.list
         } else
             list += other
         return this
     }
 
-    override suspend fun contains(context: Context, other: Obj): Boolean {
+    override suspend fun contains(scope: Scope, other: Obj): Boolean {
         return list.contains(other)
     }
 
     override val objClass: ObjClass
         get() = type
 
-    override suspend fun toKotlin(context: Context): Any {
-        return list.map { it.toKotlin(context) }
+    override suspend fun toKotlin(scope: Scope): Any {
+        return list.map { it.toKotlin(scope) }
     }
 
     override fun hashCode(): Int {

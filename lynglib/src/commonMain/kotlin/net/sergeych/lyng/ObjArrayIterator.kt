@@ -7,9 +7,9 @@ class ObjArrayIterator(val array: Obj) : Obj() {
     private var nextIndex = 0
     private var lastIndex = 0
 
-    suspend fun init(context: Context) {
+    suspend fun init(scope: Scope) {
         nextIndex = 0
-        lastIndex = array.invokeInstanceMethod(context, "size").toInt()
+        lastIndex = array.invokeInstanceMethod(scope, "size").toInt()
         ObjVoid
     }
 

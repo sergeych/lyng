@@ -1,17 +1,17 @@
 package net.sergeych.lyng
 
-open class Context(
-    val parent: Context?,
+open class Scope(
+    val parent: Scope?,
     val args: Arguments = Arguments.EMPTY,
     var pos: Pos = Pos.builtIn,
     var thisObj: Obj = ObjVoid,
-    var skipContextCreation: Boolean = false,
+    var skipScopeCreation: Boolean = false,
 ) {
     constructor(
         args: Arguments = Arguments.EMPTY,
         pos: Pos = Pos.builtIn,
     )
-            : this(Script.defaultContext, args, pos)
+            : this(Script.defaultScope, args, pos)
 
     fun raiseNotImplemented(what: String = "operation"): Nothing = raiseError("$what is not implemented")
 
@@ -75,13 +75,13 @@ open class Context(
                 ?: thisObj.objClass.getInstanceMemberOrNull(name)
         }
 
-    fun copy(pos: Pos, args: Arguments = Arguments.EMPTY, newThisObj: Obj? = null): Context =
-        Context(this, args, pos, newThisObj ?: thisObj)
+    fun copy(pos: Pos, args: Arguments = Arguments.EMPTY, newThisObj: Obj? = null): Scope =
+        Scope(this, args, pos, newThisObj ?: thisObj)
 
-    fun copy(args: Arguments = Arguments.EMPTY, newThisObj: Obj? = null): Context =
-        Context(this, args, pos, newThisObj ?: thisObj)
+    fun copy(args: Arguments = Arguments.EMPTY, newThisObj: Obj? = null): Scope =
+        Scope(this, args, pos, newThisObj ?: thisObj)
 
-    fun copy() = Context(this, args, pos, thisObj)
+    fun copy() = Scope(this, args, pos, thisObj)
 
     fun addItem(
         name: String,
@@ -97,18 +97,18 @@ open class Context(
         return ns.objClass
     }
 
-    inline fun addVoidFn(vararg names: String, crossinline fn: suspend Context.() -> Unit) {
+    inline fun addVoidFn(vararg names: String, crossinline fn: suspend Scope.() -> Unit) {
         addFn<ObjVoid>(*names) {
             fn(this)
             ObjVoid
         }
     }
 
-    inline fun <reified T : Obj> addFn(vararg names: String, crossinline fn: suspend Context.() -> T) {
+    inline fun <reified T : Obj> addFn(vararg names: String, crossinline fn: suspend Scope.() -> T) {
         val newFn = object : Statement() {
             override val pos: Pos = Pos.builtIn
 
-            override suspend fun execute(context: Context): Obj = context.fn()
+            override suspend fun execute(scope: Scope): Obj = scope.fn()
 
         }
         for (name in names) {

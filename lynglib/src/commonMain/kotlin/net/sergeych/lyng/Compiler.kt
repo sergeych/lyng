@@ -380,11 +380,11 @@ class Compiler(
 
         val body = parseBlock(skipLeadingBrace = true)
 
-        var closure: Context? = null
+        var closure: Scope? = null
 
         val callStatement = statement {
             // and the source closure of the lambda which might have other thisObj.
-            val context = AppliedContext(closure!!, args, this)
+            val context = AppliedScope(closure!!, args, this)
             if (argsDeclaration == null) {
                 // no args: automatic var 'it'
                 val l = args.list
@@ -1154,7 +1154,7 @@ class Compiler(
     }
 
     private suspend fun loopIntRange(
-        forContext: Context, start: Int, end: Int, loopVar: ObjRecord,
+        forScope: Scope, start: Int, end: Int, loopVar: ObjRecord,
         body: Statement, elseStatement: Statement?, label: String?, catchBreak: Boolean
     ): Obj {
         var result: Obj = ObjVoid
@@ -1164,7 +1164,7 @@ class Compiler(
             for (i in start..<end) {
                 iVar.value = i.toLong()
                 try {
-                    result = body.execute(forContext)
+                    result = body.execute(forScope)
                 } catch (lbe: LoopBreakContinueException) {
                     if (lbe.label == label || lbe.label == null) {
                         if (lbe.doContinue) continue
@@ -1176,24 +1176,24 @@ class Compiler(
         } else {
             for (i in start.toLong()..<end.toLong()) {
                 iVar.value = i
-                result = body.execute(forContext)
+                result = body.execute(forScope)
             }
         }
-        return elseStatement?.execute(forContext) ?: result
+        return elseStatement?.execute(forScope) ?: result
     }
 
     private suspend fun loopIterable(
-        forContext: Context, sourceObj: Obj, loopVar: ObjRecord,
+        forScope: Scope, sourceObj: Obj, loopVar: ObjRecord,
         body: Statement, elseStatement: Statement?, label: String?,
         catchBreak: Boolean
     ): Obj {
-        val iterObj = sourceObj.invokeInstanceMethod(forContext, "iterator")
+        val iterObj = sourceObj.invokeInstanceMethod(forScope, "iterator")
         var result: Obj = ObjVoid
-        while (iterObj.invokeInstanceMethod(forContext, "hasNext").toBool()) {
+        while (iterObj.invokeInstanceMethod(forScope, "hasNext").toBool()) {
             if (catchBreak)
                 try {
-                    loopVar.value = iterObj.invokeInstanceMethod(forContext, "next")
-                    result = body.execute(forContext)
+                    loopVar.value = iterObj.invokeInstanceMethod(forScope, "next")
+                    result = body.execute(forScope)
                 } catch (lbe: LoopBreakContinueException) {
                     if (lbe.label == label || lbe.label == null) {
                         if (lbe.doContinue) continue
@@ -1202,11 +1202,11 @@ class Compiler(
                     throw lbe
                 }
             else {
-                loopVar.value = iterObj.invokeInstanceMethod(forContext, "next")
-                result = body.execute(forContext)
+                loopVar.value = iterObj.invokeInstanceMethod(forScope, "next")
+                result = body.execute(forScope)
             }
         }
-        return elseStatement?.execute(forContext) ?: result
+        return elseStatement?.execute(forScope) ?: result
     }
 
     @Suppress("UNUSED_VARIABLE")
@@ -1240,11 +1240,11 @@ class Compiler(
         return statement(body.pos) {
             var wasBroken = false
             var result: Obj = ObjVoid
-            lateinit var doContext: Context
+            lateinit var doScope: Scope
             do {
-                doContext = it.copy().apply { skipContextCreation = true }
+                doScope = it.copy().apply { skipScopeCreation = true }
                 try {
-                    result = body.execute(doContext)
+                    result = body.execute(doScope)
                 } catch (e: LoopBreakContinueException) {
                     if (e.label == label || e.label == null) {
                         if (e.doContinue) continue
@@ -1256,7 +1256,7 @@ class Compiler(
                     }
                     throw e
                 }
-            } while (condition.execute(doContext).toBool())
+            } while (condition.execute(doScope).toBool())
             if (!wasBroken) elseStatement?.let { s -> result = s.execute(it) }
             result
         }
@@ -1452,7 +1452,7 @@ class Compiler(
         else
             parseBlock()
 
-        var closure: Context? = null
+        var closure: Scope? = null
 
         val fnBody = statement(t.pos) { callerContext ->
             callerContext.pos = start
@@ -1497,7 +1497,7 @@ class Compiler(
         val block = parseScript()
         return statement(startPos) {
             // block run on inner context:
-            block.execute(if (it.skipContextCreation) it else it.copy(startPos))
+            block.execute(if (it.skipScopeCreation) it else it.copy(startPos))
         }.also {
             val t1 = cc.next()
             if (t1.type != Token.Type.RBRACE)
@@ -1551,7 +1551,7 @@ class Compiler(
 //        fun isLeftAssociative() = tokenType != Token.Type.OR && tokenType != Token.Type.AND
 
         companion object {
-            fun simple(tokenType: Token.Type, priority: Int, f: suspend (Context, Obj, Obj) -> Obj): Operator =
+            fun simple(tokenType: Token.Type, priority: Int, f: suspend (Scope, Obj, Obj) -> Obj): Operator =
                 Operator(tokenType, priority, 2) { _: Pos, a: Accessor, b: Accessor ->
                     Accessor { f(it, a.getter(it).value, b.getter(it).value).asReadonly }
                 }

@@ -12,4 +12,4 @@ open class ScriptError(val pos: Pos, val errorMessage: String,cause: Throwable?=
     cause
 )
 
-class ExecutionError(val errorObject: ObjException) : ScriptError(errorObject.context.pos, errorObject.message)
+class ExecutionError(val errorObject: ObjException) : ScriptError(errorObject.scope.pos, errorObject.message)

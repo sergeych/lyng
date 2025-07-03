@@ -47,11 +47,11 @@ class ObjKotlinObjIterator(val iterator: Iterator<Obj>) : Obj() {
  * As Lyng is totally asynchronous, its iterator can't be trivially converted to Kotlin's synchronous iterator.
  * It is, though, trivially convertible to Kotlin's Flow.
  */
-fun Obj.toFlow(context: Context): Flow<Obj> = flow {
-    val iterator = invokeInstanceMethod(context, "iterator")
-    val hasNext = iterator.getInstanceMethod(context, "hasNext")
-    val next = iterator.getInstanceMethod(context, "next")
-    while (hasNext.invoke(context, iterator).toBool()) {
-        emit(next.invoke(context, iterator))
+fun Obj.toFlow(scope: Scope): Flow<Obj> = flow {
+    val iterator = invokeInstanceMethod(scope, "iterator")
+    val hasNext = iterator.getInstanceMethod(scope, "hasNext")
+    val next = iterator.getInstanceMethod(scope, "next")
+    while (hasNext.invoke(scope, iterator).toBool()) {
+        emit(next.invoke(scope, iterator))
     }
 }

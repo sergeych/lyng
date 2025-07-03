@@ -18,14 +18,14 @@ abstract class Statement(
     override val objClass: ObjClass = type
 
     abstract val pos: Pos
-    abstract suspend fun execute(context: Context): Obj
+    abstract suspend fun execute(scope: Scope): Obj
 
-    override suspend fun compareTo(context: Context,other: Obj): Int {
+    override suspend fun compareTo(scope: Scope, other: Obj): Int {
         throw UnsupportedOperationException("not comparable")
     }
 
-    override suspend fun callOn(context: Context): Obj {
-        return execute(context)
+    override suspend fun callOn(scope: Scope): Obj {
+        return execute(scope)
     }
 
     override fun toString(): String = "Callable@${this.hashCode()}"
@@ -34,7 +34,7 @@ abstract class Statement(
         val type = ObjClass("Callable")
     }
 
-    suspend fun call(context: Context,vararg args: Obj) = execute(context.copy(args =  Arguments(*args)))
+    suspend fun call(scope: Scope, vararg args: Obj) = execute(scope.copy(args =  Arguments(*args)))
 
 }
 
@@ -47,16 +47,16 @@ fun Statement.require(cond: Boolean, message: () -> String) {
     if (!cond) raise(message())
 }
 
-fun statement(pos: Pos, isStaticConst: Boolean = false, isConst: Boolean = false, f: suspend (Context) -> Obj): Statement =
+fun statement(pos: Pos, isStaticConst: Boolean = false, isConst: Boolean = false, f: suspend (Scope) -> Obj): Statement =
     object : Statement(isStaticConst, isConst) {
         override val pos: Pos = pos
-        override suspend fun execute(context: Context): Obj = f(context)
+        override suspend fun execute(scope: Scope): Obj = f(scope)
     }
 
-fun statement(isStaticConst: Boolean = false, isConst: Boolean = false, f: suspend Context.() -> Obj): Statement =
+fun statement(isStaticConst: Boolean = false, isConst: Boolean = false, f: suspend Scope.() -> Obj): Statement =
     object : Statement(isStaticConst, isConst) {
         override val pos: Pos = Pos.builtIn
-        override suspend fun execute(context: Context): Obj = f(context)
+        override suspend fun execute(scope: Scope): Obj = f(scope)
     }
 
 

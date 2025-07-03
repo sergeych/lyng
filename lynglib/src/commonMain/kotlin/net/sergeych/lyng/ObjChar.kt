@@ -4,7 +4,7 @@ class ObjChar(val value: Char): Obj() {
 
     override val objClass: ObjClass = type
 
-    override suspend fun compareTo(context: Context, other: Obj): Int =
+    override suspend fun compareTo(scope: Scope, other: Obj): Int =
         (other as? ObjChar)?.let { value.compareTo(it.value) } ?: -1
 
     override fun toString(): String = value.toString()

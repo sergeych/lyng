@@ -16,7 +16,7 @@ data class ObjString(val value: String) : Obj() {
 //    }
 
 
-    override suspend fun compareTo(context: Context, other: Obj): Int {
+    override suspend fun compareTo(scope: Scope, other: Obj): Int {
         if (other !is ObjString) return -2
         return this.value.compareTo(other.value)
     }
@@ -32,11 +32,11 @@ data class ObjString(val value: String) : Obj() {
     override val objClass: ObjClass
         get() = type
 
-    override suspend fun plus(context: Context, other: Obj): Obj {
+    override suspend fun plus(scope: Scope, other: Obj): Obj {
         return ObjString(value + other.asStr.value)
     }
 
-    override suspend fun getAt(context: Context, index: Obj): Obj {
+    override suspend fun getAt(scope: Scope, index: Obj): Obj {
         if( index is ObjInt ) return ObjChar(value[index.toInt()])
         if( index is ObjRange ) {
             val start = if(index.start == null || index.start.isNull) 0 else  index.start.toInt()
@@ -46,23 +46,23 @@ data class ObjString(val value: String) : Obj() {
             }
             return ObjString(value.substring(start, end))
         }
-        context.raiseIllegalArgument("String index must be Int or Range")
+        scope.raiseIllegalArgument("String index must be Int or Range")
     }
 
     override fun hashCode(): Int {
         return value.hashCode()
     }
 
-    override suspend fun callOn(context: Context): Obj {
-        return ObjString(this.value.sprintf(*context.args.toKotlinList(context).toTypedArray()))
+    override suspend fun callOn(scope: Scope): Obj {
+        return ObjString(this.value.sprintf(*scope.args.toKotlinList(scope).toTypedArray()))
     }
 
-    override suspend fun contains(context: Context, other: Obj): Boolean {
+    override suspend fun contains(scope: Scope, other: Obj): Boolean {
         return if (other is ObjString)
             value.contains(other.value)
         else if (other is ObjChar)
             value.contains(other.value)
-        else context.raiseIllegalArgument("String.contains can't take $other")
+        else scope.raiseIllegalArgument("String.contains can't take $other")
     }
 
     override fun equals(other: Any?): Boolean {

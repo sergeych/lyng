@@ -21,13 +21,13 @@ open class ObjClass(
 
     override fun toString(): String = className
 
-    override suspend fun compareTo(context: Context, other: Obj): Int = if (other === this) 0 else -1
+    override suspend fun compareTo(scope: Scope, other: Obj): Int = if (other === this) 0 else -1
 
-    override suspend fun callOn(context: Context): Obj {
+    override suspend fun callOn(scope: Scope): Obj {
         val instance = ObjInstance(this)
-        instance.instanceContext = context.copy(newThisObj = instance,args = context.args)
+        instance.instanceScope = scope.copy(newThisObj = instance,args = scope.args)
         if (instanceConstructor != null) {
-            instanceConstructor!!.execute(instance.instanceContext)
+            instanceConstructor!!.execute(instance.instanceScope)
         }
         return instance
     }
@@ -49,7 +49,7 @@ open class ObjClass(
         members[name] = ObjRecord(initialValue, isMutable, visibility)
     }
 
-    fun addFn(name: String, isOpen: Boolean = false, code: suspend Context.() -> Obj) {
+    fun addFn(name: String, isOpen: Boolean = false, code: suspend Scope.() -> Obj) {
         createField(name, statement { code() }, isOpen)
     }
 

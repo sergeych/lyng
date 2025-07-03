@@ -15,10 +15,10 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
         return result.toString()
     }
 
-    suspend fun containsRange(context: Context, other: ObjRange): Boolean {
+    suspend fun containsRange(scope: Scope, other: ObjRange): Boolean {
         if (start != null) {
             // our start is not -∞ so other start should be GTE or is not contained:
-            if (other.start != null && start.compareTo(context, other.start) > 0) return false
+            if (other.start != null && start.compareTo(scope, other.start) > 0) return false
         }
         if (end != null) {
             // same with the end: if it is open, it can't be contained in ours:
@@ -26,16 +26,16 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
             // both exists, now there could be 4 cases:
             return when {
                 other.isEndInclusive && isEndInclusive ->
-                    end.compareTo(context, other.end) >= 0
+                    end.compareTo(scope, other.end) >= 0
 
                 !other.isEndInclusive && !isEndInclusive ->
-                    end.compareTo(context, other.end) >= 0
+                    end.compareTo(scope, other.end) >= 0
 
                 other.isEndInclusive && !isEndInclusive ->
-                    end.compareTo(context, other.end) > 0
+                    end.compareTo(scope, other.end) > 0
 
                 !other.isEndInclusive && isEndInclusive ->
-                    end.compareTo(context, other.end) >= 0
+                    end.compareTo(scope, other.end) >= 0
 
                 else -> throw IllegalStateException("unknown comparison")
             }
@@ -43,17 +43,17 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
         return true
     }
 
-    override suspend fun contains(context: Context, other: Obj): Boolean {
+    override suspend fun contains(scope: Scope, other: Obj): Boolean {
 
         if (other is ObjRange)
-            return containsRange(context, other)
+            return containsRange(scope, other)
 
         if (start == null && end == null) return true
         if (start != null) {
-            if (start.compareTo(context, other) > 0) return false
+            if (start.compareTo(scope, other) > 0) return false
         }
         if (end != null) {
-            val cmp = end.compareTo(context, other)
+            val cmp = end.compareTo(scope, other)
             if (isEndInclusive && cmp < 0 || !isEndInclusive && cmp <= 0) return false
         }
         return true
@@ -67,7 +67,7 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
         start is ObjChar && end is ObjChar
     }
 
-    override suspend fun compareTo(context: Context, other: Obj): Int {
+    override suspend fun compareTo(scope: Scope, other: Obj): Int {
         return (other as? ObjRange)?.let {
             if( start == other.start && end == other.end ) 0 else -1
         }

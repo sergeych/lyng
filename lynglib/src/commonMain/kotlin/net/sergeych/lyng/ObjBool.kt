@@ -3,7 +3,7 @@ package net.sergeych.lyng
 data class ObjBool(val value: Boolean) : Obj() {
     override val asStr by lazy { ObjString(value.toString()) }
 
-    override suspend fun compareTo(context: Context, other: Obj): Int {
+    override suspend fun compareTo(scope: Scope, other: Obj): Int {
         if (other !is ObjBool) return -2
         return value.compareTo(other.value)
     }
@@ -12,13 +12,13 @@ data class ObjBool(val value: Boolean) : Obj() {
 
     override val objClass: ObjClass = type
 
-    override suspend fun logicalNot(context: Context): Obj = ObjBool(!value)
+    override suspend fun logicalNot(scope: Scope): Obj = ObjBool(!value)
 
-    override suspend fun logicalAnd(context: Context, other: Obj): Obj = ObjBool(value && other.toBool())
+    override suspend fun logicalAnd(scope: Scope, other: Obj): Obj = ObjBool(value && other.toBool())
 
-    override suspend fun logicalOr(context: Context, other: Obj): Obj = ObjBool(value || other.toBool())
+    override suspend fun logicalOr(scope: Scope, other: Obj): Obj = ObjBool(value || other.toBool())
 
-    override suspend fun toKotlin(context: Context): Any {
+    override suspend fun toKotlin(scope: Scope): Any {
         return value
     }
 

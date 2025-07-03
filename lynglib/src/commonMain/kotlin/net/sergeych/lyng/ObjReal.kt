@@ -14,7 +14,7 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
 
     override fun byValueCopy(): Obj = ObjReal(value)
 
-    override suspend fun compareTo(context: Context, other: Obj): Int {
+    override suspend fun compareTo(scope: Scope, other: Obj): Int {
         if (other !is Numeric) return -2
         return value.compareTo(other.doubleValue)
     }
@@ -25,25 +25,25 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
         return value.hashCode()
     }
 
-    override suspend fun plus(context: Context, other: Obj): Obj =
+    override suspend fun plus(scope: Scope, other: Obj): Obj =
         ObjReal(this.value + other.toDouble())
 
-    override suspend fun minus(context: Context, other: Obj): Obj =
+    override suspend fun minus(scope: Scope, other: Obj): Obj =
         ObjReal(this.value - other.toDouble())
 
-    override suspend fun mul(context: Context, other: Obj): Obj =
+    override suspend fun mul(scope: Scope, other: Obj): Obj =
         ObjReal(this.value * other.toDouble())
 
-    override suspend fun div(context: Context, other: Obj): Obj =
+    override suspend fun div(scope: Scope, other: Obj): Obj =
         ObjReal(this.value / other.toDouble())
 
-    override suspend fun mod(context: Context, other: Obj): Obj =
+    override suspend fun mod(scope: Scope, other: Obj): Obj =
         ObjReal(this.value % other.toDouble())
 
     /**
      * Returns unboxed Double value
      */
-    override suspend fun toKotlin(context: Context): Any {
+    override suspend fun toKotlin(scope: Scope): Any {
         return value
     }
 

@@ -75,21 +75,23 @@ runBlocking {
 
 ### Exchanging information
 
-Script is executed over some `Context`. Create instance of the context,
-add your specific vars and functions to it, an call over it:
+Script is executed over some `Scope`. Create instance,
+add your specific vars and functions to it, and call:
 
 ```kotlin
-import new.sergeych.lyng.* 
+
+import com.sun.source.tree.Scope
+import new.sergeych.lyng.*
 
 // simple function
-val context = Context().apply {
+val scope = Scope().apply {
     addFn("addArgs") {
         var sum = 0.0
-        for( a in args) sum += a.toDouble()
+        for (a in args) sum += a.toDouble()
         ObjReal(sum)
     }
     addConst("LIGHT_SPEED", ObjReal(299_792_458.0))
-    
+
     // callback back to kotlin to some suspend fn, for example::
     // suspend fun doSomeWork(text: String): Int
     addFn("doSomeWork") {
@@ -99,9 +101,9 @@ val context = Context().apply {
     }
 }
 // adding constant:
-context.eval("addArgs(1,2,3)") // <- 6
+scope.eval("addArgs(1,2,3)") // <- 6
 ```
-Note that the context stores all changes in it so you can make calls on a single context to preserve state between calls.
+Note that the scope stores all changes in it so you can make calls on a single scope to preserve state between calls.
 
 ## Why? 
 

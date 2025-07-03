@@ -2,11 +2,11 @@ package net.sergeych.lyng
 
 data class ParsedArgument(val value: Statement, val pos: Pos, val isSplat: Boolean = false)
 
-suspend fun Collection<ParsedArgument>.toArguments(context: Context,tailBlockMode: Boolean): Arguments {
+suspend fun Collection<ParsedArgument>.toArguments(scope: Scope, tailBlockMode: Boolean): Arguments {
     val list = mutableListOf<Obj>()
 
     for (x in this) {
-        val value = x.value.execute(context)
+        val value = x.value.execute(scope)
         if (x.isSplat) {
             when {
                 value is ObjList -> {
@@ -14,11 +14,11 @@ suspend fun Collection<ParsedArgument>.toArguments(context: Context,tailBlockMod
                 }
 
                 value.isInstanceOf(ObjIterable) -> {
-                    val i = (value.invokeInstanceMethod(context, "toList") as ObjList).list
+                    val i = (value.invokeInstanceMethod(scope, "toList") as ObjList).list
                     i.forEach { list.add(it) }
                 }
 
-                else -> context.raiseClassCastError("expected list of objects for splat argument")
+                else -> scope.raiseClassCastError("expected list of objects for splat argument")
             }
         } else
             list.add(value)
@@ -38,8 +38,8 @@ data class Arguments(val list: List<Obj>,val tailBlockMode: Boolean = false) : L
     /**
      * Convert to list of kotlin objects, see [Obj.toKotlin].
      */
-    suspend fun toKotlinList(context: Context): List<Any?> {
-        return list.map { it.toKotlin(context) }
+    suspend fun toKotlinList(scope: Scope): List<Any?> {
+        return list.map { it.toKotlin(scope) }
     }
 
     companion object {

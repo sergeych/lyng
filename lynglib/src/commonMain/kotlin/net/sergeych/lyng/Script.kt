@@ -9,18 +9,18 @@ class Script(
 //    private val catchReturn: Boolean = false,
 ) : Statement() {
 
-    override suspend fun execute(context: Context): Obj {
+    override suspend fun execute(scope: Scope): Obj {
         var lastResult: Obj = ObjVoid
         for (s in statements) {
-            lastResult = s.execute(context)
+            lastResult = s.execute(scope)
         }
         return lastResult
     }
 
-    suspend fun execute() = execute(defaultContext.copy(pos = pos))
+    suspend fun execute() = execute(defaultScope.copy(pos = pos))
 
     companion object {
-        val defaultContext: Context = Context().apply {
+        val defaultScope: Scope = Scope().apply {
             ObjException.addExceptionsToContext(this)
             addFn("println") {
                 for ((i, a) in args.withIndex()) {

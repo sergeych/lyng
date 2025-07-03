@@ -4,11 +4,11 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
 
     override val objClass = type
 
-    override suspend fun contains(context: Context, other: Obj): Boolean {
+    override suspend fun contains(scope: Scope, other: Obj): Boolean {
         return set.contains(other)
     }
 
-    override suspend fun plus(context: Context, other: Obj): Obj {
+    override suspend fun plus(scope: Scope, other: Obj): Obj {
         return ObjSet(
             if (other is ObjSet)
                 (set + other.set).toMutableSet()
@@ -17,7 +17,7 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
         )
     }
 
-    override suspend fun plusAssign(context: Context, other: Obj): Obj {
+    override suspend fun plusAssign(scope: Scope, other: Obj): Obj {
         when (other) {
             is ObjSet -> {
                 set += other.set
@@ -29,9 +29,9 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
 
             else -> {
                 if (other.isInstanceOf(ObjIterable)) {
-                    val i = other.invokeInstanceMethod(context, "iterable")
-                    while (i.invokeInstanceMethod(context, "hasNext").toBool()) {
-                        set += i.invokeInstanceMethod(context, "next")
+                    val i = other.invokeInstanceMethod(scope, "iterable")
+                    while (i.invokeInstanceMethod(scope, "hasNext").toBool()) {
+                        set += i.invokeInstanceMethod(scope, "next")
                     }
                 }
                 set += other
@@ -40,16 +40,16 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
         return this
     }
 
-    override suspend fun mul(context: Context, other: Obj): Obj {
+    override suspend fun mul(scope: Scope, other: Obj): Obj {
         return if (other is ObjSet) {
             ObjSet(set.intersect(other.set).toMutableSet())
         } else
-            context.raiseIllegalArgument("set operator * requires another set")
+            scope.raiseIllegalArgument("set operator * requires another set")
     }
 
-    override suspend fun minus(context: Context, other: Obj): Obj {
+    override suspend fun minus(scope: Scope, other: Obj): Obj {
         if (other !is ObjSet)
-            context.raiseIllegalArgument("set operator - requires another set")
+            scope.raiseIllegalArgument("set operator - requires another set")
         return ObjSet(set.minus(other.set).toMutableSet())
     }
 
@@ -57,7 +57,7 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
         return "Set(${set.joinToString(", ")})"
     }
 
-    override suspend fun compareTo(context: Context, other: Obj): Int {
+    override suspend fun compareTo(scope: Scope, other: Obj): Int {
         return if (other !is ObjSet) -1
         else {
             if (set == other.set) 0
@@ -69,8 +69,8 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
 
 
         val type = object : ObjClass("Set", ObjCollection) {
-            override suspend fun callOn(context: Context): Obj {
-                return ObjSet(context.args.list.toMutableSet())
+            override suspend fun callOn(scope: Scope): Obj {
+                return ObjSet(scope.args.list.toMutableSet())
             }
         }.apply {
             addFn("size") {

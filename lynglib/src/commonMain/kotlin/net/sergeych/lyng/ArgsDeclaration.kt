@@ -22,13 +22,13 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
      * parse args and create local vars in a given context
      */
     suspend fun assignToContext(
-        context: Context,
-        arguments: Arguments = context.args,
+        scope: Scope,
+        arguments: Arguments = scope.args,
         defaultAccessType: AccessType = AccessType.Var,
         defaultVisibility: Visibility = Visibility.Public
     ) {
         fun assign(a: Item, value: Obj) {
-            context.addItem(a.name, (a.accessType ?: defaultAccessType).isMutable, value,
+            scope.addItem(a.name, (a.accessType ?: defaultAccessType).isMutable, value,
                 a.visibility ?: defaultVisibility)
         }
 
@@ -52,11 +52,11 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
                 if (a.isEllipsis) break
                 val value = when {
                     i < callArgs.size -> callArgs[i]
-                    a.defaultValue != null -> a.defaultValue.execute(context)
+                    a.defaultValue != null -> a.defaultValue.execute(scope)
                     else -> {
                         println("callArgs: ${callArgs.joinToString()}")
                         println("tailBlockMode: ${arguments.tailBlockMode}")
-                        context.raiseIllegalArgument("too few arguments for the call")
+                        scope.raiseIllegalArgument("too few arguments for the call")
                     }
                 }
                 assign(a, value)
@@ -76,8 +76,8 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
                         callArgs[j--]
                     }
 
-                    a.defaultValue != null -> a.defaultValue.execute(context)
-                    else -> context.raiseIllegalArgument("too few arguments for the call")
+                    a.defaultValue != null -> a.defaultValue.execute(scope)
+                    else -> scope.raiseIllegalArgument("too few arguments for the call")
                 }
                 assign(a, value)
                 i--
@@ -98,7 +98,7 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
             processEllipsis(leftIndex, end)
         } else {
             if (leftIndex < callArgs.size)
-                context.raiseIllegalArgument("too many arguments for the call")
+                scope.raiseIllegalArgument("too many arguments for the call")
         }
     }
 

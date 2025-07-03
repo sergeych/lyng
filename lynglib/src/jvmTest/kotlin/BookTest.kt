@@ -3,8 +3,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.test.runTest
-import net.sergeych.lyng.Context
 import net.sergeych.lyng.ObjVoid
+import net.sergeych.lyng.Scope
 import java.nio.file.Files
 import java.nio.file.Files.readAllLines
 import java.nio.file.Paths
@@ -158,10 +158,10 @@ fun parseDocTests(fileName: String, bookMode: Boolean = false): Flow<DocTest> = 
 }
     .flowOn(Dispatchers.IO)
 
-suspend fun DocTest.test(context: Context = Context()) {
+suspend fun DocTest.test(scope: Scope = Scope()) {
     val collectedOutput = StringBuilder()
     val currentTest = this
-    context.apply {
+    scope.apply {
         addFn("println") {
             if( bookMode ) {
                 println("${currentTest.fileNamePart}:${currentTest.line}> ${args.joinToString(" "){it.asStr.value}}")
@@ -177,7 +177,7 @@ suspend fun DocTest.test(context: Context = Context()) {
     }
     var error: Throwable? = null
     val result = try {
-        context.eval(code)
+        scope.eval(code)
     } catch (e: Throwable) {
         error = e
         null
@@ -204,10 +204,10 @@ suspend fun DocTest.test(context: Context = Context()) {
 }
 
 suspend fun runDocTests(fileName: String, bookMode: Boolean = false) {
-    val bookContext = Context()
+    val bookScope = Scope()
     var count = 0
     parseDocTests(fileName, bookMode).collect { dt ->
-        if (bookMode) dt.test(bookContext)
+        if (bookMode) dt.test(bookScope)
         else dt.test()
         count++
     }
