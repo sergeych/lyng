@@ -123,7 +123,7 @@ open class Context(
     fun addConst(name: String, value: Obj) = addItem(name, false, value)
 
     suspend fun eval(code: String): Obj =
-        Compiler().compile(code.toSource()).execute(this)
+        Compiler.compile(code.toSource()).execute(this)
 
     fun containsLocal(name: String): Boolean = name in objects
 

@@ -118,7 +118,7 @@ suspend fun executeFile(fileName: String) {
         text = text.substring(pos + 1)
     }
     processErrors {
-        Compiler().compile(Source(fileName, text)).execute(baseContext)
+        Compiler.compile(Source(fileName, text)).execute(baseContext)
     }
 }
 

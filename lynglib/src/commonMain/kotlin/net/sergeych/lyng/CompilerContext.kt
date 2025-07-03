@@ -1,13 +1,11 @@
 package net.sergeych.lyng
 
-internal class CompilerContext(val tokens: List<Token>) {
+class CompilerContext(val tokens: List<Token>) {
     val labels = mutableSetOf<String>()
 
     var breakFound = false
-        private set
 
     var loopLevel = 0
-        private set
 
     inline fun <T> parseLoop(f: () -> T): Pair<Boolean, T> {
         if (++loopLevel == 0) breakFound = false
