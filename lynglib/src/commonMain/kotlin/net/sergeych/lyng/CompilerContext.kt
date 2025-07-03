@@ -164,7 +164,10 @@ class CompilerContext(val tokens: List<Token>) {
      * Note that [Token.Type.EOF] is not considered a whitespace token.
      */
     fun skipWsTokens(): Token {
-        while( current().type in wstokens ) next()
+        while( current().type in wstokens ) {
+            println("skipws ${current()}")
+            next()
+        }
         return next()
     }
 

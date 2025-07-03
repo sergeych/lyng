@@ -20,6 +20,10 @@ class Compiler(
         // package level declarations
         do {
             val t = cc.current()
+            if(t.type == Token.Type.NEWLINE || t.type == Token.Type.SINLGE_LINE_COMMENT || t.type == Token.Type.MULTILINE_COMMENT) {
+                cc.next()
+                continue
+            }
             if (t.type == Token.Type.ID) {
                 when (t.value) {
                     "package" -> {
@@ -42,6 +46,7 @@ class Compiler(
                             pacman.performImport(this,name,null)
                             ObjVoid
                         }
+                        continue
                     }
                 }
             }
@@ -64,6 +69,7 @@ class Compiler(
                 t = cc.next()
             }
         }
+        cc.previous()
         return result.toString()
     }
 
@@ -1614,13 +1620,6 @@ class Compiler(
 
         suspend fun compile(source: Source,pacman: Pacman = Pacman.emptyAllowAll): Script {
             return Compiler(CompilerContext(parseLyng(source)),pacman).parseScript()
-        }
-
-        suspend fun compilePackage(source: Source): Pair<String, Script> {
-            val c = Compiler(CompilerContext(parseLyng(source)))
-            val script = c.parseScript()
-            if (c.packageName == null) throw ScriptError(source.startPos, "package not set")
-            return c.packageName!! to script
         }
 
         private var lastPriority = 0

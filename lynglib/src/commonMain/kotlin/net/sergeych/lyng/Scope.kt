@@ -137,7 +137,7 @@ open class Scope(
     suspend fun eval(source: Source): Obj =
         Compiler.compile(
             source,
-            (this as? ModuleScope)?.pacman?.also { println("pacman found: $pacman")} ?: Pacman.emptyAllowAll
+            (this as? ModuleScope)?.pacman ?: Pacman.emptyAllowAll
             ).execute(this)
 
     fun containsLocal(name: String): Boolean = name in objects
