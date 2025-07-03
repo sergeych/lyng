@@ -2,7 +2,7 @@
 
 package net.sergeych.lyng
 
-open class ScriptError(val pos: Pos, val errorMessage: String,cause: Throwable?=null) : Exception(
+open class ScriptError(val pos: Pos, val errorMessage: String, cause: Throwable? = null) : Exception(
     """
         $pos: Error: $errorMessage
         
@@ -13,3 +13,5 @@ open class ScriptError(val pos: Pos, val errorMessage: String,cause: Throwable?=
 )
 
 class ExecutionError(val errorObject: ObjException) : ScriptError(errorObject.scope.pos, errorObject.message)
+
+class ImportException(pos: Pos, message: String) : ScriptError(pos, message)
