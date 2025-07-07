@@ -1,7 +1,5 @@
-import com.github.ajalt.clikt.core.main
-import kotlinx.coroutines.runBlocking
-import net.sergeych.Lyng
+import net.sergeych.runMain
 
 fun main(args: Array<String>) {
-    Lyng( { runBlocking { it() } }).main(args)
+    runMain(args)
 }

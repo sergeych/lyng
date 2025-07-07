@@ -1,11 +1,14 @@
 package net.sergeych
 
 import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.clikt.core.Context
+import com.github.ajalt.clikt.core.main
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.multiple
 import com.github.ajalt.clikt.parameters.arguments.optional
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
+import kotlinx.coroutines.runBlocking
 import net.sergeych.lyng.*
 import okio.FileSystem
 import okio.Path.Companion.toPath
@@ -41,7 +44,23 @@ val baseScope = Scope().apply {
 //    }
 }
 
-class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() {
+fun runMain(args: Array<String>) {
+    if(args.isNotEmpty()) {
+        if( args.size >= 2 && args[0] == "--" ) {
+            // -- -file.lyng <args>
+            executeFileWithArgs(args[1], args.drop(2))
+            return
+        } else if( args[0][0] != '-') {
+            // file.lyng <args>
+            executeFileWithArgs(args[0], args.drop(1))
+            return
+        }
+    }
+    // normal processing
+    Lyng { runBlocking { it() } }.main(args)
+}
+
+private class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() {
 
     override val printHelpOnEmptyArgs = true
 
@@ -55,7 +74,7 @@ class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() {
 
     val args by argument(help = "arguments for script").multiple()
 
-    override fun help(context: com.github.ajalt.clikt.core.Context): String =
+    override fun help(context: Context): String =
         """
             The Lyng script language interpreter, language version is $LyngVersion.
             
@@ -103,6 +122,13 @@ class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() {
                 }
             }
         }
+    }
+}
+
+fun executeFileWithArgs(fileName: String, args: List<String>) {
+    runBlocking {
+        baseScope.addConst("ARGV", ObjList(args.map { ObjString(it) }.toMutableList()))
+        executeFile(fileName)
     }
 }
 

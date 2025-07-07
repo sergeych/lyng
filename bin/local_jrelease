@@ -1,0 +1,14 @@
+#!/bin/bash
+
+set -e
+
+root=./lyng/build/install/lyng-jvm/
+
+./gradlew :lyng:installJvmDist
+#strip $file
+#upx   $file
+rm -rf ~/bin/jlyng-jvm || true
+rm ~/bin/jlyng 2>/dev/null || true
+mkdir -p ~/bin/jlyng-jvm
+cp -R $root ~/bin/jlyng-jvm
+ln -s ~/bin/jlyng-jvm/lyng-jvm/bin/lyng ~/bin/jlyng
