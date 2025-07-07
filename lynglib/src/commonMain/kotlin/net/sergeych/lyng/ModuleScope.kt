@@ -1,33 +1,47 @@
 package net.sergeych.lyng
 
+import net.sergeych.lyng.pacman.ImportProvider
+
 /**
- * Module scope supports importing and contains the [pacman]; it should be the same
+ * Module scope supports importing and contains the [importProvider]; it should be the same
  * used in [Compiler];
  */
 class ModuleScope(
-    val pacman: Pacman,
+    val importProvider: ImportProvider,
     pos: Pos = Pos.builtIn,
-    val packageName: String
-) : Scope(pacman.rootScope, Arguments.EMPTY, pos) {
+    override val packageName: String
+) : Scope(importProvider.rootScope, Arguments.EMPTY, pos) {
 
-    constructor(pacman: Pacman,source: Source) : this(pacman, source.startPos, source.fileName)
-
-    override suspend fun checkImport(pos: Pos, name: String, symbols: Map<String, String>?) {
-        pacman.prepareImport(pos, name, symbols)
-    }
+    constructor(importProvider: ImportProvider, source: Source) : this(importProvider, source.startPos, source.fileName)
 
     /**
-     * Import symbols into the scope. It _is called_ after the module is imported by [checkImport].
-     * If [checkImport] was not called, the symbols will not be imported with exception as module is not found.
+     * Import symbols into the scope. It _is called_ after the module is imported by [ImportProvider.prepareImport]
+     * which checks symbol availability and accessibility prior to execution.
+     * @param scope where to copy symbols from this module
+     * @param symbols symbols to import, ir present, only symbols keys will be imported renamed to corresponding values
      */
-    override suspend fun importInto(scope: Scope, name: String, symbols: Map<String, String>?) {
-        pacman.performImport(scope, name, symbols)
+    override suspend fun importInto(scope: Scope, symbols: Map<String, String>?) {
+        val symbolsToImport = symbols?.keys?.toMutableSet()
+        for ((symbol, record) in this.objects) {
+            if (record.visibility.isPublic) {
+                val newName = symbols?.let { ss: Map<String, String> ->
+                    ss[symbol]
+                        ?.also { symbolsToImport!!.remove(it) }
+                        ?: scope.raiseError("internal error: symbol $symbol not found though the module is cached")
+                } ?: symbol
+                if (newName in scope.objects)
+                    scope.raiseError("symbol $newName already exists, redefinition on import is not allowed")
+                scope.objects[newName] = record
+            }
+        }
+        if (!symbolsToImport.isNullOrEmpty())
+            scope.raiseSymbolNotFound("symbols $packageName.{$symbolsToImport} are.were not found")
     }
 
-    val packageNameObj by lazy { ObjString(packageName).asReadonly}
+    val packageNameObj by lazy { ObjString(packageName).asReadonly }
 
     override fun get(name: String): ObjRecord? {
-        return if( name == "__PACKAGE__")
+        return if (name == "__PACKAGE__")
             packageNameObj
         else
             super.get(name)

@@ -1,11 +1,13 @@
 package net.sergeych.lyng
 
+import net.sergeych.lyng.pacman.ImportProvider
+
 /**
  * The LYNG compiler.
  */
 class Compiler(
     val cc: CompilerContext,
-    val pacman: Pacman = Pacman.emptyAllowAll,
+    val importProvider: ImportProvider = ImportProvider.emptyAllowAll,
     @Suppress("UNUSED_PARAMETER")
     settings: Settings = Settings()
 ) {
@@ -41,9 +43,9 @@ class Compiler(
                         cc.next()
                         val pos = cc.currentPos()
                         val name = loadQualifiedName()
-                        pacman.prepareImport(pos, name, null)
+                        val module = importProvider.prepareImport(pos, name, null)
                         statements += statement {
-                            pacman.performImport(this,name,null)
+                            module.importInto(this, null)
                             ObjVoid
                         }
                         continue
@@ -1618,8 +1620,8 @@ class Compiler(
 
     companion object {
 
-        suspend fun compile(source: Source,pacman: Pacman = Pacman.emptyAllowAll): Script {
-            return Compiler(CompilerContext(parseLyng(source)),pacman).parseScript()
+        suspend fun compile(source: Source, importProvider: ImportProvider = ImportProvider.emptyAllowAll): Script {
+            return Compiler(CompilerContext(parseLyng(source)),importProvider).parseScript()
         }
 
         private var lastPriority = 0

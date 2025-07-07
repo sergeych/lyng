@@ -1,8 +1,8 @@
-
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.*
+import net.sergeych.lyng.pacman.InlineSourcesImportProvider
 import kotlin.test.*
 
 class ScriptTest {
@@ -2250,18 +2250,21 @@ class ScriptTest {
 
     @Test
     fun testLet() = runTest {
-        eval("""
+        eval(
+            """
             class Point(x=0,y=0)
             assert( Point() is Object) 
             Point().let { println(it.x, it.y) }
             val x = null
             x?.let { println(it.x, it.y) }
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testApply() = runTest {
-        eval("""
+        eval(
+            """
             class Point(x,y)
             // see the difference: apply changes this to newly created Point:
             val p = Point(1,2).apply { 
@@ -2270,12 +2273,14 @@ class ScriptTest {
             assertEquals(p, Point(2,3))
             >>> void
 
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testApplyThis() = runTest {
-        eval("""
+        eval(
+            """
             class Point(x,y)
             // see the difference: apply changes this to newly created Point:
             val p = Point(1,2).apply { 
@@ -2284,12 +2289,14 @@ class ScriptTest {
             assertEquals(p, Point(2,3))
             >>> void
 
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testExtend() = runTest() {
-        eval("""
+        eval(
+            """
             
             fun Int.isEven() {
                 this % 2 == 0
@@ -2311,7 +2318,8 @@ class ScriptTest {
             assert( 12.1.isInteger() == false )
             assert( "5".isInteger() )
             assert( ! "5.2".isInteger() )
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
@@ -2319,18 +2327,20 @@ class ScriptTest {
         val c = Scope()
         val arr = c.eval("[1,2,3]")
         // array is iterable so we can:
-        assertEquals(listOf(1,2,3),  arr.toFlow(c).map { it.toInt() }.toList())
+        assertEquals(listOf(1, 2, 3), arr.toFlow(c).map { it.toInt() }.toList())
     }
 
     @Test
     fun testAssociateBy() = runTest() {
-        eval("""
+        eval(
+            """
             val m = [123, 456].associateBy { "k:%s"(it) }
             println(m)
             assertEquals(123, m["k:123"])
             assertEquals(456, m["k:456"])
-            """)
-        listOf(1,2,3).associateBy { it * 10 }
+            """
+        )
+        listOf(1, 2, 3).associateBy { it * 10 }
     }
 
 //    @Test
@@ -2354,7 +2364,7 @@ class ScriptTest {
             
             fun foo() { "foo1" }
             """.trimIndent()
-        val pm = InlineSourcesPacman(Pacman.emptyAllowAll, listOf(Source("foosrc", foosrc)))
+        val pm = InlineSourcesImportProvider(listOf(Source("foosrc", foosrc)))
 
         val src = """
             import lyng.foo
@@ -2380,14 +2390,48 @@ class ScriptTest {
             
             fun bar() { "bar1" }
             """.trimIndent()
-        val pm = InlineSourcesPacman(
-            Pacman.emptyAllowAll, listOf(
+        val pm = InlineSourcesImportProvider(
+            listOf(
                 Source("barsrc", barsrc),
                 Source("foosrc", foosrc),
-            ))
+            )
+        )
 
         val src = """
             import lyng.foo
+            
+            foo() + " / " + bar()
+            """.trimIndent().toSource("test")
+
+        val scope = ModuleScope(pm, src)
+        assertEquals("foo1 / bar1", scope.eval(src).toString())
+    }
+
+    @Test
+    fun testImportsCircular() = runTest {
+        val foosrc = """
+            package lyng.foo
+            
+            import lyng.bar            
+            
+            fun foo() { "foo1" }
+            """.trimIndent()
+        val barsrc = """
+            package lyng.bar
+            
+            import lyng.foo
+            
+            fun bar() { "bar1" }
+            """.trimIndent()
+        val pm = InlineSourcesImportProvider(
+            listOf(
+                Source("barsrc", barsrc),
+                Source("foosrc", foosrc),
+            )
+        )
+
+        val src = """
+            import lyng.bar
             
             foo() + " / " + bar()
             """.trimIndent().toSource("test")

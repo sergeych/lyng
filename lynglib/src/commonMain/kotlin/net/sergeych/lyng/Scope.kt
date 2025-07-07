@@ -1,5 +1,7 @@
 package net.sergeych.lyng
 
+import net.sergeych.lyng.pacman.ImportProvider
+
 /**
  * Scope is where local variables and methods are stored. Scope is also a parent scope for other scopes.
  * Each block usually creates a scope. Accessing Lyng closures usually is done via a scope.
@@ -16,6 +18,8 @@ open class Scope(
     var thisObj: Obj = ObjVoid,
     var skipScopeCreation: Boolean = false,
 ) {
+    open val packageName: String = "<anonymous package>"
+
     constructor(
         args: Arguments = Arguments.EMPTY,
         pos: Pos = Pos.builtIn,
@@ -137,16 +141,17 @@ open class Scope(
     suspend fun eval(source: Source): Obj =
         Compiler.compile(
             source,
-            (this as? ModuleScope)?.pacman ?: Pacman.emptyAllowAll
-            ).execute(this)
+            (this as? ModuleScope)?.importProvider ?: ImportProvider.emptyAllowAll
+        ).execute(this)
 
     fun containsLocal(name: String): Boolean = name in objects
 
-    open suspend fun checkImport(pos: Pos, name: String, symbols: Map<String, String>? = null) {
-        throw ImportException(pos, "Import is not allowed here: $name")
-    }
-
-    open suspend fun importInto(scope: Scope, name: String, symbols: Map<String, String>? = null) {
-        scope.raiseError(ObjIllegalOperationException(scope,"Import is not allowed here: import $name"))
+    /**
+     * Some scopes can be imported into other scopes, like [ModuleScope]. Those must correctly implement this method.
+     * @param scope where to copy symbols from this module
+     * @param symbols symbols to import, ir present, only symbols keys will be imported renamed to corresponding values
+     */
+    open suspend fun importInto(scope: Scope, symbols: Map<String, String>? = null) {
+        scope.raiseError(ObjIllegalOperationException(scope, "Import is not allowed here: import $packageName"))
     }
 }

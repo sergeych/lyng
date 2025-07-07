@@ -1,6 +1,9 @@
 import junit.framework.TestCase.assertEquals
 import kotlinx.coroutines.runBlocking
-import net.sergeych.lyng.*
+import net.sergeych.lyng.ModuleScope
+import net.sergeych.lyng.Source
+import net.sergeych.lyng.pacman.InlineSourcesImportProvider
+import net.sergeych.lyng.toSource
 import kotlin.test.Test
 
 class OtherTests {
@@ -18,8 +21,8 @@ class OtherTests {
             
             fun bar() { "bar1" }
             """.trimIndent()
-        val pm = InlineSourcesPacman(
-            Pacman.emptyAllowAll, listOf(
+        val pm = InlineSourcesImportProvider(
+            listOf(
             Source("foosrc", foosrc),
             Source("barsrc", barsrc),
         ))
