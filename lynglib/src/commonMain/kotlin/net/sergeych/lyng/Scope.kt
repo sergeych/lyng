@@ -1,15 +1,20 @@
 package net.sergeych.lyng
 
-import net.sergeych.lyng.pacman.ImportProvider
+import net.sergeych.lyng.pacman.ImportManager
 
 /**
  * Scope is where local variables and methods are stored. Scope is also a parent scope for other scopes.
  * Each block usually creates a scope. Accessing Lyng closures usually is done via a scope.
  *
- * There are special types of scopes:
+ * To create default scope, use default `Scope()` constructor, it will create a scope with a parent
+ * module scope with default [ImportManager], you can access with [importManager] as needed.
  *
- * - [Script.defaultScope] - root scope for a script, safe one
- * - [AppliedScope] - scope used to apply a closure to some thisObj scope
+ * If you want to create [ModuleScope] by hand, try [importManager] and [ImportManager.newModule],
+ * or [ImportManager.newModuleAt].
+ *
+ *  There are special types of scopes:
+ *
+ *  - [AppliedScope] - scope used to apply a closure to some thisObj scope
  */
 open class Scope(
     val parent: Scope?,
@@ -24,7 +29,7 @@ open class Scope(
         args: Arguments = Arguments.EMPTY,
         pos: Pos = Pos.builtIn,
     )
-            : this(Script.defaultScope, args, pos)
+            : this(Script.defaultImportManager.newModuleAt(pos), args, pos)
 
     fun raiseNotImplemented(what: String = "operation"): Nothing = raiseError("$what is not implemented")
 
@@ -141,7 +146,7 @@ open class Scope(
     suspend fun eval(source: Source): Obj =
         Compiler.compile(
             source,
-            (this as? ModuleScope)?.importProvider ?: ImportProvider.emptyAllowAll
+            (this as? ModuleScope)?.importProvider ?: Script.defaultImportManager
         ).execute(this)
 
     fun containsLocal(name: String): Boolean = name in objects
@@ -154,4 +159,19 @@ open class Scope(
     open suspend fun importInto(scope: Scope, symbols: Map<String, String>? = null) {
         scope.raiseError(ObjIllegalOperationException(scope, "Import is not allowed here: import $packageName"))
     }
+
+    /**
+     * Find a first [ImportManager] in this Scope hierarchy. Normally there should be one. Found instance is cached.
+     *
+     * Use it to register your package sources, see [ImportManager] features.
+     *
+     * @throws IllegalStateException if there is no such manager (if you create some specific scope with no manager,
+     *      then you knew what you did)
+     */
+    val importManager: ImportManager by lazy {
+        if( this is ModuleScope )
+            (importProvider as? ImportManager)?.let { return@lazy it }
+        parent?.importManager ?: throw IllegalStateException("this scope has no manager in the chain")
+    }
+
 }

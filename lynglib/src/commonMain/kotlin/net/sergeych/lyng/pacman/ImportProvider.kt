@@ -11,7 +11,7 @@ import net.sergeych.lyng.*
  * caching strategy depends on the import provider
  */
 abstract class ImportProvider(
-    val rootScope: Scope = Script.defaultScope,
+    val rootScope: Scope,
     val securityManager: SecurityManager = SecurityManager.allowAll
 ) {
     /**
@@ -38,11 +38,11 @@ abstract class ImportProvider(
         return createModuleScope(pos, name)
     }
 
-    companion object {
-        val emptyAllowAll = object : ImportProvider(rootScope = Script.defaultScope, securityManager = SecurityManager.allowAll) {
-            override suspend fun createModuleScope(pos: Pos,packageName: String): ModuleScope {
-                throw ImportException(pos, "Empty import provider can't be used directly")
-            }
-        }
-    }
+    fun newModule() = newModuleAt(Pos.builtIn)
+
+    fun newModuleAt(pos: Pos): ModuleScope =
+        ModuleScope(this, pos, "unknown")
 }
+
+
+

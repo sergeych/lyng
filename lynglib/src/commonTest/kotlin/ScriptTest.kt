@@ -604,7 +604,7 @@ class ScriptTest {
     }
 
     @Test
-    fun testAssignArgumentsmiddleEllipsis() = runTest {
+    fun testAssignArgumentsMiddleEllipsis() = runTest {
         val ttEnd = Token.Type.RBRACE
         val pa = ArgsDeclaration(
             listOf(
@@ -2438,6 +2438,26 @@ class ScriptTest {
 
         val scope = ModuleScope(pm, src)
         assertEquals("foo1 / bar1", scope.eval(src).toString())
+    }
+
+    @Test
+    fun testDefaultImportManager() = runTest {
+        val scope = Scope()
+        assertFails {
+            scope.eval("""
+                import foo
+                foo()
+                """.trimIndent())
+        }
+        scope.importManager.addTextPackages("""
+            package foo
+            
+            fun foo() { "bar" }
+        """.trimIndent())
+        scope.eval("""
+                import foo
+                assertEquals( "bar", foo())
+                """.trimIndent())
     }
 
 }

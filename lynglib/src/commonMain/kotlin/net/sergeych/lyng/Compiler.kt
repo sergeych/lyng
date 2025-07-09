@@ -7,7 +7,7 @@ import net.sergeych.lyng.pacman.ImportProvider
  */
 class Compiler(
     val cc: CompilerContext,
-    val importProvider: ImportProvider = ImportProvider.emptyAllowAll,
+    val importManager: ImportProvider = Script.defaultImportManager,
     @Suppress("UNUSED_PARAMETER")
     settings: Settings = Settings()
 ) {
@@ -43,7 +43,7 @@ class Compiler(
                         cc.next()
                         val pos = cc.currentPos()
                         val name = loadQualifiedName()
-                        val module = importProvider.prepareImport(pos, name, null)
+                        val module = importManager.prepareImport(pos, name, null)
                         statements += statement {
                             module.importInto(this, null)
                             ObjVoid
@@ -1620,7 +1620,7 @@ class Compiler(
 
     companion object {
 
-        suspend fun compile(source: Source, importProvider: ImportProvider = ImportProvider.emptyAllowAll): Script {
+        suspend fun compile(source: Source, importProvider: ImportProvider = Script.defaultImportManager): Script {
             return Compiler(CompilerContext(parseLyng(source)),importProvider).parseScript()
         }
 

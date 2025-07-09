@@ -109,7 +109,7 @@ private class Parser(fromPos: Pos) {
             '/' -> when (currentChar) {
                 '/' -> {
                     pos.advance()
-                    Token(loadToEnd().trim(), from, Token.Type.SINLGE_LINE_COMMENT)
+                    Token(loadToEndOfLine().trim(), from, Token.Type.SINLGE_LINE_COMMENT)
                 }
 
                 '*' -> {
@@ -445,7 +445,7 @@ private class Parser(fromPos: Pos) {
         }
     }
 
-    private fun loadToEnd(): String {
+    private fun loadToEndOfLine(): String {
         val result = StringBuilder()
         val l = pos.line
         do {
@@ -477,6 +477,12 @@ private class Parser(fromPos: Pos) {
                 return ch
         }
         return null
+    }
+
+    init {
+        // skip shebang
+        if( pos.readFragment("#!") )
+            loadToEndOfLine()
     }
 
 }

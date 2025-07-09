@@ -54,8 +54,8 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
                     i < callArgs.size -> callArgs[i]
                     a.defaultValue != null -> a.defaultValue.execute(scope)
                     else -> {
-                        println("callArgs: ${callArgs.joinToString()}")
-                        println("tailBlockMode: ${arguments.tailBlockMode}")
+//                        println("callArgs: ${callArgs.joinToString()}")
+//                        println("tailBlockMode: ${arguments.tailBlockMode}")
                         scope.raiseIllegalArgument("too few arguments for the call")
                     }
                 }

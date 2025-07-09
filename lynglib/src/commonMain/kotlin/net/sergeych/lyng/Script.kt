@@ -1,6 +1,7 @@
 package net.sergeych.lyng
 
 import kotlinx.coroutines.delay
+import net.sergeych.lyng.pacman.ImportManager
 import kotlin.math.*
 
 class Script(
@@ -17,10 +18,11 @@ class Script(
         return lastResult
     }
 
-    suspend fun execute() = execute(defaultScope.copy(pos = pos))
+    suspend fun execute() = execute(defaultImportManager.newModule())
 
     companion object {
-        val defaultScope: Scope = Scope().apply {
+
+        private val rootScope: Scope = Scope(null).apply {
             ObjException.addExceptionsToContext(this)
             addFn("println") {
                 for ((i, a) in args.withIndex()) {
@@ -170,8 +172,9 @@ class Script(
             getOrCreateNamespace("Math").apply {
                 addConst("PI", pi)
             }
-
-
         }
+
+        val defaultImportManager: ImportManager by lazy { ImportManager(rootScope, SecurityManager.allowAll) }
+
     }
 }
