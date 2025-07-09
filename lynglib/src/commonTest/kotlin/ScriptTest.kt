@@ -1,3 +1,4 @@
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
@@ -2511,6 +2512,52 @@ class ScriptTest {
             assert( b3 > b1 )
             
         """.trimIndent())
+    }
+
+    @Test
+    fun testInstant() = runTest {
+        eval(
+            """
+            import lyng.time
+            
+            val now = Instant()
+//            assertEquals( now.epochSeconds, Instant(now.epochSeconds).epochSeconds )
+
+            assert( 10.seconds is Duration )
+            assertEquals( 10.seconds, Duration(10) )
+            assertEquals( 10.milliseconds, Duration(0.01) )
+            assertEquals( 10.milliseconds, 0.01.seconds )
+            assertEquals( 1001.5.milliseconds, 1.0015.seconds )
+
+            val n1 = now + 7.seconds
+            assert( n1 is Instant )
+
+            assertEquals( n1 - now, 7.seconds )
+            assertEquals( now - n1, -7.seconds )
+            
+            """.trimIndent()
+        )
+        delay(1000)
+    }
+    @Test
+    fun testTimeStatics() = runTest {
+        eval(
+            """
+            import lyng.time
+            assert( 100.minutes is Duration )
+            assert( 100.days is Duration )
+            assert( 1.day == 24.hours )
+            assert( 1.day.hours == 24 )
+            assert( 1.hour.seconds == 3600 )
+            assert( 1.minute.milliseconds == 60_000 )
+            
+            assert(Instant.distantFuture is Instant)
+            assert(Instant.distantPast is Instant)
+            assert( Instant.distantFuture - Instant.distantPast > 70_000_000.days)
+            val maxRange = Instant.distantFuture - Instant.distantPast
+            println("всего лет %g"(maxRange.days/365.2425))
+            """.trimIndent()
+        )
     }
 
 }

@@ -250,7 +250,7 @@ private class Parser(fromPos: Pos) {
 
             in digitsSet -> {
                 pos.back()
-                decodeNumber(loadChars(digits), from)
+                decodeNumber(loadChars { it in digitsSet || it == '_'}, from)
             }
 
             '\'' -> {

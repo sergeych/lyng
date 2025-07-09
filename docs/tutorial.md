@@ -14,7 +14,7 @@ __Other documents to read__ maybe after this one:
 - [Advanced topics](advanced_topics.md), [declaring arguments](declaring_arguments.md)
 - [OOP notes](OOP.md), [exception handling](exceptions_handling.md)
 - [math in Lyng](math.md)
-- Some class references: [List], [Set], [Map], [Real], [Range], [Iterable], [Iterator]
+- Some class references: [List], [Set], [Map], [Real], [Range], [Iterable], [Iterator], [time manipulation](time.md)
 - Some samples: [combinatorics](samples/combinatorics.lyng.md), national vars and loops: [сумма ряда](samples/сумма_ряда.lyng.md). More at [samples folder](samples)
 
 # Expressions
@@ -668,7 +668,6 @@ are [Iterable]:
 
 Please see [Map] reference for detailed description on using Maps.
 
-
 # Flow control operators
 
 ## if-then-else
@@ -1100,6 +1099,17 @@ and you can use ranges in for-loops:
     >>> void
 
 See [Ranges](Range.md) for detailed documentation on it.
+
+# Time routines
+
+These should be imported from [lyng.time](time.md). For example:
+
+    import lyng.time
+
+    val now = Instant()
+    val hourAgo = now - 1.hour
+
+See [more docs on time manipulation](time.md)
 
 # Comments
 

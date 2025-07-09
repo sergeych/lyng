@@ -42,6 +42,9 @@ data class Arguments(val list: List<Obj>,val tailBlockMode: Boolean = false) : L
         return list.map { it.toKotlin(scope) }
     }
 
+    fun inspect(): String = list.joinToString(", ") { it.inspect() }
+
+
     companion object {
         val EMPTY = Arguments(emptyList())
         fun from(values: Collection<Obj>) = Arguments(values.toList())

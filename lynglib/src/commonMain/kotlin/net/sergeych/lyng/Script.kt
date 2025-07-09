@@ -179,6 +179,20 @@ class Script(
                 addPackage("lyng.buffer") {
                     it.addConst("Buffer", ObjBuffer.type)
                 }
+                addPackage("lyng.time") {
+                    it.addConst("Instant", ObjInstant.type)
+                    it.addConst("Duration", ObjDuration.type)
+                    it.addFn("delay") {
+                        val a = args.firstAndOnly()
+                        when(a) {
+                            is ObjInt -> delay(a.value * 1000)
+                            is ObjReal -> delay((a.value * 1000).roundToLong())
+                            is ObjDuration -> delay(a.duration)
+                            else -> raiseIllegalArgument("Expected Duration, Int or Real, got ${a.inspect()}")
+                        }
+                        ObjVoid
+                    }
+                }
             }
 
         }

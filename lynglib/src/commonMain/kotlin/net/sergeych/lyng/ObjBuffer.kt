@@ -25,8 +25,7 @@ class ObjBuffer(val byteArray: UByteArray) : Obj() {
             val start: Int = index.startInt(scope)
             val end: Int = index.exclusiveIntEnd(scope) ?: size
             ObjBuffer(byteArray.sliceArray(start..<end))
-        }
-        else ObjInt(byteArray[checkIndex(scope, index)].toLong(), true)
+        } else ObjInt(byteArray[checkIndex(scope, index)].toLong(), true)
     }
 
     override suspend fun putAt(scope: Scope, index: Obj, newValue: Obj) {
@@ -42,7 +41,7 @@ class ObjBuffer(val byteArray: UByteArray) : Obj() {
     val size by byteArray::size
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
-        if (other !is ObjBuffer) return -1
+        if (other !is ObjBuffer) return super.compareTo(scope, other)
         val limit = min(size, other.size)
         for (i in 0..<limit) {
             val own = byteArray[i]
@@ -56,11 +55,12 @@ class ObjBuffer(val byteArray: UByteArray) : Obj() {
     }
 
     override suspend fun plus(scope: Scope, other: Obj): Obj {
-        return if( other is ObjBuffer)
+        return if (other is ObjBuffer)
             ObjBuffer(byteArray + other.byteArray)
-        else if( other.isInstanceOf(ObjIterable)) {
+        else if (other.isInstanceOf(ObjIterable)) {
             ObjBuffer(
-                byteArray + other.toFlow(scope).map { it.toLong().toUByte() }.toList().toTypedArray().toUByteArray()
+                byteArray + other.toFlow(scope).map { it.toLong().toUByte() }.toList().toTypedArray()
+                    .toUByteArray()
             )
         } else scope.raiseIllegalArgument("can't concatenate buffer with ${other.inspect()}")
     }
@@ -84,7 +84,8 @@ class ObjBuffer(val byteArray: UByteArray) : Obj() {
                 else -> {
                     if (obj.isInstanceOf(ObjIterable)) {
                         ObjBuffer(
-                            obj.toFlow(scope).map { it.toLong().toUByte() }.toList().toTypedArray().toUByteArray()
+                            obj.toFlow(scope).map { it.toLong().toUByte() }.toList().toTypedArray()
+                                .toUByteArray()
                         )
                     } else
                         scope.raiseIllegalArgument(

@@ -2,6 +2,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.ObjVoid
 import net.sergeych.lyng.Scope
@@ -105,6 +106,10 @@ fun parseDocTests(fileName: String, bookMode: Boolean = false): Flow<DocTest> = 
                         } else {
                             var isValid = true
                             val result = mutableListOf<String>()
+
+                            // remove empty trails:
+                            while( block.last().isEmpty() ) block.removeLast()
+
                             while (block.size > outStart) {
                                 val line = block.removeAt(outStart)
                                 if (!line.startsWith(">>> ")) {
@@ -288,4 +293,10 @@ class BookTest {
     fun testExceptionsBooks() = runTest {
         runDocTests("../docs/exceptions_handling.md")
     }
+
+    @Test
+    fun testTimeBooks() = runBlocking {
+        runDocTests("../docs/time.md")
+    }
+
 }

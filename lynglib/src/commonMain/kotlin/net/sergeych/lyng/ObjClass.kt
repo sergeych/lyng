@@ -4,7 +4,7 @@ val ObjClassType by lazy { ObjClass("Class") }
 
 open class ObjClass(
     val className: String,
-    vararg val parents: ObjClass,
+    vararg parents: ObjClass,
 ) : Obj() {
 
     var instanceConstructor: Statement? = null
@@ -18,6 +18,7 @@ open class ObjClass(
 
     // members: fields most often
     private val members = mutableMapOf<String, ObjRecord>()
+    private val classMembers = mutableMapOf<String, ObjRecord>()
 
     override fun toString(): String = className
 
@@ -32,9 +33,9 @@ open class ObjClass(
         return instance
     }
 
-    fun defaultInstance(): Obj = object : Obj() {
-        override val objClass: ObjClass = this@ObjClass
-    }
+//    fun defaultInstance(): Obj = object : Obj() {
+//        override val objClass: ObjClass = this@ObjClass
+//    }
 
     fun createField(
         name: String,
@@ -49,11 +50,25 @@ open class ObjClass(
         members[name] = ObjRecord(initialValue, isMutable, visibility)
     }
 
+    fun createClassField(
+        name: String,
+        initialValue: Obj,
+        isMutable: Boolean = false,
+        visibility: Visibility = Visibility.Public,
+        pos: Pos = Pos.builtIn
+    ) {
+        val existing = classMembers[name]
+        if( existing != null)
+            throw ScriptError(pos, "$name is already defined in $objClass or one of its supertypes")
+        classMembers[name] = ObjRecord(initialValue, isMutable, visibility)
+    }
+
     fun addFn(name: String, isOpen: Boolean = false, code: suspend Scope.() -> Obj) {
         createField(name, statement { code() }, isOpen)
     }
 
     fun addConst(name: String, value: Obj) = createField(name, value, isMutable = false)
+    fun addClassConst(name: String, value: Obj) = createClassField(name, value)
 
 
     /**
@@ -68,6 +83,14 @@ open class ObjClass(
     fun getInstanceMember(atPos: Pos, name: String): ObjRecord =
         getInstanceMemberOrNull(name)
             ?: throw ScriptError(atPos, "symbol doesn't exist: $name")
+
+    override suspend fun readField(scope: Scope, name: String): ObjRecord {
+        classMembers[name]?.let {
+            println("class field $it")
+            return it
+        }
+        return super.readField(scope, name)
+    }
 }
 
 

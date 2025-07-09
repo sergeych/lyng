@@ -320,6 +320,8 @@ open class Obj {
     }
 }
 
+fun Double.toObj(): Obj = ObjReal(this)
+
 @Suppress("unused")
 inline fun <reified T> T.toObj(): Obj = Obj.from(this)
 

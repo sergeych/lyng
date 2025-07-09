@@ -751,7 +751,7 @@ class Compiler(
         val t = cc.next()
         return when (t.type) {
             Token.Type.INT, Token.Type.HEX -> {
-                val n = t.value.toLong(if (t.type == Token.Type.HEX) 16 else 10)
+                val n = t.value.replace("_", "").toLong(if (t.type == Token.Type.HEX) 16 else 10)
                 if (isPlus) ObjInt(n) else ObjInt(-n)
             }
 
