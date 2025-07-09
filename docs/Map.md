@@ -3,6 +3,8 @@
 Map is a mutable collection of key-value pars, where keys are unique. Maps could be created with
 constructor or `.toMap` methods. When constructing from a list, each list item must be a [Collection] with exactly 2 elements, for example, a [List].
 
+Important thing is that maps can't contain `null`: it is used to return from missing elements.
+
 Constructed map instance is of class `Map` and implements `Collection` (and therefore `Iterable`)
 
     val map = Map( ["foo", 1], ["bar", "buzz"] )
@@ -16,7 +18,7 @@ Map keys could be any objects (hashable, e.g. with reasonable hashCode, most of 
     val map = Map( ["foo", 1], ["bar", "buzz"], [42, "answer"] )
     assert( map["bar"] == "buzz")
     assert( map[42] == "answer" )
-    assertThrows { map["nonexistent"] }
+    assertEquals( null, map["nonexisting"])
     assert( map.getOrNull(101) == null )
     assert( map.getOrPut(911) { "nine-eleven" } == "nine-eleven" )
     // now 91 entry is set:

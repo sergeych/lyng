@@ -2,11 +2,6 @@ package net.sergeych.lyng
 
 class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
 
-    init {
-        for (p in objClass.parents)
-            parentInstances.add(p.defaultInstance())
-    }
-
     override fun toString(): String = "[${
         list.joinToString(separator = ", ") { it.inspect() }
     }]"
@@ -51,9 +46,8 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
         }
     }
 
-    override suspend fun putAt(scope: Scope, index: Int, newValue: Obj) {
-        val i = index
-        list[i] = newValue
+    override suspend fun putAt(scope: Scope, index: Obj, newValue: Obj) {
+        list[index.toInt()] = newValue
     }
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
@@ -136,16 +130,6 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                     (thisObj as ObjList).list.size.toObj()
                 }
             )
-            addFn("getAt") {
-                requireExactCount(1)
-                thisAs<ObjList>().getAt(this, requiredArg<Obj>(0))
-            }
-            addFn("putAt") {
-                requireExactCount(2)
-                val newValue = args[1]
-                thisAs<ObjList>().putAt(this, requiredArg<ObjInt>(0).value.toInt(), newValue)
-                newValue
-            }
             createField("add",
                 statement {
                     val l = thisAs<ObjList>().list

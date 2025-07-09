@@ -165,7 +165,6 @@ class CompilerContext(val tokens: List<Token>) {
      */
     fun skipWsTokens(): Token {
         while( current().type in wstokens ) {
-            println("skipws ${current()}")
             next()
         }
         return next()

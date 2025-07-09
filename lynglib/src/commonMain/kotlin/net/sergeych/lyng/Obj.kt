@@ -220,7 +220,7 @@ open class Obj {
 
     suspend fun getAt(scope: Scope, index: Int): Obj = getAt(scope, ObjInt(index.toLong()))
 
-    open suspend fun putAt(scope: Scope, index: Int, newValue: Obj) {
+    open suspend fun putAt(scope: Scope, index: Obj, newValue: Obj) {
         scope.raiseNotImplemented("indexing")
     }
 
@@ -280,7 +280,18 @@ open class Obj {
                     args.firstAndOnly().callOn(copy(Arguments(thisObj)))
                     thisObj
                 }
+            addFn("getAt") {
+                requireExactCount(1)
+                thisObj.getAt(this, requiredArg<Obj>(0))
             }
+            addFn("putAt") {
+                requireExactCount(2)
+                val newValue = args[1]
+                thisObj.putAt(this, requiredArg<Obj>(0), newValue)
+                newValue
+            }
+
+        }
 
 
         inline fun from(obj: Any?): Obj {
@@ -349,7 +360,7 @@ object ObjNull : Obj() {
         scope.raiseNPE()
     }
 
-    override suspend fun putAt(scope: Scope, index: Int, newValue: Obj) {
+    override suspend fun putAt(scope: Scope, index: Obj, newValue: Obj) {
         scope.raiseNPE()
     }
 

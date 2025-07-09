@@ -39,7 +39,11 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
     override val objClass = type
 
     override suspend fun getAt(scope: Scope, index: Obj): Obj =
-        map.getOrElse(index) { scope.raiseNoSuchElement() }
+        map.get(index) ?: ObjNull
+
+    override suspend fun putAt(scope: Scope, index: Obj, newValue: Obj) {
+        map[index] = newValue
+    }
 
     override suspend fun contains(scope: Scope, other: Obj): Boolean {
         return other in map

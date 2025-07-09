@@ -530,7 +530,8 @@ The simplest way to concatenate lists is using `+` and `+=`:
     list += [2, 1]      
     // or you can append a single element:
     list += "end"
-    assert( list == [1, 2, 2, 1, "end"])
+    assertEquals( list, [1, 2, 2, 1, "end"])
+    void
     >>> void
 
 ***Important note***: the pitfall of using `+=` is that you can't append in [Iterable] instance as an object: it will always add all its contents. Use `list.add` to add a single iterable instance:
@@ -641,6 +642,11 @@ You can get ranges to extract a portion from a list:
     assertEquals( [2,3], list[1..<3])
     >>> void
 
+# Buffers
+
+[Buffer] is a special implementation of an [Array] of unsigned bytes, in the
+[separate file](Buffer.md).
+
 # Sets
 
 Set are unordered collection of unique elements, see [Set]. Sets are [Iterable] but have no indexing access.
@@ -740,13 +746,13 @@ You can thest that _when expression_ is _contained_, or not contained, in some o
 
 Typical builtin types that are containers (e.g. support `conain`):
 
-| class      | notes                                      |
-|------------|--------------------------------------------|
-| Collection | contains an element (1)                    |
-| Array      | faster maybe that Collection's             |
-| List       | faster than Array's                        |
-| String     | character in string or substring in string |
-| Range      | object is included in the range (2)        |
+| class      | notes                                          |
+|------------|------------------------------------------------|
+| Collection | contains an element (1)                        |
+| Array      | faster maybe that Collection's                 |
+| List       | faster than Array's                            |
+| String     | character in string or substring in string (3) |
+| Range      | object is included in the range (2)            |
 
 (1)
 : Iterable is not the container as it can be infinite
@@ -759,6 +765,9 @@ Typical builtin types that are containers (e.g. support `conain`):
     assert( 'x' in 'a'..'z') // character range: ok
     assert( "x" !in 'a'..'z') // string in character range: could be error
     >>> void
+
+(3)
+: `String` also can provide array of characters directly with `str.characters()`, which is [Iterable] and [Array]. String itself is not iterable as otherwise it will interfere when adding strigns to lists (it will add _characters_ it it would be iterable).
 
 So we recommend not to mix characters and string ranges; use `ch in str` that works
 as expected:
@@ -1216,9 +1225,10 @@ Typical set of String functions includes:
 | s1 += s2           | self-modifying concatenation                               |
 | toReal()           | attempts to parse string as a Real value                   |
 | toInt()            | parse string to Int value                                  |
-|                    |                                                            |
+| characters()       | create [List] of characters (1)                            |
 
-
+(1)
+: List is mutable therefore a new copy is created on each call.
 
 
 
@@ -1257,3 +1267,4 @@ See [math functions](math.md). Other general purpose functions are:
 [string formatting]: https://github.com/sergeych/mp_stools?tab=readme-ov-file#sprintf-syntax-summary
 [Set]: Set.md
 [Map]: Map.md
+[Buffer]: Buffer.md

@@ -1,6 +1,6 @@
 package net.sergeych.lyng
 
-data class ObjInt(var value: Long) : Obj(), Numeric {
+class ObjInt(var value: Long,val isConst: Boolean = false) : Obj(), Numeric {
     override val asStr get() = ObjString(value.toString())
     override val longValue get() = value
     override val doubleValue get() = value.toDouble()
@@ -70,7 +70,7 @@ data class ObjInt(var value: Long) : Obj(), Numeric {
      * assignment
      */
     override suspend fun assign(scope: Scope, other: Obj): Obj? {
-        return if (other is ObjInt) {
+        return if (!isConst && other is ObjInt) {
             value = other.value
             this
         } else null
@@ -90,8 +90,8 @@ data class ObjInt(var value: Long) : Obj(), Numeric {
     }
 
     companion object {
-        val Zero = ObjInt(0)
-        val One = ObjInt(1)
+        val Zero = ObjInt(0, true)
+        val One = ObjInt(1, true)
         val type = ObjClass("Int")
     }
 }

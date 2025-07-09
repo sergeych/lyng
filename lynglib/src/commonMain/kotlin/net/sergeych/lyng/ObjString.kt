@@ -15,7 +15,6 @@ data class ObjString(val value: String) : Obj() {
 //        return i
 //    }
 
-
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
         if (other !is ObjString) return -2
         return this.value.compareTo(other.value)
@@ -113,6 +112,11 @@ data class ObjString(val value: String) : Obj() {
             }
             addFn("upper") {
                 thisAs<ObjString>().value.uppercase().let(::ObjString)
+            }
+            addFn("characters") {
+                ObjList(
+                    thisAs<ObjString>().value.map { ObjChar(it) }.toMutableList()
+                )
             }
             addFn("size") { ObjInt(thisAs<ObjString>().value.length.toLong()) }
             addFn("toReal") { ObjReal(thisAs<ObjString>().value.toDouble())}

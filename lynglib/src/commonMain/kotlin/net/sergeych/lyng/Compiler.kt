@@ -274,9 +274,7 @@ class Compiler(
                             if (x == ObjNull && isOptional) ObjNull.asReadonly
                             else x.getAt(cxt, i).asMutable
                         }) { cxt, newValue ->
-                            val i = (index.execute(cxt) as? ObjInt)?.value?.toInt()
-                                ?: cxt.raiseError("index must be integer")
-                            left.getter(cxt).value.putAt(cxt, i, newValue)
+                            left.getter(cxt).value.putAt(cxt, index.execute(cxt), newValue)
                         }
                     } ?: run {
                         // array literal

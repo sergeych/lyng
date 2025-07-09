@@ -174,7 +174,14 @@ class Script(
             }
         }
 
-        val defaultImportManager: ImportManager by lazy { ImportManager(rootScope, SecurityManager.allowAll) }
+        val defaultImportManager: ImportManager by lazy {
+            ImportManager(rootScope, SecurityManager.allowAll).apply {
+                addPackage("lyng.buffer") {
+                    it.addConst("Buffer", ObjBuffer.type)
+                }
+            }
+
+        }
 
     }
 }

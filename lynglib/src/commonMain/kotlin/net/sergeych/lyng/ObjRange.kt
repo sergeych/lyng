@@ -15,6 +15,31 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
         return result.toString()
     }
 
+    /**
+     * IF end is open (null/ObjNull), returns null
+     * Otherwise, return correct value for the exclusive end
+     * raises [ObjIllegalArgumentException] if end is not ObjInt
+     */
+    fun exclusiveIntEnd(scope: Scope): Int? =
+        if (end == null || end is ObjNull) null
+        else {
+            if (end !is ObjInt) scope.raiseIllegalArgument("end is not int")
+            if (isEndInclusive) end.value.toInt() + 1 else end.value.toInt()
+        }
+
+
+    /**
+     * If start is null/ObjNull, returns 0
+     * if start is not ObjInt, raises [ObjIllegalArgumentException]
+     * otherwise returns start.value.toInt()
+     */
+    fun startInt(scope: Scope): Int =
+        if( start == null || start is ObjNull ) 0
+        else {
+            if( start is ObjInt ) start.value.toInt()
+            else scope.raiseIllegalArgument("start is not Int: ${start.inspect()}")
+        }
+
     suspend fun containsRange(scope: Scope, other: ObjRange): Boolean {
         if (start != null) {
             // our start is not -∞ so other start should be GTE or is not contained:

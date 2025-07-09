@@ -1,8 +1,8 @@
 package net.sergeych.lyng.pacman
 
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import net.sergeych.lyng.*
+import net.sergeych.synctools.ProtectedOp
+import net.sergeych.synctools.withLock
 
 /**
  * Import manager allow to register packages with builder lambdas and act as an
@@ -17,7 +17,7 @@ import net.sergeych.lyng.*
 class ImportManager(
     rootScope: Scope = Script.defaultImportManager.newModule(),
     securityManager: SecurityManager = SecurityManager.allowAll
-): ImportProvider(rootScope, securityManager) {
+) : ImportProvider(rootScope, securityManager) {
 
     private inner class Entry(
         val packageName: String,
@@ -36,7 +36,7 @@ class ImportManager(
 
 
     /**
-     * Inner provider does not lock [access], the only difference; it is meant to be used
+     * Inner provider does not lock [op], the only difference; it is meant to be used
      * exclusively by the coroutine that starts actual import chain
      */
     private inner class InternalProvider : ImportProvider(rootScope) {
@@ -52,7 +52,9 @@ class ImportManager(
 
 
     private val imports = mutableMapOf<String, Entry>()
-    private val access = Mutex()
+
+    val op = ProtectedOp()
+
 
     /**
      * Register new package that can be imported. It is not possible to unregister or
@@ -65,8 +67,8 @@ class ImportManager(
      * @param name package name
      * @param builder lambda to create actual package using the given [ModuleScope]
      */
-    suspend fun addPackage(name: String, builder: suspend (ModuleScope) -> Unit) {
-        access.withLock {
+    fun addPackage(name: String, builder: suspend (ModuleScope) -> Unit) {
+        op.withLock {
             if (name in imports)
                 throw IllegalArgumentException("Package $name already exists")
             imports[name] = Entry(name, builder)
@@ -77,8 +79,8 @@ class ImportManager(
      * Bulk [addPackage] with slightly better performance
      */
     @Suppress("unused")
-    suspend fun addPackages(registrationData: List<Pair<String, suspend (ModuleScope) -> Unit>>) {
-        access.withLock {
+    fun addPackages(registrationData: List<Pair<String, suspend (ModuleScope) -> Unit>>) {
+        op.withLock {
             for (pp in registrationData) {
                 if (pp.first in imports)
                     throw IllegalArgumentException("Package ${pp.first} already exists")
@@ -89,7 +91,7 @@ class ImportManager(
 
     /**
      * Perform actual import or return ready scope. __It must only be called when
-     * [access] is locked__, e.g. only internally
+     * [op] is locked__, e.g. only internally
      */
     private suspend fun doImport(packageName: String, pos: Pos): ModuleScope {
         val entry = imports[packageName] ?: throw ImportException(pos, "package not found: $packageName")
@@ -102,8 +104,8 @@ class ImportManager(
     /**
      * Add packages that only need to compile [Source].
      */
-    suspend fun addSourcePackages(vararg sources: Source) {
-        for( s in sources) {
+    fun addSourcePackages(vararg sources: Source) {
+        for (s in sources) {
             addPackage(s.extractPackageName()) {
                 it.eval(s)
             }
@@ -114,12 +116,12 @@ class ImportManager(
     /**
      * Add source packages using package name as [Source.fileName], for simplicity
      */
-    suspend fun addTextPackages(vararg sourceTexts: String) {
-        for( s in sourceTexts) {
+    fun addTextPackages(vararg sourceTexts: String) {
+        for (s in sourceTexts) {
             var source = Source("tmp", s)
             val packageName = source.extractPackageName()
             source = Source(packageName, s)
-            addPackage(packageName) { it.eval(source)}
+            addPackage(packageName) { it.eval(source) }
         }
     }
 

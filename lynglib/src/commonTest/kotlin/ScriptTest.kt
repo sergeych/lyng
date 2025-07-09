@@ -2460,4 +2460,57 @@ class ScriptTest {
                 """.trimIndent())
     }
 
+    @Test
+    fun testMaps() = runTest {
+        eval(
+            """
+                val map = Map( "a" => 1, "b" => 2 )
+                assertEquals( 1, map["a"] )
+                assertEquals( 2, map["b"] )
+                assertEquals( null, map["c"] )
+                map["c"] = 3
+                assertEquals( 3, map["c"] )
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testBuffer() = runTest {
+        eval("""
+            import lyng.buffer
+            
+            assertEquals( 0, Buffer().size )
+            assertEquals( 3, Buffer(1, 2, 3).size )
+            assertEquals( 5, Buffer("hello").size )
+            
+            val buffer = Buffer("Hello")
+            assertEquals( 5, buffer.size)
+            assertEquals('l'.code, buffer[2] )
+            assertEquals('l'.code, buffer[3] )
+            assertEquals("Hello", buffer.decodeUtf8())
+            
+            buffer[2] = 101
+            assertEquals(101, buffer[2])
+            assertEquals("Heelo", buffer.decodeUtf8())
+            
+        """.trimIndent())
+    }
+
+    @Test
+    fun testBufferCompare() = runTest {
+        eval("""
+            import lyng.buffer
+            
+            println("Hello".characters())
+            val b1 = Buffer("Hello")
+            val b2 = Buffer("Hello".characters())
+            
+            assertEquals( b1, b2 )
+            val b3 = b1 + Buffer("!")
+            assertEquals( "Hello!", b3.decodeUtf8())
+            assert( b3 > b1 )
+            
+        """.trimIndent())
+    }
+
 }

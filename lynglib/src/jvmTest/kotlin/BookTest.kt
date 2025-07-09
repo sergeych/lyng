@@ -266,6 +266,11 @@ class BookTest {
     }
 
     @Test
+    fun testBuffer() = runTest {
+        runDocTests("../docs/Buffer.md")
+    }
+
+    @Test
     fun testSampleBooks() = runTest {
         for (bt in Files.list(Paths.get("../docs/samples")).toList()) {
             if (bt.extension == "md") {
