@@ -19,6 +19,8 @@ class ImportManager(
     securityManager: SecurityManager = SecurityManager.allowAll
 ) : ImportProvider(rootScope, securityManager) {
 
+    val packageNames: List<String> get() = imports.keys.toList()
+
     private inner class Entry(
         val packageName: String,
         val builder: suspend (ModuleScope) -> Unit,
@@ -42,6 +44,10 @@ class ImportManager(
     private inner class InternalProvider : ImportProvider(rootScope) {
         override suspend fun createModuleScope(pos: Pos, packageName: String): ModuleScope {
             return doImport(packageName, pos)
+        }
+
+        override fun getActualProvider(): ImportProvider {
+            return this@ImportManager
         }
     }
 
@@ -95,6 +101,7 @@ class ImportManager(
      */
     private suspend fun doImport(packageName: String, pos: Pos): ModuleScope {
         val entry = imports[packageName] ?: throw ImportException(pos, "package not found: $packageName")
+        println("import enrty found: $packageName")
         return entry.getScope(pos)
     }
 
@@ -124,5 +131,12 @@ class ImportManager(
             addPackage(packageName) { it.eval(source) }
         }
     }
+
+    fun copy(): ImportManager =
+        op.withLock {
+            ImportManager(rootScope, securityManager).apply {
+                imports.putAll(this@ImportManager.imports)
+            }
+        }
 
 }

@@ -2443,7 +2443,7 @@ class ScriptTest {
 
     @Test
     fun testDefaultImportManager() = runTest {
-        val scope = Scope()
+        val scope = Scope.new()
         assertFails {
             scope.eval("""
                 import foo
@@ -2572,6 +2572,44 @@ class ScriptTest {
             assertEquals( unixEpoch.toInt(), now.epochSeconds.toInt() )
             """.trimIndent()
         )
+    }
+
+    @Test
+    fun testDoubleImports() = runTest {
+        val s = Scope.new()
+        println(Script.defaultImportManager.packageNames)
+        println(s.importManager.packageNames)
+
+        s.importManager.addTextPackages("""
+            package foo
+             
+            import lyng.time
+            
+            fun foo() {
+                println("foo: %s"(Instant()))
+            }
+        """.trimIndent())
+        s.importManager.addTextPackages("""
+            package bar
+             
+            import lyng.time
+            
+            fun bar() {
+                println("bar: %s"(Instant()))
+            }
+        """.trimIndent())
+
+        println(s.importManager.packageNames)
+
+        s.eval("""
+            import foo
+            import bar
+            
+            foo()
+            bar()
+            
+        """.trimIndent())
+
     }
 
 }

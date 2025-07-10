@@ -7,10 +7,15 @@ import net.sergeych.lyng.pacman.ImportProvider
  */
 class Compiler(
     val cc: CompilerContext,
-    val importManager: ImportProvider = Script.defaultImportManager,
+    val importManager: ImportProvider,
     @Suppress("UNUSED_PARAMETER")
     settings: Settings = Settings()
 ) {
+
+    init {
+        println("Compiler initialized: $importManager")
+    }
+
     var packageName: String? = null
 
     class Settings
@@ -1618,8 +1623,8 @@ class Compiler(
 
     companion object {
 
-        suspend fun compile(source: Source, importProvider: ImportProvider = Script.defaultImportManager): Script {
-            return Compiler(CompilerContext(parseLyng(source)),importProvider).parseScript()
+        suspend fun compile(source: Source,importManager: ImportProvider): Script {
+            return Compiler(CompilerContext(parseLyng(source)),importManager).parseScript()
         }
 
         private var lastPriority = 0
@@ -1742,7 +1747,7 @@ class Compiler(
             allOps.filter { it.priority == l }.associateBy { it.tokenType }
         }
 
-        suspend fun compile(code: String): Script = compile(Source("<eval>", code))
+        suspend fun compile(code: String): Script = compile(Source("<eval>", code), Script.defaultImportManager)
 
         /**
          * The keywords that stop processing of expression term

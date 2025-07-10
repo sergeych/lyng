@@ -15,8 +15,13 @@ import kotlin.contracts.ExperimentalContracts
 data class ObjRecord(
     var value: Obj,
     val isMutable: Boolean,
-    val visibility: Visibility = Visibility.Public
-)
+    val visibility: Visibility = Visibility.Public,
+    var importedFrom: Scope? = null
+) {
+    @Suppress("unused")
+    fun qualifiedName(name: String): String =
+        "${importedFrom?.packageName ?: "anonymous"}.$name"
+}
 
 /**
  * When we need read-write access to an object in some abstract storage, we need Accessor,

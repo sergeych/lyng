@@ -14,6 +14,9 @@ abstract class ImportProvider(
     val rootScope: Scope,
     val securityManager: SecurityManager = SecurityManager.allowAll
 ) {
+
+    open fun getActualProvider() = this
+
     /**
      * Find an import and create a scope for it. This method must implement caching so repeated
      * imports are not repeatedly loaded and parsed and should be cheap.

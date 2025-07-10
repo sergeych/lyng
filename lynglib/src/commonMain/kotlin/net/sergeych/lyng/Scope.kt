@@ -1,15 +1,16 @@
 package net.sergeych.lyng
 
 import net.sergeych.lyng.pacman.ImportManager
+import net.sergeych.lyng.pacman.ImportProvider
 
 /**
  * Scope is where local variables and methods are stored. Scope is also a parent scope for other scopes.
  * Each block usually creates a scope. Accessing Lyng closures usually is done via a scope.
  *
  * To create default scope, use default `Scope()` constructor, it will create a scope with a parent
- * module scope with default [ImportManager], you can access with [importManager] as needed.
+ * module scope with default [ImportManager], you can access with [currentImportProvider] as needed.
  *
- * If you want to create [ModuleScope] by hand, try [importManager] and [ImportManager.newModule],
+ * If you want to create [ModuleScope] by hand, try [currentImportProvider] and [ImportManager.newModule],
  * or [ImportManager.newModuleAt].
  *
  *  There are special types of scopes:
@@ -141,12 +142,12 @@ open class Scope(
     fun addConst(name: String, value: Obj) = addItem(name, false, value)
 
     suspend fun eval(code: String): Obj =
-        Compiler.compile(code.toSource()).execute(this)
+        Compiler.compile(code.toSource(), currentImportProvider).execute(this)
 
     suspend fun eval(source: Source): Obj =
         Compiler.compile(
             source,
-            (this as? ModuleScope)?.importProvider ?: Script.defaultImportManager
+            currentImportProvider
         ).execute(this)
 
     fun containsLocal(name: String): Boolean = name in objects
@@ -168,10 +169,19 @@ open class Scope(
      * @throws IllegalStateException if there is no such manager (if you create some specific scope with no manager,
      *      then you knew what you did)
      */
-    val importManager: ImportManager by lazy {
-        if( this is ModuleScope )
-            (importProvider as? ImportManager)?.let { return@lazy it }
-        parent?.importManager ?: throw IllegalStateException("this scope has no manager in the chain")
+    val currentImportProvider: ImportProvider by lazy {
+        if (this is ModuleScope)
+            importProvider.getActualProvider()
+        else
+            parent?.currentImportProvider ?: throw IllegalStateException("this scope has no manager in the chain")
     }
 
+    val importManager by lazy { (currentImportProvider as? ImportManager)
+        ?: throw IllegalStateException("this scope has no manager in the chain (provided $currentImportProvider") }
+
+    companion object {
+
+        fun new(): Scope =
+            Script.defaultImportManager.copy().newModuleAt(Pos.builtIn)
+    }
 }
