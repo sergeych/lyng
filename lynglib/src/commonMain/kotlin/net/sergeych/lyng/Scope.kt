@@ -30,7 +30,7 @@ open class Scope(
         args: Arguments = Arguments.EMPTY,
         pos: Pos = Pos.builtIn,
     )
-            : this(Script.defaultImportManager.newModuleAt(pos), args, pos)
+            : this(Script.defaultImportManager.copy().newModuleAt(pos), args, pos)
 
     fun raiseNotImplemented(what: String = "operation"): Nothing = raiseError("$what is not implemented")
 
