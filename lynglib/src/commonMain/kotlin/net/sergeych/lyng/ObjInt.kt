@@ -1,6 +1,6 @@
 package net.sergeych.lyng
 
-class ObjInt(var value: Long,val isConst: Boolean = false) : Obj(), Numeric {
+class ObjInt(var value: Long,override val isConst: Boolean = false) : Obj(), Numeric {
     override val asStr get() = ObjString(value.toString())
     override val longValue get() = value
     override val doubleValue get() = value.toDouble()
@@ -14,18 +14,22 @@ class ObjInt(var value: Long,val isConst: Boolean = false) : Obj(), Numeric {
     }
 
     override suspend fun getAndIncrement(scope: Scope): Obj {
+        ensureNotConst(scope)
         return ObjInt(value).also { value++ }
     }
 
     override suspend fun getAndDecrement(scope: Scope): Obj {
+        ensureNotConst(scope)
         return ObjInt(value).also { value-- }
     }
 
     override suspend fun incrementAndGet(scope: Scope): Obj {
+        ensureNotConst(scope)
         return ObjInt(++value)
     }
 
     override suspend fun decrementAndGet(scope: Scope): Obj {
+        ensureNotConst(scope)
         return ObjInt(--value)
     }
 

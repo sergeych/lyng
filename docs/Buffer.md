@@ -54,6 +54,8 @@ Buffer provides concatenation with another Buffer:
     assertEquals( Buffer(101, 102, 1, 2), b + [1,2])
     >>> void
 
+Please note that indexed bytes are _readonly projection_, e.g. you can't modify these with
+
 ## Comparing
 
 Buffers are comparable with other buffers:

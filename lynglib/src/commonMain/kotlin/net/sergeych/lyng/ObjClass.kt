@@ -82,7 +82,6 @@ open class ObjClass(
 
     override suspend fun readField(scope: Scope, name: String): ObjRecord {
         classMembers[name]?.let {
-            println("class field $it")
             return it
         }
         return super.readField(scope, name)

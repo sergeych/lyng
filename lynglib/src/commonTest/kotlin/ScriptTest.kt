@@ -707,19 +707,13 @@ class ScriptTest {
             var t1 = 10
             outer@ while( t1 > 0 ) {
                 var t2 = 10
-                println("starting t2 = " + t2)
                 while( t2 > 0 ) {
                     t2 = t2 - 1
-                    println("t2 " + t2 + " t1 " + t1)
                     if( t2 == 3 && t1 == 7) {
-                        println("will break")
                         break@outer "ok2:"+t2+":"+t1
                     }
                 }
-                println("next t1")
-                t1 = t1 - 1
-                println("t1 now "+t1)
-                t1
+                --t1
             }
         """.trimIndent()
             ).toString()
@@ -734,8 +728,6 @@ class ScriptTest {
                 """
                 val count = 3
                 val res = if( count > 10 ) "too much" else "just " + count
-                println(count)
-                println(res)
                 res
                 """.trimIndent()
             )
@@ -771,7 +763,7 @@ class ScriptTest {
     fun testDecr() = runTest {
         val c = Scope()
         c.eval("var x = 9")
-        assertEquals(9, c.eval("x--").toInt())
+        assertEquals(9, c.eval("println(x); val a = x--; println(x); println(a); a").toInt())
         assertEquals(8, c.eval("x--").toInt())
         assertEquals(7, c.eval("x--").toInt())
         assertEquals(6, c.eval("x--").toInt())
@@ -2610,6 +2602,42 @@ class ScriptTest {
             
         """.trimIndent())
 
+    }
+
+    @Test
+    fun testIndexIntIncrements() = runTest {
+        eval("""
+        val x = [1,2,3]
+        x[1]++
+        ++x[0]
+        assertEquals( [2,3,3], x )
+        
+        import lyng.buffer
+        
+        val b = Buffer(1,2,3)
+        b[1]++
+        assert( b == Buffer(1,3,3) )
+        ++b[0]
+        assertEquals( b, Buffer(2,3,3) )
+        """.trimIndent())
+    }
+
+    @Test
+    fun testIndexIntDecrements() = runTest {
+        eval("""
+        val x = [1,2,3]
+        x[1]--
+        --x[0]
+        assertEquals( [0,1,3], x )
+        
+        import lyng.buffer
+        
+        val b = Buffer(1,2,3)
+        b[1]--
+        assert( b == Buffer(1,1,3) )
+        --b[0]
+        assertEquals( b, Buffer(0,1,3) )
+        """.trimIndent())
     }
 
 }

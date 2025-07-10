@@ -12,10 +12,6 @@ class Compiler(
     settings: Settings = Settings()
 ) {
 
-    init {
-        println("Compiler initialized: $importManager")
-    }
-
     var packageName: String? = null
 
     class Settings
@@ -27,7 +23,7 @@ class Compiler(
         // package level declarations
         do {
             val t = cc.current()
-            if(t.type == Token.Type.NEWLINE || t.type == Token.Type.SINLGE_LINE_COMMENT || t.type == Token.Type.MULTILINE_COMMENT) {
+            if (t.type == Token.Type.NEWLINE || t.type == Token.Type.SINLGE_LINE_COMMENT || t.type == Token.Type.MULTILINE_COMMENT) {
                 cc.next()
                 continue
             }
@@ -44,6 +40,7 @@ class Compiler(
                         packageName = name
                         continue
                     }
+
                     "import" -> {
                         cc.next()
                         val pos = cc.currentPos()
@@ -349,17 +346,26 @@ class Compiler(
                         left.setter(startPos)
                         operand = Accessor { cxt ->
                             val x = left.getter(cxt)
-                            if (x.isMutable)
-                                x.value.getAndIncrement(cxt).asReadonly
-                            else cxt.raiseError("Cannot increment immutable value")
+                            if (x.isMutable) {
+                                if (x.value.isConst) {
+                                    x.value.plus(cxt, ObjInt.One).also {
+                                        left.setter(startPos)(cxt, it)
+                                    }.asReadonly
+                                } else
+                                    x.value.getAndIncrement(cxt).asReadonly
+                            } else cxt.raiseError("Cannot increment immutable value")
                         }
                     } ?: run {
                         // no lvalue means pre-increment, expression to increment follows
-                        val next = parseAccessor() ?: throw ScriptError(t.pos, "Expecting expression")
+                        val next = parseTerm() ?: throw ScriptError(t.pos, "Expecting expression")
                         operand = Accessor { ctx ->
-                            next.getter(ctx).also {
+                            val x = next.getter(ctx).also {
                                 if (!it.isMutable) ctx.raiseError("Cannot increment immutable value")
-                            }.value.incrementAndGet(ctx).asReadonly
+                            }.value
+                            if (x.isConst) {
+                                next.setter(startPos)(ctx, x.plus(ctx, ObjInt.One))
+                                x.asReadonly
+                            } else x.incrementAndGet(ctx).asReadonly
                         }
                     }
                 }
@@ -369,18 +375,28 @@ class Compiler(
                     operand?.let { left ->
                         // post decrement
                         left.setter(startPos)
-                        operand = Accessor { ctx ->
-                            left.getter(ctx).also {
-                                if (!it.isMutable) ctx.raiseError("Cannot decrement immutable value")
-                            }.value.getAndDecrement(ctx).asReadonly
+                        operand = Accessor { cxt ->
+                            val x = left.getter(cxt)
+                            if (!x.isMutable) cxt.raiseError("Cannot decrement immutable value")
+                            if (x.value.isConst) {
+                                x.value.minus(cxt, ObjInt.One).also {
+                                    left.setter(startPos)(cxt, it)
+                                }.asReadonly
+                            } else
+                                x.value.getAndDecrement(cxt).asReadonly
                         }
                     } ?: run {
                         // no lvalue means pre-decrement, expression to decrement follows
-                        val next = parseAccessor() ?: throw ScriptError(t.pos, "Expecting expression")
-                        operand = Accessor { ctx ->
-                            next.getter(ctx).also {
-                                if (!it.isMutable) ctx.raiseError("Cannot decrement immutable value")
-                            }.value.decrementAndGet(ctx).asReadonly
+                        val next = parseTerm() ?: throw ScriptError(t.pos, "Expecting expression")
+                        operand = Accessor { cxt ->
+                            val x = next.getter(cxt)
+                            if (!x.isMutable) cxt.raiseError("Cannot decrement immutable value")
+                            if (x.value.isConst) {
+                                x.value.minus(cxt, ObjInt.One).also {
+                                    next.setter(startPos)(cxt, it)
+                                }.asReadonly
+                            } else
+                                x.value.decrementAndGet(cxt).asReadonly
                         }
                     }
                 }
@@ -1623,8 +1639,8 @@ class Compiler(
 
     companion object {
 
-        suspend fun compile(source: Source,importManager: ImportProvider): Script {
-            return Compiler(CompilerContext(parseLyng(source)),importManager).parseScript()
+        suspend fun compile(source: Source, importManager: ImportProvider): Script {
+            return Compiler(CompilerContext(parseLyng(source)), importManager).parseScript()
         }
 
         private var lastPriority = 0

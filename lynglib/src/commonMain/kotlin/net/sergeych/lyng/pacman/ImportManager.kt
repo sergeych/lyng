@@ -101,7 +101,6 @@ class ImportManager(
      */
     private suspend fun doImport(packageName: String, pos: Pos): ModuleScope {
         val entry = imports[packageName] ?: throw ImportException(pos, "package not found: $packageName")
-        println("import enrty found: $packageName")
         return entry.getScope(pos)
     }
 

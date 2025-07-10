@@ -11,7 +11,7 @@ sealed class ObjType {
 @Suppress("unused")
 abstract class Statement(
     val isStaticConst: Boolean = false,
-    val isConst: Boolean = false,
+    override val isConst: Boolean = false,
     val returnType: ObjType = ObjType.Any
 ) : Obj() {
 

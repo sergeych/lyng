@@ -48,6 +48,12 @@ data class Accessor(
 
 open class Obj {
 
+    open val isConst: Boolean = false
+
+    fun ensureNotConst(scope: Scope) {
+        if( isConst ) scope.raiseError("can't assign to constant")
+    }
+
     val isNull by lazy { this === ObjNull }
 
     var isFrozen: Boolean = false
