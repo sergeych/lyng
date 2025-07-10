@@ -33,10 +33,6 @@ open class ObjClass(
         return instance
     }
 
-//    fun defaultInstance(): Obj = object : Obj() {
-//        override val objClass: ObjClass = this@ObjClass
-//    }
-
     fun createField(
         name: String,
         initialValue: Obj,

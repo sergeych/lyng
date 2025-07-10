@@ -56,6 +56,11 @@ class ObjDuration(val duration: Duration) : Obj() {
             addFn("milliseconds") {
                 thisAs<ObjDuration>().duration.toDouble(DurationUnit.MILLISECONDS).toObj()
             }
+            addFn("microseconds") {
+                thisAs<ObjDuration>().duration.toDouble(DurationUnit.MICROSECONDS).toObj()
+            }
+            // extensions
+
             ObjInt.type.addFn("seconds") {
                 ObjDuration(thisAs<ObjInt>().value.seconds)
             }
@@ -63,7 +68,6 @@ class ObjDuration(val duration: Duration) : Obj() {
             ObjInt.type.addFn("second") {
                 ObjDuration(thisAs<ObjInt>().value.seconds)
             }
-
             ObjInt.type.addFn("milliseconds") {
                 ObjDuration(thisAs<ObjInt>().value.milliseconds)
             }
@@ -71,7 +75,6 @@ class ObjDuration(val duration: Duration) : Obj() {
             ObjInt.type.addFn("millisecond") {
                 ObjDuration(thisAs<ObjInt>().value.milliseconds)
             }
-
             ObjReal.type.addFn("seconds") {
                 ObjDuration(thisAs<ObjReal>().value.seconds)
             }

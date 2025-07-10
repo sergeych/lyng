@@ -34,6 +34,10 @@ class ObjInstant(val instant: Instant) : Obj() {
         return super.compareTo(scope, other)
     }
 
+    override suspend fun toKotlin(scope: Scope): Any {
+        return instant
+    }
+
     companion object {
         val distantFuture by lazy {
             ObjInstant(Instant.DISTANT_FUTURE)
@@ -51,7 +55,7 @@ class ObjInstant(val instant: Instant) : Obj() {
                     when (a0) {
                         null -> {
                             val t = Clock.System.now()
-                            Instant.fromEpochSeconds(t.epochSeconds, (t.nanosecondsOfSecond / 1_000_000).toLong()*1_000_000)
+                            Instant.fromEpochSeconds(t.epochSeconds, t.nanosecondsOfSecond)
                         }
                         is ObjInt -> Instant.fromEpochSeconds(a0.value)
                         is ObjReal -> {
@@ -78,6 +82,14 @@ class ObjInstant(val instant: Instant) : Obj() {
             addFn("isDistantPast") {
                 thisAs<ObjInstant>().instant.isDistantPast.toObj()
             }
+            addFn("epochWholeSeconds") {
+                ObjInt(thisAs<ObjInstant>().instant.epochSeconds)
+            }
+            addFn("nanosecondsOfSecond") {
+                ObjInt(thisAs<ObjInstant>().instant.nanosecondsOfSecond.toLong())
+            }
+            // class members
+
             addClassConst("distantFuture", distantFuture)
             addClassConst("distantPast", distantPast)
 //            addFn("epochMilliseconds") {

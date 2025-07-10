@@ -2560,4 +2560,18 @@ class ScriptTest {
         )
     }
 
+    @Test
+    fun testInstantFormatting() = runTest {
+        eval(
+            """
+            import lyng.time
+            val now = Instant()
+            val unixEpoch = "%ts"(now)
+            println("current seconds is %s"(unixEpoch))
+            println("current time is %tT"(now))
+            assertEquals( unixEpoch.toInt(), now.epochSeconds.toInt() )
+            """.trimIndent()
+        )
+    }
+
 }
