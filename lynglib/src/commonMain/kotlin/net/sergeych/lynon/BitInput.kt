@@ -47,6 +47,10 @@ abstract class BitInput {
         return getBitsOrNull(count) ?: throw IllegalStateException("Unexpected end of stream")
     }
 
+    fun getBit(): Int {
+        return getBitOrNull() ?: throw IllegalStateException("Unexpected end of stream")
+    }
+
     fun unpackUnsigned(): ULong {
         val tetrades = getBits(4).toInt()
         var result = 0UL
@@ -56,6 +60,12 @@ abstract class BitInput {
             shift += 4
         }
         return result
+    }
+
+    fun unpackSigned(): Long {
+        val isNegative = getBit()
+        val value = unpackUnsigned().toLong()
+        return if( isNegative == 1) -value else value
     }
 }
 

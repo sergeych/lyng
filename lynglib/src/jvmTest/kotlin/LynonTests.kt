@@ -37,13 +37,26 @@ class LynonTests {
     }
 
     @Test
-    fun testPackInteger() {
+    fun testUnsignedPackInteger() {
         val bout = MemoryBitOutput()
-        bout.packUnsigned(147179UL)
+        bout.packUnsigned(1471792UL)
         bout.close()
         println(bout.toUByteArray().toDump())
         val bin = MemoryBitInput(bout.toUByteArray())
-        assertEquals(147179UL, bin.unpackUnsigned())
+        assertEquals(1471792UL, bin.unpackUnsigned())
+    }
+
+    @Test
+    fun testSignedPackInteger() {
+        val bout = MemoryBitOutput()
+        bout.packSigned(-1471792L)
+        bout.packSigned(1471792L)
+//        bout.packSigned(147179L)
+        bout.close()
+        println(bout.toUByteArray().toDump())
+        val bin = MemoryBitInput(bout.toUByteArray())
+        assertEquals(-1471792L, bin.unpackSigned())
+        assertEquals(1471792L, bin.unpackSigned())
     }
 
 }

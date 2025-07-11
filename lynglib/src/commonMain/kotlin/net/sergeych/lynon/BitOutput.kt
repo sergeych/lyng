@@ -45,7 +45,7 @@ abstract class BitOutput {
     }
 
     @Suppress("unused")
-    fun putSigned(value: Long) {
+    fun packSigned(value: Long) {
         if( value < 0 ) {
             putBit(1)
             packUnsigned((-value).toULong())
