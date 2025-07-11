@@ -4,8 +4,8 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
-import net.sergeych.lyng.ObjVoid
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.obj.ObjVoid
 import java.nio.file.Files
 import java.nio.file.Files.readAllLines
 import java.nio.file.Paths

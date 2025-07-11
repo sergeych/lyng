@@ -1,5 +1,7 @@
 package net.sergeych.lyng
 
+import net.sergeych.lyng.obj.ObjRecord
+
 /**
  * Special version of the [Scope] used to `apply` new this object to
  * _parent context property.

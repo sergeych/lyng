@@ -1,5 +1,7 @@
 package net.sergeych.lyng
 
+import net.sergeych.lyng.obj.ObjRecord
+import net.sergeych.lyng.obj.ObjString
 import net.sergeych.lyng.pacman.ImportProvider
 
 /**

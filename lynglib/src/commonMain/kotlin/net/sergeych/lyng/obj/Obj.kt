@@ -1,10 +1,12 @@
-package net.sergeych.lyng
+package net.sergeych.lyng.obj
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import net.sergeych.bintools.encodeToHex
+import net.sergeych.lyng.*
+import net.sergeych.lynon.LynonEncoder
 import net.sergeych.synctools.ProtectedOp
 import net.sergeych.synctools.withLock
 import kotlin.contracts.ExperimentalContracts
@@ -267,6 +269,9 @@ open class Obj {
     val asReadonly: ObjRecord by lazy { ObjRecord(this, false) }
     val asMutable: ObjRecord by lazy { ObjRecord(this, true) }
 
+    open suspend fun serialize(scope: Scope, encoder: LynonEncoder) {
+        scope.raiseNotImplemented()
+    }
 
     companion object {
 

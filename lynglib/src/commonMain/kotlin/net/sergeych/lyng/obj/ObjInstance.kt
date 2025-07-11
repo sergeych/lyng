@@ -1,4 +1,7 @@
-package net.sergeych.lyng
+package net.sergeych.lyng.obj
+
+import net.sergeych.lyng.Arguments
+import net.sergeych.lyng.Scope
 
 class ObjInstance(override val objClass: ObjClass) : Obj() {
 

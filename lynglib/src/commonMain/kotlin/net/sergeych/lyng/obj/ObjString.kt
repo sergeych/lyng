@@ -1,7 +1,11 @@
-package net.sergeych.lyng
+package net.sergeych.lyng.obj
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import net.sergeych.lyng.Scope
+import net.sergeych.lyng.statement
+import net.sergeych.lynon.LynonDecoder
+import net.sergeych.lynon.LynonEncoder
 import net.sergeych.sprintf.sprintf
 
 @Serializable
@@ -36,8 +40,8 @@ data class ObjString(val value: String) : Obj() {
     }
 
     override suspend fun getAt(scope: Scope, index: Obj): Obj {
-        if( index is ObjInt ) return ObjChar(value[index.toInt()])
-        if( index is ObjRange ) {
+        if( index is ObjInt) return ObjChar(value[index.toInt()])
+        if( index is ObjRange) {
             val start = if(index.start == null || index.start.isNull) 0 else  index.start.toInt()
             val end = if( index.end  == null || index.end.isNull ) value.length else  {
                 val e = index.end.toInt()
@@ -73,8 +77,18 @@ data class ObjString(val value: String) : Obj() {
         return value == other.value
     }
 
+    override suspend fun serialize(scope: Scope, encoder: LynonEncoder) {
+        encoder.packBinaryData(value.encodeToByteArray())
+    }
+
     companion object {
-        val type = ObjClass("String").apply {
+        val type = object : ObjClass("String") {
+            override fun deserialize(scope: Scope, decoder: LynonDecoder): Obj =
+                ObjString(
+                    decoder.unpackBinaryData()?.decodeToString()
+                        ?: scope.raiseError("unexpected end of data")
+                )
+        }.apply {
             addFn("toInt") {
                 ObjInt(thisAs<ObjString>().value.toLong())
             }
@@ -119,7 +133,7 @@ data class ObjString(val value: String) : Obj() {
                 )
             }
             addFn("size") { ObjInt(thisAs<ObjString>().value.length.toLong()) }
-            addFn("toReal") { ObjReal(thisAs<ObjString>().value.toDouble())}
+            addFn("toReal") { ObjReal(thisAs<ObjString>().value.toDouble()) }
         }
     }
 }

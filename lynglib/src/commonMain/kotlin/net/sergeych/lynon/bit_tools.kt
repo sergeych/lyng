@@ -31,3 +31,5 @@ fun sizeInBits(value: ULong): Int {
     }
     return size
 }
+
+fun sizeInBits(value: Int): Int = sizeInBits(value.toULong())

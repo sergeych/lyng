@@ -1,4 +1,8 @@
-package net.sergeych.lyng
+package net.sergeych.lyng.obj
+
+import net.sergeych.lyng.Scope
+import net.sergeych.lynon.LynonDecoder
+import net.sergeych.lynon.LynonEncoder
 
 data class ObjBool(val value: Boolean) : Obj() {
     override val asStr by lazy { ObjString(value.toString()) }
@@ -6,6 +10,10 @@ data class ObjBool(val value: Boolean) : Obj() {
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
         if (other !is ObjBool) return -2
         return value.compareTo(other.value)
+    }
+
+    override fun hashCode(): Int {
+        return value.hashCode()
     }
 
     override fun toString(): String = value.toString()
@@ -22,8 +30,25 @@ data class ObjBool(val value: Boolean) : Obj() {
         return value
     }
 
+    override suspend fun serialize(scope: Scope, encoder: LynonEncoder) {
+        encoder.packBoolean(value)
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other == null || this::class != other::class) return false
+
+        other as ObjBool
+
+        return value == other.value
+    }
+
     companion object {
-        val type = ObjClass("Bool")
+        val type = object : ObjClass("Bool") {
+            override fun deserialize(scope: Scope, decoder: LynonDecoder): Obj {
+                return ObjBool(decoder.unpackBoolean())
+            }
+        }
     }
 }
 

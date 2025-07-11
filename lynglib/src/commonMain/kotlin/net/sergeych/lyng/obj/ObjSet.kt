@@ -1,4 +1,6 @@
-package net.sergeych.lyng
+package net.sergeych.lyng.obj
+
+import net.sergeych.lyng.Scope
 
 class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
 
@@ -63,6 +65,19 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
             if (set == other.set) 0
             else -1
         }
+    }
+
+    override fun hashCode(): Int {
+        return set.hashCode()
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other == null || this::class != other::class) return false
+
+        other as ObjSet
+
+        return set == other.set
     }
 
     companion object {

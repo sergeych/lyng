@@ -1,5 +1,6 @@
 package net.sergeych.lyng
 
+import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportProvider
 
 /**

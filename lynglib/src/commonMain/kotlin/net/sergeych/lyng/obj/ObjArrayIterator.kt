@@ -1,4 +1,6 @@
-package net.sergeych.lyng
+package net.sergeych.lyng.obj
+
+import net.sergeych.lyng.Scope
 
 class ObjArrayIterator(val array: Obj) : Obj() {
 

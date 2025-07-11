@@ -1,7 +1,9 @@
-package net.sergeych.lyng
+package net.sergeych.lyng.obj
 
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
+import net.sergeych.lyng.Scope
+import net.sergeych.lyng.statement
 import kotlin.math.min
 
 class ObjBuffer(val byteArray: UByteArray) : Obj() {
@@ -40,6 +42,10 @@ class ObjBuffer(val byteArray: UByteArray) : Obj() {
 
     val size by byteArray::size
 
+    override fun hashCode(): Int {
+        return byteArray.hashCode()
+    }
+
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
         if (other !is ObjBuffer) return super.compareTo(scope, other)
         val limit = min(size, other.size)
@@ -67,6 +73,15 @@ class ObjBuffer(val byteArray: UByteArray) : Obj() {
 
     override fun toString(): String {
         return "Buffer(${byteArray.toList()})"
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other == null || this::class != other::class) return false
+
+        other as ObjBuffer
+
+        return byteArray contentEquals other.byteArray
     }
 
     companion object {

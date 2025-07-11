@@ -55,7 +55,7 @@ abstract class BitInput {
         val tetrades = getBits(4).toInt()
         var result = 0UL
         var shift = 0
-        for (i in 0..<tetrades) {
+        for (i in 0.. tetrades) {
             result = result or (getBits(4) shl shift)
             shift += 4
         }
@@ -66,6 +66,19 @@ abstract class BitInput {
         val isNegative = getBit()
         val value = unpackUnsigned().toLong()
         return if( isNegative == 1) -value else value
+    }
+
+    fun getBool(): Boolean {
+        return getBit() == 1
+    }
+
+    fun getBytes(count: Int): ByteArray? {
+        val result = ByteArray(count)
+        for (i in 0..<count) {
+            val b = getBitsOrNull(8) ?: return null
+            result[i] = b.toByte()
+        }
+        return result
     }
 }
 

@@ -1,4 +1,6 @@
-package net.sergeych.lyng
+package net.sergeych.lyng.obj
+
+import net.sergeych.lyng.Scope
 
 class ObjRangeIterator(val self: ObjRange) : Obj() {
 

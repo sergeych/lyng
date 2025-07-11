@@ -1,4 +1,8 @@
-package net.sergeych.lyng
+package net.sergeych.lyng.obj
+
+import net.sergeych.lyng.Scope
+import net.sergeych.lynon.LynonDecoder
+import net.sergeych.lynon.LynonEncoder
 
 class ObjInt(var value: Long,override val isConst: Boolean = false) : Obj(), Numeric {
     override val asStr get() = ObjString(value.toString())
@@ -93,10 +97,17 @@ class ObjInt(var value: Long,override val isConst: Boolean = false) : Obj(), Num
         return value == other.value
     }
 
+    override suspend fun serialize(scope: Scope, encoder: LynonEncoder) {
+        encoder.packSigned(value)
+    }
+
     companion object {
         val Zero = ObjInt(0, true)
         val One = ObjInt(1, true)
-        val type = ObjClass("Int")
+        val type = object: ObjClass("Int") {
+            override fun deserialize(scope: Scope, decoder: LynonDecoder): Obj =
+                ObjInt(decoder.unpackSigned())
+        }
     }
 }
 

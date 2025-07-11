@@ -1,4 +1,6 @@
-package net.sergeych.lyng
+package net.sergeych.lyng.obj
+
+import net.sergeych.lyng.Scope
 
 class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Obj() {
 
@@ -34,9 +36,9 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
      * otherwise returns start.value.toInt()
      */
     fun startInt(scope: Scope): Int =
-        if( start == null || start is ObjNull ) 0
+        if( start == null || start is ObjNull) 0
         else {
-            if( start is ObjInt ) start.value.toInt()
+            if( start is ObjInt) start.value.toInt()
             else scope.raiseIllegalArgument("start is not Int: ${start.inspect()}")
         }
 
@@ -98,6 +100,27 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
         }
             ?: -1
     }
+
+    override fun hashCode(): Int {
+        var result = start?.hashCode() ?: 0
+        result = 31 * result + (end?.hashCode() ?: 0)
+        result = 31 * result + isEndInclusive.hashCode()
+        return result
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other == null || this::class != other::class) return false
+
+        other as ObjRange
+
+        if (start != other.start) return false
+        if (end != other.end) return false
+        if (isEndInclusive != other.isEndInclusive) return false
+
+        return true
+    }
+
 
     companion object {
         val type = ObjClass("Range", ObjIterable).apply {

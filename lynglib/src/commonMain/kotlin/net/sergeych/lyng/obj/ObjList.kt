@@ -1,4 +1,7 @@
-package net.sergeych.lyng
+package net.sergeych.lyng.obj
+
+import net.sergeych.lyng.Scope
+import net.sergeych.lyng.statement
 
 class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
 

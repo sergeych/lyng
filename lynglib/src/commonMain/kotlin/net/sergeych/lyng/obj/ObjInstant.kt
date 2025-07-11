@@ -1,9 +1,10 @@
-package net.sergeych.lyng
+package net.sergeych.lyng.obj
 
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.isDistantFuture
 import kotlinx.datetime.isDistantPast
+import net.sergeych.lyng.Scope
 
 class ObjInstant(val instant: Instant) : Obj() {
     override val objClass: ObjClass get() = type
@@ -36,6 +37,19 @@ class ObjInstant(val instant: Instant) : Obj() {
 
     override suspend fun toKotlin(scope: Scope): Any {
         return instant
+    }
+
+    override fun hashCode(): Int {
+        return instant.hashCode()
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other == null || this::class != other::class) return false
+
+        other as ObjInstant
+
+        return instant == other.instant
     }
 
     companion object {

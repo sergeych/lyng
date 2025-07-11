@@ -1,6 +1,7 @@
 package net.sergeych.lyng
 
 import kotlinx.coroutines.delay
+import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
 import kotlin.math.*
 
@@ -114,7 +115,7 @@ class Script(
             }
             addFn( "abs" ) {
                 val x = args.firstAndOnly()
-                if( x is ObjInt ) ObjInt( x.value.absoluteValue ) else ObjReal( x.toDouble().absoluteValue )
+                if( x is ObjInt) ObjInt( x.value.absoluteValue ) else ObjReal( x.toDouble().absoluteValue )
             }
 
             addVoidFn("assert") {

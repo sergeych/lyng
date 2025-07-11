@@ -1,4 +1,7 @@
-package net.sergeych.lyng
+package net.sergeych.lyng.obj
+
+import net.sergeych.lyng.Scope
+import net.sergeych.lyng.Statement
 
 class ObjMapEntry(val key: Obj, val value: Obj) : Obj() {
 
@@ -54,6 +57,19 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
         return -1
     }
     override fun toString(): String = map.toString()
+
+    override fun hashCode(): Int {
+        return map.hashCode()
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other == null || this::class != other::class) return false
+
+        other as ObjMap
+
+        return map == other.map
+    }
 
     companion object {
 

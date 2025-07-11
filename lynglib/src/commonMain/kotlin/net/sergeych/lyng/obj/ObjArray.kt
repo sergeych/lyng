@@ -1,4 +1,4 @@
-package net.sergeych.lyng
+package net.sergeych.lyng.obj
 
 val ObjArray by lazy {
 

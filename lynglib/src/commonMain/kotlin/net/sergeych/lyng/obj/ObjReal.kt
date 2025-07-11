@@ -1,5 +1,10 @@
-package net.sergeych.lyng
+package net.sergeych.lyng.obj
 
+import net.sergeych.lyng.Pos
+import net.sergeych.lyng.Scope
+import net.sergeych.lyng.statement
+import net.sergeych.lynon.LynonDecoder
+import net.sergeych.lynon.LynonEncoder
 import kotlin.math.floor
 import kotlin.math.roundToLong
 
@@ -56,8 +61,15 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
         return value == other.value
     }
 
+    override suspend fun serialize(scope: Scope, encoder: LynonEncoder) {
+        encoder.packReal(value)
+    }
+
     companion object {
-        val type: ObjClass = ObjClass("Real").apply {
+        val type: ObjClass = object : ObjClass("Real") {
+            override fun deserialize(scope: Scope, decoder: LynonDecoder): Obj =
+                ObjReal(decoder.unpackDouble())
+        }.apply {
             createField(
                 "roundToInt",
                 statement(Pos.builtIn) {

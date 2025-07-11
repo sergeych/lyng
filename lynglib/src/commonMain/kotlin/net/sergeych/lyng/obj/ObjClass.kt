@@ -1,4 +1,7 @@
-package net.sergeych.lyng
+package net.sergeych.lyng.obj
+
+import net.sergeych.lyng.*
+import net.sergeych.lynon.LynonDecoder
 
 val ObjClassType by lazy { ObjClass("Class") }
 
@@ -86,6 +89,8 @@ open class ObjClass(
         }
         return super.readField(scope, name)
     }
+
+    open fun deserialize(scope: Scope, decoder: LynonDecoder): Obj = scope.raiseNotImplemented()
 }
 
 

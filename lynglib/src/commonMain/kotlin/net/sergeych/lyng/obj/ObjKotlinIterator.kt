@@ -1,9 +1,10 @@
 @file:Suppress("unused")
 
-package net.sergeych.lyng
+package net.sergeych.lyng.obj
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import net.sergeych.lyng.Scope
 
 /**
  * Iterator wrapper to allow Kotlin collections to be returned from Lyng objects;

@@ -1,4 +1,7 @@
-package net.sergeych.lyng
+package net.sergeych.lyng.obj
+
+import net.sergeych.lyng.Arguments
+import net.sergeych.lyng.Statement
 
 /**
  * Abstract class that must provide `iterator` method that returns [ObjIterator] instance.

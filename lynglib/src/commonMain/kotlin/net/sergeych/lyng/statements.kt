@@ -1,5 +1,8 @@
 package net.sergeych.lyng
 
+import net.sergeych.lyng.obj.Obj
+import net.sergeych.lyng.obj.ObjClass
+
 fun String.toSource(name: String = "eval"): Source = Source(name, this)
 
 sealed class ObjType {

@@ -1,5 +1,6 @@
-package net.sergeych.lyng
+package net.sergeych.lyng.obj
 
+import net.sergeych.lyng.Scope
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -19,6 +20,19 @@ class ObjDuration(val duration: Duration) : Obj() {
         return if( other is ObjDuration)
             duration.compareTo(other.duration)
         else -1
+    }
+
+    override fun hashCode(): Int {
+        return duration.hashCode()
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other == null || this::class != other::class) return false
+
+        other as ObjDuration
+
+        return duration == other.duration
     }
 
     companion object {

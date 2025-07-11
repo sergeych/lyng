@@ -36,7 +36,7 @@ abstract class BitOutput {
 
     fun packUnsigned(value: ULong) {
         val tetrades = sizeInTetrades(value)
-        putBits(tetrades, 4)
+        putBits(tetrades - 1, 4)
         var rest = value
         for( i in 0..<tetrades ) {
             putBits( rest and 0xFu, 4 )
@@ -67,4 +67,11 @@ abstract class BitOutput {
             isClosed = true
         }
     }
+
+    fun putBytes(data: ByteArray) {
+        for( b in data ) {
+            putBits(b.toULong(), 8)
+        }
+    }
+
 }

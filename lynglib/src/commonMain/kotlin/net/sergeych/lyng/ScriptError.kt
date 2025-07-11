@@ -2,6 +2,8 @@
 
 package net.sergeych.lyng
 
+import net.sergeych.lyng.obj.ObjException
+
 open class ScriptError(val pos: Pos, val errorMessage: String, cause: Throwable? = null) : Exception(
     """
         $pos: Error: $errorMessage

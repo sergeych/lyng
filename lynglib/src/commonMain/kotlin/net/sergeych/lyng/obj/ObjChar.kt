@@ -1,4 +1,6 @@
-package net.sergeych.lyng
+package net.sergeych.lyng.obj
+
+import net.sergeych.lyng.Scope
 
 class ObjChar(val value: Char): Obj() {
 
@@ -10,6 +12,19 @@ class ObjChar(val value: Char): Obj() {
     override fun toString(): String = value.toString()
 
     override fun inspect(): String = "'$value'"
+
+    override fun hashCode(): Int {
+        return value.hashCode()
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other == null || this::class != other::class) return false
+
+        other as ObjChar
+
+        return value == other.value
+    }
 
     companion object {
         val type = ObjClass("Char").apply {

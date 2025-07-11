@@ -9,7 +9,11 @@ import com.github.ajalt.clikt.parameters.arguments.optional
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import kotlinx.coroutines.runBlocking
-import net.sergeych.lyng.*
+import net.sergeych.lyng.LyngVersion
+import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScriptError
+import net.sergeych.lyng.Source
+import net.sergeych.lyng.obj.*
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import okio.SYSTEM

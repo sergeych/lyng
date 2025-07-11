@@ -1,5 +1,9 @@
 package net.sergeych.lyng
 
+import net.sergeych.lyng.obj.Obj
+import net.sergeych.lyng.obj.ObjIterable
+import net.sergeych.lyng.obj.ObjList
+
 data class ParsedArgument(val value: Statement, val pos: Pos, val isSplat: Boolean = false)
 
 suspend fun Collection<ParsedArgument>.toArguments(scope: Scope, tailBlockMode: Boolean): Arguments {
@@ -26,7 +30,7 @@ suspend fun Collection<ParsedArgument>.toArguments(scope: Scope, tailBlockMode: 
     return Arguments(list,tailBlockMode)
 }
 
-data class Arguments(val list: List<Obj>,val tailBlockMode: Boolean = false) : List<Obj> by list {
+data class Arguments(val list: List<Obj>, val tailBlockMode: Boolean = false) : List<Obj> by list {
 
     constructor(vararg values: Obj) : this(values.toList())
 

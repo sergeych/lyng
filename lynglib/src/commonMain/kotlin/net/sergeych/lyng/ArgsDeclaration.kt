@@ -1,5 +1,8 @@
 package net.sergeych.lyng
 
+import net.sergeych.lyng.obj.Obj
+import net.sergeych.lyng.obj.ObjList
+
 /**
  * List of argument declarations in the __definition__ of the lambda, class constructor,
  * function, etc. It is created by [Compiler.parseArgsDeclaration]
