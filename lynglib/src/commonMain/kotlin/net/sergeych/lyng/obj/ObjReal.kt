@@ -62,7 +62,7 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
     }
 
     override suspend fun serialize(scope: Scope, encoder: LynonEncoder) {
-        encoder.packReal(value)
+        encoder.encodeReal(value)
     }
 
     companion object {

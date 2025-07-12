@@ -78,7 +78,7 @@ data class ObjString(val value: String) : Obj() {
     }
 
     override suspend fun serialize(scope: Scope, encoder: LynonEncoder) {
-        encoder.packBinaryData(value.encodeToByteArray())
+        encoder.encodeBinaryData(value.encodeToByteArray())
     }
 
     companion object {

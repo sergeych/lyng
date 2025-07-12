@@ -6,13 +6,13 @@ import net.sergeych.lyng.obj.ObjBool
 import net.sergeych.lyng.obj.ObjChar
 import net.sergeych.lyng.obj.ObjInt
 
-class LynonPacker(private val bout: MemoryBitOutput= MemoryBitOutput()) : LynonEncoder(bout) {
-    fun toUByteArray(): UByteArray = bout.toUByteArray()
+class LynonPacker(bout: MemoryBitOutput = MemoryBitOutput()) : LynonEncoder(bout) {
+    fun toUByteArray(): UByteArray = (bout as MemoryBitOutput).toUByteArray()
 }
 
 class LynonUnpacker(source: UByteArray) : LynonDecoder(MemoryBitInput(source))
 
-open class LynonEncoder(private val bout: BitOutput) {
+open class LynonEncoder(val bout: BitOutput) {
 
     fun shouldCache(obj: Obj): Boolean = when (obj) {
         is ObjChar -> false
@@ -21,41 +21,56 @@ open class LynonEncoder(private val bout: BitOutput) {
         else -> true
     }
 
-    val cache = mutableMapOf<Obj,Int>()
+    val cache = mutableMapOf<Any, Int>()
 
-    suspend fun packObject(scope: Scope,obj: Obj) {
-        cache[obj]?.let { cacheId ->
-            val size = sizeInBits(cache.size)
-            bout.putBit(1)
-            bout.putBits(cacheId, size)
-        } ?: run {
-            bout.putBit(0)
-            if( shouldCache(obj) ) {
+    inline fun encodeCached(item: Any, packer: LynonEncoder.() -> Unit) {
+        if (item is Obj) {
+            cache[item]?.let { cacheId ->
+                val size = sizeInBits(cache.size)
                 bout.putBit(1)
-                cache[obj] = cache.size
-            }
-            else
+                bout.putBits(cacheId.toULong(), size)
+            } ?: run {
                 bout.putBit(0)
+                if (shouldCache(item)) {
+                    bout.putBit(1)
+                    cache[item] = cache.size
+                } else
+                    bout.putBit(0)
+                packer()
+            }
+        }
+    }
+
+    suspend fun encodeObj(scope: Scope, obj: Obj) {
+        encodeCached(obj) {
             obj.serialize(scope, this)
         }
     }
 
-    fun packBinaryData(data: ByteArray) {
+    fun encodeBinaryData(data: ByteArray) {
         bout.packUnsigned(data.size.toULong())
         bout.putBytes(data)
     }
 
-    fun packSigned(value: Long) { bout.packSigned(value) }
-    @Suppress("unused")
-    fun packUnsigned(value: ULong) { bout.packUnsigned(value) }
+    fun encodeSigned(value: Long) {
+        bout.packSigned(value)
+    }
 
     @Suppress("unused")
-    fun packBool(value: Boolean) { bout.putBit(if (value) 1 else 0) }
-    fun packReal(value: Double) {
+    fun encodeUnsigned(value: ULong) {
+        bout.packUnsigned(value)
+    }
+
+    @Suppress("unused")
+    fun encodeBool(value: Boolean) {
+        bout.putBit(if (value) 1 else 0)
+    }
+
+    fun encodeReal(value: Double) {
         bout.putBits(value.toRawBits().toULong(), 64)
     }
 
-    fun packBoolean(value: Boolean) {
+    fun encodeBoolean(value: Boolean) {
         bout.putBit(if (value) 1 else 0)
     }
 

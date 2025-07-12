@@ -90,14 +90,14 @@ class LynonTests {
         val encoder = LynonEncoder(bout)
         val s = "Hello, World!".toObj()
         val scope = Scope()
-        encoder.packObject(scope, s) // 1
-        encoder.packObject(scope, s)
-        encoder.packObject(scope, s)
-        encoder.packObject(scope, s)
-        encoder.packObject(scope, s)
-        encoder.packObject(scope, s)
-        encoder.packObject(scope, s)
-        encoder.packObject(scope, s) // 8
+        encoder.encodeObj(scope, s) // 1
+        encoder.encodeObj(scope, s)
+        encoder.encodeObj(scope, s)
+        encoder.encodeObj(scope, s)
+        encoder.encodeObj(scope, s)
+        encoder.encodeObj(scope, s)
+        encoder.encodeObj(scope, s)
+        encoder.encodeObj(scope, s) // 8
 
         val decoder = LynonDecoder(MemoryBitInput(bout))
         val s1 = decoder.unpackObject(scope, ObjString.type) // 1
@@ -122,7 +122,7 @@ class LynonTests {
         val encoder = LynonPacker()
         val scope = Scope()
         for (s in source) {
-            encoder.packObject(scope, s)
+            encoder.encodeObj(scope, s)
         }
         val decoder = LynonUnpacker(encoder.toUByteArray())
         val restored = mutableListOf<Obj>()
@@ -136,10 +136,10 @@ class LynonTests {
     fun testUnpackBoolean() = runTest {
         val scope = Scope()
         val decoder = LynonUnpacker(LynonPacker().apply {
-            packObject(scope, ObjBool(true))
-            packObject(scope, ObjBool(false))
-            packObject(scope, ObjBool(true))
-            packObject(scope, ObjBool(true))
+            encodeObj(scope, ObjBool(true))
+            encodeObj(scope, ObjBool(false))
+            encodeObj(scope, ObjBool(true))
+            encodeObj(scope, ObjBool(true))
         }.toUByteArray())
         assertEquals(ObjTrue, decoder.unpackObject(scope, ObjBool.type))
         assertEquals(ObjFalse, decoder.unpackObject(scope, ObjBool.type))
@@ -151,15 +151,15 @@ class LynonTests {
     fun testUnpackReal() = runTest {
         val scope = Scope()
         val decoder = LynonUnpacker(LynonPacker().apply {
-            packObject(scope, ObjReal(-Math.PI))
-            packObject(scope, ObjReal(Math.PI))
-            packObject(scope, ObjReal(-Math.PI))
-            packObject(scope, ObjReal(Math.PI))
-            packObject(scope, ObjReal(Double.NaN))
-            packObject(scope, ObjReal(Double.NEGATIVE_INFINITY))
-            packObject(scope, ObjReal(Double.POSITIVE_INFINITY))
-            packObject(scope, ObjReal(Double.MIN_VALUE))
-            packObject(scope, ObjReal(Double.MAX_VALUE))
+            encodeObj(scope, ObjReal(-Math.PI))
+            encodeObj(scope, ObjReal(Math.PI))
+            encodeObj(scope, ObjReal(-Math.PI))
+            encodeObj(scope, ObjReal(Math.PI))
+            encodeObj(scope, ObjReal(Double.NaN))
+            encodeObj(scope, ObjReal(Double.NEGATIVE_INFINITY))
+            encodeObj(scope, ObjReal(Double.POSITIVE_INFINITY))
+            encodeObj(scope, ObjReal(Double.MIN_VALUE))
+            encodeObj(scope, ObjReal(Double.MAX_VALUE))
         }.toUByteArray())
         assertEquals(ObjReal(-Math.PI), decoder.unpackObject(scope, ObjReal.type))
         assertEquals(ObjReal(Math.PI), decoder.unpackObject(scope, ObjReal.type))
@@ -175,12 +175,12 @@ class LynonTests {
     fun testUnpackInt() = runTest {
         val scope = Scope()
         val decoder = LynonUnpacker(LynonPacker().apply {
-            packObject(scope, ObjInt(0))
-            packObject(scope, ObjInt(-1))
-            packObject(scope, ObjInt(23))
-            packObject(scope, ObjInt(Long.MIN_VALUE))
-            packObject(scope, ObjInt(Long.MAX_VALUE))
-            packObject(scope, ObjInt(Long.MAX_VALUE))
+            encodeObj(scope, ObjInt(0))
+            encodeObj(scope, ObjInt(-1))
+            encodeObj(scope, ObjInt(23))
+            encodeObj(scope, ObjInt(Long.MIN_VALUE))
+            encodeObj(scope, ObjInt(Long.MAX_VALUE))
+            encodeObj(scope, ObjInt(Long.MAX_VALUE))
         }.toUByteArray())
         assertEquals(ObjInt(0), decoder.unpackObject(scope, ObjInt.type))
         assertEquals(ObjInt(-1), decoder.unpackObject(scope, ObjInt.type))

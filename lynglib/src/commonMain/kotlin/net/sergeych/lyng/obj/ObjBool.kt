@@ -31,7 +31,7 @@ data class ObjBool(val value: Boolean) : Obj() {
     }
 
     override suspend fun serialize(scope: Scope, encoder: LynonEncoder) {
-        encoder.packBoolean(value)
+        encoder.encodeBoolean(value)
     }
 
     override fun equals(other: Any?): Boolean {

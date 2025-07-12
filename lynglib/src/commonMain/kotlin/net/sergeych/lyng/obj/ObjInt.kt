@@ -98,7 +98,7 @@ class ObjInt(var value: Long,override val isConst: Boolean = false) : Obj(), Num
     }
 
     override suspend fun serialize(scope: Scope, encoder: LynonEncoder) {
-        encoder.packSigned(value)
+        encoder.encodeSigned(value)
     }
 
     companion object {
