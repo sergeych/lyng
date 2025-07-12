@@ -7,13 +7,11 @@ import kotlin.math.roundToInt
  * LZW compression algorithm: work in progress.
  *
  * Uses Lyng but input/output. Uses automatic code size.
- *
- * TODO: - reset dictionary
  */
 class LZW {
     companion object {
 
-        val MAX_CODE_SIZE = 12
+        val MAX_CODE_SIZE = 17
         val STOP_CODE = (1 shl MAX_CODE_SIZE) - 1
         val MAX_DICT_SIZE = (STOP_CODE * 0.92).roundToInt()
 
@@ -42,7 +40,16 @@ class LZW {
                 } else {
                     val size = sizeInBits(dictionary.size)
                     bitOutput.putBits(dictionary[current]!!,size)
-                    dictionary[combined] = nextCode++
+                    if( dictionary.size >= MAX_DICT_SIZE ) {
+                        bitOutput.putBits(STOP_CODE,size)
+                        dictionary.clear()
+                        nextCode = 256
+                        for (i in 0..255) {
+                            dictionary[ByteChunk(ubyteArrayOf(i.toUByte()))] = i
+                        }
+                    }
+                    else
+                        dictionary[combined] = nextCode++
                     current = ByteChunk(ubyteArrayOf(char))
                 }
             }
@@ -72,18 +79,29 @@ class LZW {
             while( !compressed.isEndOfStream ) {
                 val codeSize = sizeInBits(nextCode + 1)
                 val code = compressed.getBitsOrNull(codeSize)?.toInt() ?: break
-                val current = if ( code in dictionary) {
-                    dictionary[code]!!
-                } else if (code == nextCode) {
-                    // Special case for pattern like cScSc
-                    previous + previous[0]
-                } else {
-                    throw IllegalArgumentException("Invalid compressed code: $code")
-                }
 
-                result += current
-                dictionary[nextCode++] = previous + current[0]
-                previous = current
+                if( code == STOP_CODE ) {
+                    nextCode = 256
+                    dictionary.clear()
+                    for (i in 0..255)
+                        dictionary[i] = ubyteArrayOf(i.toUByte())
+                    previous = dictionary[compressed.getBits(9).toInt()]!!
+                }
+                else {
+
+                    val current = if (code in dictionary) {
+                        dictionary[code]!!
+                    } else if (code == nextCode) {
+                        // Special case for pattern like cScSc
+                        previous + previous[0]
+                    } else {
+                        throw IllegalArgumentException("Invalid compressed code: $code")
+                    }
+
+                    result += current
+                    dictionary[nextCode++] = previous + current[0]
+                    previous = current
+                }
             }
 
             return result.toTypedArray().toUByteArray()

@@ -2,10 +2,12 @@ package net.sergeych.lynon
 
 abstract class BitInput {
 
+    data class DataByte(val data: Int,val bits: Int)
+
     /**
      * Return next byte, int in 0..255 range, or -1 if end of stream reached
      */
-    abstract fun getByte(): Int
+    abstract fun getByte(): DataByte
 
     private var accumulator = 0
 
@@ -17,12 +19,13 @@ abstract class BitInput {
     fun getBitOrNull(): Int? {
         if (isEndOfStream) return null
         if (mask == 0) {
-            accumulator = getByte()
+            val ab = getByte()
+            accumulator = ab.data
             if (accumulator == -1) {
                 isEndOfStream = true
                 return null
             }
-            mask = 0x80
+            mask = 1 shl (ab.bits - 1)
         }
         val result = if (0 == accumulator and mask) 0 else 1
         mask = mask shr 1
@@ -31,14 +34,14 @@ abstract class BitInput {
 
     fun getBitsOrNull(count: Int): ULong? {
         var result = 0UL
-        var mask = 1UL
+        var resultMask = 1UL
         for( i in 0 ..< count) {
             when(getBitOrNull()) {
                 null -> return null
-                1 -> result = result or mask
+                1 -> result = result or resultMask
                 0 -> {}
             }
-            mask = mask shl 1
+            resultMask = resultMask shl 1
         }
         return result
     }
@@ -68,6 +71,7 @@ abstract class BitInput {
         return if( isNegative == 1) -value else value
     }
 
+    @Suppress("unused")
     fun getBool(): Boolean {
         return getBit() == 1
     }

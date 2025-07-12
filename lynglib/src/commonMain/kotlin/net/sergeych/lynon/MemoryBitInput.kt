@@ -1,15 +1,19 @@
 package net.sergeych.lynon
 
-class MemoryBitInput(val packedBits: UByteArray): BitInput() {
-    constructor(bout: MemoryBitOutput): this(bout.toUByteArray())
+class MemoryBitInput(val packedBits: UByteArray,val lastByteBits: Int): BitInput() {
+
+    constructor(bout: MemoryBitOutput): this(bout.toUByteArray(), bout.lastByteBits)
 
     private var index = 0
 
-    override fun getByte(): Int {
-        if( index < packedBits.size ) {
-            return packedBits[index++].toInt()
+    override fun getByte(): DataByte {
+        return if( index < packedBits.size ) {
+            DataByte(
+                packedBits[index++].toInt(),
+                if( index == packedBits.size ) lastByteBits else 8
+            )
         } else {
-            return -1
+            DataByte(-1,0)
         }
     }
 

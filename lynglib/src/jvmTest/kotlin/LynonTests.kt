@@ -40,7 +40,7 @@ class LynonTests {
         bout.putBits(3, 4)
         bout.close()
 
-        val bin = MemoryBitInput(bout.toUByteArray())
+        val bin = MemoryBitInput(bout)
         assertEquals(2UL, bin.getBits(3))
         assertEquals(1UL, bin.getBits(7))
         assertEquals(197UL, bin.getBits(8))
@@ -52,7 +52,7 @@ class LynonTests {
         val bout = MemoryBitOutput()
         bout.packUnsigned(1471792UL)
         bout.close()
-        val bin = MemoryBitInput(bout.toUByteArray())
+        val bin = MemoryBitInput(bout)
         assertEquals(1471792UL, bin.unpackUnsigned())
     }
 
@@ -61,7 +61,7 @@ class LynonTests {
         val bout = MemoryBitOutput()
         bout.packUnsigned(ULong.MAX_VALUE)
         bout.close()
-        val bin = MemoryBitInput(bout.toUByteArray())
+        val bin = MemoryBitInput(bout)
         assertEquals(ULong.MAX_VALUE, bin.unpackUnsigned())
     }
 
@@ -70,7 +70,7 @@ class LynonTests {
         val bout = MemoryBitOutput()
         bout.packUnsigned(7UL)
         bout.close()
-        val bin = MemoryBitInput(bout.toUByteArray())
+        val bin = MemoryBitInput(bout)
         assertEquals(7UL, bin.unpackUnsigned())
     }
 
@@ -81,7 +81,7 @@ class LynonTests {
         bout.packSigned(1471792L)
 //        bout.packSigned(147179L)
         bout.close()
-        val bin = MemoryBitInput(bout.toUByteArray())
+        val bin = MemoryBitInput(bout)
         assertEquals(-1471792L, bin.unpackSigned())
         assertEquals(1471792L, bin.unpackSigned())
     }
@@ -126,7 +126,7 @@ class LynonTests {
         for (s in source) {
             encoder.encodeObj(scope, s)
         }
-        val decoder = LynonUnpacker(encoder.toUByteArray())
+        val decoder = LynonUnpacker(encoder)
         val restored = mutableListOf<Obj>()
         for (i in source.indices) {
             restored.add(decoder.unpackObject(scope, ObjString.type))
@@ -142,7 +142,7 @@ class LynonTests {
             encodeObj(scope, ObjBool(false))
             encodeObj(scope, ObjBool(true))
             encodeObj(scope, ObjBool(true))
-        }.toUByteArray())
+        })
         assertEquals(ObjTrue, decoder.unpackObject(scope, ObjBool.type))
         assertEquals(ObjFalse, decoder.unpackObject(scope, ObjBool.type))
         assertEquals(ObjTrue, decoder.unpackObject(scope, ObjBool.type))
@@ -162,7 +162,7 @@ class LynonTests {
             encodeObj(scope, ObjReal(Double.POSITIVE_INFINITY))
             encodeObj(scope, ObjReal(Double.MIN_VALUE))
             encodeObj(scope, ObjReal(Double.MAX_VALUE))
-        }.toUByteArray())
+        })
         assertEquals(ObjReal(-Math.PI), decoder.unpackObject(scope, ObjReal.type))
         assertEquals(ObjReal(Math.PI), decoder.unpackObject(scope, ObjReal.type))
         assertEquals(ObjReal(-Math.PI), decoder.unpackObject(scope, ObjReal.type))
@@ -183,13 +183,31 @@ class LynonTests {
             encodeObj(scope, ObjInt(Long.MIN_VALUE))
             encodeObj(scope, ObjInt(Long.MAX_VALUE))
             encodeObj(scope, ObjInt(Long.MAX_VALUE))
-        }.toUByteArray())
+        })
         assertEquals(ObjInt(0), decoder.unpackObject(scope, ObjInt.type))
         assertEquals(ObjInt(-1), decoder.unpackObject(scope, ObjInt.type))
         assertEquals(ObjInt(23), decoder.unpackObject(scope, ObjInt.type))
         assertEquals(ObjInt(Long.MIN_VALUE), decoder.unpackObject(scope, ObjInt.type))
         assertEquals(ObjInt(Long.MAX_VALUE), decoder.unpackObject(scope, ObjInt.type))
         assertEquals(ObjInt(Long.MAX_VALUE), decoder.unpackObject(scope, ObjInt.type))
+    }
+
+    @Test
+    fun testLastvalue() {
+        var bin = MemoryBitInput(MemoryBitOutput().apply {
+            putBits(5, 3)
+        })
+        assertEquals(5UL, bin.getBits(3))
+        assertEquals(null, bin.getBitsOrNull(3))
+        bin = MemoryBitInput(MemoryBitOutput().apply {
+            putBits(5, 3)
+            putBits(1024, 11)
+            putBits(2, 2)
+        })
+        assertEquals(5UL, bin.getBits(3))
+        assertEquals(1024UL, bin.getBits(11))
+        assertEquals(2UL, bin.getBits(2))
+        assertEquals(null, bin.getBitsOrNull(3))
     }
 
     @Test
@@ -207,7 +225,7 @@ class LynonTests {
         println("Number of codes: ${out.toUByteArray().size}")
 
 //        // Decompress
-        val decompressed = LZW.decompress(MemoryBitInput(out.toUByteArray())).toByteArray().decodeToString()
+        val decompressed = LZW.decompress(MemoryBitInput(out)).toByteArray().decodeToString()
 //        println("\nDecompressed: $decompressed")
         println("Length: ${decompressed.length}")
 
