@@ -10,6 +10,7 @@ open class ObjClass(
     vararg parents: ObjClass,
 ) : Obj() {
 
+    var constructorMeta: ArgsDeclaration? = null
     var instanceConstructor: Statement? = null
 
     val allParentsSet: Set<ObjClass> =

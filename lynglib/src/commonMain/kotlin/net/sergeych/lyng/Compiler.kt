@@ -1112,6 +1112,7 @@ class Compiler(
         // inheritance must alter this code:
         val newClass = ObjClass(className).apply {
             instanceConstructor = constructorCode
+            constructorMeta = constructorArgsDeclaration
         }
 
         return statement {

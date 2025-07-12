@@ -3,6 +3,8 @@ import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.obj.*
 import net.sergeych.lynon.*
+import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.test.Test
 
 class LynonTests {
@@ -188,5 +190,28 @@ class LynonTests {
         assertEquals(ObjInt(Long.MIN_VALUE), decoder.unpackObject(scope, ObjInt.type))
         assertEquals(ObjInt(Long.MAX_VALUE), decoder.unpackObject(scope, ObjInt.type))
         assertEquals(ObjInt(Long.MAX_VALUE), decoder.unpackObject(scope, ObjInt.type))
+    }
+
+    @Test
+    fun testLzw() {
+        // Example usage
+//        val original = "TOBEORNOTTOBEORTOBEORNOT"
+        val original = Files.readString(Path.of("../sample_texts/dikkens_hard_times.txt"))
+//        println("Original: $original")
+        println("Length: ${original.length}")
+
+        // Compress
+        val out = MemoryBitOutput()
+        LZW.compress(original.encodeToByteArray().toUByteArray(), out)
+//        println("\nCompressed codes: ${out.toUByteArray().toDump()}")
+        println("Number of codes: ${out.toUByteArray().size}")
+
+//        // Decompress
+        val decompressed = LZW.decompress(MemoryBitInput(out.toUByteArray())).toByteArray().decodeToString()
+//        println("\nDecompressed: $decompressed")
+        println("Length: ${decompressed.length}")
+
+        // Verification
+        println("\nOriginal and decompressed match: ${original == decompressed}")
     }
 }

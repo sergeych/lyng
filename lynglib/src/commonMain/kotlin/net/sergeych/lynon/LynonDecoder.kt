@@ -4,16 +4,15 @@ import net.sergeych.lyng.Scope
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjClass
 
-open class LynonDecoder(val bin: BitInput) {
+open class LynonDecoder(val bin: BitInput,val settings: LynonSettings = LynonSettings.default) {
 
     val cache = mutableListOf<Obj>()
 
     inline fun decodeCached(f: LynonDecoder.() -> Obj): Obj {
         return if( bin.getBit() == 0 ) {
             // unpack and cache
-            val cached = bin.getBool()
             f().also {
-                if( cached ) cache.add(it)
+                if( settings.shouldCache(it) ) cache.add(it)
             }
         }
         else {

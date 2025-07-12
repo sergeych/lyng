@@ -2,6 +2,7 @@ package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Arguments
 import net.sergeych.lyng.Scope
+import net.sergeych.lynon.LynonEncoder
 
 class ObjInstance(override val objClass: ObjClass) : Obj() {
 
@@ -42,6 +43,18 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
     override fun toString(): String {
         val fields = publicFields.map { "${it.key}=${it.value.value}" }.joinToString(",")
         return "${objClass.className}($fields)"
+    }
+
+    override suspend fun serialize(scope: Scope, encoder: LynonEncoder) {
+        val meta = objClass.constructorMeta
+            ?: scope.raiseError("can't serialize non-serializable object (no constructor meta)")
+        for( p in meta.params) {
+            val r = readField(scope, p.name)
+            println("serialize ${p.name}=${r.value}")
+            TODO()
+//            encoder.encodeObj(scope, r.value)
+        }
+        // todo: possible vars?
     }
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {

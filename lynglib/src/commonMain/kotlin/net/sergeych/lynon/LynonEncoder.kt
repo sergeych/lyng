@@ -2,28 +2,12 @@ package net.sergeych.lynon
 
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.obj.Obj
-import net.sergeych.lyng.obj.ObjBool
-import net.sergeych.lyng.obj.ObjChar
-import net.sergeych.lyng.obj.ObjInt
 
-class LynonPacker(bout: MemoryBitOutput = MemoryBitOutput()) : LynonEncoder(bout) {
-    fun toUByteArray(): UByteArray = (bout as MemoryBitOutput).toUByteArray()
-}
-
-class LynonUnpacker(source: UByteArray) : LynonDecoder(MemoryBitInput(source))
-
-open class LynonEncoder(val bout: BitOutput) {
-
-    fun shouldCache(obj: Obj): Boolean = when (obj) {
-        is ObjChar -> false
-        is ObjInt -> obj.value > 0x10000FF
-        is ObjBool -> false
-        else -> true
-    }
+open class LynonEncoder(val bout: BitOutput,val settings: LynonSettings = LynonSettings.default) {
 
     val cache = mutableMapOf<Any, Int>()
 
-    inline fun encodeCached(item: Any, packer: LynonEncoder.() -> Unit) {
+    private inline fun encodeCached(item: Any, packer: LynonEncoder.() -> Unit) {
         if (item is Obj) {
             cache[item]?.let { cacheId ->
                 val size = sizeInBits(cache.size)
@@ -31,11 +15,8 @@ open class LynonEncoder(val bout: BitOutput) {
                 bout.putBits(cacheId.toULong(), size)
             } ?: run {
                 bout.putBit(0)
-                if (shouldCache(item)) {
-                    bout.putBit(1)
+                if (settings.shouldCache(item))
                     cache[item] = cache.size
-                } else
-                    bout.putBit(0)
                 packer()
             }
         }
