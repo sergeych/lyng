@@ -179,6 +179,7 @@ class Script(
             ImportManager(rootScope, SecurityManager.allowAll).apply {
                 addPackage("lyng.buffer") {
                     it.addConst("Buffer", ObjBuffer.type)
+                    it.addConst("MutableBuffer", ObjMutableBuffer.type)
                 }
                 addPackage("lyng.time") {
                     it.addConst("Instant", ObjInstant.type)

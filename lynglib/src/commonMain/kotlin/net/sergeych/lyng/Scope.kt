@@ -82,6 +82,11 @@ open class Scope(
         }
     }
 
+    fun requireNoArgs() {
+        if( args.list.isNotEmpty())
+            raiseError("This function does not accept any arguments")
+    }
+
     inline fun <reified T : Obj> thisAs(): T = (thisObj as? T)
         ?: raiseClassCastError("Cannot cast ${thisObj.objClass.className} to ${T::class.simpleName}")
 

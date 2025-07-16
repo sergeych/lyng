@@ -2477,11 +2477,13 @@ class ScriptTest {
             assertEquals( 3, Buffer(1, 2, 3).size )
             assertEquals( 5, Buffer("hello").size )
             
-            val buffer = Buffer("Hello")
+            var buffer = Buffer("Hello")
             assertEquals( 5, buffer.size)
             assertEquals('l'.code, buffer[2] )
             assertEquals('l'.code, buffer[3] )
             assertEquals("Hello", buffer.decodeUtf8())
+            
+            buffer = buffer.toMutable()
             
             buffer[2] = 101
             assertEquals(101, buffer[2])
@@ -2503,6 +2505,12 @@ class ScriptTest {
             val b3 = b1 + Buffer("!")
             assertEquals( "Hello!", b3.decodeUtf8())
             assert( b3 > b1 )
+            assert( b1 !== b2)
+            
+            val map = Map( b1 => "foo")
+            assertEquals("foo",  map[b1])
+            assertEquals("foo",  map[b2])
+            assertEquals(null,  map[b3])
             
         """.trimIndent())
     }
@@ -2615,7 +2623,7 @@ class ScriptTest {
         
         import lyng.buffer
         
-        val b = Buffer(1,2,3)
+        val b = MutableBuffer(1,2,3)
         b[1]++
         assert( b == Buffer(1,3,3) )
         ++b[0]
@@ -2633,7 +2641,7 @@ class ScriptTest {
         
         import lyng.buffer
         
-        val b = Buffer(1,2,3)
+        val b = Buffer(1,2,3).toMutable()
         b[1]--
         assert( b == Buffer(1,1,3) )
         --b[0]

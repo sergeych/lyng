@@ -6,7 +6,7 @@ import net.sergeych.lyng.Scope
 import net.sergeych.lyng.statement
 import kotlin.math.min
 
-class ObjBuffer(val byteArray: UByteArray) : Obj() {
+open class ObjBuffer(val byteArray: UByteArray) : Obj() {
 
     override val objClass: ObjClass = type
 
@@ -28,16 +28,6 @@ class ObjBuffer(val byteArray: UByteArray) : Obj() {
             val end: Int = index.exclusiveIntEnd(scope) ?: size
             ObjBuffer(byteArray.sliceArray(start..<end))
         } else ObjInt(byteArray[checkIndex(scope, index)].toLong(), true)
-    }
-
-    override suspend fun putAt(scope: Scope, index: Obj, newValue: Obj) {
-        byteArray[checkIndex(scope, index.toObj())] = when (newValue) {
-            is ObjInt -> newValue.value.toUByte()
-            is ObjChar -> newValue.value.code.toUByte()
-            else -> scope.raiseIllegalArgument(
-                "invalid byte value for buffer at index ${index.inspect()}: ${newValue.inspect()}"
-            )
-        }
     }
 
     val size by byteArray::size
@@ -144,18 +134,10 @@ class ObjBuffer(val byteArray: UByteArray) : Obj() {
                     thisAs<ObjBuffer>().byteArray.toByteArray().decodeToString()
                 )
             }
-//            )
-//            addFn("getAt") {
-//                requireExactCount(1)
-//                thisAs<ObjList>().getAt(this, requiredArg<Obj>(0))
-//            }
-//            addFn("putAt") {
-//                requireExactCount(2)
-//                val newValue = args[1]
-//                thisAs<ObjList>().putAt(this, requiredArg<ObjInt>(0).value.toInt(), newValue)
-//                newValue
-//            }
-
+            addFn("toMutable") {
+                requireNoArgs()
+                ObjMutableBuffer(thisAs<ObjBuffer>().byteArray.copyOf())
+            }
         }
     }
 }

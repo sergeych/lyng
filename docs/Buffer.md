@@ -1,7 +1,8 @@
 # Binary `Buffer`
 
 Buffers are effective unsigned byte arrays of fixed size. Buffers content is mutable,
-unlike its size. Buffers are comparable and implement [Array], thus [Collection] and [Iterable]. Buffer iterators return its contents as unsigned bytes converted to `Int`
+unlike its size. Buffers are comparable and implement [Array], thus [Collection] and [Iterable]. Buffer iterators return
+its contents as unsigned bytes converted to `Int`
 
 Buffers needs to be imported with `import lyng.buffer`:
 
@@ -9,6 +10,8 @@ Buffers needs to be imported with `import lyng.buffer`:
 
     assertEquals(5, Buffer("Hello").size)
     >>> void
+
+Buffer is _immutable_, there is a `MutableBuffer` with same interface but mutable.
 
 ## Constructing
 
@@ -36,15 +39,23 @@ There are a lo of ways to construct a buffer:
 
     >>> void
 
-## Accessing an modifying
+## Accessing and modifying
 
-Buffer implement [Array] and therefore can be accessed and modified with indexing:
+Buffer implement [Array] and therefore can be accessed, and `MutableBuffers` also modified:
 
     import lyng.buffer
     val b1 = Buffer( 1, 2, 3)
     assertEquals( 2, b1[1] )
-    b1[0] = 199
-    assertEquals(199, b1[0])
+
+    val b2 = b1.toMutable()
+    assertEquals( 2, b1[1] )
+    b2[1]++
+    b2[0] = 100
+    assertEquals( Buffer(100, 3, 3), b2)
+
+    // b2 is a mutable copy so b1 has not been changed:
+    assertEquals( Buffer(1, 2, 3), b1)
+
     >>> void
 
 Buffer provides concatenation with another Buffer:
@@ -58,12 +69,12 @@ Please note that indexed bytes are _readonly projection_, e.g. you can't modify 
 
 ## Comparing
 
-Buffers are comparable with other buffers:
+Buffers are comparable with other buffers (and notice there are _mutable_ buffers, bu default buffers ar _immutable_):
 
     import lyng.buffer
     val b1 = Buffer(1, 2, 3)
     val b2 = Buffer(1, 2, 3)
-    val b3 = Buffer(b2)
+    val b3 = MutableBuffer(b2)
     
     b3[0] = 101
 
@@ -93,20 +104,18 @@ As with [List], it is possible to use ranges as indexes to slice a Buffer:
 
 ## Members
 
-| name                | meaning                              | type  |
-|---------------------|--------------------------------------|-------|
-| `size`              | size                         | Int   |
-| `+=`                | add one or more elements             | Any   |
-| `+`, `union`         | union sets                           | Any   |
-| `-`, `subtract`     | subtract sets                        | Any   |
-| `*`, `intersect`    | subtract sets                        | Any   |
-| `remove(items...)`  | remove one or more items             | Range |
-| `contains(element)` | check the element is in the list (1) |       |
+| name          | meaning                            | type          |
+|---------------|------------------------------------|---------------|
+| `size`        | size                               | Int           |
+| `decodeUtf8`  | decodee to String using UTF8 rules | Any           |
+| `+`           | buffer concatenation               | Any           |
+| `toMutable()` | create a mutable copy              | MutableBuffer |
 
 (1)
 : optimized implementation that override `Iterable` one
 
-Also, it inherits methods from [Iterable].
+Also, it inherits methods from [Iterable] and [Array].
 
 
 [Range]: Range.md
+[Iterable]: Iterable.md
