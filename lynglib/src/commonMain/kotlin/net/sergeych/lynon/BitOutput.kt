@@ -1,27 +1,6 @@
 package net.sergeych.lynon
 
-abstract class BitOutput {
-
-    abstract fun outputByte(byte: UByte)
-
-    private var accumulator = 0
-
-    /**
-     * Number of bits in accumulator. After output is closed by [close] this value is
-     * not changed and represents the number of bits in the last byte; this should
-     * be used to properly calculate end of the bit stream
-     */
-    private var accumulatorBits = 0
-        private set
-
-    /**
-     * When [close] is called, represents the number of used bits in the last byte;
-     * bits after this number are the garbage and should be ignored
-     */
-    val lastByteBits: Int get() {
-        if( !isClosed ) throw IllegalStateException("BitOutput is not closed")
-        return accumulatorBits
-    }
+interface BitOutput {
 
     fun putBits(bits: ULong, count: Int) {
         require(count <= 64)
@@ -41,13 +20,11 @@ abstract class BitOutput {
         }
     }
 
-    fun putBit(bit: Int) {
-        accumulator = (accumulator shl 1) or bit
-        if (++accumulatorBits >= 8) {
-            outputByte(accumulator.toUByte())
-            accumulator = accumulator shr 0
-            accumulatorBits = 0
-        }
+    fun putBit(bit: Int)
+
+    fun putBits(bitList: BitList) {
+        for (i in bitList.indices)
+            putBit(bitList[i])
     }
 
     fun packUnsigned(value: ULong) {
@@ -71,23 +48,57 @@ abstract class BitOutput {
         }
     }
 
-    var isClosed = false
-        private set
-
-    fun close(): BitOutput {
-        if (!isClosed) {
-            if (accumulatorBits > 0) {
-                outputByte(accumulator.toUByte())
-            } else accumulatorBits = 8
-            isClosed = true
-        }
-        return this
-    }
-
     fun putBytes(data: ByteArray) {
         for (b in data) {
             putBits(b.toULong(), 8)
         }
+    }
+
+
+    /**
+     * Create compressed record with content and size check. Compression works with _bytes_.
+     *
+     * Structure:
+     *
+     * | size | meaning                                          |
+     * |------|--------------------------------------------------|
+     * | packed unsigned | size of uncompressed content in bytes |
+     * | 1               | 0 - not compressed, 1 - compressed |
+     *
+     * __If compressed__, then:
+     *
+     * | size | meaning                              |
+     * |------|--------------------------------------|
+     * |  2   | 00 - LZW, other combinations reserved|
+     *
+     * After this header compressed bits follow.
+     *
+     * __If not compressed,__ then source data follows as bit stream.
+     *
+     * Compressed block overhead is 3 bits, uncompressed 1.
+     */
+    fun compress(source: ByteArray) {
+        // size
+        packUnsigned(source.size.toULong())
+        // check compression is effective?
+        val compressed = LZW.compress(source.asUByteArray())
+        // check that compression is effective including header bits size:
+        if( compressed.size + 2 < source.size * 8L) {
+            println("write compressed")
+            putBit(1)
+            // LZW algorithm
+            putBits(0, 2)
+            // compressed data
+            putBits(compressed)
+        }
+        else {
+            putBit(0)
+            putBytes(source)
+        }
+    }
+
+    fun compress(source: String) {
+        compress(source.encodeToByteArray())
     }
 
 }

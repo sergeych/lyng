@@ -29,8 +29,7 @@ open class LynonEncoder(val bout: BitOutput,val settings: LynonSettings = LynonS
     }
 
     fun encodeBinaryData(data: ByteArray) {
-        bout.packUnsigned(data.size.toULong())
-        bout.putBytes(data)
+        bout.compress(data)
     }
 
     fun encodeSigned(value: Long) {

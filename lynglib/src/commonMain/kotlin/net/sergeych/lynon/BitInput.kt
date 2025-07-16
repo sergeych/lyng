@@ -1,36 +1,9 @@
 package net.sergeych.lynon
 
-abstract class BitInput {
+interface BitInput {
 
-    data class DataByte(val data: Int,val bits: Int)
 
-    /**
-     * Return next byte, int in 0..255 range, or -1 if end of stream reached
-     */
-    abstract fun getByte(): DataByte
-
-    private var accumulator = 0
-
-    var isEndOfStream: Boolean = false
-        private set
-
-    private var mask = 0
-
-    fun getBitOrNull(): Int? {
-        if (isEndOfStream) return null
-        if (mask == 0) {
-            val ab = getByte()
-            accumulator = ab.data
-            if (accumulator == -1) {
-                isEndOfStream = true
-                return null
-            }
-            mask = 1 shl (ab.bits - 1)
-        }
-        val result = if (0 == accumulator and mask) 0 else 1
-        mask = mask shr 1
-        return result
-    }
+    fun getBitOrNull(): Int?
 
     fun getBitsOrNull(count: Int): ULong? {
         var result = 0UL
@@ -54,8 +27,11 @@ abstract class BitInput {
         return getBitOrNull() ?: throw IllegalStateException("Unexpected end of stream")
     }
 
-    fun unpackUnsigned(): ULong {
-        val tetrades = getBits(4).toInt()
+    fun unpackUnsigned(): ULong =
+        unpackUnsignedOrNull() ?: throw IllegalStateException("Unexpected end of stream")
+
+    fun unpackUnsignedOrNull(): ULong? {
+        val tetrades = getBitsOrNull(4)?.toInt() ?: return null
         var result = 0UL
         var shift = 0
         for (i in 0.. tetrades) {
@@ -84,5 +60,27 @@ abstract class BitInput {
         }
         return result
     }
+
+
+    fun decompress(): ByteArray = decompressOrNull() ?: throw DecompressionException("Unexpected end of stream")
+
+    fun decompressOrNull(): ByteArray? {
+        val originalSize = unpackUnsignedOrNull()?.toInt() ?: return null
+        return if( getBit() == 1) {
+            // data is compressed
+//            val expectedCRC = getBits(32).toUInt()
+            val method = getBits(2).toInt()
+            if( method != 0) throw DecompressionException("Unknown compression method")
+            LZW.decompress(this, originalSize).asByteArray()
+        }
+        else {
+            getBytes(originalSize) ?: throw DecompressionException("Unexpected end of stream in uncompressed data")
+        }
+    }
+
+    @Suppress("unused")
+    fun decompressStringOrNull(): String? = decompressOrNull()?.decodeToString()
+
+    fun decompressString(): String = decompress().decodeToString()
 }
 

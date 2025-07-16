@@ -11,5 +11,5 @@ class LynonPacker(bout: MemoryBitOutput = MemoryBitOutput(), settings: LynonSett
  * Variant of [LynonDecoder] that reads from a given `source` using [MemoryBitInput]
  */
 class LynonUnpacker(source: BitInput) : LynonDecoder(source) {
-    constructor(packer: LynonPacker) : this(MemoryBitInput(packer.bout as MemoryBitOutput))
+    constructor(packer: LynonPacker) : this((packer.bout as MemoryBitOutput).toBitInput())
 }

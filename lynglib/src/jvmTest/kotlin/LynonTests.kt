@@ -6,7 +6,7 @@ import net.sergeych.lynon.*
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
-
+import kotlin.test.assertContentEquals
 class LynonTests {
 
     @Test
@@ -210,11 +210,13 @@ class LynonTests {
         assertEquals(null, bin.getBitsOrNull(3))
     }
 
+
+    val original = Files.readString(Path.of("../sample_texts/dikkens_hard_times.txt"))
+
     @Test
     fun testLzw() {
         // Example usage
 //        val original = "TOBEORNOTTOBEORTOBEORNOT"
-        val original = Files.readString(Path.of("../sample_texts/dikkens_hard_times.txt"))
 //        println("Original: $original")
         println("Length: ${original.length}")
 
@@ -222,14 +224,112 @@ class LynonTests {
         val out = MemoryBitOutput()
         LZW.compress(original.encodeToByteArray().toUByteArray(), out)
 //        println("\nCompressed codes: ${out.toUByteArray().toDump()}")
-        println("Number of codes: ${out.toUByteArray().size}")
-
+        println("Number of codes: ${out.toBitArray().bytesSize}")
+        println("Copression rate: ${out.toBitArray().bytesSize.toDouble() / original.length.toDouble()}")
 //        // Decompress
-        val decompressed = LZW.decompress(MemoryBitInput(out)).toByteArray().decodeToString()
+        val decompressed = LZW.decompress(MemoryBitInput(out), original.length).toByteArray().decodeToString()
 //        println("\nDecompressed: $decompressed")
         println("Length: ${decompressed.length}")
 
         // Verification
         println("\nOriginal and decompressed match: ${original == decompressed}")
+        assertEquals(original, decompressed)
     }
+
+    @Test
+    fun testTinyBits() {
+        var a0 = TinyBits()
+
+        assertEquals(a0, a0)
+        a0 = a0.insertBit(0)
+        a0 = a0.insertBit(1)
+        a0 = a0.insertBit(1)
+        a0 = a0.insertBit(1)
+        a0 = a0.insertBit(0)
+        a0 = a0.insertBit(1)
+//        println(a0)
+        assertEquals("011101", a0.toString())
+        val bin = MemoryBitInput(MemoryBitOutput().apply { putBits(a0) })
+        var result = TinyBits()
+        for( i in a0.indices)  result = result.insertBit(bin.getBit())
+        assertEquals(a0, result)
+    }
+
+    @Test
+    fun testHuffman() {
+        val x = original.encodeToByteArray().toUByteArray()
+//        val x ="hello, world!".toByteArray().asUByteArray()// original.encodeToByteArray().toUByteArray()
+        println("Original : ${x.size}")
+        val lzw = LZW.compress(x).bytes
+        println("LZW      : ${lzw.size}")
+        val ba = Huffman.compress(x)
+        val huff = ba.bytes
+        println("Huffman  : ${huff.size}")
+        val lzwhuff = Huffman.compress(lzw).bytes
+        println("LZW+HUFF : ${lzwhuff.size}")
+        val compressed = Huffman.compress(x)
+        val decompressed = Huffman.decompress(compressed.toBitInput())
+        assertContentEquals(x, decompressed)
+    }
+
+    @Test
+    fun testBitListSmall() {
+        var t = TinyBits()
+        for( i in listOf(1, 1, 0, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1) )
+            t = t.insertBit(i)
+        assertEquals(1, t[0])
+        assertEquals(1, t[1])
+        assertEquals(0, t[2])
+        assertEquals("1101000111101",t.toString())
+        t[0] = 0
+        t[1] = 0
+        t[2] = 1
+        assertEquals("0011000111101",t.toString())
+        t[12] = 0
+        t[11] = 1
+        assertEquals("0011000111110",t.toString())
+    }
+
+    @Test
+    fun testBitListSerialization() {
+        // this also tests bitArray with first and last bytes
+        val bout = MemoryBitOutput()
+        assertEquals("1101", bitListOf(1, 1, 0, 1).toString())
+        bout.putBits(bitListOf(1, 1, 0, 1))
+        bout.putBits(bitListOf( 0, 0))
+        bout.putBits(bitListOf( 0, 1, 1, 1, 1, 0, 1))
+        val x = bout.toBitArray()
+        assertEquals("1101000111101",x.toString())
+    }
+
+
+    @Test
+    fun testCompressionWithOffsets() {
+        val src = "to be or not to be or not to be or not to be or not to be"
+        val bout = MemoryBitOutput()
+        bout.packUnsigned(1571UL)
+        LZW.compress(src.encodeToByteArray(), bout)
+        bout.packUnsigned(157108UL)
+        val bin = bout.toBitInput()
+        assertEquals(1571UL, bin.unpackUnsigned())
+        assertEquals(src, LZW.decompress(bin, src.length).asByteArray().decodeToString())
+        assertEquals(157108UL, bin.unpackUnsigned())
+    }
+
+    @Test
+    fun testCompressionRecord() {
+        val bout = MemoryBitOutput()
+        val src = "to be or not to be or not to be or not to be or not to be"
+        val src2 = "to be or not to be"
+        val src3 = "ababababab"
+        bout.compress(src)
+        bout.compress(src2)
+        bout.compress(src3)
+        val bin = bout.toBitInput()
+        assertEquals(src, bin.decompressString())
+        assertEquals(src2, bin.decompressString())
+        assertEquals(src3, bin.decompressString())
+    }
+
 }
+

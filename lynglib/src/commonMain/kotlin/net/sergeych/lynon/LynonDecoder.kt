@@ -28,10 +28,10 @@ open class LynonDecoder(val bin: BitInput,val settings: LynonSettings = LynonSet
         return decodeCached { type.deserialize(scope, this) }
     }
 
-    fun unpackBinaryData(): ByteArray? {
-        val size = bin.unpackUnsigned()
-        return bin.getBytes(size.toInt())
-    }
+    fun unpackBinaryData(): ByteArray = bin.decompress()
+
+    @Suppress("unused")
+    fun unpackBinaryDataOrNull(): ByteArray? = bin.decompressOrNull()
 
     fun unpackBoolean(): Boolean {
         return bin.getBit() == 1
