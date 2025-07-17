@@ -57,7 +57,10 @@ data class ObjString(val value: String) : Obj() {
     }
 
     override suspend fun callOn(scope: Scope): Obj {
-        return ObjString(this.value.sprintf(*scope.args.toKotlinList(scope).toTypedArray()))
+        return ObjString(this.value.sprintf(*scope.args
+            .toKotlinList(scope)
+            .map { if( it == null) "null" else it }
+            .toTypedArray()))
     }
 
     override suspend fun contains(scope: Scope, other: Obj): Boolean {

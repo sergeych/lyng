@@ -2,6 +2,7 @@ package net.sergeych.lyng.obj
 
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
+import net.sergeych.bintools.toDump
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.statement
 import kotlin.math.min
@@ -137,6 +138,12 @@ open class ObjBuffer(val byteArray: UByteArray) : Obj() {
             addFn("toMutable") {
                 requireNoArgs()
                 ObjMutableBuffer(thisAs<ObjBuffer>().byteArray.copyOf())
+            }
+            addFn("toDump") {
+                requireNoArgs()
+                ObjString(
+                    thisAs<ObjBuffer>().byteArray.toByteArray().toDump()
+                )
             }
         }
     }

@@ -3,6 +3,7 @@ package net.sergeych.lyng
 import kotlinx.coroutines.delay
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
+import net.sergeych.lynon.ObjLynonClass
 import kotlin.math.*
 
 class Script(
@@ -180,6 +181,9 @@ class Script(
                 addPackage("lyng.buffer") {
                     it.addConst("Buffer", ObjBuffer.type)
                     it.addConst("MutableBuffer", ObjMutableBuffer.type)
+                }
+                addPackage("lyng.serialization") {
+                    it.addConst("Lynon", ObjLynonClass)
                 }
                 addPackage("lyng.time") {
                     it.addConst("Instant", ObjInstant.type)

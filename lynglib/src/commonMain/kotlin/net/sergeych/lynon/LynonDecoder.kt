@@ -3,6 +3,8 @@ package net.sergeych.lynon
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjClass
+import net.sergeych.lyng.obj.ObjInt
+import net.sergeych.lyng.obj.ObjNull
 
 open class LynonDecoder(val bin: BitInput,val settings: LynonSettings = LynonSettings.default) {
 
@@ -21,6 +23,17 @@ open class LynonDecoder(val bin: BitInput,val settings: LynonSettings = LynonSet
             val id = bin.getBitsOrNull(size)?.toInt() ?: throw RuntimeException("Invalid object id: unexpected end of stream")
             if( id >= cache.size ) throw RuntimeException("Invalid object id: $id should be in 0..<${cache.size}")
             cache[id]
+        }
+    }
+
+    fun decodeAny(scope: Scope): Obj = decodeCached {
+        val type = LynonType.entries[bin.getBits(4).toInt()]
+        return when(type) {
+            LynonType.Null -> ObjNull
+            LynonType.Int0 -> ObjInt.Zero
+            else -> {
+                scope.raiseNotImplemented("lynon type $type")
+            }
         }
     }
 

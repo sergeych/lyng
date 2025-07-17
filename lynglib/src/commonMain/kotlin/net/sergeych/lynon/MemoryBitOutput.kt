@@ -4,11 +4,13 @@ import kotlin.math.min
 
 /**
  * BitList implementation as fixed suze array of bits; indexing works exactly same as if
- * [MemoryBitInput] is used with [MemoryBitInput.getBit].
+ * [MemoryBitInput] is used with [MemoryBitInput.getBit]. See [MemoryBitOutput] for
+ * bits order and more information.
  */
 class BitArray(val bytes: UByteArray, val lastByteBits: Int) : BitList {
 
     val bytesSize: Int get() = bytes.size
+
     override val size by lazy { bytes.size * 8L - (8 - lastByteBits) }
 
     override val indices by lazy { 0..<size }
@@ -23,15 +25,9 @@ class BitArray(val bytes: UByteArray, val lastByteBits: Int) : BitList {
         if (byteIndex !in bytes.indices)
             throw IndexOutOfBoundsException("$bitIndex is out of bounds")
         val i = (bitIndex % 8).toInt()
-        return byteIndex to (
-                if (byteIndex == bytes.lastIndex) {
-                    if (i >= lastByteBits)
-                        throw IndexOutOfBoundsException("$bitIndex is out of bounds (last)")
-                    1 shl (lastByteBits - i - 1)
-                } else {
-                    1 shl (7 - i)
-                }
-                )
+        if (byteIndex == bytes.lastIndex && i >= lastByteBits)
+                throw IndexOutOfBoundsException("$bitIndex is out of bounds (last)")
+        return byteIndex to (1 shl i)
     }
 
     override operator fun get(bitIndex: Long): Int =
@@ -56,6 +52,10 @@ class BitArray(val bytes: UByteArray, val lastByteBits: Int) : BitList {
         return result.toString()
     }
 
+    fun asByteArray(): ByteArray = bytes.asByteArray()
+
+    fun asUbyteArray(): UByteArray = bytes
+
     companion object {
 
         fun withBitSize(size: Long): BitArray {
@@ -75,35 +75,40 @@ class BitArray(val bytes: UByteArray, val lastByteBits: Int) : BitList {
 
 }
 
+/**
+ * [BitOutput] implementation that writes to a memory buffer, LSB first.
+ *
+ * Bits are stored in the least significant bits of the bytes. E.g. the first bit
+ * added by [putBit] will be stored in the bit 0x01 of the first byte, the second bit
+ * in the bit 0x02 of the first byte, etc.
+ *
+ * This allow automatic fill of the last byte with zeros. This is important when
+ * using bytes stored from [asByteArray] or [asUbyteArray]. When converting to
+ * bytes, automatic padding to byte size is applied. With such bit order, constrinting
+ * [BitInput] to read from [asByteArray] result only provides 0 to 7 extra zeroes bits
+ * at teh end which is often acceptable. To avoid this, use [toBitArray]; the [BitArray]
+ * stores exact number of bits and [BitArray.toBitInput] provides [BitInput] that
+ * decodes exactly same bits.
+ *
+ */
 class MemoryBitOutput : BitOutput {
     private val buffer = mutableListOf<UByte>()
 
     private var accumulator = 0
 
-    /**
-     * Number of bits in accumulator. After output is closed by [close] this value is
-     * not changed and represents the number of bits in the last byte; this should
-     * be used to properly calculate end of the bit stream
-     */
-    private var accumulatorBits = 0
-        private set
-
-//    /**
-//     * When [close] is called, represents the number of used bits in the last byte;
-//     * bits after this number are the garbage and should be ignored
-//     */
-//    val lastByteBits: Int
-//        get() {
-//            if (!isClosed) throw IllegalStateException("BitOutput is not closed")
-//            return accumulatorBits
-//        }
+    private var mask = 1
 
     override fun putBit(bit: Int) {
-        accumulator = (accumulator shl 1) or bit
-        if (++accumulatorBits >= 8) {
+        when (bit) {
+            0 -> {}
+            1 -> accumulator = accumulator or mask
+            else -> throw IllegalArgumentException("Bit must be 0 or 1")
+        }
+        mask = mask shl 1
+        if(mask == 0x100) {
+            mask = 1
             outputByte(accumulator.toUByte())
             accumulator = accumulator shr 8
-            accumulatorBits = 0
         }
     }
 
@@ -112,19 +117,34 @@ class MemoryBitOutput : BitOutput {
 
     fun close(): BitArray {
         if (!isClosed) {
-            if (accumulatorBits > 0) {
+            if (mask != 0x01) {
                 outputByte(accumulator.toUByte())
-            } else accumulatorBits = 8
+            }
             isClosed = true
         }
         return toBitArray()
+    }
+
+    fun lastBits(): Int {
+        check(isClosed)
+        return when(mask) {
+            0x01 -> 8   // means that all bits of the last byte are in use
+            0x02 -> 1
+            0x04 -> 2
+            0x08 -> 3
+            0x10 -> 4
+            0x20 -> 5
+            0x40 -> 6
+            0x80 -> 7
+            else -> throw IllegalStateException("Invalid state, mask=${mask.toString(16)}")
+        }
     }
 
     fun toBitArray(): BitArray {
         if (!isClosed) {
             close()
         }
-        return BitArray(buffer.toTypedArray().toUByteArray(), accumulatorBits)
+        return BitArray(buffer.toTypedArray().toUByteArray(), lastBits())
     }
 
     fun toBitInput(): BitInput = toBitArray().toBitInput()

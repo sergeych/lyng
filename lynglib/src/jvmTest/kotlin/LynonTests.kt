@@ -1,6 +1,8 @@
 import junit.framework.TestCase.*
 import kotlinx.coroutines.test.runTest
+import net.sergeych.bintools.encodeToHex
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.eval
 import net.sergeych.lyng.obj.*
 import net.sergeych.lynon.*
 import java.nio.file.Files
@@ -28,6 +30,62 @@ class LynonTests {
         assertEquals(2, sizeInBits(2u))
         assertEquals(2, sizeInBits(3u))
         assertEquals(4, sizeInBits(15u))
+    }
+
+    @Test
+    fun testBitOutputSmall() {
+        val bout = MemoryBitOutput()
+        bout.putBit(1)
+        bout.putBit(1)
+        bout.putBit(0)
+        bout.putBit(1)
+        val x = bout.toBitArray()
+        assertEquals(1, x[0])
+        assertEquals(1, x[1])
+        assertEquals(0, x[2])
+        assertEquals(1, x[3])
+        assertEquals(4, x.size)
+        assertEquals("1101", x.toString())
+        val bin = MemoryBitInput(x)
+        assertEquals(1, bin.getBit())
+        assertEquals(1, bin.getBit())
+        assertEquals(0, bin.getBit())
+        assertEquals(1, bin.getBit())
+        assertEquals(null, bin.getBitOrNull())
+    }
+    @Test
+    fun testBitOutputMedium() {
+        val bout = MemoryBitOutput()
+        bout.putBit(1)
+        bout.putBit(1)
+        bout.putBit(0)
+        bout.putBit(1)
+        bout.putBits( 0, 7)
+        bout.putBits( 3, 2)
+        val x = bout.toBitArray()
+        assertEquals(1, x[0])
+        assertEquals(1, x[1])
+        assertEquals(0, x[2])
+        assertEquals(1, x[3])
+        assertEquals(13, x.size)
+        assertEquals("1101000000011", x.toString())
+        println(x.bytes.encodeToHex())
+        val bin = MemoryBitInput(x)
+        assertEquals(1, bin.getBit())
+        assertEquals(1, bin.getBit())
+        assertEquals(0, bin.getBit())
+        assertEquals(1, bin.getBit())
+
+//        assertEquals(0, bin.getBit())
+//        assertEquals(0, bin.getBit())
+//        assertEquals(0, bin.getBit())
+//        assertEquals(0, bin.getBit())
+//        assertEquals(0, bin.getBit())
+//        assertEquals(0, bin.getBit())
+//        assertEquals(0, bin.getBit())
+        assertEquals(0UL, bin.getBits(7))
+        assertEquals(3UL, bin.getBits(2))
+        assertEquals(null, bin.getBitOrNull())
     }
 
     @Test
@@ -212,6 +270,45 @@ class LynonTests {
 
 
     val original = Files.readString(Path.of("../sample_texts/dikkens_hard_times.txt"))
+
+    @Test
+    fun testEncodeNullsAndInts() = runTest{
+        testScope().eval("""
+            testEncode(null)
+            testEncode(0)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testBufferEncoderInterop() = runTest{
+        val bout = MemoryBitOutput()
+        bout.putBits(0, 1)
+        bout.putBits(1, 4)
+        val bin = MemoryBitInput(bout.toBitArray().bytes, 8)
+        assertEquals(0UL, bin.getBits(1))
+        assertEquals(1UL, bin.getBits(4))
+    }
+
+    suspend fun testScope() =
+        Scope().apply { eval("""
+            import lyng.serialization
+            fun testEncode(value) {
+                val encoded = Lynon.encode(value)
+                println(encoded.toDump())
+                println("Encoded size %d: %s"(encoded.size, value))
+                assertEquals( value, Lynon.decode(encoded) )
+            }
+            """.trimIndent())
+        }
+
+
+    @Test
+    fun testIntsNulls() = runTest{
+        eval("""
+            import lyng.serialization
+            assertEquals( null, Lynon.decode(Lynon.encode(null)) )
+        """.trimIndent())
+    }
 
     @Test
     fun testLzw() {

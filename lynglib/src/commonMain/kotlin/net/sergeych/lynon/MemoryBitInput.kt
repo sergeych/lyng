@@ -8,30 +8,31 @@ class MemoryBitInput(val packedBits: UByteArray, val lastByteBits: Int) : BitInp
 
     private var index = 0
 
+    private var isEndOfStream: Boolean = packedBits.isEmpty() || (packedBits.size == 1 && lastByteBits == 0)
+        private set
+
     /**
      * Return next byte, int in 0..255 range, or -1 if end of stream reached
      */
-    private var accumulator = 0
+    private var accumulator = if( isEndOfStream ) 0 else packedBits[0].toInt()
 
-    private var isEndOfStream: Boolean = false
-        private set
-
-    private var mask = 0
+    private var bitCounter = 0
 
     override fun getBitOrNull(): Int? {
         if (isEndOfStream) return null
-        if (mask == 0) {
-            if (index < packedBits.size) {
-                accumulator = packedBits[index++].toInt()
-                val n = if (index == packedBits.size) lastByteBits else 8
-                mask = 1 shl (n - 1)
-            } else {
-                isEndOfStream = true
-                return null
+        val result = accumulator and 1
+        accumulator = accumulator shr 1
+        bitCounter++
+        // is end?
+        if( index == packedBits.lastIndex && bitCounter == lastByteBits ) {
+            isEndOfStream = true
+        }
+        else {
+            if( bitCounter == 8 ) {
+                bitCounter = 0
+                accumulator = packedBits[++index].toInt()
             }
         }
-        val result = if (0 == accumulator and mask) 0 else 1
-        mask = mask shr 1
         return result
     }
 

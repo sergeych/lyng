@@ -69,6 +69,9 @@ open class ObjClass(
 
     fun addConst(name: String, value: Obj) = createField(name, value, isMutable = false)
     fun addClassConst(name: String, value: Obj) = createClassField(name, value)
+    fun addClassFn(name: String, isOpen: Boolean = false, code: suspend Scope.() -> Obj) {
+        createClassField(name, statement { code() }, isOpen)
+    }
 
 
     /**
@@ -89,6 +92,10 @@ open class ObjClass(
             return it
         }
         return super.readField(scope, name)
+    }
+
+    override suspend fun invokeInstanceMethod(scope: Scope, name: String, args: Arguments): Obj {
+        return classMembers[name]?.value?.invoke(scope, this, args) ?: super.invokeInstanceMethod(scope, name, args)
     }
 
     open fun deserialize(scope: Scope, decoder: LynonDecoder): Obj = scope.raiseNotImplemented()

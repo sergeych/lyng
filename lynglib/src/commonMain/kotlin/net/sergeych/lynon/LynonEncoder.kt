@@ -2,24 +2,82 @@ package net.sergeych.lynon
 
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.obj.Obj
+import net.sergeych.lyng.obj.ObjInt
+import net.sergeych.lyng.obj.ObjNull
+
+enum class LynonType {
+    Null,
+    Int0,
+    IntNegative,
+    IntPositive,
+    String,
+    Real,
+    Bool,
+    List,
+    Map,
+    Set,
+    Buffer,
+    Instant,
+    Duration,
+    Other;
+}
 
 open class LynonEncoder(val bout: BitOutput,val settings: LynonSettings = LynonSettings.default) {
 
     val cache = mutableMapOf<Any, Int>()
 
-    private inline fun encodeCached(item: Any, packer: LynonEncoder.() -> Unit) {
-        if (item is Obj) {
-            cache[item]?.let { cacheId ->
+    private suspend fun encodeCached(item: Any, packer: suspend LynonEncoder.() -> Unit) {
+
+        suspend fun serializeAndCache(key: Any=item) {
+            bout.putBit(0)
+            if( settings.shouldCache(item) )
+                cache[key] = cache.size
+            packer()
+        }
+
+        when(item) {
+            is Obj -> cache[item]?.let { cacheId ->
                 val size = sizeInBits(cache.size)
                 bout.putBit(1)
                 bout.putBits(cacheId.toULong(), size)
-            } ?: run {
-                bout.putBit(0)
-                if (settings.shouldCache(item))
-                    cache[item] = cache.size
-                packer()
+            } ?: serializeAndCache()
+
+            is ByteArray, is UByteArray ->  serializeAndCache()
+        }
+    }
+
+    /**
+     * Encode any Lyng object [Obj], which can be serialized, using type record. This allow to
+     * encode any object with the overhead of type record.
+     *
+     * Caching is used automatically.
+     */
+    suspend fun encodeAny(scope: Scope,value: Obj) {
+        encodeCached(value) {
+            when(value) {
+                is ObjNull -> putType(LynonType.Null)
+                is ObjInt -> {
+                    when {
+                        value.value == 0L -> putType(LynonType.Int0)
+                        value.value < 0 -> {
+                            putType(LynonType.IntNegative)
+                            encodeUnsigned((-value.value).toULong())
+                        }
+                        else -> {
+                            putType(LynonType.IntPositive)
+                            encodeUnsigned(value.value.toULong())
+                        }
+                    }
+                }
+                else -> {
+                    TODO()
+                }
             }
         }
+    }
+
+    private fun putType(type: LynonType) {
+        bout.putBits(type.ordinal.toULong(), 4)
     }
 
     suspend fun encodeObj(scope: Scope, obj: Obj) {

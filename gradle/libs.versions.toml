@@ -8,6 +8,7 @@ kotlinx-coroutines = "1.10.1"
 mp_bintools = "0.1.12"
 firebaseCrashlyticsBuildtools = "3.0.3"
 okioVersion = "3.10.2"
+compiler = "3.2.0-alpha11"
 
 [libraries]
 clikt = { module = "com.github.ajalt.clikt:clikt", version.ref = "clikt" }
@@ -19,6 +20,7 @@ mp_bintools = { module = "net.sergeych:mp_bintools", version.ref = "mp_bintools"
 firebase-crashlytics-buildtools = { group = "com.google.firebase", name = "firebase-crashlytics-buildtools", version.ref = "firebaseCrashlyticsBuildtools" }
 okio = { module = "com.squareup.okio:okio", version.ref = "okioVersion" }
 okio-fakefilesystem = { module = "com.squareup.okio:okio-fakefilesystem", version.ref = "okioVersion" }
+compiler = { group = "androidx.databinding", name = "compiler", version.ref = "compiler" }
 
 [plugins]
 androidLibrary = { id = "com.android.library", version.ref = "agp" }

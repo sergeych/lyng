@@ -99,6 +99,7 @@ android {
 }
 dependencies {
     implementation(libs.firebase.crashlytics.buildtools)
+    implementation(libs.compiler)
 }
 
 publishing {
