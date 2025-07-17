@@ -97,6 +97,10 @@ class ObjInt(var value: Long,override val isConst: Boolean = false) : Obj(), Num
         return value == other.value
     }
 
+    override suspend fun negate(scope: Scope): Obj {
+        return ObjInt(-value)
+    }
+
     override suspend fun serialize(scope: Scope, encoder: LynonEncoder) {
         encoder.encodeSigned(value)
     }

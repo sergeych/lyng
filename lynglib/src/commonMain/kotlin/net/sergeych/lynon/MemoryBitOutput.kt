@@ -52,8 +52,10 @@ class BitArray(val bytes: UByteArray, val lastByteBits: Int) : BitList {
         return result.toString()
     }
 
+    @Suppress("unused")
     fun asByteArray(): ByteArray = bytes.asByteArray()
 
+    @Suppress("unused")
     fun asUbyteArray(): UByteArray = bytes
 
     companion object {
@@ -82,10 +84,10 @@ class BitArray(val bytes: UByteArray, val lastByteBits: Int) : BitList {
  * added by [putBit] will be stored in the bit 0x01 of the first byte, the second bit
  * in the bit 0x02 of the first byte, etc.
  *
- * This allow automatic fill of the last byte with zeros. This is important when
+ * This allows automatic fill of the last byte with zeros. This is important when
  * using bytes stored from [asByteArray] or [asUbyteArray]. When converting to
- * bytes, automatic padding to byte size is applied. With such bit order, constrinting
- * [BitInput] to read from [asByteArray] result only provides 0 to 7 extra zeroes bits
+ * bytes, automatic padding to byte size is applied. With such bit order, constructing
+ * [BitInput] to read from [ByteArray.toUByteArray] result only provides 0 to 7 extra zeroes bits
  * at teh end which is often acceptable. To avoid this, use [toBitArray]; the [BitArray]
  * stores exact number of bits and [BitArray.toBitInput] provides [BitInput] that
  * decodes exactly same bits.

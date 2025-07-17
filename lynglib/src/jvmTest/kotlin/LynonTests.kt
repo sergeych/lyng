@@ -303,10 +303,29 @@ class LynonTests {
 
 
     @Test
-    fun testIntsNulls() = runTest{
+    fun testUnaryMinus() = runTest{
         eval("""
-            import lyng.serialization
-            assertEquals( null, Lynon.decode(Lynon.encode(null)) )
+            assertEquals( -1 * π, 0 - π )
+            assertEquals( -1 * π, -π )
+            """.trimIndent())
+    }
+    
+    @Test
+    fun testIntsNulls() = runTest{
+        testScope().eval("""
+            testEncode(null)
+            testEncode(0)
+            testEncode(47)
+            testEncode(-21)
+            testEncode(true)
+            testEncode(false)
+            testEncode(1.22345)
+            testEncode(-π)
+            
+            import lyng.time
+            testEncode(Instant.now().truncateToSecond())
+            testEncode(Instant.now().truncateToMillisecond())
+            testEncode(Instant.now().truncateToMicrosecond())
         """.trimIndent())
     }
 

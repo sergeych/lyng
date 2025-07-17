@@ -82,5 +82,9 @@ interface BitInput {
     fun decompressStringOrNull(): String? = decompressOrNull()?.decodeToString()
 
     fun decompressString(): String = decompress().decodeToString()
+    fun unpackDouble(): Double {
+        val bits = getBits(64)
+        return Double.fromBits(bits.toLong())
+    }
 }
 

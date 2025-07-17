@@ -3,17 +3,22 @@
 Lyng date and time support requires importing `lyng.time` packages. Lyng uses simple yet modern time object models:
 
 - `Instant` class for time stamps with platform-dependent resolution
-- `Duration` to represent amount of time not depending on the calendar, e.g. in absolute units (milliseconds, seconds, hours, days)
+- `Duration` to represent amount of time not depending on the calendar, e.g. in absolute units (milliseconds, seconds,
+  hours, days)
 
 ## Time instant: `Instant`
 
-Represent some moment of time not depending on the calendar (calendar for example may b e changed, daylight saving time can be for example introduced or dropped). It is similar to `TIMESTAMP` in SQL or `Instant` in Kotlin. Some moment of time; not the calendar date.
+Represent some moment of time not depending on the calendar (calendar for example may b e changed, daylight saving time
+can be for example introduced or dropped). It is similar to `TIMESTAMP` in SQL or `Instant` in Kotlin. Some moment of
+time; not the calendar date.
 
-Instant is comparable to other Instant. Subtracting instants produce `Duration`, period in time that is not dependent on the calendar, e.g. absolute time period.
+Instant is comparable to other Instant. Subtracting instants produce `Duration`, period in time that is not dependent on
+the calendar, e.g. absolute time period.
 
 It is possible to add or subtract `Duration` to and from `Instant`, that gives another `Instant`.
 
-Instants are converted to and from `Real` number of seconds before or after Unix Epoch, 01.01.1970. Constructor with single number parameter constructs from such number of seconds,
+Instants are converted to and from `Real` number of seconds before or after Unix Epoch, 01.01.1970. Constructor with
+single number parameter constructs from such number of seconds,
 and any instance provide `.epochSeconds` member:
 
     import lyng.time
@@ -61,13 +66,13 @@ The resolution of system clock could be more precise and double precision real n
 ## Getting the max precision
 
 Normally, subtracting instants gives precision to microseconds, which is well inside the jitter
-the language VM adds. Still `Instant()` captures most precise system timer at hand and provide
-inner value of 12 bytes, up to nanoseconds (hopefully). To access it use:
+the language VM adds. Still `Instant()` or `Instant.now()` capture most precise system timer at hand and provide inner
+value of 12 bytes, up to nanoseconds (hopefully). To access it use:
 
     import lyng.time
 
     // capture time
-    val now = Instant()
+    val now = Instant.now()
 
     // this is Int value, number of whole epoch 
     // milliseconds to the moment, it fits 8 bytes Int well
@@ -82,6 +87,22 @@ inner value of 12 bytes, up to nanoseconds (hopefully). To access it use:
 
     // we can construct epochSeconds from these parts:
     assertEquals( now.epochSeconds, nanos * 1e-9 + seconds )
+    >>> void
+
+## Truncating to more realistic precision
+
+Full precision Instant is way too long and impractical to store, especially when serializing,
+so it is possible to truncate it to milliseconds, microseconds or seconds:
+
+    import lyng.time
+    import lyng.serialization
+
+    // max supported size (now microseconds for serialized value):
+    assert( Lynon.encode(Instant.now()).size in [8,9] )
+    // shorter: milliseconds only
+    assertEquals( 7, Lynon.encode(Instant.now().truncateToMillisecond()).size )
+    // truncated to seconds, good for file mtime, etc:
+    assertEquals( 6, Lynon.encode(Instant.now().truncateToSecond()).size )
     >>> void
 
 ## Formatting instants
@@ -104,27 +125,36 @@ You can freely use `Instant` in string formatting. It supports usual sprintf-sty
         assertEquals( unixEpoch, "Now is %d since unix epoch"(now.epochSeconds.toInt()) )
         >>> void
 
-See the [complete list of available formats](https://github.com/sergeych/mp_stools?tab=readme-ov-file#datetime-formatting) and the [formatting reference](https://github.com/sergeych/mp_stools?tab=readme-ov-file#printf--sprintf): it all works in Lyng as `"format"(args...)`!
+See
+the [complete list of available formats](https://github.com/sergeych/mp_stools?tab=readme-ov-file#datetime-formatting)
+and the [formatting reference](https://github.com/sergeych/mp_stools?tab=readme-ov-file#printf--sprintf): it all works
+in Lyng as `"format"(args...)`!
 
 ## Instant members
 
-| member                   | description                                             |
-|--------------------------|---------------------------------------------------------|
-| epochSeconds: Real       | positive or negative offset in seconds since Unix epoch |
-| epochWholeSeconds: Int   | same, but in _whole seconds_. Slightly faster           |
-| nanosecondsOfSecond: Int | offset from epochWholeSeconds in nanos (1)              |
-| isDistantFuture: Bool    | true if it `Instant.distantFuture`                      |
-| isDistantPast: Bool      | true if it `Instant.distantPast`                        |
+| member                         | description                                             |
+|--------------------------------|---------------------------------------------------------|
+| epochSeconds: Real             | positive or negative offset in seconds since Unix epoch |
+| epochWholeSeconds: Int         | same, but in _whole seconds_. Slightly faster           |
+| nanosecondsOfSecond: Int       | offset from epochWholeSeconds in nanos (1)              |
+| isDistantFuture: Bool          | true if it `Instant.distantFuture`                      |
+| isDistantPast: Bool            | true if it `Instant.distantPast`                        |
+| truncateToSecond: Intant       | create new instnce truncated to second                  |  
+| truncateToMillisecond: Instant | truncate new instance with to millisecond               |
+| truncateToMicrosecond: Instant | truncate new instance to microsecond                    |
 
 (1)
-: The value of nanoseconds is to be added to `epochWholeSeconds` to get exact time point. It is in 0..999_999_999 range. The precise time instant value therefore needs as for now 12 bytes integer; we might use bigint later (it is planned to be added)
+: The value of nanoseconds is to be added to `epochWholeSeconds` to get exact time point. It is in 0..999_999_999 range.
+The precise time instant value therefore needs as for now 12 bytes integer; we might use bigint later (it is planned to
+be added)
 
 ## Class members
 
-| member                         | description                                             |
-|--------------------------------|---------------------------------------------------------|
-| Instant.distantPast: Instant   | most distant instant in past                            |
-| Instant.distantFuture: Instant | most distant instant in future                          |
+| member                         | description                                  |
+|--------------------------------|----------------------------------------------|
+| Instant.now()                  | create new instance with current system time |
+| Instant.distantPast: Instant   | most distant instant in past                 |
+| Instant.distantFuture: Instant | most distant instant in future               |
 
 # `Duraion` class
 
@@ -153,7 +183,8 @@ Duration can be converted from numbers, like `5.minutes` and so on. Extensions a
 
 The bigger time units like months or years are calendar-dependent and can't be used with `Duration`.
 
-Each duration instance can be converted to number of any of these time units, as `Real` number, if `d` is a `Duration` instance:
+Each duration instance can be converted to number of any of these time units, as `Real` number, if `d` is a `Duration`
+instance:
 
 - `d.microseconds`
 - `d.milliseconds`

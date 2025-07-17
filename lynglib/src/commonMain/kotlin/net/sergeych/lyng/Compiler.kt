@@ -715,7 +715,7 @@ class Compiler(
         }
     }
 
-    private fun parseAccessor(): Accessor? {
+    private suspend fun parseAccessor(): Accessor? {
         // could be: literal
         val t = cc.next()
         return when (t.type) {
@@ -737,8 +737,14 @@ class Compiler(
             }
 
             Token.Type.MINUS -> {
-                val n = parseNumber(false)
-                Accessor { n.asReadonly }
+                parseNumberOrNull(false)?.let { n ->
+                    Accessor { n.asReadonly }
+                } ?: run {
+                    val n = parseTerm() ?: throw ScriptError(t.pos, "Expecting expression after unary minus")
+                    Accessor {
+                        n.getter.invoke(it).value.negate(it).asReadonly
+                    }
+                }
             }
 
             Token.Type.ID -> {
@@ -769,7 +775,8 @@ class Compiler(
         }
     }
 
-    private fun parseNumber(isPlus: Boolean): Obj {
+    private fun parseNumberOrNull(isPlus: Boolean): Obj? {
+        val pos = cc.savePos()
         val t = cc.next()
         return when (t.type) {
             Token.Type.INT, Token.Type.HEX -> {
@@ -783,9 +790,14 @@ class Compiler(
             }
 
             else -> {
-                throw ScriptError(t.pos, "expected number")
+                cc.restorePos(pos)
+                null
             }
         }
+    }
+
+    private fun parseNumber(isPlus: Boolean): Obj {
+        return parseNumberOrNull(isPlus) ?: throw ScriptError(cc.currentPos(), "Expecting number")
     }
 
     /**

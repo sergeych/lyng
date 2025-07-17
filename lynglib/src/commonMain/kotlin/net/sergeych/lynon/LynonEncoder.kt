@@ -1,9 +1,7 @@
 package net.sergeych.lynon
 
 import net.sergeych.lyng.Scope
-import net.sergeych.lyng.obj.Obj
-import net.sergeych.lyng.obj.ObjInt
-import net.sergeych.lyng.obj.ObjNull
+import net.sergeych.lyng.obj.*
 
 enum class LynonType {
     Null,
@@ -66,6 +64,29 @@ open class LynonEncoder(val bout: BitOutput,val settings: LynonSettings = LynonS
                         else -> {
                             putType(LynonType.IntPositive)
                             encodeUnsigned(value.value.toULong())
+                        }
+                    }
+                }
+                is ObjBool -> {
+                    putType(LynonType.Bool)
+                    encodeBoolean(value.value)
+                }
+                is ObjReal -> {
+                    putType(LynonType.Real)
+                    encodeReal(value.value)
+                }
+                is ObjInstant -> {
+                    putType(LynonType.Instant)
+                    bout.putBits(value.truncateMode.ordinal, 2)
+                    // todo: favor truncation mode from ObjInstant
+                    when(value.truncateMode) {
+                        LynonSettings.InstantTruncateMode.Millisecond ->
+                            encodeSigned(value.instant.toEpochMilliseconds())
+                        LynonSettings.InstantTruncateMode.Second ->
+                            encodeSigned(value.instant.epochSeconds)
+                        LynonSettings.InstantTruncateMode.Microsecond -> {
+                            encodeSigned(value.instant.epochSeconds)
+                            encodeUnsigned(value.instant.nanosecondsOfSecond.toULong() / 1000UL)
                         }
                     }
                 }

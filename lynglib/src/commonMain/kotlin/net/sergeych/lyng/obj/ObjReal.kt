@@ -61,6 +61,10 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
         return value == other.value
     }
 
+    override suspend fun negate(scope: Scope): Obj {
+        return ObjReal(-value)
+    }
+
     override suspend fun serialize(scope: Scope, encoder: LynonEncoder) {
         encoder.encodeReal(value)
     }

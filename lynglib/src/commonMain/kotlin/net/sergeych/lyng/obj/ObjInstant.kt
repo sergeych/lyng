@@ -5,8 +5,9 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.isDistantFuture
 import kotlinx.datetime.isDistantPast
 import net.sergeych.lyng.Scope
+import net.sergeych.lynon.LynonSettings
 
-class ObjInstant(val instant: Instant) : Obj() {
+class ObjInstant(val instant: Instant,val truncateMode: LynonSettings.InstantTruncateMode=LynonSettings.InstantTruncateMode.Microsecond) : Obj() {
     override val objClass: ObjClass get() = type
 
     override fun toString(): String {
@@ -102,10 +103,31 @@ class ObjInstant(val instant: Instant) : Obj() {
             addFn("nanosecondsOfSecond") {
                 ObjInt(thisAs<ObjInstant>().instant.nanosecondsOfSecond.toLong())
             }
+            addFn("truncateToSecond") {
+                val t = thisAs<ObjInstant>().instant
+                ObjInstant(Instant.fromEpochSeconds(t.epochSeconds), LynonSettings.InstantTruncateMode.Second)
+            }
+            addFn("truncateToMillisecond") {
+                val t = thisAs<ObjInstant>().instant
+                ObjInstant(
+                    Instant.fromEpochSeconds(t.epochSeconds, t.nanosecondsOfSecond / 1_000_000 * 1_000_000),
+                    LynonSettings.InstantTruncateMode.Millisecond
+                )
+            }
+            addFn("truncateToMicrosecond") {
+                val t = thisAs<ObjInstant>().instant
+                ObjInstant(
+                    Instant.fromEpochSeconds(t.epochSeconds, t.nanosecondsOfSecond / 1_000 * 1_000),
+                    LynonSettings.InstantTruncateMode.Microsecond
+                )
+            }
             // class members
 
             addClassConst("distantFuture", distantFuture)
             addClassConst("distantPast", distantPast)
+            addClassFn("now") {
+                ObjInstant(Clock.System.now())
+            }
 //            addFn("epochMilliseconds") {
 //                ObjInt(instant.toEpochMilliseconds())
 //            }

@@ -88,8 +88,8 @@ data class ObjString(val value: String) : Obj() {
         val type = object : ObjClass("String") {
             override fun deserialize(scope: Scope, decoder: LynonDecoder): Obj =
                 ObjString(
-                    decoder.unpackBinaryData()?.decodeToString()
-                        ?: scope.raiseError("unexpected end of data")
+                    decoder.unpackBinaryData().decodeToString()
+//                        ?: scope.raiseError("unexpected end of data")
                 )
         }.apply {
             addFn("toInt") {

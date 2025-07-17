@@ -2649,4 +2649,12 @@ class ScriptTest {
         """.trimIndent())
     }
 
+    @Test
+    fun testRangeToList() = runTest {
+        val x = eval("""(1..10).toList()""") as ObjList
+        assertEquals(listOf(1,2,3,4,5,6,7,8,9,10), x.list.map { it.toInt() })
+        val y = eval("""(-2..3).toList()""") as ObjList
+        println(y.list)
+    }
+
 }

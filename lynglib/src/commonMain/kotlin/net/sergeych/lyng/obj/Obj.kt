@@ -138,6 +138,10 @@ open class Obj {
         scope.raiseNotImplemented()
     }
 
+    open suspend fun negate(scope: Scope): Obj {
+        scope.raiseNotImplemented()
+    }
+
     open suspend fun mul(scope: Scope, other: Obj): Obj {
         scope.raiseNotImplemented()
     }

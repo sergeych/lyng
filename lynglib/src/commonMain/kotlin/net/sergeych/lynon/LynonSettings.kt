@@ -6,7 +6,12 @@ import net.sergeych.lyng.obj.ObjInt
 import net.sergeych.lyng.obj.ObjNull
 import kotlin.math.absoluteValue
 
-open class LynonSettings() {
+open class LynonSettings {
+    enum class InstantTruncateMode {
+        Second,
+        Millisecond,
+        Microsecond
+    }
 
     open fun shouldCache(obj: Any): Boolean = when (obj) {
         is ObjChar -> false
