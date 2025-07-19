@@ -65,8 +65,10 @@ open class LynonEncoder(val bout: BitOutput, val settings: LynonSettings = Lynon
         bout.putBits(type.ordinal.toULong(), 4)
     }
 
-    suspend fun encodeObj(scope: Scope, obj: Obj) {
+    suspend fun encodeObject(scope: Scope, obj: Obj) {
+        encodeCached(obj) {
             obj.serialize(scope, this, null)
+        }
     }
 
     fun encodeBinaryData(data: ByteArray) {
