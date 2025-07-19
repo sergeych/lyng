@@ -41,12 +41,12 @@ data class ObjString(val value: String) : Obj() {
     }
 
     override suspend fun getAt(scope: Scope, index: Obj): Obj {
-        if( index is ObjInt) return ObjChar(value[index.toInt()])
-        if( index is ObjRange) {
-            val start = if(index.start == null || index.start.isNull) 0 else  index.start.toInt()
-            val end = if( index.end  == null || index.end.isNull ) value.length else  {
+        if (index is ObjInt) return ObjChar(value[index.toInt()])
+        if (index is ObjRange) {
+            val start = if (index.start == null || index.start.isNull) 0 else index.start.toInt()
+            val end = if (index.end == null || index.end.isNull) value.length else {
                 val e = index.end.toInt()
-                if( index.isEndInclusive) e + 1 else e
+                if (index.isEndInclusive) e + 1 else e
             }
             return ObjString(value.substring(start, end))
         }
@@ -60,7 +60,7 @@ data class ObjString(val value: String) : Obj() {
     override suspend fun callOn(scope: Scope): Obj {
         return ObjString(this.value.sprintf(*scope.args
             .toKotlinList(scope)
-            .map { if( it == null) "null" else it }
+            .map { if (it == null) "null" else it }
             .toTypedArray()))
     }
 
@@ -81,17 +81,24 @@ data class ObjString(val value: String) : Obj() {
         return value == other.value
     }
 
+    override suspend fun lynonType(): LynonType = LynonType.String
+
     override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
-        encoder.encodeBinaryData(value.encodeToByteArray())
+        if( lynonType == null )
+        encoder.encodeCached(this) { encoder.encodeBinaryData(value.encodeToByteArray()) }
+        else
+            encoder.encodeBinaryData(value.encodeToByteArray())
     }
+
 
     companion object {
         val type = object : ObjClass("String") {
             override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj =
-                ObjString(
-                    decoder.unpackBinaryData().decodeToString()
-//                        ?: scope.raiseError("unexpected end of data")
-                )
+                if( lynonType == null )
+                    decoder.decodeCached {
+                        ObjString(decoder.unpackBinaryData().decodeToString())
+                    }
+                else ObjString(decoder.unpackBinaryData().decodeToString())
         }.apply {
             addFn("toInt") {
                 ObjInt(thisAs<ObjString>().value.toLong())

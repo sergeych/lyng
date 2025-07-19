@@ -321,13 +321,14 @@ class LynonTests {
             testEncode(false)
             testEncode(1.22345)
             testEncode(-π)
-            
+
             import lyng.time
             testEncode(Instant.now().truncateToSecond())
             testEncode(Instant.now().truncateToMillisecond())
             testEncode(Instant.now().truncateToMicrosecond())
-            
+
             testEncode("Hello, world".encodeUtf8())
+            testEncode("Hello, world")
             
         """.trimIndent())
     }

@@ -21,28 +21,29 @@ enum class LynonType(val objClass: ObjClass) {
     Other(Obj.rootObjectType);
 }
 
-open class LynonEncoder(val bout: BitOutput,val settings: LynonSettings = LynonSettings.default) {
+open class LynonEncoder(val bout: BitOutput, val settings: LynonSettings = LynonSettings.default) {
 
     val cache = mutableMapOf<Any, Int>()
 
     suspend fun encodeCached(item: Any, packer: suspend LynonEncoder.() -> Unit) {
 
-        suspend fun serializeAndCache(key: Any=item) {
-            bout.putBit(0)
-            if( settings.shouldCache(item) )
-                cache[key] = cache.size
-            packer()
-        }
-
-        when(item) {
-            is Obj -> cache[item]?.let { cacheId ->
+        suspend fun serializeAndCache(key: Any = item) {
+            cache[key]?.let { cacheId ->
                 val size = sizeInBits(cache.size)
                 bout.putBit(1)
                 bout.putBits(cacheId.toULong(), size)
-            } ?: serializeAndCache()
+            } ?: run {
+                bout.putBit(0)
+                if (settings.shouldCache(item))
+                    cache[key] = cache.size
+                packer()
+            }
+        }
 
+        when (item) {
             is ByteArray -> serializeAndCache(ByteChunk(item.asUByteArray()))
-            is UByteArray ->  serializeAndCache(ByteChunk(item))
+            is UByteArray -> serializeAndCache(ByteChunk(item))
+            else -> serializeAndCache(item)
         }
     }
 
@@ -52,7 +53,7 @@ open class LynonEncoder(val bout: BitOutput,val settings: LynonSettings = LynonS
      *
      * Caching is used automatically.
      */
-    suspend fun encodeAny(scope: Scope,value: Obj) {
+    suspend fun encodeAny(scope: Scope, value: Obj) {
         encodeCached(value) {
             val type = value.lynonType()
             putType(type)
@@ -65,9 +66,7 @@ open class LynonEncoder(val bout: BitOutput,val settings: LynonSettings = LynonS
     }
 
     suspend fun encodeObj(scope: Scope, obj: Obj) {
-        encodeCached(obj) {
             obj.serialize(scope, this, null)
-        }
     }
 
     fun encodeBinaryData(data: ByteArray) {

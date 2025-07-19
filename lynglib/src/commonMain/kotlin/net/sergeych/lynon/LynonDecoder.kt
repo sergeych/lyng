@@ -41,7 +41,7 @@ open class LynonDecoder(val bin: BitInput, val settings: LynonSettings = LynonSe
 
     // todo: rewrite/remove?
     suspend fun unpackObject(scope: Scope, type: ObjClass): Obj {
-        return decodeCached { type.deserialize(scope, this, null) }
+        return type.deserialize(scope, this, null)
     }
 
     fun unpackBinaryData(): ByteArray = bin.decompress()
