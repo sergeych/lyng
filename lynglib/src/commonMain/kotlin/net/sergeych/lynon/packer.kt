@@ -2,7 +2,7 @@ package net.sergeych.lynon
 
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.obj.Obj
-import net.sergeych.lyng.obj.ObjBuffer
+import net.sergeych.lyng.obj.ObjBitBuffer
 import net.sergeych.lyng.obj.ObjClass
 import net.sergeych.lyng.obj.ObjString
 
@@ -15,11 +15,12 @@ val ObjLynonClass = object : ObjClass("Lynon") {
         val bout = MemoryBitOutput()
         val serializer = LynonEncoder(bout)
         serializer.encodeAny(this, obj)
-        return ObjBuffer(bout.toBitArray().bytes)
+        return ObjBitBuffer(bout.toBitArray())
     }
 
-    suspend fun Scope.decodeAny(buffer: ObjBuffer): Obj {
-        val bin = BitArray(buffer.byteArray,8).toInput()
+    suspend fun Scope.decodeAny(source: Obj): Obj {
+        if( source !is ObjBitBuffer) throw Exception("Invalid source: $source")
+        val bin = source.bitArray.toInput()
         val deserializer = LynonDecoder(bin)
         return deserializer.decodeAny(this)
     }
@@ -30,6 +31,6 @@ val ObjLynonClass = object : ObjClass("Lynon") {
         encodeAny(requireOnlyArg<Obj>())
     }
     addClassFn("decode") {
-        decodeAny(requireOnlyArg<ObjBuffer>())
+        decodeAny(requireOnlyArg<Obj>())
     }
 }

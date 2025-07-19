@@ -250,11 +250,10 @@ Note `Real` class: it is global variable for Real class; there are such class in
     assert('$'::class == Char)
     >>> void
 
-More complex is singleton classes, because you don't need to compare their class
-instances and generally don't need them at all, these are normally just Obj:
+Singleton classes also have class:
 
     null::class
-    >>> Obj
+    >>> Null
 
 At this time, `Obj` can't be accessed as a class.
 

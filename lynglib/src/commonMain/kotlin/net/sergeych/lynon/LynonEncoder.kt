@@ -1,30 +1,31 @@
 package net.sergeych.lynon
 
+import net.sergeych.bintools.ByteChunk
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.obj.*
 
-enum class LynonType {
-    Null,
-    Int0,
-    IntNegative,
-    IntPositive,
-    String,
-    Real,
-    Bool,
-    List,
-    Map,
-    Set,
-    Buffer,
-    Instant,
-    Duration,
-    Other;
+enum class LynonType(val objClass: ObjClass) {
+    Null(ObjNull.objClass),
+    Int0(ObjInt.type),
+    IntNegative(ObjInt.type),
+    IntPositive(ObjInt.type),
+    String(ObjString.type),
+    Real(ObjReal.type),
+    Bool(ObjBool.type),
+    List(ObjList.type),
+    Map(ObjMap.type),
+    Set(ObjSet.type),
+    Buffer(ObjBuffer.type),
+    Instant(ObjInstant.type),
+    Duration(ObjDuration.type),
+    Other(Obj.rootObjectType);
 }
 
 open class LynonEncoder(val bout: BitOutput,val settings: LynonSettings = LynonSettings.default) {
 
     val cache = mutableMapOf<Any, Int>()
 
-    private suspend fun encodeCached(item: Any, packer: suspend LynonEncoder.() -> Unit) {
+    suspend fun encodeCached(item: Any, packer: suspend LynonEncoder.() -> Unit) {
 
         suspend fun serializeAndCache(key: Any=item) {
             bout.putBit(0)
@@ -40,7 +41,8 @@ open class LynonEncoder(val bout: BitOutput,val settings: LynonSettings = LynonS
                 bout.putBits(cacheId.toULong(), size)
             } ?: serializeAndCache()
 
-            is ByteArray, is UByteArray ->  serializeAndCache()
+            is ByteArray -> serializeAndCache(ByteChunk(item.asUByteArray()))
+            is UByteArray ->  serializeAndCache(ByteChunk(item))
         }
     }
 
@@ -52,48 +54,9 @@ open class LynonEncoder(val bout: BitOutput,val settings: LynonSettings = LynonS
      */
     suspend fun encodeAny(scope: Scope,value: Obj) {
         encodeCached(value) {
-            when(value) {
-                is ObjNull -> putType(LynonType.Null)
-                is ObjInt -> {
-                    when {
-                        value.value == 0L -> putType(LynonType.Int0)
-                        value.value < 0 -> {
-                            putType(LynonType.IntNegative)
-                            encodeUnsigned((-value.value).toULong())
-                        }
-                        else -> {
-                            putType(LynonType.IntPositive)
-                            encodeUnsigned(value.value.toULong())
-                        }
-                    }
-                }
-                is ObjBool -> {
-                    putType(LynonType.Bool)
-                    encodeBoolean(value.value)
-                }
-                is ObjReal -> {
-                    putType(LynonType.Real)
-                    encodeReal(value.value)
-                }
-                is ObjInstant -> {
-                    putType(LynonType.Instant)
-                    bout.putBits(value.truncateMode.ordinal, 2)
-                    // todo: favor truncation mode from ObjInstant
-                    when(value.truncateMode) {
-                        LynonSettings.InstantTruncateMode.Millisecond ->
-                            encodeSigned(value.instant.toEpochMilliseconds())
-                        LynonSettings.InstantTruncateMode.Second ->
-                            encodeSigned(value.instant.epochSeconds)
-                        LynonSettings.InstantTruncateMode.Microsecond -> {
-                            encodeSigned(value.instant.epochSeconds)
-                            encodeUnsigned(value.instant.nanosecondsOfSecond.toULong() / 1000UL)
-                        }
-                    }
-                }
-                else -> {
-                    TODO()
-                }
-            }
+            val type = value.lynonType()
+            putType(type)
+            value.serialize(scope, this, type)
         }
     }
 
@@ -103,7 +66,7 @@ open class LynonEncoder(val bout: BitOutput,val settings: LynonSettings = LynonS
 
     suspend fun encodeObj(scope: Scope, obj: Obj) {
         encodeCached(obj) {
-            obj.serialize(scope, this)
+            obj.serialize(scope, this, null)
         }
     }
 
@@ -131,6 +94,14 @@ open class LynonEncoder(val bout: BitOutput,val settings: LynonSettings = LynonS
 
     fun encodeBoolean(value: Boolean) {
         bout.putBit(if (value) 1 else 0)
+    }
+
+    fun putBits(value: Int, sizeInBits: Int) {
+        bout.putBits(value.toULong(), sizeInBits)
+    }
+
+    fun putBit(bit: Int) {
+        bout.putBit(bit)
     }
 
 }

@@ -3,8 +3,9 @@ package net.sergeych.lyng.obj
 import net.sergeych.lyng.Scope
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
+import net.sergeych.lynon.LynonType
 
-class ObjInt(var value: Long,override val isConst: Boolean = false) : Obj(), Numeric {
+class ObjInt(var value: Long, override val isConst: Boolean = false) : Obj(), Numeric {
     override val asStr get() = ObjString(value.toString())
     override val longValue get() = value
     override val doubleValue get() = value.toDouble()
@@ -101,16 +102,37 @@ class ObjInt(var value: Long,override val isConst: Boolean = false) : Obj(), Num
         return ObjInt(-value)
     }
 
-    override suspend fun serialize(scope: Scope, encoder: LynonEncoder) {
-        encoder.encodeSigned(value)
+    override suspend fun lynonType(): LynonType = when (value) {
+        0L -> LynonType.Int0
+        else -> {
+            if (value > 0) LynonType.IntPositive
+            else LynonType.IntNegative
+        }
+    }
+
+
+    override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
+        when (lynonType) {
+            null -> encoder.encodeSigned(value)
+            LynonType.Int0 -> {}
+            LynonType.IntPositive -> encoder.encodeUnsigned(value.toULong())
+            LynonType.IntNegative -> encoder.encodeUnsigned((-value).toULong())
+            else -> scope.raiseIllegalArgument("Unsupported lynon type code for Int: $lynonType")
+        }
     }
 
     companion object {
         val Zero = ObjInt(0, true)
         val One = ObjInt(1, true)
-        val type = object: ObjClass("Int") {
-            override fun deserialize(scope: Scope, decoder: LynonDecoder): Obj =
-                ObjInt(decoder.unpackSigned())
+        val type = object : ObjClass("Int") {
+            override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj =
+                when (lynonType) {
+                    null -> ObjInt(decoder.unpackSigned())
+                    LynonType.Int0 -> Zero
+                    LynonType.IntPositive -> ObjInt(decoder.unpackUnsigned().toLong())
+                    LynonType.IntNegative -> ObjInt(-decoder.unpackUnsigned().toLong())
+                    else -> scope.raiseIllegalState("illegal type code for Int: $lynonType")
+                }
         }
     }
 }

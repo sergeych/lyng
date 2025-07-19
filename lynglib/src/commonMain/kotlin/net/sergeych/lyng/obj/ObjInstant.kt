@@ -5,7 +5,10 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.isDistantFuture
 import kotlinx.datetime.isDistantPast
 import net.sergeych.lyng.Scope
+import net.sergeych.lynon.LynonDecoder
+import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonSettings
+import net.sergeych.lynon.LynonType
 
 class ObjInstant(val instant: Instant,val truncateMode: LynonSettings.InstantTruncateMode=LynonSettings.InstantTruncateMode.Microsecond) : Obj() {
     override val objClass: ObjClass get() = type
@@ -53,6 +56,22 @@ class ObjInstant(val instant: Instant,val truncateMode: LynonSettings.InstantTru
         return instant == other.instant
     }
 
+    override suspend fun lynonType(): LynonType = LynonType.Instant
+
+    override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
+        encoder.putBits(truncateMode.ordinal, 2)
+        when(truncateMode) {
+            LynonSettings.InstantTruncateMode.Millisecond ->
+                encoder.encodeSigned(instant.toEpochMilliseconds())
+            LynonSettings.InstantTruncateMode.Second ->
+                encoder.encodeSigned(instant.epochSeconds)
+            LynonSettings.InstantTruncateMode.Microsecond -> {
+                encoder.encodeSigned(instant.epochSeconds)
+                encoder.encodeUnsigned(instant.nanosecondsOfSecond.toULong() / 1000UL)
+            }
+        }
+    }
+
     companion object {
         val distantFuture by lazy {
             ObjInstant(Instant.DISTANT_FUTURE)
@@ -86,6 +105,26 @@ class ObjInstant(val instant: Instant,val truncateMode: LynonSettings.InstantTru
                     }
                 )
             }
+
+            override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj {
+                val mode = LynonSettings.InstantTruncateMode.entries[decoder.getBitsAsInt(2)]
+                return when (mode) {
+                    LynonSettings.InstantTruncateMode.Microsecond -> ObjInstant(
+                        Instant.fromEpochSeconds(
+                            decoder.unpackSigned(), decoder.unpackUnsignedInt() * 1000
+                        )
+                    )
+                    LynonSettings.InstantTruncateMode.Millisecond -> ObjInstant(
+                        Instant.fromEpochMilliseconds(
+                            decoder.unpackSigned()
+                        )
+                    )
+                    LynonSettings.InstantTruncateMode.Second -> ObjInstant(
+                        Instant.fromEpochSeconds(decoder.unpackSigned())
+                    )
+                }
+            }
+
         }.apply {
             addFn("epochSeconds") {
                 val instant = thisAs<ObjInstant>().instant

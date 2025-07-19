@@ -6,54 +6,19 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import net.sergeych.bintools.encodeToHex
 import net.sergeych.lyng.*
+import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
+import net.sergeych.lynon.LynonType
 import net.sergeych.synctools.ProtectedOp
 import net.sergeych.synctools.withLock
 import kotlin.contracts.ExperimentalContracts
-
-/**
- * Record to store object with access rules, e.g. [isMutable] and access level [visibility].
- */
-data class ObjRecord(
-    var value: Obj,
-    val isMutable: Boolean,
-    val visibility: Visibility = Visibility.Public,
-    var importedFrom: Scope? = null
-) {
-    @Suppress("unused")
-    fun qualifiedName(name: String): String =
-        "${importedFrom?.packageName ?: "anonymous"}.$name"
-}
-
-/**
- * When we need read-write access to an object in some abstract storage, we need Accessor,
- * as in-site assigning is not always sufficient, in general case we need to replace the object
- * in the storage.
- *
- * Note that assigning new value is more complex than just replacing the object, see how assignment
- * operator is implemented in [Compiler.allOps].
- */
-data class Accessor(
-    val getter: suspend (Scope) -> ObjRecord,
-    val setterOrNull: (suspend (Scope, Obj) -> Unit)?
-) {
-    /**
-     * Simplified constructor for immutable stores.
-     */
-    constructor(getter: suspend (Scope) -> ObjRecord) : this(getter, null)
-
-    /**
-     * Get the setter or throw.
-     */
-    fun setter(pos: Pos) = setterOrNull ?: throw ScriptError(pos, "can't assign value")
-}
 
 open class Obj {
 
     open val isConst: Boolean = false
 
     fun ensureNotConst(scope: Scope) {
-        if( isConst ) scope.raiseError("can't assign to constant")
+        if (isConst) scope.raiseError("can't assign to constant")
     }
 
     val isNull by lazy { this === ObjNull }
@@ -273,33 +238,35 @@ open class Obj {
     val asReadonly: ObjRecord by lazy { ObjRecord(this, false) }
     val asMutable: ObjRecord by lazy { ObjRecord(this, true) }
 
-    open suspend fun serialize(scope: Scope, encoder: LynonEncoder) {
+    open suspend fun lynonType(): LynonType = LynonType.Other
+
+    open suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
         scope.raiseNotImplemented()
     }
 
     companion object {
 
         val rootObjectType = ObjClass("Obj").apply {
-                addFn("toString") {
-                    thisObj.asStr
-                }
-                addFn("contains") {
-                    ObjBool(thisObj.contains(this, args.firstAndOnly()))
-                }
-                // utilities
-                addFn("let") {
-                    args.firstAndOnly().callOn(copy(Arguments(thisObj)))
-                }
-                addFn("apply") {
-                    val newContext = ( thisObj as? ObjInstance)?.instanceScope ?: this
-                    args.firstAndOnly()
-                        .callOn(newContext)
-                    thisObj
-                }
-                addFn("also") {
-                    args.firstAndOnly().callOn(copy(Arguments(thisObj)))
-                    thisObj
-                }
+            addFn("toString") {
+                thisObj.asStr
+            }
+            addFn("contains") {
+                ObjBool(thisObj.contains(this, args.firstAndOnly()))
+            }
+            // utilities
+            addFn("let") {
+                args.firstAndOnly().callOn(copy(Arguments(thisObj)))
+            }
+            addFn("apply") {
+                val newContext = (thisObj as? ObjInstance)?.instanceScope ?: this
+                args.firstAndOnly()
+                    .callOn(newContext)
+                thisObj
+            }
+            addFn("also") {
+                args.firstAndOnly().callOn(copy(Arguments(thisObj)))
+                thisObj
+            }
             addFn("getAt") {
                 requireExactCount(1)
                 thisObj.getAt(this, requiredArg<Obj>(0))
@@ -394,6 +361,26 @@ object ObjNull : Obj() {
 
     override suspend fun toKotlin(scope: Scope): Any? {
         return null
+    }
+
+    override suspend fun lynonType(): LynonType {
+        return LynonType.Null
+    }
+    override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
+        if (lynonType == null) {
+            encoder.putBit(0)
+        }
+    }
+
+    override val objClass: ObjClass by lazy {
+        object : ObjClass("Null") {
+            override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj {
+                if (lynonType == LynonType.Null)
+                    return this@ObjNull
+                else
+                    scope.raiseIllegalState("can't deserialize null directly or with wrong type: ${lynonType}")
+            }
+        }
     }
 }
 
@@ -524,6 +511,9 @@ class ObjIndexOutOfBoundsException(scope: Scope, message: String = "index out of
 
 class ObjIllegalArgumentException(scope: Scope, message: String = "illegal argument") :
     ObjException("IllegalArgumentException", scope, message)
+
+class ObjIllegalStateException(scope: Scope, message: String = "illegal state") :
+    ObjException("IllegalStateException", scope, message)
 
 @Suppress("unused")
 class ObjNoSuchElementException(scope: Scope, message: String = "no such element") :

@@ -47,6 +47,10 @@ open class Scope(
         raiseError(ObjIllegalArgumentException(this, message))
 
     @Suppress("unused")
+    fun raiseIllegalState(message: String = "Illegal argument error"): Nothing =
+        raiseError(ObjIllegalStateException(this, message))
+
+    @Suppress("unused")
     fun raiseNoSuchElement(message: String = "No such element"): Nothing =
         raiseError(ObjIllegalArgumentException(this, message))
 

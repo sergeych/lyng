@@ -309,9 +309,9 @@ class LynonTests {
             assertEquals( -1 * π, -π )
             """.trimIndent())
     }
-    
+
     @Test
-    fun testIntsNulls() = runTest{
+    fun testSimpleTypes() = runTest{
         testScope().eval("""
             testEncode(null)
             testEncode(0)
@@ -326,6 +326,9 @@ class LynonTests {
             testEncode(Instant.now().truncateToSecond())
             testEncode(Instant.now().truncateToMillisecond())
             testEncode(Instant.now().truncateToMicrosecond())
+            
+            testEncode("Hello, world".encodeUtf8())
+            
         """.trimIndent())
     }
 

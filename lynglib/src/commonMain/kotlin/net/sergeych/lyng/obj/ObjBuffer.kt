@@ -2,9 +2,13 @@ package net.sergeych.lyng.obj
 
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
+import net.sergeych.bintools.encodeToHex
 import net.sergeych.bintools.toDump
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.statement
+import net.sergeych.lynon.LynonDecoder
+import net.sergeych.lynon.LynonEncoder
+import net.sergeych.lynon.LynonType
 import kotlin.math.min
 
 open class ObjBuffer(val byteArray: UByteArray) : Obj() {
@@ -63,7 +67,7 @@ open class ObjBuffer(val byteArray: UByteArray) : Obj() {
     }
 
     override fun toString(): String {
-        return "Buffer(${byteArray.toList()})"
+        return "Buffer(${byteArray.encodeToHex()})"
     }
 
     override fun equals(other: Any?): Boolean {
@@ -73,6 +77,14 @@ open class ObjBuffer(val byteArray: UByteArray) : Obj() {
         other as ObjBuffer
 
         return byteArray contentEquals other.byteArray
+    }
+
+    override suspend fun lynonType(): LynonType = LynonType.Buffer
+
+    override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
+        encoder.encodeCached(byteArray) {
+            bout.compress(byteArray.asByteArray())
+        }
     }
 
     companion object {
@@ -124,6 +136,12 @@ open class ObjBuffer(val byteArray: UByteArray) : Obj() {
                     }
                 }
             }
+
+            override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj =
+                ObjBuffer( decoder.decodeCached {
+                    decoder.decompress().asUByteArray()
+                })
+
         }.apply {
             createField("size",
                 statement {

@@ -3,6 +3,7 @@ package net.sergeych.lyng.obj
 import net.sergeych.lyng.Scope
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
+import net.sergeych.lynon.LynonType
 
 data class ObjBool(val value: Boolean) : Obj() {
     override val asStr by lazy { ObjString(value.toString()) }
@@ -30,7 +31,9 @@ data class ObjBool(val value: Boolean) : Obj() {
         return value
     }
 
-    override suspend fun serialize(scope: Scope, encoder: LynonEncoder) {
+    override suspend fun lynonType(): LynonType = LynonType.Bool
+
+    override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
         encoder.encodeBoolean(value)
     }
 
@@ -45,7 +48,7 @@ data class ObjBool(val value: Boolean) : Obj() {
 
     companion object {
         val type = object : ObjClass("Bool") {
-            override fun deserialize(scope: Scope, decoder: LynonDecoder): Obj {
+            override suspend fun deserialize(scope: Scope, decoder: LynonDecoder,lynonType: LynonType?): Obj {
                 return ObjBool(decoder.unpackBoolean())
             }
         }

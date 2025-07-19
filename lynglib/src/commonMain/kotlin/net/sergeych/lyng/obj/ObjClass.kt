@@ -2,6 +2,7 @@ package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.*
 import net.sergeych.lynon.LynonDecoder
+import net.sergeych.lynon.LynonType
 
 val ObjClassType by lazy { ObjClass("Class") }
 
@@ -98,7 +99,7 @@ open class ObjClass(
         return classMembers[name]?.value?.invoke(scope, this, args) ?: super.invokeInstanceMethod(scope, name, args)
     }
 
-    open fun deserialize(scope: Scope, decoder: LynonDecoder): Obj = scope.raiseNotImplemented()
+    open suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj = scope.raiseNotImplemented()
 }
 
 

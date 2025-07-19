@@ -98,11 +98,16 @@ so it is possible to truncate it to milliseconds, microseconds or seconds:
     import lyng.serialization
 
     // max supported size (now microseconds for serialized value):
-    assert( Lynon.encode(Instant.now()).size in [8,9] )
+    // note that encoding return _bit array_ and this is a _bit size_:
+    val s0 = Lynon.encode(Instant.now()).size
+
     // shorter: milliseconds only
-    assertEquals( 7, Lynon.encode(Instant.now().truncateToMillisecond()).size )
+    val s1 = Lynon.encode(Instant.now().truncateToMillisecond()).size
+
     // truncated to seconds, good for file mtime, etc:
-    assertEquals( 6, Lynon.encode(Instant.now().truncateToSecond()).size )
+    val s2 = Lynon.encode(Instant.now().truncateToSecond()).size 
+    assert( s1 < s0 )
+    assert( s2 < s1 )
     >>> void
 
 ## Formatting instants

@@ -3,6 +3,7 @@ package net.sergeych.lyng.obj
 import net.sergeych.lyng.Arguments
 import net.sergeych.lyng.Scope
 import net.sergeych.lynon.LynonEncoder
+import net.sergeych.lynon.LynonType
 
 class ObjInstance(override val objClass: ObjClass) : Obj() {
 
@@ -45,7 +46,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         return "${objClass.className}($fields)"
     }
 
-    override suspend fun serialize(scope: Scope, encoder: LynonEncoder) {
+    override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
         val meta = objClass.constructorMeta
             ?: scope.raiseError("can't serialize non-serializable object (no constructor meta)")
         for( p in meta.params) {

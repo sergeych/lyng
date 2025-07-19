@@ -6,6 +6,7 @@ import net.sergeych.lyng.Scope
 import net.sergeych.lyng.statement
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
+import net.sergeych.lynon.LynonType
 import net.sergeych.sprintf.sprintf
 
 @Serializable
@@ -80,13 +81,13 @@ data class ObjString(val value: String) : Obj() {
         return value == other.value
     }
 
-    override suspend fun serialize(scope: Scope, encoder: LynonEncoder) {
+    override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
         encoder.encodeBinaryData(value.encodeToByteArray())
     }
 
     companion object {
         val type = object : ObjClass("String") {
-            override fun deserialize(scope: Scope, decoder: LynonDecoder): Obj =
+            override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj =
                 ObjString(
                     decoder.unpackBinaryData().decodeToString()
 //                        ?: scope.raiseError("unexpected end of data")
@@ -135,6 +136,7 @@ data class ObjString(val value: String) : Obj() {
                     thisAs<ObjString>().value.map { ObjChar(it) }.toMutableList()
                 )
             }
+            addFn("encodeUtf8") { ObjBuffer(thisAs<ObjString>().value.encodeToByteArray().asUByteArray()) }
             addFn("size") { ObjInt(thisAs<ObjString>().value.length.toLong()) }
             addFn("toReal") { ObjReal(thisAs<ObjString>().value.toDouble()) }
         }

@@ -5,6 +5,7 @@ import net.sergeych.lyng.Scope
 import net.sergeych.lyng.statement
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
+import net.sergeych.lynon.LynonType
 import kotlin.math.floor
 import kotlin.math.roundToLong
 
@@ -65,13 +66,15 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
         return ObjReal(-value)
     }
 
-    override suspend fun serialize(scope: Scope, encoder: LynonEncoder) {
+    override suspend fun lynonType(): LynonType = LynonType.Real
+
+    override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
         encoder.encodeReal(value)
     }
 
     companion object {
         val type: ObjClass = object : ObjClass("Real") {
-            override fun deserialize(scope: Scope, decoder: LynonDecoder): Obj =
+            override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj =
                 ObjReal(decoder.unpackDouble())
         }.apply {
             createField(
