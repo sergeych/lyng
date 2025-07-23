@@ -382,14 +382,37 @@ class LynonTests {
         println("Original : ${x.size}")
         val lzw = LZW.compress(x).bytes
         println("LZW      : ${lzw.size}")
-        val ba = Huffman.compress(x)
+        val ba = Huffman.compress(x, Huffman.byteAlphabet)
         val huff = ba.bytes
         println("Huffman  : ${huff.size}")
-        val lzwhuff = Huffman.compress(lzw).bytes
+        val lzwhuff = Huffman.compress(lzw, Huffman.byteAlphabet).bytes
         println("LZW+HUFF : ${lzwhuff.size}")
-        val compressed = Huffman.compress(x)
-        val decompressed = Huffman.decompress(compressed.toBitInput())
+        val compressed = Huffman.compress(x,Huffman.byteAlphabet)
+        val decompressed = Huffman.decompress(compressed.toBitInput(),Huffman.byteAlphabet)
         assertContentEquals(x, decompressed)
+    }
+
+    @Test
+    fun testGenerateCanonicalHuffmanCodes() {
+        val frequencies = LynonType.entries.map { it.defaultFrequency }.toTypedArray()
+        val alphabet = object : Huffman.Alphabet<LynonType> {
+            override val maxOrdinal = LynonType.entries.size
+
+//            val bitSize = sizeInBits(maxOrdinal)
+
+            override fun decodeOrdinalTo(bout: BitOutput, ordinal: Int) {
+                TODO("Not yet implemented")
+            }
+
+            override fun get(ordinal: Int): LynonType {
+                TODO("Not yet implemented")
+            }
+
+            override fun ordinalOf(value: LynonType): Int = value.ordinal
+        }
+        for(code in Huffman.generateCanonicalCodes(frequencies, alphabet)) {
+            println("${code?.bits}: ${code?.ordinal?.let { LynonType.entries[it] }}")
+        }
     }
 
     @Test

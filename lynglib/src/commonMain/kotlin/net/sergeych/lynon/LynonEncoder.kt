@@ -4,21 +4,21 @@ import net.sergeych.bintools.ByteChunk
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.obj.*
 
-enum class LynonType(val objClass: ObjClass) {
-    Null(ObjNull.objClass),
-    Int0(ObjInt.type),
-    IntNegative(ObjInt.type),
-    IntPositive(ObjInt.type),
-    String(ObjString.type),
+enum class LynonType(val objClass: ObjClass,val defaultFrequency: Int = 1) {
+    Null(ObjNull.objClass, 80),
+    Int0(ObjInt.type, 70),
+    IntNegative(ObjInt.type, 50),
+    IntPositive(ObjInt.type, 100),
+    String(ObjString.type, 100),
     Real(ObjReal.type),
-    Bool(ObjBool.type),
-    List(ObjList.type),
-    Map(ObjMap.type),
+    Bool(ObjBool.type, 80),
+    List(ObjList.type, 70),
+    Map(ObjMap.type,40),
     Set(ObjSet.type),
-    Buffer(ObjBuffer.type),
-    Instant(ObjInstant.type),
+    Buffer(ObjBuffer.type, 50),
+    Instant(ObjInstant.type, 30),
     Duration(ObjDuration.type),
-    Other(Obj.rootObjectType);
+    Other(Obj.rootObjectType,60);
 }
 
 open class LynonEncoder(val bout: BitOutput, val settings: LynonSettings = LynonSettings.default) {
