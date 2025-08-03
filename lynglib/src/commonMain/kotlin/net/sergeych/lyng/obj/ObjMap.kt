@@ -94,6 +94,15 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
         return map == other.map
     }
 
+    override suspend fun lynonType(): LynonType = LynonType.Map
+
+    override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
+        val keys = map.keys.map { it.toObj() }
+        val values = map.values.map { it.toObj() }
+        encoder.encodeAnyList(scope, keys)
+        encoder.encodeAnyList(scope, values, fixedSize = true)
+    }
+
     companion object {
 
         suspend fun listToMap(scope: Scope, list: List<Obj>): MutableMap<Obj, Obj> {
@@ -120,6 +129,13 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
         val type = object : ObjClass("Map", ObjCollection) {
             override suspend fun callOn(scope: Scope): Obj {
                 return ObjMap(listToMap(scope, scope.args.list))
+            }
+
+            override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj {
+                val keys = decoder.decodeAnyList(scope)
+                val values = decoder.decodeAnyList(scope,fixedSize = keys.size)
+                if( keys.size != values.size) scope.raiseIllegalArgument("map keys and values should be same size")
+                return ObjMap(keys.zip(values).toMap().toMutableMap())
             }
         }.apply {
             addFn("getOrNull") {

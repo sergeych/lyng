@@ -108,30 +108,38 @@ open class LynonEncoder(val bout: BitOutput, val settings: LynonSettings = Lynon
      * for each item.
      *
      */
-    suspend fun encodeAnyList(scope: Scope, list: List<Obj>) {
-        val objClass = list[0].objClass
-        var type = list[0].lynonType()
-        var isHomogeneous = true
-        for (i in list.drop(1))
-            if (i.objClass != objClass) {
-                isHomogeneous = false
-                break
-            } else {
-                // same class but type might need generalization
-                type = type.generalizeTo(i.lynonType())
-                    ?: scope.raiseError("inner error: can't generalize lynon type $type to ${i.lynonType()}")
-            }
-        if (isHomogeneous) {
-            putBit(1)
-            putTypeRecord(scope, list[0], type)
-            encodeUnsigned(list.size.toULong())
-            for (i in list) encodeObject(scope, i, type)
-        } else {
+    suspend fun encodeAnyList(scope: Scope, list: List<Obj>,fixedSize: Boolean = false) {
+        if( list.isEmpty()) {
+            // any-typed, empty, save space
             putBit(0)
-            encodeUnsigned(list.size.toULong())
-            for (i in list) encodeAny(scope, i)
+            encodeUnsigned(0u)
         }
-
+        else {
+            val objClass = list[0].objClass
+            var type = list[0].lynonType()
+            var isHomogeneous = true
+            for (i in list.drop(1))
+                if (i.objClass != objClass) {
+                    isHomogeneous = false
+                    break
+                } else {
+                    // same class but type might need generalization
+                    type = type.generalizeTo(i.lynonType())
+                        ?: scope.raiseError("inner error: can't generalize lynon type $type to ${i.lynonType()}")
+                }
+            if (isHomogeneous) {
+                putBit(1)
+                putTypeRecord(scope, list[0], type)
+                if (!fixedSize)
+                    encodeUnsigned(list.size.toULong())
+                for (i in list) encodeObject(scope, i, type)
+            } else {
+                putBit(0)
+                if (!fixedSize)
+                    encodeUnsigned(list.size.toULong())
+                for (i in list) encodeAny(scope, i)
+            }
+        }
     }
 
     /**

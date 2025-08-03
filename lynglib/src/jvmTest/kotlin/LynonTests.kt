@@ -508,6 +508,7 @@ class LynonTests {
             testEncode(["the", "the", "wall", "the", "wall", "wall"])
             testEncode([1,2,3, "the", "wall", "wall"])
             testEncode([false, false, false, true,true])
+            testEncode([])
         """.trimIndent()
         )
     }
@@ -534,6 +535,28 @@ class LynonTests {
             testEncode( [1 => "one", 1 => "one", "foo" => "MapEntry"] )
         """.trimIndent())
     }
+
+    @Test
+    fun testHomogenousMap() = runTest {
+        val s = testScope()
+        s.eval("""
+            testEncode( Map("one" => 1, "two" => 2) )
+            testEncode( Map() )
+        """.trimIndent())
+    }
+
+    @Test
+    fun testHeterogeneousMap() = runTest {
+        val s = testScope()
+        s.eval("""
+//            testEncode(["one", 2])
+//            testEncode([1, "2"])
+//            testEncode( Map("one" => 1, 2 => 2) )
+            testEncode( Map("one" => 1, 2 => "2") )
+        """.trimIndent())
+    }
+
+
 }
 
 

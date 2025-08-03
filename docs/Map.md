@@ -7,12 +7,14 @@ Important thing is that maps can't contain `null`: it is used to return from mis
 
 Constructed map instance is of class `Map` and implements `Collection` (and therefore `Iterable`)
 
-    val map = Map( ["foo", 1], ["bar", "buzz"] )
+    val map = Map( "foo" => 1, "bar" => "buzz" )
     assert(map is Map)
     assert(map.size == 2)
     assert(map is Iterable)
     >>> void
 
+Notice usage of the `=>` operator that creates `MapEntry`, which implements also [Collection] of
+two items, first, at index zero, is a key, second, at index 1, is the value. You can use lists too.
 Map keys could be any objects (hashable, e.g. with reasonable hashCode, most of standard types are). You can access elements with indexing operator:
 
     val map = Map( ["foo", 1], ["bar", "buzz"], [42, "answer"] )
@@ -31,7 +33,7 @@ To remove item from the collection. use `remove`. It returns last removed item o
 hold nulls in the map - this is not a recommended practice when using `remove` returned value. `clear()` 
 removes all.
 
-    val map = Map( ["foo", 1], ["bar", "buzz"], [42, "answer"] )
+    val map = Map( "foo" => 1, "bar" => "buzz", [42, "answer"] )
     assertEquals( 1, map.remove("foo") )
     assert( map.getOrNull("foo") == null)
     assert( map.size == 2 )

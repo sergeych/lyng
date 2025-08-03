@@ -56,7 +56,7 @@ open class LynonDecoder(val bin: BitInput, val settings: LynonSettings = LynonSe
         } ?: scope.raiseSymbolNotFound("can't deserialize: not found type $className")
     }
 
-    suspend fun decodeAnyList(scope: Scope): MutableList<Obj> {
+    suspend fun decodeAnyList(scope: Scope,fixedSize: Int?=null): MutableList<Obj> {
         return if (bin.getBit() == 1) {
             // homogenous
             val type = LynonType.entries[getBitsAsInt(4)]
@@ -64,7 +64,7 @@ open class LynonDecoder(val bin: BitInput, val settings: LynonSettings = LynonSe
             val objClass = if (type == LynonType.Other)
                 decodeClassObj(scope).also { println("detected class obj: $it") }
             else type.objClass
-            val size = bin.unpackUnsigned().toInt()
+            val size = fixedSize ?: bin.unpackUnsigned().toInt()
             println("detected homogenous list type $type, $size items")
             for (i in 0..<size) {
                 list += decodeObject(scope, objClass, type).also {
@@ -73,7 +73,7 @@ open class LynonDecoder(val bin: BitInput, val settings: LynonSettings = LynonSe
             }
             list
         } else {
-            val size = unpackUnsigned().toInt()
+            val size = fixedSize ?: unpackUnsigned().toInt()
             (0..<size).map { decodeAny(scope) }.toMutableList()
         }
     }
