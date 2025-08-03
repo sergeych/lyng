@@ -2,6 +2,9 @@ package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Statement
+import net.sergeych.lynon.LynonDecoder
+import net.sergeych.lynon.LynonEncoder
+import net.sergeych.lynon.LynonType
 
 class ObjMapEntry(val key: Obj, val value: Obj) : Obj() {
 
@@ -10,6 +13,14 @@ class ObjMapEntry(val key: Obj, val value: Obj) : Obj() {
         val c = key.compareTo(scope, other.key)
         if (c != 0) return c
         return value.compareTo(scope, other.value)
+    }
+
+    override fun hashCode(): Int {
+        return key.hashCode() + value.hashCode()
+    }
+
+    override fun equals(other: Any?): Boolean {
+        return other is ObjMapEntry && key == other.key && value == other.value
     }
 
     override suspend fun getAt(scope: Scope, index: Obj): Obj = when (index.toInt()) {
@@ -24,10 +35,22 @@ class ObjMapEntry(val key: Obj, val value: Obj) : Obj() {
 
     override val objClass = type
 
+    override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
+        encoder.encodeAny(scope,key)
+        encoder.encodeAny(scope,value)
+    }
+
     companion object {
         val type = object : ObjClass("MapEntry", ObjArray) {
             override suspend fun callOn(scope: Scope): Obj {
                 return ObjMapEntry(scope.requiredArg<Obj>(0), scope.requiredArg<Obj>(1))
+            }
+
+            override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj {
+                return ObjMapEntry(
+                    decoder.decodeAny(scope),
+                    decoder.decodeAny(scope)
+                )
             }
         }.apply {
             addFn("key") { thisAs<ObjMapEntry>().key }

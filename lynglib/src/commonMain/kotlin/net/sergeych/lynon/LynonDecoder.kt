@@ -3,6 +3,7 @@ package net.sergeych.lynon
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjClass
+import net.sergeych.lyng.obj.ObjString
 
 open class LynonDecoder(val bin: BitInput, val settings: LynonSettings = LynonSettings.default) {
 
@@ -17,7 +18,7 @@ open class LynonDecoder(val bin: BitInput, val settings: LynonSettings = LynonSe
     val cache = mutableListOf<Any>()
 
 
-    inline fun <reified T : Any>decodeCached(f: LynonDecoder.() -> T): T {
+    inline fun <reified T : Any> decodeCached(f: LynonDecoder.() -> T): T {
         return if (bin.getBit() == 0) {
             // unpack and cache
             f().also {
@@ -38,32 +39,47 @@ open class LynonDecoder(val bin: BitInput, val settings: LynonSettings = LynonSe
 
     suspend fun decodeAny(scope: Scope): Obj = decodeCached {
         val type = LynonType.entries[bin.getBits(4).toInt()]
-        type.objClass.deserialize(scope, this, type)
+        if (type != LynonType.Other) {
+            type.objClass.deserialize(scope, this, type)
+        } else {
+            decodeClassObj(scope).deserialize(scope, this, null)
+        }
+    }
+
+    private suspend fun decodeClassObj(scope: Scope): ObjClass {
+        val className = decodeObject(scope, ObjString.type, null) as ObjString
+        println("expected class name $className")
+        return scope.get(className.value)?.value?.let {
+            if (it !is ObjClass)
+                scope.raiseClassCastError("Expected obj class but got ${it::class.qualifiedName}")
+            it
+        } ?: scope.raiseSymbolNotFound("can't deserialize: not found type $className")
     }
 
     suspend fun decodeAnyList(scope: Scope): MutableList<Obj> {
-        return if( bin.getBit() == 1) {
+        return if (bin.getBit() == 1) {
             // homogenous
             val type = LynonType.entries[getBitsAsInt(4)]
+            val list = mutableListOf<Obj>()
+            val objClass = if (type == LynonType.Other)
+                decodeClassObj(scope).also { println("detected class obj: $it") }
+            else type.objClass
             val size = bin.unpackUnsigned().toInt()
             println("detected homogenous list type $type, $size items")
-            val list = mutableListOf<Obj>()
-            val objClass = type.objClass
-            for( i in 0 ..< size) {
+            for (i in 0..<size) {
                 list += decodeObject(scope, objClass, type).also {
-                        println("decoded: $it")
+                    println("decoded: $it")
                 }
             }
             list
-        }
-        else {
+        } else {
             val size = unpackUnsigned().toInt()
             (0..<size).map { decodeAny(scope) }.toMutableList()
         }
     }
 
-    suspend fun decodeObject(scope: Scope, type: ObjClass,overrideType: LynonType?=null): Obj {
-        return decodeCached {  type.deserialize(scope, this, overrideType) }
+    suspend fun decodeObject(scope: Scope, type: ObjClass, overrideType: LynonType? = null): Obj {
+        return decodeCached { type.deserialize(scope, this, overrideType) }
     }
 
     fun unpackBinaryData(): ByteArray = bin.decompress()

@@ -85,13 +85,16 @@ open class LynonEncoder(val bout: BitOutput, val settings: LynonSettings = Lynon
      */
     suspend fun encodeAny(scope: Scope, obj: Obj) {
         encodeCached(obj) {
-            val type = putTypeRecord(obj, obj.lynonType())
+            val type = putTypeRecord(scope, obj, obj.lynonType())
             obj.serialize(scope, this, type)
         }
     }
 
-    private fun putTypeRecord(obj: Obj, type: LynonType): LynonType {
+    private suspend fun putTypeRecord(scope: Scope, obj: Obj, type: LynonType): LynonType {
         putType(type)
+        if( type == LynonType.Other) {
+            encodeObject(scope, obj.objClass.classNameObj)
+        }
         return type
     }
 
@@ -120,7 +123,7 @@ open class LynonEncoder(val bout: BitOutput, val settings: LynonSettings = Lynon
             }
         if (isHomogeneous) {
             putBit(1)
-            putTypeRecord(list[0], type)
+            putTypeRecord(scope, list[0], type)
             encodeUnsigned(list.size.toULong())
             for (i in list) encodeObject(scope, i, type)
         } else {

@@ -11,6 +11,8 @@ open class ObjClass(
     vararg parents: ObjClass,
 ) : Obj() {
 
+    val classNameObj by lazy { ObjString(className) }
+
     var constructorMeta: ArgsDeclaration? = null
     var instanceConstructor: Statement? = null
 
@@ -100,6 +102,7 @@ open class ObjClass(
     }
 
     open suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj = scope.raiseNotImplemented()
+
 }
 
 

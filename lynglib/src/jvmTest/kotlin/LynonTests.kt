@@ -11,6 +11,7 @@ import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class LynonTests {
 
@@ -56,6 +57,7 @@ class LynonTests {
         assertEquals(1, bin.getBit())
         assertEquals(null, bin.getBitOrNull())
     }
+
     @Test
     fun testBitOutputMedium() {
         val bout = MemoryBitOutput()
@@ -63,8 +65,8 @@ class LynonTests {
         bout.putBit(1)
         bout.putBit(0)
         bout.putBit(1)
-        bout.putBits( 0, 7)
-        bout.putBits( 3, 2)
+        bout.putBits(0, 7)
+        bout.putBits(3, 2)
         val x = bout.toBitArray()
         assertEquals(1, x[0])
         assertEquals(1, x[1])
@@ -243,6 +245,7 @@ class LynonTests {
         assertEquals(ObjReal(Double.MIN_VALUE), decoder.decodeObject(scope, ObjReal.type))
         assertEquals(ObjReal(Double.MAX_VALUE), decoder.decodeObject(scope, ObjReal.type))
     }
+
     @Test
     fun testUnpackInt() = runTest {
         val scope = Scope()
@@ -284,15 +287,17 @@ class LynonTests {
     val original = Files.readString(Path.of("../sample_texts/dikkens_hard_times.txt"))
 
     @Test
-    fun testEncodeNullsAndInts() = runTest{
-        testScope().eval("""
+    fun testEncodeNullsAndInts() = runTest {
+        testScope().eval(
+            """
             testEncode(null)
             testEncode(0)
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
-    fun testBufferEncoderInterop() = runTest{
+    fun testBufferEncoderInterop() = runTest {
         val bout = MemoryBitOutput()
         bout.putBits(0, 1)
         bout.putBits(1, 4)
@@ -302,7 +307,9 @@ class LynonTests {
     }
 
     suspend fun testScope() =
-        Scope().apply { eval("""
+        Scope().apply {
+            eval(
+                """
             import lyng.serialization
             fun testEncode(value) {
                 val encoded = Lynon.encode(value)
@@ -310,21 +317,25 @@ class LynonTests {
                 println("Encoded size %d: %s"(encoded.size, value))
                 assertEquals( value, Lynon.decode(encoded) )
             }
-            """.trimIndent())
+            """.trimIndent()
+            )
         }
 
 
     @Test
-    fun testUnaryMinus() = runTest{
-        eval("""
+    fun testUnaryMinus() = runTest {
+        eval(
+            """
             assertEquals( -1 * π, 0 - π )
             assertEquals( -1 * π, -π )
-            """.trimIndent())
+            """.trimIndent()
+        )
     }
 
     @Test
-    fun testSimpleTypes() = runTest{
-        testScope().eval("""
+    fun testSimpleTypes() = runTest {
+        testScope().eval(
+            """
             testEncode(null)
             testEncode(0)
             testEncode(47)
@@ -342,7 +353,8 @@ class LynonTests {
             testEncode("Hello, world".encodeUtf8())
             testEncode("Hello, world")
             
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
@@ -383,7 +395,7 @@ class LynonTests {
         assertEquals("011101", a0.toString())
         val bin = MemoryBitInput(MemoryBitOutput().apply { putBits(a0) })
         var result = TinyBits()
-        for( i in a0.indices)  result = result.insertBit(bin.getBit())
+        for (i in a0.indices) result = result.insertBit(bin.getBit())
         assertEquals(a0, result)
     }
 
@@ -399,8 +411,8 @@ class LynonTests {
         println("Huffman  : ${huff.size}")
         val lzwhuff = Huffman.compress(lzw, Huffman.byteAlphabet).bytes
         println("LZW+HUFF : ${lzwhuff.size}")
-        val compressed = Huffman.compress(x,Huffman.byteAlphabet)
-        val decompressed = Huffman.decompress(compressed.toBitInput(),Huffman.byteAlphabet)
+        val compressed = Huffman.compress(x, Huffman.byteAlphabet)
+        val decompressed = Huffman.decompress(compressed.toBitInput(), Huffman.byteAlphabet)
         assertContentEquals(x, decompressed)
     }
 
@@ -420,7 +432,7 @@ class LynonTests {
 
             override fun ordinalOf(value: LynonType): Int = value.ordinal
         }
-        for(code in Huffman.generateCanonicalCodes(frequencies, alphabet)) {
+        for (code in Huffman.generateCanonicalCodes(frequencies, alphabet)) {
             println("${code?.bits}: ${code?.ordinal?.let { LynonType.entries[it] }}")
         }
     }
@@ -428,19 +440,19 @@ class LynonTests {
     @Test
     fun testBitListSmall() {
         var t = TinyBits()
-        for( i in listOf(1, 1, 0, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1) )
+        for (i in listOf(1, 1, 0, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1))
             t = t.insertBit(i)
         assertEquals(1, t[0])
         assertEquals(1, t[1])
         assertEquals(0, t[2])
-        assertEquals("1101000111101",t.toString())
+        assertEquals("1101000111101", t.toString())
         t[0] = 0
         t[1] = 0
         t[2] = 1
-        assertEquals("0011000111101",t.toString())
+        assertEquals("0011000111101", t.toString())
         t[12] = 0
         t[11] = 1
-        assertEquals("0011000111110",t.toString())
+        assertEquals("0011000111110", t.toString())
     }
 
     @Test
@@ -449,10 +461,10 @@ class LynonTests {
         val bout = MemoryBitOutput()
         assertEquals("1101", bitListOf(1, 1, 0, 1).toString())
         bout.putBits(bitListOf(1, 1, 0, 1))
-        bout.putBits(bitListOf( 0, 0))
-        bout.putBits(bitListOf( 0, 1, 1, 1, 1, 0, 1))
+        bout.putBits(bitListOf(0, 0))
+        bout.putBits(bitListOf(0, 1, 1, 1, 1, 0, 1))
         val x = bout.toBitArray()
-        assertEquals("1101000111101",x.toString())
+        assertEquals("1101000111101", x.toString())
     }
 
 
@@ -486,17 +498,43 @@ class LynonTests {
 
     @Test
     fun testIntList() = runTest {
-        testScope().eval("""
-//            testEncode([1,2,3])
-//            testEncode([-1,-2,-3])
-//            testEncode([1,-2,-3])
-//            testEncode([0,1])
-//            testEncode([0,0,0])
-//       testEncode(["the", "the", "wall", "the", "wall", "wall"])
-       testEncode([1,2,3, "the", "wall", "wall"])
-            
-        """.trimIndent())
+        testScope().eval(
+            """
+            testEncode([1,2,3])
+            testEncode([-1,-2,-3])
+            testEncode([1,-2,-3])
+            testEncode([0,1])
+            testEncode([0,0,0])
+            testEncode(["the", "the", "wall", "the", "wall", "wall"])
+            testEncode([1,2,3, "the", "wall", "wall"])
+            testEncode([false, false, false, true,true])
+        """.trimIndent()
+        )
     }
 
+    @Test
+    fun testNamedObject() = runTest {
+        val s = testScope()
+        val x = s.eval("""5 => 6""")
+        assert(x is ObjMapEntry)
+        val bout = MemoryBitOutput()
+        val e = LynonEncoder(bout)
+        e.encodeAny(s, x)
+        val bin = bout.toBitInput()
+        val d = LynonDecoder(bin)
+        val x2 = d.decodeAny(s)
+        println(x)
+        println(x2)
+        assertTrue { x.compareTo(s, x2) == 0}
+        assertEquals(x, x2)
+
+        s.eval("""
+            testEncode( 1 => "one" )
+            testEncode( [1 => "one", 1 => "one"] )
+            testEncode( [1 => "one", 1 => "one", "foo" => "MapEntry"] )
+        """.trimIndent())
+    }
 }
+
+
 
