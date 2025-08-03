@@ -1,4 +1,5 @@
-import junit.framework.TestCase.*
+import junit.framework.TestCase.assertNotSame
+import junit.framework.TestCase.assertSame
 import kotlinx.coroutines.test.runTest
 import net.sergeych.bintools.encodeToHex
 import net.sergeych.lyng.Scope
@@ -9,6 +10,8 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+
 class LynonTests {
 
     @Test
@@ -142,6 +145,15 @@ class LynonTests {
         val bin = MemoryBitInput(bout)
         assertEquals(-1471792L, bin.unpackSigned())
         assertEquals(1471792L, bin.unpackSigned())
+    }
+
+    @Test
+    fun testObjStringAndStringKeys() = runTest {
+        val s = "foo"
+        val sobj = ObjString("foo")
+        val map = mutableMapOf(s to 1, sobj to 2)
+        assertEquals(1, map[s])
+        assertEquals(2, map[sobj])
     }
 
     @Test
@@ -398,14 +410,12 @@ class LynonTests {
         val alphabet = object : Huffman.Alphabet<LynonType> {
             override val maxOrdinal = LynonType.entries.size
 
-//            val bitSize = sizeInBits(maxOrdinal)
-
             override fun decodeOrdinalTo(bout: BitOutput, ordinal: Int) {
-                TODO("Not yet implemented")
+                throw NotImplementedError()
             }
 
             override fun get(ordinal: Int): LynonType {
-                TODO("Not yet implemented")
+                return LynonType.entries[ordinal]
             }
 
             override fun ordinalOf(value: LynonType): Int = value.ordinal
@@ -472,6 +482,20 @@ class LynonTests {
         assertEquals(src, bin.decompressString())
         assertEquals(src2, bin.decompressString())
         assertEquals(src3, bin.decompressString())
+    }
+
+    @Test
+    fun testIntList() = runTest {
+        testScope().eval("""
+//            testEncode([1,2,3])
+//            testEncode([-1,-2,-3])
+//            testEncode([1,-2,-3])
+//            testEncode([0,1])
+//            testEncode([0,0,0])
+//       testEncode(["the", "the", "wall", "the", "wall", "wall"])
+       testEncode([1,2,3, "the", "wall", "wall"])
+            
+        """.trimIndent())
     }
 
 }

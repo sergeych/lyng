@@ -84,17 +84,14 @@ data class ObjString(val value: String) : Obj() {
     override suspend fun lynonType(): LynonType = LynonType.String
 
     override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
-        val data = value.encodeToByteArray()
-        encoder.encodeCached(data) { encoder.encodeBinaryData(data) }
+        encoder.encodeBinaryData(value.encodeToByteArray())
     }
 
 
     companion object {
         val type = object : ObjClass("String") {
             override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj =
-                    decoder.decodeCached {
-                        ObjString(decoder.unpackBinaryData().decodeToString())
-                    }
+                ObjString(decoder.unpackBinaryData().decodeToString())
         }.apply {
             addFn("toInt") {
                 ObjInt(thisAs<ObjString>().value.toLong())

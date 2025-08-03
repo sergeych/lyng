@@ -366,6 +366,7 @@ object ObjNull : Obj() {
     override suspend fun lynonType(): LynonType {
         return LynonType.Null
     }
+
     override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
         if (lynonType == null) {
             encoder.putBit(0)

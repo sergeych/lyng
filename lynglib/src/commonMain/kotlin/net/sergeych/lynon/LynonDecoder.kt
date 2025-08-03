@@ -17,10 +17,11 @@ open class LynonDecoder(val bin: BitInput, val settings: LynonSettings = LynonSe
     val cache = mutableListOf<Any>()
 
 
-    inline fun <T : Any>decodeCached(f: LynonDecoder.() -> T): T {
+    inline fun <reified T : Any>decodeCached(f: LynonDecoder.() -> T): T {
         return if (bin.getBit() == 0) {
             // unpack and cache
             f().also {
+//                println("decode: cache miss: ${cache.size}: $it:${it::class.simpleName}")
                 if (settings.shouldCache(it)) cache.add(it)
             }
         } else {
@@ -29,7 +30,8 @@ open class LynonDecoder(val bin: BitInput, val settings: LynonSettings = LynonSe
             val id = bin.getBitsOrNull(size)?.toInt()
                 ?: throw RuntimeException("Invalid object id: unexpected end of stream")
             if (id >= cache.size) throw RuntimeException("Invalid object id: $id should be in 0..<${cache.size}")
-            @Suppress("UNCHECKED_CAST")
+//            println("decode: cache hit ${id}: ${cache[id]}:${cache[id]::class.simpleName}")
+//            @Suppress("UNCHECKED_CAST")
             cache[id] as T
         }
     }
@@ -39,8 +41,29 @@ open class LynonDecoder(val bin: BitInput, val settings: LynonSettings = LynonSe
         type.objClass.deserialize(scope, this, type)
     }
 
-    suspend fun decodeObject(scope: Scope, type: ObjClass): Obj {
-        return decodeCached {  type.deserialize(scope, this, null) }
+    suspend fun decodeAnyList(scope: Scope): MutableList<Obj> {
+        return if( bin.getBit() == 1) {
+            // homogenous
+            val type = LynonType.entries[getBitsAsInt(4)]
+            val size = bin.unpackUnsigned().toInt()
+            println("detected homogenous list type $type, $size items")
+            val list = mutableListOf<Obj>()
+            val objClass = type.objClass
+            for( i in 0 ..< size) {
+                list += decodeObject(scope, objClass, type).also {
+                        println("decoded: $it")
+                }
+            }
+            list
+        }
+        else {
+            val size = unpackUnsigned().toInt()
+            (0..<size).map { decodeAny(scope) }.toMutableList()
+        }
+    }
+
+    suspend fun decodeObject(scope: Scope, type: ObjClass,overrideType: LynonType?=null): Obj {
+        return decodeCached {  type.deserialize(scope, this, overrideType) }
     }
 
     fun unpackBinaryData(): ByteArray = bin.decompress()

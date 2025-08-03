@@ -2,6 +2,9 @@ package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.statement
+import net.sergeych.lynon.LynonDecoder
+import net.sergeych.lynon.LynonEncoder
+import net.sergeych.lynon.LynonType
 
 class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
 
@@ -125,9 +128,18 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
         return list == other.list
     }
 
-    companion object {
-        val type = ObjClass("List", ObjArray).apply {
+    override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
+        encoder.encodeAnyList(scope,list)
+    }
 
+    override suspend fun lynonType(): LynonType = LynonType.List
+
+    companion object {
+        val type = object : ObjClass("List", ObjArray) {
+            override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj {
+                return ObjList(decoder.decodeAnyList(scope))
+            }
+        }.apply {
             createField("size",
                 statement {
                     (thisObj as ObjList).list.size.toObj()

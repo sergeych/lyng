@@ -82,9 +82,7 @@ open class ObjBuffer(val byteArray: UByteArray) : Obj() {
     override suspend fun lynonType(): LynonType = LynonType.Buffer
 
     override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
-        encoder.encodeCached(byteArray) {
-            bout.compress(byteArray.asByteArray())
-        }
+        encoder.encodeCachedBytes(byteArray.asByteArray())
     }
 
     companion object {

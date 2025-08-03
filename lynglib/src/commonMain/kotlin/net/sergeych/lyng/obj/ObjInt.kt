@@ -117,6 +117,7 @@ class ObjInt(var value: Long, override val isConst: Boolean = false) : Obj(), Nu
             LynonType.Int0 -> {}
             LynonType.IntPositive -> encoder.encodeUnsigned(value.toULong())
             LynonType.IntNegative -> encoder.encodeUnsigned((-value).toULong())
+            LynonType.IntSigned -> encoder.encodeSigned(value)
             else -> scope.raiseIllegalArgument("Unsupported lynon type code for Int: $lynonType")
         }
     }
@@ -131,6 +132,7 @@ class ObjInt(var value: Long, override val isConst: Boolean = false) : Obj(), Nu
                     LynonType.Int0 -> Zero
                     LynonType.IntPositive -> ObjInt(decoder.unpackUnsigned().toLong())
                     LynonType.IntNegative -> ObjInt(-decoder.unpackUnsigned().toLong())
+                    LynonType.IntSigned -> ObjInt(decoder.unpackSigned())
                     else -> scope.raiseIllegalState("illegal type code for Int: $lynonType")
                 }
         }
