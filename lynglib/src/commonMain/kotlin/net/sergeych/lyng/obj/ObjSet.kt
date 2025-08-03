@@ -1,6 +1,9 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Scope
+import net.sergeych.lynon.LynonDecoder
+import net.sergeych.lynon.LynonEncoder
+import net.sergeych.lynon.LynonType
 
 class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
 
@@ -80,6 +83,12 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
         return set == other.set
     }
 
+    override suspend fun lynonType(): LynonType = LynonType.Set
+
+    override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
+        encoder.encodeAnyList(scope, set.toList())
+    }
+
     companion object {
 
 
@@ -87,6 +96,9 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
             override suspend fun callOn(scope: Scope): Obj {
                 return ObjSet(scope.args.list.toMutableSet())
             }
+
+            override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj =
+                ObjSet(decoder.decodeAnyList(scope).toMutableSet())
         }.apply {
             addFn("size") {
                 thisAs<ObjSet>().set.size.toObj()

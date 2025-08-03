@@ -87,7 +87,6 @@ data class ObjString(val value: String) : Obj() {
         encoder.encodeBinaryData(value.encodeToByteArray())
     }
 
-
     companion object {
         val type = object : ObjClass("String") {
             override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj =

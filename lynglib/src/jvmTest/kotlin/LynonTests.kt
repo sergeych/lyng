@@ -549,13 +549,22 @@ class LynonTests {
     fun testHeterogeneousMap() = runTest {
         val s = testScope()
         s.eval("""
-//            testEncode(["one", 2])
-//            testEncode([1, "2"])
-//            testEncode( Map("one" => 1, 2 => 2) )
+            testEncode(["one", 2])
+            testEncode([1, "2"])
+            testEncode( Map("one" => 1, 2 => 2) )
             testEncode( Map("one" => 1, 2 => "2") )
         """.trimIndent())
     }
 
+    @Test
+    fun testSetSerialization() = runTest {
+        testScope().eval("""
+            testEncode( Set("one", "two") )
+            testEncode( Set() )
+            testEncode( Set(1, "one", false) )
+            testEncode( Set(true, true, false) )
+        """.trimIndent())
+    }
 
 }
 
