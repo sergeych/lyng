@@ -1122,7 +1122,7 @@ class Compiler(
             thisObj
         }
         // inheritance must alter this code:
-        val newClass = ObjClass(className).apply {
+        val newClass = ObjInstanceClass(className).apply {
             instanceConstructor = constructorCode
             constructorMeta = constructorArgsDeclaration
         }
@@ -1630,7 +1630,7 @@ class Compiler(
             // create a separate copy:
             val initValue = initialExpression?.execute(context)?.byValueCopy() ?: ObjNull
 
-            context.addItem(name, isMutable, initValue, visibility)
+            context.addItem(name, isMutable, initValue, visibility, recordType = ObjRecord.Type.Field)
             initValue
         }
     }

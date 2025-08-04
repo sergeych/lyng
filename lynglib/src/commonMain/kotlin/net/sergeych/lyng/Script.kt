@@ -131,6 +131,12 @@ class Script(
                 if( a.compareTo(this, b) != 0 )
                     raiseError(ObjAssertionFailedException(this,"Assertion failed: ${a.inspect()} == ${b.inspect()}"))
             }
+            addVoidFn("assertNotEquals") {
+                val a = requiredArg<Obj>(0)
+                val b = requiredArg<Obj>(1)
+                if( a.compareTo(this, b) == 0 )
+                    raiseError(ObjAssertionFailedException(this,"Assertion failed: ${a.inspect()} != ${b.inspect()}"))
+            }
             addFn("assertThrows") {
                 val code = requireOnlyArg<Statement>()
                 val result =try {

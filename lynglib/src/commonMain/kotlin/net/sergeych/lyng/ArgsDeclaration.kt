@@ -2,6 +2,7 @@ package net.sergeych.lyng
 
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjList
+import net.sergeych.lyng.obj.ObjRecord
 
 /**
  * List of argument declarations in the __definition__ of the lambda, class constructor,
@@ -22,17 +23,20 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
     }
 
     /**
-     * parse args and create local vars in a given context
+     * parse args and create local vars in a given context properly interpreting
+     * ellipsis args and default values
      */
     suspend fun assignToContext(
         scope: Scope,
         arguments: Arguments = scope.args,
         defaultAccessType: AccessType = AccessType.Var,
-        defaultVisibility: Visibility = Visibility.Public
+        defaultVisibility: Visibility = Visibility.Public,
+        defaultRecordType: ObjRecord.Type = ObjRecord.Type.ConstructorField
     ) {
         fun assign(a: Item, value: Obj) {
             scope.addItem(a.name, (a.accessType ?: defaultAccessType).isMutable, value,
-                a.visibility ?: defaultVisibility)
+                a.visibility ?: defaultVisibility,
+                recordType = defaultRecordType)
         }
 
         // will be used with last lambda arg fix

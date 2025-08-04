@@ -116,9 +116,10 @@ open class Scope(
         name: String,
         isMutable: Boolean,
         value: Obj,
-        visibility: Visibility = Visibility.Public
+        visibility: Visibility = Visibility.Public,
+        recordType: ObjRecord.Type = ObjRecord.Type.Other
     ): ObjRecord {
-        return ObjRecord(value, isMutable, visibility).also { objects[name] = it }
+        return ObjRecord(value, isMutable, visibility,type = recordType).also { objects[name] = it }
     }
 
     fun getOrCreateNamespace(name: String): ObjClass {

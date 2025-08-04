@@ -50,4 +50,27 @@ class TypesTest {
            
         """.trimIndent())
     }
+
+    @Test
+    fun testUserClassCompareTo() = runTest {
+        eval("""
+            class Point(val a,b)
+            
+            assertEquals(Point(0,1), Point(0,1) )
+            assertNotEquals(Point(0,1), Point(1,1) )
+        """.trimIndent())
+    }
+
+    @Test
+    fun testUserClassCompareTo2() = runTest {
+        eval("""
+            class Point(val a,b) {
+                var c = 0
+            }
+            assertEquals(Point(0,1), Point(0,1) )
+            assertEquals(Point(0,1).apply { c = 2 }, Point(0,1).apply { c = 2 } )
+            assertNotEquals(Point(0,1), Point(1,1) )
+            assertNotEquals(Point(0,1), Point(0,1).apply { c = 1 } )
+        """.trimIndent())
+    }
 }

@@ -566,6 +566,72 @@ class LynonTests {
         """.trimIndent())
     }
 
+    @Test
+    fun testClassSerializationNoInstanceVars() = runTest {
+        testScope().eval("""
+            import lyng.serialization
+            
+            class Point(x,y)
+            
+//            println( Lynon.encode(Point(0,0)).toDump() )
+            testEncode(Point(0,0))
+            testEncode(Point(10,11))
+            testEncode(Point(-1,2))
+            testEncode(Point(-1,-2))
+            testEncode(Point("point!",-2))
+            
+        """.trimIndent())
+    }
+
+    @Test
+    fun testClassSerializationWithInstanceVars() = runTest {
+        testScope().eval("""
+            import lyng.serialization
+            
+            class Point(x=0) {
+                var y = 0
+            }
+            
+            testEncode(Point())
+            testEncode(Point(1))
+            testEncode(Point(1).apply { y = 2 })
+            testEncode(Point(10).also { it.y = 11 })
+            
+        """.trimIndent())
+    }
+
+    @Test
+    fun testClassSerializationWithInstanceVars2() = runTest {
+        testScope().eval("""
+            import lyng.serialization
+            
+            var onInitComment = null
+            
+            class Point(x=0) {
+                var y = 0
+                var comment = null
+
+                fun onDeserialized() {
+                    onInitComment = comment
+                }
+            }
+            
+            testEncode(Point())
+            testEncode(Point(1))
+            testEncode(Point(1).apply { y = 2 })
+            testEncode(Point(10).also { it.y = 11 })
+
+            // important: class init is called before setting non-constructor fields
+            // this is decessary, so deserialized fields are only available
+            // after onDeserialized() call (if exists):
+            // deserialized:
+            testEncode(Point(10).also { it.y = 11; it.comment = "comment" })
+            println("-- on init comment "+onInitComment)
+            assertEquals("comment", onInitComment)
+            
+        """.trimIndent())
+    }
+
 }
 
 

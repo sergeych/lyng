@@ -2243,6 +2243,14 @@ class ScriptTest {
     }
 
     @Test
+    fun testSet2() = runTest {
+        eval("""
+            assertEquals( Set( ...[1,2,3]), Set(1,2,3) )
+            assertEquals( Set( ...[1,false,"ok"]), Set("ok", 1, false) )
+        """.trimIndent())
+    }
+
+    @Test
     fun testLet() = runTest {
         eval(
             """

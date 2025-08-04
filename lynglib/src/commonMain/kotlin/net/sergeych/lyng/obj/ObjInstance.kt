@@ -2,6 +2,7 @@ package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Arguments
 import net.sergeych.lyng.Scope
+import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
 
@@ -29,14 +30,15 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         } ?: super.writeField(scope, name, newValue)
     }
 
-    override suspend fun invokeInstanceMethod(scope: Scope, name: String, args: Arguments): Obj =
+    override suspend fun invokeInstanceMethod(scope: Scope, name: String, args: Arguments,
+                                              onNotFoundResult: Obj?): Obj =
         instanceScope[name]?.let {
             if (it.visibility.isPublic)
                 it.value.invoke(scope, this, args)
             else
                 scope.raiseError(ObjAccessException(scope, "can't invoke non-public method $name"))
         }
-            ?: super.invokeInstanceMethod(scope, name, args)
+            ?: super.invokeInstanceMethod(scope, name, args, onNotFoundResult)
 
     private val publicFields: Map<String, ObjRecord>
         get() = instanceScope.objects.filter { it.value.visibility.isPublic }
@@ -49,19 +51,51 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
     override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
         val meta = objClass.constructorMeta
             ?: scope.raiseError("can't serialize non-serializable object (no constructor meta)")
-        for( p in meta.params) {
-            val r = readField(scope, p.name)
-            println("serialize ${p.name}=${r.value}")
-            TODO()
-//            encoder.encodeObj(scope, r.value)
+        // actual constructor can vary, for example, adding new fields with default
+        // values, so we save size of the construction:
+
+        // using objlist allow for some optimizations:
+        val params = meta.params.map { readField(scope, it.name).value }
+        encoder.encodeAnyList(scope, params)
+        serializeStateVars(scope, encoder)
+    }
+
+    protected val instanceVars: Map<String, ObjRecord> by lazy {
+        instanceScope.objects.filter { it.value.type.serializable }
+    }
+
+    protected suspend fun serializeStateVars(scope: Scope,encoder: LynonEncoder) {
+        val vars = instanceVars.values.map { it.value }
+        if( vars.isNotEmpty()) {
+            encoder.encodeAnyList(scope, vars)
+            println("serialized state vars $vars")
         }
-        // todo: possible vars?
+    }
+
+    internal suspend fun deserializeStateVars(scope: Scope, decoder: LynonDecoder) {
+        val localVars = instanceVars.values.toList()
+        if( localVars.isNotEmpty() ) {
+            println("gonna read vars")
+            val vars = decoder.decodeAnyList(scope)
+            if (vars.size > instanceVars.size)
+                scope.raiseIllegalArgument("serialized vars has bigger size than instance vars")
+            println("deser state vars $vars")
+            for ((i, v) in vars.withIndex()) {
+                localVars[i].value = vars[i]
+            }
+        }
+    }
+
+    protected val comparableVars: Map<String, ObjRecord> by lazy {
+        instanceScope.objects.filter {
+            it.value.type.comparable
+        }
     }
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
         if (other !is ObjInstance) return -1
         if (other.objClass != objClass) return -1
-        for (f in publicFields) {
+        for (f in comparableVars) {
             val a = f.value.value
             val b = other.instanceScope[f.key]!!.value
             val d = a.compareTo(scope, b)

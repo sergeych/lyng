@@ -57,13 +57,20 @@ open class Obj {
         args: Arguments = Arguments.EMPTY
     ): T = invokeInstanceMethod(scope, name, args) as T
 
+    /**
+     * Invoke a method of the object if exists
+     * it [onNotFoundResult] is not null, it returns it when symbol is not found
+     * otherwise throws [ObjSymbolNotDefinedException] object exception
+     */
     open suspend fun invokeInstanceMethod(
         scope: Scope,
         name: String,
-        args: Arguments = Arguments.EMPTY
+        args: Arguments = Arguments.EMPTY,
+        onNotFoundResult: Obj?=null
     ): Obj =
-        // note that getInstanceMember traverses the hierarchy
-        objClass.getInstanceMember(scope.pos, name).value.invoke(scope, this, args)
+        objClass.getInstanceMemberOrNull(name)?.value?.invoke(scope, this, args)
+            ?: onNotFoundResult
+            ?: scope.raiseSymbolNotFound(name)
 
     open suspend fun getInstanceMethod(
         scope: Scope,
@@ -341,7 +348,7 @@ object ObjNull : Obj() {
         scope.raiseNPE()
     }
 
-    override suspend fun invokeInstanceMethod(scope: Scope, name: String, args: Arguments): Obj {
+    override suspend fun invokeInstanceMethod(scope: Scope, name: String, args: Arguments, onNotFoundResult: Obj?): Obj {
         scope.raiseNPE()
     }
 

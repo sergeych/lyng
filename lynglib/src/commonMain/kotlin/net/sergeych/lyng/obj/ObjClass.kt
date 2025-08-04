@@ -97,8 +97,10 @@ open class ObjClass(
         return super.readField(scope, name)
     }
 
-    override suspend fun invokeInstanceMethod(scope: Scope, name: String, args: Arguments): Obj {
-        return classMembers[name]?.value?.invoke(scope, this, args) ?: super.invokeInstanceMethod(scope, name, args)
+    override suspend fun invokeInstanceMethod(scope: Scope, name: String, args: Arguments,
+                                              onNotFoundResult: Obj?): Obj {
+        return classMembers[name]?.value?.invoke(scope, this, args)
+            ?: super.invokeInstanceMethod(scope, name, args, onNotFoundResult)
     }
 
     open suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj = scope.raiseNotImplemented()
