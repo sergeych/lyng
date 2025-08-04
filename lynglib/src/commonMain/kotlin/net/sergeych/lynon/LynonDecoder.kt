@@ -51,7 +51,7 @@ open class LynonDecoder(val bin: BitInput, val settings: LynonSettings = LynonSe
         println("expected class name $className")
         return scope.get(className.value)?.value?.let {
             if (it !is ObjClass)
-                scope.raiseClassCastError("Expected obj class but got ${it::class.qualifiedName}")
+                scope.raiseClassCastError("Expected obj class but got ${it::class.simpleName}")
             it
         } ?: scope.raiseSymbolNotFound("can't deserialize: not found type $className")
     }
