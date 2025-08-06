@@ -19,10 +19,11 @@ class Compiler(
 
     private val initStack = mutableListOf<MutableList<Statement>>()
 
-    val currentInitScope: MutableList<Statement> get() =
-        initStack.lastOrNull() ?: cc.syntaxError("no initialization scope exists here")
+    val currentInitScope: MutableList<Statement>
+        get() =
+            initStack.lastOrNull() ?: cc.syntaxError("no initialization scope exists here")
 
-    private fun pushInitScope(): MutableList<Statement> = mutableListOf<Statement>().also { initStack.add(it)}
+    private fun pushInitScope(): MutableList<Statement> = mutableListOf<Statement>().also { initStack.add(it) }
 
     private fun popInitScope(): MutableList<Statement> = initStack.removeLast()
 
@@ -832,6 +833,8 @@ class Compiler(
             val isExtern = cc.skipId("extern")
             when {
                 cc.matchQualifiers("fun", "private") -> parseFunctionDeclaration(Visibility.Private, isExtern)
+                cc.matchQualifiers("fun", "private", "static") -> parseFunctionDeclaration(Visibility.Private, isExtern, isStatic = true)
+                cc.matchQualifiers("fun", "static") -> parseFunctionDeclaration(Visibility.Public, isExtern, isStatic = true)
                 cc.matchQualifiers("fn", "private") -> parseFunctionDeclaration(Visibility.Private, isExtern)
                 cc.matchQualifiers("fun", "open") -> parseFunctionDeclaration(isOpen = true, isExtern = isExtern)
                 cc.matchQualifiers("fn", "open") -> parseFunctionDeclaration(isOpen = true, isExtern = isExtern)
@@ -839,11 +842,21 @@ class Compiler(
                 cc.matchQualifiers("fun") -> parseFunctionDeclaration(isOpen = false, isExtern = isExtern)
                 cc.matchQualifiers("fn") -> parseFunctionDeclaration(isOpen = false, isExtern = isExtern)
 
-                cc.matchQualifiers("val", "private", "static") -> parseVarDeclaration(false, Visibility.Private, isStatic = true)
+                cc.matchQualifiers("val", "private", "static") -> parseVarDeclaration(
+                    false,
+                    Visibility.Private,
+                    isStatic = true
+                )
+
                 cc.matchQualifiers("val", "static") -> parseVarDeclaration(false, Visibility.Public, isStatic = true)
                 cc.matchQualifiers("val", "private") -> parseVarDeclaration(false, Visibility.Private)
                 cc.matchQualifiers("var", "static") -> parseVarDeclaration(true, Visibility.Public, isStatic = true)
-                cc.matchQualifiers("var", "static", "private" ) -> parseVarDeclaration(true, Visibility.Private, isStatic = true)
+                cc.matchQualifiers("var", "static", "private") -> parseVarDeclaration(
+                    true,
+                    Visibility.Private,
+                    isStatic = true
+                )
+
                 cc.matchQualifiers("var", "private") -> parseVarDeclaration(true, Visibility.Private)
                 cc.matchQualifiers("val", "open") -> parseVarDeclaration(false, Visibility.Private, true)
                 cc.matchQualifiers("var", "open") -> parseVarDeclaration(true, Visibility.Private, true)
@@ -1148,12 +1161,12 @@ class Compiler(
             // the main statement should create custom ObjClass instance with field
             // accessors, constructor registration, etc.
             addItem(className, false, newClass)
-            if( initScope.isNotEmpty()) {
+            if (initScope.isNotEmpty()) {
                 val classScope = copy(newThisObj = newClass)
                 newClass.classScope = classScope
-                for( s in initScope )
+                for (s in initScope)
                     s.execute(classScope)
-                        .also { println("executed, ${classScope.objects}")}
+                        .also { println("executed, ${classScope.objects}") }
             }
             newClass
         }
@@ -1530,7 +1543,8 @@ class Compiler(
     private suspend fun parseFunctionDeclaration(
         visibility: Visibility = Visibility.Public,
         @Suppress("UNUSED_PARAMETER") isOpen: Boolean = false,
-        isExtern: Boolean = false
+        isExtern: Boolean = false,
+        isStatic: Boolean = false,
     ): Statement {
         var t = cc.next()
         val start = t.pos
@@ -1583,7 +1597,7 @@ class Compiler(
             }
             fnStatements.execute(context)
         }
-        return statement(start) { context ->
+        val fnCreatestatement = statement(start) { context ->
             // we added fn in the context. now we must save closure
             // for the function
             closure = context
@@ -1601,6 +1615,11 @@ class Compiler(
             // saved the proper context in the closure
             fnBody
         }
+        return if (isStatic) {
+            currentInitScope += fnCreatestatement
+            NopStatement
+        } else
+            fnCreatestatement
     }
 
     private suspend fun parseBlock(skipLeadingBrace: Boolean = false): Statement {
@@ -1647,7 +1666,7 @@ class Compiler(
         val initialExpression = if (setNull) null else parseStatement(true)
             ?: throw ScriptError(eqToken.pos, "Expected initializer expression")
 
-        if( isStatic) {
+        if (isStatic) {
             // find objclass instance: this is tricky: this code executes in object initializer,
             // when creating instance, but we need to execute it in the class initializer which
             // is missing as for now. Add it to the compiler context?

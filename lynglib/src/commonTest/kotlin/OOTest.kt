@@ -27,9 +27,20 @@ class OOTest {
             
             class Point(x,y) {
                 private static var data = null
+                
+                static fun getData() { data }
+                static fun setData(value) { 
+                    data = value 
+                    callFrom()
+                }
+                static fun callFrom() {
+                    data = data + "!"
+                }
             }
             assertEquals(Point(0,0), Point(0,0) )
-            
+            assertEquals(null, Point.getData() )
+            Point.setData("foo")
+            assertEquals( "foo!", Point.getData() )
         """.trimIndent())
     }
 }
