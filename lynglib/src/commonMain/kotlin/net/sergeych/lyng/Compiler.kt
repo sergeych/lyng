@@ -1655,7 +1655,6 @@ class Compiler(
             // return
             currentInitScope += statement {
                 val initValue = initialExpression?.execute(this)?.byValueCopy() ?: ObjNull
-                // todo: get rid of classfield!
                 (thisObj as ObjClass).createClassField(name, initValue, isMutable, visibility, pos)
                 addItem(name, isMutable, initValue, visibility, ObjRecord.Type.Field)
                 ObjVoid

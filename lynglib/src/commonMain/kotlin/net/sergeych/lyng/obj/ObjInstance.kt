@@ -81,7 +81,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 scope.raiseIllegalArgument("serialized vars has bigger size than instance vars")
             println("deser state vars $vars")
             for ((i, v) in vars.withIndex()) {
-                localVars[i].value = vars[i]
+                localVars[i].value = v
             }
         }
     }
