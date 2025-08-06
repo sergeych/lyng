@@ -16,6 +16,16 @@ open class ObjClass(
     var constructorMeta: ArgsDeclaration? = null
     var instanceConstructor: Statement? = null
 
+    /**
+     * the scope for class methods, initialize class vars, etc.
+     *
+     * Important notice. When create a user class, e.g. from Lyng source, it should
+     * be set to a scope by compiler, so it could access local closure, etc. Otherwise,
+     * it will be initialized to default scope on first necessity, e.g. when used in
+     * external, kotlin classes with [addClassConst] and [addClassFn], etc.
+     */
+    var classScope: Scope? = null
+
     val allParentsSet: Set<ObjClass> =
         parents.flatMap {
             listOf(it) + it.allParentsSet
@@ -23,9 +33,10 @@ open class ObjClass(
 
     override val objClass: ObjClass by lazy { ObjClassType }
 
-    // members: fields most often
+    /**
+     * members: fields most often. These are called with [ObjInstance] withs ths [ObjInstance.objClass]
+     */
     private val members = mutableMapOf<String, ObjRecord>()
-    private val classMembers = mutableMapOf<String, ObjRecord>()
 
     override fun toString(): String = className
 
@@ -40,6 +51,7 @@ open class ObjClass(
         return instance
     }
 
+
     fun createField(
         name: String,
         initialValue: Obj,
@@ -53,6 +65,11 @@ open class ObjClass(
         members[name] = ObjRecord(initialValue, isMutable, visibility)
     }
 
+    private fun initClassScope(): Scope {
+        if( classScope == null ) classScope = Scope()
+        return classScope!!
+    }
+
     fun createClassField(
         name: String,
         initialValue: Obj,
@@ -60,10 +77,11 @@ open class ObjClass(
         visibility: Visibility = Visibility.Public,
         pos: Pos = Pos.builtIn
     ) {
-        val existing = classMembers[name]
+        initClassScope()
+        val existing = classScope!!.objects[name]
         if( existing != null)
             throw ScriptError(pos, "$name is already defined in $objClass or one of its supertypes")
-        classMembers[name] = ObjRecord(initialValue, isMutable, visibility)
+        classScope!!.addItem(name, isMutable, initialValue, visibility)
     }
 
     fun addFn(name: String, isOpen: Boolean = false, code: suspend Scope.() -> Obj) {
@@ -91,15 +109,23 @@ open class ObjClass(
             ?: throw ScriptError(atPos, "symbol doesn't exist: $name")
 
     override suspend fun readField(scope: Scope, name: String): ObjRecord {
-        classMembers[name]?.let {
+        classScope?.objects?.get(name)?.let {
             return it
         }
         return super.readField(scope, name)
     }
 
+    override suspend fun writeField(scope: Scope, name: String, value: Obj) {
+        initClassScope().objects[name]?.let {
+            if( it.isMutable) it.value = value
+            else scope.raiseIllegalAssignment("can't assign $name is not mutable")
+        }
+            ?: super.writeField(scope, name, value)
+    }
+
     override suspend fun invokeInstanceMethod(scope: Scope, name: String, args: Arguments,
                                               onNotFoundResult: Obj?): Obj {
-        return classMembers[name]?.value?.invoke(scope, this, args)
+        return classScope?.objects?.get(name)?.value?.invoke(scope, this, args)
             ?: super.invokeInstanceMethod(scope, name, args, onNotFoundResult)
     }
 

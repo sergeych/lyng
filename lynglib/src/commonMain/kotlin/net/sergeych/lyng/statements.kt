@@ -2,12 +2,16 @@ package net.sergeych.lyng
 
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjClass
+import net.sergeych.lyng.obj.ObjVoid
 
 fun String.toSource(name: String = "eval"): Source = Source(name, this)
 
 sealed class ObjType {
     object Any : ObjType()
-    object Int : ObjType()
+    object Void: ObjType()
+
+    companion object {
+    }
 }
 
 
@@ -62,4 +66,8 @@ fun statement(isStaticConst: Boolean = false, isConst: Boolean = false, f: suspe
         override suspend fun execute(scope: Scope): Obj = f(scope)
     }
 
+object NopStatement: Statement(true, true, ObjType.Void) {
+    override val pos: Pos = Pos.builtIn
 
+    override suspend fun execute(scope: Scope): Obj = ObjVoid
+}

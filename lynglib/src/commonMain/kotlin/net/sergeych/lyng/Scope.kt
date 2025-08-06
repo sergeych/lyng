@@ -50,6 +50,9 @@ open class Scope(
     fun raiseIllegalState(message: String = "Illegal argument error"): Nothing =
         raiseError(ObjIllegalStateException(this, message))
 
+    fun raiseIllegalAssignment(message: String): Nothing =
+        raiseError(ObjIllegalAssignmentException(this, message))
+
     @Suppress("unused")
     fun raiseNoSuchElement(message: String = "No such element"): Nothing =
         raiseError(ObjIllegalArgumentException(this, message))

@@ -10,8 +10,6 @@ import net.sergeych.lynon.LynonType
  */
 class ObjInstanceClass(val name: String) : ObjClass(name) {
 
-//    val onDeserilaized =
-
     override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj {
         val args = decoder.decodeAnyList(scope)
         println("deserializing constructor $name, $args params")

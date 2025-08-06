@@ -17,6 +17,15 @@ class Compiler(
 
     class Settings
 
+    private val initStack = mutableListOf<MutableList<Statement>>()
+
+    val currentInitScope: MutableList<Statement> get() =
+        initStack.lastOrNull() ?: cc.syntaxError("no initialization scope exists here")
+
+    private fun pushInitScope(): MutableList<Statement> = mutableListOf<Statement>().also { initStack.add(it)}
+
+    private fun popInitScope(): MutableList<Statement> = initStack.removeLast()
+
     private suspend fun parseScript(): Script {
         val statements = mutableListOf<Statement>()
         val start = cc.currentPos()
@@ -830,7 +839,11 @@ class Compiler(
                 cc.matchQualifiers("fun") -> parseFunctionDeclaration(isOpen = false, isExtern = isExtern)
                 cc.matchQualifiers("fn") -> parseFunctionDeclaration(isOpen = false, isExtern = isExtern)
 
+                cc.matchQualifiers("val", "private", "static") -> parseVarDeclaration(false, Visibility.Private, isStatic = true)
+                cc.matchQualifiers("val", "static") -> parseVarDeclaration(false, Visibility.Public, isStatic = true)
                 cc.matchQualifiers("val", "private") -> parseVarDeclaration(false, Visibility.Private)
+                cc.matchQualifiers("var", "static") -> parseVarDeclaration(true, Visibility.Public, isStatic = true)
+                cc.matchQualifiers("var", "static", "private" ) -> parseVarDeclaration(true, Visibility.Private, isStatic = true)
                 cc.matchQualifiers("var", "private") -> parseVarDeclaration(true, Visibility.Private)
                 cc.matchQualifiers("val", "open") -> parseVarDeclaration(false, Visibility.Private, true)
                 cc.matchQualifiers("var", "open") -> parseVarDeclaration(true, Visibility.Private, true)
@@ -1090,6 +1103,8 @@ class Compiler(
         cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
         val t = cc.next()
 
+        pushInitScope()
+
         val bodyInit: Statement? = if (t.type == Token.Type.LBRACE) {
             // parse body
             parseScript().also {
@@ -1099,6 +1114,8 @@ class Compiler(
             cc.previous()
             null
         }
+
+        val initScope = popInitScope()
 
         // create class
         val className = nameToken.value
@@ -1131,6 +1148,13 @@ class Compiler(
             // the main statement should create custom ObjClass instance with field
             // accessors, constructor registration, etc.
             addItem(className, false, newClass)
+            if( initScope.isNotEmpty()) {
+                val classScope = copy(newThisObj = newClass)
+                newClass.classScope = classScope
+                for( s in initScope )
+                    s.execute(classScope)
+                        .also { println("executed, ${classScope.objects}")}
+            }
             newClass
         }
     }
@@ -1600,7 +1624,8 @@ class Compiler(
     private suspend fun parseVarDeclaration(
         isMutable: Boolean,
         visibility: Visibility,
-        @Suppress("UNUSED_PARAMETER") isOpen: Boolean = false
+        @Suppress("UNUSED_PARAMETER") isOpen: Boolean = false,
+        isStatic: Boolean = false
     ): Statement {
         val nameToken = cc.next()
         val start = nameToken.pos
@@ -1621,6 +1646,22 @@ class Compiler(
 
         val initialExpression = if (setNull) null else parseStatement(true)
             ?: throw ScriptError(eqToken.pos, "Expected initializer expression")
+
+        if( isStatic) {
+            // find objclass instance: this is tricky: this code executes in object initializer,
+            // when creating instance, but we need to execute it in the class initializer which
+            // is missing as for now. Add it to the compiler context?
+            // add there
+            // return
+            currentInitScope += statement {
+                val initValue = initialExpression?.execute(this)?.byValueCopy() ?: ObjNull
+                // todo: get rid of classfield!
+                (thisObj as ObjClass).createClassField(name, initValue, isMutable, visibility, pos)
+                addItem(name, isMutable, initValue, visibility, ObjRecord.Type.Field)
+                ObjVoid
+            }
+            return NopStatement
+        }
 
         return statement(nameToken.pos) { context ->
             if (context.containsLocal(name))
