@@ -147,7 +147,7 @@ In many cases it is necessary to implement custom comparison and `toString`, sti
 each class is provided with default implementations:
 
 - default toString outputs class name and its _public_ fields.
-- default comparison compares compares all public fields in order of appearance.
+- default comparison compares all fields in order of appearance.
 
 For example, for our class Point:
 
@@ -159,6 +159,47 @@ For example, for our class Point:
     assert( Point(1,2) < Point(1,3) )
     Point(1,1+1)
     >>> Point(x=1,y=2)
+
+## Statics: class fields and class methods
+
+You can mark a field or a method as static. This is borrowed from Java as more plain version of a kotlin's companion object or Scala's object. Static field and functions is one for a class, not for an instance. From inside the class, e.g. from the class method, it is a regular var. From outside, it is accessible as `ClassName.field` or method:
+
+
+    class Value(x) {
+        static var foo = Value("foo")
+
+        static fun exclamation() {
+            // here foo is a regular var:
+            foo.x + "!"
+        }
+    }
+    assertEquals( Value.foo.x, "foo" )
+    assertEquals( "foo!", Value.exclamation() )
+
+    // we can access foo from outside like this:
+    Value.foo = Value("bar")
+    assertEquals( "bar!", Value.exclamation() )
+    >>> void
+
+As usual, private statics are not accessible from the outside:
+
+    class Test {
+        // private, inacessible from outside protected data:
+        private static var data = null
+
+        // the interface to access and change it:
+        static fun getData() { data }
+        static fun setData(value) { data = value }
+    }
+
+    // no direct access:
+    assertThrows { Test.data }
+
+    // accessible with the interface:
+    assertEquals( null, Test.getData() )
+    Test.setData("fubar")
+    assertEquals("fubar", Test.getData() )
+    >>> void
 
 # Extending classes
 

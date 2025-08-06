@@ -110,17 +110,17 @@ open class ObjClass(
 
     override suspend fun readField(scope: Scope, name: String): ObjRecord {
         classScope?.objects?.get(name)?.let {
-            return it
+            if( it.visibility.isPublic ) return it
         }
         return super.readField(scope, name)
     }
 
-    override suspend fun writeField(scope: Scope, name: String, value: Obj) {
+    override suspend fun writeField(scope: Scope, name: String, newValue: Obj) {
         initClassScope().objects[name]?.let {
-            if( it.isMutable) it.value = value
+            if( it.isMutable) it.value = newValue
             else scope.raiseIllegalAssignment("can't assign $name is not mutable")
         }
-            ?: super.writeField(scope, name, value)
+            ?: super.writeField(scope, name, newValue)
     }
 
     override suspend fun invokeInstanceMethod(scope: Scope, name: String, args: Arguments,
