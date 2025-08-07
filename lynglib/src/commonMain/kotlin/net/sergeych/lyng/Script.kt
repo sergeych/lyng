@@ -1,6 +1,7 @@
 package net.sergeych.lyng
 
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.yield
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lynon.ObjLynonClass
@@ -185,6 +186,11 @@ class Script(
                 ObjDeferred(globalDefer {
                     callable.execute(this@addFn)
                 })
+            }
+
+            addFn("yield") {
+                yield()
+                ObjVoid
             }
 
 

@@ -98,7 +98,6 @@ Sometimes it is convenient to manually set completion status of some deferred re
     // and as any other deferred it is now complete:
     assert(done.isCompleted)
 
-
 ## True parallelism
 
 Cooperative, coroutine-based parallelism is automatically available on all platforms. Depending on the platform, though, the coroutines could be dispatched also in different threads; where there are multiple cores and/or CPU available, it means the coroutines could be exuted truly in parallel, unless [Mutex] is used:
@@ -116,3 +115,16 @@ Cooperative, coroutine-based parallelism is automatically available on all platf
 
 So it is important to always use [Mutex] where concurrent execution could be a problem (so called Race Conditions, or RC).
 
+## Yield
+
+When the coroutine is executed, on the single-threaded environment all other coroutines are suspended until active one will wait for something. Sometimes, it is undesirable; the coroutine may perform long calculations or some other CPU consuming task. The solution is to call `yield()` periodically. Unlike `delay()`, yield does not pauses the coroutine for some specified time, but it just makes all other coroutines to be executed. In other word, yield interrupts current coroutines and out it to the end of the dispatcher list of active coroutines. It is especially important on Javascript and wasmJS targets as otherwise UI thread could be blocked. 
+
+Usage example:
+
+    fun someLongTask() { // ...
+        do {
+            // execute step
+            if( done ) break
+            yield()
+        } while(true)
+    }

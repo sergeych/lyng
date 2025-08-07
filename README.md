@@ -23,7 +23,7 @@ fun swapEnds(first, args..., last, f) {
     delay(1.5) // coroutine is delayed for 1.5s, thread is not blocked!
 ```
 and it is multithreaded on platforms supporting it (automatically, no code changes required, just
-`launch` more coroutines and they will be executed concurrently if possible)/
+`launch` more coroutines and they will be executed concurrently if possible). See [parallelism]
 
 - functional style and OOP together, multiple inheritance, implementing interfaces for existing classes, writing extensions.
 - Any unicode letters can be used as identifiers: `assert( sin(π/2) == 1 )`.
@@ -142,12 +142,12 @@ Ready features:
 
 Under way: 
 
-- [ ] maps, sets and sequences (flows?)
+- [x] maps, sets and sequences (flows?)
 - [ ] regular exceptions
-- [ ] modules
-- [ ] string interpolation and more string tools
+- [x] modules
+- [x] string formatting and tools
 - [ ] multiple inheritance for user classes
-- [ ] launch, deferred, coroutineScope, mutex, etc.
+- [x] launch, deferred, CompletableDeferred, Mutex, etc.
 - [ ] site with integrated interpreter to give a try
 - [ ] kotlin part public API good docs, integration focused
 - [ ] better stack reporting
@@ -158,10 +158,12 @@ Planned features.
 
 - [ ] type specifications
 - [ ] source docs and maybe lyng.md to a standard
-- [ ] moacro-style kotlin integration or something else to simplify it
+- [ ] macro-style kotlin integration or something else to simplify it
 
 Further
 
 - [ ] client with GUI support based on compose multiplatform somehow
 - [ ] notebook - style workbooks with graphs, formulaes, etc.
 - [ ] language server or compose-based lyng-aware editor
+
+[parallelism]: docs/parallelism.md
