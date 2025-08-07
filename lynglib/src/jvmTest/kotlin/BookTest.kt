@@ -299,4 +299,9 @@ class BookTest {
         runDocTests("../docs/time.md")
     }
 
+    @Test
+    fun testParallelismBook() = runBlocking {
+        runDocTests("../docs/parallelism.md")
+    }
+
 }

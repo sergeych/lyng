@@ -1,0 +1,118 @@
+# Parallelism in Lyng
+
+Lyng is built to me multithreaded where possible (e.g. all targets byt JS and wasmJS as for now)
+and cooperatively parallel (coroutine based) everywhere.
+
+In Lyng, every function, every lambda are _coroutines_. It means, you can have as many of these as you want without risking running out of memory on threads stack, or get too many threads.
+
+Depending on the platform, these coroutines may be executed on different CPU and cores, too, truly in parallel. Where not, like Javascript browser, they are still executed cooperatively. You should not care about the platform capabilities, just call `launch`:
+
+    // track coroutine call: 
+    var xIsCalled = false
+
+    // launch coroutine in parallel
+    val x = launch { 
+        // wait 10ms to let main code to be executed
+        delay(10)
+        // now set the flag
+        xIsCalled = true
+        // and return something useful:
+        "ok"
+    }
+    // corouine is launhed, but not yet executed
+    // due to delay call:
+    assert(!xIsCalled)
+    
+    // now we wait for it to be executed:
+    assertEquals( x.await(), "ok")
+
+    // now glag should be set:
+    assert(xIsCalled)
+    >>> void
+
+This example shows how to launch a coroutine with `launch` which returns [Deferred] instance, the latter have ways to await for the coroutine completion and retrieve possible result.
+
+Launch has the only argument which should be a callable (lambda usually) that is run in parallel (or cooperatively in parallel), and return anything as the result.
+
+## Synchronization: Mutex
+
+Suppose we have a resource, that could be used concurrently, a coutner in our case. If we won'r protect it, concurrent usage cause RC, Race Condition, providing wrong result:
+
+    var counter = 0
+    
+    (1..4).map { 
+        launch {
+            // slow increment:
+            val c = counter
+            delay(10)
+            counter = c + 1
+        }
+    }.forEach { it.await() }
+    assert(counter < 4)
+    >>> void
+
+The obviously wrong result is not 4, as all coroutines capture the counter value, which is 1, then sleep for 5ms, then save 1 + 1 as result. May some coroutines will pass, so it will be 1 or 2, most likely.
+
+Using [Mutex] makes it all working:
+
+    var counter = 0
+    val mutex = Mutex()
+    
+    (1..4).map { 
+        launch {
+            // slow increment:
+            mutex.withLock {
+                val c = counter
+                delay(10)
+                counter = c + 1
+            }
+        }
+    }.forEach { it.await() }
+    assertEquals(4, counter)
+    >>> void
+
+now everything works as expected: `mutex.withLock` makes them all be executed in sequence, not in parallel.
+
+
+## Completable deferred
+
+Sometimes it is convenient to manually set completion status of some deferred result. This is when [CompletableDeferred] is used:
+
+    // this variable will be completed later:
+    val done = CompletableDeferred()
+    
+    // complete it ater delay
+    launch { 
+        delay(10)
+        // complete it setting the result:
+        done.complete("ok")
+    }
+    
+    // now it is still not completed: coroutine is delayed
+    // (ot not started on sinthe-threaded platforms):
+    assert(!done.isCompleted)
+    assert(done.isActive)
+
+    // then we can just await it as any other deferred:
+    assertEquals( done.await(), "ok")
+    // and as any other deferred it is now complete:
+    assert(done.isCompleted)
+
+
+## True parallelism
+
+Cooperative, coroutine-based parallelism is automatically available on all platforms. Depending on the platform, though, the coroutines could be dispatched also in different threads; where there are multiple cores and/or CPU available, it means the coroutines could be exuted truly in parallel, unless [Mutex] is used:
+
+| platofrm   | multithreaded |
+|------------|---------------|
+| JVM        | yes           |
+| Android    | yes           |
+| Javascript | NO            |
+| wasmJS     | NO            |
+| IOS        | yes           |
+| MacOSX     | yes           |
+| Linux      | yes           |
+| Windows    | yes           |
+
+So it is important to always use [Mutex] where concurrent execution could be a problem (so called Race Conditions, or RC).
+

@@ -4,6 +4,7 @@ import kotlinx.coroutines.delay
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lynon.ObjLynonClass
+import net.sergeych.mp_tools.globalDefer
 import kotlin.math.*
 
 class Script(
@@ -174,6 +175,18 @@ class Script(
             addConst("Collection", ObjCollection)
             addConst("Array", ObjArray)
             addConst("Class", ObjClassType)
+
+            addConst("Deferred", ObjDeferred.type)
+            addConst("CompletableDeferred", ObjCompletableDeferred.type)
+            addConst("Mutex", ObjMutex.type)
+
+            addFn("launch") {
+                val callable = args.firstAndOnly() as Statement
+                ObjDeferred(globalDefer {
+                    callable.execute(this@addFn)
+                })
+            }
+
 
             val pi = ObjReal(PI)
             addConst("π", pi)

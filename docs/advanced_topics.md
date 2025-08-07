@@ -1,5 +1,7 @@
 # Advanced topics
 
+__See also:__ [parallelism].
+
 ## Closures/scopes isolation
 
 Each block has own scope, in which it can safely use closures and override
@@ -111,3 +113,5 @@ arguments list in almost arbitrary ways. For example:
     >>> void
 
 ,
+
+[parallelism]: parallelism.md
