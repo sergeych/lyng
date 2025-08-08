@@ -90,28 +90,20 @@ class TestCoroutines {
     fun testFlow2() = runTest {
         eval("""
                 val f = flow {
-                    println("Starting generator")
                         emit("start")
                         emit("start2")
-                        println("Emitting")
                         (1..4).forEach { 
-//                            println("you hoo "+it)
                             emit(it) 
                         }
-                        println("Done emitting")
                 }
                 // let's collect flow:
                 val result = []
-//                for( x in f ) result += x
-                println(result)
-            
+                for( x in f ) result += x
+                    println(result)
+                
                 // let's collect it once again:
-                println(f.toList())
-                println(f.toList())
-//                for( x in f ) println(x)
-//                for( x in f ) println(x)
-            
-                //assertEquals( result, f.toList() )
+                assertEquals( result, f.toList())
+                assertEquals( result, f.toList())
         """.trimIndent())
     }
 }

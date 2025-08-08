@@ -23,10 +23,7 @@ class ObjFlowBuilder(val output: SendChannel<Obj>) : Obj() {
         val type = object : ObjClass("FlowBuilder") {}.apply {
             addFn("emit") {
                 val data = requireOnlyArg<Obj>()
-                println("well well $data")
                 try {
-                    println("builder ${thisAs<ObjFlowBuilder>().hashCode()}")
-                    println("channel ${thisAs<ObjFlowBuilder>().output.hashCode()}")
                     val channel = thisAs<ObjFlowBuilder>().output
                     if( !channel.isClosedForSend )
                         channel.send(data)
@@ -74,7 +71,6 @@ class ObjFlow(val producer: Statement) : Obj() {
             }
         }.apply {
             addFn("iterator") {
-                println("called iterator!")
                 ObjFlowIterator(thisAs<ObjFlow>().producer)
             }
         }

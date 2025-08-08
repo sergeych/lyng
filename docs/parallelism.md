@@ -160,23 +160,32 @@ Great: the generator is not executed until collected bu the `f.take()` call, whi
 
 Important difference from the channels or like, every time you collect the flow, you collect it anew:
 
+    var isStarted = false
     val f = flow {
             emit("start")
+            isStarted = true
             (1..4).forEach { emit(it) }
     }
+    // flow is not yet started, e.g. not got execited, 
+    // that is called 'cold':
+    assertEquals( false, isStarted )
+
     // let's collect flow:
     val result = []
     for( x in f ) result += x
     println(result)
 
-    // let's collect it once again:
+    assertEquals( true, isStarted)
+
+    // let's collect it once again, it should be the same:
     println(f.toList())
 
     // and again:
-    //assertEquals( result, f.toList() )
+    assertEquals( result, f.toList() )
 
     >>> ["start", 1, 2, 3, 4]
     >>> ["start", 1, 2, 3, 4]
     >>> void
 
-1
+Notice that flow's lambda is not called until actual collection is started. Cold flows are
+better in terms of resource consumption.
