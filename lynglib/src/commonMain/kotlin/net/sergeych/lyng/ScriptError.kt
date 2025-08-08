@@ -14,6 +14,8 @@ open class ScriptError(val pos: Pos, val errorMessage: String, cause: Throwable?
     cause
 )
 
+class ScriptFlowIsNoMoreCollected: Exception()
+
 class ExecutionError(val errorObject: ObjException) : ScriptError(errorObject.scope.pos, errorObject.message)
 
 class ImportException(pos: Pos, message: String) : ScriptError(pos, message)

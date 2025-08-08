@@ -153,6 +153,16 @@ class Script(
                 }
                 result ?: raiseError(ObjAssertionFailedException(this,"Expected exception but nothing was thrown"))
             }
+            addFn("traceScope") {
+                println("trace Scope: $this")
+                var p = this.parent
+                var level = 0
+                while (p != null) {
+                    println("     parent#${++level}: $p")
+                    p = p.parent
+                }
+                ObjVoid
+            }
 
             addVoidFn("delay") {
                 delay((this.args.firstAndOnly().toDouble()/1000.0).roundToLong())
@@ -182,7 +192,7 @@ class Script(
             addConst("Mutex", ObjMutex.type)
 
             addFn("launch") {
-                val callable = args.firstAndOnly() as Statement
+                val callable = requireOnlyArg<Statement>()
                 ObjDeferred(globalDefer {
                     callable.execute(this@addFn)
                 })
@@ -193,6 +203,9 @@ class Script(
                 ObjVoid
             }
 
+            addFn("flow") {
+                ObjFlow(requireOnlyArg<Statement>())
+            }
 
             val pi = ObjReal(PI)
             addConst("π", pi)

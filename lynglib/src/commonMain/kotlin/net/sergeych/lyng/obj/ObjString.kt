@@ -93,7 +93,9 @@ data class ObjString(val value: String) : Obj() {
                 ObjString(decoder.unpackBinaryData().decodeToString())
         }.apply {
             addFn("toInt") {
-                ObjInt(thisAs<ObjString>().value.toLong())
+                ObjInt(thisAs<ObjString>().value.toLongOrNull()
+                    ?: raiseIllegalArgument("can't convert to int: $thisObj")
+                )
             }
             addFn("startsWith") {
                 ObjBool(thisAs<ObjString>().value.startsWith(requiredArg<ObjString>(0).value))
@@ -137,7 +139,9 @@ data class ObjString(val value: String) : Obj() {
             }
             addFn("encodeUtf8") { ObjBuffer(thisAs<ObjString>().value.encodeToByteArray().asUByteArray()) }
             addFn("size") { ObjInt(thisAs<ObjString>().value.length.toLong()) }
-            addFn("toReal") { ObjReal(thisAs<ObjString>().value.toDouble()) }
+            addFn("toReal") {
+                ObjReal(thisAs<ObjString>().value.toDouble())
+            }
         }
     }
 }

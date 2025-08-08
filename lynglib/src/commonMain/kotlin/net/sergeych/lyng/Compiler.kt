@@ -470,7 +470,7 @@ class Compiler(
 
         val callStatement = statement {
             // and the source closure of the lambda which might have other thisObj.
-            val context = AppliedScope(closure!!, args, this)
+            val context = ClosureScope(this, closure!!) //AppliedScope(closure!!, args, this)
             if (argsDeclaration == null) {
                 // no args: automatic var 'it'
                 val l = args.list
@@ -1540,7 +1540,8 @@ class Compiler(
         }
     }
 
-    private suspend fun parseFunctionDeclaration(
+    private suspend fun
+        parseFunctionDeclaration(
         visibility: Visibility = Visibility.Public,
         @Suppress("UNUSED_PARAMETER") isOpen: Boolean = false,
         isExtern: Boolean = false,
@@ -1586,9 +1587,11 @@ class Compiler(
 
         val fnBody = statement(t.pos) { callerContext ->
             callerContext.pos = start
+
             // restore closure where the function was defined, and making a copy of it
             // for local space (otherwise it will write local stuff to closure!)
-            val context = closure?.copy() ?: callerContext.raiseError("bug: closure not set")
+            val context = closure?.let { ClosureScope(callerContext, it) }
+                ?: callerContext.raiseError("bug: closure not set")
 
             // load params from caller context
             argsDeclaration.assignToContext(context, callerContext.args, defaultAccessType = AccessType.Val)
@@ -1597,7 +1600,7 @@ class Compiler(
             }
             fnStatements.execute(context)
         }
-        val fnCreatestatement = statement(start) { context ->
+        val fnCreateStatement = statement(start) { context ->
             // we added fn in the context. now we must save closure
             // for the function
             closure = context
@@ -1606,7 +1609,12 @@ class Compiler(
                 val type = context[typeName]?.value ?: context.raiseSymbolNotFound("class $typeName not found")
                 if (type !is ObjClass) context.raiseClassCastError("$typeName is not the class instance")
                 type.addFn(name, isOpen = true) {
-                    fnBody.execute(this)
+                    // ObjInstance has a fixed instance scope, so we need to build a closure
+                    (thisObj as? ObjInstance)?.let { i ->
+                        fnBody.execute(ClosureScope(this, i.instanceScope))
+                    }
+                        // other classes can create one-time scope for this rare case:
+                        ?: fnBody.execute(thisObj.autoInstanceScope(this))
                 }
             }
             // regular function/method
@@ -1616,10 +1624,10 @@ class Compiler(
             fnBody
         }
         return if (isStatic) {
-            currentInitScope += fnCreatestatement
+            currentInitScope += fnCreateStatement
             NopStatement
         } else
-            fnCreatestatement
+            fnCreateStatement
     }
 
     private suspend fun parseBlock(skipLeadingBrace: Boolean = false): Statement {

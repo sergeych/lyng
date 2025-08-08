@@ -1275,6 +1275,106 @@ class ScriptTest {
     }
 
     @Test
+    fun testCaptureLocals() = runTest {
+        eval(
+            """
+            
+            fun outer(prefix) {
+                val p1 = "0" + prefix
+                { 
+                    p1 + "2" + it
+                }
+            }
+            fun outer2(prefix) {
+                val p1 = "*" + prefix
+                { 
+                    p1 + "2" + it
+                }
+            }
+            val x = outer("1")
+            val y = outer2("1")
+            println(x("!"))
+            assertEquals( "0123", x("3") )
+            assertEquals( "*123", y("3") )
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testInstanceCallScopeIsCorrect() = runTest {
+        eval(
+            """
+            
+            val prefix = ":"
+            
+            class T(text) {
+                fun getText() { 
+                    println(text)
+                    prefix + text + "!" 
+                }
+            }
+            
+            val text = "invalid"
+            
+            val t1 = T("foo")
+            val t2 = T("bar")
+            
+            // get inside the block
+            for( i in 1..3 ) {
+                assertEquals( "foo", t1.text )
+                assertEquals( ":foo!", t1.getText() )
+                assertEquals( "bar", t2.text )
+                assertEquals( ":bar!", t2.getText() )
+            }
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testAppliedScopes() = runTest {
+        eval(
+            """
+            class T(text) {
+                fun getText() { 
+                    println(text)
+                    text + "!" 
+                }
+            }
+        
+            val prefix = ":"
+            val lambda = { 
+                prefix + getText() + "!"
+            }
+        
+            val text = "invalid"
+            val t1 = T("foo")
+            val t2 = T("bar")
+            
+            t1.apply { 
+                // it must take "text" from class t1:
+                assertEquals("foo", text)
+                assertEquals( "foo!", getText() ) 
+                assertEquals( ":foo!!", lambda() ) 
+            } 
+            t2.apply { 
+                assertEquals("bar", text)
+                assertEquals( "bar!", getText() ) 
+                assertEquals( ":bar!!", lambda() ) 
+            }
+            // worst case: names clash
+            fun badOne() {
+                val prefix = "&"
+                t1.apply {
+                    assertEquals( ":foo!!", lambda() ) 
+                }
+            }
+            badOne()
+            
+            """.trimIndent()
+        )
+    }
+
+    @Test
     fun testLambdaWithArgsEllipsis() = runTest {
         eval(
             """
@@ -2244,10 +2344,12 @@ class ScriptTest {
 
     @Test
     fun testSet2() = runTest {
-        eval("""
+        eval(
+            """
             assertEquals( Set( ...[1,2,3]), Set(1,2,3) )
             assertEquals( Set( ...[1,false,"ok"]), Set("ok", 1, false) )
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
@@ -2284,9 +2386,11 @@ class ScriptTest {
         eval(
             """
             class Point(x,y)
+            
             // see the difference: apply changes this to newly created Point:
             val p = Point(1,2).apply { 
-                this.x++; this.y++ 
+                this.x++ 
+                y++ 
             }
             assertEquals(p, Point(2,3))
             >>> void
@@ -2305,6 +2409,10 @@ class ScriptTest {
             }
             
             fun Object.isInteger() {
+                println(this)
+                println(this is Int)
+                println(this is Real)
+                println(this is String)
                 when(this) {
                     is Int -> true
                     is Real -> toInt() == this
@@ -2319,7 +2427,7 @@ class ScriptTest {
             assert( 12.isInteger() == true )
             assert( 12.1.isInteger() == false )
             assert( "5".isInteger() )
-            assert( ! "5.2".isInteger() )
+            assert( !"5.2".isInteger() )
         """.trimIndent()
         )
     }
@@ -2446,20 +2554,26 @@ class ScriptTest {
     fun testDefaultImportManager() = runTest {
         val scope = Scope.new()
         assertFails {
-            scope.eval("""
+            scope.eval(
+                """
                 import foo
                 foo()
-                """.trimIndent())
+                """.trimIndent()
+            )
         }
-        scope.importManager.addTextPackages("""
+        scope.importManager.addTextPackages(
+            """
             package foo
             
             fun foo() { "bar" }
-        """.trimIndent())
-        scope.eval("""
+        """.trimIndent()
+        )
+        scope.eval(
+            """
                 import foo
                 assertEquals( "bar", foo())
-                """.trimIndent())
+                """.trimIndent()
+        )
     }
 
     @Test
@@ -2478,7 +2592,8 @@ class ScriptTest {
 
     @Test
     fun testBuffer() = runTest {
-        eval("""
+        eval(
+            """
             import lyng.buffer
             
             assertEquals( 0, Buffer().size )
@@ -2497,12 +2612,14 @@ class ScriptTest {
             assertEquals(101, buffer[2])
             assertEquals("Heelo", buffer.decodeUtf8())
             
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testBufferCompare() = runTest {
-        eval("""
+        eval(
+            """
             import lyng.buffer
             
             println("Hello".characters())
@@ -2520,7 +2637,8 @@ class ScriptTest {
             assertEquals("foo",  map[b2])
             assertEquals(null,  map[b3])
             
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
@@ -2548,6 +2666,7 @@ class ScriptTest {
         )
         delay(1000)
     }
+
     @Test
     fun testTimeStatics() = runTest {
         eval(
@@ -2589,7 +2708,8 @@ class ScriptTest {
         println(Script.defaultImportManager.packageNames)
         println(s.importManager.packageNames)
 
-        s.importManager.addTextPackages("""
+        s.importManager.addTextPackages(
+            """
             package foo
              
             import lyng.time
@@ -2597,8 +2717,10 @@ class ScriptTest {
             fun foo() {
                 println("foo: %s"(Instant()))
             }
-        """.trimIndent())
-        s.importManager.addTextPackages("""
+        """.trimIndent()
+        )
+        s.importManager.addTextPackages(
+            """
             package bar
              
             import lyng.time
@@ -2606,24 +2728,28 @@ class ScriptTest {
             fun bar() {
                 println("bar: %s"(Instant()))
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
 
         println(s.importManager.packageNames)
 
-        s.eval("""
+        s.eval(
+            """
             import foo
             import bar
             
             foo()
             bar()
             
-        """.trimIndent())
+        """.trimIndent()
+        )
 
     }
 
     @Test
     fun testIndexIntIncrements() = runTest {
-        eval("""
+        eval(
+            """
         val x = [1,2,3]
         x[1]++
         ++x[0]
@@ -2636,12 +2762,14 @@ class ScriptTest {
         assert( b == Buffer(1,3,3) )
         ++b[0]
         assertEquals( b, Buffer(2,3,3) )
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testIndexIntDecrements() = runTest {
-        eval("""
+        eval(
+            """
         val x = [1,2,3]
         x[1]--
         --x[0]
@@ -2654,13 +2782,14 @@ class ScriptTest {
         assert( b == Buffer(1,1,3) )
         --b[0]
         assertEquals( b, Buffer(0,1,3) )
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testRangeToList() = runTest {
         val x = eval("""(1..10).toList()""") as ObjList
-        assertEquals(listOf(1,2,3,4,5,6,7,8,9,10), x.list.map { it.toInt() })
+        assertEquals(listOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), x.list.map { it.toInt() })
         val y = eval("""(-2..3).toList()""") as ObjList
         println(y.list)
     }

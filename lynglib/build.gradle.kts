@@ -65,6 +65,7 @@ kotlin {
             languageSettings.optIn("kotlin.contracts.ExperimentalContracts")
             languageSettings.optIn("kotlin.ExperimentalUnsignedTypes")
             languageSettings.optIn("kotlin.coroutines.DelicateCoroutinesApi")
+            languageSettings.optIn("kotlinx.coroutines.flow.DelicateCoroutinesApi")
         }
 
         val commonMain by getting {

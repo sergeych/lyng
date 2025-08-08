@@ -34,7 +34,10 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                                               onNotFoundResult: Obj?): Obj =
         instanceScope[name]?.let {
             if (it.visibility.isPublic)
-                it.value.invoke(scope, this, args)
+                it.value.invoke(
+                    instanceScope,
+                    this,
+                    args)
             else
                 scope.raiseError(ObjAccessException(scope, "can't invoke non-public method $name"))
         }

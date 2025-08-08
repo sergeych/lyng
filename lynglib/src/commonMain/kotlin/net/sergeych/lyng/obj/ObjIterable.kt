@@ -53,7 +53,7 @@ val ObjIterable by lazy {
         addFn("toMap") {
             val result = ObjMap()
             thisObj.toFlow(this).collect { pair ->
-                result.map[pair.getAt(this,0)] = pair.getAt(this, 1)
+                result.map[pair.getAt(this, 0)] = pair.getAt(this, 1)
             }
             result
         }
@@ -85,6 +85,24 @@ val ObjIterable by lazy {
             }
             ObjList(result)
         }
+
+        addFn("take") {
+            var n = requireOnlyArg<ObjInt>().value.toInt()
+            val result = mutableListOf<Obj>()
+            if (n > 0) {
+                thisObj.enumerate(this) {
+                    result += it
+                    --n > 0
+                }
+            }
+            ObjList(result)
+        }
+
+//        addFn("drop" ) {
+//            var n = requireOnlyArg<ObjInt>().value.toInt()
+//            if( n < 0 ) raiseIllegalArgument("drop($n): should be positive")
+//            val it = callMethod<>()
+//        }
 
         addFn("isEmpty") {
             ObjBool(

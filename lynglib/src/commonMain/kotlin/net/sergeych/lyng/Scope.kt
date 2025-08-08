@@ -16,7 +16,7 @@ import net.sergeych.lyng.pacman.ImportProvider
  *
  *  There are special types of scopes:
  *
- *  - [AppliedScope] - scope used to apply a closure to some thisObj scope
+ *  - [ClosureScope] - scope used to apply a closure to some thisObj scope
  */
 open class Scope(
     val parent: Scope?,
@@ -73,7 +73,7 @@ open class Scope(
 
     inline fun <reified T : Obj> requiredArg(index: Int): T {
         if (args.list.size <= index) raiseError("Expected at least ${index + 1} argument, got ${args.list.size}")
-        return (args.list[index] as? T)
+        return (args.list[index].byValueCopy() as? T)
             ?: raiseClassCastError("Expected type ${T::class.simpleName}, got ${args.list[index]::class.simpleName}")
     }
 
@@ -94,8 +94,15 @@ open class Scope(
             raiseError("This function does not accept any arguments")
     }
 
-    inline fun <reified T : Obj> thisAs(): T = (thisObj as? T)
-        ?: raiseClassCastError("Cannot cast ${thisObj.objClass.className} to ${T::class.simpleName}")
+    inline fun <reified T : Obj> thisAs(): T {
+        var s: Scope? = this
+        do {
+            val t = s!!.thisObj
+            if (t is T) return t
+            s = s.parent
+        } while(s != null)
+        raiseClassCastError("Cannot cast ${thisObj.objClass.className} to ${T::class.simpleName}")
+    }
 
     internal val objects = mutableMapOf<String, ObjRecord>()
 
@@ -192,6 +199,11 @@ open class Scope(
 
     val importManager by lazy { (currentImportProvider as? ImportManager)
         ?: throw IllegalStateException("this scope has no manager in the chain (provided $currentImportProvider") }
+
+    override fun toString(): String {
+        val contents = objects.entries.joinToString { "${if( it.value.isMutable ) "var" else "val" } ${it.key}=${it.value.value}" }
+        return "S[this=$thisObj $contents]"
+    }
 
     companion object {
 

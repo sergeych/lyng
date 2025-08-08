@@ -36,7 +36,7 @@ open class ObjClass(
     /**
      * members: fields most often. These are called with [ObjInstance] withs ths [ObjInstance.objClass]
      */
-    private val members = mutableMapOf<String, ObjRecord>()
+    internal val members = mutableMapOf<String, ObjRecord>()
 
     override fun toString(): String = className
 

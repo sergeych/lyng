@@ -34,7 +34,8 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
         defaultRecordType: ObjRecord.Type = ObjRecord.Type.ConstructorField
     ) {
         fun assign(a: Item, value: Obj) {
-            scope.addItem(a.name, (a.accessType ?: defaultAccessType).isMutable, value,
+            scope.addItem(a.name, (a.accessType ?: defaultAccessType).isMutable,
+                value.byValueCopy(),
                 a.visibility ?: defaultVisibility,
                 recordType = defaultRecordType)
         }

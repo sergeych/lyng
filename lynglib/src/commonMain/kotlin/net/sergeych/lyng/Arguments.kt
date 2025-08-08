@@ -36,7 +36,7 @@ data class Arguments(val list: List<Obj>, val tailBlockMode: Boolean = false) : 
 
     fun firstAndOnly(pos: Pos = Pos.UNKNOWN): Obj {
         if (list.size != 1) throw ScriptError(pos, "expected one argument, got ${list.size}")
-        return list.first()
+        return list.first().byValueCopy()
     }
 
     /**

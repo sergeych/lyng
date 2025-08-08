@@ -128,3 +128,55 @@ Usage example:
             yield()
         } while(true)
     }
+
+# Data exchange for coroutines
+
+## Flow
+
+Flow is an async cold sequence; it is named after kotlin's Flow as it resembles it closely. The cold means the flow is only evaluated when iterated (collected, in Kotlin terms), before it is inactive. Sequence means that it is potentially unlimited, as in our example of glorious Fibonacci number generator:
+
+    // Fibonacch numbers flow! 
+    val f = flow {
+        println("Starting generator")
+        var n1 = 0
+        var n2 = 1
+        emit(n1)
+        emit(n2)
+        while(true) {
+            val n = n1 + n2
+            emit(n)
+            n1 = n2
+            n2 = n
+        }
+    }
+    val correctFibs = [0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765]
+    println("Generation starts")
+    assertEquals( correctFibs, f.take(correctFibs.size))
+    >>> Generation starts
+    >>> Starting generator
+    >>> void
+
+Great: the generator is not executed until collected bu the `f.take()` call, which picks specified number of elements from the flow, can cancel it.
+
+Important difference from the channels or like, every time you collect the flow, you collect it anew:
+
+    val f = flow {
+            emit("start")
+            (1..4).forEach { emit(it) }
+    }
+    // let's collect flow:
+    val result = []
+    for( x in f ) result += x
+    println(result)
+
+    // let's collect it once again:
+    println(f.toList())
+
+    // and again:
+    //assertEquals( result, f.toList() )
+
+    >>> ["start", 1, 2, 3, 4]
+    >>> ["start", 1, 2, 3, 4]
+    >>> void
+
+1

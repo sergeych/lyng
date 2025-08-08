@@ -55,7 +55,8 @@ open class Obj {
         scope: Scope,
         name: String,
         args: Arguments = Arguments.EMPTY
-    ): T = invokeInstanceMethod(scope, name, args) as T
+    ): T =
+        invokeInstanceMethod(scope, name, args) as T
 
     /**
      * Invoke a method of the object if exists
@@ -68,7 +69,10 @@ open class Obj {
         args: Arguments = Arguments.EMPTY,
         onNotFoundResult: Obj?=null
     ): Obj =
-        objClass.getInstanceMemberOrNull(name)?.value?.invoke(scope, this, args)
+        objClass.getInstanceMemberOrNull(name)?.value?.invoke(
+            scope,
+            this,
+            args)
             ?: onNotFoundResult
             ?: scope.raiseSymbolNotFound(name)
 
@@ -249,6 +253,14 @@ open class Obj {
 
     open suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
         scope.raiseNotImplemented()
+    }
+
+    fun autoInstanceScope(parent: Scope): Scope  {
+       val scope = parent.copy(newThisObj = this, args = parent.args)
+        for( m in objClass.members) {
+            scope.objects[m.key] = m.value
+        }
+        return scope
     }
 
     companion object {
