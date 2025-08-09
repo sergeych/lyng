@@ -1,5 +1,11 @@
 # Iterable interface
 
+The interface for anything that can be iterated, e.g. finite or infinite ordered set of data that can be accessed sequentially. Almost any data container in `Lyng` implements it: `List`, `Set`, `Buffer`, `RingBuffer`, and many others are `Iterable`, also `Collection` and `Array` interfaces inherit it.
+
+`Map` and `String` have `Iterable` members to access its contents too.
+
+## Definition:
+
 Iterable is a class that provides function that creates _the iterator_:
 
     class Iterable {
@@ -26,7 +32,7 @@ Having `Iterable` in base classes allows to use it in for loop. Also, each `Iter
     assertEquals( [1,2] r.dropLast(8) )
     >>> void
 
-## Instance methods
+## Instance methods:
 
 | fun/method      | description                                                                     |
 |-----------------|---------------------------------------------------------------------------------|
@@ -60,7 +66,7 @@ Having `Iterable` in base classes allows to use it in for loop. Also, each `Iter
     fun Iterable.associateBy( keyMaker: (Any?)->Any): Map
     
 
-## Abstract methods
+## Abstract methods:
 
     fun iterator(): Iterator
 
