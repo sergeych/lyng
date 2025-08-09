@@ -106,4 +106,67 @@ class TestCoroutines {
                 assertEquals( result, f.toList())
         """.trimIndent())
     }
+
+    @Test
+    fun testFlowClosures() = runTest {
+        eval("""
+            fun filter( a, b ) {
+                println("filter: %s, %s"(a,b))
+                flow {
+                    emit(a)
+                    emit(b)
+                }
+            }
+            
+            assertEquals( [5, 1], filter(5,1).toList() )
+            assertEquals( [2, 3], filter(2,3).toList() )
+            
+        """.trimIndent())
+    }
+
+
+    @Test
+    fun testFilterFlow() = runTest {
+        eval("""
+            fun filter( list, predicate ) {
+                val p = predicate
+                println("predicate "+predicate+" / "+p)
+                flow {
+                    // here p is captured only once and does not change!
+                    for( item in list ) {
+                        print("filter "+p+" "+item+": ")
+                        if( p(item) ) {
+                            println("OK")
+                            emit(item)
+                        }
+                        else println("NO")
+                    }
+                }
+            }
+            
+//            fun drop(i, n) {
+//                require( n >= 0, "drop amount must be non-negative")
+//                var count = 0
+//                println("drop %d"(n))
+//                filter(i) {
+//                    count++ >= n
+//                }
+//            }
+            
+            val src = (1..1).toList()
+            assertEquals( 1, filter(src) { true }.toList().size )
+            println("----------------------------------------------------------")
+            println("----------------------------------------------------------")
+            println("----------------------------------------------------------")
+            println("----------------------------------------------------------")
+            assertEquals( 0, filter(src) { false }.toList().size )
+//            assertEquals( 3, filter(src) { true }.size() ) 
+            
+//            assertEquals( [7,8], drop((1..8).toList(),6).toList())
+//            assertEquals( [1,3,5,7], filter((1..8).toList()) { 
+//                println("call2")
+//                it % 2 == 1 
+//            }.toList())
+        """.trimIndent())
+    }
 }

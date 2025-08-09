@@ -205,6 +205,20 @@ open class Scope(
         return "S[this=$thisObj $contents]"
     }
 
+    fun trace(text: String="") {
+        println("trace Scope: $text ------------------")
+        var p = this.parent
+        var level = 0
+        while (p != null) {
+            println("     parent#${++level}: $p")
+            println("     ( ${p.args.list} )")
+            p = p.parent
+        }
+        println("--------------------")
+        ObjVoid
+
+    }
+
     companion object {
 
         fun new(): Scope =

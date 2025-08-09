@@ -26,8 +26,15 @@ class Script(
 
     companion object {
 
-        private val rootScope: Scope = Scope(null).apply {
+        internal val rootScope: Scope = Scope(null).apply {
             ObjException.addExceptionsToContext(this)
+            addFn("print") {
+                for ((i, a) in args.withIndex()) {
+                    if (i > 0) print(' ' + a.asStr.value)
+                    else print(a.asStr.value)
+                }
+                ObjVoid
+            }
             addFn("println") {
                 for ((i, a) in args.withIndex()) {
                     if (i > 0) print(' ' + a.asStr.value)
@@ -153,14 +160,24 @@ class Script(
                 }
                 result ?: raiseError(ObjAssertionFailedException(this,"Expected exception but nothing was thrown"))
             }
-            addFn("traceScope") {
-                println("trace Scope: $this")
-                var p = this.parent
-                var level = 0
-                while (p != null) {
-                    println("     parent#${++level}: $p")
-                    p = p.parent
+            addFn("require") {
+                val condition = requiredArg<ObjBool>(0)
+                if( !condition.value ) {
+                    val message = args.list.getOrNull(1)?.toString() ?: "requirement not met"
+                    raiseIllegalArgument(message)
                 }
+                ObjVoid
+            }
+            addFn("check") {
+                val condition = requiredArg<ObjBool>(0)
+                if( !condition.value ) {
+                    val message = args.list.getOrNull(1)?.toString() ?: "check failed"
+                    raiseIllegalState(message)
+                }
+                ObjVoid
+            }
+            addFn("traceScope") {
+                this.trace(args.get(0)?.toString() ?: "")
                 ObjVoid
             }
 
@@ -204,7 +221,9 @@ class Script(
             }
 
             addFn("flow") {
-                ObjFlow(requireOnlyArg<Statement>())
+                // important is: current context contains closure often used in call;
+                // we'll need it for the producer
+                ObjFlow(requireOnlyArg<Statement>(), this)
             }
 
             val pi = ObjReal(PI)

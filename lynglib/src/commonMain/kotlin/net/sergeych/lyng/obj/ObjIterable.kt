@@ -111,6 +111,5 @@ val ObjIterable by lazy {
                     .not()
             )
         }
-
     }
 }

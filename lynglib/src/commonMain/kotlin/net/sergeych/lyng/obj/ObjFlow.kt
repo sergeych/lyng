@@ -7,9 +7,7 @@ import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import net.sergeych.lyng.Scope
-import net.sergeych.lyng.ScriptFlowIsNoMoreCollected
-import net.sergeych.lyng.Statement
+import net.sergeych.lyng.*
 import net.sergeych.mp_tools.globalLaunch
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -60,7 +58,7 @@ private fun createLyngFlowInput(scope: Scope, producer: Statement): ReceiveChann
     return channel
 }
 
-class ObjFlow(val producer: Statement) : Obj() {
+class ObjFlow(val producer: Statement, val scope: Scope) : Obj() {
 
     override val objClass = type
 
@@ -71,7 +69,8 @@ class ObjFlow(val producer: Statement) : Obj() {
             }
         }.apply {
             addFn("iterator") {
-                ObjFlowIterator(thisAs<ObjFlow>().producer)
+                val objFlow = thisAs<ObjFlow>()
+                ObjFlowIterator( statement { objFlow.producer.execute(ClosureScope(this,objFlow.scope)) } )
             }
         }
     }

@@ -1,0 +1,16 @@
+
+fun Iterable.filter( predicate ) {
+    flow {
+        for( item in this )
+            if( predicate(item) )
+                emit(item)
+    }
+}
+
+fun Iterable.drop(n) {
+    require( n >= 0, "drop amount must be non-negative")
+    var count = 0
+    filter {
+        count++ < N
+    }
+}
