@@ -1,6 +1,6 @@
 # Iterable interface
 
-The interface for anything that can be iterated, e.g. finite or infinite ordered set of data that can be accessed sequentially. Almost any data container in `Lyng` implements it: `List`, `Set`, `Buffer`, `RingBuffer`, and many others are `Iterable`, also `Collection` and `Array` interfaces inherit it.
+The interface for anything that can be iterated, e.g. finite or infinite ordered set of data that can be accessed sequentially. Almost any data container in `Lyng` implements it: `List`, `Set`, `Buffer`, `RingBuffer`, `BitBuffer`, `Range` and many others are `Iterable`, also `Collection` and `Array` interfaces inherit it.
 
 `Map` and `String` have `Iterable` members to access its contents too.
 
@@ -78,7 +78,9 @@ Creates a list by iterating to the end. So, the Iterator should be finite to be 
 
 ## Implemented in classes:
 
-- [List], [Range]
+- [List], [Range], [Buffer](Buffer.md), [BitBuffer], [Buffer], [Set], [RingBuffer]
 
 [List]: List.md
 [Range]: Range.md
+[Set]: Set.md
+[RingBuffer]: RingBuffer.md
