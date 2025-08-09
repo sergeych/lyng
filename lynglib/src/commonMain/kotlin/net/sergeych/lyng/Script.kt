@@ -177,7 +177,7 @@ class Script(
                 ObjVoid
             }
             addFn("traceScope") {
-                this.trace(args.get(0)?.toString() ?: "")
+                this.trace(args.getOrNull(0)?.toString() ?: "")
                 ObjVoid
             }
 

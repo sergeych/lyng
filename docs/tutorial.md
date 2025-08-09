@@ -16,7 +16,8 @@ __Other documents to read__ maybe after this one:
 - [math in Lyng](math.md)
 - [parallelism] - multithreaded code, coroutines, etc.
 - Some class references: [List], [Set], [Map], [Real], [Range], [Iterable], [Iterator], [time manipulation](time.md)
-- Some samples: [combinatorics](samples/combinatorics.lyng.md), national vars and loops: [сумма ряда](samples/сумма_ряда.lyng.md). More at [samples folder](samples)
+- Some samples: [combinatorics](samples/combinatorics.lyng.md), national vars and
+  loops: [сумма ряда](samples/сумма_ряда.lyng.md). More at [samples folder](samples)
 
 # Expressions
 
@@ -169,9 +170,10 @@ There is also "elvis operator", null-coalesce infix operator '?:' that returns r
 The following functions simplify nullable values processing and
 allow to improve code look and readability. There are borrowed from Kotlin:
 
-### let 
+### let
 
-`value.let {}` passes to the block value as the single parameter (by default it is assigned to `it`) and return block's returned value. It is useful dealing with null or to
+`value.let {}` passes to the block value as the single parameter (by default it is assigned to `it`) and return block's
+returned value. It is useful dealing with null or to
 get a snapshot of some externally varying value, or with `?.` to process nullable value in a safe manner:
 
     // this state is changed from parallel processes
@@ -465,7 +467,6 @@ after function call, it is treated as a last argument to the call, e.g.:
     assert( [11, 21, 31] == mapped)
     >>> void
 
-
 # Lists (aka arrays)
 
 Lyng has built-in mutable array class `List` with simple literals:
@@ -535,7 +536,8 @@ The simplest way to concatenate lists is using `+` and `+=`:
     void
     >>> void
 
-***Important note***: the pitfall of using `+=` is that you can't append in [Iterable] instance as an object: it will always add all its contents. Use `list.add` to add a single iterable instance:
+***Important note***: the pitfall of using `+=` is that you can't append in [Iterable] instance as an object: it will
+always add all its contents. Use `list.add` to add a single iterable instance:
 
     var list = [1, 2]
     val other = [3, 4]
@@ -562,7 +564,6 @@ Use `list.add` to avoid confusion:
     list.add(10..12)
     assert( list == [1, 2, [3, 4], (10..12)])
     >>> void
-
 
 To add elements to the list:
 
@@ -595,7 +596,6 @@ Using splat arguments can simplify inserting list in list:
     x.insertAt( 1, ...[0,100,0])
     x
     >>> [1, 0, 100, 0, 2, 3]
-
 
 Note that to add to the end you still need to use `add` or positive index of the after-last element:
 
@@ -740,9 +740,11 @@ Also, you can check the type too:
 
 ### supported when conditions:
 
-#### Contains: 
+#### Contains:
 
-You can thest that _when expression_ is _contained_, or not contained, in some object using `in container` and `!in container`. The container is any object that provides `contains` method, otherwise the runtime exception will be thrown.
+You can thest that _when expression_ is _contained_, or not contained, in some object using `in container` and
+`!in container`. The container is any object that provides `contains` method, otherwise the runtime exception will be
+thrown.
 
 Typical builtin types that are containers (e.g. support `conain`):
 
@@ -758,7 +760,8 @@ Typical builtin types that are containers (e.g. support `conain`):
 : Iterable is not the container as it can be infinite
 
 (2)
-: Depending on the inclusivity and open/closed range parameters. BE careful here: String range is allowed, but it is usually not what you expect of it:
+: Depending on the inclusivity and open/closed range parameters. BE careful here: String range is allowed, but it is
+usually not what you expect of it:
 
     assert( "more" in "a".."z") // string range ok
     assert( 'x' !in "a".."z") // char in string range: probably error
@@ -767,7 +770,9 @@ Typical builtin types that are containers (e.g. support `conain`):
     >>> void
 
 (3)
-: `String` also can provide array of characters directly with `str.characters()`, which is [Iterable] and [Array]. String itself is not iterable as otherwise it will interfere when adding strigns to lists (it will add _characters_ it it would be iterable).
+: `String` also can provide array of characters directly with `str.characters()`, which is [Iterable] and [Array].
+String itself is not iterable as otherwise it will interfere when adding strigns to lists (it will add _characters_ it
+it would be iterable).
 
 So we recommend not to mix characters and string ranges; use `ch in str` that works
 as expected:
@@ -845,7 +850,8 @@ We can skip the rest of the loop and restart it, as usual, with `continue` opera
     "found even numbers: " + countEven
     >>> "found even numbers: 5"
 
-`continue` can't "return" anything: it just restarts the loop. It can use labeled loops to restart outer ones (we intentionally avoid using for loops here):
+`continue` can't "return" anything: it just restarts the loop. It can use labeled loops to restart outer ones (we
+intentionally avoid using for loops here):
 
     var count = 0
     var total = 0
@@ -891,21 +897,22 @@ test function (remember function return it's last expression result):
 ```mermaid
 flowchart TD
     S((start)) --> Cond{check}
-    Cond--false, no else--->V((void))
-    Cond--true-->E(["last = loop_body()" ])
-    E--break value---->BV((value))
-    E--> Check2{check}
-    E--break---->V
-    Check2 --false-->E
-    Check2 --true, no else--->L((last))
-    Check2 --true, else-->Else(["else_clause()"])
-    Cond--false, else--->Else
+    Cond -- false, no else ---> V((void))
+    Cond -- true --> E(["last = loop_body()"])
+    E -- break value ----> BV((value))
+    E --> Check2{check}
+    E -- break ----> V
+    Check2 -- false --> E
+    Check2 -- true, no else ---> L((last))
+    Check2 -- true, else --> Else(["else_clause()"])
+    Cond -- false, else ---> Else
     Else --> Ele4$nr((else))
 ```
 
 So the returned value, as seen from diagram could be one of:
 
-- `void`, if the loop was not executed, e.g. `condition` was initially false, and there was no `else` clause, or if the empty break was executed.
+- `void`, if the loop was not executed, e.g. `condition` was initially false, and there was no `else` clause, or if the
+  empty break was executed.
 - value returned from `break value' statement
 - value returned from the `else` clause, of the loop was not broken
 - value returned from the last execution of loop body, if there was no `break` and no `else` clause.
@@ -929,7 +936,8 @@ available in the condition:
     } while( continueLoop )
     >>> "OK"
 
-This is sometimes convenient when condition is complex and has to be calculated inside the loop body. Notice the value returning by the loop:
+This is sometimes convenient when condition is complex and has to be calculated inside the loop body. Notice the value
+returning by the loop:
 
     fun readLine() { "done: result" }
     val result = do {
@@ -939,7 +947,6 @@ This is sometimes convenient when condition is complex and has to be calculated 
     >>> "result"
 
 Suppose readLine() here reads some stream of lines.
-
 
 ## For loops
 
@@ -983,7 +990,8 @@ We can use labels too:
 
 # Exception handling
 
-Very much like in Kotlin. Try block returns its body block result, if no exception was cauht, or the result from the catch block that caught the exception:
+Very much like in Kotlin. Try block returns its body block result, if no exception was cauht, or the result from the
+catch block that caught the exception:
 
     var error = "not caught"
     var finallyCaught = false
@@ -1030,12 +1038,11 @@ And even shortest, for the Lying lang tradition, missing var is `it`:
     assert( caught is IllegalArgumentException )
     >>> void
 
-It is possible to catch several exceptions in the same block too, use 
+It is possible to catch several exceptions in the same block too, use
 `catch( varName: ExceptionClass1, ExceptionClass2)`, etc, use short form of throw and
 many more.
 
 - see [exception handling](exceptions_handling.md) for detailed exceptions tutorial and reference.
-
 
 # Self-assignments in expression
 
@@ -1159,7 +1166,6 @@ Are the same as in string literals with little difference:
 | code   | Int  | Unicode code for the character |
 |        |      |                                |
 
-
 ## String details
 
 Strings are arrays of Unicode characters. It can be indexed, and indexing will
@@ -1187,7 +1193,10 @@ To format a string use sprintf-style modifiers like:
     assertEquals( "hello :11    ", "%-6s:%-6d"(a, b) )
     >>> void
 
-List of format specifiers closely resembles C sprintf() one. See [format specifiers](https://github.com/sergeych/mp_stools?tab=readme-ov-file#sprintf-syntax-summary), this is doe using [mp_stools kotlin multiplatform library](https://github.com/sergeych/mp_stools). Currently supported Lyng types are `String`, `Int`, `Real`, `Bool`, the rest are displayed using their `toString()` representation.
+List of format specifiers closely resembles C sprintf() one.
+See [format specifiers](https://github.com/sergeych/mp_stools?tab=readme-ov-file#sprintf-syntax-summary), this is doe
+using [mp_stools kotlin multiplatform library](https://github.com/sergeych/mp_stools). Currently supported Lyng types
+are `String`, `Int`, `Real`, `Bool`, the rest are displayed using their `toString()` representation.
 
 This list will be extended.
 
@@ -1218,32 +1227,29 @@ Concatenation is a `+`: `"hello " + name` works as expected. No confusion.
 
 Typical set of String functions includes:
 
-| fun/prop          | description / notes                                        |
-|-------------------|------------------------------------------------------------|
-| lower()           | change case to unicode upper                               |
-| upper()           | change case to unicode lower                               |
+| fun/prop           | description / notes                                        |
+|--------------------|------------------------------------------------------------|
+| lower()            | change case to unicode upper                               |
+| upper()            | change case to unicode lower                               |
 | startsWith(prefix) | true if starts with a prefix                               |
-| endsWith(prefix)  | true if ends with a prefix                                 |
-| take(n)           | get a new string from up to n first characters             |
-| takeLast(n)       | get a new string from up to n last characters              |
-| drop(n)           | get a new string dropping n first chars, or empty string   |
-| dropLast(n)       | get a new string dropping n last chars, or empty string    |
-| size              | size in characters like `length` because String is [Array] |
-| (args...)         | sprintf-like formatting, see [string formatting]           |
-| [index]           | character at index                                         | 
-| [Range]           | substring at range                                         |
-| s1 + s2           | concatenation                                              |
-| s1 += s2          | self-modifying concatenation                               |
-| toReal()          | attempts to parse string as a Real value                   |
-| toInt()           | parse string to Int value                                  |
-| characters()      | create [List] of characters (1)                            |
-| encodeUtf8()      | returns [Buffer] with characters encoded to utf8           |
+| endsWith(prefix)   | true if ends with a prefix                                 |
+| take(n)            | get a new string from up to n first characters             |
+| takeLast(n)        | get a new string from up to n last characters              |
+| drop(n)            | get a new string dropping n first chars, or empty string   |
+| dropLast(n)        | get a new string dropping n last chars, or empty string    |
+| size               | size in characters like `length` because String is [Array] |
+| (args...)          | sprintf-like formatting, see [string formatting]           |
+| [index]            | character at index                                         | 
+| [Range]            | substring at range                                         |
+| s1 + s2            | concatenation                                              |
+| s1 += s2           | self-modifying concatenation                               |
+| toReal()           | attempts to parse string as a Real value                   |
+| toInt()            | parse string to Int value                                  |
+| characters()       | create [List] of characters (1)                            |
+| encodeUtf8()       | returns [Buffer] with characters encoded to utf8           |
 
 (1)
 : List is mutable therefore a new copy is created on each call.
-
-
-
 
 ### Literals
 
@@ -1258,10 +1264,18 @@ though multiline literals is yet work in progress.
 
 See [math functions](math.md). Other general purpose functions are:
 
-| name                                         | description                                              |
-|----------------------------------------------|----------------------------------------------------------|
-| assert(condition,message="assertion failed") | runtime code check. There will be an option to skip them |
-| println(args...)                             | Open for overriding, it prints to stdout.                |
+| name                                       | description                                               |
+|--------------------------------------------|-----------------------------------------------------------|
+| assert(condition,message="assertion failed") | runtime code check. There will be an option to skip them  |
+| assertEquals(a,b)                          |                                                           |
+| assertNotEquals(a,b)                       |                                                           |
+| assertTrows { /* block */ }                |                                                           |
+| check(condition, message=<default>)        | throws IllegalStateException" of condition isn't met      |
+| require(condition, message=<default>)      | throws IllegalArgumentException" of condition isn't met   |
+| println(args...)                           | Open for overriding, it prints to stdout with newline.    |
+| print(args...)                             | Open for overriding, it prints to stdout without newline. |
+| flow {}                                    | create flow sequence, see [parallelism]                   |
+| delay, launch, yield                       | see [parallelism]                                         |
 
 # Built-in constants
 
@@ -1271,13 +1285,23 @@ See [math functions](math.md). Other general purpose functions are:
 | π                                   | See [math](math.md)          |
 
 [List]: List.md
+
 [Iterable]: Iterable.md
+
 [Iterator]: Iterator.md
+
 [Real]: Real.md
+
 [Range]: Range.md
+
 [String]: String.md
+
 [string formatting]: https://github.com/sergeych/mp_stools?tab=readme-ov-file#sprintf-syntax-summary
+
 [Set]: Set.md
+
 [Map]: Map.md
+
 [Buffer]: Buffer.md
+
 [parallelism]: parallelism.md
