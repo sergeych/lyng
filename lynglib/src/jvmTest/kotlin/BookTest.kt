@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.Script
 import net.sergeych.lyng.obj.ObjVoid
 import java.nio.file.Files
 import java.nio.file.Files.readAllLines
@@ -163,9 +164,10 @@ fun parseDocTests(fileName: String, bookMode: Boolean = false): Flow<DocTest> = 
 }
     .flowOn(Dispatchers.IO)
 
-suspend fun DocTest.test(scope: Scope = Scope()) {
+suspend fun DocTest.test(_scope: Scope? = null) {
     val collectedOutput = StringBuilder()
     val currentTest = this
+    val scope  = _scope ?: Script.newScope()
     scope.apply {
         addFn("println") {
             if( bookMode ) {
@@ -302,6 +304,11 @@ class BookTest {
     @Test
     fun testParallelismBook() = runBlocking {
         runDocTests("../docs/parallelism.md")
+    }
+
+    @Test
+    fun testRingBuffer() = runBlocking {
+        runDocTests("../docs/RingBuffer.md")
     }
 
 }

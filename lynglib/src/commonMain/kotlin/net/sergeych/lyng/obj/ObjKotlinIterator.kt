@@ -36,7 +36,9 @@ class ObjKotlinObjIterator(val iterator: Iterator<Obj>) : Obj() {
             addFn("next") {
                 thisAs<ObjKotlinObjIterator>().iterator.next()
             }
-            addFn("hasNext") { thisAs<ObjKotlinIterator>().iterator.hasNext().toObj() }
+            addFn("hasNext") {
+                thisAs<ObjKotlinObjIterator>().iterator.hasNext().toObj()
+            }
         }
 
     }

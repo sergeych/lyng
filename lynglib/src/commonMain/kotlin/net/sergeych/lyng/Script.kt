@@ -4,6 +4,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
+import net.sergeych.lyng.stdlib_included.rootLyng
 import net.sergeych.lynon.ObjLynonClass
 import net.sergeych.mp_tools.globalDefer
 import kotlin.math.*
@@ -22,9 +23,13 @@ class Script(
         return lastResult
     }
 
-    suspend fun execute() = execute(defaultImportManager.newModule())
+    suspend fun execute() = execute(
+        defaultImportManager.newStdScope()
+    )
 
     companion object {
+
+        suspend fun newScope(pos: Pos = Pos.builtIn) = defaultImportManager.newStdScope(pos)
 
         internal val rootScope: Scope = Scope(null).apply {
             ObjException.addExceptionsToContext(this)
@@ -202,6 +207,7 @@ class Script(
             addConst("Iterable", ObjIterable)
             addConst("Collection", ObjCollection)
             addConst("Array", ObjArray)
+            addConst("RingBuffer", ObjRingBuffer.type)
             addConst("Class", ObjClassType)
 
             addConst("Deferred", ObjDeferred.type)
@@ -235,6 +241,9 @@ class Script(
 
         val defaultImportManager: ImportManager by lazy {
             ImportManager(rootScope, SecurityManager.allowAll).apply {
+                addTextPackages(
+                    rootLyng
+                )
                 addPackage("lyng.buffer") {
                     it.addConst("Buffer", ObjBuffer.type)
                     it.addConst("MutableBuffer", ObjMutableBuffer.type)

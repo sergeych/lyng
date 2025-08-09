@@ -1,6 +1,7 @@
 package net.sergeych.lyng.pacman
 
 import net.sergeych.lyng.*
+import net.sergeych.mptools.CachedExpression
 
 /**
  * Package manager INTERFACE (abstract class). Performs import routines
@@ -45,6 +46,15 @@ abstract class ImportProvider(
 
     fun newModuleAt(pos: Pos): ModuleScope =
         ModuleScope(this, pos, "unknown")
+
+    private var cachedStdScope = CachedExpression<Scope>()
+
+    suspend fun newStdScope(pos: Pos = Pos.builtIn): Scope =
+        cachedStdScope.get {
+            newModuleAt(pos).also {
+                it.eval("import lyng.stdlib\n")
+            }
+        }.copy()
 }
 
 

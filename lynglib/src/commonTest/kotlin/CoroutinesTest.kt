@@ -29,7 +29,7 @@ class TestCoroutines {
             val done = CompletableDeferred()
             
             launch { 
-                delay(10)
+                delay(30)
                 done.complete("ok")
             }
             
@@ -123,7 +123,6 @@ class TestCoroutines {
             
         """.trimIndent())
     }
-
 
     @Test
     fun testFilterFlow() = runTest {

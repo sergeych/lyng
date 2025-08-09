@@ -189,3 +189,19 @@ Important difference from the channels or like, every time you collect the flow,
 
 Notice that flow's lambda is not called until actual collection is started. Cold flows are
 better in terms of resource consumption.
+
+Flows allow easy transforming of any [Iterable]. See how the standard Lyng library functions use it:
+
+    fun Iterable.filter(predicate) {
+        val list = this
+        flow {
+            for( item in list ) {
+                if( predicate(item) ) {
+                    emit(item)
+                }
+            }
+        }
+    }
+
+
+[Iterable]: Iterable.md

@@ -163,13 +163,14 @@ open class Scope(
     fun addConst(name: String, value: Obj) = addItem(name, false, value)
 
     suspend fun eval(code: String): Obj =
-        Compiler.compile(code.toSource(), currentImportProvider).execute(this)
+        eval(code.toSource())
 
-    suspend fun eval(source: Source): Obj =
-        Compiler.compile(
+    suspend fun eval(source: Source): Obj {
+        return Compiler.compile(
             source,
             currentImportProvider
         ).execute(this)
+    }
 
     fun containsLocal(name: String): Boolean = name in objects
 

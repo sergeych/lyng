@@ -14,8 +14,9 @@ __Other documents to read__ maybe after this one:
 - [Advanced topics](advanced_topics.md), [declaring arguments](declaring_arguments.md)
 - [OOP notes](OOP.md), [exception handling](exceptions_handling.md)
 - [math in Lyng](math.md)
+- [time](time.md) and [parallelism](parallelism.md)
 - [parallelism] - multithreaded code, coroutines, etc.
-- Some class references: [List], [Set], [Map], [Real], [Range], [Iterable], [Iterator], [time manipulation](time.md)
+- Some class references: [List], [Set], [Map], [Real], [Range], [Iterable], [Iterator], [time manipulation](time.md), [RingBuffer], [Buffer].
 - Some samples: [combinatorics](samples/combinatorics.lyng.md), national vars and
   loops: [сумма ряда](samples/сумма_ряда.lyng.md). More at [samples folder](samples)
 
@@ -1305,3 +1306,5 @@ See [math functions](math.md). Other general purpose functions are:
 [Buffer]: Buffer.md
 
 [parallelism]: parallelism.md
+
+[RingBuffer]: RingBuffer.md
