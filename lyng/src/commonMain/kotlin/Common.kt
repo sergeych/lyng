@@ -10,10 +10,11 @@ import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import kotlinx.coroutines.runBlocking
 import net.sergeych.lyng.LyngVersion
-import net.sergeych.lyng.Scope
+import net.sergeych.lyng.Script
 import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.Source
 import net.sergeych.lyng.obj.*
+import net.sergeych.mp_tools.globalDefer
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import okio.SYSTEM
@@ -38,14 +39,13 @@ data class CommandResult(
     val error: String
 )
 
-val baseScope = Scope().apply {
-    addFn("exit") {
-        exit(requireOnlyArg<ObjInt>().toInt())
-        ObjVoid
+val baseScopeDefer = globalDefer {
+    Script.newScope().apply {
+        addFn("exit") {
+            exit(requireOnlyArg<ObjInt>().toInt())
+            ObjVoid
+        }
     }
-//    ObjString.type.addFn("shell") {
-//
-//    }
 }
 
 fun runMain(args: Array<String>) {
@@ -88,41 +88,44 @@ private class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() 
         """.trimIndent()
 
     override fun run() {
-        when {
-            version -> {
-                println("Lyng language version ${LyngVersion}")
-            }
+        runBlocking {
+            val baseScope = baseScopeDefer.await()
+            when {
+                version -> {
+                    println("Lyng language version ${LyngVersion}")
+                }
 
-            execute != null -> {
-                val objargs = mutableListOf<String>()
-                script?.let { objargs += it }
-                objargs += args
-                baseScope.addConst(
-                    "ARGV", ObjList(
-                        objargs.map { ObjString(it) }.toMutableList()
+                execute != null -> {
+                    val objargs = mutableListOf<String>()
+                    script?.let { objargs += it }
+                    objargs += args
+                    baseScope.addConst(
+                        "ARGV", ObjList(
+                            objargs.map { ObjString(it) }.toMutableList()
+                        )
                     )
-                )
-                launcher {
-                    // there is no script name, it is a first argument instead:
-                    processErrors {
-                        baseScope.eval(execute!!)
+                    launcher {
+                        // there is no script name, it is a first argument instead:
+                        processErrors {
+                            baseScope.eval(execute!!)
+                        }
                     }
                 }
-            }
 
-            else -> {
-                if (script == null) {
-                    println(
-                        """
+                else -> {
+                    if (script == null) {
+                        println(
+                            """
                         
                         Error: no script specified.
                         
                     """.trimIndent()
-                    )
-                    echoFormattedHelp()
-                } else {
-                    baseScope.addConst("ARGV", ObjList(args.map { ObjString(it) }.toMutableList()))
-                    launcher { executeFile(script!!) }
+                        )
+                        echoFormattedHelp()
+                    } else {
+                        baseScope.addConst("ARGV", ObjList(args.map { ObjString(it) }.toMutableList()))
+                        launcher { executeFile(script!!) }
+                    }
                 }
             }
         }
@@ -131,7 +134,7 @@ private class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() 
 
 fun executeFileWithArgs(fileName: String, args: List<String>) {
     runBlocking {
-        baseScope.addConst("ARGV", ObjList(args.map { ObjString(it) }.toMutableList()))
+        baseScopeDefer.await().addConst("ARGV", ObjList(args.map { ObjString(it) }.toMutableList()))
         executeFile(fileName)
     }
 }
@@ -148,7 +151,7 @@ suspend fun executeFile(fileName: String) {
         text = text.substring(pos + 1)
     }
     processErrors {
-        baseScope.eval(Source(fileName, text))
+        baseScopeDefer.await().eval(Source(fileName, text))
     }
 }
 
