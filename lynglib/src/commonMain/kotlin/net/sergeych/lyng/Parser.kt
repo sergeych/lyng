@@ -375,6 +375,32 @@ private class Parser(fromPos: Pos) {
 
     private val currentChar: Char get() = pos.currentChar
 
+    private fun fixMultilineStringLiteral(source: String): String {
+        val sizes = mutableListOf<Int>()
+        val lines = source.lines().toMutableList()
+        if( lines.size == 0 ) return ""
+        if( lines[0].isBlank() ) lines.removeFirst()
+        if( lines.isEmpty()) return ""
+        if( lines.last().isBlank() ) lines.removeLast()
+
+        val normalized = lines.map { l ->
+            if( l.isBlank() ) {
+                sizes.add(-1)
+                ""
+            }
+            else {
+                val margin = leftMargin(l)
+                sizes += margin
+                " ".repeat(margin) + l.trim()
+            }
+        }
+        val commonMargin = sizes.filter { it >= 0 }.min()
+        val fixed = if( commonMargin < 1 ) lines else normalized.map {
+            if( it.isBlank() ) "" else it.drop(commonMargin)
+        }
+        return fixed.joinToString("\n")
+    }
+
     private fun loadStringToken(): Token {
         val start = currentPos
 
@@ -383,6 +409,7 @@ private class Parser(fromPos: Pos) {
 //        start = start.back()
 
         val sb = StringBuilder()
+        var newlineDetected = false
         while (currentChar != '"') {
             if (pos.end) throw ScriptError(start, "unterminated string started there")
             when (currentChar) {
@@ -397,6 +424,12 @@ private class Parser(fromPos: Pos) {
                     }
                 }
 
+                '\n', '\r'-> {
+                    newlineDetected = true
+                    sb.append(currentChar)
+                    pos.advance()
+                }
+
                 else -> {
                     sb.append(currentChar)
                     pos.advance()
@@ -404,7 +437,10 @@ private class Parser(fromPos: Pos) {
             }
         }
         pos.advance()
-        return Token(sb.toString(), start, Token.Type.STRING)
+
+        val result = sb.toString().let { if( newlineDetected ) fixMultilineStringLiteral(it) else it }
+
+        return Token(result, start, Token.Type.STRING)
     }
 
     /**

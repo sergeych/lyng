@@ -1259,7 +1259,19 @@ String literal could be multiline:
     "Hello
     World"
 
-though multiline literals is yet work in progress.
+In this case, it will be passed literally ot "hello\n    World". But, if there are
+several lines with common left indent, it will be removed, also, forst and last lines,
+if blank, will be removed too, for example:
+
+    println("
+            This is a multiline text.
+            This is a second line.
+        ")
+    >>> This is a multiline text.
+    >>> This is a second line.
+    >>> void
+
+- as expected, empty lines and common indent were removed. It is much like kotlin's `""" ... """.trimIndent()` technique, but simpler ;)
 
 # Built-in functions
 

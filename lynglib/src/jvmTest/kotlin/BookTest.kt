@@ -6,6 +6,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Script
+import net.sergeych.lyng.leftMargin
 import net.sergeych.lyng.obj.ObjVoid
 import java.nio.file.Files
 import java.nio.file.Files.readAllLines
@@ -15,18 +16,6 @@ import kotlin.io.path.extension
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.fail
-
-fun leftMargin(s: String): Int {
-    var cnt = 0
-    for (c in s) {
-        when (c) {
-            ' ' -> cnt++
-            '\t' -> cnt = (cnt / 4.0 + 0.9).toInt() * 4
-            else -> break
-        }
-    }
-    return cnt
-}
 
 data class DocTest(
     val fileName: String,

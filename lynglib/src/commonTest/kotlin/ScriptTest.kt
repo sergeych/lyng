@@ -2794,4 +2794,45 @@ class ScriptTest {
         println(y.list)
     }
 
+    @Test
+    fun testMultilineStrings() = runTest {
+        assertEquals(
+            """
+            This is a multiline text.
+            This is a second line.
+        """.trimIndent(), eval(
+                """
+            "
+                This is a multiline text.
+                This is a second line.
+            "
+        """.trimIndent()
+            ).toString()
+        )
+        assertEquals(
+            """
+            This is a multiline text.
+        """.trimIndent(), eval(
+                """
+            "
+                This is a multiline text.
+            "
+        """.trimIndent()
+            ).toString()
+        )
+        assertEquals(
+            """
+
+            This is a multiline text.
+        """.trimIndent(), eval(
+                """
+            "
+
+                This is a multiline text.
+            "
+        """.trimIndent()
+            ).toString()
+        )
+    }
+
 }
