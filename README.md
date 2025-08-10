@@ -139,15 +139,18 @@ Ready features:
 - [x] exception handling: throw, try-catch-finally, exception classes.
 - [x] multiplatform maven publication
 - [x] documentation for the current state
-
-Under way: 
-
 - [x] maps, sets and sequences (flows?)
-- [ ] regular exceptions
 - [x] modules
 - [x] string formatting and tools
-- [ ] multiple inheritance for user classes
 - [x] launch, deferred, CompletableDeferred, Mutex, etc.
+- [x] multiline strings
+- [x] typesafe bit-effective serialization
+- [x] compression/decompression (integrated in serialization)
+- 
+  Under way: 
+
+- [ ] regular exceptions
+- [ ] multiple inheritance for user classes
 - [ ] site with integrated interpreter to give a try
 - [ ] kotlin part public API good docs, integration focused
 - [ ] better stack reporting
@@ -158,7 +161,7 @@ Planned features.
 
 - [ ] type specifications
 - [ ] source docs and maybe lyng.md to a standard
-- [ ] macro-style kotlin integration or something else to simplify it
+- [ ] metadata first class access from lyng
 
 Further
 
