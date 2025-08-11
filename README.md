@@ -2,7 +2,7 @@
 
 A KMP library and a standalone interpreter
 
-- simple, compact, intuitive and elegant modern code style:
+- simple, compact, intuitive and elegant modern code:
 
 ```
 class Point(x,y) {
@@ -15,12 +15,19 @@ fun swapEnds(first, args..., last, f) {
 } 
 ```
 
-- extremely simple Kotlin integration on any platform
+- extremely simple Kotlin integration on any platform (JVM, JS, WasmJS, Lunux, MacOS, iOS, Windows)
 - 100% secure: no access to any API you didn't explicitly provide
-- 100% coroutines! Every function/script is a coroutine, it does not block the thread, no async/await/suspend keyword garbage:
+- 100% coroutines! Every function/script is a coroutine, it does not block the thread, no async/await/suspend keyword garbage, see [parallelism]
 
 ```
+  val deferred = launch {
     delay(1.5) // coroutine is delayed for 1.5s, thread is not blocked!
+    "done"
+  }
+  // ...
+  // suspend current coroutine, no thread is blocked again,
+  // and wait for deferred to return something:
+  assertEquals("donw", deferred.await())
 ```
 and it is multithreaded on platforms supporting it (automatically, no code changes required, just
 `launch` more coroutines and they will be executed concurrently if possible). See [parallelism]
