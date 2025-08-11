@@ -43,4 +43,21 @@ class OOTest {
             assertEquals( "foo!", Point.getData() )
         """.trimIndent())
     }
+
+//    @Test
+    fun testDynamic() = runTest {
+        eval("""
+            println("0")
+            class DynamicTest : Dynamic {
+            
+                fun getDynamic(name) {
+                    if (name == "foo") "bar" else null
+                }
+            }
+            println("1")
+            val d = DynamicTest()
+            println(d)
+            println("2")
+        """.trimIndent())
+    }
 }

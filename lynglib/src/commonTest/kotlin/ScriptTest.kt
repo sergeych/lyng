@@ -2375,8 +2375,6 @@ class ScriptTest {
                 x++; y++ 
             }
             assertEquals(p, Point(2,3))
-            >>> void
-
         """.trimIndent()
         )
     }
@@ -2393,8 +2391,6 @@ class ScriptTest {
                 y++ 
             }
             assertEquals(p, Point(2,3))
-            >>> void
-
         """.trimIndent()
         )
     }

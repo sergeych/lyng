@@ -65,9 +65,17 @@ class Compiler(
                     }
                 }
             }
-            parseStatement(braceMeansLambda = true)?.also {
+            val s = parseStatement(braceMeansLambda = true)?.also {
                 statements += it
-            } ?: break
+            }
+            if (s == null) {
+                when( t.type ) {
+                    Token.Type.RBRACE, Token.Type.EOF, Token.Type.SEMICOLON -> {}
+                    else ->
+                        throw ScriptError(t.pos, "unexpeced `${t.value}` here")
+                }
+                break
+            }
 
         } while (true)
         return Script(start, statements)//returnScope.needCatch)
@@ -833,8 +841,18 @@ class Compiler(
             val isExtern = cc.skipId("extern")
             when {
                 cc.matchQualifiers("fun", "private") -> parseFunctionDeclaration(Visibility.Private, isExtern)
-                cc.matchQualifiers("fun", "private", "static") -> parseFunctionDeclaration(Visibility.Private, isExtern, isStatic = true)
-                cc.matchQualifiers("fun", "static") -> parseFunctionDeclaration(Visibility.Public, isExtern, isStatic = true)
+                cc.matchQualifiers("fun", "private", "static") -> parseFunctionDeclaration(
+                    Visibility.Private,
+                    isExtern,
+                    isStatic = true
+                )
+
+                cc.matchQualifiers("fun", "static") -> parseFunctionDeclaration(
+                    Visibility.Public,
+                    isExtern,
+                    isStatic = true
+                )
+
                 cc.matchQualifiers("fn", "private") -> parseFunctionDeclaration(Visibility.Private, isExtern)
                 cc.matchQualifiers("fun", "open") -> parseFunctionDeclaration(isOpen = true, isExtern = isExtern)
                 cc.matchQualifiers("fn", "open") -> parseFunctionDeclaration(isOpen = true, isExtern = isExtern)
@@ -1541,7 +1559,7 @@ class Compiler(
     }
 
     private suspend fun
-        parseFunctionDeclaration(
+            parseFunctionDeclaration(
         visibility: Visibility = Visibility.Public,
         @Suppress("UNUSED_PARAMETER") isOpen: Boolean = false,
         isExtern: Boolean = false,
@@ -1613,7 +1631,7 @@ class Compiler(
                     (thisObj as? ObjInstance)?.let { i ->
                         fnBody.execute(ClosureScope(this, i.instanceScope))
                     }
-                        // other classes can create one-time scope for this rare case:
+                    // other classes can create one-time scope for this rare case:
                         ?: fnBody.execute(thisObj.autoInstanceScope(this))
                 }
             }
