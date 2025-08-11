@@ -44,20 +44,49 @@ class OOTest {
         """.trimIndent())
     }
 
-//    @Test
-    fun testDynamic() = runTest {
+    @Test
+    fun testDynamicGet() = runTest {
         eval("""
-            println("0")
-            class DynamicTest : Dynamic {
-            
-                fun getDynamic(name) {
-                    if (name == "foo") "bar" else null
+            val accessor = dynamic {
+                get { name ->
+                    if( name == "foo" ) "bar" else null
                 }
             }
-            println("1")
-            val d = DynamicTest()
-            println(d)
-            println("2")
+           
+            println("-- " + accessor.foo)
+            assertEquals("bar", accessor.foo)
+            assertEquals(null, accessor.bar)
+            
+        """.trimIndent())
+    }
+
+    @Test
+    fun testDelegateSet() = runTest {
+        eval("""
+            var setValueForBar = null
+            val accessor = dynamic {
+                get { name ->
+                    when(name) {
+                        "foo" -> "bar"
+                        "bar" -> setValueForBar 
+                        else -> null
+                    }
+                }
+                set { name, value ->
+                    if( name == "bar" )
+                        setValueForBar = value
+                    else throw IllegalAssignmentException("Can't assign "+name)
+                }
+            }
+           
+            assertEquals("bar", accessor.foo)
+            assertEquals(null, accessor.bar)
+            accessor.bar = "buzz"
+            assertEquals("buzz", accessor.bar)
+            
+            assertThrows {
+                accessor.bad = "!23"
+            }
         """.trimIndent())
     }
 }

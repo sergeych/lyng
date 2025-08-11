@@ -156,8 +156,9 @@ Ready features:
 - [x] multiline strings
 - [x] typesafe bit-effective serialization
 - [x] compression/decompression (integrated in serialization)
-- 
-  Under way: 
+- [x] dynamic fields
+
+###  Under way: 
 
 - [ ] regular exceptions
 - [ ] multiple inheritance for user classes

@@ -170,6 +170,11 @@ class Script(
                 }
                 result ?: raiseError(ObjAssertionFailedException(this,"Expected exception but nothing was thrown"))
             }
+
+            addFn("dynamic") {
+                ObjDynamic.create(this, requireOnlyArg())
+            }
+
             addFn("require") {
                 val condition = requiredArg<ObjBool>(0)
                 if( !condition.value ) {

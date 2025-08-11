@@ -235,6 +235,63 @@ as they are modifying the type, not the context.
 
 Beware of it. We might need to reconsider it later.
 
+## dynamic symbols
+
+Sometimes it is convenient to provide methods and variables whose names are not known at compile time. For example, it could be external interfaces not known to library code, user-defined data fields, etc. You can use `dynamic` function to create such:
+
+    // val only dynamic object
+    val accessor = dynamic {
+        // all symbol reads are redirected here:
+        get { name ->
+            // lets provide one dynamic symbol:
+            if( name == "foo" ) "bar" else null
+            // consider also throw SymbolNotDefinedException
+        }
+    }
+    
+    // now we can access dynamic "fields" of accessor:
+    assertEquals("bar", accessor.foo)
+    assertEquals(null, accessor.bar)
+    >>> void
+
+The same we can provide writable dynamic fields (var-type), adding set method:
+
+    // store one dynamic field here
+    var storedValueForBar = null
+    
+    // create dynamic object with 2 fields:
+    val accessor = dynamic {
+        get { name ->
+            when(name) {
+                // constant field
+                "foo" -> "bar"
+                // mutable field
+                "bar" -> setValueForBar 
+
+                else -> throw SymbolNotFoundException()
+            }
+        }
+        set { name, value ->
+            // only 'bar' is mutable:
+            if( name == "bar" )
+                storedValueForBar = value
+            // the rest is immotable. consider throw also
+            // SymbolNotFoundException when needed.
+            else throw IllegalAssignmentException("Can't assign "+name)
+        }
+    }
+    
+    assertEquals("bar", accessor.foo)
+    assertEquals(null, accessor.bar)
+    accessor.bar = "buzz"
+    assertEquals("buzz", accessor.bar)
+    
+    assertThrows {
+        accessor.bad = "!23"
+    }
+
+Of course, you can return any object from dynamic fields; returning lambdas let create _dynamic methods_ - the callable method. It is very convenient to implement libraries with dynamic remote interfaces, etc.
+
 # Theory
 
 ## Basic principles:
