@@ -26,12 +26,13 @@ and it is multithreaded on platforms supporting it (automatically, no code chang
 `launch` more coroutines and they will be executed concurrently if possible). See [parallelism]
 
 - functional style and OOP together, multiple inheritance, implementing interfaces for existing classes, writing extensions.
-- Any unicode letters can be used as identifiers: `assert( sin(π/2) == 1 )`.
+- Any Unicode letters can be used as identifiers: `assert( sin(π/2) == 1 )`.
 
  ## Resources: 
 
 - [introduction and tutorial](docs/tutorial.md) - start here please
 - [Samples directory](docs/samples)
+- [Books directory](docs)
 
 ## Integration in Kotlin multiplatform
 
@@ -84,8 +85,8 @@ import com.sun.source.tree.Scope
 import new.sergeych.lyng.*
 
 // simple function
-val scope = Scope().apply {
-    addFn("addArgs") {
+val scope = Script.newScope().apply {
+    addFn("sumOf") {
         var sum = 0.0
         for (a in args) sum += a.toDouble()
         ObjReal(sum)
@@ -96,12 +97,14 @@ val scope = Scope().apply {
     // suspend fun doSomeWork(text: String): Int
     addFn("doSomeWork") {
         // this _is_ a suspend lambda, we can call suspend function,
-        // and it won't consume the thread:
-        doSomeWork(args[0].toString()).toObj()
+        // and it won't consume the thread.
+        // note that in kotlin handler, `args` is a list of `Obj` arguments
+        // and return value from this lambda should be Obj too:
+        doSomeWork(args[0]).toObj()
     }
 }
 // adding constant:
-scope.eval("addArgs(1,2,3)") // <- 6
+scope.eval("sumOf(1,2,3)") // <- 6
 ```
 Note that the scope stores all changes in it so you can make calls on a single scope to preserve state between calls.
 
@@ -119,7 +122,7 @@ Designed to add scripting to kotlin multiplatform application in easy and effici
 
 - Javascript, WasmJS, native, JVM, android - batteries included.
 - dynamic types in most elegant and concise way
-- async, 100% coroutines, supports multiple cores where platofrm supports thread
+- async, 100% coroutines, supports multiple cores where platform supports thread
 - good for functional an object-oriented style
 
 # Language Roadmap
@@ -166,7 +169,7 @@ Planned features.
 Further
 
 - [ ] client with GUI support based on compose multiplatform somehow
-- [ ] notebook - style workbooks with graphs, formulaes, etc.
+- [ ] notebook - style workbooks with graphs, formulae, etc.
 - [ ] language server or compose-based lyng-aware editor
 
 [parallelism]: docs/parallelism.md
