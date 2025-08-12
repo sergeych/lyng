@@ -96,7 +96,10 @@ class Compiler(
         return result.toString()
     }
 
+    private var lastAnnotation: (suspend (Scope, ObjString,Statement) -> Statement)? = null
+
     private suspend fun parseStatement(braceMeansLambda: Boolean = false): Statement? {
+        lastAnnotation = null
         while (true) {
             val t = cc.next()
             return when (t.type) {
@@ -113,6 +116,10 @@ class Compiler(
                     parseExpression()
                 }
 
+                Token.Type.ATLABEL -> {
+                    lastAnnotation = parseAnnotation(t) ?: throw ScriptError(t.pos, "can't parse annotation")
+                    continue
+                }
                 Token.Type.LABEL -> continue
                 Token.Type.SINLGE_LINE_COMMENT, Token.Type.MULTILINE_COMMENT -> continue
 
@@ -817,6 +824,26 @@ class Compiler(
     private fun parseNumber(isPlus: Boolean): Obj {
         return parseNumberOrNull(isPlus) ?: throw ScriptError(cc.currentPos(), "Expecting number")
     }
+
+    suspend fun parseAnnotation(t: Token): (suspend (Scope, ObjString,Statement)->Statement) {
+        val extraArgs = parseArgsOrNull()
+        println("annotation ${t.value}: args: $extraArgs")
+        return { scope, name, body ->
+            val extras = extraArgs?.first?.toArguments(scope, extraArgs.second)?.list
+            val required = listOf(name, body)
+            val args = extras?.let { required + it } ?: required
+            val fn = scope.get(t.value)?.value ?: scope.raiseSymbolNotFound("annotation not found: ${t.value}")
+            if( fn !is Statement ) scope.raiseIllegalArgument("annotation must be callable, got ${fn.objClass}")
+            (fn.execute(scope.copy(Arguments(args))) as? Statement)
+                ?: scope.raiseClassCastError("function annotation must return callable")
+        }
+    }
+
+    suspend fun parseArgsOrNull(): Pair<List<ParsedArgument>, Boolean>? =
+        if( cc.skipNextIf(Token.Type.LPAREN))
+            parseArgs()
+        else
+            null
 
     /**
      * Parse keyword-starting statement.
@@ -1572,6 +1599,9 @@ class Compiler(
             throw ScriptError(t.pos, "Expected identifier after 'fun'")
         else t.value
 
+        val annotation = lastAnnotation
+
+
         t = cc.next()
         // Is extension?
         if (t.type == Token.Type.DOT) {
@@ -1622,6 +1652,10 @@ class Compiler(
             // we added fn in the context. now we must save closure
             // for the function
             closure = context
+
+            val annotatedFnBody = annotation?.invoke(context, ObjString(name), fnBody)
+                ?: fnBody
+
             extTypeName?.let { typeName ->
                 // class extension method
                 val type = context[typeName]?.value ?: context.raiseSymbolNotFound("class $typeName not found")
@@ -1629,17 +1663,17 @@ class Compiler(
                 type.addFn(name, isOpen = true) {
                     // ObjInstance has a fixed instance scope, so we need to build a closure
                     (thisObj as? ObjInstance)?.let { i ->
-                        fnBody.execute(ClosureScope(this, i.instanceScope))
+                        annotatedFnBody.execute(ClosureScope(this, i.instanceScope))
                     }
                     // other classes can create one-time scope for this rare case:
-                        ?: fnBody.execute(thisObj.autoInstanceScope(this))
+                        ?: annotatedFnBody.execute(thisObj.autoInstanceScope(this))
                 }
             }
             // regular function/method
-                ?: context.addItem(name, false, fnBody, visibility)
+                ?: context.addItem(name, false, annotatedFnBody, visibility)
             // as the function can be called from anywhere, we have
             // saved the proper context in the closure
-            fnBody
+            annotatedFnBody
         }
         return if (isStatic) {
             currentInitScope += fnCreateStatement

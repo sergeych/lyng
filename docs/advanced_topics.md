@@ -112,6 +112,30 @@ arguments list in almost arbitrary ways. For example:
     )
     >>> void
 
-,
+# Annotations
+
+Annotation in Lyng resembles these proposed for Javascript. Annotation is just regular functions that, if used as annotation, are called when defining a function, var, val or class. 
+
+## Function annotation
+
+When used without params, annotation calls a function with two arguments: actual function name and callable function body. Function annotation __must return callable for the function__, either what it received as a second argument (most often), or something else. Annotation name convention is upper scaled: 
+
+    var annotated = false
+    
+    // this is annotation function:
+    fun Special(name, body) {
+        assertEquals("foo", name)
+        annotated = true
+        { body(it) + 100 }
+    }
+
+    @Special
+    fun foo(value) { value + 1 }
+
+    assert(annotated)
+    assertEquals(111, foo( 10 ))
+    >>> void
+
+Function annotation can have more args specified at call time.
 
 [parallelism]: parallelism.md

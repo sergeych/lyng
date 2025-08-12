@@ -20,7 +20,7 @@ class CompilerContext(val tokens: List<Token>) {
     fun hasNext() = currentIndex < tokens.size
     fun hasPrevious() = currentIndex > 0
     fun next() =
-        if( currentIndex < tokens.size ) tokens[currentIndex++]
+        if (currentIndex < tokens.size) tokens[currentIndex++]
         else Token("", tokens.last().pos, Token.Type.EOF)
 //        throw IllegalStateException("No more tokens")
 
@@ -61,7 +61,7 @@ class CompilerContext(val tokens: List<Token>) {
      */
     fun skipId(name: String): Boolean {
         current().let { t ->
-            if( t.type == Token.Type.ID && t.value == name ) {
+            if (t.type == Token.Type.ID && t.value == name) {
                 next()
                 return true
             }
@@ -91,6 +91,20 @@ class CompilerContext(val tokens: List<Token>) {
                 false
             }
         } else true
+    }
+
+    /**
+     * If next token is one of these types, skip it.
+     * @return true if token was found and skipped
+     */
+    fun skipNextIf(vararg types: Token.Type): Boolean {
+        val t = next()
+        return if (t.type in types)
+            true
+        else {
+            previous()
+            false
+        }
     }
 
     @Suppress("unused")
@@ -143,19 +157,24 @@ class CompilerContext(val tokens: List<Token>) {
     fun matchQualifiers(keyword: String, vararg qualifiers: String): Boolean {
         val pos = savePos()
         var count = 0
-        while( count < qualifiers.size) {
+        while (count < qualifiers.size) {
             val t = next()
-            when(t.type) {
+            when (t.type) {
                 Token.Type.ID -> {
-                    if( t.value in qualifiers ) count++
-                    else { restorePos(pos); return false }
+                    if (t.value in qualifiers) count++
+                    else {
+                        restorePos(pos); return false
+                    }
                 }
+
                 Token.Type.MULTILINE_COMMENT, Token.Type.SINLGE_LINE_COMMENT, Token.Type.NEWLINE -> {}
-                else -> { restorePos(pos); return false }
+                else -> {
+                    restorePos(pos); return false
+                }
             }
         }
         val t = next()
-        if( t.type == Token.Type.ID && t.value == keyword ) {
+        if (t.type == Token.Type.ID && t.value == keyword) {
             return true
         } else {
             restorePos(pos)
@@ -168,7 +187,7 @@ class CompilerContext(val tokens: List<Token>) {
      * Note that [Token.Type.EOF] is not considered a whitespace token.
      */
     fun skipWsTokens(): Token {
-        while( current().type in wstokens ) {
+        while (current().type in wstokens) {
             next()
         }
         return next()

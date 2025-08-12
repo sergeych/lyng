@@ -157,6 +157,7 @@ Ready features:
 - [x] typesafe bit-effective serialization
 - [x] compression/decompression (integrated in serialization)
 - [x] dynamic fields
+- [x] function annotations
 
 ###  Under way: 
 

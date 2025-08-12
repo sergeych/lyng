@@ -2831,4 +2831,28 @@ class ScriptTest {
         )
     }
 
+    @Test
+    fun tesFunAnnotation() = runTest {
+        eval("""
+        
+            val exportedSymbols = Map()
+            
+            fun Exported(name, f, overrideName = null) {
+                assertEquals(name, "getBalance")
+                assertEquals(null, overrideName)
+                exportedSymbols[ overrideName ?: name ] = f
+                f
+            }
+            
+            @Exported
+            fun getBalance(x = 0) {
+                121 + x
+            }
+            
+            assert( exportedSymbols["getBalance"] != null )
+            assertEquals(122, getBalance(1))
+            
+        """.trimIndent())
+    }
+
 }

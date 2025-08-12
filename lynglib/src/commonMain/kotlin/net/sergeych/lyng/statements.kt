@@ -2,6 +2,7 @@ package net.sergeych.lyng
 
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjClass
+import net.sergeych.lyng.obj.ObjNull
 import net.sergeych.lyng.obj.ObjVoid
 
 fun String.toSource(name: String = "eval"): Source = Source(name, this)
@@ -28,6 +29,7 @@ abstract class Statement(
     abstract suspend fun execute(scope: Scope): Obj
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
+        if( other == ObjNull || other == ObjVoid ) return 1
         throw UnsupportedOperationException("not comparable")
     }
 
