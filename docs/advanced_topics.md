@@ -136,6 +136,25 @@ When used without params, annotation calls a function with two arguments: actual
     assertEquals(111, foo( 10 ))
     >>> void
 
-Function annotation can have more args specified at call time.
+Function annotation can have more args specified at call time. There arguments must follow two mandatory ones (name and body). Use default values in order to allow parameterless annotation to be used simultaneously.
+
+    val registered = Map()
+
+    // it is recommended to provide defaults for extra parameters:
+    fun Registered(name, body, overrideName = null) {
+        registered[ overrideName ?: name ] = body
+        body
+    }
+
+    // witout parameters is Ok as we provided default value
+    @Registered
+    fun foo() { "called foo" }
+
+    @Registered("bar") 
+    fun foo2() { "called foo2" }
+
+    assertEquals(registered["foo"](), "called foo")
+    assertEquals(registered["bar"](), "called foo2")
+    >>> void
 
 [parallelism]: parallelism.md
