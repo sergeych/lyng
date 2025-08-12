@@ -1,5 +1,6 @@
 package net.sergeych.lyng
 
+import ObjEnumClass
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportProvider
 
@@ -858,7 +859,8 @@ class Compiler(
         "break" -> parseBreakStatement(id.pos)
         "continue" -> parseContinueStatement(id.pos)
         "if" -> parseIfStatement()
-        "class" -> parseClassDeclaration(false)
+        "class" -> parseClassDeclaration()
+        "enum" -> parseEnumDeclaration()
         "try" -> parseTryStatement()
         "throw" -> parseThrowStatement()
         "when" -> parseWhenStatement()
@@ -1145,7 +1147,40 @@ class Compiler(
         }
     }
 
-    private suspend fun parseClassDeclaration(isStruct: Boolean): Statement {
+    private fun parseEnumDeclaration(): Statement {
+        val nameToken = cc.requireToken(Token.Type.ID)
+        // so far only simplest enums:
+        val names = mutableListOf<String>()
+        // skip '{'
+        cc.skipTokenOfType(Token.Type.LBRACE)
+
+        do {
+            val t = cc.skipWsTokens()
+            when(t.type) {
+                Token.Type.ID -> {
+                    names += t.value
+                    val t1 = cc.skipWsTokens()
+                    when(t1.type) {
+                        Token.Type.COMMA ->
+                            continue
+                        Token.Type.RBRACE -> break
+                        else -> {
+                            t1.raiseSyntax("unexpected token")
+                        }
+                    }
+                }
+                else -> t.raiseSyntax("expected enum entry name")
+            }
+        } while(true)
+
+        return statement {
+            ObjEnumClass.createSimpleEnum(nameToken.value, names).also {
+                addItem(nameToken.value, false, it, recordType = ObjRecord.Type.Enum)
+            }
+        }
+    }
+
+    private suspend fun parseClassDeclaration(): Statement {
         val nameToken = cc.requireToken(Token.Type.ID)
         val constructorArgsDeclaration =
             if (cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true))
@@ -1178,8 +1213,8 @@ class Compiler(
         // create class
         val className = nameToken.value
 
-        @Suppress("UNUSED_VARIABLE") val defaultAccess = if (isStruct) AccessType.Var else AccessType.Initialization
-        @Suppress("UNUSED_VARIABLE") val defaultVisibility = Visibility.Public
+//        @Suppress("UNUSED_VARIABLE") val defaultAccess = if (isStruct) AccessType.Var else AccessType.Initialization
+//        @Suppress("UNUSED_VARIABLE") val defaultVisibility = Visibility.Public
 
         // create instance constructor
         // create custom objClass with all fields and instance constructor

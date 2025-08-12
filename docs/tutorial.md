@@ -475,7 +475,7 @@ Lyng has built-in mutable array class `List` with simple literals:
     [1, "two", 3.33].size
     >>> 3
 
-[List] is an implementation of the type `Array`, and through it `Collection` and [Iterable].
+[List] is an implementation of the type `Array`, and through it `Collection` and [Iterable]. Please read [Iterable], many collection based methods are implemented there.
 
 Lists can contain any type of objects, lists too:
 
@@ -1119,6 +1119,25 @@ These should be imported from [lyng.time](time.md). For example:
     val hourAgo = now - 1.hour
 
 See [more docs on time manipulation](time.md)
+
+# Enums
+
+For the moment, only simple enums are implemented. Enum is a list of constants, represented also by their _ordinal_ - [Int] value.
+
+    enum Color {
+        RED, GREEN, BLUE
+    }
+    
+    assert( Color.RED is Color )
+
+    assertEquals( 2, Color.BLUE.ordinal )
+    assertEquals( "BLUE", Color.BLUE.name )
+    
+    assertEquals( [Color.RED,Color.GREEN,Color.BLUE], Color.entries)
+    assertEquals( Color.valueOf("GREEN"), Color.GREEN )
+    >>> void
+
+Enums are serialized as ordinals. Please note that due to caching, serialized string arrays could be even more compact than enum arrays, until `Lynon.encodeTyped` will be implemented.
 
 # Comments
 

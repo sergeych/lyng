@@ -19,6 +19,9 @@ data class ObjRecord(
         @Suppress("unused")
         Fun,
         ConstructorField(true, true),
+        @Suppress("unused")
+        Class,
+        Enum,
         Other
     }
     @Suppress("unused")

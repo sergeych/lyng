@@ -1,6 +1,10 @@
 package net.sergeych.lyng
 
 data class Token(val value: String, val pos: Pos, val type: Type) {
+    fun raiseSyntax(text: String): Nothing {
+        throw ScriptError(pos, text)
+    }
+
     val isComment: Boolean by lazy { type == Type.SINLGE_LINE_COMMENT || type == Type.MULTILINE_COMMENT }
 
     @Suppress("unused")
