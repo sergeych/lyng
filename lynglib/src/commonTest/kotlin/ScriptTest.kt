@@ -2887,9 +2887,10 @@ class ScriptTest {
             val e = Lynon.encode(Color.BLUE)
             assertEquals( Color.BLUE, Lynon.decode(e) )
             println(e.toDump())
-            
-            val e1 = Lynon.encode( (1..100).map { Color.GREEN } )
+
+            val e1 = Lynon.encode( (1..1000).map { Color.GREEN } )
             println(e1.toDump())
+            assert( e1.size / 1000.0 < 6)
             println(Lynon.encode( (1..100).map { "RED" } ).toDump() )
             
         """.trimIndent())
