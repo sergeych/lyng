@@ -117,7 +117,7 @@ class Compiler(
                 }
 
                 Token.Type.ATLABEL -> {
-                    lastAnnotation = parseAnnotation(t) ?: throw ScriptError(t.pos, "can't parse annotation")
+                    lastAnnotation = parseAnnotation(t)
                     continue
                 }
                 Token.Type.LABEL -> continue
