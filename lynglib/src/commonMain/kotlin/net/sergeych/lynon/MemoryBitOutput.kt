@@ -102,7 +102,7 @@ class BitArray(val bytes: UByteArray, val lastByteBits: Int) : BitList {
  * in the bit 0x02 of the first byte, etc.
  *
  * This allows automatic fill of the last byte with zeros. This is important when
- * using bytes stored from [asByteArray] or [asUbyteArray]. When converting to
+ * using bytes stored from [asByteArray] or `asUbyteArray`. When converting to
  * bytes, automatic padding to byte size is applied. With such bit order, constructing
  * [BitInput] to read from [ByteArray.toUByteArray] result only provides 0 to 7 extra zeroes bits
  * at teh end which is often acceptable. To avoid this, use [toBitArray]; the [BitArray]

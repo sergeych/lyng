@@ -99,6 +99,8 @@ interface BitInput {
     fun decompressStringOrNull(): String? = decompressOrNull()?.decodeToString()
 
     fun decompressString(): String = decompress().decodeToString()
+
+    @Suppress("unused")
     fun unpackDouble(): Double {
         val bits = getBits(64)
         return Double.fromBits(bits.toLong())

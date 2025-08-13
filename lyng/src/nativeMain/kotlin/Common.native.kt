@@ -15,7 +15,9 @@
  *
  */
 
-@file:OptIn(ExperimentalForeignApi::class, ExperimentalForeignApi::class, ExperimentalForeignApi::class)
+@file:OptIn(ExperimentalForeignApi::class, ExperimentalForeignApi::class, ExperimentalForeignApi::class,
+    ExperimentalForeignApi::class
+)
 
 package net.sergeych
 
