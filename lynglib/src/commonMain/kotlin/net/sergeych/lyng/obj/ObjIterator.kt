@@ -17,5 +17,26 @@
 
 package net.sergeych.lyng.obj
 
-val ObjIterator by lazy { ObjClass("Iterator") }
+/**
+ * Iterator should provide lyng-level iterator functions:
+ *
+ * - hasNext()
+ * - next()
+ * - optional cancelIteration() that _may_ be called when iteration is performed
+ *   only on the part of the iterable entity. Implement it when there are resources
+ *   to be reclaimed on iteration interruption.
+ */
+val ObjIterator by lazy {
+    ObjClass("Iterator").apply {
+        addFn("cancelIteration", true) {
+            ObjVoid
+        }
+        addFn("hasNext", true) {
+            raiseNotImplemented("hasNext() is not implemented")
+        }
+        addFn("next", true) {
+            raiseNotImplemented("next() is not implemented")
+        }
+    }
+}
 
