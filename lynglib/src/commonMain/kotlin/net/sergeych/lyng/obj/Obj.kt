@@ -1,3 +1,20 @@
+/*
+ * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
 package net.sergeych.lyng.obj
 
 import kotlinx.coroutines.sync.Mutex
@@ -513,6 +530,7 @@ open class ObjException(exceptionClass: ExceptionClass, val scope: Scope, val me
                 "IterationEndException",
                 "AccessException",
                 "UnknownException",
+                "NotFoundException"
             )) {
                 scope.addConst(name, getOrCreateExceptionClass(name))
             }
@@ -556,3 +574,6 @@ class ObjUnknownException(scope: Scope, message: String = "access not allowed er
 
 class ObjIllegalOperationException(scope: Scope, message: String = "Operation is illegal") :
     ObjException("IllegalOperationException", scope, message)
+
+class ObjNotFoundException(scope: Scope, message: String = "not found") :
+    ObjException("NotFoundException", scope, message)
