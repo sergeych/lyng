@@ -109,7 +109,7 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
     companion object {
 
 
-        val type = object : ObjClass("Set", ObjCollection) {
+        val type: ObjClass = object : ObjClass("Set", ObjCollection) {
             override suspend fun callOn(scope: Scope): Obj {
                 return ObjSet(scope.args.list.toMutableSet())
             }

@@ -59,12 +59,16 @@ val ObjIterable by lazy {
         }
 
         addFn("toSet") {
-            val result = mutableSetOf<Obj>()
-            val it = thisObj.invokeInstanceMethod(this, "iterator")
-            while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
-                result += it.invokeInstanceMethod(this, "next")
+            if( thisObj.isInstanceOf(ObjSet.type) )
+                thisObj
+            else {
+                val result = mutableSetOf<Obj>()
+                val it = thisObj.invokeInstanceMethod(this, "iterator")
+                while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
+                    result += it.invokeInstanceMethod(this, "next")
+                }
+                ObjSet(result)
             }
-            ObjSet(result)
         }
 
         addFn("toMap") {

@@ -28,7 +28,7 @@ import net.sergeych.lyng.obj.ObjString
 
 object ObjLynonClass : ObjClass("Lynon") {
 
-    suspend fun encodeAny(scope: Scope, obj: Obj): Obj {
+    suspend fun encodeAny(scope: Scope, obj: Obj): ObjBitBuffer {
         val bout = MemoryBitOutput()
         val serializer = LynonEncoder(bout)
         serializer.encodeAny(scope, obj)
@@ -52,3 +52,17 @@ object ObjLynonClass : ObjClass("Lynon") {
         }
     }
 }
+
+@Suppress("unused")
+suspend fun lynonEncodeAny(scope: Scope, value: Obj): UByteArray =
+    (ObjLynonClass.encodeAny(scope, value))
+        .bitArray.asUbyteArray()
+
+@Suppress("unused")
+suspend fun lynonDecodeAny(scope: Scope, encoded: UByteArray): Obj =
+    ObjLynonClass.decodeAny(
+        scope,
+        ObjBitBuffer(
+            BitArray(encoded, 8)
+        )
+    )

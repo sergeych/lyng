@@ -65,7 +65,6 @@ open class LynonDecoder(val bin: BitInput, val settings: LynonSettings = LynonSe
 
     private suspend fun decodeClassObj(scope: Scope): ObjClass {
         val className = decodeObject(scope, ObjString.type, null) as ObjString
-        println("expected class name $className")
         return scope.get(className.value)?.value?.let {
             if (it !is ObjClass)
                 scope.raiseClassCastError("Expected obj class but got ${it::class.simpleName}")

@@ -88,18 +88,15 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         val vars = instanceVars.values.map { it.value }
         if( vars.isNotEmpty()) {
             encoder.encodeAnyList(scope, vars)
-            println("serialized state vars $vars")
         }
     }
 
     internal suspend fun deserializeStateVars(scope: Scope, decoder: LynonDecoder) {
         val localVars = instanceVars.values.toList()
         if( localVars.isNotEmpty() ) {
-            println("gonna read vars")
             val vars = decoder.decodeAnyList(scope)
             if (vars.size > instanceVars.size)
                 scope.raiseIllegalArgument("serialized vars has bigger size than instance vars")
-            println("deser state vars $vars")
             for ((i, v) in vars.withIndex()) {
                 localVars[i].value = v
             }

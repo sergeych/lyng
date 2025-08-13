@@ -29,7 +29,6 @@ class ObjInstanceClass(val name: String) : ObjClass(name) {
 
     override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj {
         val args = decoder.decodeAnyList(scope)
-        println("deserializing constructor $name, $args params")
         val actualSize = constructorMeta?.params?.size ?: 0
         if( args.size > actualSize )
             scope.raiseIllegalArgument("constructor $name has only $actualSize but serialized version has ${args.size}")
