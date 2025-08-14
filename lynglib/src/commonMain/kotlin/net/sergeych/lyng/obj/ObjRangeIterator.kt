@@ -56,7 +56,7 @@ class ObjRangeIterator(val self: ObjRange) : Obj() {
         }
 
     companion object {
-        val type = ObjClass("RangeIterator", ObjIterable).apply {
+        val type = ObjClass("RangeIterator", ObjIterator).apply {
             addFn("hasNext") {
                 thisAs<ObjRangeIterator>().hasNext().toObj()
             }

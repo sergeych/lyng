@@ -747,7 +747,7 @@ You can thest that _when expression_ is _contained_, or not contained, in some o
 `!in container`. The container is any object that provides `contains` method, otherwise the runtime exception will be
 thrown.
 
-Typical builtin types that are containers (e.g. support `conain`):
+Typical builtin types that are containers (e.g. support `contains`):
 
 | class      | notes                                          |
 |------------|------------------------------------------------|
@@ -756,6 +756,8 @@ Typical builtin types that are containers (e.g. support `conain`):
 | List       | faster than Array's                            |
 | String     | character in string or substring in string (3) |
 | Range      | object is included in the range (2)            |
+| Buffer     | byte is in buffer                              |
+| RingBuffer | object is in buffer                            |
 
 (1)
 : Iterable is not the container as it can be infinite
@@ -1296,18 +1298,20 @@ if blank, will be removed too, for example:
 
 See [math functions](math.md). Other general purpose functions are:
 
-| name                                       | description                                               |
-|--------------------------------------------|-----------------------------------------------------------|
-| assert(condition,message="assertion failed") | runtime code check. There will be an option to skip them  |
-| assertEquals(a,b)                          |                                                           |
-| assertNotEquals(a,b)                       |                                                           |
-| assertTrows { /* block */ }                |                                                           |
-| check(condition, message=<default>)        | throws IllegalStateException" of condition isn't met      |
-| require(condition, message=<default>)      | throws IllegalArgumentException" of condition isn't met   |
-| println(args...)                           | Open for overriding, it prints to stdout with newline.    |
-| print(args...)                             | Open for overriding, it prints to stdout without newline. |
-| flow {}                                    | create flow sequence, see [parallelism]                   |
-| delay, launch, yield                       | see [parallelism]                                         |
+| name                                         | description                                                |
+|----------------------------------------------|------------------------------------------------------------|
+| assert(condition,message="assertion failed") | runtime code check. There will be an option to skip them   |
+| assertEquals(a,b)                            |                                                            |
+| assertNotEquals(a,b)                         |                                                            |
+| assertTrows { /* block */ }                  |                                                            |
+| check(condition, message=<default>)          | throws IllegalStateException" of condition isn't met       |
+| require(condition, message=<default>)        | throws IllegalArgumentException" of condition isn't met    |
+| println(args...)                             | Open for overriding, it prints to stdout with newline.     |
+| print(args...)                               | Open for overriding, it prints to stdout without newline.  |
+| flow {}                                      | create flow sequence, see [parallelism]                    |
+| delay, launch, yield                         | see [parallelism]                                          |
+| cached(builder)                              | remembers builder() on first invocation and return it then |
+
 
 # Built-in constants
 

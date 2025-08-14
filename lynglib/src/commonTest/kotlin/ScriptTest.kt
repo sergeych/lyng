@@ -2913,5 +2913,33 @@ class ScriptTest {
         """.trimIndent())
     }
 
+    @Test
+    fun cachedTest() = runTest {
+        eval( """
+        
+        var counter = 0
+        var value = cached {
+            counter++
+            "ok"
+        }
+        
+        assertEquals(0, counter)
+        assertEquals("ok", value())
+        assertEquals(1, counter)
+        assertEquals("ok", value())
+        assertEquals(1, counter)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testJoinToString() = runTest {
+        eval("""
+            assertEquals( (1..3).joinToString(), "1 2 3")
+            assertEquals( (1..3).joinToString(":"), "1:2:3")
+            assertEquals( (1..3).joinToString { it * 10 }, "10 20 30")
+        """.trimIndent())
+    }
+
+
 
 }

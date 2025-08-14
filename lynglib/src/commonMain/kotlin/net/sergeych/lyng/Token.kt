@@ -24,6 +24,10 @@ data class Token(val value: String, val pos: Pos, val type: Type) {
 
     val isComment: Boolean by lazy { type == Type.SINLGE_LINE_COMMENT || type == Type.MULTILINE_COMMENT }
 
+    fun isId(text: String) =
+        type == Type.ID && value == text
+
+
     @Suppress("unused")
     enum class Type {
         ID, INT, REAL, HEX, STRING, CHAR,

@@ -87,7 +87,7 @@ class Compiler(
                 statements += it
             }
             if (s == null) {
-                when( t.type ) {
+                when (t.type) {
                     Token.Type.RBRACE, Token.Type.EOF, Token.Type.SEMICOLON -> {}
                     else ->
                         throw ScriptError(t.pos, "unexpeced `${t.value}` here")
@@ -114,7 +114,7 @@ class Compiler(
         return result.toString()
     }
 
-    private var lastAnnotation: (suspend (Scope, ObjString,Statement) -> Statement)? = null
+    private var lastAnnotation: (suspend (Scope, ObjString, Statement) -> Statement)? = null
 
     private suspend fun parseStatement(braceMeansLambda: Boolean = false): Statement? {
         lastAnnotation = null
@@ -138,6 +138,7 @@ class Compiler(
                     lastAnnotation = parseAnnotation(t)
                     continue
                 }
+
                 Token.Type.LABEL -> continue
                 Token.Type.SINLGE_LINE_COMMENT, Token.Type.MULTILINE_COMMENT -> continue
 
@@ -843,7 +844,7 @@ class Compiler(
         return parseNumberOrNull(isPlus) ?: throw ScriptError(cc.currentPos(), "Expecting number")
     }
 
-    suspend fun parseAnnotation(t: Token): (suspend (Scope, ObjString,Statement)->Statement) {
+    suspend fun parseAnnotation(t: Token): (suspend (Scope, ObjString, Statement) -> Statement) {
         val extraArgs = parseArgsOrNull()
         println("annotation ${t.value}: args: $extraArgs")
         return { scope, name, body ->
@@ -851,14 +852,14 @@ class Compiler(
             val required = listOf(name, body)
             val args = extras?.let { required + it } ?: required
             val fn = scope.get(t.value)?.value ?: scope.raiseSymbolNotFound("annotation not found: ${t.value}")
-            if( fn !is Statement ) scope.raiseIllegalArgument("annotation must be callable, got ${fn.objClass}")
+            if (fn !is Statement) scope.raiseIllegalArgument("annotation must be callable, got ${fn.objClass}")
             (fn.execute(scope.copy(Arguments(args))) as? Statement)
                 ?: scope.raiseClassCastError("function annotation must return callable")
         }
     }
 
     suspend fun parseArgsOrNull(): Pair<List<ParsedArgument>, Boolean>? =
-        if( cc.skipNextIf(Token.Type.LPAREN))
+        if (cc.skipNextIf(Token.Type.LPAREN))
             parseArgs()
         else
             null
@@ -1173,22 +1174,24 @@ class Compiler(
 
         do {
             val t = cc.skipWsTokens()
-            when(t.type) {
+            when (t.type) {
                 Token.Type.ID -> {
                     names += t.value
                     val t1 = cc.skipWsTokens()
-                    when(t1.type) {
+                    when (t1.type) {
                         Token.Type.COMMA ->
                             continue
+
                         Token.Type.RBRACE -> break
                         else -> {
                             t1.raiseSyntax("unexpected token")
                         }
                     }
                 }
+
                 else -> t.raiseSyntax("expected enum entry name")
             }
-        } while(true)
+        } while (true)
 
         return statement {
             ObjEnumClass.createSimpleEnum(nameToken.value, names).also {
@@ -1263,7 +1266,6 @@ class Compiler(
                 newClass.classScope = classScope
                 for (s in initScope)
                     s.execute(classScope)
-                        .also { println("executed, ${classScope.objects}") }
             }
             newClass
         }
@@ -1766,24 +1768,31 @@ class Compiler(
 
         val eqToken = cc.next()
         var setNull = false
-        if (eqToken.type != Token.Type.ASSIGN) {
-            if (!isMutable)
-                throw ScriptError(start, "val must be initialized")
-            else {
-                cc.previous()
-                setNull = true
+
+        val isDelegate = if (eqToken.isId("by")) {
+            true
+        } else {
+            if (eqToken.type != Token.Type.ASSIGN) {
+                if (!isMutable)
+                    throw ScriptError(start, "val must be initialized")
+                else {
+                    cc.previous()
+                    setNull = true
+                }
             }
+            false
         }
 
-        val initialExpression = if (setNull) null else parseStatement(true)
+        val initialExpression = if (setNull) null
+        else parseStatement(true)
             ?: throw ScriptError(eqToken.pos, "Expected initializer expression")
 
         if (isStatic) {
             // find objclass instance: this is tricky: this code executes in object initializer,
             // when creating instance, but we need to execute it in the class initializer which
             // is missing as for now. Add it to the compiler context?
-            // add there
-            // return
+
+            if (isDelegate) throw ScriptError(start, "static delegates are not yet implemented")
             currentInitScope += statement {
                 val initValue = initialExpression?.execute(this)?.byValueCopy() ?: ObjNull
                 (thisObj as ObjClass).createClassField(name, initValue, isMutable, visibility, pos)
@@ -1797,12 +1806,31 @@ class Compiler(
             if (context.containsLocal(name))
                 throw ScriptError(nameToken.pos, "Variable $name is already defined")
 
-            // init value could be a val; when we initialize by-value type var with it, we need to
-            // create a separate copy:
-            val initValue = initialExpression?.execute(context)?.byValueCopy() ?: ObjNull
-
-            context.addItem(name, isMutable, initValue, visibility, recordType = ObjRecord.Type.Field)
-            initValue
+            if (isDelegate) {
+                println("initial expr = $initialExpression")
+                val initValue =
+                    (initialExpression?.execute(context.copy(Arguments(ObjString(name)))) as? Statement)
+                        ?.execute(context.copy(Arguments(ObjString(name))))
+                    ?: context.raiseError("delegate initialization required")
+                println("delegate init: $initValue")
+                if (!initValue.isInstanceOf(ObjArray))
+                    context.raiseIllegalArgument("delegate initialized must be an array")
+                val s = initValue.getAt(context, 1)
+                val setter = if (s == ObjNull) statement { raiseNotImplemented("setter is not provided") }
+                else (s as? Statement) ?: context.raiseClassCastError("setter must be a callable")
+                ObjDelegate(
+                    (initValue.getAt(context, 0) as? Statement)
+                        ?: context.raiseClassCastError("getter must be a callable"), setter
+                ).also {
+                    context.addItem(name, isMutable, it, visibility, recordType = ObjRecord.Type.Field)
+                }
+            } else {
+                // init value could be a val; when we initialize by-value type var with it, we need to
+                // create a separate copy:
+                val initValue = initialExpression?.execute(context)?.byValueCopy() ?: ObjNull
+                context.addItem(name, isMutable, initValue, visibility, recordType = ObjRecord.Type.Field)
+                initValue
+            }
         }
     }
 

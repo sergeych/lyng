@@ -26,35 +26,57 @@ Just remember at this stage typed declarations are not yet supported.
 Having `Iterable` in base classes allows to use it in for loop. Also, each `Iterable` has some utility functions available, for example
 
     val r = 1..10  // Range is Iterable!  
-    assertEquals( [9,10] r.takeLast(2) )
-    assertEquals( [1,2,3] r.take(3) )
-    assertEquals( [9,10] r.drop(8) )
-    assertEquals( [1,2] r.dropLast(8) )
+    assertEquals( [9,10], r.takeLast(2).toList() )
+    assertEquals( [1,2,3], r.take(3).toList() )
+    assertEquals( [9,10], r.drop(8).toList() )
+    assertEquals( [1,2], r.dropLast(8).toList() )
+    >>> void
+
+## joinToString
+
+This methods convert any iterable to a string joining string representation of each element, optionally transforming it and joining using specified suffix.
+
+    Iterable.joinToString(suffux=' ', transform=null)
+
+- if `Iterable` `isEmpty`, the empty string `""` is returned.
+- `suffix` is inserted between items when there are more than one. 
+- `transform` of specified is applied to each element, otherwise its `toString()` method is used.
+
+Here is the sample:
+
+    assertEquals( (1..3).joinToString(), "1 2 3")
+    assertEquals( (1..3).joinToString(":"), "1:2:3")
+    assertEquals( (1..3).joinToString { it * 10 }, "10 20 30")
     >>> void
 
 ## Instance methods:
 
-| fun/method      | description                                                                     |
-|-----------------|---------------------------------------------------------------------------------|
-| toList()        | create a list from iterable                                                     |
-| toSet()         | create a set from iterable                                                      |
-| contains(i)     | check that iterable contains `i`                                                |
-| `i in iterator` | same as `contains(i)`                                                           |
-| isEmpty()       | check iterable is empty                                                         |
-| forEach(f)      | call f for each element                                                         |
-| toMap()         | create a map from list of key-value pairs (arrays of 2 items or like)           |
-| map(f)          | create a list of values returned by `f` called for each element of the iterable |
-| indexOf(i)      | return index if the first encounter of i or a negative value if not found       |
-| associateBy(kf) | create a map where keys are returned by kf that will be called for each element |
-| first           | first element (1)                                                               |
-| last            | last element (1)                                                                |
-| take(n)         | return [Iterable] of up to n first elements                                     |
-| taleLast(n)     | return [Iterable] of up to n last elements                                      |
-| drop(n)         | return new [Iterable] without first n elements                                  |
-| dropLast(n)     | return new [Iterable] without last n elements                                   |
+
+| fun/method        | description                                                               |
+|-------------------|---------------------------------------------------------------------------|
+| toList()          | create a list from iterable                                               |
+| toSet()           | create a set from iterable                                                |
+| contains(i)       | check that iterable contains `i`                                          |
+| `i in iterator`   | same as `contains(i)`                                                     |
+| isEmpty()         | check iterable is empty                                                   |
+| forEach(f)        | call f for each element                                                   |
+| toMap()           | create a map from list of key-value pairs (arrays of 2 items or like)     |
+| map(f)            | create a list of values returned by `f` called for each element of the iterable |
+| indexOf(i)        | return index if the first encounter of i or a negative value if not found |
+| associateBy(kf)   | create a map where keys are returned by kf that will be called for each element |
+| first             | first element (1)                                                         |
+| last              | last element (1)                                                          |
+| take(n)           | return [Iterable] of up to n first elements                               |
+| taleLast(n)       | return [Iterable] of up to n last elements                                |
+| drop(n)           | return new [Iterable] without first n elements                            |
+| dropLast(n)       | return new [Iterable] without last n elements                             |
+| joinToString(s,t) | convert iterable to string, see (2)                                       |
 
 (1)
 : throws `NoSuchElementException` if there is no such element 
+
+(2)
+: `joinToString(suffix=" ",transform=null)`: suffix is inserted between items if there are more than one, trasnfom is optional function applied to each item that must return result string for an item, otherwise `item.toString()` is used. 
 
     fun Iterable.toList(): List
     fun Iterable.toSet(): Set

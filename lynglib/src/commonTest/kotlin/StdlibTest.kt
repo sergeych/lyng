@@ -40,8 +40,9 @@ class StdlibTest {
     @Test
     fun testTake() = runTest {
         eval("""
-            assertEquals([1,2,3], (1..8).take(3).toList() )
-            assertEquals([7,8], (1..8).takeLast(2).toList() )
+            val r = 1..8
+            assertEquals([1,2,3], r.take(3).toList() )
+            assertEquals([7,8], r.takeLast(2).toList() )
         """.trimIndent())
     }
 

@@ -317,4 +317,9 @@ class BookTest {
         runDocTests("../docs/RingBuffer.md")
     }
 
+    @Test
+    fun testIterable() = runBlocking {
+        runDocTests("../docs/Iterable.md")
+    }
+
 }

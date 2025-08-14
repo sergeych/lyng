@@ -19,6 +19,18 @@ package net.sergeych.lyng.stdlib_included
 internal val rootLyng = """
 package lyng.stdlib
     
+fun cached(builder) {
+    var calculated = false
+    var value = null
+    {
+        if( !calculated ) {
+            value = builder()
+            calculated = true
+        }
+        value
+    }
+}
+    
 fun Iterable.filter(predicate) {
     val list = this
     flow {
@@ -38,7 +50,7 @@ fun Iterable.drop(n) {
 fun Iterable.first() {
     val i = iterator()
     if( !i.hasNext() ) throw NoSuchElementException()
-    i.next()
+    i.next().also { i.cancelIteration() }
 }
 
 fun Iterable.last() {
@@ -69,6 +81,16 @@ fun Iterable.takeLast(n) {
     val buffer = RingBuffer(n)
     for( item in list ) buffer += item
     buffer
+}
+
+fun Iterable.joinToString(prefix=" ", transformer=null) {
+    var result = null
+    for( part in this ) {
+        val transformed = transformer?(part)?.toString() ?: part.toString()
+        if( result == null ) result = transformed
+        else result += prefix + transformed
+    }
+    result ?: ""
 }
     
 """.trimIndent()
