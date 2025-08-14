@@ -1792,7 +1792,7 @@ class Compiler(
             // when creating instance, but we need to execute it in the class initializer which
             // is missing as for now. Add it to the compiler context?
 
-            if (isDelegate) throw ScriptError(start, "static delegates are not yet implemented")
+//            if (isDelegate) throw ScriptError(start, "static delegates are not yet implemented")
             currentInitScope += statement {
                 val initValue = initialExpression?.execute(this)?.byValueCopy() ?: ObjNull
                 (thisObj as ObjClass).createClassField(name, initValue, isMutable, visibility, pos)
@@ -1807,23 +1807,24 @@ class Compiler(
                 throw ScriptError(nameToken.pos, "Variable $name is already defined")
 
             if (isDelegate) {
-                println("initial expr = $initialExpression")
-                val initValue =
-                    (initialExpression?.execute(context.copy(Arguments(ObjString(name)))) as? Statement)
-                        ?.execute(context.copy(Arguments(ObjString(name))))
-                    ?: context.raiseError("delegate initialization required")
-                println("delegate init: $initValue")
-                if (!initValue.isInstanceOf(ObjArray))
-                    context.raiseIllegalArgument("delegate initialized must be an array")
-                val s = initValue.getAt(context, 1)
-                val setter = if (s == ObjNull) statement { raiseNotImplemented("setter is not provided") }
-                else (s as? Statement) ?: context.raiseClassCastError("setter must be a callable")
-                ObjDelegate(
-                    (initValue.getAt(context, 0) as? Statement)
-                        ?: context.raiseClassCastError("getter must be a callable"), setter
-                ).also {
-                    context.addItem(name, isMutable, it, visibility, recordType = ObjRecord.Type.Field)
-                }
+                TODO()
+//                println("initial expr = $initialExpression")
+//                val initValue =
+//                    (initialExpression?.execute(context.copy(Arguments(ObjString(name)))) as? Statement)
+//                        ?.execute(context.copy(Arguments(ObjString(name))))
+//                    ?: context.raiseError("delegate initialization required")
+//                println("delegate init: $initValue")
+//                if (!initValue.isInstanceOf(ObjArray))
+//                    context.raiseIllegalArgument("delegate initialized must be an array")
+//                val s = initValue.getAt(context, 1)
+//                val setter = if (s == ObjNull) statement { raiseNotImplemented("setter is not provided") }
+//                else (s as? Statement) ?: context.raiseClassCastError("setter must be a callable")
+//                ObjDelegate(
+//                    (initValue.getAt(context, 0) as? Statement)
+//                        ?: context.raiseClassCastError("getter must be a callable"), setter
+//                ).also {
+//                    context.addItem(name, isMutable, it, visibility, recordType = ObjRecord.Type.Field)
+//                }
             } else {
                 // init value could be a val; when we initialize by-value type var with it, we need to
                 // create a separate copy:
