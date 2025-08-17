@@ -103,12 +103,7 @@ fun Iterable.any(predicate): Bool {
 }
 
 fun Iterable.all(predicate): Bool {
-    for( i in this ) {
-        if( !predicate(i) ) {
-            break false
-        }
-    }
-    else true
+    !any { !predicate(it) }
 }
     
 """.trimIndent()
