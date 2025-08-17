@@ -376,6 +376,11 @@ class Compiler(
 
                         }
 
+                        "throw" -> {
+                            val s = parseThrowStatement()
+                            operand = Accessor { s.execute(it).asReadonly }
+                        }
+
                         else -> operand?.let { left ->
                             // selector: <lvalue>, '.' , <id>
                             // we replace operand with selector code, that

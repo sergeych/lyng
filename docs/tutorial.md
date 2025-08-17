@@ -225,6 +225,19 @@ It works much like `also`, but is executed in the context of the source object:
     assertEquals(p, Point(2,3))
     >>> void
 
+## run
+
+Executes a block after it returning the value passed by the block. for example, can be used with elvis operator:
+
+    var someVar = null
+    val result = someVar ?: run {
+      someVar = 121
+      "reset"
+    }
+    assertEquals("reset", result)
+    assertEquals(121, someVar)
+    >>> void
+
 ## Math
 
 It is rather simple, like everywhere else:
@@ -1311,6 +1324,7 @@ See [math functions](math.md). Other general purpose functions are:
 | flow {}                                      | create flow sequence, see [parallelism]                    |
 | delay, launch, yield                         | see [parallelism]                                          |
 | cached(builder)                              | remembers builder() on first invocation and return it then |
+| let, also, apply, run                        | see above, flow controls                                   |
 
 
 # Built-in constants

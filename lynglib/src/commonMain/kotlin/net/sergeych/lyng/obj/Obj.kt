@@ -315,6 +315,9 @@ open class Obj {
                 args.firstAndOnly().callOn(copy(Arguments(thisObj)))
                 thisObj
             }
+            addFn("run") {
+                args.firstAndOnly().callOn(this)
+            }
             addFn("getAt") {
                 requireExactCount(1)
                 thisObj.getAt(this, requiredArg<Obj>(0))
