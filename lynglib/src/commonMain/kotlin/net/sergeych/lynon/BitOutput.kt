@@ -101,7 +101,6 @@ interface BitOutput {
         val compressed = LZW.compress(source.asUByteArray())
         // check that compression is effective including header bits size:
         if( compressed.size + 2 < source.size * 8L) {
-            println("write compressed")
             putBit(1)
             // LZW algorithm
             putBits(0, 2)

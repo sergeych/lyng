@@ -203,10 +203,6 @@ class Compiler(
             val rvalue = parseExpressionLevel(level + 1)
                 ?: throw ScriptError(opToken.pos, "Expecting expression")
 
-            if( op.tokenType == Token.Type.ELVIS) {
-                println("elvis!!")
-            }
-
             lvalue = op.generate(opToken.pos, lvalue!!, rvalue)
         }
         return lvalue
