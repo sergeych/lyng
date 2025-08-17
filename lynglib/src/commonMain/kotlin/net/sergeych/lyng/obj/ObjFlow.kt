@@ -40,12 +40,12 @@ class ObjFlowBuilder(val output: SendChannel<Obj>) : Obj() {
                 val data = requireOnlyArg<Obj>()
                 try {
                     val channel = thisAs<ObjFlowBuilder>().output
-                    if( !channel.isClosedForSend )
+                    if (!channel.isClosedForSend)
                         channel.send(data)
                     else
                         throw ScriptFlowIsNoMoreCollected()
                 } catch (x: Exception) {
-                    if( x !is CancellationException )
+                    if (x !is CancellationException)
                         x.printStackTrace()
                     throw ScriptFlowIsNoMoreCollected()
                 }
@@ -62,12 +62,10 @@ private fun createLyngFlowInput(scope: Scope, producer: Statement): ReceiveChann
     globalLaunch {
         try {
             producer.execute(builderScope)
-        }
-        catch(x: ScriptFlowIsNoMoreCollected) {
+        } catch (x: ScriptFlowIsNoMoreCollected) {
             x.printStackTrace()
             // premature flow closing, OK
-        }
-        catch(x: Exception) {
+        } catch (x: Exception) {
             x.printStackTrace()
         }
         channel.close()
@@ -87,7 +85,11 @@ class ObjFlow(val producer: Statement, val scope: Scope) : Obj() {
         }.apply {
             addFn("iterator") {
                 val objFlow = thisAs<ObjFlow>()
-                ObjFlowIterator( statement { objFlow.producer.execute(ClosureScope(this,objFlow.scope)) } )
+                ObjFlowIterator(statement {
+                    objFlow.producer.execute(
+                        ClosureScope(this, objFlow.scope)
+                    )
+                })
             }
         }
     }
@@ -105,9 +107,10 @@ class ObjFlowIterator(val producer: Statement) : Obj() {
     private var isCancelled = false
 
     private fun checkNotCancelled(scope: Scope) {
-        if( isCancelled )
+        if (isCancelled)
             scope.raiseIllegalState("iteration is cancelled")
     }
+
     suspend fun hasNext(scope: Scope): ObjBool {
         checkNotCancelled(scope)
         // cold start:

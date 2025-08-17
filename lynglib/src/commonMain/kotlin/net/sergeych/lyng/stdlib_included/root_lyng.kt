@@ -35,7 +35,7 @@ fun Iterable.filter(predicate) {
     val list = this
     flow {
         for( item in list ) {
-            if( predicate(item) ) {
+            if( predicate(item) ) {ln
                 emit(item)
             }
         }
@@ -91,6 +91,24 @@ fun Iterable.joinToString(prefix=" ", transformer=null) {
         else result += prefix + transformed
     }
     result ?: ""
+}
+
+fun Iterable.any(predicate): Bool {
+    for( i in this ) {
+        if( predicate(i) ) {
+        break true
+        // todo: add cancelIteration() in for loop!
+        }
+    } else false
+}
+
+fun Iterable.all(predicate): Bool {
+    for( i in this ) {
+        if( !predicate(i) ) {
+            break false
+        }
+    }
+    else true
 }
     
 """.trimIndent()

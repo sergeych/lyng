@@ -131,9 +131,16 @@ open class Scope(
     open operator fun get(name: String): ObjRecord? =
         if (name == "this") thisObj.asReadonly
         else {
-            objects[name]
+            (objects[name]
                 ?: parent?.get(name)
-                ?: thisObj.objClass.getInstanceMemberOrNull(name)
+                ?: thisObj.objClass
+                    .getInstanceMemberOrNull(name)
+                    )
+//                ?.also {
+//                        if( name == "predicate") {
+//                            println("got predicate $it")
+//                        }
+//                }
         }
 
     fun copy(pos: Pos, args: Arguments = Arguments.EMPTY, newThisObj: Obj? = null): Scope =
@@ -241,6 +248,8 @@ open class Scope(
         ObjVoid
 
     }
+
+    open fun applyClosure(closure: Scope): Scope = ClosureScope(this, closure)
 
     companion object {
 

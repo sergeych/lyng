@@ -24,10 +24,33 @@ import net.sergeych.lyng.obj.ObjRecord
  * Inherits [Scope.args] and [Scope.thisObj] from [callScope] and adds lookup for symbols
  * from [closureScope] with proper precedence
  */
-class ClosureScope(val callScope: Scope,val closureScope: Scope) : Scope(callScope, callScope.args, thisObj = callScope.thisObj) {
+class ClosureScope(val callScope: Scope, val closureScope: Scope) :
+    Scope(callScope, callScope.args, thisObj = callScope.thisObj) {
 
     override fun get(name: String): ObjRecord? {
-        // closure should be treated below callScope
-        return super.get(name) ?: closureScope.get(name)
+        // we take arguments from the callerScope, the rest
+        // from the closure.
+
+        // note using super, not callScope, as arguments are assigned by the constructor
+        // and are not assigned yet to vars in callScope self:
+        super.objects[name]?.let {
+//            if( name == "predicate" ) {
+//                println("predicate: ${it.type.isArgument}: ${it.value}")
+//            }
+            if( it.type.isArgument ) return it
+        }
+        return closureScope.get(name)
     }
+}
+
+class ApplyScope(_parent: Scope,val applied: Scope) : Scope(_parent, thisObj = applied.thisObj) {
+
+    override fun get(name: String): ObjRecord? {
+        return applied.get(name) ?: super.get(name)
+    }
+
+    override fun applyClosure(closure: Scope): Scope {
+        return this
+    }
+
 }

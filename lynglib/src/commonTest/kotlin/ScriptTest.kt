@@ -1359,9 +1359,6 @@ class ScriptTest {
             }
         
             val prefix = ":"
-            val lambda = { 
-                prefix + getText() + "!"
-            }
         
             val text = "invalid"
             val t1 = T("foo")
@@ -1371,18 +1368,22 @@ class ScriptTest {
                 // it must take "text" from class t1:
                 assertEquals("foo", text)
                 assertEquals( "foo!", getText() ) 
-                assertEquals( ":foo!!", lambda() ) 
+                assertEquals( ":foo!!", {
+                    prefix + getText() + "!" 
+                }()) 
             } 
             t2.apply { 
                 assertEquals("bar", text)
                 assertEquals( "bar!", getText() ) 
-                assertEquals( ":bar!!", lambda() ) 
+                assertEquals( ":bar!!", {
+                    prefix + getText() + "!" 
+                }()) 
             }
             // worst case: names clash
             fun badOne() {
                 val prefix = "&"
                 t1.apply {
-                    assertEquals( ":foo!!", lambda() ) 
+                    assertEquals( ":foo!!", prefix + getText() + "!" ) 
                 }
             }
             badOne()
@@ -2939,7 +2940,6 @@ class ScriptTest {
             assertEquals( (1..3).joinToString { it * 10 }, "10 20 30")
         """.trimIndent())
     }
-
 
 
 }

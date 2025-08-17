@@ -23,8 +23,9 @@ class StdlibTest {
     @Test
     fun testIterableFilter() = runTest {
         eval("""
-            assertEquals([1,3,5,7], (1..8).filter{ it % 2 == 1 }.toList() )
-            assertEquals([2,4,6,8], (1..8).filter{ it % 2 == 0 }.toList() )
+            assertEquals([2,4,6,8], (1..8).filter{ println("call2"); it % 2 == 0 }.toList() )
+            println("-------------------")
+            assertEquals([1,3,5,7], (1..8).filter{ println("call1"); it % 2 == 1 }.toList() )
         """.trimIndent())
 
     }
@@ -43,6 +44,16 @@ class StdlibTest {
             val r = 1..8
             assertEquals([1,2,3], r.take(3).toList() )
             assertEquals([7,8], r.takeLast(2).toList() )
+        """.trimIndent())
+    }
+
+    @Test
+    fun testAnyAndAll() = runTest {
+        eval("""
+            assert( [1,2,3].any { it > 2 } )
+            assert( ![1,2,3].any { it > 4 } )
+            assert( [1,2,3].all { it <= 3 } )
+            
         """.trimIndent())
     }
 

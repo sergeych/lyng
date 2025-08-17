@@ -48,13 +48,12 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
         arguments: Arguments = scope.args,
         defaultAccessType: AccessType = AccessType.Var,
         defaultVisibility: Visibility = Visibility.Public,
-        defaultRecordType: ObjRecord.Type = ObjRecord.Type.ConstructorField
     ) {
         fun assign(a: Item, value: Obj) {
             scope.addItem(a.name, (a.accessType ?: defaultAccessType).isMutable,
                 value.byValueCopy(),
                 a.visibility ?: defaultVisibility,
-                recordType = defaultRecordType)
+                recordType = ObjRecord.Type.Argument)
         }
 
         // will be used with last lambda arg fix

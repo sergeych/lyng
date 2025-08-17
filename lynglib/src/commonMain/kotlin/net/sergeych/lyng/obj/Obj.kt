@@ -296,9 +296,14 @@ open class Obj {
                 args.firstAndOnly().callOn(copy(Arguments(thisObj)))
             }
             addFn("apply") {
-                val newContext = (thisObj as? ObjInstance)?.instanceScope ?: this
-                args.firstAndOnly()
-                    .callOn(newContext)
+                val body = args.firstAndOnly()
+                (thisObj as? ObjInstance)?.let {
+                    println("apply in ${thisObj is ObjInstance}, ${it.instanceScope}")
+                    body.callOn(ApplyScope(this, it.instanceScope))
+                } ?: run {
+                    println("apply on non-instance $thisObj")
+                    body.callOn(this)
+                }
                 thisObj
             }
             addFn("also") {

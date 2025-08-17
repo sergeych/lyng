@@ -35,11 +35,15 @@ data class ObjRecord(
         Field(true, true),
         @Suppress("unused")
         Fun,
+        @Suppress("unused")
         ConstructorField(true, true),
+        Argument(true, true),
         @Suppress("unused")
         Class,
         Enum,
-        Other
+        Other;
+
+        val isArgument get() = this == Argument
     }
     @Suppress("unused")
     fun qualifiedName(name: String): String =

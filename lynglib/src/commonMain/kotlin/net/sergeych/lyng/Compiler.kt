@@ -45,6 +45,17 @@ class Compiler(
 
     private fun popInitScope(): MutableList<Statement> = initStack.removeLast()
 
+    private val codeContexts = mutableListOf<CodeContext>(CodeContext.Module(null))
+
+    private suspend fun <T>inCodeContext(context: CodeContext,f: suspend ()->T): T {
+        return try {
+            codeContexts.add(context)
+            f()
+        } finally {
+            codeContexts.removeLast()
+        }
+    }
+
     private suspend fun parseScript(): Script {
         val statements = mutableListOf<Statement>()
         val start = cc.currentPos()
@@ -504,7 +515,7 @@ class Compiler(
 
         val callStatement = statement {
             // and the source closure of the lambda which might have other thisObj.
-            val context = ClosureScope(this, closure!!) //AppliedScope(closure!!, args, this)
+            val context = this.applyClosure(closure!!)
             if (argsDeclaration == null) {
                 // no args: automatic var 'it'
                 val l = args.list
@@ -516,7 +527,7 @@ class Compiler(
                     // more args: it is a list of args
                     else -> ObjList(l.toMutableList())
                 }
-                context.addItem("it", false, itValue)
+                context.addItem("it", false, itValue, recordType = ObjRecord.Type.Argument)
             } else {
                 // assign vars as declared the standard way
                 argsDeclaration.assignToContext(context, defaultAccessType = AccessType.Val)
@@ -525,7 +536,7 @@ class Compiler(
         }
 
         return Accessor { x ->
-            if (closure == null) closure = x
+            closure = x
             callStatement.asReadonly
         }
     }
@@ -1202,73 +1213,76 @@ class Compiler(
 
     private suspend fun parseClassDeclaration(): Statement {
         val nameToken = cc.requireToken(Token.Type.ID)
-        val constructorArgsDeclaration =
-            if (cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true))
-                parseArgsDeclaration(isClassDeclaration = true)
-            else null
+        return inCodeContext(CodeContext.ClassBody(nameToken.value)) {
+            val constructorArgsDeclaration =
+                if (cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true))
+                    parseArgsDeclaration(isClassDeclaration = true)
+                else null
 
-        if (constructorArgsDeclaration != null && constructorArgsDeclaration.endTokenType != Token.Type.RPAREN)
-            throw ScriptError(
-                nameToken.pos,
-                "Bad class declaration: expected ')' at the end of the primary constructor"
-            )
+            if (constructorArgsDeclaration != null && constructorArgsDeclaration.endTokenType != Token.Type.RPAREN)
+                throw ScriptError(
+                    nameToken.pos,
+                    "Bad class declaration: expected ')' at the end of the primary constructor"
+                )
 
-        cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
-        val t = cc.next()
+            cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
+            val t = cc.next()
 
-        pushInitScope()
+            pushInitScope()
 
-        val bodyInit: Statement? = if (t.type == Token.Type.LBRACE) {
-            // parse body
-            parseScript().also {
-                cc.skipTokens(Token.Type.RBRACE)
+            val bodyInit: Statement? = if (t.type == Token.Type.LBRACE) {
+                // parse body
+                parseScript().also {
+                    cc.skipTokens(Token.Type.RBRACE)
+                }
+            } else {
+                cc.previous()
+                null
             }
-        } else {
-            cc.previous()
-            null
-        }
 
-        val initScope = popInitScope()
+            val initScope = popInitScope()
 
-        // create class
-        val className = nameToken.value
+            // create class
+            val className = nameToken.value
 
 //        @Suppress("UNUSED_VARIABLE") val defaultAccess = if (isStruct) AccessType.Var else AccessType.Initialization
 //        @Suppress("UNUSED_VARIABLE") val defaultVisibility = Visibility.Public
 
-        // create instance constructor
-        // create custom objClass with all fields and instance constructor
+            // create instance constructor
+            // create custom objClass with all fields and instance constructor
 
-        val constructorCode = statement {
-            // constructor code is registered with class instance and is called over
-            // new `thisObj` already set by class to ObjInstance.instanceContext
-            thisObj as ObjInstance
+            val constructorCode = statement {
+                // constructor code is registered with class instance and is called over
+                // new `thisObj` already set by class to ObjInstance.instanceContext
+                thisObj as ObjInstance
 
-            // the context now is a "class creation context", we must use its args to initialize
-            // fields. Note that 'this' is already set by class
-            constructorArgsDeclaration?.assignToContext(this)
-            bodyInit?.execute(this)
+                // the context now is a "class creation context", we must use its args to initialize
+                // fields. Note that 'this' is already set by class
+                constructorArgsDeclaration?.assignToContext(this)
+                bodyInit?.execute(this)
 
-            thisObj
-        }
-        // inheritance must alter this code:
-        val newClass = ObjInstanceClass(className).apply {
-            instanceConstructor = constructorCode
-            constructorMeta = constructorArgsDeclaration
-        }
-
-        return statement {
-            // the main statement should create custom ObjClass instance with field
-            // accessors, constructor registration, etc.
-            addItem(className, false, newClass)
-            if (initScope.isNotEmpty()) {
-                val classScope = copy(newThisObj = newClass)
-                newClass.classScope = classScope
-                for (s in initScope)
-                    s.execute(classScope)
+                thisObj
             }
-            newClass
+            // inheritance must alter this code:
+            val newClass = ObjInstanceClass(className).apply {
+                instanceConstructor = constructorCode
+                constructorMeta = constructorArgsDeclaration
+            }
+
+            statement {
+                // the main statement should create custom ObjClass instance with field
+                // accessors, constructor registration, etc.
+                addItem(className, false, newClass)
+                if (initScope.isNotEmpty()) {
+                    val classScope = copy(newThisObj = newClass)
+                    newClass.classScope = classScope
+                    for (s in initScope)
+                        s.execute(classScope)
+                }
+                newClass
+            }
         }
+
     }
 
 
@@ -1639,8 +1653,7 @@ class Compiler(
         }
     }
 
-    private suspend fun
-            parseFunctionDeclaration(
+    private suspend fun parseFunctionDeclaration(
         visibility: Visibility = Visibility.Public,
         @Suppress("UNUSED_PARAMETER") isOpen: Boolean = false,
         isExtern: Boolean = false,
@@ -1654,7 +1667,7 @@ class Compiler(
         else t.value
 
         val annotation = lastAnnotation
-
+        val parentContext = codeContexts.last()
 
         t = cc.next()
         // Is extension?
@@ -1679,61 +1692,66 @@ class Compiler(
 
         if (cc.current().type == Token.Type.COLON) parseTypeDeclaration()
 
-        // Here we should be at open body
-        val fnStatements = if (isExtern)
-            statement { raiseError("extern function not provided: $name") }
-        else
-            parseBlock()
+        return inCodeContext(CodeContext.Function(name))    {
 
-        var closure: Scope? = null
+            // Here we should be at open body
+            val fnStatements = if (isExtern)
+                statement { raiseError("extern function not provided: $name") }
+            else
+                parseBlock()
 
-        val fnBody = statement(t.pos) { callerContext ->
-            callerContext.pos = start
+            var closure: Scope? = null
 
-            // restore closure where the function was defined, and making a copy of it
-            // for local space (otherwise it will write local stuff to closure!)
-            val context = closure?.let { ClosureScope(callerContext, it) }
-                ?: callerContext.raiseError("bug: closure not set")
+            val fnBody = statement(t.pos) { callerContext ->
+                callerContext.pos = start
 
-            // load params from caller context
-            argsDeclaration.assignToContext(context, callerContext.args, defaultAccessType = AccessType.Val)
-            if (extTypeName != null) {
-                context.thisObj = callerContext.thisObj
-            }
-            fnStatements.execute(context)
-        }
-        val fnCreateStatement = statement(start) { context ->
-            // we added fn in the context. now we must save closure
-            // for the function
-            closure = context
+                // restore closure where the function was defined, and making a copy of it
+                // for local space. If there is no closure, we are in, say, class context where
+                // the closure is in the class initialization and we needn't more:
+                val context = closure?.let { ClosureScope(callerContext, it) }
+                    ?: callerContext
 
-            val annotatedFnBody = annotation?.invoke(context, ObjString(name), fnBody)
-                ?: fnBody
-
-            extTypeName?.let { typeName ->
-                // class extension method
-                val type = context[typeName]?.value ?: context.raiseSymbolNotFound("class $typeName not found")
-                if (type !is ObjClass) context.raiseClassCastError("$typeName is not the class instance")
-                type.addFn(name, isOpen = true) {
-                    // ObjInstance has a fixed instance scope, so we need to build a closure
-                    (thisObj as? ObjInstance)?.let { i ->
-                        annotatedFnBody.execute(ClosureScope(this, i.instanceScope))
-                    }
-                    // other classes can create one-time scope for this rare case:
-                        ?: annotatedFnBody.execute(thisObj.autoInstanceScope(this))
+                // load params from caller context
+                argsDeclaration.assignToContext(context, callerContext.args, defaultAccessType = AccessType.Val)
+                if (extTypeName != null) {
+                    context.thisObj = callerContext.thisObj
                 }
+                fnStatements.execute(context)
             }
-            // regular function/method
-                ?: context.addItem(name, false, annotatedFnBody, visibility)
-            // as the function can be called from anywhere, we have
-            // saved the proper context in the closure
-            annotatedFnBody
+            val fnCreateStatement = statement(start) { context ->
+                // we added fn in the context. now we must save closure
+                // for the function, unless we're in the class scope:
+                if( isStatic || parentContext !is CodeContext.ClassBody)
+                    closure = context
+
+                val annotatedFnBody = annotation?.invoke(context, ObjString(name), fnBody)
+                    ?: fnBody
+
+                extTypeName?.let { typeName ->
+                    // class extension method
+                    val type = context[typeName]?.value ?: context.raiseSymbolNotFound("class $typeName not found")
+                    if (type !is ObjClass) context.raiseClassCastError("$typeName is not the class instance")
+                    type.addFn(name, isOpen = true) {
+                        // ObjInstance has a fixed instance scope, so we need to build a closure
+                        (thisObj as? ObjInstance)?.let { i ->
+                            annotatedFnBody.execute(ClosureScope(this, i.instanceScope))
+                        }
+                        // other classes can create one-time scope for this rare case:
+                            ?: annotatedFnBody.execute(thisObj.autoInstanceScope(this))
+                    }
+                }
+                // regular function/method
+                    ?: context.addItem(name, false, annotatedFnBody, visibility)
+                // as the function can be called from anywhere, we have
+                // saved the proper context in the closure
+                annotatedFnBody
+            }
+            if (isStatic) {
+                currentInitScope += fnCreateStatement
+                NopStatement
+            } else
+                fnCreateStatement
         }
-        return if (isStatic) {
-            currentInitScope += fnCreateStatement
-            NopStatement
-        } else
-            fnCreateStatement
     }
 
     private suspend fun parseBlock(skipLeadingBrace: Boolean = false): Statement {

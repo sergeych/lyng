@@ -17,31 +17,26 @@
 
 package net.sergeych.lyng.obj
 
-import net.sergeych.lyng.Arguments
-import net.sergeych.lyng.Scope
-import net.sergeych.lyng.Statement
-import net.sergeych.lyng.statement
-
-class ObjDelegateContext()
-
-class ObjDelegate(
-                  val getter: Statement,
-                  val setter: Statement = statement { raiseNotImplemented("setter is not implemented") }
-): Obj() {
-
-    override suspend fun assign(scope: Scope, other: Obj): Obj? {
-        setter.execute(scope.copy(Arguments(other)))
-        return other
-    }
-
-    companion object {
-        val type = object: ObjClass("Delegate") {
-            override suspend fun callOn(scope: Scope): Obj {
-                scope.raiseError("Delegate should not be constructed directly")
-            }
-        }.apply {
-
-        }
-    }
-
-}
+//class ObjDelegateContext()
+//
+//class ObjDelegate(
+//                  val getter: Statement,
+//                  val setter: Statement = statement { raiseNotImplemented("setter is not implemented") }
+//): Obj() {
+//
+//    override suspend fun assign(scope: Scope, other: Obj): Obj? {
+//        setter.execute(scope.copy(Arguments(other)))
+//        return other
+//    }
+//
+//    companion object {
+//        val type = object: ObjClass("Delegate") {
+//            override suspend fun callOn(scope: Scope): Obj {
+//                scope.raiseError("Delegate should not be constructed directly")
+//            }
+//        }.apply {
+//
+//        }
+//    }
+//
+//}
