@@ -2972,6 +2972,16 @@ class ScriptTest {
     }
 
     @Test
+    fun testElvisAndThrow2() = runTest {
+        eval("""
+            val t = "112"
+            val x = t ?: run { throw "testx" }
+            }
+            assertEquals( "112", x)
+        """.trimIndent())
+    }
+
+    @Test
     fun testElvisAndRunThrow() = runTest {
         eval("""
             val x = assertThrows {

@@ -47,7 +47,7 @@ class Compiler(
 
     private val codeContexts = mutableListOf<CodeContext>(CodeContext.Module(null))
 
-    private suspend fun <T>inCodeContext(context: CodeContext,f: suspend ()->T): T {
+    private suspend fun <T> inCodeContext(context: CodeContext, f: suspend () -> T): T {
         return try {
             codeContexts.add(context)
             f()
@@ -202,6 +202,10 @@ class Compiler(
 
             val rvalue = parseExpressionLevel(level + 1)
                 ?: throw ScriptError(opToken.pos, "Expecting expression")
+
+            if( op.tokenType == Token.Type.ELVIS) {
+                println("elvis!!")
+            }
 
             lvalue = op.generate(opToken.pos, lvalue!!, rvalue)
         }
@@ -378,7 +382,9 @@ class Compiler(
 
                         "throw" -> {
                             val s = parseThrowStatement()
-                            operand = Accessor { s.execute(it).asReadonly }
+                            operand = Accessor {
+                                s.execute(it).asReadonly
+                            }
                         }
 
                         else -> operand?.let { left ->
@@ -1697,7 +1703,7 @@ class Compiler(
 
         if (cc.current().type == Token.Type.COLON) parseTypeDeclaration()
 
-        return inCodeContext(CodeContext.Function(name))    {
+        return inCodeContext(CodeContext.Function(name)) {
 
             // Here we should be at open body
             val fnStatements = if (isExtern)
@@ -1726,7 +1732,7 @@ class Compiler(
             val fnCreateStatement = statement(start) { context ->
                 // we added fn in the context. now we must save closure
                 // for the function, unless we're in the class scope:
-                if( isStatic || parentContext !is CodeContext.ClassBody)
+                if (isStatic || parentContext !is CodeContext.ClassBody)
                     closure = context
 
                 val annotatedFnBody = annotation?.invoke(context, ObjString(name), fnBody)
@@ -1973,7 +1979,15 @@ class Compiler(
             Operator.simple(Token.Type.IS, lastPriority) { _, a, b -> ObjBool(a.isInstanceOf(b)) },
             Operator.simple(Token.Type.NOTIS, lastPriority) { _, a, b -> ObjBool(!a.isInstanceOf(b)) },
 
-            Operator.simple(Token.Type.ELVIS, ++lastPriority) { _, a, b -> if (a == ObjNull) b else a },
+            Operator(Token.Type.ELVIS, ++lastPriority, 2) { _: Pos, a: Accessor, b: Accessor ->
+                Accessor {
+                    val aa = a.getter(it).value
+                    (
+                            if (aa != ObjNull) aa
+                            else b.getter(it).value
+                            ).asReadonly
+                }
+            },
 
             // shuttle <=> 6
             Operator.simple(Token.Type.SHUTTLE, ++lastPriority) { c, a, b ->
