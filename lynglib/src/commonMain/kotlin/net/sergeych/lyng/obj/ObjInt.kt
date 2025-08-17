@@ -62,7 +62,7 @@ class ObjInt(var value: Long, override val isConst: Boolean = false) : Obj(), Nu
 
     override fun toString(): String = value.toString()
 
-    override val objClass: ObjClass = type
+    override val objClass: ObjClass by lazy { type }
 
     override suspend fun plus(scope: Scope, other: Obj): Obj =
         if (other is ObjInt)

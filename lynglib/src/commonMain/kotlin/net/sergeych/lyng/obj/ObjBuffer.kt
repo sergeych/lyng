@@ -24,6 +24,7 @@ import net.sergeych.bintools.encodeToHex
 import net.sergeych.bintools.toDump
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.statement
+import net.sergeych.lynon.BitArray
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
@@ -199,6 +200,9 @@ open class ObjBuffer(val byteArray: UByteArray) : Obj() {
                 ObjString(
                     thisAs<ObjBuffer>().byteArray.toByteArray().toDump()
                 )
+            }
+            addFn("toBitInput") {
+                ObjBitBuffer(BitArray(thisAs<ObjBuffer>().byteArray, 8))
             }
         }
     }

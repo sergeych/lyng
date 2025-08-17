@@ -85,13 +85,15 @@ open class Obj {
         name: String,
         args: Arguments = Arguments.EMPTY,
         onNotFoundResult: Obj?=null
-    ): Obj =
-        objClass.getInstanceMemberOrNull(name)?.value?.invoke(
+    ): Obj {
+        return objClass.getInstanceMemberOrNull(name)?.value?.invoke(
             scope,
             this,
-            args)
+            args
+        )
             ?: onNotFoundResult
             ?: scope.raiseSymbolNotFound(name)
+    }
 
     open suspend fun getInstanceMethod(
         scope: Scope,

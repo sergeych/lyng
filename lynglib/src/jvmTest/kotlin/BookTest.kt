@@ -322,4 +322,9 @@ class BookTest {
         runDocTests("../docs/Iterable.md")
     }
 
+    @Test
+    fun testSerialization() = runBlocking {
+        runDocTests("../docs/serialization.md")
+    }
+
 }

@@ -649,6 +649,48 @@ class LynonTests {
         """.trimIndent())
     }
 
+    @Test
+    fun testTokenFailure() = runTest {
+        val s = Scope()
+        val t = s.eval(
+            """
+                import lyng.serialization
+                import lyng.buffer
+                import lyng.time
+                
+class Wallet( id, ownerKey, balance=0, createdAt=Instant.now().truncateToSecond(), isBlocked=false) {
+    
+    /*
+        Create new key for the given owner multikey
+    */
+    static fun new( ownerKey ) {
+    
+        // this is per-contract unique id generated and approved by the network.
+        // it is not random, but it _is_ unique, and we use it as a walletId.
+        val newId = Buffer("testid")
+        
+        val w = Wallet(newId, ownerKey)
+        println(w)
+        println(w.balance)
+        
+        val x = Lynon.encode(Wallet(newId, ownerKey) ).toBuffer()
+        val t = Lynon.decode(x.toBitInput())
+        println(x)
+        println(t)
+        assertEquals(w.balance, t.balance)
+        w
+    }
+ 
+}
+    Wallet.new(Buffer("1234"))
+
+        """.trimIndent())
+        println(t)
+//        val bb = lynonEncodeAny(s, t)
+//        val t2 = lynonDecodeAny(s, bb)
+//        println(t2.readField(s, "balance"))
+    }
+
 }
 
 
