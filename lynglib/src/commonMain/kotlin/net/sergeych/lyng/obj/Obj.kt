@@ -288,6 +288,9 @@ open class Obj {
             addFn("toString") {
                 thisObj.asStr
             }
+            addFn("inspect", true) {
+                thisObj.inspect().toObj()
+            }
             addFn("contains") {
                 ObjBool(thisObj.contains(this, args.firstAndOnly()))
             }

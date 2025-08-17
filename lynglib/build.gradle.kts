@@ -21,7 +21,7 @@ import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 group = "net.sergeych"
-version = "0.8.11-SNAPSHOT"
+version = "0.8.12-SNAPSHOT"
 
 buildscript {
     repositories {

@@ -2631,6 +2631,26 @@ class ScriptTest {
     }
 
     @Test
+    fun testBufferEncodings() = runTest {
+        eval("""
+            import lyng.buffer
+            
+            val b = Buffer("hello")
+            println(b.toDump())
+            assertEquals( "hello", b.decodeUtf8() )
+            
+            println(b.base64)
+            println(b.hex)
+
+            assertEquals( b, Buffer.decodeBase64(b.base64) )
+            assertEquals( b, Buffer.decodeHex(b.hex) )
+            
+            println(b.inspect())
+                        
+        """.trimIndent())
+    }
+
+    @Test
     fun testBufferCompare() = runTest {
         eval(
             """

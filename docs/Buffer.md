@@ -102,20 +102,46 @@ As with [List], it is possible to use ranges as indexes to slice a Buffer:
 
     >>> void
 
+## Encoding
+
+You can encode `String` to buffer using buffer constructor, as was shown. Also, buffer supports out of the box base64 (
+which is used in `toString`) and hex encoding:
+
+    import lyng.buffer
+    
+    // to UTF8 and back:
+    val b = Buffer("hello")
+    assertEquals( "hello", b.decodeUtf8() )
+    
+    // to base64 and back:
+    assertEquals( b, Buffer.decodeBase64(b.base64) )
+    assertEquals( b, Buffer.decodeHex(b.hex) )
+    >>> void
+
 ## Members
 
-| name          | meaning                            | type          |
-|---------------|------------------------------------|---------------|
-| `size`        | size                               | Int           |
-| `decodeUtf8`  | decodee to String using UTF8 rules | Any           |
-| `+`           | buffer concatenation               | Any           |
-| `toMutable()` | create a mutable copy              | MutableBuffer |
+| name                      | meaning                           | type          |
+|---------------------------|-----------------------------------|---------------|
+| `size`                    | size                              | Int           |
+| `decodeUtf8`              | decode to String using UTF8 rules | Any           |
+| `+`                       | buffer concatenation              | Any           |
+| `toMutable()`             | create a mutable copy             | MutableBuffer |
+| `hex`                     | encode to hex strign              | String        |
+| `Buffer.decodeHex(hexStr) | decode hex string                 | Buffer        |
+| `base64`                  | encode to base64 (url flavor) (2) | String        |
+| `Buffer.decodeBase64`     | decode base64 to new Buffer (2)   | Buffer        |
 
 (1)
 : optimized implementation that override `Iterable` one
+
+(2)
+: base64url alphabet is used without trailing '=', which allows string to be used in URI without escaping. Note that
+decoding supports both traditional and URL alphabets automatically, and ignores filling `=` characters. Base64URL is
+well known and mentioned in the internet, for example, [here](https://base64.guru/standards/base64url).
 
 Also, it inherits methods from [Iterable] and [Array].
 
 
 [Range]: Range.md
+
 [Iterable]: Iterable.md

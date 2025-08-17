@@ -19,6 +19,7 @@ package net.sergeych.lyng.obj
 
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
+import net.sergeych.bintools.decodeHex
 import net.sergeych.bintools.encodeToHex
 import net.sergeych.bintools.toDump
 import net.sergeych.lyng.Scope
@@ -26,11 +27,16 @@ import net.sergeych.lyng.statement
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
+import net.sergeych.mp_tools.decodeBase64Url
+import net.sergeych.mp_tools.encodeToBase64Url
 import kotlin.math.min
 
 open class ObjBuffer(val byteArray: UByteArray) : Obj() {
 
     override val objClass: ObjClass = type
+
+    val hex by lazy { byteArray.encodeToHex("")}
+    val base64 by lazy { byteArray.toByteArray().encodeToBase64Url()}
 
     fun checkIndex(scope: Scope, index: Obj): Int {
         if (index !is ObjInt)
@@ -83,9 +89,7 @@ open class ObjBuffer(val byteArray: UByteArray) : Obj() {
         } else scope.raiseIllegalArgument("can't concatenate buffer with ${other.inspect()}")
     }
 
-    override fun toString(): String {
-        return "Buffer(${byteArray.encodeToHex()})"
-    }
+    override fun toString(): String = base64
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -101,6 +105,8 @@ open class ObjBuffer(val byteArray: UByteArray) : Obj() {
     override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
         encoder.encodeCachedBytes(byteArray.asByteArray())
     }
+
+    override fun inspect(): String = "Buf($base64)"
 
     companion object {
         private suspend fun createBufferFrom(scope: Scope, obj: Obj): ObjBuffer =
@@ -158,9 +164,25 @@ open class ObjBuffer(val byteArray: UByteArray) : Obj() {
                 })
 
         }.apply {
+            addClassFn("decodeBase64") {
+                ObjBuffer(requireOnlyArg<Obj>().toString().decodeBase64Url().asUByteArray())
+            }
+            addClassFn("decodeHex") {
+                ObjBuffer(requireOnlyArg<Obj>().toString().decodeHex().asUByteArray())
+            }
             createField("size",
                 statement {
                     (thisObj as ObjBuffer).byteArray.size.toObj()
+                }
+            )
+            createField("hex",
+                statement {
+                    thisAs<ObjBuffer>().hex.toObj()
+                }
+            )
+            createField("base64",
+                statement {
+                    thisAs<ObjBuffer>().base64.toObj()
                 }
             )
             addFn("decodeUtf8") {

@@ -95,10 +95,8 @@ fun Iterable.joinToString(prefix=" ", transformer=null) {
 
 fun Iterable.any(predicate): Bool {
     for( i in this ) {
-        if( predicate(i) ) {
-        break true
-        // todo: add cancelIteration() in for loop!
-        }
+        if( predicate(i) )
+            break true
     } else false
 }
 
