@@ -864,7 +864,7 @@ class Compiler(
 
     suspend fun parseAnnotation(t: Token): (suspend (Scope, ObjString, Statement) -> Statement) {
         val extraArgs = parseArgsOrNull()
-        println("annotation ${t.value}: args: $extraArgs")
+//        println("annotation ${t.value}: args: $extraArgs")
         return { scope, name, body ->
             val extras = extraArgs?.first?.toArguments(scope, extraArgs.second)?.list
             val required = listOf(name, body)
