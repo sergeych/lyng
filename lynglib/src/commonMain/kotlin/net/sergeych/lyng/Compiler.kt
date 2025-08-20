@@ -211,11 +211,32 @@ class Compiler(
     private suspend fun parseTerm(): Accessor? {
         var operand: Accessor? = null
 
+        // newlines _before_
+        cc.skipWsTokens()
+
         while (true) {
             val t = cc.next()
             val startPos = t.pos
             when (t.type) {
-                Token.Type.NEWLINE, Token.Type.SEMICOLON, Token.Type.EOF, Token.Type.RBRACE, Token.Type.COMMA -> {
+//                Token.Type.NEWLINE, Token.Type.SINLGE_LINE_COMMENT, Token.Type.MULTILINE_COMMENT-> {
+//                    continue
+//                }
+
+                // very special case chained calls: call()<NL>.call2 {}.call3()
+                Token.Type.NEWLINE -> {
+                    val saved = cc.savePos()
+                    if( cc.peekNextNonWhitespace().type == Token.Type.DOT) {
+                        // chained call continue from it
+                        continue
+                    } else {
+                        // restore position and stop parsing as a term:
+                        cc.restorePos(saved)
+                        cc.previous()
+                        return operand
+                    }
+                }
+
+                Token.Type.SEMICOLON, Token.Type.EOF, Token.Type.RBRACE, Token.Type.COMMA -> {
                     cc.previous()
                     return operand
                 }
@@ -468,7 +489,13 @@ class Compiler(
                     // range operator
                     val isEndInclusive = t.type == Token.Type.DOTDOT
                     val left = operand
-                    val right = parseExpression()
+                    // if it is an open end range, then the end of line could be here that we do not want
+                    // to skip in parseExpression:
+                    val current = cc.current()
+                    val right = if( current.type == Token.Type.NEWLINE || current.type == Token.Type.SINLGE_LINE_COMMENT)
+                        null
+                    else
+                        parseExpression()
                     operand = Accessor {
                         ObjRange(
                             left?.getter?.invoke(it)?.value ?: ObjNull,
@@ -955,7 +982,7 @@ class Compiler(
 
     private suspend fun parseWhenStatement(): Statement {
         // has a value, when(value) ?
-        var t = cc.skipWsTokens()
+        var t = cc.nextNonWhitespace()
         return if (t.type == Token.Type.LPAREN) {
             // when(value)
             val value = parseStatement() ?: throw ScriptError(cc.currentPos(), "when(value) expected")
@@ -978,7 +1005,7 @@ class Compiler(
 
                 // loop conditions
                 while (true) {
-                    t = cc.skipWsTokens()
+                    t = cc.nextNonWhitespace()
 
                     when (t.type) {
                         Token.Type.IN,
@@ -1191,11 +1218,11 @@ class Compiler(
         cc.skipTokenOfType(Token.Type.LBRACE)
 
         do {
-            val t = cc.skipWsTokens()
+            val t = cc.nextNonWhitespace()
             when (t.type) {
                 Token.Type.ID -> {
                     names += t.value
-                    val t1 = cc.skipWsTokens()
+                    val t1 = cc.nextNonWhitespace()
                     when (t1.type) {
                         Token.Type.COMMA ->
                             continue

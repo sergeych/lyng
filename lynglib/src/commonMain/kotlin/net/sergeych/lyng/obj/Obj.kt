@@ -436,6 +436,9 @@ object ObjNull : Obj() {
     }
 }
 
+/**
+ * TODO: get rid of it. Maybe we ise some Lyng inheritance instead
+ */
 interface Numeric {
     val longValue: Long
     val doubleValue: Double

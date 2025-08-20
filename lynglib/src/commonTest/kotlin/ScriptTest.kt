@@ -1185,6 +1185,35 @@ class ScriptTest {
     }
 
     @Test
+    fun testOpenEndRanges2() = runTest {
+        eval(
+            """
+            var r = 5..; var r2 = 6..
+            val r3 = 7.. // open end
+            assert( r::class == Range)
+            assert( r.end == null)
+            assert( r.start == 5)
+            
+            assert( r3::class == Range)
+            assertEquals( r3.end, null)
+            assert( r3.start == 7)
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testOpenEndRanges3() = runTest {
+        eval(
+            """
+            val r3 = 7.. // open end with comment
+            assert( r3::class == Range)
+            assertEquals( r3.end, null)
+            assert( r3.start == 7)
+        """.trimIndent()
+        )
+    }
+
+    @Test
     fun testCharacterRange() = runTest {
         eval(
             """
@@ -2989,6 +3018,21 @@ class ScriptTest {
             }
             assertEquals( "testx", x.message)
         """.trimIndent())
+    }
+
+    @Test
+    fun testNewlinesAnsCommentsInExpressions() = runTest {
+        assertEquals( 2, (Scope().eval("""
+            val e = 1 + 4 -
+                3
+        """.trimIndent())).toInt())
+
+        eval("""
+                val x = [1,2,3]
+                    .map { it * 10 }
+                    .map { it + 1 }
+                assertEquals( [11,21,31], x)
+            """.trimIndent())
     }
 
 

@@ -39,7 +39,6 @@ class CompilerContext(val tokens: List<Token>) {
     fun next() =
         if (currentIndex < tokens.size) tokens[currentIndex++]
         else Token("", tokens.last().pos, Token.Type.EOF)
-//        throw IllegalStateException("No more tokens")
 
     fun previous() = if (!hasPrevious()) throw IllegalStateException("No previous token") else tokens[--currentIndex]
 
@@ -131,6 +130,28 @@ class CompilerContext(val tokens: List<Token>) {
         previous()
     }
 
+    fun nextNonWhitespace(): Token {
+        while (true) {
+            val t = next()
+            if (t.type !in wstokens) return t
+        }
+    }
+
+    /**
+     * Find next non-whitespace token and return it. The token is not extracted,
+     * is will be returned on [next] call.
+     * @return next non-whitespace token without extracting it from tokens list
+     */
+    fun peekNextNonWhitespace(): Token {
+        while (true) {
+            val t = next()
+            if (t.type !in wstokens) {
+                previous()
+                return t
+            }
+        }
+    }
+
 
     inline fun ifNextIs(typeId: Token.Type, f: (Token) -> Unit): Boolean {
         val t = next()
@@ -207,7 +228,7 @@ class CompilerContext(val tokens: List<Token>) {
         while (current().type in wstokens) {
             next()
         }
-        return next()
+        return current()
     }
 
     companion object {
