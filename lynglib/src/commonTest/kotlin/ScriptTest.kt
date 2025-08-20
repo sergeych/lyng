@@ -3049,5 +3049,22 @@ class ScriptTest {
         """.trimIndent())
     }
 
+    @Test
+    fun testMultilineFnDeclaration() = runTest {
+        eval("""
+            fun test(
+                x = 1,
+                y = 2
+            ) {
+                x * y
+            }
+            assertEquals( 10, test(5) )
+            assertEquals( 42, test(
+                6,
+                7
+            ) )
+        """.trimIndent())
+    }
+
 
 }

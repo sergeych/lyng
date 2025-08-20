@@ -622,6 +622,8 @@ class Compiler(
         var endTokenType: Token.Type? = null
         val startPos = cc.savePos()
 
+        cc.skipWsTokens()
+
         while (endTokenType == null) {
             var t = cc.next()
             when (t.type) {
@@ -679,7 +681,7 @@ class Compiler(
 
                     // important: valid argument list continues with ',' and ends with '->' or ')'
                     // otherwise it is not an argument list:
-                    when (val tt = cc.next().type) {
+                    when (val tt = cc.nextNonWhitespace().type) {
                         Token.Type.RPAREN -> {
                             // end of arguments
                             endTokenType = tt

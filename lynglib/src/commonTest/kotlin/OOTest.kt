@@ -106,4 +106,15 @@ class OOTest {
             }
         """.trimIndent())
     }
+
+    @Test
+    fun testMultilineConstructor() = runTest {
+        eval("""
+            class Point(
+                x,
+                y
+            ) 
+            assertEquals(Point(1,2), Point(1,2) )
+            """.trimIndent())
+    }
 }
