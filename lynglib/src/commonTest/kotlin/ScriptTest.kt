@@ -3035,5 +3035,19 @@ class ScriptTest {
             """.trimIndent())
     }
 
+    @Test
+    fun testNotExpressionWithoutWs() = runTest {
+        eval("""
+            fun test() { false }
+            class T(value)
+            assert( !false )
+            assert( !test() )
+            assert( !test() )
+            val t = T(false)
+            assert( !t.value )
+            assert( !if( true ) false else true )
+        """.trimIndent())
+    }
+
 
 }
