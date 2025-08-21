@@ -25,10 +25,6 @@ import net.sergeych.lynon.LynonType
 
 class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
 
-    override fun toString(): String = "[${
-        list.joinToString(separator = ", ") { it.inspect() }
-    }]"
-
     override suspend fun getAt(scope: Scope, index: Obj): Obj {
         return when (index) {
             is ObjInt -> {
@@ -65,7 +61,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 }
             }
 
-            else -> scope.raiseIllegalArgument("Illegal index object for a list: ${index.inspect()}")
+            else -> scope.raiseIllegalArgument("Illegal index object for a list: ${index.inspect(scope)}")
         }
     }
 

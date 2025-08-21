@@ -183,8 +183,8 @@ Important difference from the channels or like, every time you collect the flow,
     // and again:
     assertEquals( result, f.toList() )
 
-    >>> ["start", 1, 2, 3, 4]
-    >>> ["start", 1, 2, 3, 4]
+    >>> [start,1,2,3,4]
+    >>> [start,1,2,3,4]
     >>> void
 
 Notice that flow's lambda is not called until actual collection is started. Cold flows are

@@ -57,15 +57,15 @@ class Script(
             ObjException.addExceptionsToContext(this)
             addFn("print") {
                 for ((i, a) in args.withIndex()) {
-                    if (i > 0) print(' ' + a.asStr.value)
-                    else print(a.asStr.value)
+                    if (i > 0) print(' ' + a.toString(this).value)
+                    else print(a.toString(this).value)
                 }
                 ObjVoid
             }
             addFn("println") {
                 for ((i, a) in args.withIndex()) {
-                    if (i > 0) print(' ' + a.asStr.value)
-                    else print(a.asStr.value)
+                    if (i > 0) print(' ' + a.toString(this).value)
+                    else print(a.toString(this).value)
                 }
                 println()
                 ObjVoid
@@ -165,13 +165,13 @@ class Script(
                 val a = requiredArg<Obj>(0)
                 val b = requiredArg<Obj>(1)
                 if( a.compareTo(this, b) != 0 )
-                    raiseError(ObjAssertionFailedException(this,"Assertion failed: ${a.inspect()} == ${b.inspect()}"))
+                    raiseError(ObjAssertionFailedException(this,"Assertion failed: ${a.inspect(this)} == ${b.inspect(this)}"))
             }
             addVoidFn("assertNotEquals") {
                 val a = requiredArg<Obj>(0)
                 val b = requiredArg<Obj>(1)
                 if( a.compareTo(this, b) == 0 )
-                    raiseError(ObjAssertionFailedException(this,"Assertion failed: ${a.inspect()} != ${b.inspect()}"))
+                    raiseError(ObjAssertionFailedException(this,"Assertion failed: ${a.inspect(this)} != ${b.inspect(this)}"))
             }
             addFn("assertThrows") {
                 val code = requireOnlyArg<Statement>()
@@ -287,7 +287,7 @@ class Script(
                             is ObjInt -> delay(a.value * 1000)
                             is ObjReal -> delay((a.value * 1000).roundToLong())
                             is ObjDuration -> delay(a.duration)
-                            else -> raiseIllegalArgument("Expected Duration, Int or Real, got ${a.inspect()}")
+                            else -> raiseIllegalArgument("Expected Duration, Int or Real, got ${a.inspect(this)}")
                         }
                         ObjVoid
                     }

@@ -87,7 +87,7 @@ open class ObjBuffer(val byteArray: UByteArray) : Obj() {
                 byteArray + other.toFlow(scope).map { it.toLong().toUByte() }.toList().toTypedArray()
                     .toUByteArray()
             )
-        } else scope.raiseIllegalArgument("can't concatenate buffer with ${other.inspect()}")
+        } else scope.raiseIllegalArgument("can't concatenate buffer with ${other.inspect(scope)}")
     }
 
     override fun toString(): String = base64
@@ -107,7 +107,7 @@ open class ObjBuffer(val byteArray: UByteArray) : Obj() {
         encoder.encodeCachedBytes(byteArray.asByteArray())
     }
 
-    override fun inspect(): String = "Buf($base64)"
+    override suspend fun inspect(scope: Scope): String = "Buf($base64)"
 
     companion object {
         private suspend fun createBufferFrom(scope: Scope, obj: Obj): ObjBuffer =
@@ -129,7 +129,7 @@ open class ObjBuffer(val byteArray: UByteArray) : Obj() {
                         )
                     } else
                         scope.raiseIllegalArgument(
-                            "can't construct buffer from ${obj.inspect()}"
+                            "can't construct buffer from ${obj.inspect(scope)}"
                         )
                 }
             }
@@ -149,7 +149,7 @@ open class ObjBuffer(val byteArray: UByteArray) : Obj() {
                                 is ObjChar -> b.value.code.toUByte()
                                 is ObjInt -> b.value.toUByte()
                                 else -> scope.raiseIllegalArgument(
-                                    "invalid byte value for buffer constructor at index $i: ${b.inspect()}"
+                                    "invalid byte value for buffer constructor at index $i: ${b.inspect(scope)}"
                                 )
                             }
                             data[i] = code

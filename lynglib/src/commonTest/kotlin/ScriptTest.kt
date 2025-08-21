@@ -1789,7 +1789,7 @@ class ScriptTest {
                 "e="+e+"f="+f()
             }
             assertEquals("e=[]f=xx", f { "xx" })
-            assertEquals("e=[1, 2]f=xx", f(1,2) { "xx" })
+            assertEquals("e=[1,2]f=xx", f(1,2) { "xx" })
         """.trimIndent()
         )
 
@@ -1824,7 +1824,7 @@ class ScriptTest {
             }
             val f = Foo()
             assertEquals("e=[]f=xx", f.f { "xx" })
-            assertEquals("e=[1, 2]f=xx", f.f(1,2) { "xx" })
+            assertEquals("e=[1,2]f=xx", f.f(1,2) { "xx" })
         """.trimIndent()
         )
 
@@ -2661,7 +2661,8 @@ class ScriptTest {
 
     @Test
     fun testBufferEncodings() = runTest {
-        eval("""
+        eval(
+            """
             import lyng.buffer
             
             val b = Buffer("hello")
@@ -2676,7 +2677,8 @@ class ScriptTest {
             
             println(b.inspect())
                         
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
@@ -2900,7 +2902,8 @@ class ScriptTest {
 
     @Test
     fun tesFunAnnotation() = runTest {
-        eval("""
+        eval(
+            """
         
             val exportedSymbols = Map()
             
@@ -2919,7 +2922,8 @@ class ScriptTest {
             assert( exportedSymbols["getBalance"] != null )
             assertEquals(122, getBalance(1))
             
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
@@ -2939,12 +2943,14 @@ class ScriptTest {
                 assertEquals( Color.valueOf("GREEN"), Color.GREEN )
 
                 
-                """.trimIndent())
+                """.trimIndent()
+        )
     }
 
     @Test
     fun enumSerializationTest() = runTest {
-        eval("""
+        eval(
+            """
             import lyng.serialization
             
             enum Color {
@@ -2960,12 +2966,14 @@ class ScriptTest {
             assert( e1.size / 1000.0 < 6)
             println(Lynon.encode( (1..100).map { "RED" } ).toDump() )
             
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun cachedTest() = runTest {
-        eval( """
+        eval(
+            """
         
         var counter = 0
         var value = cached {
@@ -2978,66 +2986,82 @@ class ScriptTest {
         assertEquals(1, counter)
         assertEquals("ok", value())
         assertEquals(1, counter)
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testJoinToString() = runTest {
-        eval("""
+        eval(
+            """
             assertEquals( (1..3).joinToString(), "1 2 3")
             assertEquals( (1..3).joinToString(":"), "1:2:3")
             assertEquals( (1..3).joinToString { it * 10 }, "10 20 30")
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testElvisAndThrow() = runTest {
-        eval("""
+        eval(
+            """
             val x = assertThrows {
                 null ?: throw "test" + "x"
             }
             assertEquals( "testx", x.message)
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testElvisAndThrow2() = runTest {
-        eval("""
+        eval(
+            """
             val t = "112"
             val x = t ?: run { throw "testx" }
             }
             assertEquals( "112", x)
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testElvisAndRunThrow() = runTest {
-        eval("""
+        eval(
+            """
             val x = assertThrows {
                 null ?: run { throw "testx" }
             }
             assertEquals( "testx", x.message)
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testNewlinesAnsCommentsInExpressions() = runTest {
-        assertEquals( 2, (Scope().eval("""
+        assertEquals(
+            2, (Scope().eval(
+                """
             val e = 1 + 4 -
                 3
-        """.trimIndent())).toInt())
+        """.trimIndent()
+            )).toInt()
+        )
 
-        eval("""
+        eval(
+            """
                 val x = [1,2,3]
                     .map { it * 10 }
                     .map { it + 1 }
                 assertEquals( [11,21,31], x)
-            """.trimIndent())
+            """.trimIndent()
+        )
     }
 
     @Test
     fun testNotExpressionWithoutWs() = runTest {
-        eval("""
+        eval(
+            """
             fun test() { false }
             class T(value)
             assert( !false )
@@ -3046,12 +3070,14 @@ class ScriptTest {
             val t = T(false)
             assert( !t.value )
             assert( !if( true ) false else true )
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testMultilineFnDeclaration() = runTest {
-        eval("""
+        eval(
+            """
             fun test(
                 x = 1,
                 y = 2
@@ -3063,8 +3089,38 @@ class ScriptTest {
                 6,
                 7
             ) )
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testOverridenListToString() = runTest {
+        eval("""
+            val x = [1,2,3]
+            assertEquals( "[1,2,3]", x.toString() )
         """.trimIndent())
     }
 
-
+    @Test
+    fun testExceptionSerialization() = runTest {
+        eval(
+            """
+                import lyng.serialization
+                val x = [1,2,3]
+                assertEquals( "[1,2,3]", x.toString() )
+                try {    
+                    require(false)
+                }
+                catch (e) {
+                    println(e)
+                    println(e.getStackTrace())
+                    for( t in e.getStackTrace() ) {
+                        println(t)
+                    }
+//                    val coded = Lynon.encode(e)
+//                    println(coded.toDump())
+                }
+                """.trimIndent()
+        )
+    }
 }

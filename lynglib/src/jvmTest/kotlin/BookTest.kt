@@ -177,11 +177,11 @@ suspend fun DocTest.test(_scope: Scope? = null) {
     scope.apply {
         addFn("println") {
             if( bookMode ) {
-                println("${currentTest.fileNamePart}:${currentTest.line}> ${args.joinToString(" "){it.asStr.value}}")
+                println("${currentTest.fileNamePart}:${currentTest.line}> ${args.map{it.toString(this).value}.joinToString(" ")}")
             }
             else {
                 for ((i, a) in args.withIndex()) {
-                    if (i > 0) collectedOutput.append(' '); collectedOutput.append(a.asStr.value)
+                    if (i > 0) collectedOutput.append(' '); collectedOutput.append(a.toString(this).value)
                     collectedOutput.append('\n')
                 }
             }
@@ -194,7 +194,7 @@ suspend fun DocTest.test(_scope: Scope? = null) {
     } catch (e: Throwable) {
         error = e
         null
-    }?.inspect()?.replace(Regex("@\\d+"), "@...")
+    }?.inspect(scope)?.replace(Regex("@\\d+"), "@...")
 
     if (bookMode) {
         if (error != null) {

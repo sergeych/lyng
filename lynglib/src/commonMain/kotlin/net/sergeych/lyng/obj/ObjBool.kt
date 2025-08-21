@@ -23,7 +23,6 @@ import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
 
 data class ObjBool(val value: Boolean) : Obj() {
-    override val asStr by lazy { ObjString(value.toString()) }
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
         if (other !is ObjBool) return -2

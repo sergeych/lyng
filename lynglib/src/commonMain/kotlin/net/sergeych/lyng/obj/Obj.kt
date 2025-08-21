@@ -26,6 +26,7 @@ import net.sergeych.lyng.*
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
+import net.sergeych.mptools.CachedExpression
 import net.sergeych.synctools.ProtectedOp
 import net.sergeych.synctools.withLock
 import kotlin.contracts.ExperimentalContracts
@@ -49,7 +50,7 @@ open class Obj {
 
     private val opInstances = ProtectedOp()
 
-    open fun inspect(): String = toString()
+    open suspend fun inspect(scope: Scope): String = toString(scope).value
 
     /**
      * Some objects are by-value, historically [ObjInt] and [ObjReal] are usually treated as such.
@@ -84,14 +85,14 @@ open class Obj {
         scope: Scope,
         name: String,
         args: Arguments = Arguments.EMPTY,
-        onNotFoundResult: Obj?=null
+        onNotFoundResult: (()->Obj?)? = null
     ): Obj {
         return objClass.getInstanceMemberOrNull(name)?.value?.invoke(
             scope,
             this,
             args
         )
-            ?: onNotFoundResult
+            ?: onNotFoundResult?.invoke()
             ?: scope.raiseSymbolNotFound(name)
     }
 
@@ -115,8 +116,11 @@ open class Obj {
         return invokeInstanceMethod(scope, "contains", other).toBool()
     }
 
-    open val asStr: ObjString by lazy {
-        if (this is ObjString) this else ObjString(this.toString())
+    suspend open fun toString(scope: Scope): ObjString {
+        return if (this is ObjString) this
+        else invokeInstanceMethod(scope, "toString") {
+            ObjString(this.toString())
+        } as ObjString
     }
 
     /**
@@ -276,9 +280,9 @@ open class Obj {
         scope.raiseNotImplemented()
     }
 
-    fun autoInstanceScope(parent: Scope): Scope  {
-       val scope = parent.copy(newThisObj = this, args = parent.args)
-        for( m in objClass.members) {
+    fun autoInstanceScope(parent: Scope): Scope {
+        val scope = parent.copy(newThisObj = this, args = parent.args)
+        for (m in objClass.members) {
             scope.objects[m.key] = m.value
         }
         return scope
@@ -287,11 +291,11 @@ open class Obj {
     companion object {
 
         val rootObjectType = ObjClass("Obj").apply {
-            addFn("toString") {
-                thisObj.asStr
+            addFn("toString", true) {
+                ObjString(thisObj.toString())
             }
             addFn("inspect", true) {
-                thisObj.inspect().toObj()
+                thisObj.inspect(this).toObj()
             }
             addFn("contains") {
                 ObjBool(thisObj.contains(this, args.firstAndOnly()))
@@ -392,9 +396,14 @@ object ObjNull : Obj() {
         scope.raiseNPE()
     }
 
-    override suspend fun invokeInstanceMethod(scope: Scope, name: String, args: Arguments, onNotFoundResult: Obj?): Obj {
-        scope.raiseNPE()
-    }
+//    override suspend fun invokeInstanceMethod(
+//        scope: Scope,
+//        name: String,
+//        args: Arguments,
+//        onNotFoundResult: (()->Obj?)?
+//    ): Obj {
+//        scope.raiseNPE()
+//    }
 
     override suspend fun getAt(scope: Scope, index: Obj): Obj {
         scope.raiseNPE()
@@ -469,19 +478,50 @@ fun Obj.toBool(): Boolean =
 data class ObjNamespace(val name: String) : Obj() {
     override val objClass by lazy { ObjClass(name) }
 
-    override fun inspect(): String = "Ns[$name]"
+    override suspend fun inspect(scope: Scope): String = "Ns[$name]"
 
     override fun toString(): String {
         return "package $name"
     }
 }
 
-open class ObjException(exceptionClass: ExceptionClass, val scope: Scope, val message: String) : Obj() {
+open class ObjException(
+    val exceptionClass: ExceptionClass,
+    val scope: Scope,
+    val message: String,
+    @Suppress("unused") val extraData: Obj = ObjNull
+) : Obj() {
     constructor(name: String, scope: Scope, message: String) : this(
         getOrCreateExceptionClass(name),
         scope,
         message
     )
+
+    private val cachedStackTrace = CachedExpression<ObjList>()
+
+    suspend fun getStackTrace(): ObjList {
+        return cachedStackTrace.get {
+            val result = ObjList()
+            val cls = scope.get("StackTraceEntry")!!.value as ObjClass
+            var s: Scope? = scope
+            var lastPos: Pos? = null
+            while( s != null ) {
+                val pos = s.pos
+                if( pos != lastPos && !pos.currentLine.isEmpty() ) {
+                    result.list += cls.callWithArgs(
+                        scope,
+                        pos.source.objSourceName,
+                        ObjInt(pos.line.toLong()),
+                        ObjInt(pos.column.toLong()),
+                        ObjString(pos.currentLine)
+                    )
+                }
+                s = s.parent
+                lastPos = pos
+            }
+            result
+        }
+    }
 
     constructor(scope: Scope, message: String) : this(Root, scope, message)
 
@@ -494,6 +534,12 @@ open class ObjException(exceptionClass: ExceptionClass, val scope: Scope, val me
     override fun toString(): String {
         return "ObjException:${objClass.className}:${scope.pos}@${hashCode().encodeToHex()}"
     }
+
+    override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
+        encoder.encodeAny(scope, ObjString(exceptionClass.name))
+        encoder.encodeAny(scope, ObjString(message))
+    }
+
 
     companion object {
 
@@ -510,6 +556,9 @@ open class ObjException(exceptionClass: ExceptionClass, val scope: Scope, val me
             addConst("message", statement {
                 (thisObj as ObjException).message.toObj()
             })
+            addFn("getStackTrace") {
+                (thisObj as ObjException).getStackTrace()
+            }
         }
 
         private val op = ProtectedOp()

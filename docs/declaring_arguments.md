@@ -71,7 +71,7 @@ destructuring arrays when calling functions and lambdas:
         [ first, last ]
     }
     getFirstAndLast( ...(1..10) ) // see "splats" section below
-    >>> [1, 10]
+    >>> [1,10]
 
 # Splats
 
@@ -83,7 +83,7 @@ or whatever implementing [Iterable], is called _splats_. Here is how we use it:
     }
     val array = [1,2,3]
     testSplat("start", ...array, "end")
-    >>> ["start", 1, 2, 3, "end"]
+    >>> [start,1,2,3,end]
     >>> void
 
 There could be any number of splats at any positions. You can splat any other [Iterable] type:
@@ -93,7 +93,7 @@ There could be any number of splats at any positions. You can splat any other [I
     }
     val range = 1..3
     testSplat("start", ...range, "end")
-    >>> ["start", 1, 2, 3, "end"]
+    >>> [start,1,2,3,end]
     >>> void
     
 

@@ -28,7 +28,7 @@ class ObjChar(val value: Char): Obj() {
 
     override fun toString(): String = value.toString()
 
-    override fun inspect(): String = "'$value'"
+    override suspend fun inspect(scope: Scope): String = "'$value'"
 
     override fun hashCode(): Int {
         return value.hashCode()

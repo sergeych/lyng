@@ -117,7 +117,7 @@ class ObjInstant(val instant: Instant,val truncateMode: LynonSettings.InstantTru
                         is ObjInstant -> a0.instant
 
                         else -> {
-                            scope.raiseIllegalArgument("can't construct Instant(${args.inspect()})")
+                            scope.raiseIllegalArgument("can't construct Instant(${args.inspect(scope)})")
                         }
                     }
                 )

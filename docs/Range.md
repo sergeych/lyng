@@ -87,7 +87,7 @@ You can use Char as both ends of the closed range:
 Exclusive end char ranges are supported too:
 
     ('a'..<'c').toList 
-    >>> ['a', 'b']
+    >>> [a,b]
 
 
 # Instance members

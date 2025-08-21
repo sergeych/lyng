@@ -27,7 +27,6 @@ import kotlin.math.floor
 import kotlin.math.roundToLong
 
 data class ObjReal(val value: Double) : Obj(), Numeric {
-    override val asStr by lazy { ObjString(value.toString()) }
     override val longValue: Long by lazy { floor(value).toLong() }
     override val doubleValue: Double by lazy { value }
     override val toObjInt: ObjInt by lazy { ObjInt(longValue) }

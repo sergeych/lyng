@@ -103,6 +103,21 @@ fun Iterable.any(predicate): Bool {
 fun Iterable.all(predicate): Bool {
     !any { !predicate(it) }
 }
+
+fun List.toString() {
+    "[" + joinToString(",") + "]"
+}
+
+class StackTraceEntry(
+    val sourceName: String,
+    val line: Int,
+    val column: Int,
+    val sourceString: String
+) {
+    fun toString() {
+        "%s:%d:%d: %s"(sourceName, line, column, sourceString.trim())
+    }
+}
     
 """.trimIndent()
 

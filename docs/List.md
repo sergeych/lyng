@@ -24,7 +24,7 @@ There is a shortcut for the last:
 
     val list = [10, 20, 30]
     [list.last, list.lastIndex]
-    >>> [30, 2]
+    >>> [30,2]
 
 __Important__ negative indexes works wherever indexes are used, e.g. in insertion and removal methods too.
 

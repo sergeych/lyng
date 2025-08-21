@@ -17,9 +17,13 @@
 
 package net.sergeych.lyng
 
+import net.sergeych.lyng.obj.ObjString
+
 class Source(val fileName: String, text: String) {
 
     val lines = text.lines().map { it.trimEnd() }
+
+    val objSourceName by lazy { ObjString(fileName) }
 
     companion object {
         val builtIn: Source by lazy { Source("built-in", "") }

@@ -1363,8 +1363,8 @@ class Compiler(
             }
 
 
-            return statement(body.pos) { ctx ->
-                val forContext = ctx.copy(start)
+            return statement(body.pos) { cxt ->
+                val forContext = cxt.copy(start)
 
                 // loop var: StoredObject
                 val loopSO = forContext.addItem(tVar.value, true, ObjNull)
@@ -1393,7 +1393,7 @@ class Compiler(
                             .getOrElse {
                                 throw ScriptError(
                                     tOp.pos,
-                                    "object is not enumerable: no index access for ${sourceObj.inspect()}",
+                                    "object is not enumerable: no index access for ${sourceObj.inspect(cxt)}",
                                     it
                                 )
                             }
@@ -1420,7 +1420,7 @@ class Compiler(
                         }
                     }
                     if (!breakCaught && elseStatement != null) {
-                        result = elseStatement.execute(ctx)
+                        result = elseStatement.execute(cxt)
                     }
                     result
                 }

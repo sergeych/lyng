@@ -50,6 +50,5 @@ val ObjArray by lazy {
         addFn("indices") {
             ObjRange(0.toObj(), thisObj.invokeInstanceMethod(this, "size"), false)
         }
-
     }
 }

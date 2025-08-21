@@ -28,7 +28,7 @@ class ObjMutableBuffer(byteArray: UByteArray) : ObjBuffer(byteArray) {
             is ObjInt -> newValue.value.toUByte()
             is ObjChar -> newValue.value.code.toUByte()
             else -> scope.raiseIllegalArgument(
-                "invalid byte value for buffer at index ${index.inspect()}: ${newValue.inspect()}"
+                "invalid byte value for buffer at index ${index.inspect(scope)}: ${newValue.inspect(scope)}"
             )
         }
     }
@@ -54,7 +54,7 @@ class ObjMutableBuffer(byteArray: UByteArray) : ObjBuffer(byteArray) {
                         )
                     } else
                         scope.raiseIllegalArgument(
-                            "can't construct buffer from ${obj.inspect()}"
+                            "can't construct buffer from ${obj.inspect(scope)}"
                         )
                 }
             }
@@ -74,7 +74,7 @@ class ObjMutableBuffer(byteArray: UByteArray) : ObjBuffer(byteArray) {
                                 is ObjChar -> b.value.code.toUByte()
                                 is ObjInt -> b.value.toUByte()
                                 else -> scope.raiseIllegalArgument(
-                                    "invalid byte value for buffer constructor at index $i: ${b.inspect()}"
+                                    "invalid byte value for buffer constructor at index $i: ${b.inspect(scope)}"
                                 )
                             }
                             data[i] = code

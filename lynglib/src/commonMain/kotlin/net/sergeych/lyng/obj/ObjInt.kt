@@ -23,7 +23,6 @@ import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
 
 class ObjInt(var value: Long, override val isConst: Boolean = false) : Obj(), Numeric {
-    override val asStr get() = ObjString(value.toString())
     override val longValue get() = value
     override val doubleValue get() = value.toDouble()
     override val toObjInt get() = this

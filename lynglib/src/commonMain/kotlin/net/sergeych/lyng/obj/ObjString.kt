@@ -44,9 +44,7 @@ data class ObjString(val value: String) : Obj() {
 
     override fun toString(): String = value
 
-    override val asStr: ObjString by lazy { this }
-
-    override fun inspect(): String {
+    override suspend fun inspect(scope: Scope): String {
         return "\"$value\""
     }
 
@@ -54,7 +52,7 @@ data class ObjString(val value: String) : Obj() {
         get() = type
 
     override suspend fun plus(scope: Scope, other: Obj): Obj {
-        return ObjString(value + other.asStr.value)
+        return ObjString(value + other.toString(scope).value)
     }
 
     override suspend fun getAt(scope: Scope, index: Obj): Obj {
@@ -158,6 +156,9 @@ data class ObjString(val value: String) : Obj() {
             addFn("size") { ObjInt(thisAs<ObjString>().value.length.toLong()) }
             addFn("toReal") {
                 ObjReal(thisAs<ObjString>().value.toDouble())
+            }
+            addFn("trim") {
+                thisAs<ObjString>().value.trim().let(::ObjString)
             }
         }
     }

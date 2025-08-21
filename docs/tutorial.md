@@ -505,21 +505,21 @@ Notice usage of indexing. You can use negative indexes to offset from the end of
 When you want to "flatten" it to single array, you can use splat syntax:
 
     [1, ...[2,3], 4]
-    >>> [1, 2, 3, 4]
+    >>> [1,2,3,4]
 
 Of course, you can splat from anything that is List (or list-like, but it will be defined later):
 
     val a = ["one", "two"]
     val b = [10.1, 20.2]
     ["start", ...b, ...a, "end"]
-    >>> ["start", 10.1, 20.2, "one", "two", "end"]
+    >>> [start,10.1,20.2,one,two,end]
 
 Of course, you can set any list element:
 
     val a = [1, 2, 3]
     a[1] = 200
     a
-    >>> [1, 200, 3]
+    >>> [1,200,3]
 
 Lists are comparable, and it works well as long as their respective elements are:
 
@@ -609,20 +609,20 @@ Using splat arguments can simplify inserting list in list:
     val x = [1, 2, 3]
     x.insertAt( 1, ...[0,100,0])
     x
-    >>> [1, 0, 100, 0, 2, 3]
+    >>> [1,0,100,0,2,3]
 
 Note that to add to the end you still need to use `add` or positive index of the after-last element:
 
     val x = [1,2,3]
     x.insertAt(3, 10)
     x
-    >>> [1, 2, 3, 10]
+    >>> [1,2,3,10]
 
 but it is much simpler, and we recommend to use '+='
 
     val x = [1,2,3]
     x += 10
-    >>> [1, 2, 3, 10]
+    >>> [1,2,3,10]
 
 ## Removing list items
 

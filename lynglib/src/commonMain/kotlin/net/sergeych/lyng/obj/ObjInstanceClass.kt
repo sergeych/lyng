@@ -30,12 +30,19 @@ class ObjInstanceClass(val name: String) : ObjClass(name) {
     override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj {
         val args = decoder.decodeAnyList(scope)
         val actualSize = constructorMeta?.params?.size ?: 0
-        if( args.size > actualSize )
+        if (args.size > actualSize)
             scope.raiseIllegalArgument("constructor $name has only $actualSize but serialized version has ${args.size}")
         val newScope = scope.copy(args = Arguments(args))
         return (callOn(newScope) as ObjInstance).apply {
-            deserializeStateVars(scope,decoder)
-            invokeInstanceMethod(scope, "onDeserialized", onNotFoundResult = ObjVoid)
+            deserializeStateVars(scope, decoder)
+            invokeInstanceMethod(scope, "onDeserialized") { ObjVoid }
+        }
+    }
+
+    init {
+        addFn("toString", true) {
+            println("-------------- tos! --------------")
+            ObjString(thisObj.toString())
         }
     }
 

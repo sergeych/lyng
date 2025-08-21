@@ -57,7 +57,7 @@ class ObjDuration(val duration: Duration) : Obj() {
             override suspend fun callOn(scope: Scope): Obj {
                 val args = scope.args
                 if( args.list.size > 1 )
-                    scope.raiseIllegalArgument("can't construct Duration(${args.inspect()})")
+                    scope.raiseIllegalArgument("can't construct Duration(${args.inspect(scope)})")
                 val a0 = args.list.getOrNull(0)
 
                 return ObjDuration(
@@ -66,7 +66,7 @@ class ObjDuration(val duration: Duration) : Obj() {
                         is ObjInt -> a0.value.seconds
                         is ObjReal -> a0.value.seconds
                         else -> {
-                            scope.raiseIllegalArgument("can't construct Instant(${args.inspect()})")
+                            scope.raiseIllegalArgument("can't construct Instant(${args.inspect(scope)})")
                         }
                     }
                 )

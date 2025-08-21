@@ -61,11 +61,15 @@ open class ObjClass(
 
     override suspend fun callOn(scope: Scope): Obj {
         val instance = ObjInstance(this)
-        instance.instanceScope = scope.copy(newThisObj = instance,args = scope.args)
+        instance.instanceScope = scope.copy(newThisObj = instance, args = scope.args)
         if (instanceConstructor != null) {
             instanceConstructor!!.execute(instance.instanceScope)
         }
         return instance
+    }
+
+    suspend fun callWithArgs(scope: Scope, vararg plainArgs: Obj): Obj {
+        return callOn(scope.copy(Arguments(*plainArgs)))
     }
 
 
@@ -77,13 +81,13 @@ open class ObjClass(
         pos: Pos = Pos.builtIn
     ) {
         val existing = members[name] ?: allParentsSet.firstNotNullOfOrNull { it.members[name] }
-        if( existing?.isMutable == false)
+        if (existing?.isMutable == false)
             throw ScriptError(pos, "$name is already defined in $objClass or one of its supertypes")
         members[name] = ObjRecord(initialValue, isMutable, visibility)
     }
 
     private fun initClassScope(): Scope {
-        if( classScope == null ) classScope = Scope()
+        if (classScope == null) classScope = Scope()
         return classScope!!
     }
 
@@ -96,7 +100,7 @@ open class ObjClass(
     ) {
         initClassScope()
         val existing = classScope!!.objects[name]
-        if( existing != null)
+        if (existing != null)
             throw ScriptError(pos, "$name is already defined in $objClass or one of its supertypes")
         classScope!!.addItem(name, isMutable, initialValue, visibility)
     }
@@ -127,26 +131,29 @@ open class ObjClass(
 
     override suspend fun readField(scope: Scope, name: String): ObjRecord {
         classScope?.objects?.get(name)?.let {
-            if( it.visibility.isPublic ) return it
+            if (it.visibility.isPublic) return it
         }
         return super.readField(scope, name)
     }
 
     override suspend fun writeField(scope: Scope, name: String, newValue: Obj) {
         initClassScope().objects[name]?.let {
-            if( it.isMutable) it.value = newValue
+            if (it.isMutable) it.value = newValue
             else scope.raiseIllegalAssignment("can't assign $name is not mutable")
         }
             ?: super.writeField(scope, name, newValue)
     }
 
-    override suspend fun invokeInstanceMethod(scope: Scope, name: String, args: Arguments,
-                                              onNotFoundResult: Obj?): Obj {
+    override suspend fun invokeInstanceMethod(
+        scope: Scope, name: String, args: Arguments,
+        onNotFoundResult: (() -> Obj?)?
+    ): Obj {
         return classScope?.objects?.get(name)?.value?.invoke(scope, this, args)
             ?: super.invokeInstanceMethod(scope, name, args, onNotFoundResult)
     }
 
-    open suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj = scope.raiseNotImplemented()
+    open suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj =
+        scope.raiseNotImplemented()
 
 }
 

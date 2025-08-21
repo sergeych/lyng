@@ -26,12 +26,12 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
 
     override val objClass: ObjClass = type
 
-    override fun toString(): String {
+    override suspend fun toString(scope: Scope): ObjString {
         val result = StringBuilder()
-        result.append("${start?.inspect() ?: '∞'} ..")
+        result.append("${start?.inspect(scope) ?: '∞'} ..")
         if (!isEndInclusive) result.append('<')
-        result.append(" ${end?.inspect() ?: '∞'}")
-        return result.toString()
+        result.append(" ${end?.inspect(scope) ?: '∞'}")
+        return ObjString(result.toString())
     }
 
     /**
@@ -52,11 +52,11 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
      * if start is not ObjInt, raises [ObjIllegalArgumentException]
      * otherwise returns start.value.toInt()
      */
-    fun startInt(scope: Scope): Int =
+    suspend fun startInt(scope: Scope): Int =
         if( start == null || start is ObjNull) 0
         else {
             if( start is ObjInt) start.value.toInt()
-            else scope.raiseIllegalArgument("start is not Int: ${start.inspect()}")
+            else scope.raiseIllegalArgument("start is not Int: ${start.inspect(scope)}")
         }
 
     suspend fun containsRange(scope: Scope, other: ObjRange): Boolean {

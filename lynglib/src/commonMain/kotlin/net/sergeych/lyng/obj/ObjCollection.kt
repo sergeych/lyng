@@ -22,4 +22,4 @@ package net.sergeych.lyng.obj
  */
 val ObjCollection = ObjClass("Collection", ObjIterable).apply {
 
-    }
+}

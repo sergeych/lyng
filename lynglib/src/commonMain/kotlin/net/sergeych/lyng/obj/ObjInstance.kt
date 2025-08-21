@@ -48,7 +48,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
     }
 
     override suspend fun invokeInstanceMethod(scope: Scope, name: String, args: Arguments,
-                                              onNotFoundResult: Obj?): Obj =
+                                              onNotFoundResult: (()->Obj?)?): Obj =
         instanceScope[name]?.let {
             if (it.visibility.isPublic)
                 it.value.invoke(
