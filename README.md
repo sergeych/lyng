@@ -158,6 +158,7 @@ Ready features:
 - [x] compression/decompression (integrated in serialization)
 - [x] dynamic fields
 - [x] function annotations
+- [x] better stack reporting
 
 ###  Under way: 
 
@@ -165,7 +166,6 @@ Ready features:
 - [ ] multiple inheritance for user classes
 - [ ] site with integrated interpreter to give a try
 - [ ] kotlin part public API good docs, integration focused
-- [ ] better stack reporting
 
 ## v1.1+
 
