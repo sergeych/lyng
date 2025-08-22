@@ -122,6 +122,32 @@ This way, in turn, can also be shortened, as it is overly popular:
 The trick, though, works with strings only, and always provide `Exception` instances, which is good for debugging but
 most often not enough.
 
+# Exception class
+
+Serializable class that conveys information about the exception. Important members and methods are:
+
+| name              | description                                            |
+|-------------------|--------------------------------------------------------|
+| message           | String message                                         |
+| stackTrace        | lyng stack trace, list of `StackTraceEntry`, see below |
+| printStackTrace() | format and print stack trace using println()           |
+
+## StackTraceEntry
+
+A simple structire that stores single entry in Lyng stack, it is created automatically on exception creation:
+
+```kotlin
+class StackTraceEntry(
+    val sourceName: String,
+    val line: Int,
+    val column: Int,
+    val sourceString: String
+)
+```
+
+- `sourceString` is a line extracted from sources. Note that it _is serialized and printed_, so if you want to conceal it, catch all exceptions and filter out sensitive information.
+
+
 # Custom error classes
 
 _this functionality is not yet released_
@@ -131,7 +157,7 @@ _this functionality is not yet released_
 | class                      | notes                                                 |
 |----------------------------|-------------------------------------------------------|
 | Exception                  | root of al throwable objects                          |
-| NullReferenceException       |                                                       |
+| NullReferenceException     |                                                       |
 | AssertionFailedException   |                                                       | 
 | ClassCastException         |                                                       |
 | IndexOutOfBoundsException  |                                                       |

@@ -85,7 +85,7 @@ open class Obj {
         scope: Scope,
         name: String,
         args: Arguments = Arguments.EMPTY,
-        onNotFoundResult: (()->Obj?)? = null
+        onNotFoundResult: (() -> Obj?)? = null
     ): Obj {
         return objClass.getInstanceMemberOrNull(name)?.value?.invoke(
             scope,
@@ -116,11 +116,28 @@ open class Obj {
         return invokeInstanceMethod(scope, "contains", other).toBool()
     }
 
-    suspend open fun toString(scope: Scope): ObjString {
+    /**
+     * Default toString implementation:
+     *
+     * - if the object is a string, returns it
+     * - otherwise, if not [calledFromLyng], calls Lyng override `toString()` if exists
+     * - otherwise, meaning either called from Lyng `toString`, or there is no
+     *   Lyng override, returns the object's Kotlin variant of `toString()
+     *
+     * Note on kotlin's `toString()`: it is preferred to use this, 'scoped` version,
+     * as it can execute Lyng code using the scope and being suspending one.
+     *
+     * @param scope the scope where the string representation was requested
+     * @param calledFromLyng true if called from Lyng's `toString`. Normally this parameter should be ignored,
+     *      but it is used to avoid endless recursion in [Obj.toString] base implementation
+     */
+    suspend open fun toString(scope: Scope,calledFromLyng: Boolean=false): ObjString {
         return if (this is ObjString) this
-        else invokeInstanceMethod(scope, "toString") {
-            ObjString(this.toString())
-        } as ObjString
+        else if( !calledFromLyng ) {
+            invokeInstanceMethod(scope, "toString") {
+                ObjString(this.toString())
+            } as ObjString
+        } else { ObjString(this.toString()) }
     }
 
     /**
@@ -292,7 +309,7 @@ open class Obj {
 
         val rootObjectType = ObjClass("Obj").apply {
             addFn("toString", true) {
-                ObjString(thisObj.toString())
+                thisObj.toString(this, true)
             }
             addFn("inspect", true) {
                 thisObj.inspect(this).toObj()
@@ -485,19 +502,26 @@ data class ObjNamespace(val name: String) : Obj() {
     }
 }
 
+/**
+ * note on [getStackTrace]. If [useStackTrace] is not null, it is used instead. Otherwise, it is calculated
+ * from the current scope which is treated as exception scope. It is used to restore serialized
+ * exception with stack trace; the scope of the de-serialized exception is not valid
+ * for stack unwinding.
+ */
 open class ObjException(
     val exceptionClass: ExceptionClass,
     val scope: Scope,
-    val message: String,
-    @Suppress("unused") val extraData: Obj = ObjNull
+    val message: ObjString,
+    @Suppress("unused") val extraData: Obj = ObjNull,
+    val useStackTrace: ObjList? = null
 ) : Obj() {
     constructor(name: String, scope: Scope, message: String) : this(
         getOrCreateExceptionClass(name),
         scope,
-        message
+        ObjString(message)
     )
 
-    private val cachedStackTrace = CachedExpression<ObjList>()
+    private val cachedStackTrace = CachedExpression(initialValue = useStackTrace)
 
     suspend fun getStackTrace(): ObjList {
         return cachedStackTrace.get {
@@ -505,9 +529,9 @@ open class ObjException(
             val cls = scope.get("StackTraceEntry")!!.value as ObjClass
             var s: Scope? = scope
             var lastPos: Pos? = null
-            while( s != null ) {
+            while (s != null) {
                 val pos = s.pos
-                if( pos != lastPos && !pos.currentLine.isEmpty() ) {
+                if (pos != lastPos && !pos.currentLine.isEmpty()) {
                     result.list += cls.callWithArgs(
                         scope,
                         pos.source.objSourceName,
@@ -523,7 +547,7 @@ open class ObjException(
         }
     }
 
-    constructor(scope: Scope, message: String) : this(Root, scope, message)
+    constructor(scope: Scope, message: String) : this(Root, scope, ObjString(message))
 
     fun raise(): Nothing {
         throw ExecutionError(this)
@@ -531,13 +555,17 @@ open class ObjException(
 
     override val objClass: ObjClass = exceptionClass
 
-    override fun toString(): String {
-        return "ObjException:${objClass.className}:${scope.pos}@${hashCode().encodeToHex()}"
+    override suspend fun toString(scope: Scope,calledFromLyng: Boolean): ObjString {
+        val at = getStackTrace().list.firstOrNull()?.toString(scope)
+            ?: ObjString("(unknown)")
+        return ObjString("${objClass.className}: $message at $at")
     }
 
     override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
-        encoder.encodeAny(scope, ObjString(exceptionClass.name))
-        encoder.encodeAny(scope, ObjString(message))
+        encoder.encodeAny(scope, exceptionClass.classNameObj)
+        encoder.encodeAny(scope, message)
+        encoder.encodeAny(scope, extraData)
+        encoder.encodeAny(scope, getStackTrace())
     }
 
 
@@ -545,18 +573,40 @@ open class ObjException(
 
         class ExceptionClass(val name: String, vararg parents: ObjClass) : ObjClass(name, *parents) {
             override suspend fun callOn(scope: Scope): Obj {
-                val message = scope.args.getOrNull(0)?.toString() ?: name
+                val message = scope.args.getOrNull(0)?.toString(scope) ?: ObjString(name)
                 return ObjException(this, scope, message)
             }
 
             override fun toString(): String = "ExceptionClass[$name]@${hashCode().encodeToHex()}"
+
+            override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj {
+                return try {
+                    val lyngClass = decoder.decodeAnyAs<ObjString>(scope).value.let {
+                        ((scope[it] ?: scope.raiseIllegalArgument("Unknown exception class: $it"))
+                            .value as? ExceptionClass)
+                            ?: scope.raiseIllegalArgument("Not an exception class: $it")
+                    }
+                    ObjException(
+                        lyngClass,
+                        scope,
+                        decoder.decodeAnyAs<ObjString>(scope),
+                        decoder.decodeAny(scope),
+                        decoder.decodeAnyAs<ObjList>(scope)
+                    )
+                } catch (e: ScriptError) {
+                    throw e
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    scope.raiseIllegalArgument("Failed to deserialize exception: ${e.message}")
+                }
+            }
         }
 
         val Root = ExceptionClass("Throwable").apply {
             addConst("message", statement {
                 (thisObj as ObjException).message.toObj()
             })
-            addFn("getStackTrace") {
+            addFn("stackTrace") {
                 (thisObj as ObjException).getStackTrace()
             }
         }

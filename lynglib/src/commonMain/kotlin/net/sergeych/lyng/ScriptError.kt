@@ -33,6 +33,6 @@ open class ScriptError(val pos: Pos, val errorMessage: String, cause: Throwable?
 
 class ScriptFlowIsNoMoreCollected: Exception()
 
-class ExecutionError(val errorObject: ObjException) : ScriptError(errorObject.scope.pos, errorObject.message)
+class ExecutionError(val errorObject: ObjException) : ScriptError(errorObject.scope.pos, errorObject.message.value)
 
 class ImportException(pos: Pos, message: String) : ScriptError(pos, message)

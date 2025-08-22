@@ -63,6 +63,19 @@ open class LynonDecoder(val bin: BitInput, val settings: LynonSettings = LynonSe
         }
     }
 
+    /**
+     * Decode any object with [decodeAny] and cast it to [T] or raise Lyng's class cast error
+     * with [Scope.raiseClassCastError].
+     *
+     * @return T typed Lyng object
+     */
+    suspend inline fun <reified T : Obj> decodeAnyAs(scope: Scope): T {
+        val x = decodeAny(scope)
+        return (x as? T) ?: scope.raiseClassCastError(
+                "Expected ${T::class.simpleName} but got $x"
+            )
+    }
+
     private suspend fun decodeClassObj(scope: Scope): ObjClass {
         val className = decodeObject(scope, ObjString.type, null) as ObjString
         return scope.get(className.value)?.value?.let {
@@ -72,7 +85,7 @@ open class LynonDecoder(val bin: BitInput, val settings: LynonSettings = LynonSe
         } ?: scope.raiseSymbolNotFound("can't deserialize: not found type $className")
     }
 
-    suspend fun decodeAnyList(scope: Scope,fixedSize: Int?=null): MutableList<Obj> {
+    suspend fun decodeAnyList(scope: Scope, fixedSize: Int? = null): MutableList<Obj> {
         return if (bin.getBit() == 1) {
             // homogenous
             val type = LynonType.entries[getBitsAsInt(4)]

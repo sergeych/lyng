@@ -118,6 +118,13 @@ class StackTraceEntry(
         "%s:%d:%d: %s"(sourceName, line, column, sourceString.trim())
     }
 }
+
+fun Exception.printStackTrace() {
+    println(this)
+    for( entry in stackTrace() ) {
+        println("\tat "+entry)
+    }
+}
     
 """.trimIndent()
 

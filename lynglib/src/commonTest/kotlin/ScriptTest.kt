@@ -2035,7 +2035,7 @@ class ScriptTest {
 
     @Test
     fun testThrowFromKotlin() = runTest {
-        val c = Scope()
+        val c = Script.newScope()
         c.addFn("callThrow") {
             raiseIllegalArgument("fromKotlin")
         }
@@ -3112,13 +3112,18 @@ class ScriptTest {
                     require(false)
                 }
                 catch (e) {
-                    println(e)
-                    println(e.getStackTrace())
-                    for( t in e.getStackTrace() ) {
-                        println(t)
-                    }
-//                    val coded = Lynon.encode(e)
-//                    println(coded.toDump())
+                    println(e.stackTrace)
+                    e.printStackTrace()
+                    val coded = Lynon.encode(e)
+                    val decoded = Lynon.decode(coded)
+                    assertEquals( e::class, decoded::class )
+                    assertEquals( e.stackTrace, decoded.stackTrace )
+                    assertEquals( e.message, decoded.message )
+                    println("-------------------- e")
+                    println(e.toString())
+                    println("-------------------- dee")
+                    println(decoded.toString())
+//                    assertEquals( e.toString(), decoded.toString() )
                 }
                 """.trimIndent()
         )

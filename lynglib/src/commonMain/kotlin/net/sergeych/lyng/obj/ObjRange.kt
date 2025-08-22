@@ -26,7 +26,7 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
 
     override val objClass: ObjClass = type
 
-    override suspend fun toString(scope: Scope): ObjString {
+    override suspend fun toString(scope: Scope,calledFromLyng: Boolean): ObjString {
         val result = StringBuilder()
         result.append("${start?.inspect(scope) ?: '∞'} ..")
         if (!isEndInclusive) result.append('<')

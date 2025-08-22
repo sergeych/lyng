@@ -16,7 +16,8 @@ __Other documents to read__ maybe after this one:
 - [math in Lyng](math.md)
 - [time](time.md) and [parallelism](parallelism.md)
 - [parallelism] - multithreaded code, coroutines, etc.
-- Some class references: [List], [Set], [Map], [Real], [Range], [Iterable], [Iterator], [time manipulation](time.md), [RingBuffer], [Buffer].
+- Some class
+  references: [List], [Set], [Map], [Real], [Range], [Iterable], [Iterator], [time manipulation](time.md), [RingBuffer], [Buffer].
 - Some samples: [combinatorics](samples/combinatorics.lyng.md), national vars and
   loops: [сумма ряда](samples/сумма_ряда.lyng.md). More at [samples folder](samples)
 
@@ -488,7 +489,8 @@ Lyng has built-in mutable array class `List` with simple literals:
     [1, "two", 3.33].size
     >>> 3
 
-[List] is an implementation of the type `Array`, and through it `Collection` and [Iterable]. Please read [Iterable], many collection based methods are implemented there.
+[List] is an implementation of the type `Array`, and through it `Collection` and [Iterable]. Please read [Iterable],
+many collection based methods are implemented there.
 
 Lists can contain any type of objects, lists too:
 
@@ -1137,7 +1139,8 @@ See [more docs on time manipulation](time.md)
 
 # Enums
 
-For the moment, only simple enums are implemented. Enum is a list of constants, represented also by their _ordinal_ - [Int] value.
+For the moment, only simple enums are implemented. Enum is a list of constants, represented also by their
+_ordinal_ - [Int] value.
 
     enum Color {
         RED, GREEN, BLUE
@@ -1152,7 +1155,8 @@ For the moment, only simple enums are implemented. Enum is a list of constants, 
     assertEquals( Color.valueOf("GREEN"), Color.GREEN )
     >>> void
 
-Enums are serialized as ordinals. Please note that due to caching, serialized string arrays could be even more compact than enum arrays, until `Lynon.encodeTyped` will be implemented.
+Enums are serialized as ordinals. Please note that due to caching, serialized string arrays could be even more compact
+than enum arrays, until `Lynon.encodeTyped` will be implemented.
 
 # Comments
 
@@ -1266,6 +1270,7 @@ Typical set of String functions includes:
 |--------------------|------------------------------------------------------------|
 | lower()            | change case to unicode upper                               |
 | upper()            | change case to unicode lower                               |
+| trim()             | trim space chars from both ends                            |
 | startsWith(prefix) | true if starts with a prefix                               |
 | endsWith(prefix)   | true if ends with a prefix                                 |
 | take(n)            | get a new string from up to n first characters             |
@@ -1293,7 +1298,7 @@ String literal could be multiline:
     "Hello
     World"
 
-In this case, it will be passed literally ot "hello\n    World". But, if there are
+In this case, it will be passed literally ot "hello\n World". But, if there are
 several lines with common left indent, it will be removed, also, forst and last lines,
 if blank, will be removed too, for example:
 
@@ -1305,7 +1310,8 @@ if blank, will be removed too, for example:
     >>> This is a second line.
     >>> void
 
-- as expected, empty lines and common indent were removed. It is much like kotlin's `""" ... """.trimIndent()` technique, but simpler ;)
+- as expected, empty lines and common indent were removed. It is much like kotlin's `""" ... """.trimIndent()`
+  technique, but simpler ;)
 
 # Built-in functions
 
@@ -1325,7 +1331,6 @@ See [math functions](math.md). Other general purpose functions are:
 | delay, launch, yield                         | see [parallelism]                                          |
 | cached(builder)                              | remembers builder() on first invocation and return it then |
 | let, also, apply, run                        | see above, flow controls                                   |
-
 
 # Built-in constants
 

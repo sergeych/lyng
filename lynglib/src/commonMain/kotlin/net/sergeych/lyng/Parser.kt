@@ -433,10 +433,10 @@ private class Parser(fromPos: Pos) {
                 '\\' -> {
                     pos.advance() ?: raise("unterminated string")
                     when (currentChar) {
-                        'n' -> sb.append('\n')
-                        'r' -> sb.append('\r')
-                        't' -> sb.append('\t')
-                        '"' -> sb.append('"')
+                        'n' -> {sb.append('\n'); pos.advance()}
+                        'r' -> {sb.append('\r'); pos.advance()}
+                        't' -> {sb.append('\t'); pos.advance()}
+                        '"' -> {sb.append('"'); pos.advance()}
                         else -> sb.append('\\').append(currentChar)
                     }
                 }
