@@ -1364,3 +1364,5 @@ See [math functions](math.md). Other general purpose functions are:
 [RingBuffer]: RingBuffer.md
 
 [Collection]: Collection.md
+
+[Array]: Array.md
