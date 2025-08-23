@@ -3095,10 +3095,12 @@ class ScriptTest {
 
     @Test
     fun testOverridenListToString() = runTest {
-        eval("""
+        eval(
+            """
             val x = [1,2,3]
             assertEquals( "[1,2,3]", x.toString() )
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
@@ -3131,7 +3133,8 @@ class ScriptTest {
 
     @Test
     fun testThisInClosure() = runTest {
-        eval("""
+        eval(
+            """
             fun Iterable.sum2by(f) {
                 var acc = null
                 for( x in this ) {
@@ -3147,12 +3150,14 @@ class ScriptTest {
                 }
             }
             assertEquals(60, T([1,2,3], 10).sum())
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testThisInFlowClosure() = runTest {
-        eval("""
+        eval(
+            """
             class T(val coll, val factor) {
                 fun seq() {
                     flow {
@@ -3163,7 +3168,50 @@ class ScriptTest {
                 }
             }
             assertEquals([10,20,30], T([1,2,3], 10).seq().toList())
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
+    @Test
+    fun testSum() = runTest {
+        eval(
+            """
+            assertEquals(1, [1].sum())
+            assertEquals(null, [].sum())
+            assertEquals(6, [1,2,3].sum())
+            assertEquals(30, [3].sumOf { it * 10 })
+            assertEquals(null, [].sumOf { it * 10 })
+            assertEquals(60, [1,2,3].sumOf { it * 10 })
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testSort() = runTest {
+        eval("""
+            val coll = [5,4,1,7]
+            assertEquals( [1,4,5,7], coll.sortedWith { a,b -> a <=> b })
+            assertEquals( [1,4,5,7], coll.sorted())
+            assertEquals( [7,5,4,1], coll.sortedBy { -it })
+            assertEquals( [1,4,5,7], coll.sortedBy { -it }.reversed())
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testListSortInPlace() = runTest {
+        eval("""
+            val l1 = [6,3,1,9]
+            l1.sort()
+            assertEquals( [1,3,6,9], l1)
+            l1.sortBy { -it }
+            assertEquals( [1,3,6,9].reversed(), l1)
+            l1.sort()
+            l1.sortBy { it % 4 }
+            // 1,3,6,9
+            // 1 3 2 1
+            // we hope we got it also stable:
+            assertEquals( [1,9,6,3], l1)
+        """)
+    }
 }

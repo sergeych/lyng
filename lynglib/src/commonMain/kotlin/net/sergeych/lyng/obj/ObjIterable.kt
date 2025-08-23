@@ -119,12 +119,6 @@ val ObjIterable by lazy {
             ObjList(result)
         }
 
-//        addFn("drop" ) {
-//            var n = requireOnlyArg<ObjInt>().value.toInt()
-//            if( n < 0 ) raiseIllegalArgument("drop($n): should be positive")
-//            val it = callMethod<>()
-//        }
-
         addFn("isEmpty") {
             ObjBool(
                 thisObj.invokeInstanceMethod(this, "iterator")
@@ -132,5 +126,21 @@ val ObjIterable by lazy {
                     .not()
             )
         }
+
+        addFn("sortedWith") {
+            val list = thisObj.callMethod<ObjList>(this, "toList")
+            val comparator = requireOnlyArg<Statement>()
+            list.quicksort { a, b ->
+                comparator.call(this, a, b).toInt()
+            }
+            list
+        }
+
+        addFn("reversed") {
+            val list = thisObj.callMethod<ObjList>(this, "toList")
+            list.list.reverse()
+            list
+        }
+
     }
 }

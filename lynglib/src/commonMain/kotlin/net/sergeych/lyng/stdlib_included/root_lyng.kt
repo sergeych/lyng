@@ -103,8 +103,44 @@ fun Iterable.all(predicate): Bool {
     !any { !predicate(it) }
 }
 
+fun Iterable.sum() {
+    val i = iterator()
+    if( i.hasNext() ) {
+        var result = i.next()
+        while( i.hasNext() ) result += i.next()
+        result
+    }
+    else null
+}
+
+fun Iterable.sumOf(f) {
+    val i = iterator()
+    if( i.hasNext() ) {
+        var result = f(i.next())
+        while( i.hasNext() ) result += f(i.next())
+        result
+    }
+    else null
+}
+
+fun Iterable.sorted() {
+    sortedWith { a, b -> a <=> b }
+}
+
+fun Iterable.sortedBy(predicate) {
+    sortedWith { a, b -> predicate(a) <=> predicate(b) }
+}
+
 fun List.toString() {
     "[" + joinToString(",") + "]"
+}
+
+fun List.sortBy(predicate) {
+    sortWith { a, b -> predicate(a) <=> predicate(b) }
+}
+
+fun List.sort() {
+    sortWith { a, b -> a <=> b }
 }
 
 class StackTraceEntry(
@@ -124,6 +160,7 @@ fun Exception.printStackTrace() {
         println("\tat "+entry)
     }
 }
+
     
 """.trimIndent()
 

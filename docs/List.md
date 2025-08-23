@@ -92,22 +92,44 @@ Open end ranges remove head and tail elements:
     assert( [1, 2, 3] !== [1, 2, 3])
     >>> void
 
+## In-place sort
+
+List could be sorted in place, just like [Collection] provide sorted copies, in a very like way:
+
+    val l1 = [6,3,1,9]
+    l1.sort()
+    assertEquals( [1,3,6,9], l1)
+    
+    l1.sortBy { -it }
+    assertEquals( [1,3,6,9].reversed(), l1)
+    
+    l1.sort() // 1 3 6 9
+    l1.sortBy { it % 4 }
+    // 1,3,6,9 gives, mod 4:
+    // 1 3 2 1
+    // we hope we got it also stable:
+    assertEquals( [1,9,6,3], l1)
+    >>> void
+
 ## Members
 
-| name                          | meaning                               | type        |
-|-------------------------------|---------------------------------------|-------------|
-| `size`                        | current size                          | Int         |
-| `add(elements...)`            | add one or more elements to the end   | Any         |
-| `insertAt(index,elements...)` | insert elements at position           | Int, Any    |
-| `removeAt(index)`             | remove element at position            | Int         |
-| `remove(from,toNonInclusive)` | remove range from (incl) to (nonincl) | Int, Int    |
-| `remove(Range)`               | remove range                          | Range       |
-| `removeLast()`                | remove last element                   |             |
-| `removeLast(n)`               | remove n last elements                | Int         |
-| `contains(element)`           | check the element is in the list (1)  |             |
-| `[index]`                     | get or set element at index           | Int         |
-| `[Range]`                     | get slice of the array (copy)         | Range       |
-| `+=`                          | append element(s)                     | List or Obj |
+| name                          | meaning                                      | type        |
+|-------------------------------|----------------------------------------------|-------------|
+| `size`                        | current size                                 | Int         |
+| `add(elements...)`            | add one or more elements to the end          | Any         |
+| `insertAt(index,elements...)` | insert elements at position                  | Int, Any    |
+| `removeAt(index)`             | remove element at position                   | Int         |
+| `remove(from,toNonInclusive)` | remove range from (incl) to (nonincl)        | Int, Int    |
+| `remove(Range)`               | remove range                                 | Range       |
+| `removeLast()`                | remove last element                          |             |
+| `removeLast(n)`               | remove n last elements                       | Int         |
+| `contains(element)`           | check the element is in the list (1)         |             |
+| `[index]`                     | get or set element at index                  | Int         |
+| `[Range]`                     | get slice of the array (copy)                | Range       |
+| `+=`                          | append element(s) (2)                        | List or Obj |
+| `sort()`                      | in-place sort, natural order                 | void        |
+| 'sortBy(predicate)`           | in place sort bu `predicate` call result (3) | void        |
+| `SortWith(comparator)         | in place sort using `comarator` function (4) | void        |
 
 (1)
 : optimized implementation that override `Array` one
@@ -116,7 +138,16 @@ Open end ranges remove head and tail elements:
 : `+=` append either a single element, or all elements if the List or other Iterable
 instance is appended. If you want to append an Iterable object itself, use `add` instead.
 
-It inherits from [Iterable] too.
+(3)
+: predicate is called on each element, and the returned values are used to sort in natural
+order, e.g. is same as `list.sortWith { a,b -> predicate(a) <=> predicate(b) }`
+
+(4)
+: comparator callable takes tho arguments and must return: negative value when first is less, 
+positive if first is greater, and zero if they are equal. For example, the equvalent comparator
+for `sort()` will be `sort { a, b -> a <=> b }
+
+It inherits from [Iterable] too and thus all iterable methods are applicable to any list.
 
 ## Member inherited from Array
 
@@ -134,4 +165,5 @@ It inherits from [Iterable] too.
 
 
 [Range]: Range.md
+
 [Iterable]: Iterable.md

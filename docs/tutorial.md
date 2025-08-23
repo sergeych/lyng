@@ -764,15 +764,15 @@ thrown.
 
 Typical builtin types that are containers (e.g. support `contains`):
 
-| class      | notes                                          |
-|------------|------------------------------------------------|
-| Collection | contains an element (1)                        |
-| Array      | faster maybe that Collection's                 |
-| List       | faster than Array's                            |
-| String     | character in string or substring in string (3) |
-| Range      | object is included in the range (2)            |
-| Buffer     | byte is in buffer                              |
-| RingBuffer | object is in buffer                            |
+| class        | notes                                          |
+|--------------|------------------------------------------------|
+| [Collection] | contains an element (1)                        |
+| Array        | faster maybe that Collection's                 |
+| List         | faster than Array's                            |
+| String       | character in string or substring in string (3) |
+| Range        | object is included in the range (2)            |
+| Buffer       | byte is in buffer                              |
+| RingBuffer   | object is in buffer                            |
 
 (1)
 : Iterable is not the container as it can be infinite
@@ -1362,3 +1362,5 @@ See [math functions](math.md). Other general purpose functions are:
 [parallelism]: parallelism.md
 
 [RingBuffer]: RingBuffer.md
+
+[Collection]: Collection.md

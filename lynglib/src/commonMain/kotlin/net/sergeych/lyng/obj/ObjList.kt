@@ -18,6 +18,7 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.Statement
 import net.sergeych.lyng.statement
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
@@ -125,6 +126,33 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
 
     override suspend fun toKotlin(scope: Scope): Any {
         return list.map { it.toKotlin(scope) }
+    }
+
+    suspend fun quicksort(compare: suspend (Obj, Obj) -> Int) = quicksort(compare, 0, list.size - 1)
+
+    suspend fun quicksort(compare: suspend (Obj, Obj) -> Int, left: Int, right: Int) {
+        if (left >= right) return
+        var i = left
+        var j = right
+        val pivot = list[left]
+        while (i < j) {
+            // Сдвигаем j влево, пока элемент меньше pivot
+            while (i < j && compare(list[j], pivot) >= 0) {
+                j--
+            }
+            // Сдвигаем i вправо, пока элемент больше pivot
+            while (i < j && compare(list[i], pivot) <= 0) {
+                i++
+            }
+            if (i < j) {
+                list.swap(i, j)
+            }
+        }
+        // После завершения i == j, ставим pivot на своё место
+        list.swap(left, i)
+        // Рекурсивно сортируем левую и правую части
+        quicksort(compare, left, i - 1)
+        quicksort(compare, i + 1, right)
     }
 
     override fun hashCode(): Int {
@@ -235,7 +263,22 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 }
                 self
             }
+
+            addFn("sortWith") {
+                val comparator = requireOnlyArg<Statement>()
+                thisAs<ObjList>().quicksort { a, b -> comparator.call(this, a, b).toInt() }
+                ObjVoid
+            }
         }
+    }
+}
+
+// Расширение MutableList для удобного обмена элементами
+fun <T>MutableList<T>.swap(i: Int, j: Int) {
+    if (i in indices && j in indices) {
+        val temp = this[i]
+        this[i] = this[j]
+        this[j] = temp
     }
 }
 
