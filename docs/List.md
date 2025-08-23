@@ -128,8 +128,9 @@ List could be sorted in place, just like [Collection] provide sorted copies, in 
 | `[Range]`                     | get slice of the array (copy)                | Range       |
 | `+=`                          | append element(s) (2)                        | List or Obj |
 | `sort()`                      | in-place sort, natural order                 | void        |
-| 'sortBy(predicate)`           | in place sort bu `predicate` call result (3) | void        |
-| `SortWith(comparator)         | in place sort using `comarator` function (4) | void        |
+| `sortBy(predicate)`           | in-place sort bu `predicate` call result (3) | void        |
+| `sortWith(comparator)`        | in-place sort using `comarator` function (4) | void        |
+| `shiffle()`                   | in-place shiffle contents                    |             |
 
 (1)
 : optimized implementation that override `Array` one
@@ -143,7 +144,7 @@ instance is appended. If you want to append an Iterable object itself, use `add`
 order, e.g. is same as `list.sortWith { a,b -> predicate(a) <=> predicate(b) }`
 
 (4)
-: comparator callable takes tho arguments and must return: negative value when first is less, 
+: comparator callable takes tho arguments and must return: negative value when first is less,
 positive if first is greater, and zero if they are equal. For example, the equvalent comparator
 for `sort()` will be `sort { a, b -> a <=> b }
 

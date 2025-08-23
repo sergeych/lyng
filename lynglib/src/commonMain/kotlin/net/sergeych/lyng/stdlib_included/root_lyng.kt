@@ -131,6 +131,10 @@ fun Iterable.sortedBy(predicate) {
     sortedWith { a, b -> predicate(a) <=> predicate(b) }
 }
 
+fun Iterable.shuffled() {
+    toList().apply { shuffle() }
+}
+
 fun List.toString() {
     "[" + joinToString(",") + "]"
 }

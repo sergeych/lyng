@@ -50,5 +50,26 @@ val ObjArray by lazy {
         addFn("indices") {
             ObjRange(0.toObj(), thisObj.invokeInstanceMethod(this, "size"), false)
         }
+
+        addFn("binarySearch") {
+            val target = args.firstAndOnly()
+            var low = 0
+            var high = thisObj.invokeInstanceMethod(this, "size").toInt() - 1
+
+            while (low <= high) {
+                val mid = (low + high) / 2
+                val midVal = thisObj.getAt(this, ObjInt(mid.toLong()))
+
+                val cmp = midVal.compareTo(this, target)
+                when {
+                    cmp == 0 -> return@addFn (mid).toObj()
+                    cmp > 0 -> high = mid - 1
+                    else -> low = mid + 1
+                }
+            }
+
+            // Элемент не найден, возвращаем -(точка вставки) - 1
+            (-low - 1).toObj()
+        }
     }
 }

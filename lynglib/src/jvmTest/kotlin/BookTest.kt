@@ -327,4 +327,9 @@ class BookTest {
         runDocTests("../docs/serialization.md")
     }
 
+    @Test
+    fun testArray() = runBlocking {
+        runDocTests("../docs/Array.md")
+    }
+
 }

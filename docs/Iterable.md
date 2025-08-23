@@ -95,6 +95,7 @@ These, again, does the thing:
 | sortedBy(predicate)    | sort by comparing results of the predicate function                             |
 | joinToString(s,t)      | convert iterable to string, see (2)                                             |
 | reversed()             | create a list containing items from this in reverse order                       |
+| shuffled()             | create a listof shiffled elements                                               |
 
 (1)
 : throws `NoSuchElementException` if there is no such element

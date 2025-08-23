@@ -3188,7 +3188,8 @@ class ScriptTest {
 
     @Test
     fun testSort() = runTest {
-        eval("""
+        eval(
+            """
             val coll = [5,4,1,7]
             assertEquals( [1,4,5,7], coll.sortedWith { a,b -> a <=> b })
             assertEquals( [1,4,5,7], coll.sorted())
@@ -3200,7 +3201,8 @@ class ScriptTest {
 
     @Test
     fun testListSortInPlace() = runTest {
-        eval("""
+        eval(
+            """
             val l1 = [6,3,1,9]
             l1.sort()
             assertEquals( [1,3,6,9], l1)
@@ -3212,6 +3214,35 @@ class ScriptTest {
             // 1 3 2 1
             // we hope we got it also stable:
             assertEquals( [1,9,6,3], l1)
-        """)
+        """
+        )
     }
+
+    @Test
+    fun binarySearchTest() = runTest {
+        eval(
+            """
+            val coll = [1,2,3,4,5]
+            assertEquals( 2, coll.binarySearch(3) )
+            assertEquals( 0, coll.binarySearch(1) )
+            assertEquals( 4, coll.binarySearch(5) )
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun binarySearchTest2() = runTest {
+        eval(
+            """
+            val src = (1..50).toList().shuffled()
+            val result = []
+            for( x in src ) {
+                val i = result.binarySearch(x)
+                assert( i < 0 )
+                result.insertAt(-i-1, x)
+            }
+            assertEquals( src.sorted(), result )
+            """.trimIndent())
+    }
+
 }

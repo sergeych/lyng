@@ -324,10 +324,8 @@ open class Obj {
             addFn("apply") {
                 val body = args.firstAndOnly()
                 (thisObj as? ObjInstance)?.let {
-                    println("apply in ${thisObj is ObjInstance}, ${it.instanceScope}")
                     body.callOn(ApplyScope(this, it.instanceScope))
                 } ?: run {
-                    println("apply on non-instance $thisObj")
                     body.callOn(this)
                 }
                 thisObj

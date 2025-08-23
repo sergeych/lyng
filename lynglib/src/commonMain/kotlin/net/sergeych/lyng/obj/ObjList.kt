@@ -269,6 +269,10 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 thisAs<ObjList>().quicksort { a, b -> comparator.call(this, a, b).toInt() }
                 ObjVoid
             }
+            addFn("shuffle") {
+                thisAs<ObjList>().list.shuffle()
+                ObjVoid
+            }
         }
     }
 }
