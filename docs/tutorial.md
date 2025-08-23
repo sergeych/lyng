@@ -17,7 +17,7 @@ __Other documents to read__ maybe after this one:
 - [time](time.md) and [parallelism](parallelism.md)
 - [parallelism] - multithreaded code, coroutines, etc.
 - Some class
-  references: [List], [Set], [Map], [Real], [Range], [Iterable], [Iterator], [time manipulation](time.md), [RingBuffer], [Buffer].
+  references: [List], [Set], [Map], [Real], [Range], [Iterable], [Iterator], [time manipulation](time.md), [Array], [RingBuffer], [Buffer].
 - Some samples: [combinatorics](samples/combinatorics.lyng.md), national vars and
   loops: [сумма ряда](samples/сумма_ряда.lyng.md). More at [samples folder](samples)
 
