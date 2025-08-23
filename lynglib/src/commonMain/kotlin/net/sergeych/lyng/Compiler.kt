@@ -225,7 +225,7 @@ class Compiler(
                 // very special case chained calls: call()<NL>.call2 {}.call3()
                 Token.Type.NEWLINE -> {
                     val saved = cc.savePos()
-                    if( cc.peekNextNonWhitespace().type == Token.Type.DOT) {
+                    if (cc.peekNextNonWhitespace().type == Token.Type.DOT) {
                         // chained call continue from it
                         continue
                     } else {
@@ -492,10 +492,11 @@ class Compiler(
                     // if it is an open end range, then the end of line could be here that we do not want
                     // to skip in parseExpression:
                     val current = cc.current()
-                    val right = if( current.type == Token.Type.NEWLINE || current.type == Token.Type.SINLGE_LINE_COMMENT)
-                        null
-                    else
-                        parseExpression()
+                    val right =
+                        if (current.type == Token.Type.NEWLINE || current.type == Token.Type.SINLGE_LINE_COMMENT)
+                            null
+                        else
+                            parseExpression()
                     operand = Accessor {
                         ObjRange(
                             left?.getter?.invoke(it)?.value ?: ObjNull,
@@ -1383,7 +1384,13 @@ class Compiler(
                     loopIterable(forContext, sourceObj, loopSO, body, elseStatement, label, canBreak)
                 } else {
                     val size = runCatching { sourceObj.invokeInstanceMethod(forContext, "size").toInt() }
-                        .getOrElse { throw ScriptError(tOp.pos, "object is not enumerable: no size", it) }
+                        .getOrElse {
+                            throw ScriptError(
+                                tOp.pos,
+                                "object is not enumerable: no size in $sourceObj",
+                                it
+                            )
+                        }
 
                     var result: Obj = ObjVoid
                     var breakCaught = false

@@ -77,9 +77,8 @@ fun Iterable.dropLast(n) {
 }
 
 fun Iterable.takeLast(n) {
-    val list = this
     val buffer = RingBuffer(n)
-    for( item in list ) buffer += item
+    for( item in this ) buffer += item
     buffer
 }
 

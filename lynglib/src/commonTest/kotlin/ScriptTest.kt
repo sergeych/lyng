@@ -3123,9 +3123,47 @@ class ScriptTest {
                     println(e.toString())
                     println("-------------------- dee")
                     println(decoded.toString())
-//                    assertEquals( e.toString(), decoded.toString() )
+                    assertEquals( e.toString(), decoded.toString() )
                 }
                 """.trimIndent()
         )
     }
+
+    @Test
+    fun testThisInClosure() = runTest {
+        eval("""
+            fun Iterable.sum2by(f) {
+                var acc = null
+                for( x in this ) {
+                    println(x)
+                    println(f(x))
+                    acc = acc?.let { acc + f(x) } ?: f(x)
+                }
+            }
+            class T(val coll, val factor) {
+                fun sum() {
+                    // here we use ths::T and it must be available:
+                    coll.sum2by { it * factor }
+                }
+            }
+            assertEquals(60, T([1,2,3], 10).sum())
+        """.trimIndent())
+    }
+
+    @Test
+    fun testThisInFlowClosure() = runTest {
+        eval("""
+            class T(val coll, val factor) {
+                fun seq() {
+                    flow {
+                        for( x in coll ) {
+                            emit(x*factor)
+                        }
+                    }
+                }
+            }
+            assertEquals([10,20,30], T([1,2,3], 10).seq().toList())
+        """.trimIndent())
+    }
+
 }
