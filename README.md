@@ -134,7 +134,19 @@ Designed to add scripting to kotlin multiplatform application in easy and effici
 
 # Language Roadmap
 
-## v1.0.0
+```mermaid
+flowchart
+    v0([the idea])
+    v1([v1: make it happen])
+    v2([v1.5: testmake it fasted and rich featured])
+    v3([v2: ideal script language])
+    v0 --code MVP--> v1
+    v1 --refine and extend--> v2
+    v2 -- optimize --> v3
+    
+```
+
+## v1.0.0 "Make it happen"
 
 Planned autumn 2025. Complete dynamic language with sufficient standard library:
 
@@ -162,23 +174,28 @@ Ready features:
 
 ###  Under way: 
 
-- [ ] regular exceptions
+- [ ] regular exceptions + extended `when`
 - [ ] multiple inheritance for user classes
 - [ ] site with integrated interpreter to give a try
 - [ ] kotlin part public API good docs, integration focused
 
-## v1.1+
+## plan: v1.0 - v1.5 "Rich and stable"
+
+Estimated spring of 2026
 
 Planned features.
 
 - [ ] type specifications
+- [ ] language server or compose-based lyng-aware editor
 - [ ] source docs and maybe lyng.md to a standard
 - [ ] metadata first class access from lyng
 
-Further
+## After 1.5 "Ideal scripting"
+
+Estimated winter 2027
 
 - [ ] client with GUI support based on compose multiplatform somehow
 - [ ] notebook - style workbooks with graphs, formulae, etc.
-- [ ] language server or compose-based lyng-aware editor
+- [ ] aggressive optimizations
 
 [parallelism]: docs/parallelism.md
