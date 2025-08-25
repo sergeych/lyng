@@ -1376,9 +1376,16 @@ class Compiler(
                 if (sourceObj is ObjRange && sourceObj.isIntRange) {
                     loopIntRange(
                         forContext,
-                        sourceObj.start!!.toInt(),
-                        if (sourceObj.isEndInclusive) sourceObj.end!!.toInt() + 1 else sourceObj.end!!.toInt(),
-                        loopSO, body, elseStatement, label, canBreak
+                        sourceObj.start!!.toLong(),
+                        if (sourceObj.isEndInclusive)
+                            sourceObj.end!!.toLong() + 1
+                        else
+                            sourceObj.end!!.toLong(),
+                        loopSO,
+                        body,
+                        elseStatement,
+                        label,
+                        canBreak
                     )
                 } else if (sourceObj.isInstanceOf(ObjIterable)) {
                     loopIterable(forContext, sourceObj, loopSO, body, elseStatement, label, canBreak)
@@ -1439,7 +1446,7 @@ class Compiler(
     }
 
     private suspend fun loopIntRange(
-        forScope: Scope, start: Int, end: Int, loopVar: ObjRecord,
+        forScope: Scope, start: Long, end: Long, loopVar: ObjRecord,
         body: Statement, elseStatement: Statement?, label: String?, catchBreak: Boolean
     ): Obj {
         var result: Obj = ObjVoid
@@ -1447,7 +1454,7 @@ class Compiler(
         loopVar.value = iVar
         if (catchBreak) {
             for (i in start..<end) {
-                iVar.value = i.toLong()
+                iVar.value = i//.toLong()
                 try {
                     result = body.execute(forScope)
                 } catch (lbe: LoopBreakContinueException) {
@@ -1459,7 +1466,7 @@ class Compiler(
                 }
             }
         } else {
-            for (i in start.toLong()..<end.toLong()) {
+            for (i in start ..< end) {
                 iVar.value = i
                 result = body.execute(forScope)
             }

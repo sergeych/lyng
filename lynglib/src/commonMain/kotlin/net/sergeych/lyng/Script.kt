@@ -241,6 +241,8 @@ class Script(
             addConst("CompletableDeferred", ObjCompletableDeferred.type)
             addConst("Mutex", ObjMutex.type)
 
+            addConst("Regex", ObjRegex.type)
+
             addFn("launch") {
                 val callable = requireOnlyArg<Statement>()
                 ObjDeferred(globalDefer {

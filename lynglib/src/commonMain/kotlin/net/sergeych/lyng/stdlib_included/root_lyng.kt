@@ -165,6 +165,8 @@ fun Exception.printStackTrace() {
     }
 }
 
+fun String.re() { Regex(this) }
+
     
 """.trimIndent()
 

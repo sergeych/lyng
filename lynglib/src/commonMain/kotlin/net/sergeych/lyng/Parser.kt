@@ -437,7 +437,11 @@ private class Parser(fromPos: Pos) {
                         'r' -> {sb.append('\r'); pos.advance()}
                         't' -> {sb.append('\t'); pos.advance()}
                         '"' -> {sb.append('"'); pos.advance()}
-                        else -> sb.append('\\').append(currentChar)
+                        '\\' -> {sb.append('\\'); pos.advance()}
+                        else -> {
+                            sb.append('\\').append(currentChar)
+                            pos.advance()
+                        }
                     }
                 }
 

@@ -136,11 +136,6 @@ open class Scope(
                 ?: thisObj.objClass
                     .getInstanceMemberOrNull(name)
                     )
-//                ?.also {
-//                        if( name == "predicate") {
-//                            println("got predicate $it")
-//                        }
-//                }
         }
 
     fun copy(pos: Pos, args: Arguments = Arguments.EMPTY, newThisObj: Obj? = null): Scope =

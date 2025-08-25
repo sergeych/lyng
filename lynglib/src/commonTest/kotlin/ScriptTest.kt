@@ -3242,7 +3242,45 @@ class ScriptTest {
                 result.insertAt(-i-1, x)
             }
             assertEquals( src.sorted(), result )
-            """.trimIndent())
+            """.trimIndent()
+        )
     }
 
+
+//    @Test
+    fun testMinimumOptimization() = runTest {
+        val x = Scope().eval(
+            """
+                fun naiveCountHappyNumbers() {
+                    var count = 0
+                    for( n1 in 0..9 )
+                        for( n2 in 0..9 )
+                            for( n3 in 0..9 )
+                                for( n4 in 0..9 )
+                                    for( n5 in 0..9 )
+                                        for( n6 in 0..9 )
+                                            if( n1 + n2 + n3 == n4 + n5 + n6 ) count++
+                    count
+                }
+                naiveCountHappyNumbers()
+            """.trimIndent()
+        ).toInt()
+        assertEquals(55252, x)
+    }
+
+    @Test
+    fun testRegex1() = runTest {
+        eval(
+            """
+            assert( ! "123".re.matches("abs123def") )
+            assert( ".*123.*".re.matches("abs123def") )
+//            assertEquals( "123", "123".re.find("abs123def")?.value )
+//            assertEquals( "123", "[0-9]{3}".re.find("abs123def")?.value )
+            assertEquals( "123", "\d{3}".re.find("abs123def")?.value )
+            assertEquals( "123", "\\d{3}".re.find("abs123def")?.value )
+            assertEquals( [1,2,3], "\d".re.findAll("abs123def").map { it.value.toInt() } )
+            """
+                .trimIndent()
+        )
+    }
 }

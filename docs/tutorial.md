@@ -1184,6 +1184,30 @@ See also [math operations](math.md)
 
 The type for the character objects is `Char`.
 
+### String literal escapes
+
+| escape | ASCII value           |
+|--------|-----------------------|
+| \n     | 0x10, newline         |
+| \r     | 0x13, carriage return |
+| \t     | 0x07, tabulation      |
+| \\     | \ slash character     |
+| \"     | " double quote        |
+
+Other `\c` combinations, where c is any char except mentioned above, are left intact, e.g.:
+
+    val s = "\a"
+    assert(s[0] == '\')
+    assert(s[1] == 'a')
+    >>> void
+
+same as:
+
+    val s = "\\a"
+    assert(s[0] == '\')
+    assert(s[1] == 'a')
+    >>> void
+
 ### Char literal escapes
 
 Are the same as in string literals with little difference:
@@ -1191,6 +1215,7 @@ Are the same as in string literals with little difference:
 | escape | ASCII value       |
 |--------|-------------------|
 | \n     | 0x10, newline     |
+| \r     | 0x13, carriage return |
 | \t     | 0x07, tabulation  |
 | \\     | \ slash character |
 | \'     | ' apostrophe      |
