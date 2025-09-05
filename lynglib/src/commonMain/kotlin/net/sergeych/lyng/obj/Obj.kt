@@ -178,6 +178,14 @@ open class Obj {
         scope.raiseNotImplemented()
     }
 
+    open suspend fun operatorMatch(scope: Scope, other: Obj): Obj {
+        scope.raiseNotImplemented()
+    }
+
+    open suspend fun operatorNotMatch(scope: Scope, other: Obj): Obj {
+        return operatorMatch(scope,other).logicalNot(scope)
+    }
+
     open suspend fun assign(scope: Scope, other: Obj): Obj? = null
 
     open fun getValue(scope: Scope) = this
@@ -299,6 +307,18 @@ open class Obj {
             scope.objects[m.key] = m.value
         }
         return scope
+    }
+
+    inline fun <reified R: Obj> cast(scope: Scope): R {
+        castOrNull<R>()?.let { return it }
+        scope.raiseClassCastError("can't cast ${this::class.simpleName} to ${R::class.simpleName}")
+
+    }
+
+    inline fun <reified R: Obj> castOrNull(): R? {
+        (this as? R)?.let { return it }
+        // todo: check for subclasses
+        return null
     }
 
     companion object {

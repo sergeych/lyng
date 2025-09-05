@@ -22,11 +22,20 @@ import net.sergeych.lyng.Scope
 class ObjRegex(val regex: Regex) : Obj() {
     override val objClass = type
 
+    override suspend fun operatorMatch(scope: Scope, other: Obj): Obj {
+        return regex.find(other.cast<ObjString>(scope).value)?.let {
+            scope.addConst("$~", ObjRegexMatch(it))
+            ObjTrue
+        } ?: ObjFalse
+    }
+
+    fun find(s: ObjString): Obj =
+        regex.find(s.value)?.let { ObjRegexMatch(it) } ?: ObjNull
+
     companion object {
         val type by lazy {
             object : ObjClass("Regex") {
                 override suspend fun callOn(scope: Scope): Obj {
-                    println(scope.requireOnlyArg<ObjString>().value)
                     return ObjRegex(
                         scope.requireOnlyArg<ObjString>().value.toRegex()
                     )
@@ -36,8 +45,7 @@ class ObjRegex(val regex: Regex) : Obj() {
                     ObjBool(args.firstAndOnly().toString().matches(thisAs<ObjRegex>().regex))
                 }
                 addFn("find") {
-                    val s = requireOnlyArg<ObjString>().value
-                    thisAs<ObjRegex>().regex.find(s)?.let { ObjRegexMatch(it) } ?: ObjNull
+                    thisAs<ObjRegex>().find(requireOnlyArg<ObjString>())
                 }
                 addFn("findAll") {
                     val s = requireOnlyArg<ObjString>().value
@@ -61,11 +69,25 @@ class ObjRegexMatch(val match: MatchResult) : Obj() {
 
     val objRange: ObjRange by lazy {
         val r = match.range
+
         ObjRange(
             ObjInt(r.first.toLong()),
             ObjInt(r.last.toLong()),
             false
         )
+    }
+
+    override suspend fun toString(scope: Scope,calledFromLyng: Boolean): ObjString {
+        return ObjString("RegexMath(${objRange.toString(scope)},${objGroups.toString(scope)})")
+    }
+
+    override suspend fun getAt(scope: Scope, index: Obj): Obj {
+        return objGroups.getAt(scope, index)
+    }
+
+    override suspend fun compareTo(scope: Scope, other: Obj): Int {
+        if( other === this) return 0
+        return -2
     }
 
     companion object {

@@ -2243,6 +2243,45 @@ class ScriptTest {
     }
 
     @Test
+    fun testParseSpecialVars() {
+        val l = parseLyng("$~".toSource("test$~"))
+        println(l)
+        assertEquals(Token.Type.ID, l[0].type)
+        assertEquals("$~", l[0].value)
+    }
+
+    @Test
+    fun testMatchOperator() = runTest {
+        eval("""
+            assert( "abc123".matches(".*\d{3}") )
+            assert( ".*\d{3}".re =~ "abc123" )
+            assert( "abc123" =~ ".*\d{3}".re )
+            assert( "abc123" !~ ".*\d{4}".re )
+            
+            "abc123" =~ ".*(\d)(\d)(\d)$".re
+            println($~)
+            assertEquals("1", $~[1])
+            assertEquals("2", $~[2])
+            assertEquals("3", $~[3])
+            assertEquals("abc123", $~[0])
+        """.trimIndent())
+    }
+
+//    @Test
+//    fun testWhenMatch() = runTest {
+//        eval(
+//            """
+//            when("abc123") {
+//                ".*(\d)(\d)(\d)".re -> { x ->
+//                    assertEquals("123", x[0])
+//                }
+//                else -> assert(false)
+//            }
+//            """.trimIndent()
+//        )
+//    }
+
+    @Test
     fun testWhenSample1() = runTest {
         eval(
             """
@@ -3247,7 +3286,7 @@ class ScriptTest {
     }
 
 
-//    @Test
+    //    @Test
     fun testMinimumOptimization() = runTest {
         val x = Scope().eval(
             """

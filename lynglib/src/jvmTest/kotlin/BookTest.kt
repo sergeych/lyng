@@ -332,4 +332,8 @@ class BookTest {
         runDocTests("../docs/Array.md")
     }
 
+    @Test
+    fun testRegex() = runBlocking {
+        runDocTests("../docs/Regex.md")
+    }
 }

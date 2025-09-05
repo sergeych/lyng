@@ -56,16 +56,23 @@ data class ObjString(val value: String) : Obj() {
     }
 
     override suspend fun getAt(scope: Scope, index: Obj): Obj {
-        if (index is ObjInt) return ObjChar(value[index.toInt()])
-        if (index is ObjRange) {
-            val start = if (index.start == null || index.start.isNull) 0 else index.start.toInt()
-            val end = if (index.end == null || index.end.isNull) value.length else {
-                val e = index.end.toInt()
-                if (index.isEndInclusive) e + 1 else e
+        when (index) {
+            is ObjInt -> return ObjChar(value[index.toInt()])
+            is ObjRange -> {
+                val start = if (index.start == null || index.start.isNull) 0 else index.start.toInt()
+                val end = if (index.end == null || index.end.isNull) value.length else {
+                    val e = index.end.toInt()
+                    if (index.isEndInclusive) e + 1 else e
+                }
+                return ObjString(value.substring(start, end))
             }
-            return ObjString(value.substring(start, end))
+
+            is ObjRegex -> {
+                return index.find(this)
+            }
+
+            else -> scope.raiseIllegalArgument("String index must be Int, Regex or Range")
         }
-        scope.raiseIllegalArgument("String index must be Int or Range")
     }
 
     override fun hashCode(): Int {
@@ -96,6 +103,11 @@ data class ObjString(val value: String) : Obj() {
         return value == other.value
     }
 
+    override suspend fun operatorMatch(scope: Scope, other: Obj): Obj {
+        val re = other.cast<ObjRegex>(scope)
+        return re.operatorMatch(scope, this)
+    }
+
     override suspend fun lynonType(): LynonType = LynonType.String
 
     override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
@@ -108,8 +120,9 @@ data class ObjString(val value: String) : Obj() {
                 ObjString(decoder.unpackBinaryData().decodeToString())
         }.apply {
             addFn("toInt") {
-                ObjInt(thisAs<ObjString>().value.toLongOrNull()
-                    ?: raiseIllegalArgument("can't convert to int: $thisObj")
+                ObjInt(
+                    thisAs<ObjString>().value.toLongOrNull()
+                        ?: raiseIllegalArgument("can't convert to int: $thisObj")
                 )
             }
             addFn("startsWith") {
@@ -159,6 +172,22 @@ data class ObjString(val value: String) : Obj() {
             }
             addFn("trim") {
                 thisAs<ObjString>().value.trim().let(::ObjString)
+            }
+            addFn("matches") {
+                val s = requireOnlyArg<Obj>()
+                val self = thisAs<ObjString>().value
+                ObjBool(
+                    when (s) {
+                        is ObjRegex -> self.matches(s.regex)
+                        is ObjString -> {
+                            if (s.value == ".*") true
+                            else self.matches(s.value.toRegex())
+                        }
+
+                        else ->
+                            raiseIllegalArgument("can't match ${s.objClass.className}: required Regex or String")
+                    }
+                )
             }
         }
     }

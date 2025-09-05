@@ -20,10 +20,10 @@ package net.sergeych.lyng
 val digitsSet = ('0'..'9').toSet()
 val digits = { d: Char -> d in digitsSet }
 val hexDigits = digitsSet + ('a'..'f') + ('A'..'F')
-val idNextChars = { d: Char -> d.isLetter() || d == '_' || d.isDigit() }
+val idNextChars = { d: Char -> d.isLetter() || d == '_' || d.isDigit() || d == '$' || d == '~' }
 
 @Suppress("unused")
-val idFirstChars = { d: Char -> d.isLetter() || d == '_' }
+val idFirstChars = { d: Char -> d.isLetter() || d == '_' || d == '$' }
 
 fun parseLyng(source: Source): List<Token> {
     val p = Parser(fromPos = source.startPos)
@@ -67,13 +67,16 @@ private class Parser(fromPos: Pos) {
                             pos.advance()
                             Token("===", from, Token.Type.REF_EQ)
                         }
+
                         else -> Token("==", from, Token.Type.EQ)
                     }
-                } else if( currentChar == '>' ) {
+                } else if (currentChar == '>') {
                     pos.advance()
                     Token("=>", from, Token.Type.EQARROW)
-                }
-                else
+                } else if (currentChar == '~') {
+                    pos.advance()
+                    Token("=~", from, Token.Type.MATCH)
+                } else
                     Token("=", from, Token.Type.ASSIGN)
             }
 
@@ -227,6 +230,9 @@ private class Parser(fromPos: Pos) {
                             Token("!==", from, Token.Type.REF_NEQ)
                         } else
                             Token("!=", from, Token.Type.NEQ)
+                    } else if (currentChar == '~') {
+                        pos.advance()
+                        Token("!~", from, Token.Type.NOTMATCH)
                     } else
                         Token("!", from, Token.Type.NOT)
             }
@@ -267,7 +273,7 @@ private class Parser(fromPos: Pos) {
 
             in digitsSet -> {
                 pos.back()
-                decodeNumber(loadChars { it in digitsSet || it == '_'}, from)
+                decodeNumber(loadChars { it in digitsSet || it == '_' }, from)
             }
 
             '\'' -> {
@@ -291,7 +297,7 @@ private class Parser(fromPos: Pos) {
             }
 
             '?' -> {
-                when(currentChar.also { pos.advance() }) {
+                when (currentChar.also { pos.advance() }) {
                     ':' -> Token("??", from, Token.Type.ELVIS)
                     '?' -> Token("??", from, Token.Type.ELVIS)
                     '.' -> Token("?.", from, Token.Type.NULL_COALESCE)
@@ -310,7 +316,7 @@ private class Parser(fromPos: Pos) {
                 // Labels processing is complicated!
                 // some@ statement: label 'some', ID 'statement'
                 // statement@some: ID 'statement', LABEL 'some'!
-                if (ch.isLetter() || ch == '_') {
+                if (idNextChars(ch)) {
                     val text = ch + loadChars(idNextChars)
                     if (currentChar == '@') {
                         pos.advance()
@@ -395,25 +401,24 @@ private class Parser(fromPos: Pos) {
     private fun fixMultilineStringLiteral(source: String): String {
         val sizes = mutableListOf<Int>()
         val lines = source.lines().toMutableList()
-        if( lines.size == 0 ) return ""
-        if( lines[0].isBlank() ) lines.removeFirst()
-        if( lines.isEmpty()) return ""
-        if( lines.last().isBlank() ) lines.removeLast()
+        if (lines.size == 0) return ""
+        if (lines[0].isBlank()) lines.removeFirst()
+        if (lines.isEmpty()) return ""
+        if (lines.last().isBlank()) lines.removeLast()
 
         val normalized = lines.map { l ->
-            if( l.isBlank() ) {
+            if (l.isBlank()) {
                 sizes.add(-1)
                 ""
-            }
-            else {
+            } else {
                 val margin = leftMargin(l)
                 sizes += margin
                 " ".repeat(margin) + l.trim()
             }
         }
         val commonMargin = sizes.filter { it >= 0 }.min()
-        val fixed = if( commonMargin < 1 ) lines else normalized.map {
-            if( it.isBlank() ) "" else it.drop(commonMargin)
+        val fixed = if (commonMargin < 1) lines else normalized.map {
+            if (it.isBlank()) "" else it.drop(commonMargin)
         }
         return fixed.joinToString("\n")
     }
@@ -433,11 +438,26 @@ private class Parser(fromPos: Pos) {
                 '\\' -> {
                     pos.advance() ?: raise("unterminated string")
                     when (currentChar) {
-                        'n' -> {sb.append('\n'); pos.advance()}
-                        'r' -> {sb.append('\r'); pos.advance()}
-                        't' -> {sb.append('\t'); pos.advance()}
-                        '"' -> {sb.append('"'); pos.advance()}
-                        '\\' -> {sb.append('\\'); pos.advance()}
+                        'n' -> {
+                            sb.append('\n'); pos.advance()
+                        }
+
+                        'r' -> {
+                            sb.append('\r'); pos.advance()
+                        }
+
+                        't' -> {
+                            sb.append('\t'); pos.advance()
+                        }
+
+                        '"' -> {
+                            sb.append('"'); pos.advance()
+                        }
+
+                        '\\' -> {
+                            sb.append('\\'); pos.advance()
+                        }
+
                         else -> {
                             sb.append('\\').append(currentChar)
                             pos.advance()
@@ -445,7 +465,7 @@ private class Parser(fromPos: Pos) {
                     }
                 }
 
-                '\n', '\r'-> {
+                '\n', '\r' -> {
                     newlineDetected = true
                     sb.append(currentChar)
                     pos.advance()
@@ -459,7 +479,7 @@ private class Parser(fromPos: Pos) {
         }
         pos.advance()
 
-        val result = sb.toString().let { if( newlineDetected ) fixMultilineStringLiteral(it) else it }
+        val result = sb.toString().let { if (newlineDetected) fixMultilineStringLiteral(it) else it }
 
         return Token(result, start, Token.Type.STRING)
     }
@@ -538,7 +558,7 @@ private class Parser(fromPos: Pos) {
 
     init {
         // skip shebang
-        if( pos.readFragment("#!") )
+        if (pos.readFragment("#!"))
             loadToEndOfLine()
     }
 

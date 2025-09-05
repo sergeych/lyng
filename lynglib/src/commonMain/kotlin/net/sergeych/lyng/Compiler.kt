@@ -1000,6 +1000,7 @@ class Compiler(
             // condition could be a value, in and is clauses:
             // parse several conditions for one then clause
 
+
             // loop cases
             outer@ while (true) {
 
@@ -1466,7 +1467,7 @@ class Compiler(
                 }
             }
         } else {
-            for (i in start ..< end) {
+            for (i in start..<end) {
                 iVar.value = i
                 result = body.execute(forScope)
             }
@@ -2007,6 +2008,8 @@ class Compiler(
             Operator.simple(Token.Type.NEQ, lastPriority) { c, a, b -> ObjBool(a.compareTo(c, b) != 0) },
             Operator.simple(Token.Type.REF_EQ, lastPriority) { _, a, b -> ObjBool(a === b) },
             Operator.simple(Token.Type.REF_NEQ, lastPriority) { _, a, b -> ObjBool(a !== b) },
+            Operator.simple(Token.Type.MATCH, lastPriority) { s, a, b -> a.operatorMatch(s,b) },
+            Operator.simple(Token.Type.NOTMATCH, lastPriority) { s, a, b -> a.operatorNotMatch(s,b) },
             // relational <=,... 5
             Operator.simple(Token.Type.LTE, ++lastPriority) { c, a, b -> ObjBool(a.compareTo(c, b) <= 0) },
             Operator.simple(Token.Type.LT, lastPriority) { c, a, b -> ObjBool(a.compareTo(c, b) < 0) },

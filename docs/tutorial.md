@@ -275,6 +275,8 @@ Logical operation could be used the same
 |   ===    |     | Any               | (2)      |
 |   !==    |     | Any               | (2)      |
 |    !=    |     | Any               | (1)      |
+|    =~    |     |                   | (3)      |
+|    !~    |     |                   | (3)      |
 | ++a, a++ |     | Int               |          |
 | --a, a-- |     | Int               |          |
 
@@ -285,6 +287,9 @@ Logical operation could be used the same
 : referential equality means left and right operands references exactly same instance of some object. Note that all
 singleton object, like `null`, are referentially equal too, while string different literals even being equal are most
 likely referentially not equal
+
+(3)
+: Implemented now in String and Regex as regular expression match and not match, see [Regex].
 
 Reference quality and object equality example:
 
@@ -1285,9 +1290,26 @@ Open-ended ranges could be used to get start and end too:
     assertEquals( "pult", "catapult"[ 4.. ])
     >>> void
 
+
 ### String operations
 
-Concatenation is a `+`: `"hello " + name` works as expected. No confusion.
+Concatenation is a `+`: `"hello " + name` works as expected. No confusion. There is also
+[Regex] support for strings, see the link, for example, whole string match:
+
+    assert( !"123".matches( "\d\d".re ) )
+    assert( "123".matches( "\d\d\d".re ) )
+    >>> void
+
+Extraction:
+
+    "abcd42def"[ "\d+".re ].value
+    >>> "42"
+
+Part match:
+
+    assert( "abc foo def" =~ "f[oO]+".re )
+    assert( "foo" == $~.value )
+    >>> void
 
 Typical set of String functions includes:
 
@@ -1305,16 +1327,23 @@ Typical set of String functions includes:
 | size               | size in characters like `length` because String is [Array] |
 | (args...)          | sprintf-like formatting, see [string formatting]           |
 | [index]            | character at index                                         | 
-| [Range]            | substring at range                                         |
+| [Range]            | substring at range (2)                                     |
+| [Regex]            | find first match of regex, like [Regex.find] (2)           |
 | s1 + s2            | concatenation                                              |
 | s1 += s2           | self-modifying concatenation                               |
 | toReal()           | attempts to parse string as a Real value                   |
 | toInt()            | parse string to Int value                                  |
 | characters()       | create [List] of characters (1)                            |
 | encodeUtf8()       | returns [Buffer] with characters encoded to utf8           |
+| matches(re)        | matches the regular expression (2)                         |
+|                    |                                                            |
+
 
 (1)
 : List is mutable therefore a new copy is created on each call.
+
+(2)
+: See [Regex]
 
 ### Literals
 
@@ -1391,3 +1420,5 @@ See [math functions](math.md). Other general purpose functions are:
 [Collection]: Collection.md
 
 [Array]: Array.md
+
+[Regex]: Regex.md
