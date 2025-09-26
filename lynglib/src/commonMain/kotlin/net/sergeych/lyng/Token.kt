@@ -30,7 +30,7 @@ data class Token(val value: String, val pos: Pos, val type: Type) {
 
     @Suppress("unused")
     enum class Type {
-        ID, INT, REAL, HEX, STRING, CHAR,
+        ID, INT, REAL, HEX, STRING, STRING2, REGEX,  CHAR,
         LPAREN, RPAREN, LBRACE, RBRACE, LBRACKET, RBRACKET, COMMA,
         SEMICOLON, COLON,
         PLUS, MINUS, STAR, SLASH, PERCENT,

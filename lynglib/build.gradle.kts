@@ -21,7 +21,7 @@ import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 group = "net.sergeych"
-version = "0.9.0-SNAPSHOT"
+version = "0.9.1-SNAPSHOT"
 
 buildscript {
     repositories {
@@ -37,7 +37,7 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidLibrary)
 //    alias(libs.plugins.vanniktech.mavenPublish)
-    kotlin("plugin.serialization") version "2.2.0"
+    kotlin("plugin.serialization") version "2.1.0"
     id("com.codingfeline.buildkonfig") version "0.17.1"
     `maven-publish`
 }

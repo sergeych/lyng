@@ -1403,7 +1403,7 @@ See [math functions](math.md). Other general purpose functions are:
 
 [Range]: Range.md
 
-[String]: String.md
+[String]: development/String.md
 
 [string formatting]: https://github.com/sergeych/mp_stools?tab=readme-ov-file#sprintf-syntax-summary
 
