@@ -81,7 +81,13 @@ class BitArray(val bytes: UByteArray, val lastByteBits: Int) : BitList {
     fun asUByteArray(): UByteArray = bytes
 
     override fun equals(other: Any?): Boolean {
-        return other is BitList && this.compareTo(other) == 0
+        return when(other) {
+            is BitArray ->
+                // important: size must match as trailing zero bits will generate false eq otherwise:
+                size == other.size && bytes contentEquals other.bytes
+            is BitList -> compareTo(other) == 0
+            else -> false
+        }
     }
 
     override fun hashCode(): Int {

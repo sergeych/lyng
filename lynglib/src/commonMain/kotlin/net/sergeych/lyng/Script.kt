@@ -183,7 +183,7 @@ class Script(
                 catch( e: ExecutionError ) {
                     e.errorObject
                 }
-                catch (e: ScriptError) {
+                catch (_: ScriptError) {
                     ObjNull
                 }
                 result ?: raiseError(ObjAssertionFailedException(this,"Expected exception but nothing was thrown"))
