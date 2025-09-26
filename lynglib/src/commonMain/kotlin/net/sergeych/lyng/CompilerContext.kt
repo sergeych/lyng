@@ -164,6 +164,7 @@ class CompilerContext(val tokens: List<Token>) {
         }
     }
 
+    @Suppress("NOTHING_TO_INLINE")
     inline fun addBreak() {
         breakFound = true
     }

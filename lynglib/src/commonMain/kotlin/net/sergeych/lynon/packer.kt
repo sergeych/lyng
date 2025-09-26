@@ -56,7 +56,7 @@ object ObjLynonClass : ObjClass("Lynon") {
 @Suppress("unused")
 suspend fun lynonEncodeAny(scope: Scope, value: Obj): UByteArray =
     (ObjLynonClass.encodeAny(scope, value))
-        .bitArray.asUbyteArray()
+        .bitArray.asUByteArray()
 
 @Suppress("unused")
 suspend fun lynonDecodeAny(scope: Scope, encoded: UByteArray): Obj =

@@ -17,13 +17,18 @@
 
 package net.sergeych.lynon
 
+import kotlinx.serialization.Serializable
 import kotlin.math.min
 
 /**
  * BitList implementation as fixed suze array of bits; indexing works exactly same as if
  * [MemoryBitInput] is used with [MemoryBitInput.getBit]. See [MemoryBitOutput] for
  * bits order and more information.
+ *
+ * It is [BitList] - comparable, and provides valid [hashCode] and [equals], so it could
+ * also be used as a key in maps.
  */
+@Serializable
 class BitArray(val bytes: UByteArray, val lastByteBits: Int) : BitList {
 
     val bytesSize: Int get() = bytes.size
@@ -73,7 +78,15 @@ class BitArray(val bytes: UByteArray, val lastByteBits: Int) : BitList {
     fun asByteArray(): ByteArray = bytes.asByteArray()
 
     @Suppress("unused")
-    fun asUbyteArray(): UByteArray = bytes
+    fun asUByteArray(): UByteArray = bytes
+
+    override fun equals(other: Any?): Boolean {
+        return other is BitList && this.compareTo(other) == 0
+    }
+
+    override fun hashCode(): Int {
+        return bytes.contentHashCode()
+    }
 
     companion object {
 

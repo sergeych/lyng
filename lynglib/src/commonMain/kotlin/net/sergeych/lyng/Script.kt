@@ -26,6 +26,7 @@ import net.sergeych.lynon.ObjLynonClass
 import net.sergeych.mp_tools.globalDefer
 import kotlin.math.*
 
+@Suppress("TYPE_INTERSECTION_AS_REIFIED_WARNING")
 class Script(
     override val pos: Pos,
     private val statements: List<Statement> = emptyList(),

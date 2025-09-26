@@ -21,7 +21,7 @@ import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 group = "net.sergeych"
-version = "0.9.1-SNAPSHOT"
+version = "0.9.2-SNAPSHOT"
 
 buildscript {
     repositories {
@@ -66,6 +66,7 @@ kotlin {
 //    iosArm64()
 //    iosSimulatorArm64()
     linuxX64()
+    linuxArm64()
     js {
         browser()
         nodejs()
@@ -79,9 +80,9 @@ kotlin {
     sourceSets {
         all {
             languageSettings.optIn("kotlinx.coroutines.ExperimentalCoroutinesApi")
-            languageSettings.optIn("kotlin.contracts.ExperimentalContracts")
             languageSettings.optIn("kotlin.ExperimentalUnsignedTypes")
             languageSettings.optIn("kotlin.coroutines.DelicateCoroutinesApi")
+            languageSettings.optIn("kotlin.contracts.ExperimentalContracts")
             languageSettings.optIn("kotlinx.coroutines.flow.DelicateCoroutinesApi")
         }
 

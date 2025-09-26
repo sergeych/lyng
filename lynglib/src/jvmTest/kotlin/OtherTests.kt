@@ -22,7 +22,10 @@ import net.sergeych.lyng.Source
 import net.sergeych.lyng.eval
 import net.sergeych.lyng.pacman.InlineSourcesImportProvider
 import net.sergeych.lyng.toSource
+import net.sergeych.lynon.BitArray
+import net.sergeych.lynon.BitList
 import kotlin.test.Test
+import kotlin.test.assertNotEquals
 
 class OtherTests {
     @Test
@@ -65,6 +68,35 @@ class OtherTests {
             println(t1 - t2)
         """.trimIndent())
         Unit
+    }
+
+    @Test
+    fun testBitArrayEqAndHash() {
+
+        val b1 = BitArray.ofBits(1, 0, 1, 1)
+        val b11 = BitArray.ofBits(1, 0, 1, 1)
+        val b2 = BitArray.ofBits(1, 1, 1, 1)
+        val b3 = BitArray.ofBits(1, 0, 1, 1, 0)
+
+        assert( b3 > b1 )
+        assert( b2 > b1)
+        assert( b11.compareTo(b1) == 0)
+
+        assertEquals(b1, b11)
+        assertNotEquals(b1, b2)
+        assertNotEquals(b1, b3)
+
+        assert( b1.hashCode() == b11.hashCode() )
+
+        val x = mutableMapOf<BitList,String>()
+        x[b1] = "wrong"
+        x[b11] = "OK"
+        x[b2] = "other"
+
+        assertEquals("OK", x[b11])
+        assertEquals("OK", x[b1])
+        assertEquals("other", x[b2])
+
     }
 
 }

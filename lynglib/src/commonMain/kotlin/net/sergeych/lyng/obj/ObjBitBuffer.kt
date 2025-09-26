@@ -35,12 +35,12 @@ class ObjBitBuffer(val bitArray: BitArray) : Obj() {
         }.apply {
             addFn("toBuffer") {
                 requireNoArgs()
-                ObjBuffer(thisAs<ObjBitBuffer>().bitArray.asUbyteArray())
+                ObjBuffer(thisAs<ObjBitBuffer>().bitArray.asUByteArray())
             }
             addFn("toDump") {
                 requireNoArgs()
                 ObjString(
-                    thisAs<ObjBitBuffer>().bitArray.asUbyteArray().toDump()
+                    thisAs<ObjBitBuffer>().bitArray.asUByteArray().toDump()
                 )
             }
             addFn("size") {

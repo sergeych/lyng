@@ -18,7 +18,6 @@
 package net.sergeych.lynon
 
 import net.sergeych.collections.SortedList
-import net.sergeych.lynon.Huffman.Alphabet
 
 
 /**
@@ -285,7 +284,7 @@ object Huffman {
 
     fun <T>decompress(bin: BitInput,alphabet: Alphabet<T>): UByteArray {
         val codes = deserializeCanonicCodes(bin, alphabet)
-        return decompressUsingCodes(bin, codes, alphabet).asUbyteArray()
+        return decompressUsingCodes(bin, codes, alphabet).asUByteArray()
     }
 
 }

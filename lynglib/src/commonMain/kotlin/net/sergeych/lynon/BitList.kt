@@ -17,8 +17,10 @@
 
 package net.sergeych.lynon
 
+import kotlin.math.min
+
 @Suppress("unused")
-interface BitList {
+interface BitList: Comparable<BitList> {
     operator fun get(bitIndex: Long): Int
     operator fun set(bitIndex: Long,value: Int)
     val size: Long
@@ -31,6 +33,22 @@ interface BitList {
             if( index < size) this@BitList[index++]
             else null
     }
+
+    override fun compareTo(other: BitList): Int {
+        val m = min(size, other.size)
+        for( i in 0 ..< m) {
+            val a = this[i]
+            val b = other[i]
+            when {
+                a < b -> return -1
+                a > b -> return 1
+            }
+        }
+        if( size > other.size) return 1
+        if( size < other.size) return -1
+        return 0
+    }
+
 }
 
 fun bitListOf(vararg bits: Int): BitList {

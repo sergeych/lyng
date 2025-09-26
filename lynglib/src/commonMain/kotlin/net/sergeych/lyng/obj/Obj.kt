@@ -367,6 +367,7 @@ open class Obj {
         }
 
 
+        @Suppress("NOTHING_TO_INLINE")
         inline fun from(obj: Any?): Obj {
             @Suppress("UNCHECKED_CAST")
             return when (obj) {
