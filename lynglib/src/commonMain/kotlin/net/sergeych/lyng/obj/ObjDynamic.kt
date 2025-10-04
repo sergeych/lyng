@@ -67,6 +67,16 @@ class ObjDynamic : Obj() {
             ?: super.writeField(scope, name, newValue)
     }
 
+    override suspend fun getAt(scope: Scope, index: Obj): Obj {
+        return readCallback?.execute( scope.copy(Arguments(index)))
+            ?: super.getAt(scope, index)
+    }
+
+    override suspend fun putAt(scope: Scope, index: Obj, newValue: Obj) {
+        writeCallback?.execute(scope.copy(Arguments(index, newValue)))
+            ?: super.putAt(scope, index, newValue)
+    }
+
     companion object {
 
         suspend fun create(scope: Scope, builder: Statement): ObjDynamic {
@@ -76,7 +86,9 @@ class ObjDynamic : Obj() {
             return delegate
         }
 
-        val type = object : ObjClass("Delegate") {}
+        val type = object : ObjClass("Delegate") {}.apply {
+//            addClassConst("IndexGetName", operatorGetName)
+        }
     }
 
 }

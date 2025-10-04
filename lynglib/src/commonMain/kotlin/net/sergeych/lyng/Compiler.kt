@@ -888,6 +888,7 @@ class Compiler(
         }
     }
 
+    @Suppress("SameParameterValue")
     private fun parseNumber(isPlus: Boolean): Obj {
         return parseNumberOrNull(isPlus) ?: throw ScriptError(cc.currentPos(), "Expecting number")
     }
@@ -1681,7 +1682,7 @@ class Compiler(
 
         cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
         // could be else block:
-        val t2 = cc.next()
+        val t2 = cc.nextNonWhitespace()
 
         // we generate different statements: optimization
         return if (t2.type == Token.Type.ID && t2.value == "else") {

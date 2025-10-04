@@ -26,7 +26,7 @@ open class ScriptError(val pos: Pos, val errorMessage: String, cause: Throwable?
         $pos: Error: $errorMessage
         
         ${pos.currentLine}
-        ${"-".repeat(pos.column)}^
+        ${if( pos.column >= 0 ) "-".repeat(pos.column) + "^" else ""}
     """.trimIndent(),
     cause
 )

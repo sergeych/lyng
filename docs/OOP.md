@@ -266,7 +266,7 @@ The same we can provide writable dynamic fields (var-type), adding set method:
                 // constant field
                 "foo" -> "bar"
                 // mutable field
-                "bar" -> setValueForBar 
+                "bar" -> storedValueForBar 
 
                 else -> throw SymbolNotFoundException()
             }
@@ -275,8 +275,8 @@ The same we can provide writable dynamic fields (var-type), adding set method:
             // only 'bar' is mutable:
             if( name == "bar" )
                 storedValueForBar = value
-            // the rest is immotable. consider throw also
-            // SymbolNotFoundException when needed.
+                // the rest is immotable. consider throw also
+                // SymbolNotFoundException when needed.
             else throw IllegalAssignmentException("Can't assign "+name)
         }
     }
@@ -289,8 +289,55 @@ The same we can provide writable dynamic fields (var-type), adding set method:
     assertThrows {
         accessor.bad = "!23"
     }
+    void
+    >>> void
 
 Of course, you can return any object from dynamic fields; returning lambdas let create _dynamic methods_ - the callable method. It is very convenient to implement libraries with dynamic remote interfaces, etc.
+
+### Dynamic indexers
+
+Index access for dynamics is passed to the same getter and setter, so it is
+generally the same:
+
+    var storedValue = "bar"
+    val x = dynamic {
+        get { 
+            if( it == "foo" ) storedValue
+            else null
+        }
+    }
+    assertEquals("bar", x["foo"] )
+    assertEquals("bar", x.foo )
+    >>> void
+
+And assigning them works the same. You can make it working
+mimicking arrays, but remember, it is not Collection so
+collection's sugar won't work with it:
+
+    var storedValue = "bar"
+    val x = dynamic {
+        get { 
+            when(it) {
+                "size" -> 1
+                0 -> storedValue
+                else -> null
+            }
+        }
+        set { index, value -> 
+            if( index == 0 ) storedValue = value
+            else throw "Illegal index: "+index
+        }
+    }
+    assertEquals("bar", x[0] )
+    assertEquals(1, x.size )
+    x[0] = "buzz"
+    assertThrows { x[1] = 1 }
+    assertEquals("buzz", storedValue)
+    assertEquals("buzz", x[0])
+    >>> void
+
+If you want dynamic to function like an array, create a [feature
+request](https://gitea.sergeych.net/SergeychWorks/lyng/issues).
 
 # Theory
 

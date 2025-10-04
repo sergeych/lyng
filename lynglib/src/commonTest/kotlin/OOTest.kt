@@ -108,6 +108,26 @@ class OOTest {
     }
 
     @Test
+    fun testDynamicIndexAccess() = runTest {
+        eval("""
+            val store = Map()
+            val accessor = dynamic {
+                get { name ->
+                    store[name]
+                }
+                set { name, value ->
+                    store[name] = value
+                }
+            }
+           assertEquals(null, accessor["foo"])
+           assertEquals(null, accessor.foo)
+           accessor["foo"] = "bar"
+           assertEquals("bar", accessor["foo"])
+           assertEquals("bar", accessor.foo)
+        """.trimIndent())
+    }
+
+    @Test
     fun testMultilineConstructor() = runTest {
         eval("""
             class Point(

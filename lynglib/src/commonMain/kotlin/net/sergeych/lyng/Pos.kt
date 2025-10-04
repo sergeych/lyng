@@ -28,7 +28,9 @@ data class Pos(val source: Source, val line: Int, val column: Int) {
         else if( line > 0) Pos(source, line-1, source.lines[line-1].length - 1)
         else throw IllegalStateException("can't go back from line 0, column 0")
 
-    val currentLine: String get() = if( end ) "EOF" else source.lines[line]
+    val currentLine: String get() =
+        if( end ) "EOF"
+        else if( line >= 0 ) source.lines[line] else "<no line information>"
 
     val end: Boolean get() = line >= source.lines.size
 
