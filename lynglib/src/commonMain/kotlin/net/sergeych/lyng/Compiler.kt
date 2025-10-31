@@ -796,7 +796,7 @@ class Compiler(
             val v = left.getter(context)
             if (v.value == ObjNull && isOptional) return@Accessor v.value.asReadonly
             v.value.callOn(
-                context.copy(
+                context.createChildScope(
                     context.pos,
                     args.toArguments(context, detectedBlockArgument)
 //                Arguments(
@@ -902,7 +902,7 @@ class Compiler(
             val args = extras?.let { required + it } ?: required
             val fn = scope.get(t.value)?.value ?: scope.raiseSymbolNotFound("annotation not found: ${t.value}")
             if (fn !is Statement) scope.raiseIllegalArgument("annotation must be callable, got ${fn.objClass}")
-            (fn.execute(scope.copy(Arguments(args))) as? Statement)
+            (fn.execute(scope.createChildScope(Arguments(args))) as? Statement)
                 ?: scope.raiseClassCastError("function annotation must return callable")
         }
     }
@@ -1197,7 +1197,7 @@ class Compiler(
                         }
                     }
                     if (exceptionObject != null) {
-                        val catchContext = this.copy(pos = cdata.catchVar.pos)
+                        val catchContext = this.createChildScope(pos = cdata.catchVar.pos)
                         catchContext.addItem(cdata.catchVar.value, false, objException)
                         result = cdata.block.execute(catchContext)
                         isCaught = true
@@ -1313,7 +1313,7 @@ class Compiler(
                 // accessors, constructor registration, etc.
                 addItem(className, false, newClass)
                 if (initScope.isNotEmpty()) {
-                    val classScope = copy(newThisObj = newClass)
+                    val classScope = createChildScope(newThisObj = newClass)
                     newClass.classScope = classScope
                     for (s in initScope)
                         s.execute(classScope)
@@ -1367,7 +1367,7 @@ class Compiler(
 
 
             return statement(body.pos) { cxt ->
-                val forContext = cxt.copy(start)
+                val forContext = cxt.createChildScope(start)
 
                 // loop var: StoredObject
                 val loopSO = forContext.addItem(tVar.value, true, ObjNull)
@@ -1536,7 +1536,7 @@ class Compiler(
             var result: Obj = ObjVoid
             lateinit var doScope: Scope
             do {
-                doScope = it.copy().apply { skipScopeCreation = true }
+                doScope = it.createChildScope().apply { skipScopeCreation = true }
                 try {
                     result = body.execute(doScope)
                 } catch (e: LoopBreakContinueException) {
@@ -1816,7 +1816,7 @@ class Compiler(
         val block = parseScript()
         return statement(startPos) {
             // block run on inner context:
-            block.execute(if (it.skipScopeCreation) it else it.copy(startPos))
+            block.execute(if (it.skipScopeCreation) it else it.createChildScope(startPos))
         }.also {
             val t1 = cc.next()
             if (t1.type != Token.Type.RBRACE)

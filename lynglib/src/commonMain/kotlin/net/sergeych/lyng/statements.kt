@@ -60,7 +60,7 @@ abstract class Statement(
         val type = ObjClass("Callable")
     }
 
-    suspend fun call(scope: Scope, vararg args: Obj) = execute(scope.copy(args =  Arguments(*args)))
+    suspend fun call(scope: Scope, vararg args: Obj) = execute(scope.createChildScope(args =  Arguments(*args)))
 
 }
 

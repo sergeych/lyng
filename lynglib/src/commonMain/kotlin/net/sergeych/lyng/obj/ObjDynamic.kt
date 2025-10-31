@@ -53,7 +53,7 @@ class ObjDynamic : Obj() {
     internal var writeCallback: Statement? = null
 
     override suspend fun readField(scope: Scope, name: String): ObjRecord {
-        return readCallback?.execute(scope.copy(Arguments(ObjString(name))))?.let {
+        return readCallback?.execute(scope.createChildScope(Arguments(ObjString(name))))?.let {
             if (writeCallback != null)
                 it.asMutable
             else
@@ -63,17 +63,17 @@ class ObjDynamic : Obj() {
     }
 
     override suspend fun writeField(scope: Scope, name: String, newValue: Obj) {
-        writeCallback?.execute(scope.copy(Arguments(ObjString(name), newValue)))
+        writeCallback?.execute(scope.createChildScope(Arguments(ObjString(name), newValue)))
             ?: super.writeField(scope, name, newValue)
     }
 
     override suspend fun getAt(scope: Scope, index: Obj): Obj {
-        return readCallback?.execute( scope.copy(Arguments(index)))
+        return readCallback?.execute( scope.createChildScope(Arguments(index)))
             ?: super.getAt(scope, index)
     }
 
     override suspend fun putAt(scope: Scope, index: Obj, newValue: Obj) {
-        writeCallback?.execute(scope.copy(Arguments(index, newValue)))
+        writeCallback?.execute(scope.createChildScope(Arguments(index, newValue)))
             ?: super.putAt(scope, index, newValue)
     }
 
@@ -82,7 +82,7 @@ class ObjDynamic : Obj() {
         suspend fun create(scope: Scope, builder: Statement): ObjDynamic {
             val delegate = ObjDynamic()
             val context = ObjDynamicContext(delegate)
-            builder.execute(scope.copy(newThisObj = context))
+            builder.execute(scope.createChildScope(newThisObj = context))
             return delegate
         }
 

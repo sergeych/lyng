@@ -17,15 +17,12 @@
 
 package net.sergeych.lyng.obj
 
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import net.sergeych.lyng.*
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
-import net.sergeych.synctools.ProtectedOp
 
 open class Obj {
 
@@ -39,12 +36,12 @@ open class Obj {
 
     var isFrozen: Boolean = false
 
-    private val monitor = Mutex()
+//    private val monitor = Mutex()
 
     //    private val memberMutex = Mutex()
-    internal var parentInstances: MutableList<Obj> = mutableListOf()
+//    internal var parentInstances: MutableList<Obj> = mutableListOf()
 
-    private val opInstances = ProtectedOp()
+//    private val opInstances = ProtectedOp()
 
     open suspend fun inspect(scope: Scope): String = toString(scope).value
 
@@ -100,7 +97,7 @@ open class Obj {
         // note that getInstanceMember traverses the hierarchy
         objClass.getInstanceMember(scope.pos, name).value
 
-    fun getMemberOrNull(name: String): Obj? = objClass.getInstanceMemberOrNull(name)?.value
+//    fun getMemberOrNull(name: String): Obj? = objClass.getInstanceMemberOrNull(name)?.value
 
     // methods that to override
 
@@ -232,14 +229,14 @@ open class Obj {
         if (isFrozen) scope.raiseError("attempt to mutate frozen object")
     }
 
-    suspend fun <T> sync(block: () -> T): T = monitor.withLock { block() }
+//    suspend fun <T> sync(block: () -> T): T = monitor.withLock { block() }
 
     open suspend fun readField(scope: Scope, name: String): ObjRecord {
         // could be property or class field:
         val obj = objClass.getInstanceMemberOrNull(name) ?: scope.raiseError("no such field: $name")
         return when (val value = obj.value) {
             is Statement -> {
-                ObjRecord(value.execute(scope.copy(scope.pos, newThisObj = this)), obj.isMutable)
+                ObjRecord(value.execute(scope.createChildScope(scope.pos, newThisObj = this)), obj.isMutable)
             }
             // could be writable property naturally
 //            null -> ObjNull.asReadonly
@@ -268,11 +265,11 @@ open class Obj {
     }
 
     suspend fun invoke(scope: Scope, thisObj: Obj, args: Arguments): Obj =
-        callOn(scope.copy(scope.pos, args = args, newThisObj = thisObj))
+        callOn(scope.createChildScope(scope.pos, args = args, newThisObj = thisObj))
 
     suspend fun invoke(scope: Scope, thisObj: Obj, vararg args: Obj): Obj =
         callOn(
-            scope.copy(
+            scope.createChildScope(
                 scope.pos,
                 args = Arguments(args.toList()),
                 newThisObj = thisObj
@@ -281,7 +278,7 @@ open class Obj {
 
     suspend fun invoke(scope: Scope, thisObj: Obj): Obj =
         callOn(
-            scope.copy(
+            scope.createChildScope(
                 scope.pos,
                 args = Arguments.EMPTY,
                 newThisObj = thisObj
@@ -289,7 +286,7 @@ open class Obj {
         )
 
     suspend fun invoke(scope: Scope, atPos: Pos, thisObj: Obj, args: Arguments): Obj =
-        callOn(scope.copy(atPos, args = args, newThisObj = thisObj))
+        callOn(scope.createChildScope(atPos, args = args, newThisObj = thisObj))
 
 
     val asReadonly: ObjRecord by lazy { ObjRecord(this, false) }
@@ -302,7 +299,7 @@ open class Obj {
     }
 
     fun autoInstanceScope(parent: Scope): Scope {
-        val scope = parent.copy(newThisObj = this, args = parent.args)
+        val scope = parent.createChildScope(newThisObj = this, args = parent.args)
         for (m in objClass.members) {
             scope.objects[m.key] = m.value
         }
@@ -335,7 +332,7 @@ open class Obj {
             }
             // utilities
             addFn("let") {
-                args.firstAndOnly().callOn(copy(Arguments(thisObj)))
+                args.firstAndOnly().callOn(createChildScope(Arguments(thisObj)))
             }
             addFn("apply") {
                 val body = args.firstAndOnly()
@@ -347,7 +344,7 @@ open class Obj {
                 thisObj
             }
             addFn("also") {
-                args.firstAndOnly().callOn(copy(Arguments(thisObj)))
+                args.firstAndOnly().callOn(createChildScope(Arguments(thisObj)))
                 thisObj
             }
             addFn("run") {

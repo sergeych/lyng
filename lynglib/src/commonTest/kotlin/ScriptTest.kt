@@ -3171,6 +3171,34 @@ class ScriptTest {
     }
 
     @Test
+    fun testExceptionSerializationPlain() = runTest {
+        eval(
+            """
+                import lyng.serialization
+                val x = [1,2,3]
+                assertEquals( "[1,2,3]", x.toString() )
+                try {    
+                    throw "test"
+                }
+                catch (e) {
+                    println(e.stackTrace)
+                    e.printStackTrace()
+                    val coded = Lynon.encode(e)
+                    val decoded = Lynon.decode(coded)
+                    assertEquals( e::class, decoded::class )
+                    assertEquals( e.stackTrace, decoded.stackTrace )
+                    assertEquals( e.message, decoded.message )
+                    println("-------------------- e")
+                    println(e.toString())
+                    println("-------------------- dee")
+                    println(decoded.toString())
+                    assertEquals( e.toString(), decoded.toString() )
+                }
+                """.trimIndent()
+        )
+    }
+
+    @Test
     fun testThisInClosure() = runTest {
         eval(
             """
@@ -3287,25 +3315,25 @@ class ScriptTest {
 
 
     //    @Test
-    fun testMinimumOptimization() = runTest {
-        val x = Scope().eval(
-            """
-                fun naiveCountHappyNumbers() {
-                    var count = 0
-                    for( n1 in 0..9 )
-                        for( n2 in 0..9 )
-                            for( n3 in 0..9 )
-                                for( n4 in 0..9 )
-                                    for( n5 in 0..9 )
-                                        for( n6 in 0..9 )
-                                            if( n1 + n2 + n3 == n4 + n5 + n6 ) count++
-                    count
-                }
-                naiveCountHappyNumbers()
-            """.trimIndent()
-        ).toInt()
-        assertEquals(55252, x)
-    }
+//    fun testMinimumOptimization() = runTest {
+//        val x = Scope().eval(
+//            """
+//                fun naiveCountHappyNumbers() {
+//                    var count = 0
+//                    for( n1 in 0..9 )
+//                        for( n2 in 0..9 )
+//                            for( n3 in 0..9 )
+//                                for( n4 in 0..9 )
+//                                    for( n5 in 0..9 )
+//                                        for( n6 in 0..9 )
+//                                            if( n1 + n2 + n3 == n4 + n5 + n6 ) count++
+//                    count
+//                }
+//                naiveCountHappyNumbers()
+//            """.trimIndent()
+//        ).toInt()
+//        assertEquals(55252, x)
+//    }
 
     @Test
     fun testRegex1() = runTest {

@@ -61,7 +61,7 @@ open class ObjClass(
 
     override suspend fun callOn(scope: Scope): Obj {
         val instance = ObjInstance(this)
-        instance.instanceScope = scope.copy(newThisObj = instance, args = scope.args)
+        instance.instanceScope = scope.createChildScope(newThisObj = instance, args = scope.args)
         if (instanceConstructor != null) {
             instanceConstructor!!.execute(instance.instanceScope)
         }
@@ -69,7 +69,7 @@ open class ObjClass(
     }
 
     suspend fun callWithArgs(scope: Scope, vararg plainArgs: Obj): Obj {
-        return callOn(scope.copy(Arguments(*plainArgs)))
+        return callOn(scope.createChildScope(Arguments(*plainArgs)))
     }
 
 

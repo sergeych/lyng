@@ -28,9 +28,9 @@ import net.sergeych.synctools.withLock
 import kotlin.contracts.ExperimentalContracts
 
 /**
- * note on [getStackTrace]. If [useStackTrace] is not null, it is used instead. Otherwise, it is calculated
- * from the current scope which is treated as exception scope. It is used to restore serialized
- * exception with stack trace; the scope of the de-serialized exception is not valid
+ * Note on [getStackTrace]. If [useStackTrace] is not null, it is used instead. Otherwise, it is calculated
+ * from the current scope, which is treated as an exception scope. It is used to restore a serialized
+ * exception with stack trace; the scope of the deserialized exception is not valid
  * for stack unwinding.
  */
 open class ObjException(
@@ -127,7 +127,7 @@ open class ObjException(
             }
         }
 
-        val Root = ExceptionClass("Throwable").apply {
+        val Root = ExceptionClass("Exception").apply {
             addConst("message", statement {
                 (thisObj as ObjException).message.toObj()
             })

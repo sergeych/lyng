@@ -71,7 +71,7 @@ abstract class ImportProvider(
             newModuleAt(pos).also {
                 it.eval("import lyng.stdlib\n")
             }
-        }.copy()
+        }.createChildScope()
 }
 
 

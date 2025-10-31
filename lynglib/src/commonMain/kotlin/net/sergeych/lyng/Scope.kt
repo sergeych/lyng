@@ -138,13 +138,27 @@ open class Scope(
                     )
         }
 
-    fun copy(pos: Pos, args: Arguments = Arguments.EMPTY, newThisObj: Obj? = null): Scope =
+    /**
+     * Creates a new child scope using the provided arguments and optional `thisObj`.
+     */
+    fun createChildScope(pos: Pos, args: Arguments = Arguments.EMPTY, newThisObj: Obj? = null): Scope =
         Scope(this, args, pos, newThisObj ?: thisObj)
 
-    fun copy(args: Arguments = Arguments.EMPTY, newThisObj: Obj? = null): Scope =
+    /**
+     * Creates a new child scope using the provided arguments and optional `thisObj`.
+     * The child scope inherits the current scope's properties such as position and the existing `thisObj` if no new `thisObj` is provided.
+     *
+     * @param args The arguments to associate with the child scope. Defaults to [Arguments.EMPTY].
+     * @param newThisObj The new `thisObj` to associate with the child scope. Defaults to the current scope's `thisObj` if not provided.
+     * @return A new instance of [Scope] initialized with the specified arguments and `thisObj`.
+     */
+    fun createChildScope(args: Arguments = Arguments.EMPTY, newThisObj: Obj? = null): Scope =
         Scope(this, args, pos, newThisObj ?: thisObj)
 
-    fun copy() = Scope(this, args, pos, thisObj)
+    /**
+     * @return A child scope with the same arguments, position and [thisObj]
+     */
+    fun createChildScope() = Scope(this, args, pos, thisObj)
 
     fun addItem(
         name: String,
@@ -240,8 +254,6 @@ open class Scope(
             p = p.parent
         }
         println("--------------------")
-        ObjVoid
-
     }
 
     open fun applyClosure(closure: Scope): Scope = ClosureScope(this, closure)

@@ -93,7 +93,7 @@ val ObjIterable by lazy {
             val fn = requiredArg<Statement>(0)
             while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
                 val x = it.invokeInstanceMethod(this, "next")
-                fn.execute(this.copy(Arguments(listOf(x))))
+                fn.execute(this.createChildScope(Arguments(listOf(x))))
             }
             ObjVoid
         }

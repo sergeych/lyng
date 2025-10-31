@@ -58,7 +58,7 @@ class ObjFlowBuilder(val output: SendChannel<Obj>) : Obj() {
 private fun createLyngFlowInput(scope: Scope, producer: Statement): ReceiveChannel<Obj> {
     val channel = Channel<Obj>(Channel.RENDEZVOUS)
     val builder = ObjFlowBuilder(channel)
-    val builderScope = scope.copy(newThisObj = builder)
+    val builderScope = scope.createChildScope(newThisObj = builder)
     globalLaunch {
         try {
             producer.execute(builderScope)
