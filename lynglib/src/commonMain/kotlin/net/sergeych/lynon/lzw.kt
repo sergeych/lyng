@@ -21,7 +21,9 @@ import net.sergeych.bintools.ByteChunk
 import kotlin.math.roundToInt
 
 /**
- * LZW lightweight pure kotlin compression.
+ * LZW lightweight pure kotlin compression. LZW works with but streams [BitInput] and [BitOutput]
+ * to be used effectively in Lynon or other bit-grained formats. To safely comress byte arresy and
+ * strings without boilerplate use [lzwCompress], [lzwDecompress], [lzwCompressUtf8] and [lzwDecompressUtf8].
  */
 object LZW {
 
@@ -30,8 +32,10 @@ object LZW {
     val MAX_DICT_SIZE = (STOP_CODE * 0.92).roundToInt()
 
 
-    fun compress(input: ByteArray, bitOutput: BitOutput)
-        = compress(input.asUByteArray(), bitOutput)
+    /**
+     * Compress a byte array using LZW algorithm writing the result to [bitOutput]
+     */
+    fun compress(input: ByteArray, bitOutput: BitOutput) = compress(input.asUByteArray(), bitOutput)
 
     /**
      * Compresses the input string using LZW algorithm
@@ -139,7 +143,42 @@ object LZW {
     }
 }
 
-
 private operator fun ByteChunk.plus(byte: UByte): ByteChunk {
     return ByteChunk(data + byte)
 }
+
+/**
+ * Safely compress binary byte data using the LZW algorithm. This can use up to one byte more space than
+ * with [LZW.compress] and [BitOutput] but you often need byte array operations. Source data size is also
+ * encoded to prevent file-bomb-like attacks. Note that content protection is not included (we assume
+ * LZW is robust).
+ * @param source the data to compress
+ */
+fun lzwCompress(source: UByteArray): UByteArray {
+    val out = MemoryBitOutput()
+    out.packUnsigned(source.size.toULong())
+    LZW.compress(source, out)
+    return out.toBitArray().asUByteArray()
+}
+
+/**
+ * Safely decompress data compressed with [lzwCompress], checking size. Contect checks are not implemented
+ * here as we assume LZW is robust.
+ * @param packed the compressed data
+ * @throws DecompressionException if something goes wrong, like size mismatch or bad compressed data
+ */
+fun lzwDecompress(packed: UByteArray): UByteArray {
+    val inp = MemoryBitInput(packed, 8)
+    val size = inp.unpackUnsigned()
+    return LZW.decompress(inp, size.toInt())
+}
+
+/**
+ * Compress a text using utf-8 encoding and [lzwCompress]
+ */
+fun lzwCompressUtf8(text: String) = lzwCompress(text.encodeToByteArray().toUByteArray())
+
+/**
+ * Decompress a text compressed with [lzwCompressUtf8]. See also [lzwDecompress]
+ */
+fun lzwDecompressUtf8(packed: UByteArray): String = lzwDecompress(packed).asByteArray().decodeToString()

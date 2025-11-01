@@ -398,6 +398,13 @@ class LynonTests {
     }
 
     @Test
+    fun testCompressed() {
+        val compressed = lzwCompressUtf8(original)
+        println("${compressed.size/original.encodeToByteArray().size.toDouble()} compression ratio")
+        assertEquals(original, lzwDecompressUtf8(compressed))
+    }
+
+    @Test
     fun testTinyBits() {
         var a0 = TinyBits()
 
