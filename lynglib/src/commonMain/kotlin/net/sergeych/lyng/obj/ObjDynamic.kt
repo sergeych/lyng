@@ -47,10 +47,18 @@ class ObjDynamicContext(val delegate: ObjDynamic) : Obj() {
     }
 }
 
+/**
+ * Object that delegates all its field access/invocation operations to a callback. It is used to implement dynamic
+ * objects using "dynamic" keyword.
+ */
 open class ObjDynamic(var readCallback: Statement? = null, var writeCallback: Statement? = null) : Obj() {
 
     override val objClass: ObjClass = type
 
+    /**
+     * Use read callback to dynamically resolve the field name. Note that it does not work
+     * with method invocation which is implemented separately in [invokeInstanceMethod] below.
+     */
     override suspend fun readField(scope: Scope, name: String): ObjRecord {
         return readCallback?.execute(scope.createChildScope(Arguments(ObjString(name))))?.let {
             if (writeCallback != null)
@@ -61,6 +69,10 @@ open class ObjDynamic(var readCallback: Statement? = null, var writeCallback: St
             ?: super.readField(scope, name)
     }
 
+    /**
+     * Notice that invocation currently does not rely on [readField], which is a buffy moment to be reconsidered
+     * in the future, so we implement it separately:
+     */
     override suspend fun invokeInstanceMethod(
         scope: Scope,
         name: String,
