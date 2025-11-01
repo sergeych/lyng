@@ -183,7 +183,7 @@ class OOTest {
             x(1,2,3)
             assertEquals(6, x(1,2,3))
             //               v  HERE    v
-            assertEquals(15, (cc.foo.bar)(10,2,3))
+            assertEquals(15, cc.foo.bar(10,2,3))
        """)
     }
 }

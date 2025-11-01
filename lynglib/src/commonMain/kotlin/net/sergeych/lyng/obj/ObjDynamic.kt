@@ -47,7 +47,9 @@ class ObjDynamicContext(val delegate: ObjDynamic) : Obj() {
     }
 }
 
-open class ObjDynamic(var readCallback: Statement? = null,var writeCallback: Statement? = null) : Obj() {
+open class ObjDynamic(var readCallback: Statement? = null, var writeCallback: Statement? = null) : Obj() {
+
+    override val objClass: ObjClass = type
 
     override suspend fun readField(scope: Scope, name: String): ObjRecord {
         return readCallback?.execute(scope.createChildScope(Arguments(ObjString(name))))?.let {
@@ -59,13 +61,29 @@ open class ObjDynamic(var readCallback: Statement? = null,var writeCallback: Sta
             ?: super.readField(scope, name)
     }
 
+    override suspend fun invokeInstanceMethod(
+        scope: Scope,
+        name: String,
+        args: Arguments,
+        onNotFoundResult: (() -> Obj?)?
+    ): Obj {
+        val over = readCallback?.execute(
+            scope.createChildScope(
+                Arguments(ObjString(name)
+                )
+            )
+        )
+        return over?.invoke(scope, scope.thisObj, args)
+            ?: super.invokeInstanceMethod(scope, name, args, onNotFoundResult)
+    }
+
     override suspend fun writeField(scope: Scope, name: String, newValue: Obj) {
         writeCallback?.execute(scope.createChildScope(Arguments(ObjString(name), newValue)))
             ?: super.writeField(scope, name, newValue)
     }
 
     override suspend fun getAt(scope: Scope, index: Obj): Obj {
-        return readCallback?.execute( scope.createChildScope(Arguments(index)))
+        return readCallback?.execute(scope.createChildScope(Arguments(index)))
             ?: super.getAt(scope, index)
     }
 
