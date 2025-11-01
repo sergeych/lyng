@@ -137,4 +137,53 @@ class OOTest {
             assertEquals(Point(1,2), Point(1,2) )
             """.trimIndent())
     }
+
+    @Test
+    fun testDynamicClass() = runTest {
+        eval("""
+            
+            fun getContract(contractName) {
+                dynamic {
+                    get { name ->
+                        println("Call: %s.%s"(contractName,name))
+                    }
+                }
+            }
+            getContract("foo").bar
+       """)
+    }
+
+    @Test
+    fun testDynamicClassReturn2() = runTest {
+        // todo: should work without extra parenthesis
+        // see below
+        eval("""
+            
+            fun getContract(contractName) {
+                println("1")
+                dynamic {
+                    get { name ->
+                        println("innrer %s.%s"(contractName,name))
+                        { args... ->
+                            if( name == "bar" ) args.sum() else null
+                        }
+                    }
+                }
+            }
+            
+            val cc = dynamic {
+                get { name ->
+                    println("Call cc %s"(name))
+                    getContract(name)
+                }
+            }
+            
+            val x = cc.foo.bar
+            println(x)
+            x(1,2,3)
+            assertEquals(6, x(1,2,3))
+            //               v  HERE    v
+            assertEquals(15, (cc.foo.bar)(10,2,3))
+       """)
+    }
 }

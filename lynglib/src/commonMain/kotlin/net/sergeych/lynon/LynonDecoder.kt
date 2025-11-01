@@ -91,14 +91,15 @@ open class LynonDecoder(val bin: BitInput, val settings: LynonSettings = LynonSe
             val type = LynonType.entries[getBitsAsInt(4)]
             val list = mutableListOf<Obj>()
             val objClass = if (type == LynonType.Other)
-                decodeClassObj(scope).also { println("detected class obj: $it") }
+                decodeClassObj(scope)//.also { println("detected class obj: $it") }
             else type.objClass
             val size = fixedSize ?: bin.unpackUnsigned().toInt()
-            println("detected homogenous list type $type, $size items")
+//            println("detected homogenous list type $type, $size items")
             for (i in 0..<size) {
-                list += decodeObject(scope, objClass, type).also {
-                    println("decoded: $it")
-                }
+                list += decodeObject(scope, objClass, type)
+                //.also {
+//                    println("decoded: $it")
+//                }
             }
             list
         } else {

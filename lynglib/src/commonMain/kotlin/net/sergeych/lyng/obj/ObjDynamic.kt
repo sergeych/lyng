@@ -47,10 +47,7 @@ class ObjDynamicContext(val delegate: ObjDynamic) : Obj() {
     }
 }
 
-class ObjDynamic : Obj() {
-
-    internal var readCallback: Statement? = null
-    internal var writeCallback: Statement? = null
+open class ObjDynamic(var readCallback: Statement? = null,var writeCallback: Statement? = null) : Obj() {
 
     override suspend fun readField(scope: Scope, name: String): ObjRecord {
         return readCallback?.execute(scope.createChildScope(Arguments(ObjString(name))))?.let {
