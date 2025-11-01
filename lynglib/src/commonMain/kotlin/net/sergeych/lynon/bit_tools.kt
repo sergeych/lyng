@@ -17,6 +17,8 @@
 
 package net.sergeych.lynon
 
+import kotlin.random.Random
+
 /**
  * Hoq many tetrades needed to store the value. It is faster to use this function
  * than to use sizeInBits
@@ -35,7 +37,7 @@ fun sizeInTetrades(value: ULong): Int {
 }
 
 /**
- * How many bits needed to store the value. Size for 0 is 1,
+ * Calculates ow many bits needed to store the value. Size for 0, for example, is 1.
  */
 @Suppress("unused")
 fun sizeInBits(value: ULong): Int {
@@ -50,3 +52,20 @@ fun sizeInBits(value: ULong): Int {
 }
 
 fun sizeInBits(value: Int): Int = sizeInBits(value.toULong())
+
+/**
+ * Generates a random BitArray of the specified size. Important: this is
+ * __not cryptographically secure__. Use random from [crypto2](https://gitea.sergeych.net/sergeych/crypto2),
+ * `randomInt()`, `randomUBytes()`, etc., for cryptographically secure random data.
+ *
+ * @param sizeInBits The size of the BitArray to generate in bits.
+ * @return A BitArray of the specified size filled with random bits.
+ */
+@Suppress("unused")
+fun BitArray.Companion.random(sizeInBits: Int): BitArray {
+    val result = BitArray.withBitSize(sizeInBits.toLong())
+    for (i in 0..<sizeInBits) {
+        result[i.toLong()] = Random.nextInt() and 1
+    }
+    return result
+}
