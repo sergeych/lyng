@@ -21,7 +21,7 @@ import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 group = "net.sergeych"
-version = "0.9.3-SNAPSHOT"
+version = "0.9.3"
 
 buildscript {
     repositories {
@@ -62,9 +62,12 @@ kotlin {
             jvmTarget.set(JvmTarget.JVM_11)
         }
     }
-//    iosX64()
-//    iosArm64()
-//    iosSimulatorArm64()
+    iosX64()
+    iosArm64()
+    iosSimulatorArm64()
+    macosX64()
+    macosArm64()
+    mingwX64()
     linuxX64()
     linuxArm64()
     js {
