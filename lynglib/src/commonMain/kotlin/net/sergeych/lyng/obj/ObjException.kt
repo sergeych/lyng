@@ -166,13 +166,15 @@ open class ObjException(
                 "ClassCastException",
                 "IndexOutOfBoundsException",
                 "IllegalArgumentException",
+                "IllegalStateException",
                 "NoSuchElementException",
                 "IllegalAssignmentException",
                 "SymbolNotDefinedException",
                 "IterationEndException",
                 "AccessException",
                 "UnknownException",
-                "NotFoundException"
+                "NotFoundException",
+                "IllegalOperationException"
             )) {
                 scope.addConst(name, getOrCreateExceptionClass(name))
             }
@@ -197,10 +199,10 @@ class ObjIllegalStateException(scope: Scope, message: String = "illegal state") 
 
 @Suppress("unused")
 class ObjNoSuchElementException(scope: Scope, message: String = "no such element") :
-    ObjException("IllegalArgumentException", scope, message)
+    ObjException("NoSuchElementException", scope, message)
 
 class ObjIllegalAssignmentException(scope: Scope, message: String = "illegal assignment") :
-    ObjException("NoSuchElementException", scope, message)
+    ObjException("IllegalAssignmentException", scope, message)
 
 class ObjSymbolNotDefinedException(scope: Scope, message: String = "symbol is not defined") :
     ObjException("SymbolNotDefinedException", scope, message)
