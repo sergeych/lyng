@@ -86,6 +86,7 @@ private class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() 
     override val printHelpOnEmptyArgs = true
 
     val version by option("-v", "--version", help = "Print version and exit").flag()
+    val benchmark by option("--benchmark", help = "Run JVM microbenchmarks and exit").flag()
     val script by argument(help = "one or more scripts to execute").optional()
     val execute: String? by option(
         "-x", "--execute", help = """

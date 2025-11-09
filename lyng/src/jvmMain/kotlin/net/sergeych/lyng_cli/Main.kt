@@ -20,5 +20,9 @@ package net.sergeych.lyng_cli
 import net.sergeych.runMain
 
 fun main(args: Array<String>) {
+    if (args.contains("--benchmark")) {
+        BenchmarkRunner.runAll()
+        return
+    }
     runMain(args)
 }

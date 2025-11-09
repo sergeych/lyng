@@ -36,19 +36,19 @@ Launch has the only argument which should be a callable (lambda usually) that is
 
 ## Synchronization: Mutex
 
-Suppose we have a resource, that could be used concurrently, a coutner in our case. If we won'r protect it, concurrent usage cause RC, Race Condition, providing wrong result:
+Suppose we have a resource, that could be used concurrently, a counter in our case. If we won't protect it, concurrent usage cause RC, Race Condition, providing wrong result:
 
     var counter = 0
     
-    (1..4).map { 
+    (1..50).map { 
         launch {
             // slow increment:
             val c = counter
-            delay(10)
+            delay(100)
             counter = c + 1
         }
     }.forEach { it.await() }
-    assert(counter < 4)
+    assert(counter < 50) { "counter is "+counter }
     >>> void
 
 The obviously wrong result is not 4, as all coroutines capture the counter value, which is 1, then sleep for 5ms, then save 1 + 1 as result. May some coroutines will pass, so it will be 1 or 2, most likely.

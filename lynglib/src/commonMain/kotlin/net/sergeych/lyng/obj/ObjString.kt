@@ -181,7 +181,10 @@ data class ObjString(val value: String) : Obj() {
                         is ObjRegex -> self.matches(s.regex)
                         is ObjString -> {
                             if (s.value == ".*") true
-                            else self.matches(s.value.toRegex())
+                            else {
+                                val re = s.value.toRegex()
+                                self.matches(re)
+                            }
                         }
 
                         else ->

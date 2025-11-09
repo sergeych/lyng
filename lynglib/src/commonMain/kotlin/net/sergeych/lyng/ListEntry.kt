@@ -17,10 +17,10 @@
 
 package net.sergeych.lyng
 
-import net.sergeych.lyng.obj.Accessor
+import net.sergeych.lyng.obj.ObjRef
 
 sealed class ListEntry {
-    data class Element(val accessor: Accessor) : ListEntry()
+    data class Element(val ref: ObjRef) : ListEntry()
 
-    data class Spread(val accessor: Accessor) : ListEntry()
+    data class Spread(val ref: ObjRef) : ListEntry()
 }

@@ -24,7 +24,7 @@ class ObjRegex(val regex: Regex) : Obj() {
 
     override suspend fun operatorMatch(scope: Scope, other: Obj): Obj {
         return regex.find(other.cast<ObjString>(scope).value)?.let {
-            scope.addConst("$~", ObjRegexMatch(it))
+            scope.addOrUpdateItem("$~", ObjRegexMatch(it))
             ObjTrue
         } ?: ObjFalse
     }
@@ -60,8 +60,10 @@ class ObjRegexMatch(val match: MatchResult) : Obj() {
     override val objClass = type
 
     val objGroups: ObjList by lazy {
+        // Use groupValues so that index 0 is the whole match and subsequent indices are capturing groups,
+        // which matches the language/tests expectation for `$~[i]`.
         ObjList(
-            match.groups.map { it?.let { ObjString(it.value) } ?: ObjNull }.toMutableList()
+            match.groupValues.map { ObjString(it) as Obj }.toMutableList()
         )
     }
 

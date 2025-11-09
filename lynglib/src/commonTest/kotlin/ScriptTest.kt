@@ -22,6 +22,7 @@ import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.InlineSourcesImportProvider
+import net.sergeych.tools.bm
 import kotlin.test.*
 
 class ScriptTest {
@@ -812,7 +813,8 @@ class ScriptTest {
         assertEquals(6, c.eval("x").toInt())
         assertEquals(6, c.eval("x++").toInt())
         assertEquals(7, c.eval("x++").toInt())
-        assertEquals(8, c.eval("x")
+        assertEquals(
+            8, c.eval("x")
             .also {
                 println("${it.toDouble()} ${it.toInt()} ${it.toLong()} ${it.toInt()}")
             }
@@ -2252,19 +2254,35 @@ class ScriptTest {
 
     @Test
     fun testMatchOperator() = runTest {
-        eval("""
+        eval(
+            """
             assert( "abc123".matches(".*\d{3}") )
             assert( ".*\d{3}".re =~ "abc123" )
             assert( "abc123" =~ ".*\d{3}".re )
             assert( "abc123" !~ ".*\d{4}".re )
-            
+
+
+            println($~)
+
+            "abc123" =~ ".*(\d)(\d)(\d)$".re
+            println($~)
+            assertEquals("1", $~[1])
+            """
+        )
+    }
+
+    @Test
+    fun testMatchingOperator2() = runTest {
+        eval(
+            """
             "abc123" =~ ".*(\d)(\d)(\d)$".re
             println($~)
             assertEquals("1", $~[1])
             assertEquals("2", $~[2])
             assertEquals("3", $~[3])
             assertEquals("abc123", $~[0])
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
 //    @Test
@@ -3314,26 +3332,31 @@ class ScriptTest {
     }
 
 
-    //    @Test
-//    fun testMinimumOptimization() = runTest {
-//        val x = Scope().eval(
-//            """
-//                fun naiveCountHappyNumbers() {
-//                    var count = 0
-//                    for( n1 in 0..9 )
-//                        for( n2 in 0..9 )
-//                            for( n3 in 0..9 )
-//                                for( n4 in 0..9 )
-//                                    for( n5 in 0..9 )
-//                                        for( n6 in 0..9 )
-//                                            if( n1 + n2 + n3 == n4 + n5 + n6 ) count++
-//                    count
-//                }
-//                naiveCountHappyNumbers()
-//            """.trimIndent()
-//        ).toInt()
-//        assertEquals(55252, x)
-//    }
+//    @Test
+    fun testMinimumOptimization() = runTest {
+        for (i in 1..200) {
+            bm {
+                val x = Scope().eval(
+                    """
+                fun naiveCountHappyNumbers() {
+                    var count = 0
+                    for( n1 in 0..9 )
+                        for( n2 in 0..9 )
+                            for( n3 in 0..9 )
+                                for( n4 in 0..9 )
+                                    for( n5 in 0..9 )
+                                        for( n6 in 0..9 )
+                                            if( n1 + n2 + n3 == n4 + n5 + n6 ) count++
+                    count
+                }
+                naiveCountHappyNumbers()
+            """.trimIndent()
+                ).toInt()
+                assertEquals(55252, x)
+            }
+            delay(10)
+        }
+    }
 
     @Test
     fun testRegex1() = runTest {

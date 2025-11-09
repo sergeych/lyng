@@ -15,7 +15,6 @@
  *
  */
 
-
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Compiler
@@ -26,25 +25,36 @@ import net.sergeych.lyng.ScriptError
 // avoid KDOC bug: keep it
 @Suppress("unused")
 typealias DocCompiler = Compiler
-/**
- * When we need read-write access to an object in some abstract storage, we need Accessor,
- * as in-site assigning is not always sufficient, in general case we need to replace the object
- * in the storage.
- *
- * Note that assigning new value is more complex than just replacing the object, see how assignment
- * operator is implemented in [Compiler.allOps].
- */
-data class Accessor(
-    val getter: suspend (Scope) -> ObjRecord,
-    val setterOrNull: (suspend (Scope, Obj) -> Unit)?
-) {
-    /**
-     * Simplified constructor for immutable stores.
-     */
-    constructor(getter: suspend (Scope) -> ObjRecord) : this(getter, null)
 
-    /**
-     * Get the setter or throw.
-     */
-    fun setter(pos: Pos) = setterOrNull ?: throw ScriptError(pos, "can't assign value")
+/**
+ * Final migration shim: make `Accessor` an alias to `ObjRef`.
+ * This preserves source compatibility while removing lambda-based indirection.
+ */
+typealias Accessor = ObjRef
+
+/** Lambda-based reference for edge cases that still construct access via lambdas. */
+private class LambdaRef(
+    private val getterFn: suspend (Scope) -> ObjRecord,
+    private val setterFn: (suspend (Pos, Scope, Obj) -> Unit)? = null
+) : ObjRef {
+    override suspend fun get(scope: Scope): ObjRecord = getterFn(scope)
+    override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
+        val s = setterFn ?: throw ScriptError(pos, "can't assign value")
+        s(pos, scope, newValue)
+    }
+}
+
+// Factory functions to preserve current call sites like `Accessor { ... }`
+fun Accessor(getter: suspend (Scope) -> ObjRecord): Accessor = LambdaRef(getter)
+fun Accessor(
+    getter: suspend (Scope) -> ObjRecord,
+    setter: suspend (Scope, Obj) -> Unit
+): Accessor = LambdaRef(getter) { _, scope, value -> setter(scope, value) }
+
+// Compatibility shims used throughout Compiler: `.getter(...)` and `.setter(pos)`
+val Accessor.getter: suspend (Scope) -> ObjRecord
+    get() = { scope -> this.get(scope) }
+
+fun Accessor.setter(pos: Pos): suspend (Scope, Obj) -> Unit = { scope, newValue ->
+    this.setAt(pos, scope, newValue)
 }

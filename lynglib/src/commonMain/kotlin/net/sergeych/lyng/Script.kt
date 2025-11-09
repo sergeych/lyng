@@ -19,6 +19,7 @@ package net.sergeych.lyng
 
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
+import net.sergeych.lyng.Script.Companion.defaultImportManager
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.stdlib_included.rootLyng
@@ -158,8 +159,11 @@ class Script(
 
             addVoidFn("assert") {
                 val cond = requiredArg<ObjBool>(0)
+                val message = if( args.size > 1 )
+                    ": " + (args[1] as Statement).execute(this).toString(this).value
+                else ""
                 if( !cond.value == true )
-                    raiseError(ObjAssertionFailedException(this,"Assertion failed"))
+                    raiseError(ObjAssertionFailedException(this, "Assertion failed$message"))
             }
 
             addVoidFn("assertEquals") {

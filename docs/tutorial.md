@@ -1217,13 +1217,13 @@ same as:
 
 Are the same as in string literals with little difference:
 
-| escape | ASCII value       |
-|--------|-------------------|
-| \n     | 0x10, newline     |
+| escape | ASCII value           |
+|--------|-----------------------|
+| \n     | 0x10, newline         |
 | \r     | 0x13, carriage return |
-| \t     | 0x07, tabulation  |
-| \\     | \ slash character |
-| \'     | ' apostrophe      |
+| \t     | 0x07, tabulation      |
+| \\     | \ slash character     |
+| \'     | ' apostrophe          |
 
 ### Char instance members
 
@@ -1290,7 +1290,6 @@ Open-ended ranges could be used to get start and end too:
     assertEquals( "pult", "catapult"[ 4.. ])
     >>> void
 
-
 ### String operations
 
 Concatenation is a `+`: `"hello " + name` works as expected. No confusion. There is also
@@ -1338,7 +1337,6 @@ Typical set of String functions includes:
 | matches(re)        | matches the regular expression (2)                         |
 |                    |                                                            |
 
-
 (1)
 : List is mutable therefore a new copy is created on each call.
 
@@ -1371,20 +1369,26 @@ if blank, will be removed too, for example:
 
 See [math functions](math.md). Other general purpose functions are:
 
-| name                                         | description                                                |
-|----------------------------------------------|------------------------------------------------------------|
-| assert(condition,message="assertion failed") | runtime code check. There will be an option to skip them   |
-| assertEquals(a,b)                            |                                                            |
-| assertNotEquals(a,b)                         |                                                            |
-| assertTrows { /* block */ }                  |                                                            |
-| check(condition, message=<default>)          | throws IllegalStateException" of condition isn't met       |
-| require(condition, message=<default>)        | throws IllegalArgumentException" of condition isn't met    |
-| println(args...)                             | Open for overriding, it prints to stdout with newline.     |
-| print(args...)                               | Open for overriding, it prints to stdout without newline.  |
-| flow {}                                      | create flow sequence, see [parallelism]                    |
-| delay, launch, yield                         | see [parallelism]                                          |
-| cached(builder)                              | remembers builder() on first invocation and return it then |
-| let, also, apply, run                        | see above, flow controls                                   |
+| name                                  | description                                                |
+|---------------------------------------|------------------------------------------------------------|
+| assert(condition, fn)                 | (1) runtime code check with generic or custom nessage `fn` |
+| assertEquals(a,b)                     |                                                            |
+| assertNotEquals(a,b)                  |                                                            |
+| assertTrows { /* block */ }           |                                                            |
+| check(condition, message=<default>)   | throws IllegalStateException" of condition isn't met       |
+| require(condition, message=<default>) | throws IllegalArgumentException" of condition isn't met    |
+| println(args...)                      | Open for overriding, it prints to stdout with newline.     |
+| print(args...)                        | Open for overriding, it prints to stdout without newline.  |
+| flow {}                               | create flow sequence, see [parallelism]                    |
+| delay, launch, yield                  | see [parallelism]                                          |
+| cached(builder)                       | remembers builder() on first invocation and return it then |
+| let, also, apply, run                 | see above, flow controls                                   |
+
+(1)
+: `fn` is optional lambda returning string message to add to exception string. 
+Lambda avoid unnecessary execution if assertion is not failed. for example:
+
+    assert( x < 10 ) { "x=%s should be < 10"(x) } 
 
 # Built-in constants
 

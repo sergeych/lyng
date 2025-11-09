@@ -42,6 +42,10 @@ open class Scope(
     var thisObj: Obj = ObjVoid,
     var skipScopeCreation: Boolean = false,
 ) {
+    // Fast-path storage for local variables/arguments accessed by slot index.
+    // Enabled by default for child scopes; module/class scopes can ignore it.
+    private val slots: MutableList<ObjRecord> = mutableListOf()
+    private val nameToSlot: MutableMap<String, Int> = mutableMapOf()
     open val packageName: String = "<anonymous package>"
 
     constructor(
@@ -89,8 +93,8 @@ open class Scope(
     }
 
     @Suppress("unused")
-    fun raiseNotFound(message: String="not found"): Nothing {
-        throw ExecutionError(ObjNotFoundException(this,message))
+    fun raiseNotFound(message: String = "not found"): Nothing {
+        throw ExecutionError(ObjNotFoundException(this, message))
     }
 
     inline fun <reified T : Obj> requiredArg(index: Int): T {
@@ -112,7 +116,7 @@ open class Scope(
     }
 
     fun requireNoArgs() {
-        if( args.list.isNotEmpty())
+        if (args.list.isNotEmpty())
             raiseError("This function does not accept any arguments")
     }
 
@@ -122,7 +126,7 @@ open class Scope(
             val t = s!!.thisObj
             if (t is T) return t
             s = s.parent
-        } while(s != null)
+        } while (s != null)
         raiseClassCastError("Cannot cast ${thisObj.objClass.className} to ${T::class.simpleName}")
     }
 
@@ -137,6 +141,20 @@ open class Scope(
                     .getInstanceMemberOrNull(name)
                     )
         }
+
+    // Slot fast-path API
+    fun getSlotRecord(index: Int): ObjRecord = slots[index]
+    fun setSlotValue(index: Int, newValue: Obj) {
+        slots[index].value = newValue
+    }
+
+    fun getSlotIndexOf(name: String): Int? = nameToSlot[name]
+    fun allocateSlotFor(name: String, record: ObjRecord): Int {
+        val idx = slots.size
+        slots.add(record)
+        nameToSlot[name] = idx
+        return idx
+    }
 
     /**
      * Creates a new child scope using the provided arguments and optional `thisObj`.
@@ -160,6 +178,24 @@ open class Scope(
      */
     fun createChildScope() = Scope(this, args, pos, thisObj)
 
+    /**
+     * Add or update ObjRecord with a given value checking rights. Created [ObjRecord] is mutable.
+     * Throws Lyng [ObjIllegalArgumentException] if yje [name] exists and readonly.
+     * @return ObjRector, new or updated.
+     */
+    fun addOrUpdateItem(
+        name: String,
+        value: Obj,
+        visibility: Visibility = Visibility.Public,
+        recordType: ObjRecord.Type = ObjRecord.Type.Other
+    ): ObjRecord =
+        objects[name]?.let {
+            if( !it.isMutable )
+                raiseIllegalAssignment("symbol is readonly: $name")
+            it.value = value
+            it
+        } ?: addItem(name, true, value, visibility, recordType)
+
     fun addItem(
         name: String,
         isMutable: Boolean,
@@ -167,7 +203,13 @@ open class Scope(
         visibility: Visibility = Visibility.Public,
         recordType: ObjRecord.Type = ObjRecord.Type.Other
     ): ObjRecord {
-        return ObjRecord(value, isMutable, visibility,type = recordType).also { objects[name] = it }
+        val rec = ObjRecord(value, isMutable, visibility, type = recordType)
+        objects[name] = rec
+        // Map to a slot for fast local access (if not already mapped)
+        if (getSlotIndexOf(name) == null) {
+            allocateSlotFor(name, rec)
+        }
+        return rec
     }
 
     fun getOrCreateNamespace(name: String): ObjClass {
@@ -236,15 +278,18 @@ open class Scope(
             parent?.currentImportProvider ?: throw IllegalStateException("this scope has no manager in the chain")
     }
 
-    val importManager by lazy { (currentImportProvider as? ImportManager)
-        ?: throw IllegalStateException("this scope has no manager in the chain (provided $currentImportProvider") }
+    val importManager by lazy {
+        (currentImportProvider as? ImportManager)
+            ?: throw IllegalStateException("this scope has no manager in the chain (provided $currentImportProvider")
+    }
 
     override fun toString(): String {
-        val contents = objects.entries.joinToString { "${if( it.value.isMutable ) "var" else "val" } ${it.key}=${it.value.value}" }
+        val contents =
+            objects.entries.joinToString { "${if (it.value.isMutable) "var" else "val"} ${it.key}=${it.value.value}" }
         return "S[this=$thisObj $contents]"
     }
 
-    fun trace(text: String="") {
+    fun trace(text: String = "") {
         println("trace Scope: $text ------------------")
         var p = this.parent
         var level = 0

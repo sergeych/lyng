@@ -183,13 +183,13 @@ class Compiler(
 
     private suspend fun parseExpression(): Statement? {
         val pos = cc.currentPos()
-        return parseExpressionLevel()?.let { a -> statement(pos) { a.getter(it).value } }
+        return parseExpressionLevel()?.let { a -> statement(pos) { a.get(it).value } }
     }
 
-    private suspend fun parseExpressionLevel(level: Int = 0): Accessor? {
+    private suspend fun parseExpressionLevel(level: Int = 0): ObjRef? {
         if (level == lastLevel)
             return parseTerm()
-        var lvalue: Accessor? = parseExpressionLevel(level + 1) ?: return null
+        var lvalue: ObjRef? = parseExpressionLevel(level + 1) ?: return null
 
         while (true) {
 
@@ -208,8 +208,8 @@ class Compiler(
         return lvalue
     }
 
-    private suspend fun parseTerm(): Accessor? {
-        var operand: Accessor? = null
+    private suspend fun parseTerm(): ObjRef? {
+        var operand: ObjRef? = null
 
         // newlines _before_
         cc.skipWsTokens()
@@ -242,9 +242,9 @@ class Compiler(
                 }
 
                 Token.Type.NOT -> {
-                    if (operand != null) throw ScriptError(t.pos, "unexpected operator not '!'")
+                    if (operand != null) throw ScriptError(t.pos, "unexpected operator not '!' ")
                     val op = parseTerm() ?: throw ScriptError(t.pos, "Expecting expression")
-                    operand = Accessor { op.getter(it).value.logicalNot(it).asReadonly }
+                    operand = UnaryOpRef(UnaryOp.NOT, op)
                 }
 
                 Token.Type.DOT, Token.Type.NULL_COALESCE -> {
@@ -260,58 +260,29 @@ class Compiler(
                                 Token.Type.LPAREN -> {
                                     cc.next()
                                     // instance method call
-                                    val args = parseArgs().first
+                                    val parsed = parseArgs()
+                                    val args = parsed.first
+                                    val tailBlock = parsed.second
                                     isCall = true
-                                    operand = Accessor { context ->
-                                        context.pos = next.pos
-                                        val v = left.getter(context).value
-                                        if (v == ObjNull && isOptional)
-                                            ObjNull.asReadonly
-                                        else
-                                            ObjRecord(
-                                                v.invokeInstanceMethod(
-                                                    context,
-                                                    next.value,
-                                                    args.toArguments(context, false)
-                                                ), isMutable = false
-                                            )
-                                    }
+                                    operand = MethodCallRef(left, next.value, args, tailBlock, isOptional)
                                 }
 
 
                                 Token.Type.LBRACE, Token.Type.NULL_COALESCE_BLOCKINVOKE -> {
-                                    // single lambda arg, like assertTrows { ... }
+                                    // single lambda arg, like assertThrows { ... }
                                     cc.next()
                                     isCall = true
-                                    val lambda =
-                                        parseLambdaExpression()
-                                    operand = Accessor { context ->
-                                        context.pos = next.pos
-                                        val v = left.getter(context).value
-                                        if (v == ObjNull && isOptional)
-                                            ObjNull.asReadonly
-                                        else
-                                            ObjRecord(
-                                                v.invokeInstanceMethod(
-                                                    context,
-                                                    next.value,
-                                                    Arguments(listOf(lambda.getter(context).value), true)
-                                                ), isMutable = false
-                                            )
-                                    }
+                                                val lambda = parseLambdaExpression()
+                                    val argStmt = statement { lambda.get(this).value }
+                                    val args = listOf(ParsedArgument(argStmt, next.pos))
+                                    operand = MethodCallRef(left, next.value, args, true, isOptional)
                                 }
 
                                 else -> {}
                             }
                         }
                         if (!isCall) {
-                            operand = Accessor({ context ->
-                                val x = left.getter(context).value
-                                if (x == ObjNull && isOptional) ObjNull.asReadonly
-                                else x.readField(context, next.value)
-                            }) { cxt, newValue ->
-                                left.getter(cxt).value.writeField(cxt, next.value, newValue)
-                            }
+                            operand = FieldRef(left, next.value, isOptional)
                         }
                     }
 
@@ -333,9 +304,7 @@ class Compiler(
                     } ?: run {
                         // Expression in parentheses
                         val statement = parseStatement() ?: throw ScriptError(t.pos, "Expecting expression")
-                        operand = Accessor {
-                            statement.execute(it).asReadonly
-                        }
+                        operand = StatementRef(statement)
                         cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
                         cc.skipTokenOfType(Token.Type.RPAREN, "missing ')'")
                     }
@@ -343,41 +312,16 @@ class Compiler(
 
                 Token.Type.LBRACKET, Token.Type.NULL_COALESCE_INDEX -> {
                     operand?.let { left ->
-                        // array access
+                        // array access via ObjRef
                         val isOptional = t.type == Token.Type.NULL_COALESCE_INDEX
                         val index = parseStatement() ?: throw ScriptError(t.pos, "Expecting index expression")
                         cc.skipTokenOfType(Token.Type.RBRACKET, "missing ']' at the end of the list literal")
-                        operand = Accessor({ cxt ->
-                            val i = index.execute(cxt)
-                            val x = left.getter(cxt).value
-                            if (x == ObjNull && isOptional) ObjNull.asReadonly
-                            else x.getAt(cxt, i).asMutable
-                        }) { cxt, newValue ->
-                            left.getter(cxt).value.putAt(cxt, index.execute(cxt), newValue)
-                        }
+                        operand = IndexRef(left, StatementRef(index), isOptional)
                     } ?: run {
                         // array literal
                         val entries = parseArrayLiteral()
-                        // if it didn't throw, ot parsed ot and consumed it all
-                        operand = Accessor { cxt ->
-                            val list = mutableListOf<Obj>()
-                            for (e in entries) {
-                                when (e) {
-                                    is ListEntry.Element -> {
-                                        list += e.accessor.getter(cxt).value
-                                    }
-
-                                    is ListEntry.Spread -> {
-                                        val elements = e.accessor.getter(cxt).value
-                                        when {
-                                            elements is ObjList -> list.addAll(elements.list)
-                                            else -> cxt.raiseError("Spread element must be list")
-                                        }
-                                    }
-                                }
-                            }
-                            ObjList(list).asReadonly
-                        }
+                        // build list literal via ObjRef node (no per-access lambdas)
+                        operand = ListLiteralRef(entries)
                     }
                 }
 
@@ -388,7 +332,7 @@ class Compiler(
                             if (operand != null) throw ScriptError(t.pos, "unexpected keyword")
                             cc.previous()
                             val s = parseStatement() ?: throw ScriptError(t.pos, "Expecting valid statement")
-                            operand = Accessor { s.execute(it).asReadonly }
+                            operand = StatementRef(s)
                         }
 
                         "else", "break", "continue" -> {
@@ -399,22 +343,14 @@ class Compiler(
 
                         "throw" -> {
                             val s = parseThrowStatement()
-                            operand = Accessor {
-                                s.execute(it).asReadonly
-                            }
+                            operand = StatementRef(s)
                         }
 
                         else -> operand?.let { left ->
                             // selector: <lvalue>, '.' , <id>
                             // we replace operand with selector code, that
                             // is RW:
-                            operand = Accessor({
-                                it.pos = t.pos
-                                left.getter(it).value.readField(it, t.value)
-                            }) { cxt, newValue ->
-                                cxt.pos = t.pos
-                                left.getter(cxt).value.writeField(cxt, t.value, newValue)
-                            }
+                            operand = FieldRef(left, t.value, false)
                         } ?: run {
                             // variable to read or like
                             cc.previous()
@@ -424,64 +360,22 @@ class Compiler(
                 }
 
                 Token.Type.PLUS2 -> {
-                    // note: post-increment result is not assignable (truly lvalue)
-                    operand?.let { left ->
-                        // post increment
-                        left.setter(startPos)
-                        operand = Accessor { cxt ->
-                            val x = left.getter(cxt)
-                            if (x.isMutable) {
-                                if (x.value.isConst) {
-                                    x.value.plus(cxt, ObjInt.One).also {
-                                        left.setter(startPos)(cxt, it)
-                                    }.asReadonly
-                                } else
-                                    x.value.getAndIncrement(cxt).asReadonly
-                            } else cxt.raiseError("Cannot increment immutable value")
-                        }
+                    // ++ (post if operand exists, pre otherwise)
+                    operand = operand?.let { left ->
+                        IncDecRef(left, isIncrement = true, isPost = true, atPos = startPos)
                     } ?: run {
-                        // no lvalue means pre-increment, expression to increment follows
                         val next = parseTerm() ?: throw ScriptError(t.pos, "Expecting expression")
-                        operand = Accessor { ctx ->
-                            val x = next.getter(ctx).also {
-                                if (!it.isMutable) ctx.raiseError("Cannot increment immutable value")
-                            }.value
-                            if (x.isConst) {
-                                next.setter(startPos)(ctx, x.plus(ctx, ObjInt.One))
-                                x.asReadonly
-                            } else x.incrementAndGet(ctx).asReadonly
-                        }
+                        IncDecRef(next, isIncrement = true, isPost = false, atPos = startPos)
                     }
                 }
 
                 Token.Type.MINUS2 -> {
-                    // note: post-decrement result is not assignable (truly lvalue)
-                    operand?.let { left ->
-                        // post decrement
-                        left.setter(startPos)
-                        operand = Accessor { cxt ->
-                            val x = left.getter(cxt)
-                            if (!x.isMutable) cxt.raiseError("Cannot decrement immutable value")
-                            if (x.value.isConst) {
-                                x.value.minus(cxt, ObjInt.One).also {
-                                    left.setter(startPos)(cxt, it)
-                                }.asReadonly
-                            } else
-                                x.value.getAndDecrement(cxt).asReadonly
-                        }
+                    // -- (post if operand exists, pre otherwise)
+                    operand = operand?.let { left ->
+                        IncDecRef(left, isIncrement = false, isPost = true, atPos = startPos)
                     } ?: run {
-                        // no lvalue means pre-decrement, expression to decrement follows
                         val next = parseTerm() ?: throw ScriptError(t.pos, "Expecting expression")
-                        operand = Accessor { cxt ->
-                            val x = next.getter(cxt)
-                            if (!x.isMutable) cxt.raiseError("Cannot decrement immutable value")
-                            if (x.value.isConst) {
-                                x.value.minus(cxt, ObjInt.One).also {
-                                    next.setter(startPos)(cxt, it)
-                                }.asReadonly
-                            } else
-                                x.value.decrementAndGet(cxt).asReadonly
-                        }
+                        IncDecRef(next, isIncrement = false, isPost = false, atPos = startPos)
                     }
                 }
 
@@ -497,13 +391,11 @@ class Compiler(
                             null
                         else
                             parseExpression()
-                    operand = Accessor {
-                        ObjRange(
-                            left?.getter?.invoke(it)?.value ?: ObjNull,
-                            right?.execute(it) ?: ObjNull,
-                            isEndInclusive = isEndInclusive
-                        ).asReadonly
-                    }
+                    operand = RangeRef(
+                        left,
+                        right?.let { StatementRef(it) },
+                        isEndInclusive
+                    )
                 }
 
                 Token.Type.LBRACE, Token.Type.NULL_COALESCE_BLOCKINVOKE -> {
@@ -534,7 +426,7 @@ class Compiler(
     /**
      * Parse lambda expression, leading '{' is already consumed
      */
-    private suspend fun parseLambdaExpression(): Accessor {
+    private suspend fun parseLambdaExpression(): ObjRef {
         // lambda args are different:
         val startPos = cc.currentPos()
         val argsDeclaration = parseArgsDeclaration()
@@ -570,7 +462,7 @@ class Compiler(
             body.execute(context)
         }
 
-        return Accessor { x ->
+        return ValueFnRef { x ->
             closure = x
             callStatement.asReadonly
         }
@@ -600,14 +492,14 @@ class Compiler(
         }
     }
 
-    private fun parseScopeOperator(operand: Accessor?): Accessor {
+    private fun parseScopeOperator(operand: ObjRef?): ObjRef {
         // implement global scope maybe?
         if (operand == null) throw ScriptError(cc.next().pos, "Expecting expression before ::")
         val t = cc.next()
         if (t.type != Token.Type.ID) throw ScriptError(t.pos, "Expecting ID after ::")
         return when (t.value) {
-            "class" -> Accessor {
-                operand.getter(it).value.objClass.asReadonly
+            "class" -> ValueFnRef { scope ->
+                operand.get(scope).value.objClass.asReadonly
             }
 
             else -> throw ScriptError(t.pos, "Unknown scope operation: ${t.value}")
@@ -760,9 +652,9 @@ class Compiler(
             // last argument - callable
             val callableAccessor = parseLambdaExpression()
             args += ParsedArgument(
-                // transform accessor to the callable:
+                // transform ObjRef to the callable value
                 statement {
-                    callableAccessor.getter(this).value
+                    callableAccessor.get(this).value
                 },
                 end.pos
             )
@@ -774,11 +666,10 @@ class Compiler(
 
 
     private suspend fun parseFunctionCall(
-        left: Accessor,
+        left: ObjRef,
         blockArgument: Boolean,
         isOptional: Boolean
-    ): Accessor {
-        // insofar, functions always return lvalue
+    ): ObjRef {
         var detectedBlockArgument = blockArgument
         val args = if (blockArgument) {
             val blockArg = ParsedArgument(
@@ -791,75 +682,44 @@ class Compiler(
             detectedBlockArgument = r.second
             r.first
         }
-
-        return Accessor { context ->
-            val v = left.getter(context)
-            if (v.value == ObjNull && isOptional) return@Accessor v.value.asReadonly
-            v.value.callOn(
-                context.createChildScope(
-                    context.pos,
-                    args.toArguments(context, detectedBlockArgument)
-//                Arguments(
-//                    args.map { Arguments.Info((it.value as Statement).execute(context), it.pos) }
-//                ),
-                )
-            ).asReadonly
-        }
+        return CallRef(left, args, detectedBlockArgument, isOptional)
     }
 
-    private suspend fun parseAccessor(): Accessor? {
+    private suspend fun parseAccessor(): ObjRef? {
         // could be: literal
         val t = cc.next()
         return when (t.type) {
             Token.Type.INT, Token.Type.REAL, Token.Type.HEX -> {
                 cc.previous()
                 val n = parseNumber(true)
-                Accessor {
-                    n.asReadonly
-                }
+                ConstRef(n.asReadonly)
             }
 
-            Token.Type.STRING -> Accessor { ObjString(t.value).asReadonly }
+            Token.Type.STRING -> ConstRef(ObjString(t.value).asReadonly)
 
-            Token.Type.CHAR -> Accessor { ObjChar(t.value[0]).asReadonly }
+            Token.Type.CHAR -> ConstRef(ObjChar(t.value[0]).asReadonly)
 
             Token.Type.PLUS -> {
                 val n = parseNumber(true)
-                Accessor { n.asReadonly }
+                ConstRef(n.asReadonly)
             }
 
             Token.Type.MINUS -> {
                 parseNumberOrNull(false)?.let { n ->
-                    Accessor { n.asReadonly }
+                    ConstRef(n.asReadonly)
                 } ?: run {
                     val n = parseTerm() ?: throw ScriptError(t.pos, "Expecting expression after unary minus")
-                    Accessor {
-                        n.getter.invoke(it).value.negate(it).asReadonly
-                    }
+                    UnaryOpRef(UnaryOp.NEGATE, n)
                 }
             }
 
             Token.Type.ID -> {
                 when (t.value) {
-                    "void" -> Accessor { ObjVoid.asReadonly }
-                    "null" -> Accessor { ObjNull.asReadonly }
-                    "true" -> Accessor { ObjBool(true).asReadonly }
-                    "false" -> Accessor { ObjFalse.asReadonly }
-                    else -> {
-                        Accessor({
-                            it.pos = t.pos
-                            it[t.value]
-                                ?: it.raiseError("symbol not defined: '${t.value}'")
-                        }) { ctx, newValue ->
-                            ctx[t.value]?.let { stored ->
-                                ctx.pos = t.pos
-                                if (stored.isMutable)
-                                    stored.value = newValue
-                                else
-                                    ctx.raiseError("Cannot assign to immutable value")
-                            } ?: ctx.raiseError("symbol not defined: '${t.value}'")
-                        }
-                    }
+                    "void" -> ConstRef(ObjVoid.asReadonly)
+                    "null" -> ConstRef(ObjNull.asReadonly)
+                    "true" -> ConstRef(ObjTrue.asReadonly)
+                    "false" -> ConstRef(ObjFalse.asReadonly)
+                    else -> LocalVarRef(t.value, t.pos)
                 }
             }
 
@@ -1908,16 +1768,11 @@ class Compiler(
     data class Operator(
         val tokenType: Token.Type,
         val priority: Int, val arity: Int = 2,
-        val generate: (Pos, Accessor, Accessor) -> Accessor
+        val generate: (Pos, ObjRef, ObjRef) -> ObjRef
     ) {
 //        fun isLeftAssociative() = tokenType != Token.Type.OR && tokenType != Token.Type.AND
 
-        companion object {
-            fun simple(tokenType: Token.Type, priority: Int, f: suspend (Scope, Obj, Obj) -> Obj): Operator =
-                Operator(tokenType, priority, 2) { _: Pos, a: Accessor, b: Accessor ->
-                    Accessor { f(it, a.getter(it).value, b.getter(it).value).asReadonly }
-                }
-        }
+        companion object {}
 
     }
 
@@ -1931,118 +1786,104 @@ class Compiler(
         val allOps = listOf(
             // assignments, lowest priority
             Operator(Token.Type.ASSIGN, lastPriority) { pos, a, b ->
-                Accessor {
-                    val value = b.getter(it).value
-                    val access = a.getter(it)
-                    if (!access.isMutable) throw ScriptError(pos, "cannot assign to immutable variable")
-                    if (access.value.assign(it, value) == null)
-                        a.setter(pos)(it, value)
-                    value.asReadonly
-                }
+                AssignRef(a, b, pos)
             },
             Operator(Token.Type.PLUSASSIGN, lastPriority) { pos, a, b ->
-                Accessor {
-                    val x = a.getter(it).value
-                    val y = b.getter(it).value
-                    (x.plusAssign(it, y) ?: run {
-                        val result = x.plus(it, y)
-                        a.setter(pos)(it, result)
-                        result
-                    }).asReadonly
-                }
+                AssignOpRef(BinOp.PLUS, a, b, pos)
             },
             Operator(Token.Type.MINUSASSIGN, lastPriority) { pos, a, b ->
-                Accessor {
-                    val x = a.getter(it).value
-                    val y = b.getter(it).value
-                    (x.minusAssign(it, y) ?: run {
-                        val result = x.minus(it, y)
-                        a.setter(pos)(it, result)
-                        result
-                    }).asReadonly
-                }
+                AssignOpRef(BinOp.MINUS, a, b, pos)
             },
             Operator(Token.Type.STARASSIGN, lastPriority) { pos, a, b ->
-                Accessor {
-                    val x = a.getter(it).value
-                    val y = b.getter(it).value
-                    (x.mulAssign(it, y) ?: run {
-                        val result = x.mul(it, y)
-                        a.setter(pos)(it, result)
-                        result
-
-                    }).asReadonly
-                }
+                AssignOpRef(BinOp.STAR, a, b, pos)
             },
             Operator(Token.Type.SLASHASSIGN, lastPriority) { pos, a, b ->
-                Accessor {
-                    val x = a.getter(it).value
-                    val y = b.getter(it).value
-                    (x.divAssign(it, y) ?: run {
-                        val result = x.div(it, y)
-                        a.setter(pos)(it, result)
-                        result
-                    }).asReadonly
-                }
+                AssignOpRef(BinOp.SLASH, a, b, pos)
             },
             Operator(Token.Type.PERCENTASSIGN, lastPriority) { pos, a, b ->
-                Accessor {
-                    val x = a.getter(it).value
-                    val y = b.getter(it).value
-                    (x.modAssign(it, y) ?: run {
-                        val result = x.mod(it, y)
-                        a.setter(pos)(it, result)
-                        result
-                    }).asReadonly
-                }
+                AssignOpRef(BinOp.PERCENT, a, b, pos)
             },
             // logical 1
-            Operator.simple(Token.Type.OR, ++lastPriority) { ctx, a, b -> a.logicalOr(ctx, b) },
+            Operator(Token.Type.OR, ++lastPriority) { _, a, b ->
+                LogicalOrRef(a, b)
+            },
             // logical 2
-            Operator.simple(Token.Type.AND, ++lastPriority) { ctx, a, b -> a.logicalAnd(ctx, b) },
-            // bitwise or 2
-            // bitwise and 3
-            // equality/not equality 4
-            Operator.simple(Token.Type.EQARROW, ++lastPriority) { _, a, b -> ObjMapEntry(a, b) },
-            //
-            Operator.simple(Token.Type.EQ, ++lastPriority) { c, a, b -> ObjBool(a.compareTo(c, b) == 0) },
-            Operator.simple(Token.Type.NEQ, lastPriority) { c, a, b -> ObjBool(a.compareTo(c, b) != 0) },
-            Operator.simple(Token.Type.REF_EQ, lastPriority) { _, a, b -> ObjBool(a === b) },
-            Operator.simple(Token.Type.REF_NEQ, lastPriority) { _, a, b -> ObjBool(a !== b) },
-            Operator.simple(Token.Type.MATCH, lastPriority) { s, a, b -> a.operatorMatch(s,b) },
-            Operator.simple(Token.Type.NOTMATCH, lastPriority) { s, a, b -> a.operatorNotMatch(s,b) },
-            // relational <=,... 5
-            Operator.simple(Token.Type.LTE, ++lastPriority) { c, a, b -> ObjBool(a.compareTo(c, b) <= 0) },
-            Operator.simple(Token.Type.LT, lastPriority) { c, a, b -> ObjBool(a.compareTo(c, b) < 0) },
-            Operator.simple(Token.Type.GTE, lastPriority) { c, a, b -> ObjBool(a.compareTo(c, b) >= 0) },
-            Operator.simple(Token.Type.GT, lastPriority) { c, a, b -> ObjBool(a.compareTo(c, b) > 0) },
+            Operator(Token.Type.AND, ++lastPriority) { _, a, b ->
+                LogicalAndRef(a, b)
+            },
+            // equality/not equality and related
+            Operator(Token.Type.EQARROW, ++lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.EQARROW, a, b)
+            },
+            Operator(Token.Type.EQ, ++lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.EQ, a, b)
+            },
+            Operator(Token.Type.NEQ, lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.NEQ, a, b)
+            },
+            Operator(Token.Type.REF_EQ, lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.REF_EQ, a, b)
+            },
+            Operator(Token.Type.REF_NEQ, lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.REF_NEQ, a, b)
+            },
+            Operator(Token.Type.MATCH, lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.MATCH, a, b)
+            },
+            Operator(Token.Type.NOTMATCH, lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.NOTMATCH, a, b)
+            },
+            // relational <=,...
+            Operator(Token.Type.LTE, ++lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.LTE, a, b)
+            },
+            Operator(Token.Type.LT, lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.LT, a, b)
+            },
+            Operator(Token.Type.GTE, lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.GTE, a, b)
+            },
+            Operator(Token.Type.GT, lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.GT, a, b)
+            },
             // in, is:
-            Operator.simple(Token.Type.IN, lastPriority) { c, a, b -> ObjBool(b.contains(c, a)) },
-            Operator.simple(Token.Type.NOTIN, lastPriority) { c, a, b -> ObjBool(!b.contains(c, a)) },
-            Operator.simple(Token.Type.IS, lastPriority) { _, a, b -> ObjBool(a.isInstanceOf(b)) },
-            Operator.simple(Token.Type.NOTIS, lastPriority) { _, a, b -> ObjBool(!a.isInstanceOf(b)) },
-
-            Operator(Token.Type.ELVIS, ++lastPriority, 2) { _: Pos, a: Accessor, b: Accessor ->
-                Accessor {
-                    val aa = a.getter(it).value
-                    (
-                            if (aa != ObjNull) aa
-                            else b.getter(it).value
-                            ).asReadonly
-                }
+            Operator(Token.Type.IN, lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.IN, a, b)
+            },
+            Operator(Token.Type.NOTIN, lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.NOTIN, a, b)
+            },
+            Operator(Token.Type.IS, lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.IS, a, b)
+            },
+            Operator(Token.Type.NOTIS, lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.NOTIS, a, b)
             },
 
-            // shuttle <=> 6
-            Operator.simple(Token.Type.SHUTTLE, ++lastPriority) { c, a, b ->
-                ObjInt(a.compareTo(c, b).toLong())
+            Operator(Token.Type.ELVIS, ++lastPriority, 2) { _, a, b ->
+                ElvisRef(a, b)
             },
-            // bit shifts 7
-            Operator.simple(Token.Type.PLUS, ++lastPriority) { ctx, a, b -> a.plus(ctx, b) },
-            Operator.simple(Token.Type.MINUS, lastPriority) { ctx, a, b -> a.minus(ctx, b) },
 
-            Operator.simple(Token.Type.STAR, ++lastPriority) { ctx, a, b -> a.mul(ctx, b) },
-            Operator.simple(Token.Type.SLASH, lastPriority) { ctx, a, b -> a.div(ctx, b) },
-            Operator.simple(Token.Type.PERCENT, lastPriority) { ctx, a, b -> a.mod(ctx, b) },
+            // shuttle <=>
+            Operator(Token.Type.SHUTTLE, ++lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.SHUTTLE, a, b)
+            },
+            // arithmetic
+            Operator(Token.Type.PLUS, ++lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.PLUS, a, b)
+            },
+            Operator(Token.Type.MINUS, lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.MINUS, a, b)
+            },
+            Operator(Token.Type.STAR, ++lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.STAR, a, b)
+            },
+            Operator(Token.Type.SLASH, lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.SLASH, a, b)
+            },
+            Operator(Token.Type.PERCENT, lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.PERCENT, a, b)
+            },
         )
 
 //        private val assigner = allOps.first { it.tokenType == Token.Type.ASSIGN }
