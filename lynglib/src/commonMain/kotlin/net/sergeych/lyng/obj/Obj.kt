@@ -304,7 +304,10 @@ open class Obj {
     }
 
     fun autoInstanceScope(parent: Scope): Scope {
-        val scope = parent.createChildScope(newThisObj = this, args = parent.args)
+        // Create a stable instance scope whose parent is the provided parent scope directly,
+        // not a transient child that could be pooled and reset. This preserves proper name
+        // resolution (e.g., stdlib functions like sqrt) even when call frame pooling is enabled.
+        val scope = Scope(parent, parent.args, parent.pos, this)
         for (m in objClass.members) {
             scope.objects[m.key] = m.value
         }

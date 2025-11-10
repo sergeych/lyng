@@ -68,7 +68,11 @@ open class ObjClass(
 
     override suspend fun callOn(scope: Scope): Obj {
         val instance = ObjInstance(this)
-        instance.instanceScope = scope.createChildScope(newThisObj = instance, args = scope.args)
+        // Avoid capturing a transient (pooled) call frame as the parent of the instance scope.
+        // Bind instance scope to the caller's parent chain directly so name resolution (e.g., stdlib like sqrt)
+        // remains stable even when call frames are pooled and reused.
+        val stableParent = scope.parent
+        instance.instanceScope = Scope(stableParent, scope.args, scope.pos, instance)
         if (instanceConstructor != null) {
             instanceConstructor!!.execute(instance.instanceScope)
         }

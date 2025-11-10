@@ -206,6 +206,10 @@ suspend fun DocTest.test(_scope: Scope? = null) {
             expectedResult != result
         ) {
             System.err.println("\nfailed: ${this.detailedString}")
+            System.err.println("[DEBUG_LOG] expectedOutput=\n${expectedOutput}")
+            System.err.println("[DEBUG_LOG] actualOutput=\n${collectedOutput}")
+            System.err.println("[DEBUG_LOG] expectedResult=${expectedResult}")
+            System.err.println("[DEBUG_LOG] actualResult=${result}")
         }
         error?.let {
             fail(it.message, it)

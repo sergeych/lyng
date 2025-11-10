@@ -6,7 +6,7 @@ actual object PerfDefaults {
 
     actual val ARG_BUILDER: Boolean = true
     actual val SKIP_ARGS_ON_NULL_RECEIVER: Boolean = true
-    actual val SCOPE_POOL: Boolean = false
+    actual val SCOPE_POOL: Boolean = true
 
     actual val FIELD_PIC: Boolean = true
     actual val METHOD_PIC: Boolean = true
