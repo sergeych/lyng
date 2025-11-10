@@ -21,6 +21,10 @@ import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.pacman.ImportProvider
 
+// Simple per-frame id generator for perf caches (not thread-safe, fine for scripts)
+private object FrameIdGen { var c: Long = 1L; fun nextId(): Long = c++ }
+private fun nextFrameId(): Long = FrameIdGen.nextId()
+
 /**
  * Scope is where local variables and methods are stored. Scope is also a parent scope for other scopes.
  * Each block usually creates a scope. Accessing Lyng closures usually is done via a scope.
@@ -42,11 +46,16 @@ open class Scope(
     var thisObj: Obj = ObjVoid,
     var skipScopeCreation: Boolean = false,
 ) {
+    // Unique id per scope frame for PICs; cheap to compare and stable for the frame lifetime.
+    val frameId: Long = nextFrameId()
+
     // Fast-path storage for local variables/arguments accessed by slot index.
     // Enabled by default for child scopes; module/class scopes can ignore it.
     private val slots: MutableList<ObjRecord> = mutableListOf()
     private val nameToSlot: MutableMap<String, Int> = mutableMapOf()
     open val packageName: String = "<anonymous package>"
+
+    fun slotCount(): Int = slots.size
 
     constructor(
         args: Arguments = Arguments.EMPTY,

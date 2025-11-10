@@ -31,6 +31,25 @@ class Compiler(
     settings: Settings = Settings()
 ) {
 
+    // Stack of parameter-to-slot plans for current function being parsed (by declaration index)
+    private val paramSlotPlanStack = mutableListOf<Map<String, Int>>()
+    private val currentParamSlotPlan: Map<String, Int>?
+        get() = paramSlotPlanStack.lastOrNull()
+
+    // Track identifiers known to be locals/parameters in the current function for fast local emission
+    private val localNamesStack = mutableListOf<MutableSet<String>>()
+    private val currentLocalNames: MutableSet<String>?
+        get() = localNamesStack.lastOrNull()
+
+    private inline fun <T> withLocalNames(names: Set<String>, block: () -> T): T {
+        localNamesStack.add(names.toMutableSet())
+        return try { block() } finally { localNamesStack.removeLast() }
+    }
+
+    private fun declareLocalName(name: String) {
+        currentLocalNames?.add(name)
+    }
+
     var packageName: String? = null
 
     class Settings
@@ -59,55 +78,57 @@ class Compiler(
     private suspend fun parseScript(): Script {
         val statements = mutableListOf<Statement>()
         val start = cc.currentPos()
-//        val returnScope = cc.startReturnScope()
-        // package level declarations
-        do {
-            val t = cc.current()
-            if (t.type == Token.Type.NEWLINE || t.type == Token.Type.SINLGE_LINE_COMMENT || t.type == Token.Type.MULTILINE_COMMENT) {
-                cc.next()
-                continue
-            }
-            if (t.type == Token.Type.ID) {
-                when (t.value) {
-                    "package" -> {
-                        cc.next()
-                        val name = loadQualifiedName()
-                        if (name.isEmpty()) throw ScriptError(cc.currentPos(), "Expecting package name here")
-                        if (packageName != null) throw ScriptError(
-                            cc.currentPos(),
-                            "package name redefined, already set to $packageName"
-                        )
-                        packageName = name
-                        continue
-                    }
-
-                    "import" -> {
-                        cc.next()
-                        val pos = cc.currentPos()
-                        val name = loadQualifiedName()
-                        val module = importManager.prepareImport(pos, name, null)
-                        statements += statement {
-                            module.importInto(this, null)
-                            ObjVoid
+        // Track locals at script level for fast local refs
+        return withLocalNames(emptySet()) {
+            // package level declarations
+            do {
+                val t = cc.current()
+                if (t.type == Token.Type.NEWLINE || t.type == Token.Type.SINLGE_LINE_COMMENT || t.type == Token.Type.MULTILINE_COMMENT) {
+                    cc.next()
+                    continue
+                }
+                if (t.type == Token.Type.ID) {
+                    when (t.value) {
+                        "package" -> {
+                            cc.next()
+                            val name = loadQualifiedName()
+                            if (name.isEmpty()) throw ScriptError(cc.currentPos(), "Expecting package name here")
+                            if (packageName != null) throw ScriptError(
+                                cc.currentPos(),
+                                "package name redefined, already set to $packageName"
+                            )
+                            packageName = name
+                            continue
                         }
-                        continue
+
+                        "import" -> {
+                            cc.next()
+                            val pos = cc.currentPos()
+                            val name = loadQualifiedName()
+                            val module = importManager.prepareImport(pos, name, null)
+                            statements += statement {
+                                module.importInto(this, null)
+                                ObjVoid
+                            }
+                            continue
+                        }
                     }
                 }
-            }
-            val s = parseStatement(braceMeansLambda = true)?.also {
-                statements += it
-            }
-            if (s == null) {
-                when (t.type) {
-                    Token.Type.RBRACE, Token.Type.EOF, Token.Type.SEMICOLON -> {}
-                    else ->
-                        throw ScriptError(t.pos, "unexpeced `${t.value}` here")
+                val s = parseStatement(braceMeansLambda = true)?.also {
+                    statements += it
                 }
-                break
-            }
+                if (s == null) {
+                    when (t.type) {
+                        Token.Type.RBRACE, Token.Type.EOF, Token.Type.SEMICOLON -> {}
+                        else ->
+                            throw ScriptError(t.pos, "unexpeced `${t.value}` here")
+                    }
+                    break
+                }
 
-        } while (true)
-        return Script(start, statements)//returnScope.needCatch)
+            } while (true)
+            Script(start, statements)
+        }
     }
 
     fun loadQualifiedName(): String {
@@ -719,7 +740,9 @@ class Compiler(
                     "null" -> ConstRef(ObjNull.asReadonly)
                     "true" -> ConstRef(ObjTrue.asReadonly)
                     "false" -> ConstRef(ObjFalse.asReadonly)
-                    else -> LocalVarRef(t.value, t.pos)
+                    else -> if (PerfFlags.EMIT_FAST_LOCAL_REFS && (currentLocalNames?.contains(t.value) == true))
+                        FastLocalVarRef(t.value, t.pos)
+                    else LocalVarRef(t.value, t.pos)
                 }
             }
 
@@ -1606,11 +1629,13 @@ class Compiler(
 
         return inCodeContext(CodeContext.Function(name)) {
 
+            val paramNames: Set<String> = argsDeclaration.params.map { it.name }.toSet()
+
             // Here we should be at open body
             val fnStatements = if (isExtern)
                 statement { raiseError("extern function not provided: $name") }
             else
-                parseBlock()
+                withLocalNames(paramNames) { parseBlock() }
 
             var closure: Scope? = null
 
@@ -1699,6 +1724,9 @@ class Compiler(
         val eqToken = cc.next()
         var setNull = false
 
+        // Register the local name at compile time so that subsequent identifiers can be emitted as fast locals
+        if (!isStatic) declareLocalName(name)
+
         val isDelegate = if (eqToken.isId("by")) {
             true
         } else {
@@ -1735,6 +1763,9 @@ class Compiler(
         return statement(nameToken.pos) { context ->
             if (context.containsLocal(name))
                 throw ScriptError(nameToken.pos, "Variable $name is already defined")
+
+            // Register the local name so subsequent identifiers can be emitted as fast locals
+            if (!isStatic) declareLocalName(name)
 
             if (isDelegate) {
                 TODO()

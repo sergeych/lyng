@@ -290,18 +290,48 @@ class MethodCallRef(
  * Reference to a local/visible variable by name (Phase A: scope lookup).
  */
 class LocalVarRef(private val name: String, private val atPos: Pos) : ObjRef {
+    // Per-frame slot cache to avoid repeated name lookups
+    private var cachedFrameId: Long = 0L
+    private var cachedSlot: Int = -1
+
+    private fun resolveSlot(scope: Scope): Int {
+        val idx = scope.getSlotIndexOf(name)
+        if (idx != null) {
+            cachedFrameId = scope.frameId
+            cachedSlot = idx
+            return idx
+        }
+        return -1
+    }
+
     override suspend fun get(scope: Scope): ObjRecord {
         scope.pos = atPos
-        // Fast-path: slot lookup
-        scope.getSlotIndexOf(name)?.let { return scope.getSlotRecord(it) }
+        if (!PerfFlags.LOCAL_SLOT_PIC) {
+            scope.getSlotIndexOf(name)?.let { return scope.getSlotRecord(it) }
+            return scope[name] ?: scope.raiseError("symbol not defined: '$name'")
+        }
+        val slot = if (cachedFrameId == scope.frameId && cachedSlot >= 0 && cachedSlot < scope.slotCount()) cachedSlot else resolveSlot(scope)
+        if (slot >= 0) return scope.getSlotRecord(slot)
         return scope[name] ?: scope.raiseError("symbol not defined: '$name'")
     }
 
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
         scope.pos = atPos
-        // Fast-path: slot lookup
-        scope.getSlotIndexOf(name)?.let {
-            val rec = scope.getSlotRecord(it)
+        if (!PerfFlags.LOCAL_SLOT_PIC) {
+            scope.getSlotIndexOf(name)?.let {
+                val rec = scope.getSlotRecord(it)
+                if (!rec.isMutable) scope.raiseError("Cannot assign to immutable value")
+                rec.value = newValue
+                return
+            }
+            val stored = scope[name] ?: scope.raiseError("symbol not defined: '$name'")
+            if (stored.isMutable) stored.value = newValue
+            else scope.raiseError("Cannot assign to immutable value")
+            return
+        }
+        val slot = if (cachedFrameId == scope.frameId && cachedSlot >= 0 && cachedSlot < scope.slotCount()) cachedSlot else resolveSlot(scope)
+        if (slot >= 0) {
+            val rec = scope.getSlotRecord(slot)
             if (!rec.isMutable) scope.raiseError("Cannot assign to immutable value")
             rec.value = newValue
             return
@@ -316,6 +346,84 @@ class LocalVarRef(private val name: String, private val atPos: Pos) : ObjRef {
 /**
  * Array/list literal construction without per-access lambdas.
  */
+class BoundLocalVarRef(
+    private val slot: Int,
+    private val atPos: Pos,
+) : ObjRef {
+    override suspend fun get(scope: Scope): ObjRecord {
+        scope.pos = atPos
+        return scope.getSlotRecord(slot)
+    }
+
+    override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
+        scope.pos = atPos
+        val rec = scope.getSlotRecord(slot)
+        if (!rec.isMutable) scope.raiseError("Cannot assign to immutable value")
+        rec.value = newValue
+    }
+}
+
+/**
+ * Fast local-by-name reference meant for identifiers that the compiler knows are locals/parameters.
+ * It resolves the slot once per frame and never falls back to global/module lookup.
+ */
+class FastLocalVarRef(
+    private val name: String,
+    private val atPos: Pos,
+) : ObjRef {
+    // Cache the exact scope frame that owns the slot, not just the current frame
+    private var cachedOwnerScope: Scope? = null
+    private var cachedOwnerFrameId: Long = 0L
+    private var cachedSlot: Int = -1
+
+    private fun isOwnerValidFor(current: Scope): Boolean {
+        val owner = cachedOwnerScope ?: return false
+        if (owner.frameId != cachedOwnerFrameId) return false
+        // Ensure owner is an ancestor (or same) of current
+        var s: Scope? = current
+        while (s != null) {
+            if (s === owner) return true
+            s = s.parent
+        }
+        return false
+    }
+
+    private fun resolveSlotInAncestry(scope: Scope): Int {
+        var s: Scope? = scope
+        while (s != null) {
+            val idx = s.getSlotIndexOf(name)
+            if (idx != null) {
+                cachedOwnerScope = s
+                cachedOwnerFrameId = s.frameId
+                cachedSlot = idx
+                return idx
+            }
+            s = s.parent
+        }
+        return -1
+    }
+
+    override suspend fun get(scope: Scope): ObjRecord {
+        scope.pos = atPos
+        val owner = if (isOwnerValidFor(scope)) cachedOwnerScope else null
+        val slot = if (owner != null && cachedSlot >= 0) cachedSlot else resolveSlotInAncestry(scope)
+        val actualOwner = cachedOwnerScope
+        if (slot < 0 || actualOwner == null) scope.raiseError("local '$name' is not available in this scope")
+        return actualOwner.getSlotRecord(slot)
+    }
+
+    override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
+        scope.pos = atPos
+        val owner = if (isOwnerValidFor(scope)) cachedOwnerScope else null
+        val slot = if (owner != null && cachedSlot >= 0) cachedSlot else resolveSlotInAncestry(scope)
+        val actualOwner = cachedOwnerScope
+        if (slot < 0 || actualOwner == null) scope.raiseError("local '$name' is not available in this scope")
+        val rec = actualOwner.getSlotRecord(slot)
+        if (!rec.isMutable) scope.raiseError("Cannot assign to immutable value")
+        rec.value = newValue
+    }
+}
+
 class ListLiteralRef(private val entries: List<ListEntry>) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
         val list = mutableListOf<Obj>()
