@@ -65,6 +65,42 @@ class BinaryOpRef(private val op: BinOp, private val left: ObjRef, private val r
     override suspend fun get(scope: Scope): ObjRecord {
         val a = left.get(scope).value
         val b = right.get(scope).value
+
+        // Primitive fast paths for common cases (guarded by PerfFlags.PRIMITIVE_FASTOPS)
+        if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
+            // Fast boolean ops when both operands are ObjBool
+            if (a is ObjBool && b is ObjBool) {
+                val r: Obj? = when (op) {
+                    BinOp.OR -> if (a.value || b.value) ObjTrue else ObjFalse
+                    BinOp.AND -> if (a.value && b.value) ObjTrue else ObjFalse
+                    BinOp.EQ -> if (a.value == b.value) ObjTrue else ObjFalse
+                    BinOp.NEQ -> if (a.value != b.value) ObjTrue else ObjFalse
+                    else -> null
+                }
+                if (r != null) return r.asReadonly
+            }
+            // Fast integer ops when both operands are ObjInt
+            if (a is ObjInt && b is ObjInt) {
+                val av = a.value
+                val bv = b.value
+                val r: Obj? = when (op) {
+                    BinOp.PLUS -> ObjInt(av + bv)
+                    BinOp.MINUS -> ObjInt(av - bv)
+                    BinOp.STAR -> ObjInt(av * bv)
+                    BinOp.SLASH -> if (bv != 0L) ObjInt(av / bv) else null
+                    BinOp.PERCENT -> if (bv != 0L) ObjInt(av % bv) else null
+                    BinOp.EQ -> if (av == bv) ObjTrue else ObjFalse
+                    BinOp.NEQ -> if (av != bv) ObjTrue else ObjFalse
+                    BinOp.LT -> if (av < bv) ObjTrue else ObjFalse
+                    BinOp.LTE -> if (av <= bv) ObjTrue else ObjFalse
+                    BinOp.GT -> if (av > bv) ObjTrue else ObjFalse
+                    BinOp.GTE -> if (av >= bv) ObjTrue else ObjFalse
+                    else -> null
+                }
+                if (r != null) return r.asReadonly
+            }
+        }
+
         val r: Obj = when (op) {
             BinOp.OR -> a.logicalOr(scope, b)
             BinOp.AND -> a.logicalAnd(scope, b)
@@ -172,6 +208,11 @@ class LogicalOrRef(private val left: ObjRef, private val right: ObjRef) : ObjRef
         val a = left.get(scope).value
         if ((a as? ObjBool)?.value == true) return ObjTrue.asReadonly
         val b = right.get(scope).value
+        if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
+            if (a is ObjBool && b is ObjBool) {
+                return if (a.value || b.value) ObjTrue.asReadonly else ObjFalse.asReadonly
+            }
+        }
         return a.logicalOr(scope, b).asReadonly
     }
 }
@@ -182,6 +223,11 @@ class LogicalAndRef(private val left: ObjRef, private val right: ObjRef) : ObjRe
         val a = left.get(scope).value
         if ((a as? ObjBool)?.value == false) return ObjFalse.asReadonly
         val b = right.get(scope).value
+        if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
+            if (a is ObjBool && b is ObjBool) {
+                return if (a.value && b.value) ObjTrue.asReadonly else ObjFalse.asReadonly
+            }
+        }
         return a.logicalAnd(scope, b).asReadonly
     }
 }
@@ -201,9 +247,54 @@ class FieldRef(
     private val name: String,
     private val isOptional: Boolean,
 ) : ObjRef {
+    // 2-entry PIC for reads/writes (guarded by PerfFlags.FIELD_PIC)
+    private var rKey1: Long = 0L; private var rVer1: Int = -1; private var rGetter1: (suspend (Obj, Scope) -> ObjRecord)? = null
+    private var rKey2: Long = 0L; private var rVer2: Int = -1; private var rGetter2: (suspend (Obj, Scope) -> ObjRecord)? = null
+
+    private var wKey1: Long = 0L; private var wVer1: Int = -1; private var wSetter1: (suspend (Obj, Scope, Obj) -> Unit)? = null
+    private var wKey2: Long = 0L; private var wVer2: Int = -1; private var wSetter2: (suspend (Obj, Scope, Obj) -> Unit)? = null
+
     override suspend fun get(scope: Scope): ObjRecord {
         val base = target.get(scope).value
-        return if (base == ObjNull && isOptional) ObjNull.asMutable else base.readField(scope, name)
+        if (base == ObjNull && isOptional) return ObjNull.asMutable
+        if (net.sergeych.lyng.PerfFlags.FIELD_PIC) {
+            val (key, ver) = receiverKeyAndVersion(base)
+            rGetter1?.let { g -> if (key == rKey1 && ver == rVer1) return g(base, scope) }
+            rGetter2?.let { g -> if (key == rKey2 && ver == rVer2) return g(base, scope) }
+            // Slow path
+            val rec = base.readField(scope, name)
+            // Install move-to-front with a handle-aware getter
+            rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+            rKey1 = key;   rVer1 = ver;   rGetter1 = { obj, sc ->
+                when (obj) {
+                    is ObjInstance -> {
+                        val instScope = obj.instanceScope
+                        val idx = instScope.getSlotIndexOf(name)
+                        if (idx != null) {
+                            val r = instScope.getSlotRecord(idx)
+                            if (!r.visibility.isPublic)
+                                sc.raiseError(ObjAccessException(sc, "can't access non-public field $name"))
+                            r
+                        } else obj.readField(sc, name)
+                    }
+                    is ObjClass -> {
+                        val clsScope = obj.classScope
+                        if (clsScope != null) {
+                            val idx = clsScope.getSlotIndexOf(name)
+                            if (idx != null) {
+                                val r = clsScope.getSlotRecord(idx)
+                                if (!r.visibility.isPublic)
+                                    sc.raiseError(ObjAccessException(sc, "can't access non-public field $name"))
+                                r
+                            } else obj.readField(sc, name)
+                        } else obj.readField(sc, name)
+                    }
+                    else -> obj.readField(sc, name)
+                }
+            }
+            return rec
+        }
+        return base.readField(scope, name)
     }
 
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
@@ -212,7 +303,52 @@ class FieldRef(
             // no-op on null receiver for optional chaining assignment
             return
         }
+        if (net.sergeych.lyng.PerfFlags.FIELD_PIC) {
+            val (key, ver) = receiverKeyAndVersion(base)
+            wSetter1?.let { s -> if (key == wKey1 && ver == wVer1) return s(base, scope, newValue) }
+            wSetter2?.let { s -> if (key == wKey2 && ver == wVer2) return s(base, scope, newValue) }
+            // Slow path
+            base.writeField(scope, name, newValue)
+            // Install move-to-front with a handle-aware setter
+            wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
+            wKey1 = key;   wVer1 = ver;   wSetter1 = { obj, sc, v ->
+                when (obj) {
+                    is ObjInstance -> {
+                        val instScope = obj.instanceScope
+                        val idx = instScope.getSlotIndexOf(name)
+                        if (idx != null) {
+                            val r = instScope.getSlotRecord(idx)
+                            if (!r.visibility.isPublic)
+                                sc.raiseError(ObjAccessException(sc, "can't assign to non-public field $name"))
+                            if (!r.isMutable)
+                                sc.raiseError(ObjIllegalAssignmentException(sc, "can't reassign val $name"))
+                            if (r.value.assign(sc, v) == null) r.value = v
+                        } else obj.writeField(sc, name, v)
+                    }
+                    is ObjClass -> {
+                        val clsScope = obj.classScope
+                        if (clsScope != null) {
+                            val idx = clsScope.getSlotIndexOf(name)
+                            if (idx != null) {
+                                val r = clsScope.getSlotRecord(idx)
+                                if (!r.isMutable)
+                                    sc.raiseError(ObjIllegalAssignmentException(sc, "can't reassign val $name"))
+                                r.value = v
+                            } else obj.writeField(sc, name, v)
+                        } else obj.writeField(sc, name, v)
+                    }
+                    else -> obj.writeField(sc, name, v)
+                }
+            }
+            return
+        }
         base.writeField(scope, name, newValue)
+    }
+
+    private fun receiverKeyAndVersion(obj: Obj): Pair<Long, Int> = when (obj) {
+        is ObjInstance -> obj.objClass.classId to obj.objClass.layoutVersion
+        is ObjClass -> obj.classId to obj.layoutVersion
+        else -> 0L to -1 // no caching for primitives/dynamics without stable shape
     }
 }
 
@@ -277,12 +413,55 @@ class MethodCallRef(
     private val tailBlock: Boolean,
     private val isOptional: Boolean,
 ) : ObjRef {
+    // 2-entry PIC for method invocations (guarded by PerfFlags.METHOD_PIC)
+    private var mKey1: Long = 0L; private var mVer1: Int = -1; private var mInvoker1: (suspend (Obj, Scope, Arguments) -> Obj)? = null
+    private var mKey2: Long = 0L; private var mVer2: Int = -1; private var mInvoker2: (suspend (Obj, Scope, Arguments) -> Obj)? = null
+
     override suspend fun get(scope: Scope): ObjRecord {
         val base = receiver.get(scope).value
         if (base == ObjNull && isOptional) return ObjNull.asReadonly
         val callArgs = args.toArguments(scope, tailBlock)
+        if (net.sergeych.lyng.PerfFlags.METHOD_PIC) {
+            val (key, ver) = receiverKeyAndVersion(base)
+            mInvoker1?.let { inv -> if (key == mKey1 && ver == mVer1) return inv(base, scope, callArgs).asReadonly }
+            mInvoker2?.let { inv -> if (key == mKey2 && ver == mVer2) return inv(base, scope, callArgs).asReadonly }
+            // Slow path
+            val result = base.invokeInstanceMethod(scope, name, callArgs)
+            // Install move-to-front with a handle-aware invoker
+            mKey2 = mKey1; mVer2 = mVer1; mInvoker2 = mInvoker1
+            mKey1 = key;   mVer1 = ver;   mInvoker1 = { obj, sc, a ->
+                when (obj) {
+                    is ObjInstance -> {
+                        val instScope = obj.instanceScope
+                        val rec = instScope.get(name)
+                        if (rec != null) {
+                            if (!rec.visibility.isPublic)
+                                sc.raiseError(ObjAccessException(sc, "can't invoke non-public method $name"))
+                            rec.value.invoke(instScope, obj, a)
+                        } else obj.invokeInstanceMethod(sc, name, a)
+                    }
+                    is ObjClass -> {
+                        val clsScope = obj.classScope
+                        if (clsScope != null) {
+                            val rec = clsScope.get(name)
+                            if (rec != null) {
+                                rec.value.invoke(sc, obj, a)
+                            } else obj.invokeInstanceMethod(sc, name, a)
+                        } else obj.invokeInstanceMethod(sc, name, a)
+                    }
+                    else -> obj.invokeInstanceMethod(sc, name, a)
+                }
+            }
+            return result.asReadonly
+        }
         val result = base.invokeInstanceMethod(scope, name, callArgs)
         return result.asReadonly
+    }
+
+    private fun receiverKeyAndVersion(obj: Obj): Pair<Long, Int> = when (obj) {
+        is ObjInstance -> obj.objClass.classId to obj.objClass.layoutVersion
+        is ObjClass -> obj.classId to obj.layoutVersion
+        else -> 0L to -1
     }
 }
 

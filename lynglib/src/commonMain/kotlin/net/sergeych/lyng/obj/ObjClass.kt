@@ -21,12 +21,19 @@ import net.sergeych.lyng.*
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonType
 
+// Simple id generator for class identities (not thread-safe; fine for scripts)
+private object ClassIdGen { var c: Long = 1L; fun nextId(): Long = c++ }
+
 val ObjClassType by lazy { ObjClass("Class") }
 
 open class ObjClass(
     val className: String,
     vararg parents: ObjClass,
 ) : Obj() {
+
+    // Stable identity and simple structural version for PICs
+    val classId: Long = ClassIdGen.nextId()
+    var layoutVersion: Int = 0
 
     val classNameObj by lazy { ObjString(className) }
 
@@ -84,6 +91,8 @@ open class ObjClass(
         if (existing?.isMutable == false)
             throw ScriptError(pos, "$name is already defined in $objClass or one of its supertypes")
         members[name] = ObjRecord(initialValue, isMutable, visibility)
+        // Structural change: bump layout version for PIC invalidation
+        layoutVersion += 1
     }
 
     private fun initClassScope(): Scope {
@@ -103,6 +112,8 @@ open class ObjClass(
         if (existing != null)
             throw ScriptError(pos, "$name is already defined in $objClass or one of its supertypes")
         classScope!!.addItem(name, isMutable, initialValue, visibility)
+        // Structural change: bump layout version for PIC invalidation
+        layoutVersion += 1
     }
 
     fun addFn(name: String, isOpen: Boolean = false, code: suspend Scope.() -> Obj) {
