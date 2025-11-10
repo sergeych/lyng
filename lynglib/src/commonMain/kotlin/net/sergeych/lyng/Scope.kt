@@ -53,6 +53,16 @@ open class Scope(
     // Enabled by default for child scopes; module/class scopes can ignore it.
     private val slots: MutableList<ObjRecord> = mutableListOf()
     private val nameToSlot: MutableMap<String, Int> = mutableMapOf()
+
+    /**
+     * Hint internal collections to reduce reallocations for upcoming parameter/local assignments.
+     * Only effective for ArrayList-backed slots; maps are left as-is (rehashed lazily by JVM).
+     */
+    private fun reserveLocalCapacity(expected: Int) {
+        if (expected <= 0) return
+        (slots as? ArrayList<ObjRecord>)?.ensureCapacity(expected)
+        // nameToSlot has no portable ensureCapacity across KMP; leave it to grow as needed.
+    }
     open val packageName: String = "<anonymous package>"
 
     fun slotCount(): Int = slots.size
@@ -181,13 +191,15 @@ open class Scope(
         objects.clear()
         slots.clear()
         nameToSlot.clear()
+        // Pre-size local slots for upcoming parameter assignment where possible
+        reserveLocalCapacity(args.list.size + 4)
     }
 
     /**
      * Creates a new child scope using the provided arguments and optional `thisObj`.
      */
     fun createChildScope(pos: Pos, args: Arguments = Arguments.EMPTY, newThisObj: Obj? = null): Scope =
-        Scope(this, args, pos, newThisObj ?: thisObj)
+        Scope(this, args, pos, newThisObj ?: thisObj).also { it.reserveLocalCapacity(args.list.size + 4) }
 
     /**
      * Execute a block inside a child frame. Guarded for future pooling via [PerfFlags.SCOPE_POOL].

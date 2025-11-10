@@ -265,6 +265,9 @@ class FieldRef(
     private var wKey1: Long = 0L; private var wVer1: Int = -1; private var wSetter1: (suspend (Obj, Scope, Obj) -> Unit)? = null
     private var wKey2: Long = 0L; private var wVer2: Int = -1; private var wSetter2: (suspend (Obj, Scope, Obj) -> Unit)? = null
 
+    // Transient per-step cache to optimize read-then-write sequences within the same frame
+    private var tKey: Long = 0L; private var tVer: Int = -1; private var tFrameId: Long = -1L; private var tRecord: ObjRecord? = null
+
     override suspend fun get(scope: Scope): ObjRecord {
         val base = if (net.sergeych.lyng.PerfFlags.RVAL_FASTPATH) target.evalValue(scope) else target.get(scope).value
         if (base == ObjNull && isOptional) return ObjNull.asMutable
@@ -272,11 +275,21 @@ class FieldRef(
             val (key, ver) = receiverKeyAndVersion(base)
             rGetter1?.let { g -> if (key == rKey1 && ver == rVer1) {
                 if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.fieldPicHit++
-                return g(base, scope)
+                val rec0 = g(base, scope)
+                if (base is ObjClass) {
+                    val idx0 = base.classScope?.getSlotIndexOf(name)
+                    if (idx0 != null) { tKey = key; tVer = ver; tFrameId = scope.frameId; tRecord = rec0 } else { tRecord = null }
+                } else { tRecord = null }
+                return rec0
             } }
             rGetter2?.let { g -> if (key == rKey2 && ver == rVer2) {
                 if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.fieldPicHit++
-                return g(base, scope)
+                val rec0 = g(base, scope)
+                if (base is ObjClass) {
+                    val idx0 = base.classScope?.getSlotIndexOf(name)
+                    if (idx0 != null) { tKey = key; tVer = ver; tFrameId = scope.frameId; tRecord = rec0 } else { tRecord = null }
+                } else { tRecord = null }
+                return rec0
             } }
             // Slow path
             if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.fieldPicMiss++
@@ -430,9 +443,11 @@ class MethodCallRef(
     private val tailBlock: Boolean,
     private val isOptional: Boolean,
 ) : ObjRef {
-    // 2-entry PIC for method invocations (guarded by PerfFlags.METHOD_PIC)
+    // 4-entry PIC for method invocations (guarded by PerfFlags.METHOD_PIC)
     private var mKey1: Long = 0L; private var mVer1: Int = -1; private var mInvoker1: (suspend (Obj, Scope, Arguments) -> Obj)? = null
     private var mKey2: Long = 0L; private var mVer2: Int = -1; private var mInvoker2: (suspend (Obj, Scope, Arguments) -> Obj)? = null
+    private var mKey3: Long = 0L; private var mVer3: Int = -1; private var mInvoker3: (suspend (Obj, Scope, Arguments) -> Obj)? = null
+    private var mKey4: Long = 0L; private var mVer4: Int = -1; private var mInvoker4: (suspend (Obj, Scope, Arguments) -> Obj)? = null
 
     override suspend fun get(scope: Scope): ObjRecord {
         val base = if (net.sergeych.lyng.PerfFlags.RVAL_FASTPATH) receiver.evalValue(scope) else receiver.get(scope).value
@@ -448,10 +463,31 @@ class MethodCallRef(
                 if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.methodPicHit++
                 return inv(base, scope, callArgs).asReadonly
             } }
+            mInvoker3?.let { inv -> if (key == mKey3 && ver == mVer3) {
+                if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.methodPicHit++
+                // move-to-front: promote 3→1
+                val tK = mKey3; val tV = mVer3; val tI = mInvoker3
+                mKey3 = mKey2; mVer3 = mVer2; mInvoker3 = mInvoker2
+                mKey2 = mKey1; mVer2 = mVer1; mInvoker2 = mInvoker1
+                mKey1 = tK; mVer1 = tV; mInvoker1 = tI
+                return inv(base, scope, callArgs).asReadonly
+            } }
+            mInvoker4?.let { inv -> if (key == mKey4 && ver == mVer4) {
+                if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.methodPicHit++
+                // move-to-front: promote 4→1
+                val tK = mKey4; val tV = mVer4; val tI = mInvoker4
+                mKey4 = mKey3; mVer4 = mVer3; mInvoker4 = mInvoker3
+                mKey3 = mKey2; mVer3 = mVer2; mInvoker3 = mInvoker2
+                mKey2 = mKey1; mVer2 = mVer1; mInvoker2 = mInvoker1
+                mKey1 = tK; mVer1 = tV; mInvoker1 = tI
+                return inv(base, scope, callArgs).asReadonly
+            } }
             // Slow path
             if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.methodPicMiss++
             val result = base.invokeInstanceMethod(scope, name, callArgs)
-            // Install move-to-front with a handle-aware invoker
+            // Install move-to-front with a handle-aware invoker: shift 1→2→3→4, put new at 1
+            mKey4 = mKey3; mVer4 = mVer3; mInvoker4 = mInvoker3
+            mKey3 = mKey2; mVer3 = mVer2; mInvoker3 = mInvoker2
             mKey2 = mKey1; mVer2 = mVer1; mInvoker2 = mInvoker1
             when (base) {
                 is ObjInstance -> {
