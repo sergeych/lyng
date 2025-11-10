@@ -45,6 +45,10 @@ class PicBenchmarkTest {
         val t3 = System.nanoTime()
         println("[DEBUG_LOG] [BENCH] Field PIC=ON: ${(t3 - t2) / 1_000_000.0} ms")
         assertEquals(iterations.toLong(), r2)
+        if (PerfFlags.PIC_DEBUG_COUNTERS) {
+            println("[DEBUG_LOG] [PIC] field get hit=${net.sergeych.lyng.PerfStats.fieldPicHit} miss=${net.sergeych.lyng.PerfStats.fieldPicMiss}")
+            println("[DEBUG_LOG] [PIC] field set hit=${net.sergeych.lyng.PerfStats.fieldPicSetHit} miss=${net.sergeych.lyng.PerfStats.fieldPicSetMiss}")
+        }
     }
 
     @Test

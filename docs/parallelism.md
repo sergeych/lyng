@@ -205,3 +205,17 @@ Flows allow easy transforming of any [Iterable]. See how the standard Lyng libra
 
 
 [Iterable]: Iterable.md
+
+## Scope frame pooling (JVM)
+
+Lyng includes an optional optimization for function/method calls on JVM: scope frame pooling, toggled by the runtime flag `PerfFlags.SCOPE_POOL`.
+
+- Default: `SCOPE_POOL` is OFF on JVM.
+- Rationale: the current `ScopePool` implementation is not thread‑safe. Lyng targets multi‑threaded execution on most platforms, therefore we keep pooling disabled by default until a thread‑safe design is introduced.
+- When safe to enable: single‑threaded runs (e.g., micro‑benchmarks or scripts executed on a single worker) where no scopes are shared across threads.
+- How to toggle at runtime (Kotlin/JVM tests):
+  - `PerfFlags.SCOPE_POOL = true` to enable.
+  - `PerfFlags.SCOPE_POOL = false` to disable.
+- Expected effect (from our JVM micro‑benchmarks): in deep call loops, enabling pooling reduced total time by about 1.38× in a dedicated pooling benchmark; mileage may vary depending on workload.
+
+Future work: introduce thread‑safe pooling (e.g., per‑thread pools or confinement strategies) before considering enabling it by default in multi‑threaded environments.

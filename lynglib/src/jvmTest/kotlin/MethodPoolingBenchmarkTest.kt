@@ -1,0 +1,50 @@
+/*
+ * JVM micro-benchmark for scope frame pooling on instance method calls.
+ */
+
+import kotlinx.coroutines.runBlocking
+import net.sergeych.lyng.PerfFlags
+import net.sergeych.lyng.Scope
+import net.sergeych.lyng.obj.ObjInt
+import kotlin.test.Test
+import kotlin.test.assertEquals
+
+class MethodPoolingBenchmarkTest {
+    @Test
+    fun benchmarkInstanceMethodCallsWithPooling() = runBlocking {
+        val n = 300_000
+        val script = """
+            class C() {
+                var x = 0
+                fun add1() { x = x + 1 }
+                fun get() { x }
+            }
+            val c = C()
+            var i = 0
+            while (i < $n) {
+                c.add1()
+                i = i + 1
+            }
+            c.get()
+        """.trimIndent()
+
+        // Pool OFF
+        PerfFlags.SCOPE_POOL = false
+        val scope1 = Scope()
+        val t0 = System.nanoTime()
+        val r1 = (scope1.eval(script) as ObjInt).value
+        val t1 = System.nanoTime()
+        println("[DEBUG_LOG] [BENCH] method-loop x$n [SCOPE_POOL=OFF]: ${(t1 - t0)/1_000_000.0} ms")
+
+        // Pool ON
+        PerfFlags.SCOPE_POOL = true
+        val scope2 = Scope()
+        val t2 = System.nanoTime()
+        val r2 = (scope2.eval(script) as ObjInt).value
+        val t3 = System.nanoTime()
+        println("[DEBUG_LOG] [BENCH] method-loop x$n [SCOPE_POOL=ON]: ${(t3 - t2)/1_000_000.0} ms")
+
+        assertEquals(n.toLong(), r1)
+        assertEquals(n.toLong(), r2)
+    }
+}

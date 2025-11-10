@@ -142,6 +142,13 @@ publishing {
     }
 }
 
+// Ensure JVM test stdout is visible and runs are single-threaded for stable timings
+tasks.withType<org.gradle.api.tasks.testing.Test> {
+    testLogging {
+        showStandardStreams = true
+    }
+    maxParallelForks = 1
+}
 
 //mavenPublishing {
 //    publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)

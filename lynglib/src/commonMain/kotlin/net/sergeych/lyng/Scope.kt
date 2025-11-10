@@ -22,8 +22,8 @@ import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.pacman.ImportProvider
 
 // Simple per-frame id generator for perf caches (not thread-safe, fine for scripts)
-private object FrameIdGen { var c: Long = 1L; fun nextId(): Long = c++ }
-private fun nextFrameId(): Long = FrameIdGen.nextId()
+object FrameIdGen { var c: Long = 1L; fun nextId(): Long = c++ }
+fun nextFrameId(): Long = FrameIdGen.nextId()
 
 /**
  * Scope is where local variables and methods are stored. Scope is also a parent scope for other scopes.
@@ -40,14 +40,14 @@ private fun nextFrameId(): Long = FrameIdGen.nextId()
  *  - [ClosureScope] - scope used to apply a closure to some thisObj scope
  */
 open class Scope(
-    val parent: Scope?,
-    val args: Arguments = Arguments.EMPTY,
+    var parent: Scope?,
+    var args: Arguments = Arguments.EMPTY,
     var pos: Pos = Pos.builtIn,
     var thisObj: Obj = ObjVoid,
     var skipScopeCreation: Boolean = false,
 ) {
-    // Unique id per scope frame for PICs; cheap to compare and stable for the frame lifetime.
-    val frameId: Long = nextFrameId()
+    // Unique id per scope frame for PICs; regenerated on each borrow from the pool.
+    var frameId: Long = nextFrameId()
 
     // Fast-path storage for local variables/arguments accessed by slot index.
     // Enabled by default for child scopes; module/class scopes can ignore it.
@@ -166,10 +166,46 @@ open class Scope(
     }
 
     /**
+     * Reset this scope instance so it can be safely reused as a fresh child frame.
+     * Clears locals and slots, assigns new frameId, and sets parent/args/pos/thisObj.
+     */
+    fun resetForReuse(parent: Scope?, args: Arguments, pos: Pos, thisObj: Obj) {
+        this.parent = parent
+        this.args = args
+        this.pos = pos
+        this.thisObj = thisObj
+        this.skipScopeCreation = false
+        // fresh identity for PIC caches
+        this.frameId = nextFrameId()
+        // clear locals and slot maps
+        objects.clear()
+        slots.clear()
+        nameToSlot.clear()
+    }
+
+    /**
      * Creates a new child scope using the provided arguments and optional `thisObj`.
      */
     fun createChildScope(pos: Pos, args: Arguments = Arguments.EMPTY, newThisObj: Obj? = null): Scope =
         Scope(this, args, pos, newThisObj ?: thisObj)
+
+    /**
+     * Execute a block inside a child frame. Guarded for future pooling via [PerfFlags.SCOPE_POOL].
+     * Currently always creates a fresh child scope to preserve unique frameId semantics.
+     */
+    inline suspend fun <R> withChildFrame(args: Arguments = Arguments.EMPTY, newThisObj: Obj? = null, crossinline block: suspend (Scope) -> R): R {
+        if (PerfFlags.SCOPE_POOL) {
+            val child = ScopePool.borrow(this, args, pos, newThisObj ?: thisObj)
+            try {
+                return block(child)
+            } finally {
+                ScopePool.release(child)
+            }
+        } else {
+            val child = createChildScope(args, newThisObj)
+            return block(child)
+        }
+    }
 
     /**
      * Creates a new child scope using the provided arguments and optional `thisObj`.

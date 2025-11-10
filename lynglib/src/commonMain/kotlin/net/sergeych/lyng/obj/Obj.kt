@@ -265,7 +265,12 @@ open class Obj {
     }
 
     suspend fun invoke(scope: Scope, thisObj: Obj, args: Arguments): Obj =
-        callOn(scope.createChildScope(scope.pos, args = args, newThisObj = thisObj))
+        if (net.sergeych.lyng.PerfFlags.SCOPE_POOL)
+            scope.withChildFrame(args, newThisObj = thisObj) { child ->
+                callOn(child)
+            }
+        else
+            callOn(scope.createChildScope(scope.pos, args = args, newThisObj = thisObj))
 
     suspend fun invoke(scope: Scope, thisObj: Obj, vararg args: Obj): Obj =
         callOn(
