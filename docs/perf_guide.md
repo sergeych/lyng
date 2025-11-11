@@ -490,8 +490,51 @@ Reproduce (examples):
 ./gradlew :lynglib:jvmTest --tests MultiThreadPoolingStressJvmTest --rerun-tasks
 ```
 
-Summary:
-- All listed tests passed in this sanity sweep.
-- For each benchmark’s OFF → ON printouts examined during this pass, ON was equal or faster than OFF; no ON<OFF regressions were observed.
-- For publication‑grade numbers, use the 3× medians methodology outlined earlier in this document. The existing median tables in previous sections remain representative, and the additional tweaks (Index write, List literal pre‑size, Regex LRU, Field PIC 4‑way + read→write reuse, mixed Int/Real fast‑ops) remained neutral‑to‑positive.
+  Summary:
+  - All listed tests passed in this sanity sweep.
+  - For each benchmark’s OFF → ON printouts examined during this pass, ON was equal or faster than OFF; no ON<OFF regressions were observed.
+  - For publication‑grade numbers, use the 3× medians methodology outlined earlier in this document. The existing median tables in previous sections remain representative, and the additional tweaks (Index write, List literal pre‑size, Regex LRU, Field PIC 4‑way + read→write reuse, mixed Int/Real fast‑ops) remained neutral‑to‑positive.
+  
+
+## Quick snapshot — IndexRef PIC + negative miss cache (JVM) — 3× medians (OFF → ON)
+
+Date: 2025-11-11 22:32 (local)
+
+Scope
+- Confirm that the latest changes — IndexRef read/write PIC (stacked on RVAL_FASTPATH) and safe catch‑and‑cache negative entries for Field/Method PICs — do not regress performance. We collected 3× medians for the two expression sub‑benches that are most sensitive to RVAL paths and cross‑checked PICs and ranges.
+
+Environment
+- Gradle: 8.7 (stdout enabled, maxParallelForks=1)
+- JVM: project toolchain default
+- OS/Arch: macOS 14.x (aarch64)
+
+Results (3× medians)
+
+| Area | Benchmark/Test | OFF median (ms) | ON median (ms) | Speedup | Notes |
+|------|-----------------|-----------------:|----------------:|:-------:|-------|
+| RVAL_FASTPATH | ExpressionBenchmarkTest::benchmarkListIndexReads | 304.282 | 229.168 | 1.33× | IndexRef direct fast‑path for ObjList+ObjInt; 4‑way Index PIC handles polymorphic cases |
+| RVAL_FASTPATH | ExpressionBenchmarkTest::benchmarkFieldReadPureReceiver | 275.122 | 194.876 | 1.41× | Monomorphic, immutable receiver path; preserves visibility/optional semantics |
+
+Cross‑checks (from the same session, 1× quick)
+- PicBenchmarkTest::benchmarkFieldGetSetPic — OFF 203.701 ms → ON 117.129 ms (≈1.74×)
+- PicBenchmarkTest::benchmarkMethodPic — OFF 280.806 ms → ON 202.613 ms (≈1.39×)
+- RangeBenchmarkTest::benchmarkIntRangeForIn — OFF 1762.425 ms → ON 806.898 ms (≈2.18×)
+
+Reproduce
+```
+./gradlew :lynglib:jvmTest --tests "ExpressionBenchmarkTest.benchmarkListIndexReads" --rerun-tasks
+./gradlew :lynglib:jvmTest --tests "ExpressionBenchmarkTest.benchmarkListIndexReads" --rerun-tasks
+./gradlew :lynglib:jvmTest --tests "ExpressionBenchmarkTest.benchmarkListIndexReads" --rerun-tasks
+
+./gradlew :lynglib:jvmTest --tests "ExpressionBenchmarkTest.benchmarkFieldReadPureReceiver" --rerun-tasks
+./gradlew :lynglib:jvmTest --tests "ExpressionBenchmarkTest.benchmarkFieldReadPureReceiver" --rerun-tasks
+./gradlew :lynglib:jvmTest --tests "ExpressionBenchmarkTest.benchmarkFieldReadPureReceiver" --rerun-tasks
+
+./gradlew :lynglib:jvmTest --tests PicBenchmarkTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests RangeBenchmarkTest --rerun-tasks
+```
+
+Notes
+- Negative caches are installed only after a real miss throws (cache‑after‑miss), preserving error semantics and invalidation on `layoutVersion` changes.
+- IndexRef PIC augments the existing direct path and uses move‑to‑front promotion; it is keyed on `(classId, layoutVersion)` like other PICs.
 

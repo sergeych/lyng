@@ -110,6 +110,62 @@ class BinaryOpRef(private val op: BinOp, private val left: ObjRef, private val r
                     return r.asReadonly
                 }
             }
+            // Fast string operations when both are strings
+            if (a is ObjString && b is ObjString) {
+                val r: Obj? = when (op) {
+                    BinOp.EQ -> if (a.value == b.value) ObjTrue else ObjFalse
+                    BinOp.NEQ -> if (a.value != b.value) ObjTrue else ObjFalse
+                    BinOp.LT -> if (a.value < b.value) ObjTrue else ObjFalse
+                    BinOp.LTE -> if (a.value <= b.value) ObjTrue else ObjFalse
+                    BinOp.GT -> if (a.value > b.value) ObjTrue else ObjFalse
+                    BinOp.GTE -> if (a.value >= b.value) ObjTrue else ObjFalse
+                    BinOp.PLUS -> ObjString(a.value + b.value)
+                    else -> null
+                }
+                if (r != null) {
+                    if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.primitiveFastOpsHit++
+                    return r.asReadonly
+                }
+            }
+            // Fast char vs char comparisons
+            if (a is ObjChar && b is ObjChar) {
+                val av = a.value
+                val bv = b.value
+                val r: Obj? = when (op) {
+                    BinOp.EQ -> if (av == bv) ObjTrue else ObjFalse
+                    BinOp.NEQ -> if (av != bv) ObjTrue else ObjFalse
+                    BinOp.LT -> if (av < bv) ObjTrue else ObjFalse
+                    BinOp.LTE -> if (av <= bv) ObjTrue else ObjFalse
+                    BinOp.GT -> if (av > bv) ObjTrue else ObjFalse
+                    BinOp.GTE -> if (av >= bv) ObjTrue else ObjFalse
+                    else -> null
+                }
+                if (r != null) {
+                    if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.primitiveFastOpsHit++
+                    return r.asReadonly
+                }
+            }
+            // Fast concatenation for String with Int/Char on either side
+            if (op == BinOp.PLUS) {
+                when {
+                    a is ObjString && b is ObjInt -> {
+                        if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.primitiveFastOpsHit++
+                        return ObjString(a.value + b.value.toString()).asReadonly
+                    }
+                    a is ObjString && b is ObjChar -> {
+                        if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.primitiveFastOpsHit++
+                        return ObjString(a.value + b.value).asReadonly
+                    }
+                    b is ObjString && a is ObjInt -> {
+                        if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.primitiveFastOpsHit++
+                        return ObjString(a.value.toString() + b.value).asReadonly
+                    }
+                    b is ObjString && a is ObjChar -> {
+                        if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.primitiveFastOpsHit++
+                        return ObjString(a.value.toString() + b.value).asReadonly
+                    }
+                }
+            }
             // Fast numeric mixed ops for Int/Real combinations by promoting to double
             if ((a is ObjInt || a is ObjReal) && (b is ObjInt || b is ObjReal)) {
                 val ad: Double = if (a is ObjInt) a.doubleValue else (a as ObjReal).value
@@ -361,7 +417,16 @@ class FieldRef(
             } }
             // Slow path
             if (picCounters) net.sergeych.lyng.PerfStats.fieldPicMiss++
-            val rec = base.readField(scope, name)
+            val rec = try {
+                base.readField(scope, name)
+            } catch (e: ExecutionError) {
+                // Cache-after-miss negative entry: rethrow the same error quickly for this shape
+                rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
+                rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
+                rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                rKey1 = key; rVer1 = ver; rGetter1 = { _, sc -> sc.raiseError(e.message ?: "no such field: $name") }
+                throw e
+            }
             // Install move-to-front with a handle-aware getter (shift 1→2→3→4; put new at 1)
             rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
             rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
@@ -494,6 +559,23 @@ class IndexRef(
     private val index: ObjRef,
     private val isOptional: Boolean,
 ) : ObjRef {
+    // Tiny 4-entry PIC for index reads (guarded implicitly by RVAL_FASTPATH); move-to-front on hits
+    private var rKey1: Long = 0L; private var rVer1: Int = -1; private var rGetter1: (suspend (Obj, Scope, Obj) -> Obj)? = null
+    private var rKey2: Long = 0L; private var rVer2: Int = -1; private var rGetter2: (suspend (Obj, Scope, Obj) -> Obj)? = null
+    private var rKey3: Long = 0L; private var rVer3: Int = -1; private var rGetter3: (suspend (Obj, Scope, Obj) -> Obj)? = null
+    private var rKey4: Long = 0L; private var rVer4: Int = -1; private var rGetter4: (suspend (Obj, Scope, Obj) -> Obj)? = null
+
+    // Tiny 4-entry PIC for index writes
+    private var wKey1: Long = 0L; private var wVer1: Int = -1; private var wSetter1: (suspend (Obj, Scope, Obj, Obj) -> Unit)? = null
+    private var wKey2: Long = 0L; private var wVer2: Int = -1; private var wSetter2: (suspend (Obj, Scope, Obj, Obj) -> Unit)? = null
+    private var wKey3: Long = 0L; private var wVer3: Int = -1; private var wSetter3: (suspend (Obj, Scope, Obj, Obj) -> Unit)? = null
+    private var wKey4: Long = 0L; private var wVer4: Int = -1; private var wSetter4: (suspend (Obj, Scope, Obj, Obj) -> Unit)? = null
+
+    private fun receiverKeyAndVersion(obj: Obj): Pair<Long, Int> = when (obj) {
+        is ObjInstance -> obj.objClass.classId to obj.objClass.layoutVersion
+        is ObjClass -> obj.classId to obj.layoutVersion
+        else -> 0L to -1
+    }
     override suspend fun get(scope: Scope): ObjRecord {
         val fastRval = net.sergeych.lyng.PerfFlags.RVAL_FASTPATH
         val base = if (fastRval) target.evalValue(scope) else target.get(scope).value
@@ -505,6 +587,43 @@ class IndexRef(
                 val i = idx.toInt()
                 // Bounds checks are enforced by the underlying list access; exceptions propagate as before
                 return base.list[i].asMutable
+            }
+            // Polymorphic inline cache for other common shapes
+            val (key, ver) = when (base) {
+                is ObjInstance -> base.objClass.classId to base.objClass.layoutVersion
+                is ObjClass -> base.classId to base.layoutVersion
+                else -> 0L to -1
+            }
+            if (key != 0L) {
+                rGetter1?.let { g -> if (key == rKey1 && ver == rVer1) return g(base, scope, idx).asMutable }
+                rGetter2?.let { g -> if (key == rKey2 && ver == rVer2) {
+                    val tk = rKey2; val tv = rVer2; val tg = rGetter2
+                    rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                    rKey1 = tk; rVer1 = tv; rGetter1 = tg
+                    return g(base, scope, idx).asMutable
+                } }
+                rGetter3?.let { g -> if (key == rKey3 && ver == rVer3) {
+                    val tk = rKey3; val tv = rVer3; val tg = rGetter3
+                    rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
+                    rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                    rKey1 = tk; rVer1 = tv; rGetter1 = tg
+                    return g(base, scope, idx).asMutable
+                } }
+                rGetter4?.let { g -> if (key == rKey4 && ver == rVer4) {
+                    val tk = rKey4; val tv = rVer4; val tg = rGetter4
+                    rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
+                    rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
+                    rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                    rKey1 = tk; rVer1 = tv; rGetter1 = tg
+                    return g(base, scope, idx).asMutable
+                } }
+                // Miss: resolve and install generic handler
+                val v = base.getAt(scope, idx)
+                rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
+                rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
+                rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                rKey1 = key; rVer1 = ver; rGetter1 = { obj, sc, ix -> obj.getAt(sc, ix) }
+                return v.asMutable
             }
         }
         return base.getAt(scope, idx).asMutable
@@ -523,6 +642,43 @@ class IndexRef(
             if (base is ObjList && idx is ObjInt) {
                 val i = idx.toInt()
                 base.list[i] = newValue
+                return
+            }
+            // Polymorphic inline cache for index write
+            val (key, ver) = when (base) {
+                is ObjInstance -> base.objClass.classId to base.objClass.layoutVersion
+                is ObjClass -> base.classId to base.layoutVersion
+                else -> 0L to -1
+            }
+            if (key != 0L) {
+                wSetter1?.let { s -> if (key == wKey1 && ver == wVer1) { s(base, scope, idx, newValue); return } }
+                wSetter2?.let { s -> if (key == wKey2 && ver == wVer2) {
+                    val tk = wKey2; val tv = wVer2; val ts = wSetter2
+                    wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
+                    wKey1 = tk; wVer1 = tv; wSetter1 = ts
+                    s(base, scope, idx, newValue); return
+                } }
+                wSetter3?.let { s -> if (key == wKey3 && ver == wVer3) {
+                    val tk = wKey3; val tv = wVer3; val ts = wSetter3
+                    wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
+                    wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
+                    wKey1 = tk; wVer1 = tv; wSetter1 = ts
+                    s(base, scope, idx, newValue); return
+                } }
+                wSetter4?.let { s -> if (key == wKey4 && ver == wVer4) {
+                    val tk = wKey4; val tv = wVer4; val ts = wSetter4
+                    wKey4 = wKey3; wVer4 = wVer3; wSetter4 = wSetter3
+                    wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
+                    wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
+                    wKey1 = tk; wVer1 = tv; wSetter1 = ts
+                    s(base, scope, idx, newValue); return
+                } }
+                // Miss: perform write and install generic handler
+                base.putAt(scope, idx, newValue)
+                wKey4 = wKey3; wVer4 = wVer3; wSetter4 = wSetter3
+                wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
+                wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
+                wKey1 = key; wVer1 = ver; wSetter1 = { obj, sc, ix, v -> obj.putAt(sc, ix, v) }
                 return
             }
         }
@@ -617,7 +773,16 @@ class MethodCallRef(
             } }
             // Slow path
             if (picCounters) net.sergeych.lyng.PerfStats.methodPicMiss++
-            val result = base.invokeInstanceMethod(scope, name, callArgs)
+            val result = try {
+                base.invokeInstanceMethod(scope, name, callArgs)
+            } catch (e: ExecutionError) {
+                // Cache-after-miss negative entry for this shape
+                mKey4 = mKey3; mVer4 = mVer3; mInvoker4 = mInvoker3
+                mKey3 = mKey2; mVer3 = mVer2; mInvoker3 = mInvoker2
+                mKey2 = mKey1; mVer2 = mVer1; mInvoker2 = mInvoker1
+                mKey1 = key; mVer1 = ver; mInvoker1 = { _, sc, _ -> sc.raiseError(e.message ?: "method not found: $name") }
+                throw e
+            }
             // Install move-to-front with a handle-aware invoker: shift 1→2→3→4, put new at 1
             mKey4 = mKey3; mVer4 = mVer3; mInvoker4 = mInvoker3
             mKey3 = mKey2; mVer3 = mVer2; mInvoker3 = mInvoker2

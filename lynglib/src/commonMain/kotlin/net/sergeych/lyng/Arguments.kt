@@ -176,7 +176,12 @@ import net.sergeych.lyng.obj.ObjList
          return when (v) {
              net.sergeych.lyng.obj.ObjNull,
              net.sergeych.lyng.obj.ObjTrue,
-             net.sergeych.lyng.obj.ObjFalse -> v
+            net.sergeych.lyng.obj.ObjFalse,
+            // Immutable scalars: safe to return directly
+            is net.sergeych.lyng.obj.ObjInt,
+            is net.sergeych.lyng.obj.ObjReal,
+            is net.sergeych.lyng.obj.ObjChar,
+            is net.sergeych.lyng.obj.ObjString -> v
              else -> v.byValueCopy()
          }
      }
