@@ -63,6 +63,14 @@ open class Scope(
         (slots as? ArrayList<ObjRecord>)?.ensureCapacity(expected)
         // nameToSlot has no portable ensureCapacity across KMP; leave it to grow as needed.
     }
+
+    /**
+     * Hint expected number of local variables/arguments to reduce internal reallocations.
+     * Safe no-op for small or unknown values.
+     */
+    fun hintLocalCapacity(expected: Int) {
+        reserveLocalCapacity(expected)
+    }
     open val packageName: String = "<anonymous package>"
 
     fun slotCount(): Int = slots.size

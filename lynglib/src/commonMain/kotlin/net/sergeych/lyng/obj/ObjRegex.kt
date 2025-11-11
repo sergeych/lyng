@@ -17,6 +17,8 @@
 
 package net.sergeych.lyng.obj
 
+import net.sergeych.lyng.PerfFlags
+import net.sergeych.lyng.RegexCache
 import net.sergeych.lyng.Scope
 
 class ObjRegex(val regex: Regex) : Obj() {
@@ -36,9 +38,9 @@ class ObjRegex(val regex: Regex) : Obj() {
         val type by lazy {
             object : ObjClass("Regex") {
                 override suspend fun callOn(scope: Scope): Obj {
-                    return ObjRegex(
-                        scope.requireOnlyArg<ObjString>().value.toRegex()
-                    )
+                    val pattern = scope.requireOnlyArg<ObjString>().value
+                    val re = if (PerfFlags.REGEX_CACHE) RegexCache.get(pattern) else pattern.toRegex()
+                    return ObjRegex(re)
                 }
             }.apply {
                 addFn("matches") {

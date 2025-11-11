@@ -41,13 +41,22 @@ class Compiler(
     private val currentLocalNames: MutableSet<String>?
         get() = localNamesStack.lastOrNull()
 
+    // Track declared local variables count per function for precise capacity hints
+    private val localDeclCountStack = mutableListOf<Int>()
+    private val currentLocalDeclCount: Int
+        get() = localDeclCountStack.lastOrNull() ?: 0
+
     private inline fun <T> withLocalNames(names: Set<String>, block: () -> T): T {
         localNamesStack.add(names.toMutableSet())
         return try { block() } finally { localNamesStack.removeLast() }
     }
 
     private fun declareLocalName(name: String) {
-        currentLocalNames?.add(name)
+        // Add to current function's local set; only count if it was newly added (avoid duplicates)
+        val added = currentLocalNames?.add(name) == true
+        if (added && localDeclCountStack.isNotEmpty()) {
+            localDeclCountStack[localDeclCountStack.lastIndex] = currentLocalDeclCount + 1
+        }
     }
 
     var packageName: String? = null
@@ -1236,18 +1245,23 @@ class Compiler(
             val source = parseStatement() ?: throw ScriptError(start, "Bad for statement: expected expression")
             ensureRparen()
 
-            val (canBreak, body) = cc.parseLoop {
-                parseStatement() ?: throw ScriptError(start, "Bad for statement: expected loop body")
+            // Expose the loop variable name to the parser so identifiers inside the loop body
+            // can be emitted as FastLocalVarRef when enabled.
+            val namesForLoop = (currentLocalNames?.toSet() ?: emptySet()) + tVar.value
+            val (canBreak, body, elseStatement) = withLocalNames(namesForLoop) {
+                val loopParsed = cc.parseLoop {
+                    parseStatement() ?: throw ScriptError(start, "Bad for statement: expected loop body")
+                }
+                // possible else clause
+                cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
+                val elseStmt = if (cc.next().let { it.type == Token.Type.ID && it.value == "else" }) {
+                    parseStatement()
+                } else {
+                    cc.previous()
+                    null
+                }
+                Triple(loopParsed.first, loopParsed.second, elseStmt)
             }
-            // possible else clause
-            cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
-            val elseStatement = if (cc.next().let { it.type == Token.Type.ID && it.value == "else" }) {
-                parseStatement()
-            } else {
-                cc.previous()
-                null
-            }
-
 
             return statement(body.pos) { cxt ->
                 val forContext = cxt.createChildScope(start)
@@ -1258,7 +1272,7 @@ class Compiler(
                 // insofar we suggest source object is enumerable. Later we might need to add checks
                 val sourceObj = source.execute(forContext)
 
-                if (sourceObj is ObjRange && sourceObj.isIntRange) {
+                if (sourceObj is ObjRange && sourceObj.isIntRange && PerfFlags.PRIMITIVE_FASTOPS) {
                     loopIntRange(
                         forContext,
                         sourceObj.start!!.toLong(),
@@ -1631,11 +1645,15 @@ class Compiler(
 
             val paramNames: Set<String> = argsDeclaration.params.map { it.name }.toSet()
 
-            // Here we should be at open body
+            // Parse function body while tracking declared locals to compute precise capacity hints
+            val fnLocalDeclStart = currentLocalDeclCount
+            localDeclCountStack.add(0)
             val fnStatements = if (isExtern)
                 statement { raiseError("extern function not provided: $name") }
             else
                 withLocalNames(paramNames) { parseBlock() }
+            // Capture and pop the local declarations count for this function
+            val fnLocalDecls = localDeclCountStack.removeLastOrNull() ?: 0
 
             var closure: Scope? = null
 
@@ -1647,6 +1665,10 @@ class Compiler(
                 // the closure is in the class initialization and we needn't more:
                 val context = closure?.let { ClosureScope(callerContext, it) }
                     ?: callerContext
+
+                // Capacity hint: parameters + declared locals + small overhead
+                val capacityHint = paramNames.size + fnLocalDecls + 4
+                context.hintLocalCapacity(capacityHint)
 
                 // load params from caller context
                 argsDeclaration.assignToContext(context, callerContext.args, defaultAccessType = AccessType.Val)

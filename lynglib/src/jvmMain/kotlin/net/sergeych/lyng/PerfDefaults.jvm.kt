@@ -15,4 +15,7 @@ actual object PerfDefaults {
 
     actual val PRIMITIVE_FASTOPS: Boolean = true
     actual val RVAL_FASTPATH: Boolean = true
+
+    // Regex caching (JVM-first): enabled by default on JVM
+    actual val REGEX_CACHE: Boolean = true
 }

@@ -118,6 +118,19 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
     }
 
     override suspend fun contains(scope: Scope, other: Obj): Boolean {
+        if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
+            // Fast path: int membership in a list of ints (common case in benches)
+            if (other is ObjInt) {
+                var i = 0
+                val sz = list.size
+                while (i < sz) {
+                    val v = list[i]
+                    if (v is ObjInt && v.value == other.value) return true
+                    i++
+                }
+                return false
+            }
+        }
         return list.contains(other)
     }
 
@@ -272,6 +285,115 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
             addFn("shuffle") {
                 thisAs<ObjList>().list.shuffle()
                 ObjVoid
+            }
+            addFn("sum") {
+                val self = thisAs<ObjList>()
+                val l = self.list
+                if (l.isEmpty()) return@addFn ObjNull
+                if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
+                    // Fast path: all ints → accumulate as long
+                    var i = 0
+                    var acc: Long = 0
+                    while (i < l.size) {
+                        val v = l[i]
+                        if (v is ObjInt) {
+                            acc += v.value
+                            i++
+                        } else {
+                            // Fallback to generic dynamic '+' accumulation starting from current acc
+                            var res: Obj = ObjInt(acc)
+                            while (i < l.size) {
+                                res = res.plus(this, l[i])
+                                i++
+                            }
+                            return@addFn res
+                        }
+                    }
+                    return@addFn ObjInt(acc)
+                }
+                // Generic path: dynamic '+' starting from first element
+                var res: Obj = l[0]
+                var k = 1
+                while (k < l.size) {
+                    res = res.plus(this, l[k])
+                    k++
+                }
+                res
+            }
+            addFn("min") {
+                val l = thisAs<ObjList>().list
+                if (l.isEmpty()) return@addFn ObjNull
+                if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
+                    var i = 0
+                    var hasOnlyInts = true
+                    var minVal: Long = Long.MAX_VALUE
+                    while (i < l.size) {
+                        val v = l[i]
+                        if (v is ObjInt) {
+                            if (v.value < minVal) minVal = v.value
+                        } else {
+                            hasOnlyInts = false
+                            break
+                        }
+                        i++
+                    }
+                    if (hasOnlyInts) return@addFn ObjInt(minVal)
+                }
+                var res: Obj = l[0]
+                var i = 1
+                while (i < l.size) {
+                    val v = l[i]
+                    if (v.compareTo(this, res) < 0) res = v
+                    i++
+                }
+                res
+            }
+            addFn("max") {
+                val l = thisAs<ObjList>().list
+                if (l.isEmpty()) return@addFn ObjNull
+                if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
+                    var i = 0
+                    var hasOnlyInts = true
+                    var maxVal: Long = Long.MIN_VALUE
+                    while (i < l.size) {
+                        val v = l[i]
+                        if (v is ObjInt) {
+                            if (v.value > maxVal) maxVal = v.value
+                        } else {
+                            hasOnlyInts = false
+                            break
+                        }
+                        i++
+                    }
+                    if (hasOnlyInts) return@addFn ObjInt(maxVal)
+                }
+                var res: Obj = l[0]
+                var i = 1
+                while (i < l.size) {
+                    val v = l[i]
+                    if (v.compareTo(this, res) > 0) res = v
+                    i++
+                }
+                res
+            }
+            addFn("indexOf") {
+                val l = thisAs<ObjList>().list
+                val needle = args.firstAndOnly()
+                if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS && needle is ObjInt) {
+                    var i = 0
+                    while (i < l.size) {
+                        val v = l[i]
+                        if (v is ObjInt && v.value == needle.value) return@addFn ObjInt(i.toLong())
+                        i++
+                    }
+                    return@addFn ObjInt((-1).toLong())
+                }
+                var i = 0
+                while (i < l.size) {
+                    if (l[i].compareTo(this, needle) == 0) return@addFn ObjInt(i.toLong())
+                    i++
+                }
+                ObjInt((-1).toLong())
             }
         }
     }

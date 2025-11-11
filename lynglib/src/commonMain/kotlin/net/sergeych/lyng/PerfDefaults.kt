@@ -20,4 +20,7 @@ expect object PerfDefaults {
 
     val PRIMITIVE_FASTOPS: Boolean
     val RVAL_FASTPATH: Boolean
+
+    // Regex caching (JVM-first): small LRU for compiled patterns
+    val REGEX_CACHE: Boolean
 }

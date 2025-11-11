@@ -231,10 +231,13 @@ class LogicalOrRef(private val left: ObjRef, private val right: ObjRef) : ObjRef
 /** Logical AND with short-circuit: a && b */
 class LogicalAndRef(private val left: ObjRef, private val right: ObjRef) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
-        val a = if (net.sergeych.lyng.PerfFlags.RVAL_FASTPATH) left.evalValue(scope) else left.get(scope).value
+        // Hoist flags to locals for JIT friendliness
+        val fastRval = net.sergeych.lyng.PerfFlags.RVAL_FASTPATH
+        val fastPrim = net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS
+        val a = if (fastRval) left.evalValue(scope) else left.get(scope).value
         if ((a as? ObjBool)?.value == false) return ObjFalse.asReadonly
-        val b = if (net.sergeych.lyng.PerfFlags.RVAL_FASTPATH) right.evalValue(scope) else right.get(scope).value
-        if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
+        val b = if (fastRval) right.evalValue(scope) else right.get(scope).value
+        if (fastPrim) {
             if (a is ObjBool && b is ObjBool) {
                 return if (a.value && b.value) ObjTrue.asReadonly else ObjFalse.asReadonly
             }
@@ -269,12 +272,15 @@ class FieldRef(
     private var tKey: Long = 0L; private var tVer: Int = -1; private var tFrameId: Long = -1L; private var tRecord: ObjRecord? = null
 
     override suspend fun get(scope: Scope): ObjRecord {
-        val base = if (net.sergeych.lyng.PerfFlags.RVAL_FASTPATH) target.evalValue(scope) else target.get(scope).value
+        val fastRval = net.sergeych.lyng.PerfFlags.RVAL_FASTPATH
+        val fieldPic = net.sergeych.lyng.PerfFlags.FIELD_PIC
+        val picCounters = net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS
+        val base = if (fastRval) target.evalValue(scope) else target.get(scope).value
         if (base == ObjNull && isOptional) return ObjNull.asMutable
-        if (net.sergeych.lyng.PerfFlags.FIELD_PIC) {
+        if (fieldPic) {
             val (key, ver) = receiverKeyAndVersion(base)
             rGetter1?.let { g -> if (key == rKey1 && ver == rVer1) {
-                if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.fieldPicHit++
+                if (picCounters) net.sergeych.lyng.PerfStats.fieldPicHit++
                 val rec0 = g(base, scope)
                 if (base is ObjClass) {
                     val idx0 = base.classScope?.getSlotIndexOf(name)
@@ -283,7 +289,7 @@ class FieldRef(
                 return rec0
             } }
             rGetter2?.let { g -> if (key == rKey2 && ver == rVer2) {
-                if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.fieldPicHit++
+                if (picCounters) net.sergeych.lyng.PerfStats.fieldPicHit++
                 val rec0 = g(base, scope)
                 if (base is ObjClass) {
                     val idx0 = base.classScope?.getSlotIndexOf(name)
@@ -292,7 +298,7 @@ class FieldRef(
                 return rec0
             } }
             // Slow path
-            if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.fieldPicMiss++
+            if (picCounters) net.sergeych.lyng.PerfStats.fieldPicMiss++
             val rec = base.readField(scope, name)
             // Install move-to-front with a handle-aware getter. Where safe, capture resolved handles.
             rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
@@ -323,23 +329,25 @@ class FieldRef(
     }
 
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
+        val fieldPic = net.sergeych.lyng.PerfFlags.FIELD_PIC
+        val picCounters = net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS
         val base = target.get(scope).value
         if (base == ObjNull && isOptional) {
             // no-op on null receiver for optional chaining assignment
             return
         }
-        if (net.sergeych.lyng.PerfFlags.FIELD_PIC) {
+        if (fieldPic) {
             val (key, ver) = receiverKeyAndVersion(base)
             wSetter1?.let { s -> if (key == wKey1 && ver == wVer1) {
-                if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.fieldPicSetHit++
+                if (picCounters) net.sergeych.lyng.PerfStats.fieldPicSetHit++
                 return s(base, scope, newValue)
             } }
             wSetter2?.let { s -> if (key == wKey2 && ver == wVer2) {
-                if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.fieldPicSetHit++
+                if (picCounters) net.sergeych.lyng.PerfStats.fieldPicSetHit++
                 return s(base, scope, newValue)
             } }
             // Slow path
-            if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.fieldPicSetMiss++
+            if (picCounters) net.sergeych.lyng.PerfStats.fieldPicSetMiss++
             base.writeField(scope, name, newValue)
             // Install move-to-front with a handle-aware setter
             wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
@@ -385,9 +393,18 @@ class IndexRef(
     private val isOptional: Boolean,
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
-        val base = if (net.sergeych.lyng.PerfFlags.RVAL_FASTPATH) target.evalValue(scope) else target.get(scope).value
+        val fastRval = net.sergeych.lyng.PerfFlags.RVAL_FASTPATH
+        val base = if (fastRval) target.evalValue(scope) else target.get(scope).value
         if (base == ObjNull && isOptional) return ObjNull.asMutable
-        val idx = if (net.sergeych.lyng.PerfFlags.RVAL_FASTPATH) index.evalValue(scope) else index.get(scope).value
+        val idx = if (fastRval) index.evalValue(scope) else index.get(scope).value
+        if (fastRval) {
+            // Primitive list index fast path: avoid virtual dispatch to getAt when shapes match
+            if (base is ObjList && idx is ObjInt) {
+                val i = idx.toInt()
+                // Bounds checks are enforced by the underlying list access; exceptions propagate as before
+                return base.list[i].asMutable
+            }
+        }
         return base.getAt(scope, idx).asMutable
     }
 
@@ -419,10 +436,12 @@ class CallRef(
     private val isOptionalInvoke: Boolean,
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
-        val callee = if (net.sergeych.lyng.PerfFlags.RVAL_FASTPATH) target.evalValue(scope) else target.get(scope).value
+        val fastRval = net.sergeych.lyng.PerfFlags.RVAL_FASTPATH
+        val usePool = net.sergeych.lyng.PerfFlags.SCOPE_POOL
+        val callee = if (fastRval) target.evalValue(scope) else target.get(scope).value
         if (callee == ObjNull && isOptionalInvoke) return ObjNull.asReadonly
         val callArgs = args.toArguments(scope, tailBlock)
-        val result: Obj = if (net.sergeych.lyng.PerfFlags.SCOPE_POOL) {
+        val result: Obj = if (usePool) {
             scope.withChildFrame(callArgs) { child ->
                 callee.callOn(child)
             }
@@ -450,21 +469,24 @@ class MethodCallRef(
     private var mKey4: Long = 0L; private var mVer4: Int = -1; private var mInvoker4: (suspend (Obj, Scope, Arguments) -> Obj)? = null
 
     override suspend fun get(scope: Scope): ObjRecord {
-        val base = if (net.sergeych.lyng.PerfFlags.RVAL_FASTPATH) receiver.evalValue(scope) else receiver.get(scope).value
+        val fastRval = net.sergeych.lyng.PerfFlags.RVAL_FASTPATH
+        val methodPic = net.sergeych.lyng.PerfFlags.METHOD_PIC
+        val picCounters = net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS
+        val base = if (fastRval) receiver.evalValue(scope) else receiver.get(scope).value
         if (base == ObjNull && isOptional) return ObjNull.asReadonly
         val callArgs = args.toArguments(scope, tailBlock)
-        if (net.sergeych.lyng.PerfFlags.METHOD_PIC) {
+        if (methodPic) {
             val (key, ver) = receiverKeyAndVersion(base)
             mInvoker1?.let { inv -> if (key == mKey1 && ver == mVer1) {
-                if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.methodPicHit++
+                if (picCounters) net.sergeych.lyng.PerfStats.methodPicHit++
                 return inv(base, scope, callArgs).asReadonly
             } }
             mInvoker2?.let { inv -> if (key == mKey2 && ver == mVer2) {
-                if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.methodPicHit++
+                if (picCounters) net.sergeych.lyng.PerfStats.methodPicHit++
                 return inv(base, scope, callArgs).asReadonly
             } }
             mInvoker3?.let { inv -> if (key == mKey3 && ver == mVer3) {
-                if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.methodPicHit++
+                if (picCounters) net.sergeych.lyng.PerfStats.methodPicHit++
                 // move-to-front: promote 3→1
                 val tK = mKey3; val tV = mVer3; val tI = mInvoker3
                 mKey3 = mKey2; mVer3 = mVer2; mInvoker3 = mInvoker2
@@ -473,7 +495,7 @@ class MethodCallRef(
                 return inv(base, scope, callArgs).asReadonly
             } }
             mInvoker4?.let { inv -> if (key == mKey4 && ver == mVer4) {
-                if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.methodPicHit++
+                if (picCounters) net.sergeych.lyng.PerfStats.methodPicHit++
                 // move-to-front: promote 4→1
                 val tK = mKey4; val tV = mVer4; val tI = mInvoker4
                 mKey4 = mKey3; mVer4 = mVer3; mInvoker4 = mInvoker3
@@ -483,7 +505,7 @@ class MethodCallRef(
                 return inv(base, scope, callArgs).asReadonly
             } }
             // Slow path
-            if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.methodPicMiss++
+            if (picCounters) net.sergeych.lyng.PerfStats.methodPicMiss++
             val result = base.invokeInstanceMethod(scope, name, callArgs)
             // Install move-to-front with a handle-aware invoker: shift 1→2→3→4, put new at 1
             mKey4 = mKey3; mVer4 = mVer3; mInvoker4 = mInvoker3

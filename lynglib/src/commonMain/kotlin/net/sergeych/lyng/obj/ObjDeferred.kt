@@ -38,8 +38,8 @@ open class ObjDeferred(val deferred: Deferred<Obj>): Obj() {
             }
             addFn("isActive") {
                 val d = thisAs<ObjDeferred>().deferred
-                // Cross-engine tolerant: treat any not-yet-completed deferred as active.
-                (!d.isCompleted).toObj()
+                // Cross-engine tolerant: prefer Deferred.isActive; otherwise treat any not-yet-completed and not-cancelled as active
+                (d.isActive || (!d.isCompleted && !d.isCancelled)).toObj()
             }
             addFn("isCancelled") {
                 thisAs<ObjDeferred>().deferred.isCancelled.toObj()

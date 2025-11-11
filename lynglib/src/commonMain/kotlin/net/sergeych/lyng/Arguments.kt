@@ -98,6 +98,26 @@ import net.sergeych.lyng.obj.ObjList
              if (quick != null) return quick
          }
      }
+     // Single-splat fast path: if there is exactly one splat argument that evaluates to ObjList,
+     // avoid builder and copies by returning its list directly.
+     if (PerfFlags.ARG_BUILDER) {
+         if (this.size == 1) {
+             val only = this.first()
+             if (only.isSplat) {
+                 val v = only.value.execute(scope)
+                 if (v is ObjList) {
+                     return Arguments(v.list, tailBlockMode)
+                 } else if (v.isInstanceOf(ObjIterable)) {
+                     // Convert iterable to list once and return directly
+                     val i = (v.invokeInstanceMethod(scope, "toList") as ObjList).list
+                     return Arguments(i, tailBlockMode)
+                 } else {
+                     scope.raiseClassCastError("expected list of objects for splat argument")
+                 }
+             }
+         }
+     }
+
      // General path with builder or simple list fallback
      if (PerfFlags.ARG_BUILDER) {
          val b = ArgBuilderProvider.acquire()
@@ -143,7 +163,7 @@ import net.sergeych.lyng.obj.ObjList
          }
          return Arguments(list, tailBlockMode)
      }
- }
+  }
  
  data class Arguments(val list: List<Obj>, val tailBlockMode: Boolean = false) : List<Obj> by list {
  

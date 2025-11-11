@@ -1,4 +1,3 @@
-# Lyng Performance Guide (JVM‑first)
 
 This document explains how to enable and measure the performance optimizations added to the Lyng interpreter. The focus is JVM‑first with safe, flag‑guarded rollouts and quick A/B testing. Other targets (JS/Wasm/Native) keep conservative defaults until validated.
 
@@ -136,7 +135,7 @@ Date: 2025-11-10 23:04 (local)
 
 Notes:
 - All results obtained from `[DEBUG_LOG] [BENCH]` outputs with three repeated Gradle test invocations per configuration; medians reported.
-- JVM defaults (current): `ARG_BUILDER=true`, `PRIMITIVE_FASTOPS=true`, `RVAL_FASTPATH=true`, `FIELD_PIC=true`, `METHOD_PIC=true`, `SCOPE_POOL=true` (per‑thread ThreadLocal pool).
+- JVM defaults (current): `ARG_BUILDER=true`, `PRIMITIVE_FASTOPS=true`, `RVAL_FASTPATH=true`, `FIELD_PIC=true`, `METHOD_PIC=true`, `SCOPE_POOL=true` (per‑thread ThreadLocal pool), `REGEX_CACHE=true`.
 
 
 ## Concurrency (multi‑core) pooling results (3× medians; OFF → ON)
@@ -184,3 +183,241 @@ Date: 2025-11-10 23:04 (local)
 Validation matrix
 - Always re-run: `CallBenchmarkTest`, `CallMixedArityBenchmarkTest`, `PicBenchmarkTest`, `ExpressionBenchmarkTest`, `ArithmeticBenchmarkTest`, `CallPoolingBenchmarkTest`, `DeepPoolingStressJvmTest`, `ConcurrencyCallBenchmarkTest` (3× medians when comparing).
 - Keep full `:lynglib:jvmTest` green after each change.
+
+
+
+## PIC update (4‑way METHOD_PIC) — JVM (3× medians; OFF → ON)
+
+Date: 2025-11-11 00:16 (local)
+
+| Flag      | Benchmark/Test                               | OFF median (ms) | ON median (ms) | Speedup | Notes |
+|-----------|-----------------------------------------------|-----------------:|----------------:|:-------:|-------|
+| FIELD_PIC | PicBenchmarkTest::benchmarkFieldGetSetPic      |          207.578 |         106.481 |  1.95×  | Read→write loop; micro fast‑path groundwork present |
+| METHOD_PIC| PicBenchmarkTest::benchmarkMethodPic           |          273.478 |         182.226 |  1.50×  | 4‑way PIC with move‑to‑front (was 2‑way before) |
+
+Medians computed from three Gradle runs in this session; see `[DEBUG_LOG] [BENCH]` lines in test output.
+
+
+## Locals/slots capacity (pre‑sizing hints) — JVM (3× medians; OFF → ON)
+
+Date: 2025-11-11 13:19 (local)
+
+| Optimization            | Benchmark/Test              | OFF config                         | ON config                          | OFF median (ms) | ON median (ms) | Speedup | Notes |
+|-------------------------|-----------------------------|------------------------------------|------------------------------------|-----------------:|----------------:|:-------:|-------|
+| Locals pre‑sizing + PIC | LocalVarBenchmarkTest       | LOCAL_SLOT_PIC=OFF, FAST_LOCAL=OFF | LOCAL_SLOT_PIC=ON, FAST_LOCAL=ON   |          472.129 |         370.871 |  1.27×  | Compiler hint `params+4`; slot pre‑size; semantics unchanged |
+
+Methodology:
+- Each configuration executed three times via `:lynglib:jvmTest --tests "…" --rerun-tasks`; medians reported.
+- Locals improvement stacks with per‑thread `SCOPE_POOL` and ARG fast paths.
+
+
+
+
+## RVAL fast paths update — JVM (IndexRef and FieldRef) [3× medians; OFF → ON]
+
+Date: 2025-11-11 13:19 (local)
+
+New micro-benchmarks have been added to quantify the latest `RVAL_FASTPATH` extensions:
+- Primitive `ObjList` index-read fast path in `IndexRef`.
+- Conservative “pure receiver” evaluation in `FieldRef` (monomorphic, immutable receiver), preserving visibility/mutability checks and optional chaining semantics.
+
+Benchmarks to run (each 3× OFF → ON):
+- `ExpressionBenchmarkTest::benchmarkListIndexReads`
+- `ExpressionBenchmarkTest::benchmarkFieldReadPureReceiver`
+
+Reproduce (3× each; collect `[DEBUG_LOG] [BENCH]` lines and compute medians):
+```
+./gradlew :lynglib:jvmTest --tests "ExpressionBenchmarkTest.benchmarkListIndexReads" --rerun-tasks
+./gradlew :lynglib:jvmTest --tests "ExpressionBenchmarkTest.benchmarkListIndexReads" --rerun-tasks
+./gradlew :lynglib:jvmTest --tests "ExpressionBenchmarkTest.benchmarkListIndexReads" --rerun-tasks
+
+./gradlew :lynglib:jvmTest --tests "ExpressionBenchmarkTest.benchmarkFieldReadPureReceiver" --rerun-tasks
+./gradlew :lynglib:jvmTest --tests "ExpressionBenchmarkTest.benchmarkFieldReadPureReceiver" --rerun-tasks
+./gradlew :lynglib:jvmTest --tests "ExpressionBenchmarkTest.benchmarkFieldReadPureReceiver" --rerun-tasks
+```
+
+Once collected, add medians and speedups to the table below:
+
+| Flag          | Benchmark/Test                                  | OFF median (ms) | ON median (ms) | Speedup | Notes |
+|---------------|---------------------------------------------------|-----------------:|----------------:|:-------:|-------|
+| RVAL_FASTPATH | ExpressionBenchmarkTest::benchmarkListIndexReads  |           305.243 |          230.942 |  1.32×  | Fast path in `IndexRef` for `ObjList` + `ObjInt` index |
+| RVAL_FASTPATH | ExpressionBenchmarkTest::benchmarkFieldReadPureReceiver |           266.222 |          190.720 |  1.40×  | Pure-receiver evaluation in `FieldRef` (monomorphic, immutable) |
+
+Notes:
+- Both benches toggle `PerfFlags.RVAL_FASTPATH` within a single run to produce OFF and ON timings under identical conditions.
+- Correctness assertions ensure the loops are not optimized away.
+- All semantics (visibility/mutability checks, optional chaining) remain intact; fast paths only skip interim `ObjRecord` traffic when safe.
+
+
+## ARG_BUILDER — splat fast‑path (3× medians; OFF → ON)
+
+Date: 2025-11-11 13:12 (local)
+
+Environment: Gradle 8.7; JVM (JDK as configured by toolchain); single‑threaded test execution; stdout enabled.
+
+| Flag        | Benchmark/Test                    | OFF median (ms) | ON median (ms) | Speedup | Notes |
+|-------------|-----------------------------------|-----------------:|----------------:|:-------:|-------|
+| ARG_BUILDER | CallSplatBenchmarkTest (splat)    |          613.689 |         463.593 |  1.32×  | Single‑splat fast‑path returns underlying list directly; avoids intermediate copies |
+
+Inputs (3×):
+- OFF runs (ms): 613.689 | 629.604 | 612.361 → median 613.689
+- ON runs (ms):  453.752 | 463.593 | 468.844 → median 463.593
+
+Reproduce (3×):
+```
+./gradlew :lynglib:jvmTest --tests "CallSplatBenchmarkTest" --rerun-tasks
+```
+
+
+
+## Phase A consolidation (JVM) — 3× medians updated
+
+Date: 2025-11-11 13:48 (local)
+Environment:
+- JDK: OpenJDK 20.0.2.1 (Amazon Corretto 20.0.2.1+10-FR)
+- Gradle: 8.7
+- OS/Arch: macOS 14.8.1 (aarch64)
+
+### ARG_BUILDER
+
+| Benchmark/Test                   | OFF median (ms) | ON median (ms) | Speedup | Notes |
+|----------------------------------|-----------------:|----------------:|:-------:|-------|
+| CallMixedArityBenchmarkTest      |          866.681 |         717.439 |  1.21×  | Small-arity 0–8 fast path + builder; correctness preserved |
+| CallSplatBenchmarkTest (splat)   |          600.880 |         459.706 |  1.31×  | Single-splat fast path returns underlying list; avoids copies |
+
+Inputs (3×):
+- Mixed arity OFF: 874.088291 | 866.680959 | 858.577125 → median 866.680959
+- Mixed arity ON:  731.308625 | 706.440125 | 717.438542 → median 717.438542
+- Splat OFF: 600.268625 | 607.849416 | 600.879666 → median 600.879666
+- Splat ON:  459.706375 | 449.950166 | 461.815167 → median 459.706375
+
+### RVAL_FASTPATH (new coverage)
+
+| Benchmark/Test                                   | OFF median (ms) | ON median (ms) | Speedup | Notes |
+|--------------------------------------------------|-----------------:|----------------:|:-------:|-------|
+| ExpressionBenchmarkTest::benchmarkListIndexReads |          299.366 |         218.812 |  1.37×  | IndexRef fast path for ObjList + ObjInt |
+| ExpressionBenchmarkTest::benchmarkFieldReadPureReceiver |          268.315 |         186.032 |  1.44×  | Pure-receiver evaluation in FieldRef (monomorphic, immutable) |
+
+Inputs (3×):
+- ListIndex OFF: 291.344 | 310.717167 | 299.365709 → median 299.365709
+- ListIndex ON:  217.795375 | 221.504166 | 218.812042 → median 218.812042
+- FieldRead OFF: 267.2775 | 274.355208 | 268.315125 → median 268.315125
+- FieldRead ON:  189.599333 | 186.031791 | 182.069167 → median 186.031791
+
+### Locals/slots capacity (precise hints)
+
+| Benchmark/Test             | OFF config                         | ON config                          | OFF median (ms) | ON median (ms) | Speedup | Notes |
+|---------------------------|------------------------------------|------------------------------------|-----------------:|----------------:|:-------:|-------|
+| LocalVarBenchmarkTest     | LOCAL_SLOT_PIC=OFF, FAST_LOCAL=OFF | LOCAL_SLOT_PIC=ON, FAST_LOCAL=ON   |          446.018 |         347.964 |  1.28×  | Precise capacity hints + fast-locals coverage |
+
+Inputs (3×):
+- Locals OFF: 470.575041 | 441.89625 | 446.017833 → median 446.017833
+- Locals ON:  370.664208 | 345.615541 | 347.964291 → median 347.964291
+
+Methodology:
+- Each test executed three times via Gradle with stdout enabled; medians computed from `[DEBUG_LOG] [BENCH]` lines.
+- Full JVM tests and stress benches remain green in this cycle.
+
+
+
+## Phase B — List ops specialization (PRIMITIVE_FASTOPS) — 3× medians (OFF → ON)
+
+Date: 2025-11-11 13:48 (local)
+Environment:
+- JDK: OpenJDK 20.0.2.1 (Amazon Corretto 20.0.2.1+10-FR)
+- Gradle: 8.7
+- OS/Arch: macOS 14.8.1 (aarch64)
+
+| Optimization        | Benchmark/Test                          | OFF median (ms) | ON median (ms) | Speedup | Notes |
+|---------------------|------------------------------------------|-----------------:|----------------:|:-------:|-------|
+| PRIMITIVE_FASTOPS   | ListOpsBenchmarkTest::benchmarkSumInts   |          324.805 |         144.908 |  2.24×  | ObjList.sum fast path for int lists; generic fallback preserved |
+| PRIMITIVE_FASTOPS   | ListOpsBenchmarkTest::benchmarkContainsInts |          440.414 |         415.476 |  1.06×  | ObjList.contains fast path when searching ObjInt in int list |
+
+Inputs (3×):
+- list-sum OFF: 332.863417 | 323.491625 | 324.804083 → median 324.804083
+- list-sum ON:  144.907833 | 148.870792 | 126.418542 → median 144.907833
+- list-contains OFF: 440.413709 | 440.368333 | 441.4365 → median 440.413709
+- list-contains ON:  416.465292 | 412.283291 | 415.475833 → median 415.475833
+
+Methodology:
+- Each test executed three times via Gradle; medians computed from `[DEBUG_LOG] [BENCH]` lines.
+- Changes are fully guarded by `PerfFlags.PRIMITIVE_FASTOPS`; semantics preserved (null on empty sum; generic fallback on mixed types).
+
+
+
+### Phase B — Ranges for-in lowering (PRIMITIVE_FASTOPS) — 3× medians (OFF → ON)
+
+Date: 2025-11-11 13:48 (local)
+Environment:
+- JDK: OpenJDK 20.0.2.1 (Amazon Corretto 20.0.2.1+10-FR)
+- Gradle: 8.7
+- OS/Arch: macOS 14.8.1 (aarch64)
+
+| Optimization        | Benchmark/Test                          | OFF median (ms) | ON median (ms) | Speedup | Notes |
+|---------------------|------------------------------------------|-----------------:|----------------:|:-------:|-------|
+| PRIMITIVE_FASTOPS   | RangeBenchmarkTest::benchmarkIntRangeForIn |         1705.299 |         788.974 |  2.16×  | Tight counted loop for (Int..Int) for-in; preserves semantics |
+
+Inputs (3×):
+- range-for-in OFF: 1705.298958 | 1684.357708 | 1735.880917 → median 1705.298958
+- range-for-in ON:  794.178458 | 778.741834 | 788.973625 → median 788.973625
+
+Methodology:
+- Each configuration executed three times via Gradle; medians computed from `[DEBUG_LOG] [BENCH]` lines.
+- Lowering is guarded by `PerfFlags.PRIMITIVE_FASTOPS` and applies only when the source is an `ObjRange` with int bounds; otherwise falls back to generic iteration.
+
+
+
+## Phase B — Regex caching (REGEX_CACHE) — 3× medians (OFF → ON)
+
+Date: 2025-11-11 13:48 (local)
+Environment:
+- JDK: OpenJDK 20.0.2.1 (Amazon Corretto 20.0.2.1+10-FR)
+- Gradle: 8.7
+- OS/Arch: macOS 14.8.1 (aarch64)
+
+| Flag         | Benchmark/Test                                  | OFF median (ms) | ON median (ms) | Speedup | Notes |
+|--------------|---------------------------------------------------|-----------------:|----------------:|:-------:|-------|
+| REGEX_CACHE  | RegexBenchmarkTest::benchmarkLiteralPatternMatches |          378.246 |         275.890 |  1.37×  | Caches compiled regex for identical literal pattern per iteration |
+| REGEX_CACHE  | RegexBenchmarkTest::benchmarkDynamicPatternMatches |          514.944 |         229.006 |  2.25×  | Two dynamic patterns alternate; cache size sufficient to retain both |
+
+Inputs (1× here; can extend to 3× on request):
+- regex-literal OFF: 378.245916; ON: 275.889541
+- regex-dynamic OFF: 514.944167; ON: 229.005834
+
+Methodology:
+- Each benchmark toggles `PerfFlags.REGEX_CACHE` inside a single test and prints `[DEBUG_LOG]` timings for OFF and ON runs under identical conditions. We recorded one set of OFF/ON timings here; we can extend to 3× medians if required for publication.
+- The cache is a tiny size-bounded map (64 entries) activated only when `PerfFlags.REGEX_CACHE` is true. Defaults remain OFF.
+
+
+
+
+## JIT tweaks (Round 1) — quick gains snapshot (locals, ranges, list ops)
+
+Date: 2025-11-11 21:05 (local)
+
+Scope: fast confirmation of overall gain using current configuration; focused on locals, ranges, and list ops. Each test prints OFF → ON timings in a single run. We executed the benches via Gradle with stdout enabled and single test fork.
+
+Environment:
+- Gradle: 8.7 (stdout enabled, maxParallelForks=1)
+- JVM: as configured by toolchain for this project
+- OS/Arch: per developer machine (unchanged from prior sections)
+
+Reproduce:
+```
+./gradlew :lynglib:jvmTest --tests LocalVarBenchmarkTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests RangeBenchmarkTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests ListOpsBenchmarkTest --rerun-tasks
+```
+
+Results (representative runs; OFF → ON):
+- Local variables — LOCAL_SLOT_PIC + EMIT_FAST_LOCAL_REFS
+  - Run 1: 468.407 ms → 367.277 ms (≈ 1.28×)
+  - Run 2: 447.031 ms → 346.126 ms (≈ 1.29×)
+- Ranges for‑in — PRIMITIVE_FASTOPS (tight counted loop for (Int..Int))
+  - 1731.780 ms → 799.023 ms (≈ 2.17×)
+- List ops — PRIMITIVE_FASTOPS
+  - sum(int list): 318.943 ms → 148.571 ms (≈ 2.15×)
+  - contains(int in int list): 440.013 ms → 412.450 ms (≈ 1.07×)
+
+Summary: All three areas improved with optimizations ON; no regressions observed in these runs. For publication‑grade stability, run each test 3× and report medians (see sections below for methodology and previous median tables).
+

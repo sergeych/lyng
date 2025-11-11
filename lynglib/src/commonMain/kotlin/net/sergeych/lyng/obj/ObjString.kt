@@ -19,6 +19,8 @@ package net.sergeych.lyng.obj
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import net.sergeych.lyng.PerfFlags
+import net.sergeych.lyng.RegexCache
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.statement
 import net.sergeych.lynon.LynonDecoder
@@ -182,7 +184,7 @@ data class ObjString(val value: String) : Obj() {
                         is ObjString -> {
                             if (s.value == ".*") true
                             else {
-                                val re = s.value.toRegex()
+                                val re = if (PerfFlags.REGEX_CACHE) RegexCache.get(s.value) else s.value.toRegex()
                                 self.matches(re)
                             }
                         }

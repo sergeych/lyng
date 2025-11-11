@@ -6,8 +6,15 @@ import kotlinx.coroutines.runBlocking
 import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.obj.ObjInt
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+
+private fun appendBenchLog(name: String, variant: String, ms: Double) {
+    val f = File("lynglib/build/benchlogs/log.csv")
+    f.parentFile.mkdirs()
+    f.appendText("$name,$variant,$ms\n")
+}
 
 class CallMixedArityBenchmarkTest {
     @Test

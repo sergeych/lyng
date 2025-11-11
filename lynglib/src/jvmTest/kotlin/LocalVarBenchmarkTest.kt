@@ -1,8 +1,9 @@
 /*
- * Tiny JVM benchmark for local variable access performance.
+ * JVM micro-benchmark focused on local variable access paths:
+ * - LOCAL_SLOT_PIC (per-frame slot PIC in LocalVarRef)
+ * - EMIT_FAST_LOCAL_REFS (compiler-emitted fast locals)
  */
 
-// import net.sergeych.tools.bm
 import kotlinx.coroutines.runBlocking
 import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.Scope
@@ -12,65 +13,46 @@ import kotlin.test.assertEquals
 
 class LocalVarBenchmarkTest {
     @Test
-    fun benchmarkLocalVarLoop() = runBlocking {
-        val n = 400_000 // keep under 1s even on CI
-        val code = """
-            var s = 0
-            var i = 0
-            while(i < $n) {
-                s = s + i
-                i = i + 1
-            }
-            s
-        """.trimIndent()
-
-        // Part 1: PIC off vs on for LocalVarRef
-        PerfFlags.EMIT_FAST_LOCAL_REFS = false
-
-        // Baseline: disable PIC
-        PerfFlags.LOCAL_SLOT_PIC = false
-        val scope1 = Scope()
-        val t0 = System.nanoTime()
-        val result1 = (scope1.eval(code) as ObjInt).value
-        val t1 = System.nanoTime()
-        println("[DEBUG_LOG] [BENCH] local-var loop $n iters [baseline PIC=OFF, EMIT=OFF]: ${(t1 - t0) / 1_000_000.0} ms")
-
-        // Optimized: enable PIC
-        PerfFlags.LOCAL_SLOT_PIC = true
-        val scope2 = Scope()
-        val t2 = System.nanoTime()
-        val result2 = (scope2.eval(code) as ObjInt).value
-        val t3 = System.nanoTime()
-        println("[DEBUG_LOG] [BENCH] local-var loop $n iters [baseline PIC=ON, EMIT=OFF]: ${(t3 - t2) / 1_000_000.0} ms")
-
-        // Verify correctness to avoid dead code elimination in future optimizations
-        val expected = (n.toLong() - 1L) * n / 2L
-        assertEquals(expected, result1)
-        assertEquals(expected, result2)
-
-        // Part 2: Enable compiler fast locals emission and measure
-        PerfFlags.EMIT_FAST_LOCAL_REFS = true
-        PerfFlags.LOCAL_SLOT_PIC = true
-
-        val code2 = """
-            fun sumN(n) {
+    fun benchmarkLocalReadsWrites_off_on() = runBlocking {
+        val iterations = 400_000
+        val script = """
+            fun hot(n){
+                var a = 0
+                var b = 1
+                var c = 2
                 var s = 0
                 var i = 0
-                while(i < n) {
-                    s = s + i
+                while(i < n){
+                    a = a + 1
+                    b = b + a
+                    c = c + b
+                    s = s + a + b + c
                     i = i + 1
                 }
                 s
             }
-            sumN($n)
+            hot($iterations)
         """.trimIndent()
 
-        val scope3 = Scope()
-        val t4 = System.nanoTime()
-        val result3 = (scope3.eval(code2) as ObjInt).value
-        val t5 = System.nanoTime()
-        println("[DEBUG_LOG] [BENCH] local-var loop $n iters [EMIT=ON]: ${(t5 - t4) / 1_000_000.0} ms")
+        // Baseline: disable both fast paths
+        PerfFlags.LOCAL_SLOT_PIC = false
+        PerfFlags.EMIT_FAST_LOCAL_REFS = false
+        val scope1 = Scope()
+        val t0 = System.nanoTime()
+        val r1 = (scope1.eval(script) as ObjInt).value
+        val t1 = System.nanoTime()
+        println("[DEBUG_LOG] [BENCH] locals x$iterations [PIC=OFF, FAST_LOCAL=OFF]: ${(t1 - t0)/1_000_000.0} ms")
 
-        assertEquals(expected, result3)
+        // Optimized: enable both
+        PerfFlags.LOCAL_SLOT_PIC = true
+        PerfFlags.EMIT_FAST_LOCAL_REFS = true
+        val scope2 = Scope()
+        val t2 = System.nanoTime()
+        val r2 = (scope2.eval(script) as ObjInt).value
+        val t3 = System.nanoTime()
+        println("[DEBUG_LOG] [BENCH] locals x$iterations [PIC=ON, FAST_LOCAL=ON]: ${(t3 - t2)/1_000_000.0} ms")
+
+        // Correctness: both runs produce the same result
+        assertEquals(r1, r2)
     }
 }

@@ -30,4 +30,7 @@ object PerfFlags {
 
     // Step 4: R-value fast path to bypass ObjRecord in pure expression evaluation
     var RVAL_FASTPATH: Boolean = PerfDefaults.RVAL_FASTPATH
+
+    // Regex: enable small LRU cache for compiled patterns (JVM-first usage)
+    var REGEX_CACHE: Boolean = PerfDefaults.REGEX_CACHE
 }
