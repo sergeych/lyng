@@ -19,12 +19,13 @@ fun naiveCountHappyNumbers() {
 import lyng.time
 
 //
-// After all optimizations it takes ~120ms.
+// After all optimizations it took ~120ms - before.
 //
-for( r in 1..100 ) {
+for( r in 1..900 ) {
     val start = Instant.now()
     val found = naiveCountHappyNumbers()
     println("Found happy numbers: %d time %s"(found, Instant.now() - start))
     assert( found == 55252 )
-    delay(0.1)
+    delay(0.05)
 }
+

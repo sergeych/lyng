@@ -124,7 +124,7 @@ open class Obj {
      * @param calledFromLyng true if called from Lyng's `toString`. Normally this parameter should be ignored,
      *      but it is used to avoid endless recursion in [Obj.toString] base implementation
      */
-    suspend open fun toString(scope: Scope,calledFromLyng: Boolean=false): ObjString {
+    open suspend fun toString(scope: Scope,calledFromLyng: Boolean=false): ObjString {
         return if (this is ObjString) this
         else if( !calledFromLyng ) {
             invokeInstanceMethod(scope, "toString") {
@@ -265,7 +265,7 @@ open class Obj {
     }
 
     suspend fun invoke(scope: Scope, thisObj: Obj, args: Arguments): Obj =
-        if (net.sergeych.lyng.PerfFlags.SCOPE_POOL)
+        if (PerfFlags.SCOPE_POOL)
             scope.withChildFrame(args, newThisObj = thisObj) { child ->
                 callOn(child)
             }
@@ -300,7 +300,7 @@ open class Obj {
     open suspend fun lynonType(): LynonType = LynonType.Other
 
     open suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
-        scope.raiseNotImplemented()
+        scope.raiseNotImplemented("lynon: can't serialize ${this.objClass}:${this.toString(scope)}")
     }
 
     fun autoInstanceScope(parent: Scope): Scope {
