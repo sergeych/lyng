@@ -16,4 +16,6 @@ actual object PerfDefaults {
     actual val PRIMITIVE_FASTOPS: Boolean = true
     // Conservative default for non-JVM until validated
     actual val RVAL_FASTPATH: Boolean = false
+    // Regex caching: disabled by default on JS until validated
+    actual val REGEX_CACHE: Boolean = false
 }
