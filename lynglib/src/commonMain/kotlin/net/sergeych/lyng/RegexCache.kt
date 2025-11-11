@@ -11,17 +11,20 @@ object RegexCache {
 
     fun get(pattern: String): Regex {
         // Fast path: return cached instance if present
-        map[pattern]?.let { return it }
+        map[pattern]?.let {
+            // Emulate access-order LRU on all targets by moving the entry to the tail
+            // (LinkedHashMap preserves insertion order; remove+put moves it to the end)
+            map.remove(pattern)
+            map[pattern] = it
+            return it
+        }
         // Compile new pattern
         val re = pattern.toRegex()
         // Keep the cache size bounded
         if (map.size >= MAX) {
             // Remove the oldest inserted entry (first key in iteration order)
             val it = map.keys.iterator()
-            if (it.hasNext()) {
-                val k = it.next()
-                it.remove()
-            }
+            if (it.hasNext()) { val k = it.next(); it.remove() }
         }
         map[pattern] = re
         return re

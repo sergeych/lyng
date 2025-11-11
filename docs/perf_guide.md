@@ -421,3 +421,77 @@ Results (representative runs; OFF → ON):
 
 Summary: All three areas improved with optimizations ON; no regressions observed in these runs. For publication‑grade stability, run each test 3× and report medians (see sections below for methodology and previous median tables).
 
+
+## Additional tweaks — verification snapshot (Index write fast‑path, List literal pre‑size, Regex LRU)
+
+Date: 2025-11-11 21:31 (local)
+
+Scope: Implemented three semantics‑neutral optimizations and verified they are green across targeted and broader JVM benches.
+
+What changed (guarded by flags where applicable):
+- RVAL_FASTPATH: Index write fast‑path
+  - `IndexRef.setAt`: direct path for `ObjList` + `ObjInt` (`list[i] = value`) mirrors the read fast‑path. Optional chaining semantics preserved; bounds exceptions propagate unchanged.
+- RVAL_FASTPATH: List literal pre‑sizing
+  - `ListLiteralRef.get`: pre‑counts element entries and uses `ArrayList` with capacity hint; for spreads of `ObjList`, uses `ensureCapacity` before bulk add. Evaluation order unchanged.
+- REGEX_CACHE: LRU‑like behavior
+  - `RegexCache`: emulates access‑order LRU within a tiny bounded map (`MAX=64`) by moving accessed entries to the tail; improves alternating‑pattern scenarios. Only active when `PerfFlags.REGEX_CACHE` is true.
+
+Reproduce quick verification (1× runs):
+```
+./gradlew :lynglib:jvmTest --tests ExpressionBenchmarkTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests ListOpsBenchmarkTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests RegexBenchmarkTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests PicBenchmarkTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests PicInvalidationJvmTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests LocalVarBenchmarkTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests ConcurrencyCallBenchmarkTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests DeepPoolingStressJvmTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests MultiThreadPoolingStressJvmTest --rerun-tasks
+```
+
+Observation: All listed tests green in this cycle; no behavioral regressions observed. For the new paths (index write, list literal), performance was neutral‑to‑positive in smoke runs; Regex benches remained positive or neutral with the LRU behavior. For publication‑grade medians, extend to 3× per test as in earlier sections.
+
+
+## Sanity matrix (JVM) — quick OFF→ON runs
+
+Date: 2025-11-11 21:59 (local)
+
+Scope: Final Round 1 sanity sweep across JVM micro‑benches and stress tests to confirm that optimizations ON do not regress performance vs OFF in representative scenarios. Each benchmark prints `[DEBUG_LOG] [BENCH]` timings for OFF → ON within a single run. This section records a quick pass confirmation (not 3× medians) and reproduction commands.
+
+Environment:
+- Gradle: 8.7 (stdout enabled, maxParallelForks=1)
+- JVM: as configured by the project toolchain
+- OS/Arch: macOS 14.x (aarch64)
+
+Benches covered (all green; no regressions observed in these runs):
+- Calls/Args: `CallBenchmarkTest`, `CallMixedArityBenchmarkTest` (ARG_BUILDER)
+- PICs: `PicBenchmarkTest` (field/method); `PicInvalidationJvmTest` correctness reconfirmed
+- Expressions/Arithmetic: `ExpressionBenchmarkTest`, `ArithmeticBenchmarkTest` (RVAL_FASTPATH, PRIMITIVE_FASTOPS)
+- Ranges: `RangeBenchmarkTest` (PRIMITIVE_FASTOPS counted loop)
+- List ops: `ListOpsBenchmarkTest` (PRIMITIVE_FASTOPS specializations)
+- Regex: `RegexBenchmarkTest` (REGEX_CACHE with LRU behavior)
+- Locals: `LocalVarBenchmarkTest` (LOCAL_SLOT_PIC + FAST_LOCAL)
+- Concurrency/Pooling: `ConcurrencyCallBenchmarkTest`, `DeepPoolingStressJvmTest`, `MultiThreadPoolingStressJvmTest` (SCOPE_POOL per‑thread)
+
+Reproduce (examples):
+```
+./gradlew :lynglib:jvmTest --tests CallBenchmarkTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests CallMixedArityBenchmarkTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests PicBenchmarkTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests PicInvalidationJvmTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests ExpressionBenchmarkTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests ArithmeticBenchmarkTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests RangeBenchmarkTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests ListOpsBenchmarkTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests RegexBenchmarkTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests LocalVarBenchmarkTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests ConcurrencyCallBenchmarkTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests DeepPoolingStressJvmTest --rerun-tasks
+./gradlew :lynglib:jvmTest --tests MultiThreadPoolingStressJvmTest --rerun-tasks
+```
+
+Summary:
+- All listed tests passed in this sanity sweep.
+- For each benchmark’s OFF → ON printouts examined during this pass, ON was equal or faster than OFF; no ON<OFF regressions were observed.
+- For publication‑grade numbers, use the 3× medians methodology outlined earlier in this document. The existing median tables in previous sections remain representative, and the additional tweaks (Index write, List literal pre‑size, Regex LRU, Field PIC 4‑way + read→write reuse, mixed Int/Real fast‑ops) remained neutral‑to‑positive.
+

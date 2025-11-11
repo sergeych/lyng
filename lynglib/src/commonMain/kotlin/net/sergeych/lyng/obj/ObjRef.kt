@@ -110,6 +110,29 @@ class BinaryOpRef(private val op: BinOp, private val left: ObjRef, private val r
                     return r.asReadonly
                 }
             }
+            // Fast numeric mixed ops for Int/Real combinations by promoting to double
+            if ((a is ObjInt || a is ObjReal) && (b is ObjInt || b is ObjReal)) {
+                val ad: Double = if (a is ObjInt) a.doubleValue else (a as ObjReal).value
+                val bd: Double = if (b is ObjInt) b.doubleValue else (b as ObjReal).value
+                val rNum: Obj? = when (op) {
+                    BinOp.PLUS -> ObjReal(ad + bd)
+                    BinOp.MINUS -> ObjReal(ad - bd)
+                    BinOp.STAR -> ObjReal(ad * bd)
+                    BinOp.SLASH -> ObjReal(ad / bd)
+                    BinOp.PERCENT -> ObjReal(ad % bd)
+                    BinOp.LT -> if (ad < bd) ObjTrue else ObjFalse
+                    BinOp.LTE -> if (ad <= bd) ObjTrue else ObjFalse
+                    BinOp.GT -> if (ad > bd) ObjTrue else ObjFalse
+                    BinOp.GTE -> if (ad >= bd) ObjTrue else ObjFalse
+                    BinOp.EQ -> if (ad == bd) ObjTrue else ObjFalse
+                    BinOp.NEQ -> if (ad != bd) ObjTrue else ObjFalse
+                    else -> null
+                }
+                if (rNum != null) {
+                    if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.primitiveFastOpsHit++
+                    return rNum.asReadonly
+                }
+            }
         }
 
         val r: Obj = when (op) {
@@ -261,12 +284,18 @@ class FieldRef(
     private val name: String,
     private val isOptional: Boolean,
 ) : ObjRef {
-    // 2-entry PIC for reads/writes (guarded by PerfFlags.FIELD_PIC)
+    // 4-entry PIC for reads/writes (guarded by PerfFlags.FIELD_PIC)
+    // Reads
     private var rKey1: Long = 0L; private var rVer1: Int = -1; private var rGetter1: (suspend (Obj, Scope) -> ObjRecord)? = null
     private var rKey2: Long = 0L; private var rVer2: Int = -1; private var rGetter2: (suspend (Obj, Scope) -> ObjRecord)? = null
+    private var rKey3: Long = 0L; private var rVer3: Int = -1; private var rGetter3: (suspend (Obj, Scope) -> ObjRecord)? = null
+    private var rKey4: Long = 0L; private var rVer4: Int = -1; private var rGetter4: (suspend (Obj, Scope) -> ObjRecord)? = null
 
+    // Writes
     private var wKey1: Long = 0L; private var wVer1: Int = -1; private var wSetter1: (suspend (Obj, Scope, Obj) -> Unit)? = null
     private var wKey2: Long = 0L; private var wVer2: Int = -1; private var wSetter2: (suspend (Obj, Scope, Obj) -> Unit)? = null
+    private var wKey3: Long = 0L; private var wVer3: Int = -1; private var wSetter3: (suspend (Obj, Scope, Obj) -> Unit)? = null
+    private var wKey4: Long = 0L; private var wVer4: Int = -1; private var wSetter4: (suspend (Obj, Scope, Obj) -> Unit)? = null
 
     // Transient per-step cache to optimize read-then-write sequences within the same frame
     private var tKey: Long = 0L; private var tVer: Int = -1; private var tFrameId: Long = -1L; private var tRecord: ObjRecord? = null
@@ -290,6 +319,39 @@ class FieldRef(
             } }
             rGetter2?.let { g -> if (key == rKey2 && ver == rVer2) {
                 if (picCounters) net.sergeych.lyng.PerfStats.fieldPicHit++
+                // move-to-front: promote 2→1
+                val tK = rKey2; val tV = rVer2; val tG = rGetter2
+                rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                rKey1 = tK; rVer1 = tV; rGetter1 = tG
+                val rec0 = g(base, scope)
+                if (base is ObjClass) {
+                    val idx0 = base.classScope?.getSlotIndexOf(name)
+                    if (idx0 != null) { tKey = key; tVer = ver; tFrameId = scope.frameId; tRecord = rec0 } else { tRecord = null }
+                } else { tRecord = null }
+                return rec0
+            } }
+            rGetter3?.let { g -> if (key == rKey3 && ver == rVer3) {
+                if (picCounters) net.sergeych.lyng.PerfStats.fieldPicHit++
+                // move-to-front: promote 3→1
+                val tK = rKey3; val tV = rVer3; val tG = rGetter3
+                rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
+                rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                rKey1 = tK; rVer1 = tV; rGetter1 = tG
+                val rec0 = g(base, scope)
+                if (base is ObjClass) {
+                    val idx0 = base.classScope?.getSlotIndexOf(name)
+                    if (idx0 != null) { tKey = key; tVer = ver; tFrameId = scope.frameId; tRecord = rec0 } else { tRecord = null }
+                } else { tRecord = null }
+                return rec0
+            } }
+            rGetter4?.let { g -> if (key == rKey4 && ver == rVer4) {
+                if (picCounters) net.sergeych.lyng.PerfStats.fieldPicHit++
+                // move-to-front: promote 4→1
+                val tK = rKey4; val tV = rVer4; val tG = rGetter4
+                rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
+                rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
+                rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                rKey1 = tK; rVer1 = tV; rGetter1 = tG
                 val rec0 = g(base, scope)
                 if (base is ObjClass) {
                     val idx0 = base.classScope?.getSlotIndexOf(name)
@@ -300,7 +362,9 @@ class FieldRef(
             // Slow path
             if (picCounters) net.sergeych.lyng.PerfStats.fieldPicMiss++
             val rec = base.readField(scope, name)
-            // Install move-to-front with a handle-aware getter. Where safe, capture resolved handles.
+            // Install move-to-front with a handle-aware getter (shift 1→2→3→4; put new at 1)
+            rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
+            rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
             rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
             when (base) {
                 is ObjClass -> {
@@ -336,6 +400,19 @@ class FieldRef(
             // no-op on null receiver for optional chaining assignment
             return
         }
+        // Read→write micro fast-path: reuse transient record captured by get()
+        if (fieldPic) {
+            val (k, v) = receiverKeyAndVersion(base)
+            val rec = tRecord
+            if (rec != null && tKey == k && tVer == v && tFrameId == scope.frameId) {
+                // visibility/mutability checks
+                if (!rec.isMutable) scope.raiseError(ObjIllegalAssignmentException(scope, "can't reassign val $name"))
+                if (!rec.visibility.isPublic)
+                    scope.raiseError(ObjAccessException(scope, "can't access non-public field $name"))
+                if (rec.value.assign(scope, newValue) == null) rec.value = newValue
+                return
+            }
+        }
         if (fieldPic) {
             val (key, ver) = receiverKeyAndVersion(base)
             wSetter1?.let { s -> if (key == wKey1 && ver == wVer1) {
@@ -344,12 +421,37 @@ class FieldRef(
             } }
             wSetter2?.let { s -> if (key == wKey2 && ver == wVer2) {
                 if (picCounters) net.sergeych.lyng.PerfStats.fieldPicSetHit++
+                // move-to-front: promote 2→1
+                val tK = wKey2; val tV = wVer2; val tS = wSetter2
+                wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
+                wKey1 = tK; wVer1 = tV; wSetter1 = tS
+                return s(base, scope, newValue)
+            } }
+            wSetter3?.let { s -> if (key == wKey3 && ver == wVer3) {
+                if (picCounters) net.sergeych.lyng.PerfStats.fieldPicSetHit++
+                // move-to-front: promote 3→1
+                val tK = wKey3; val tV = wVer3; val tS = wSetter3
+                wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
+                wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
+                wKey1 = tK; wVer1 = tV; wSetter1 = tS
+                return s(base, scope, newValue)
+            } }
+            wSetter4?.let { s -> if (key == wKey4 && ver == wVer4) {
+                if (picCounters) net.sergeych.lyng.PerfStats.fieldPicSetHit++
+                // move-to-front: promote 4→1
+                val tK = wKey4; val tV = wVer4; val tS = wSetter4
+                wKey4 = wKey3; wVer4 = wVer3; wSetter4 = wSetter3
+                wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
+                wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
+                wKey1 = tK; wVer1 = tV; wSetter1 = tS
                 return s(base, scope, newValue)
             } }
             // Slow path
             if (picCounters) net.sergeych.lyng.PerfStats.fieldPicSetMiss++
             base.writeField(scope, name, newValue)
-            // Install move-to-front with a handle-aware setter
+            // Install move-to-front with a handle-aware setter (shift 1→2→3→4; put new at 1)
+            wKey4 = wKey3; wVer4 = wVer3; wSetter4 = wSetter3
+            wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
             wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
             when (base) {
                 is ObjClass -> {
@@ -409,12 +511,21 @@ class IndexRef(
     }
 
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
-        val base = target.get(scope).value
+        val fastRval = net.sergeych.lyng.PerfFlags.RVAL_FASTPATH
+        val base = if (fastRval) target.evalValue(scope) else target.get(scope).value
         if (base == ObjNull && isOptional) {
             // no-op on null receiver for optional chaining assignment
             return
         }
-        val idx = index.get(scope).value
+        val idx = if (fastRval) index.evalValue(scope) else index.get(scope).value
+        if (fastRval) {
+            // Mirror read fast-path with direct write for ObjList + ObjInt index
+            if (base is ObjList && idx is ObjInt) {
+                val i = idx.toInt()
+                base.list[i] = newValue
+                return
+            }
+        }
         base.putAt(scope, idx, newValue)
     }
 }
@@ -710,7 +821,9 @@ class FastLocalVarRef(
 
 class ListLiteralRef(private val entries: List<ListEntry>) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
-        val list = mutableListOf<Obj>()
+        // Heuristic capacity hint: count element entries; spreads handled opportunistically
+        val elemCount = entries.count { it is ListEntry.Element }
+        val list = ArrayList<Obj>(elemCount)
         for (e in entries) {
             when (e) {
                 is ListEntry.Element -> {
@@ -720,7 +833,11 @@ class ListLiteralRef(private val entries: List<ListEntry>) : ObjRef {
                 is ListEntry.Spread -> {
                     val elements = if (net.sergeych.lyng.PerfFlags.RVAL_FASTPATH) e.ref.evalValue(scope) else e.ref.get(scope).value
                     when (elements) {
-                        is ObjList -> list.addAll(elements.list)
+                        is ObjList -> {
+                            // Grow underlying array once when possible
+                            if (list is ArrayList) list.ensureCapacity(list.size + elements.list.size)
+                            list.addAll(elements.list)
+                        }
                         else -> scope.raiseError("Spread element must be list")
                     }
                 }
