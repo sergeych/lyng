@@ -1432,22 +1432,25 @@ class Compiler(
             var wasBroken = false
             var result: Obj = ObjVoid
             lateinit var doScope: Scope
-            do {
+            while (true) {
                 doScope = it.createChildScope().apply { skipScopeCreation = true }
                 try {
                     result = body.execute(doScope)
                 } catch (e: LoopBreakContinueException) {
                     if (e.label == label || e.label == null) {
-                        if (e.doContinue) continue
-                        else {
+                        if (!e.doContinue) {
                             result = e.result
                             wasBroken = true
                             break
                         }
+                        // for continue: just fall through to condition check below
+                    } else {
+                        // Not our label, let outer loops handle it
+                        throw e
                     }
-                    throw e
                 }
-            } while (condition.execute(doScope).toBool())
+                if (!condition.execute(doScope).toBool()) break
+            }
             if (!wasBroken) elseStatement?.let { s -> result = s.execute(it) }
             result
         }

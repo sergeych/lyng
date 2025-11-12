@@ -51,19 +51,24 @@ open class ObjException(
     suspend fun getStackTrace(): ObjList {
         return cachedStackTrace.get {
             val result = ObjList()
-            val cls = scope.get("StackTraceEntry")!!.value as ObjClass
+            val maybeCls = scope.get("StackTraceEntry")?.value as? ObjClass
             var s: Scope? = scope
             var lastPos: Pos? = null
             while (s != null) {
                 val pos = s.pos
                 if (pos != lastPos && !pos.currentLine.isEmpty()) {
-                    result.list += cls.callWithArgs(
-                        scope,
-                        pos.source.objSourceName,
-                        ObjInt(pos.line.toLong()),
-                        ObjInt(pos.column.toLong()),
-                        ObjString(pos.currentLine)
-                    )
+                    if (maybeCls != null) {
+                        result.list += maybeCls.callWithArgs(
+                            scope,
+                            pos.source.objSourceName,
+                            ObjInt(pos.line.toLong()),
+                            ObjInt(pos.column.toLong()),
+                            ObjString(pos.currentLine)
+                        )
+                    } else {
+                        // Fallback textual entry if StackTraceEntry class is not available in this scope
+                        result.list += ObjString("${'$'}{pos.source.objSourceName}:${'$'}{pos.line}:${'$'}{pos.column}: ${'$'}{pos.currentLine}")
+                    }
                 }
                 s = s.parent
                 lastPos = pos

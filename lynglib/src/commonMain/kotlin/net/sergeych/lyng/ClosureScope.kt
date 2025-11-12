@@ -25,21 +25,41 @@ import net.sergeych.lyng.obj.ObjRecord
  * from [closureScope] with proper precedence
  */
 class ClosureScope(val callScope: Scope, val closureScope: Scope) :
-    Scope(callScope, callScope.args, thisObj = callScope.thisObj) {
+    // Important: use closureScope.thisObj so unqualified members (e.g., fields) resolve to the instance
+    // we captured, not to the caller's `this` (e.g., FlowBuilder).
+    Scope(callScope, callScope.args, thisObj = closureScope.thisObj) {
 
     override fun get(name: String): ObjRecord? {
-        // we take arguments from the callerScope, the rest
-        // from the closure.
+        // Priority:
+        // 1) Arguments from the caller scope (if present in this frame)
+        // 2) Instance/class members of the captured receiver (`closureScope.thisObj`), e.g., fields like `coll`, `factor`
+        // 3) Symbols from the captured closure scope (its locals and parents)
+        // 4) Instance members of the caller's `this` (e.g., FlowBuilder.emit)
+        // 5) Fallback to the standard chain (this frame -> parent (callScope) -> class members)
 
         // note using super, not callScope, as arguments are assigned by the constructor
-        // and are not assigned yet to vars in callScope self:
-        super.objects[name]?.let {
-//            if( name == "predicate" ) {
-//                println("predicate: ${it.type.isArgument}: ${it.value}")
-//            }
-            if( it.type.isArgument ) return it
-        }
-        return closureScope.get(name)
+        // and are not yet exposed via callScope.get at this point:
+        super.objects[name]?.let { if (it.type.isArgument) return it }
+
+        // Prefer instance fields/methods declared on the captured receiver:
+        // First, resolve real instance fields stored in the instance scope (constructor vars like `coll`, `factor`)
+        (closureScope.thisObj as? net.sergeych.lyng.obj.ObjInstance)
+            ?.instanceScope
+            ?.objects
+            ?.get(name)
+            ?.let { return it }
+
+        // Then, try class-declared members (methods/properties declared in the class body)
+        closureScope.thisObj.objClass.getInstanceMemberOrNull(name)?.let { return it }
+
+        // Then delegate to the full closure scope chain (locals, parents, etc.)
+        closureScope.get(name)?.let { return it }
+
+        // Allow resolving instance members of the caller's `this` (e.g., FlowBuilder.emit)
+        callScope.thisObj.objClass.getInstanceMemberOrNull(name)?.let { return it }
+
+        // Fallback to the standard lookup chain: this frame -> parent (callScope) -> class members
+        return super.get(name)
     }
 }
 

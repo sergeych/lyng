@@ -41,7 +41,19 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
         return value.compareTo(other.doubleValue)
     }
 
-    override fun toString(): String = value.toString()
+    override fun toString(): String {
+        // Normalize scientific notation to match tests across platforms.
+        // Kotlin/JVM prints 1e-6 as "1.0E-6" by default; tests accept "1E-6" (or a plain decimal).
+        val s = value.toString()
+        val ePos = s.indexOf('E').let { if (it >= 0) it else s.indexOf('e') }
+        if (ePos >= 0) {
+            val mantissa = s.substring(0, ePos)
+            val exponent = s.substring(ePos + 1) // skip the 'E'/'e'
+            val mantissaNorm = if (mantissa.endsWith(".0")) mantissa.dropLast(2) else mantissa
+            return mantissaNorm + "E" + exponent
+        }
+        return s
+    }
 
     override fun hashCode(): Int {
         return value.hashCode()

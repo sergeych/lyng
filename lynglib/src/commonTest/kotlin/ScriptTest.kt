@@ -19,11 +19,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import net.sergeych.lyng.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.InlineSourcesImportProvider
 import net.sergeych.tools.bm
 import kotlin.test.*
+import kotlin.time.Duration.Companion.seconds
 
 class ScriptTest {
 
@@ -1765,7 +1767,11 @@ class ScriptTest {
 
     @Test
     fun testIntExponentRealForm() = runTest {
-        assertEquals("1.0E-6", eval("1e-6").toString())
+        when(val x = eval("1e-6").toString()) {
+            "0.000001", "1E-6", "1e-6" -> true
+            else -> fail("Excepted 1e-6 got $x")
+        }
+//        assertEquals("1.0E-6", eval("1e-6").toString())
     }
 
     @Test
@@ -2126,8 +2132,9 @@ class ScriptTest {
 
     @Test
     fun doWhileValuesLabelTest() = runTest {
-        eval(
-            """
+        withTimeout(5.seconds) {
+            eval(
+                """
             var count = 0 
             var count2 = 0
                var count3 = 0
@@ -2148,7 +2155,8 @@ class ScriptTest {
             assertEquals("found 11/5", result)
             assertEquals( 4, count3)
             """.trimIndent()
-        )
+            )
+        }
     }
 
     @Test

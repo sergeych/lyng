@@ -218,8 +218,10 @@ class Script(
                 ObjVoid
             }
 
+            // Delay in milliseconds (plain numeric). For time-aware variants use lyng.time.Duration API.
             addVoidFn("delay") {
-                delay((this.args.firstAndOnly().toDouble()/1000.0).roundToLong())
+                val ms = (this.args.firstAndOnly().toDouble()).roundToLong()
+                delay(ms)
             }
 
             addConst("Object", rootObjectType)
