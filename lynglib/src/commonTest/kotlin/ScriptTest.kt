@@ -2507,6 +2507,27 @@ class ScriptTest {
     }
 
     @Test
+    fun testApplyFromStatic() = runTest {
+        eval(
+            """
+                class Foo(value) {
+                
+                    fun test() {
+                        "test: "+value
+                    }
+                    static val instance = Foo("bar")
+                }
+                
+                Foo.instance.apply {
+                    assertEquals("bar", value)
+                    assertEquals("test: bar", test())
+                }
+                
+        """.trimIndent()
+        )
+    }
+
+    @Test
     fun testExtend() = runTest() {
         eval(
             """
