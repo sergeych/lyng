@@ -28,7 +28,6 @@ import kotlin.test.*
 import kotlin.time.Duration.Companion.seconds
 
 class ScriptTest {
-
     @Test
     fun testVersion() {
         println("--------------------------------------------")

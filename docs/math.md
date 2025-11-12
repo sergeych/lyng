@@ -9,17 +9,37 @@ Same as in C++.
 | **Highest**<br>0 | power, not, calls, indexing, dot,... |
 |        1         | `%` `*` `/`                          |
 |        2         | `+` `-`                              |
-|        3         | bit shifts (NI)                      |
+|        3         | bit shifts `<<` `>>`                 |
 |        4         | `<=>` (1)                            |
 |        5         | `<=` `>=` `<` `>`                    |
 |        6         | `==` `!=`                            |
-|        7         | bitwise and `&` (NI)                 |
-|        9         | bitwise or `\|` (NI)                 |
+|        7         | bitwise and `&`                      |
+|        8         | bitwise xor `^`                      |
+|        9         | bitwise or `\|`                      |
 |        10        | `&&`                                 |
 |  11<br/>lowest   | `\|\|`                               |
 
-(NI)
-: not yet implemented.
+Bitwise operators
+: available only for `Int` values. For mixed `Int`/`Real` numeric expressions, bitwise operators are not defined.
+
+Bitwise NOT `~x`
+: unary operator that inverts all bits of a 64‑bit signed integer (`Int`). It follows two's‑complement rules, so
+  `~x` is numerically equal to `-(x + 1)`. Examples: `~0 == -1`, `~1 == -2`, `~(-1) == 0`.
+
+Examples:
+
+```
+5 & 3    // -> 1
+5 | 3    // -> 7
+5 ^ 3    // -> 6
+~0       // -> -1
+1 << 3   // -> 8
+8 >> 3   // -> 1
+```
+
+Notes:
+- Shifts operate on 64-bit signed integers (`Int` is 64-bit). Right shift `>>` is arithmetic (sign-propagating).
+- Shift count is masked to the range 0..63, similar to the JVM/Kotlin behavior (e.g., `1 << 65` equals `1 << 1`).
 
 (1)
 : Shuttle operator: `a <=> b` returns 0 if a == b, negative Int if a < b and positive Int otherwise. It is necessary to

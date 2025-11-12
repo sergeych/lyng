@@ -118,6 +118,29 @@ class ObjInt(var value: Long, override val isConst: Boolean = false) : Obj(), Nu
         return ObjInt(-value)
     }
 
+    // Bitwise operations
+    override suspend fun bitAnd(scope: Scope, other: Obj): Obj =
+        if (other is ObjInt) ObjInt(this.value and other.value)
+        else scope.raiseIllegalArgument("bitwise and '&' requires Int, got ${other.objClass.className}")
+
+    override suspend fun bitOr(scope: Scope, other: Obj): Obj =
+        if (other is ObjInt) ObjInt(this.value or other.value)
+        else scope.raiseIllegalArgument("bitwise or '|' requires Int, got ${other.objClass.className}")
+
+    override suspend fun bitXor(scope: Scope, other: Obj): Obj =
+        if (other is ObjInt) ObjInt(this.value xor other.value)
+        else scope.raiseIllegalArgument("bitwise xor '^' requires Int, got ${other.objClass.className}")
+
+    override suspend fun shl(scope: Scope, other: Obj): Obj =
+        if (other is ObjInt) ObjInt(this.value shl (other.value.toInt() and 63))
+        else scope.raiseIllegalArgument("shift left '<<' requires Int, got ${other.objClass.className}")
+
+    override suspend fun shr(scope: Scope, other: Obj): Obj =
+        if (other is ObjInt) ObjInt(this.value shr (other.value.toInt() and 63))
+        else scope.raiseIllegalArgument("shift right '>>' requires Int, got ${other.objClass.className}")
+
+    override suspend fun bitNot(scope: Scope): Obj = ObjInt(this.value.inv())
+
     override suspend fun lynonType(): LynonType = when (value) {
         0L -> LynonType.Int0
         else -> {

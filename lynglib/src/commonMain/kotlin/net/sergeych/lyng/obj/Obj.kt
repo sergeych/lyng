@@ -183,6 +183,31 @@ open class Obj {
         return operatorMatch(scope,other).logicalNot(scope)
     }
 
+    // Bitwise ops default (override in numeric types that support them)
+    open suspend fun bitAnd(scope: Scope, other: Obj): Obj {
+        scope.raiseNotImplemented()
+    }
+
+    open suspend fun bitOr(scope: Scope, other: Obj): Obj {
+        scope.raiseNotImplemented()
+    }
+
+    open suspend fun bitXor(scope: Scope, other: Obj): Obj {
+        scope.raiseNotImplemented()
+    }
+
+    open suspend fun shl(scope: Scope, other: Obj): Obj {
+        scope.raiseNotImplemented()
+    }
+
+    open suspend fun shr(scope: Scope, other: Obj): Obj {
+        scope.raiseNotImplemented()
+    }
+
+    open suspend fun bitNot(scope: Scope): Obj {
+        scope.raiseNotImplemented()
+    }
+
     open suspend fun assign(scope: Scope, other: Obj): Obj? = null
 
     open fun getValue(scope: Scope) = this

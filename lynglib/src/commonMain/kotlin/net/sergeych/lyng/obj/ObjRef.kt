@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov
+ * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 package net.sergeych.lyng.obj
@@ -40,7 +41,7 @@ class ValueFnRef(private val fn: suspend (Scope) -> ObjRecord) : ObjRef {
 }
 
 /** Unary operations supported by ObjRef. */
-enum class UnaryOp { NOT, NEGATE }
+enum class UnaryOp { NOT, NEGATE, BITNOT }
 
 /** Binary operations supported by ObjRef. */
 enum class BinOp {
@@ -50,6 +51,11 @@ enum class BinOp {
     IN, NOTIN,
     IS, NOTIS,
     SHUTTLE,
+    // bitwise
+    BAND, BXOR, BOR,
+    // shifts
+    SHL, SHR,
+    // arithmetic
     PLUS, MINUS, STAR, SLASH, PERCENT
 }
 
@@ -60,6 +66,7 @@ class UnaryOpRef(private val op: UnaryOp, private val a: ObjRef) : ObjRef {
         val r = when (op) {
             UnaryOp.NOT -> v.logicalNot(scope)
             UnaryOp.NEGATE -> v.negate(scope)
+            UnaryOp.BITNOT -> v.bitNot(scope)
         }
         return r.asReadonly
     }
@@ -97,6 +104,11 @@ class BinaryOpRef(private val op: BinOp, private val left: ObjRef, private val r
                     BinOp.STAR -> ObjInt(av * bv)
                     BinOp.SLASH -> if (bv != 0L) ObjInt(av / bv) else null
                     BinOp.PERCENT -> if (bv != 0L) ObjInt(av % bv) else null
+                    BinOp.BAND -> ObjInt(av and bv)
+                    BinOp.BXOR -> ObjInt(av xor bv)
+                    BinOp.BOR -> ObjInt(av or bv)
+                    BinOp.SHL -> ObjInt(av shl (bv.toInt() and 63))
+                    BinOp.SHR -> ObjInt(av shr (bv.toInt() and 63))
                     BinOp.EQ -> if (av == bv) ObjTrue else ObjFalse
                     BinOp.NEQ -> if (av != bv) ObjTrue else ObjFalse
                     BinOp.LT -> if (av < bv) ObjTrue else ObjFalse
@@ -210,6 +222,11 @@ class BinaryOpRef(private val op: BinOp, private val left: ObjRef, private val r
             BinOp.IS -> ObjBool(a.isInstanceOf(b))
             BinOp.NOTIS -> ObjBool(!a.isInstanceOf(b))
             BinOp.SHUTTLE -> ObjInt(a.compareTo(scope, b).toLong())
+            BinOp.BAND -> a.bitAnd(scope, b)
+            BinOp.BXOR -> a.bitXor(scope, b)
+            BinOp.BOR -> a.bitOr(scope, b)
+            BinOp.SHL -> a.shl(scope, b)
+            BinOp.SHR -> a.shr(scope, b)
             BinOp.PLUS -> a.plus(scope, b)
             BinOp.MINUS -> a.minus(scope, b)
             BinOp.STAR -> a.mul(scope, b)

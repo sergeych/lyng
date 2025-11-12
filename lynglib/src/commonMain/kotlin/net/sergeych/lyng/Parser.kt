@@ -191,6 +191,10 @@ private class Parser(fromPos: Pos) {
                     } else {
                         Token("<=", from, Token.Type.LTE)
                     }
+                } else if (currentChar == '<') {
+                    // Shift left <<
+                    pos.advance()
+                    Token("<<", from, Token.Type.SHL)
                 } else
                     Token("<", from, Token.Type.LT)
             }
@@ -199,6 +203,10 @@ private class Parser(fromPos: Pos) {
                 if (currentChar == '=') {
                     pos.advance()
                     Token(">=", from, Token.Type.GTE)
+                } else if (currentChar == '>') {
+                    // Shift right >>
+                    pos.advance()
+                    Token(">>", from, Token.Type.SHR)
                 } else
                     Token(">", from, Token.Type.GT)
             }
@@ -252,6 +260,10 @@ private class Parser(fromPos: Pos) {
                 } else
                     Token("&", from, Token.Type.BITAND)
             }
+
+            '^' -> Token("^", from, Token.Type.BITXOR)
+
+            '~' -> Token("~", from, Token.Type.BITNOT)
 
             '@' -> {
                 val label = loadChars(idNextChars)

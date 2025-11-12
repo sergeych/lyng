@@ -277,6 +277,12 @@ class Compiler(
                     operand = UnaryOpRef(UnaryOp.NOT, op)
                 }
 
+                Token.Type.BITNOT -> {
+                    if (operand != null) throw ScriptError(t.pos, "unexpected operator '~'")
+                    val op = parseTerm() ?: throw ScriptError(t.pos, "Expecting expression after '~'")
+                    operand = UnaryOpRef(UnaryOp.BITNOT, op)
+                }
+
                 Token.Type.DOT, Token.Type.NULL_COALESCE -> {
                     val isOptional = t.type == Token.Type.NULL_COALESCE
                     operand?.let { left ->
@@ -1867,6 +1873,16 @@ class Compiler(
             Operator(Token.Type.AND, ++lastPriority) { _, a, b ->
                 LogicalAndRef(a, b)
             },
+            // bitwise or/xor/and (tighter than &&, looser than equality)
+            Operator(Token.Type.BITOR, ++lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.BOR, a, b)
+            },
+            Operator(Token.Type.BITXOR, ++lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.BXOR, a, b)
+            },
+            Operator(Token.Type.BITAND, ++lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.BAND, a, b)
+            },
             // equality/not equality and related
             Operator(Token.Type.EQARROW, ++lastPriority) { _, a, b ->
                 BinaryOpRef(BinOp.EQARROW, a, b)
@@ -1923,6 +1939,13 @@ class Compiler(
             // shuttle <=>
             Operator(Token.Type.SHUTTLE, ++lastPriority) { _, a, b ->
                 BinaryOpRef(BinOp.SHUTTLE, a, b)
+            },
+            // shifts (tighter than shuttle, looser than +/-)
+            Operator(Token.Type.SHL, ++lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.SHL, a, b)
+            },
+            Operator(Token.Type.SHR, lastPriority) { _, a, b ->
+                BinaryOpRef(BinOp.SHR, a, b)
             },
             // arithmetic
             Operator(Token.Type.PLUS, ++lastPriority) { _, a, b ->
