@@ -1845,6 +1845,92 @@ class Compiler(
         }
 
         private var lastPriority = 0
+        // Helpers for conservative constant folding (literal-only). Only pure, side-effect-free ops.
+        private fun constOf(r: ObjRef): Obj? = (r as? ConstRef)?.constValue
+
+        private fun foldBinary(op: BinOp, aRef: ObjRef, bRef: ObjRef): Obj? {
+            val a = constOf(aRef) ?: return null
+            val b = constOf(bRef) ?: return null
+            return when (op) {
+                // Boolean logic
+                BinOp.OR -> if (a is ObjBool && b is ObjBool) if (a.value || b.value) ObjTrue else ObjFalse else null
+                BinOp.AND -> if (a is ObjBool && b is ObjBool) if (a.value && b.value) ObjTrue else ObjFalse else null
+
+                // Equality and comparisons for ints/strings/chars
+                BinOp.EQ -> when {
+                    a is ObjInt && b is ObjInt -> if (a.value == b.value) ObjTrue else ObjFalse
+                    a is ObjString && b is ObjString -> if (a.value == b.value) ObjTrue else ObjFalse
+                    a is ObjChar && b is ObjChar -> if (a.value == b.value) ObjTrue else ObjFalse
+                    else -> null
+                }
+                BinOp.NEQ -> when {
+                    a is ObjInt && b is ObjInt -> if (a.value != b.value) ObjTrue else ObjFalse
+                    a is ObjString && b is ObjString -> if (a.value != b.value) ObjTrue else ObjFalse
+                    a is ObjChar && b is ObjChar -> if (a.value != b.value) ObjTrue else ObjFalse
+                    else -> null
+                }
+                BinOp.LT -> when {
+                    a is ObjInt && b is ObjInt -> if (a.value < b.value) ObjTrue else ObjFalse
+                    a is ObjString && b is ObjString -> if (a.value < b.value) ObjTrue else ObjFalse
+                    a is ObjChar && b is ObjChar -> if (a.value < b.value) ObjTrue else ObjFalse
+                    else -> null
+                }
+                BinOp.LTE -> when {
+                    a is ObjInt && b is ObjInt -> if (a.value <= b.value) ObjTrue else ObjFalse
+                    a is ObjString && b is ObjString -> if (a.value <= b.value) ObjTrue else ObjFalse
+                    a is ObjChar && b is ObjChar -> if (a.value <= b.value) ObjTrue else ObjFalse
+                    else -> null
+                }
+                BinOp.GT -> when {
+                    a is ObjInt && b is ObjInt -> if (a.value > b.value) ObjTrue else ObjFalse
+                    a is ObjString && b is ObjString -> if (a.value > b.value) ObjTrue else ObjFalse
+                    a is ObjChar && b is ObjChar -> if (a.value > b.value) ObjTrue else ObjFalse
+                    else -> null
+                }
+                BinOp.GTE -> when {
+                    a is ObjInt && b is ObjInt -> if (a.value >= b.value) ObjTrue else ObjFalse
+                    a is ObjString && b is ObjString -> if (a.value >= b.value) ObjTrue else ObjFalse
+                    a is ObjChar && b is ObjChar -> if (a.value >= b.value) ObjTrue else ObjFalse
+                    else -> null
+                }
+
+                // Arithmetic for ints only (keep semantics simple at compile time)
+                BinOp.PLUS -> when {
+                    a is ObjInt && b is ObjInt -> ObjInt(a.value + b.value)
+                    a is ObjString && b is ObjString -> ObjString(a.value + b.value)
+                    else -> null
+                }
+                BinOp.MINUS -> if (a is ObjInt && b is ObjInt) ObjInt(a.value - b.value) else null
+                BinOp.STAR -> if (a is ObjInt && b is ObjInt) ObjInt(a.value * b.value) else null
+                BinOp.SLASH -> if (a is ObjInt && b is ObjInt && b.value != 0L) ObjInt(a.value / b.value) else null
+                BinOp.PERCENT -> if (a is ObjInt && b is ObjInt && b.value != 0L) ObjInt(a.value % b.value) else null
+
+                // Bitwise for ints
+                BinOp.BAND -> if (a is ObjInt && b is ObjInt) ObjInt(a.value and b.value) else null
+                BinOp.BXOR -> if (a is ObjInt && b is ObjInt) ObjInt(a.value xor b.value) else null
+                BinOp.BOR -> if (a is ObjInt && b is ObjInt) ObjInt(a.value or b.value) else null
+                BinOp.SHL -> if (a is ObjInt && b is ObjInt) ObjInt(a.value shl (b.value.toInt() and 63)) else null
+                BinOp.SHR -> if (a is ObjInt && b is ObjInt) ObjInt(a.value shr (b.value.toInt() and 63)) else null
+
+                // Non-folded / side-effecting or type-dependent ops
+                BinOp.EQARROW, BinOp.REF_EQ, BinOp.REF_NEQ, BinOp.MATCH, BinOp.NOTMATCH,
+                BinOp.IN, BinOp.NOTIN, BinOp.IS, BinOp.NOTIS, BinOp.SHUTTLE -> null
+            }
+        }
+
+        private fun foldUnary(op: UnaryOp, aRef: ObjRef): Obj? {
+            val a = constOf(aRef) ?: return null
+            return when (op) {
+                UnaryOp.NOT -> if (a is ObjBool) if (!a.value) ObjTrue else ObjFalse else null
+                UnaryOp.NEGATE -> when (a) {
+                    is ObjInt -> ObjInt(-a.value)
+                    is ObjReal -> ObjReal(-a.value)
+                    else -> null
+                }
+                UnaryOp.BITNOT -> if (a is ObjInt) ObjInt(a.value.inv()) else null
+            }
+        }
+
         val allOps = listOf(
             // assignments, lowest priority
             Operator(Token.Type.ASSIGN, lastPriority) { pos, a, b ->
@@ -1867,6 +1953,7 @@ class Compiler(
             },
             // logical 1
             Operator(Token.Type.OR, ++lastPriority) { _, a, b ->
+                foldBinary(BinOp.OR, a, b)?.let { return@Operator ConstRef(it.asReadonly) }
                 LogicalOrRef(a, b)
             },
             // logical 2
@@ -1875,12 +1962,15 @@ class Compiler(
             },
             // bitwise or/xor/and (tighter than &&, looser than equality)
             Operator(Token.Type.BITOR, ++lastPriority) { _, a, b ->
+                foldBinary(BinOp.BOR, a, b)?.let { return@Operator ConstRef(it.asReadonly) }
                 BinaryOpRef(BinOp.BOR, a, b)
             },
             Operator(Token.Type.BITXOR, ++lastPriority) { _, a, b ->
+                foldBinary(BinOp.BXOR, a, b)?.let { return@Operator ConstRef(it.asReadonly) }
                 BinaryOpRef(BinOp.BXOR, a, b)
             },
             Operator(Token.Type.BITAND, ++lastPriority) { _, a, b ->
+                foldBinary(BinOp.BAND, a, b)?.let { return@Operator ConstRef(it.asReadonly) }
                 BinaryOpRef(BinOp.BAND, a, b)
             },
             // equality/not equality and related
@@ -1888,9 +1978,11 @@ class Compiler(
                 BinaryOpRef(BinOp.EQARROW, a, b)
             },
             Operator(Token.Type.EQ, ++lastPriority) { _, a, b ->
+                foldBinary(BinOp.EQ, a, b)?.let { return@Operator ConstRef(it.asReadonly) }
                 BinaryOpRef(BinOp.EQ, a, b)
             },
             Operator(Token.Type.NEQ, lastPriority) { _, a, b ->
+                foldBinary(BinOp.NEQ, a, b)?.let { return@Operator ConstRef(it.asReadonly) }
                 BinaryOpRef(BinOp.NEQ, a, b)
             },
             Operator(Token.Type.REF_EQ, lastPriority) { _, a, b ->
@@ -1907,15 +1999,19 @@ class Compiler(
             },
             // relational <=,...
             Operator(Token.Type.LTE, ++lastPriority) { _, a, b ->
+                foldBinary(BinOp.LTE, a, b)?.let { return@Operator ConstRef(it.asReadonly) }
                 BinaryOpRef(BinOp.LTE, a, b)
             },
             Operator(Token.Type.LT, lastPriority) { _, a, b ->
+                foldBinary(BinOp.LT, a, b)?.let { return@Operator ConstRef(it.asReadonly) }
                 BinaryOpRef(BinOp.LT, a, b)
             },
             Operator(Token.Type.GTE, lastPriority) { _, a, b ->
+                foldBinary(BinOp.GTE, a, b)?.let { return@Operator ConstRef(it.asReadonly) }
                 BinaryOpRef(BinOp.GTE, a, b)
             },
             Operator(Token.Type.GT, lastPriority) { _, a, b ->
+                foldBinary(BinOp.GT, a, b)?.let { return@Operator ConstRef(it.asReadonly) }
                 BinaryOpRef(BinOp.GT, a, b)
             },
             // in, is:
@@ -1942,25 +2038,32 @@ class Compiler(
             },
             // shifts (tighter than shuttle, looser than +/-)
             Operator(Token.Type.SHL, ++lastPriority) { _, a, b ->
+                foldBinary(BinOp.SHL, a, b)?.let { return@Operator ConstRef(it.asReadonly) }
                 BinaryOpRef(BinOp.SHL, a, b)
             },
             Operator(Token.Type.SHR, lastPriority) { _, a, b ->
+                foldBinary(BinOp.SHR, a, b)?.let { return@Operator ConstRef(it.asReadonly) }
                 BinaryOpRef(BinOp.SHR, a, b)
             },
             // arithmetic
             Operator(Token.Type.PLUS, ++lastPriority) { _, a, b ->
+                foldBinary(BinOp.PLUS, a, b)?.let { return@Operator ConstRef(it.asReadonly) }
                 BinaryOpRef(BinOp.PLUS, a, b)
             },
             Operator(Token.Type.MINUS, lastPriority) { _, a, b ->
+                foldBinary(BinOp.MINUS, a, b)?.let { return@Operator ConstRef(it.asReadonly) }
                 BinaryOpRef(BinOp.MINUS, a, b)
             },
             Operator(Token.Type.STAR, ++lastPriority) { _, a, b ->
+                foldBinary(BinOp.STAR, a, b)?.let { return@Operator ConstRef(it.asReadonly) }
                 BinaryOpRef(BinOp.STAR, a, b)
             },
             Operator(Token.Type.SLASH, lastPriority) { _, a, b ->
+                foldBinary(BinOp.SLASH, a, b)?.let { return@Operator ConstRef(it.asReadonly) }
                 BinaryOpRef(BinOp.SLASH, a, b)
             },
             Operator(Token.Type.PERCENT, lastPriority) { _, a, b ->
+                foldBinary(BinOp.PERCENT, a, b)?.let { return@Operator ConstRef(it.asReadonly) }
                 BinaryOpRef(BinOp.PERCENT, a, b)
             },
         )

@@ -27,6 +27,11 @@ actual object PerfDefaults {
 
     actual val FIELD_PIC: Boolean = true
     actual val METHOD_PIC: Boolean = true
+    actual val FIELD_PIC_SIZE_4: Boolean = false
+    actual val METHOD_PIC_SIZE_4: Boolean = false
+    actual val PIC_ADAPTIVE_2_TO_4: Boolean = false
+    actual val PIC_ADAPTIVE_METHODS_ONLY: Boolean = false
+    actual val PIC_ADAPTIVE_HEURISTIC: Boolean = false
 
     actual val PIC_DEBUG_COUNTERS: Boolean = false
 
@@ -35,4 +40,7 @@ actual object PerfDefaults {
     actual val RVAL_FASTPATH: Boolean = false
     // Regex caching: disabled by default on WasmJS until validated
     actual val REGEX_CACHE: Boolean = false
+    actual val ARG_SMALL_ARITY_12: Boolean = false
+    actual val INDEX_PIC_SIZE_4: Boolean = false
+    actual val RANGE_FAST_ITER: Boolean = false
 }

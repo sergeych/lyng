@@ -26,12 +26,13 @@ import net.sergeych.lyng.obj.ObjList
  suspend fun Collection<ParsedArgument>.toArguments(scope: Scope, tailBlockMode: Boolean): Arguments {
      // Small-arity fast path (no splats) to reduce allocations
      if (PerfFlags.ARG_BUILDER) {
+        val limit = if (PerfFlags.ARG_SMALL_ARITY_12) 12 else 8
          var hasSplat = false
          var count = 0
          for (pa in this) {
              if (pa.isSplat) { hasSplat = true; break }
              count++
-             if (count > 8) break
+            if (count > limit) break
          }
          if (!hasSplat && count == this.size) {
              val quick = when (count) {
@@ -93,6 +94,60 @@ import net.sergeych.lyng.obj.ObjList
                      val a7 = this.elementAt(7).value.execute(scope)
                      Arguments(listOf(a0, a1, a2, a3, a4, a5, a6, a7), tailBlockMode)
                  }
+                9 -> if (PerfFlags.ARG_SMALL_ARITY_12) {
+                    val a0 = this.elementAt(0).value.execute(scope)
+                    val a1 = this.elementAt(1).value.execute(scope)
+                    val a2 = this.elementAt(2).value.execute(scope)
+                    val a3 = this.elementAt(3).value.execute(scope)
+                    val a4 = this.elementAt(4).value.execute(scope)
+                    val a5 = this.elementAt(5).value.execute(scope)
+                    val a6 = this.elementAt(6).value.execute(scope)
+                    val a7 = this.elementAt(7).value.execute(scope)
+                    val a8 = this.elementAt(8).value.execute(scope)
+                    Arguments(listOf(a0, a1, a2, a3, a4, a5, a6, a7, a8), tailBlockMode)
+                } else null
+                10 -> if (PerfFlags.ARG_SMALL_ARITY_12) {
+                    val a0 = this.elementAt(0).value.execute(scope)
+                    val a1 = this.elementAt(1).value.execute(scope)
+                    val a2 = this.elementAt(2).value.execute(scope)
+                    val a3 = this.elementAt(3).value.execute(scope)
+                    val a4 = this.elementAt(4).value.execute(scope)
+                    val a5 = this.elementAt(5).value.execute(scope)
+                    val a6 = this.elementAt(6).value.execute(scope)
+                    val a7 = this.elementAt(7).value.execute(scope)
+                    val a8 = this.elementAt(8).value.execute(scope)
+                    val a9 = this.elementAt(9).value.execute(scope)
+                    Arguments(listOf(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9), tailBlockMode)
+                } else null
+                11 -> if (PerfFlags.ARG_SMALL_ARITY_12) {
+                    val a0 = this.elementAt(0).value.execute(scope)
+                    val a1 = this.elementAt(1).value.execute(scope)
+                    val a2 = this.elementAt(2).value.execute(scope)
+                    val a3 = this.elementAt(3).value.execute(scope)
+                    val a4 = this.elementAt(4).value.execute(scope)
+                    val a5 = this.elementAt(5).value.execute(scope)
+                    val a6 = this.elementAt(6).value.execute(scope)
+                    val a7 = this.elementAt(7).value.execute(scope)
+                    val a8 = this.elementAt(8).value.execute(scope)
+                    val a9 = this.elementAt(9).value.execute(scope)
+                    val a10 = this.elementAt(10).value.execute(scope)
+                    Arguments(listOf(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10), tailBlockMode)
+                } else null
+                12 -> if (PerfFlags.ARG_SMALL_ARITY_12) {
+                    val a0 = this.elementAt(0).value.execute(scope)
+                    val a1 = this.elementAt(1).value.execute(scope)
+                    val a2 = this.elementAt(2).value.execute(scope)
+                    val a3 = this.elementAt(3).value.execute(scope)
+                    val a4 = this.elementAt(4).value.execute(scope)
+                    val a5 = this.elementAt(5).value.execute(scope)
+                    val a6 = this.elementAt(6).value.execute(scope)
+                    val a7 = this.elementAt(7).value.execute(scope)
+                    val a8 = this.elementAt(8).value.execute(scope)
+                    val a9 = this.elementAt(9).value.execute(scope)
+                    val a10 = this.elementAt(10).value.execute(scope)
+                    val a11 = this.elementAt(11).value.execute(scope)
+                    Arguments(listOf(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11), tailBlockMode)
+                } else null
                  else -> null
              }
              if (quick != null) return quick

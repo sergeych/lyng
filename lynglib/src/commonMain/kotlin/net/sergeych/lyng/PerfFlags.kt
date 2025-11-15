@@ -30,6 +30,8 @@ object PerfFlags {
 
     // Enable more efficient argument building and bulk-copy for splats
     var ARG_BUILDER: Boolean = PerfDefaults.ARG_BUILDER
+    // Extend small-arity no-alloc argument paths to 9..12 (JVM-first; default via PerfDefaults)
+    var ARG_SMALL_ARITY_12: Boolean = PerfDefaults.ARG_SMALL_ARITY_12
     // Allow early-return in optional calls before building args (semantics-compatible). Present for A/B only.
     var SKIP_ARGS_ON_NULL_RECEIVER: Boolean = PerfDefaults.SKIP_ARGS_ON_NULL_RECEIVER
     // Enable pooling of Scope frames for calls (may be JVM-only optimization)
@@ -38,6 +40,23 @@ object PerfFlags {
     // Step 2: PICs for fields and methods
     var FIELD_PIC: Boolean = PerfDefaults.FIELD_PIC
     var METHOD_PIC: Boolean = PerfDefaults.METHOD_PIC
+
+    // Optional: expand PIC size for fields/methods from 2 to 4 entries (JVM-first tuning)
+    // Initialized from platform defaults; still runtime-togglable.
+    var FIELD_PIC_SIZE_4: Boolean = PerfDefaults.FIELD_PIC_SIZE_4
+    var METHOD_PIC_SIZE_4: Boolean = PerfDefaults.METHOD_PIC_SIZE_4
+    // Adaptive growth from 2→4 entries per-site for field/method PICs when polymorphism is high (JVM-first)
+    var PIC_ADAPTIVE_2_TO_4: Boolean = PerfDefaults.PIC_ADAPTIVE_2_TO_4
+    // Adaptive growth for methods only (independent of fields)
+    var PIC_ADAPTIVE_METHODS_ONLY: Boolean = PerfDefaults.PIC_ADAPTIVE_METHODS_ONLY
+    // Heuristic to avoid or revert promotion when it shows no benefit (experimental)
+    var PIC_ADAPTIVE_HEURISTIC: Boolean = PerfDefaults.PIC_ADAPTIVE_HEURISTIC
+
+    // Index PIC/fast paths (JVM-first). By default follow FIELD_PIC enablement to avoid extra flags churn.
+    // Host apps/tests can flip independently if needed.
+    var INDEX_PIC: Boolean = FIELD_PIC
+    // Optional 4-entry PIC for IndexRef (JVM-first tuning); initialized from platform defaults
+    var INDEX_PIC_SIZE_4: Boolean = PerfDefaults.INDEX_PIC_SIZE_4
 
     // Debug/observability for PICs and fast paths (JVM-first)
     var PIC_DEBUG_COUNTERS: Boolean = PerfDefaults.PIC_DEBUG_COUNTERS
@@ -50,4 +69,7 @@ object PerfFlags {
 
     // Regex: enable small LRU cache for compiled patterns (JVM-first usage)
     var REGEX_CACHE: Boolean = PerfDefaults.REGEX_CACHE
+
+    // Specialized non-allocating integer range iteration in hot loops
+    var RANGE_FAST_ITER: Boolean = PerfDefaults.RANGE_FAST_ITER
 }

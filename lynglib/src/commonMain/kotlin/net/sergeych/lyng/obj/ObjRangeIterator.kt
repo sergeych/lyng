@@ -17,6 +17,7 @@
 
 package net.sergeych.lyng.obj
 
+import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.Scope
 
 class ObjRangeIterator(val self: ObjRange) : Obj() {
@@ -63,6 +64,30 @@ class ObjRangeIterator(val self: ObjRange) : Obj() {
             addFn("next") {
                 thisAs<ObjRangeIterator>().next(this)
             }
+        }
+    }
+}
+
+/**
+ * Fast iterator for simple integer ranges (step +1). Returned only when
+ * [PerfFlags.RANGE_FAST_ITER] is enabled and the range is an ascending int range.
+ */
+class ObjFastIntRangeIterator(private val start: Int, private val endExclusive: Int) : Obj() {
+
+    private var cur: Int = start
+
+    override val objClass: ObjClass = type
+
+    fun hasNext(): Boolean = cur < endExclusive
+
+    fun next(scope: Scope): Obj =
+        if (cur < endExclusive) ObjInt(cur++.toLong())
+        else scope.raiseError(ObjIterationFinishedException(scope))
+
+    companion object {
+        val type = ObjClass("FastIntRangeIterator", ObjIterator).apply {
+            addFn("hasNext") { thisAs<ObjFastIntRangeIterator>().hasNext().toObj() }
+            addFn("next") { thisAs<ObjFastIntRangeIterator>().next(this) }
         }
     }
 }

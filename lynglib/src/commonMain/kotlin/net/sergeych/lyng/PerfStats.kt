@@ -41,6 +41,10 @@ object PerfStats {
     // Primitive fast ops
     var primitiveFastOpsHit: Long = 0
 
+    // Index PIC
+    var indexPicHit: Long = 0
+    var indexPicMiss: Long = 0
+
     fun resetAll() {
         fieldPicHit = 0
         fieldPicMiss = 0
@@ -53,5 +57,7 @@ object PerfStats {
         fastLocalHit = 0
         fastLocalMiss = 0
         primitiveFastOpsHit = 0
+        indexPicHit = 0
+        indexPicMiss = 0
     }
 }

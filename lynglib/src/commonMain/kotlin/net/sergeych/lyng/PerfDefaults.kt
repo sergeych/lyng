@@ -32,6 +32,14 @@ expect object PerfDefaults {
 
     val FIELD_PIC: Boolean
     val METHOD_PIC: Boolean
+    // Optional larger PICs and adaptivity (JVM-first)
+    val FIELD_PIC_SIZE_4: Boolean
+    val METHOD_PIC_SIZE_4: Boolean
+    val PIC_ADAPTIVE_2_TO_4: Boolean
+    // Enable adaptivity only for methods (independent of fields)
+    val PIC_ADAPTIVE_METHODS_ONLY: Boolean
+    // Enable per-site heuristic to revert/avoid promotion when it shows no benefit
+    val PIC_ADAPTIVE_HEURISTIC: Boolean
 
     val PIC_DEBUG_COUNTERS: Boolean
 
@@ -40,4 +48,13 @@ expect object PerfDefaults {
 
     // Regex caching (JVM-first): small LRU for compiled patterns
     val REGEX_CACHE: Boolean
+
+    // Argument builder extended arity (JVM-first exploration)
+    val ARG_SMALL_ARITY_12: Boolean
+
+    // Index PIC sizing (JVM-first)
+    val INDEX_PIC_SIZE_4: Boolean
+
+    // Specialized non-allocating integer range iteration in hot loops
+    val RANGE_FAST_ITER: Boolean
 }

@@ -62,7 +62,23 @@ enum class BinOp {
 /** R-value reference for unary operations. */
 class UnaryOpRef(private val op: UnaryOp, private val a: ObjRef) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
-        val v = if (net.sergeych.lyng.PerfFlags.RVAL_FASTPATH) a.evalValue(scope) else a.get(scope).value
+        val fastRval = net.sergeych.lyng.PerfFlags.RVAL_FASTPATH
+        val v = if (fastRval) a.evalValue(scope) else a.get(scope).value
+        if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
+            val rFast: Obj? = when (op) {
+                UnaryOp.NOT -> if (v is ObjBool) if (!v.value) ObjTrue else ObjFalse else null
+                UnaryOp.NEGATE -> when (v) {
+                    is ObjInt -> ObjInt(-v.value)
+                    is ObjReal -> ObjReal(-v.value)
+                    else -> null
+                }
+                UnaryOp.BITNOT -> if (v is ObjInt) ObjInt(v.value.inv()) else null
+            }
+            if (rFast != null) {
+                if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.primitiveFastOpsHit++
+                return rFast.asReadonly
+            }
+        }
         val r = when (op) {
             UnaryOp.NOT -> v.logicalNot(scope)
             UnaryOp.NEGATE -> v.negate(scope)
@@ -303,8 +319,9 @@ class IncDecRef(
 /** Elvis operator reference: a ?: b */
 class ElvisRef(private val left: ObjRef, private val right: ObjRef) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
-        val a = if (net.sergeych.lyng.PerfFlags.RVAL_FASTPATH) left.evalValue(scope) else left.get(scope).value
-        val r = if (a != ObjNull) a else if (net.sergeych.lyng.PerfFlags.RVAL_FASTPATH) right.evalValue(scope) else right.get(scope).value
+        val fastRval = net.sergeych.lyng.PerfFlags.RVAL_FASTPATH
+        val a = if (fastRval) left.evalValue(scope) else left.get(scope).value
+        val r = if (a != ObjNull) a else if (fastRval) right.evalValue(scope) else right.get(scope).value
         return r.asReadonly
     }
 }
@@ -312,10 +329,12 @@ class ElvisRef(private val left: ObjRef, private val right: ObjRef) : ObjRef {
 /** Logical OR with short-circuit: a || b */
 class LogicalOrRef(private val left: ObjRef, private val right: ObjRef) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
-        val a = if (net.sergeych.lyng.PerfFlags.RVAL_FASTPATH) left.evalValue(scope) else left.get(scope).value
+        val fastRval = net.sergeych.lyng.PerfFlags.RVAL_FASTPATH
+        val fastPrim = net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS
+        val a = if (fastRval) left.evalValue(scope) else left.get(scope).value
         if ((a as? ObjBool)?.value == true) return ObjTrue.asReadonly
-        val b = if (net.sergeych.lyng.PerfFlags.RVAL_FASTPATH) right.evalValue(scope) else right.get(scope).value
-        if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
+        val b = if (fastRval) right.evalValue(scope) else right.get(scope).value
+        if (fastPrim) {
             if (a is ObjBool && b is ObjBool) {
                 return if (a.value || b.value) ObjTrue.asReadonly else ObjFalse.asReadonly
             }
@@ -347,6 +366,8 @@ class LogicalAndRef(private val left: ObjRef, private val right: ObjRef) : ObjRe
  */
 class ConstRef(private val record: ObjRecord) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord = record
+    // Expose constant value for compiler constant folding (pure, read-only)
+    val constValue: Obj get() = record.value
 }
 
 /**
@@ -373,6 +394,48 @@ class FieldRef(
     // Transient per-step cache to optimize read-then-write sequences within the same frame
     private var tKey: Long = 0L; private var tVer: Int = -1; private var tFrameId: Long = -1L; private var tRecord: ObjRecord? = null
 
+    // Adaptive PIC (2→4) for reads/writes
+    private var rAccesses: Int = 0; private var rMisses: Int = 0; private var rPromotedTo4: Boolean = false
+    private var wAccesses: Int = 0; private var wMisses: Int = 0; private var wPromotedTo4: Boolean = false
+    private inline fun size4ReadsEnabled(): Boolean =
+        net.sergeych.lyng.PerfFlags.FIELD_PIC_SIZE_4 ||
+            (net.sergeych.lyng.PerfFlags.PIC_ADAPTIVE_2_TO_4 && rPromotedTo4)
+    private inline fun size4WritesEnabled(): Boolean =
+        net.sergeych.lyng.PerfFlags.FIELD_PIC_SIZE_4 ||
+            (net.sergeych.lyng.PerfFlags.PIC_ADAPTIVE_2_TO_4 && wPromotedTo4)
+    private fun noteReadHit() {
+        if (!net.sergeych.lyng.PerfFlags.PIC_ADAPTIVE_2_TO_4) return
+        val a = (rAccesses + 1).coerceAtMost(1_000_000)
+        rAccesses = a
+    }
+    private fun noteReadMiss() {
+        if (!net.sergeych.lyng.PerfFlags.PIC_ADAPTIVE_2_TO_4) return
+        val a = (rAccesses + 1).coerceAtMost(1_000_000)
+        rAccesses = a
+        rMisses = (rMisses + 1).coerceAtMost(1_000_000)
+        if (!rPromotedTo4 && a >= 256) {
+            // promote if miss rate > 20%
+            if (rMisses * 100 / a > 20) rPromotedTo4 = true
+            // reset counters after decision
+            rAccesses = 0; rMisses = 0
+        }
+    }
+    private fun noteWriteHit() {
+        if (!net.sergeych.lyng.PerfFlags.PIC_ADAPTIVE_2_TO_4) return
+        val a = (wAccesses + 1).coerceAtMost(1_000_000)
+        wAccesses = a
+    }
+    private fun noteWriteMiss() {
+        if (!net.sergeych.lyng.PerfFlags.PIC_ADAPTIVE_2_TO_4) return
+        val a = (wAccesses + 1).coerceAtMost(1_000_000)
+        wAccesses = a
+        wMisses = (wMisses + 1).coerceAtMost(1_000_000)
+        if (!wPromotedTo4 && a >= 256) {
+            if (wMisses * 100 / a > 20) wPromotedTo4 = true
+            wAccesses = 0; wMisses = 0
+        }
+    }
+
     override suspend fun get(scope: Scope): ObjRecord {
         val fastRval = net.sergeych.lyng.PerfFlags.RVAL_FASTPATH
         val fieldPic = net.sergeych.lyng.PerfFlags.FIELD_PIC
@@ -383,6 +446,7 @@ class FieldRef(
             val (key, ver) = receiverKeyAndVersion(base)
             rGetter1?.let { g -> if (key == rKey1 && ver == rVer1) {
                 if (picCounters) net.sergeych.lyng.PerfStats.fieldPicHit++
+                noteReadHit()
                 val rec0 = g(base, scope)
                 if (base is ObjClass) {
                     val idx0 = base.classScope?.getSlotIndexOf(name)
@@ -392,6 +456,7 @@ class FieldRef(
             } }
             rGetter2?.let { g -> if (key == rKey2 && ver == rVer2) {
                 if (picCounters) net.sergeych.lyng.PerfStats.fieldPicHit++
+                noteReadHit()
                 // move-to-front: promote 2→1
                 val tK = rKey2; val tV = rVer2; val tG = rGetter2
                 rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
@@ -403,8 +468,9 @@ class FieldRef(
                 } else { tRecord = null }
                 return rec0
             } }
-            rGetter3?.let { g -> if (key == rKey3 && ver == rVer3) {
+            if (size4ReadsEnabled()) rGetter3?.let { g -> if (key == rKey3 && ver == rVer3) {
                 if (picCounters) net.sergeych.lyng.PerfStats.fieldPicHit++
+                noteReadHit()
                 // move-to-front: promote 3→1
                 val tK = rKey3; val tV = rVer3; val tG = rGetter3
                 rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
@@ -417,8 +483,9 @@ class FieldRef(
                 } else { tRecord = null }
                 return rec0
             } }
-            rGetter4?.let { g -> if (key == rKey4 && ver == rVer4) {
+            if (size4ReadsEnabled()) rGetter4?.let { g -> if (key == rKey4 && ver == rVer4) {
                 if (picCounters) net.sergeych.lyng.PerfStats.fieldPicHit++
+                noteReadHit()
                 // move-to-front: promote 4→1
                 val tK = rKey4; val tV = rVer4; val tG = rGetter4
                 rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
@@ -434,6 +501,7 @@ class FieldRef(
             } }
             // Slow path
             if (picCounters) net.sergeych.lyng.PerfStats.fieldPicMiss++
+            noteReadMiss()
             val rec = try {
                 base.readField(scope, name)
             } catch (e: ExecutionError) {
@@ -444,9 +512,11 @@ class FieldRef(
                 rKey1 = key; rVer1 = ver; rGetter1 = { _, sc -> sc.raiseError(e.message ?: "no such field: $name") }
                 throw e
             }
-            // Install move-to-front with a handle-aware getter (shift 1→2→3→4; put new at 1)
-            rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
-            rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
+            // Install move-to-front with a handle-aware getter; honor PIC size flag
+            if (size4ReadsEnabled()) {
+                rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
+                rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
+            }
             rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
             when (base) {
                 is ObjClass -> {
@@ -499,18 +569,21 @@ class FieldRef(
             val (key, ver) = receiverKeyAndVersion(base)
             wSetter1?.let { s -> if (key == wKey1 && ver == wVer1) {
                 if (picCounters) net.sergeych.lyng.PerfStats.fieldPicSetHit++
+                noteWriteHit()
                 return s(base, scope, newValue)
             } }
             wSetter2?.let { s -> if (key == wKey2 && ver == wVer2) {
                 if (picCounters) net.sergeych.lyng.PerfStats.fieldPicSetHit++
+                noteWriteHit()
                 // move-to-front: promote 2→1
                 val tK = wKey2; val tV = wVer2; val tS = wSetter2
                 wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
                 wKey1 = tK; wVer1 = tV; wSetter1 = tS
                 return s(base, scope, newValue)
             } }
-            wSetter3?.let { s -> if (key == wKey3 && ver == wVer3) {
+            if (size4WritesEnabled()) wSetter3?.let { s -> if (key == wKey3 && ver == wVer3) {
                 if (picCounters) net.sergeych.lyng.PerfStats.fieldPicSetHit++
+                noteWriteHit()
                 // move-to-front: promote 3→1
                 val tK = wKey3; val tV = wVer3; val tS = wSetter3
                 wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
@@ -518,8 +591,9 @@ class FieldRef(
                 wKey1 = tK; wVer1 = tV; wSetter1 = tS
                 return s(base, scope, newValue)
             } }
-            wSetter4?.let { s -> if (key == wKey4 && ver == wVer4) {
+            if (size4WritesEnabled()) wSetter4?.let { s -> if (key == wKey4 && ver == wVer4) {
                 if (picCounters) net.sergeych.lyng.PerfStats.fieldPicSetHit++
+                noteWriteHit()
                 // move-to-front: promote 4→1
                 val tK = wKey4; val tV = wVer4; val tS = wSetter4
                 wKey4 = wKey3; wVer4 = wVer3; wSetter4 = wSetter3
@@ -530,10 +604,13 @@ class FieldRef(
             } }
             // Slow path
             if (picCounters) net.sergeych.lyng.PerfStats.fieldPicSetMiss++
+            noteWriteMiss()
             base.writeField(scope, name, newValue)
-            // Install move-to-front with a handle-aware setter (shift 1→2→3→4; put new at 1)
-            wKey4 = wKey3; wVer4 = wVer3; wSetter4 = wSetter3
-            wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
+            // Install move-to-front with a handle-aware setter; honor PIC size flag
+            if (size4WritesEnabled()) {
+                wKey4 = wKey3; wVer4 = wVer3; wSetter4 = wSetter3
+                wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
+            }
             wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
             when (base) {
                 is ObjClass -> {
@@ -565,6 +642,63 @@ class FieldRef(
         is ObjInstance -> obj.objClass.classId to obj.objClass.layoutVersion
         is ObjClass -> obj.classId to obj.layoutVersion
         else -> 0L to -1 // no caching for primitives/dynamics without stable shape
+    }
+
+    override suspend fun evalValue(scope: Scope): Obj {
+        // Mirror get(), but return raw Obj to avoid transient ObjRecord on R-value paths
+        val fastRval = net.sergeych.lyng.PerfFlags.RVAL_FASTPATH
+        val fieldPic = net.sergeych.lyng.PerfFlags.FIELD_PIC
+        val picCounters = net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS
+        val base = if (fastRval) target.evalValue(scope) else target.get(scope).value
+        if (base == ObjNull && isOptional) return ObjNull
+        if (fieldPic) {
+            val (key, ver) = receiverKeyAndVersion(base)
+            rGetter1?.let { g -> if (key == rKey1 && ver == rVer1) {
+                if (picCounters) net.sergeych.lyng.PerfStats.fieldPicHit++
+                return g(base, scope).value
+            } }
+            rGetter2?.let { g -> if (key == rKey2 && ver == rVer2) {
+                if (picCounters) net.sergeych.lyng.PerfStats.fieldPicHit++
+                val tK = rKey2; val tV = rVer2; val tG = rGetter2
+                rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                rKey1 = tK; rVer1 = tV; rGetter1 = tG
+                return g(base, scope).value
+            } }
+            if (size4ReadsEnabled()) rGetter3?.let { g -> if (key == rKey3 && ver == rVer3) {
+                if (picCounters) net.sergeych.lyng.PerfStats.fieldPicHit++
+                val tK = rKey3; val tV = rVer3; val tG = rGetter3
+                rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
+                rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                rKey1 = tK; rVer1 = tV; rGetter1 = tG
+                return g(base, scope).value
+            } }
+            if (size4ReadsEnabled()) rGetter4?.let { g -> if (key == rKey4 && ver == rVer4) {
+                if (picCounters) net.sergeych.lyng.PerfStats.fieldPicHit++
+                val tK = rKey4; val tV = rVer4; val tG = rGetter4
+                rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
+                rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
+                rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                rKey1 = tK; rVer1 = tV; rGetter1 = tG
+                return g(base, scope).value
+            } }
+            if (picCounters) net.sergeych.lyng.PerfStats.fieldPicMiss++
+            val rec = base.readField(scope, name)
+            // install primary generic getter for this shape
+            when (base) {
+                is ObjClass -> {
+                    rKey1 = base.classId; rVer1 = base.layoutVersion; rGetter1 = { obj, sc -> obj.readField(sc, name) }
+                }
+                is ObjInstance -> {
+                    val cls = base.objClass
+                    rKey1 = cls.classId; rVer1 = cls.layoutVersion; rGetter1 = { obj, sc -> obj.readField(sc, name) }
+                }
+                else -> {
+                    rKey1 = 0L; rVer1 = -1; rGetter1 = null
+                }
+            }
+            return rec.value
+        }
+        return base.readField(scope, name).value
     }
 }
 
@@ -605,45 +739,137 @@ class IndexRef(
                 // Bounds checks are enforced by the underlying list access; exceptions propagate as before
                 return base.list[i].asMutable
             }
-            // Polymorphic inline cache for other common shapes
-            val (key, ver) = when (base) {
-                is ObjInstance -> base.objClass.classId to base.objClass.layoutVersion
-                is ObjClass -> base.classId to base.layoutVersion
-                else -> 0L to -1
+            // String[Int] fast path
+            if (base is ObjString && idx is ObjInt) {
+                val i = idx.toInt()
+                return ObjChar(base.value[i]).asMutable
             }
-            if (key != 0L) {
-                rGetter1?.let { g -> if (key == rKey1 && ver == rVer1) return g(base, scope, idx).asMutable }
-                rGetter2?.let { g -> if (key == rKey2 && ver == rVer2) {
-                    val tk = rKey2; val tv = rVer2; val tg = rGetter2
-                    rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
-                    rKey1 = tk; rVer1 = tv; rGetter1 = tg
-                    return g(base, scope, idx).asMutable
-                } }
-                rGetter3?.let { g -> if (key == rKey3 && ver == rVer3) {
-                    val tk = rKey3; val tv = rVer3; val tg = rGetter3
-                    rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
-                    rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
-                    rKey1 = tk; rVer1 = tv; rGetter1 = tg
-                    return g(base, scope, idx).asMutable
-                } }
-                rGetter4?.let { g -> if (key == rKey4 && ver == rVer4) {
-                    val tk = rKey4; val tv = rVer4; val tg = rGetter4
-                    rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
-                    rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
-                    rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
-                    rKey1 = tk; rVer1 = tv; rGetter1 = tg
-                    return g(base, scope, idx).asMutable
-                } }
-                // Miss: resolve and install generic handler
-                val v = base.getAt(scope, idx)
-                rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
-                rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
-                rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
-                rKey1 = key; rVer1 = ver; rGetter1 = { obj, sc, ix -> obj.getAt(sc, ix) }
+            // Map[String] fast path (common case); return ObjNull if absent
+            if (base is ObjMap && idx is ObjString) {
+                val v = base.map[idx] ?: ObjNull
                 return v.asMutable
+            }
+            if (net.sergeych.lyng.PerfFlags.INDEX_PIC) {
+                // Polymorphic inline cache for other common shapes
+                val (key, ver) = when (base) {
+                    is ObjInstance -> base.objClass.classId to base.objClass.layoutVersion
+                    is ObjClass -> base.classId to base.layoutVersion
+                    else -> 0L to -1
+                }
+                if (key != 0L) {
+                    rGetter1?.let { g -> if (key == rKey1 && ver == rVer1) {
+                        if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.indexPicHit++
+                        return g(base, scope, idx).asMutable
+                    } }
+                    rGetter2?.let { g -> if (key == rKey2 && ver == rVer2) {
+                        if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.indexPicHit++
+                        val tk = rKey2; val tv = rVer2; val tg = rGetter2
+                        rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                        rKey1 = tk; rVer1 = tv; rGetter1 = tg
+                        return g(base, scope, idx).asMutable
+                    } }
+                    if (net.sergeych.lyng.PerfFlags.INDEX_PIC_SIZE_4) rGetter3?.let { g -> if (key == rKey3 && ver == rVer3) {
+                        if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.indexPicHit++
+                        val tk = rKey3; val tv = rVer3; val tg = rGetter3
+                        rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
+                        rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                        rKey1 = tk; rVer1 = tv; rGetter1 = tg
+                        return g(base, scope, idx).asMutable
+                    } }
+                    if (net.sergeych.lyng.PerfFlags.INDEX_PIC_SIZE_4) rGetter4?.let { g -> if (key == rKey4 && ver == rVer4) {
+                        if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.indexPicHit++
+                        val tk = rKey4; val tv = rVer4; val tg = rGetter4
+                        rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
+                        rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
+                        rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                        rKey1 = tk; rVer1 = tv; rGetter1 = tg
+                        return g(base, scope, idx).asMutable
+                    } }
+                    // Miss: resolve and install generic handler
+                    if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.indexPicMiss++
+                    val v = base.getAt(scope, idx)
+                    if (net.sergeych.lyng.PerfFlags.INDEX_PIC_SIZE_4) {
+                        rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
+                        rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
+                    }
+                    rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                    rKey1 = key; rVer1 = ver; rGetter1 = { obj, sc, ix -> obj.getAt(sc, ix) }
+                    return v.asMutable
+                }
             }
         }
         return base.getAt(scope, idx).asMutable
+    }
+
+    override suspend fun evalValue(scope: Scope): Obj {
+        val fastRval = net.sergeych.lyng.PerfFlags.RVAL_FASTPATH
+        val base = if (fastRval) target.evalValue(scope) else target.get(scope).value
+        if (base == ObjNull && isOptional) return ObjNull
+        val idx = if (fastRval) index.evalValue(scope) else index.get(scope).value
+        if (fastRval) {
+            // Fast list[int] path
+            if (base is ObjList && idx is ObjInt) {
+                val i = idx.toInt()
+                return base.list[i]
+            }
+            // String[Int] fast path
+            if (base is ObjString && idx is ObjInt) {
+                val i = idx.toInt()
+                return ObjChar(base.value[i])
+            }
+            // Map[String] fast path
+            if (base is ObjMap && idx is ObjString) {
+                return base.map[idx] ?: ObjNull
+            }
+            if (net.sergeych.lyng.PerfFlags.INDEX_PIC) {
+                // PIC path analogous to get(), but returning raw Obj
+                val (key, ver) = when (base) {
+                    is ObjInstance -> base.objClass.classId to base.objClass.layoutVersion
+                    is ObjClass -> base.classId to base.layoutVersion
+                    else -> 0L to -1
+                }
+                if (key != 0L) {
+                    rGetter1?.let { g -> if (key == rKey1 && ver == rVer1) {
+                        if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.indexPicHit++
+                        return g(base, scope, idx)
+                    } }
+                    rGetter2?.let { g -> if (key == rKey2 && ver == rVer2) {
+                        if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.indexPicHit++
+                        val tk = rKey2; val tv = rVer2; val tg = rGetter2
+                        rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                        rKey1 = tk; rVer1 = tv; rGetter1 = tg
+                        return g(base, scope, idx)
+                    } }
+                    if (net.sergeych.lyng.PerfFlags.INDEX_PIC_SIZE_4) rGetter3?.let { g -> if (key == rKey3 && ver == rVer3) {
+                        if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.indexPicHit++
+                        val tk = rKey3; val tv = rVer3; val tg = rGetter3
+                        rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
+                        rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                        rKey1 = tk; rVer1 = tv; rGetter1 = tg
+                        return g(base, scope, idx)
+                    } }
+                    if (net.sergeych.lyng.PerfFlags.INDEX_PIC_SIZE_4) rGetter4?.let { g -> if (key == rKey4 && ver == rVer4) {
+                        if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.indexPicHit++
+                        val tk = rKey4; val tv = rVer4; val tg = rGetter4
+                        rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
+                        rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
+                        rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                        rKey1 = tk; rVer1 = tv; rGetter1 = tg
+                        return g(base, scope, idx)
+                    } }
+                    if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.indexPicMiss++
+                    val v = base.getAt(scope, idx)
+                    if (net.sergeych.lyng.PerfFlags.INDEX_PIC_SIZE_4) {
+                        rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
+                        rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
+                    }
+                    rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                    rKey1 = key; rVer1 = ver; rGetter1 = { obj, sc, ix -> obj.getAt(sc, ix) }
+                    return v
+                }
+            }
+        }
+        return base.getAt(scope, idx)
     }
 
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
@@ -661,42 +887,51 @@ class IndexRef(
                 base.list[i] = newValue
                 return
             }
-            // Polymorphic inline cache for index write
-            val (key, ver) = when (base) {
-                is ObjInstance -> base.objClass.classId to base.objClass.layoutVersion
-                is ObjClass -> base.classId to base.layoutVersion
-                else -> 0L to -1
-            }
-            if (key != 0L) {
-                wSetter1?.let { s -> if (key == wKey1 && ver == wVer1) { s(base, scope, idx, newValue); return } }
-                wSetter2?.let { s -> if (key == wKey2 && ver == wVer2) {
-                    val tk = wKey2; val tv = wVer2; val ts = wSetter2
-                    wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
-                    wKey1 = tk; wVer1 = tv; wSetter1 = ts
-                    s(base, scope, idx, newValue); return
-                } }
-                wSetter3?.let { s -> if (key == wKey3 && ver == wVer3) {
-                    val tk = wKey3; val tv = wVer3; val ts = wSetter3
-                    wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
-                    wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
-                    wKey1 = tk; wVer1 = tv; wSetter1 = ts
-                    s(base, scope, idx, newValue); return
-                } }
-                wSetter4?.let { s -> if (key == wKey4 && ver == wVer4) {
-                    val tk = wKey4; val tv = wVer4; val ts = wSetter4
-                    wKey4 = wKey3; wVer4 = wVer3; wSetter4 = wSetter3
-                    wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
-                    wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
-                    wKey1 = tk; wVer1 = tv; wSetter1 = ts
-                    s(base, scope, idx, newValue); return
-                } }
-                // Miss: perform write and install generic handler
-                base.putAt(scope, idx, newValue)
-                wKey4 = wKey3; wVer4 = wVer3; wSetter4 = wSetter3
-                wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
-                wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
-                wKey1 = key; wVer1 = ver; wSetter1 = { obj, sc, ix, v -> obj.putAt(sc, ix, v) }
+            // Direct write fast path for ObjMap + ObjString
+            if (base is ObjMap && idx is ObjString) {
+                base.map[idx] = newValue
                 return
+            }
+            if (net.sergeych.lyng.PerfFlags.INDEX_PIC) {
+                // Polymorphic inline cache for index write
+                val (key, ver) = when (base) {
+                    is ObjInstance -> base.objClass.classId to base.objClass.layoutVersion
+                    is ObjClass -> base.classId to base.layoutVersion
+                    else -> 0L to -1
+                }
+                if (key != 0L) {
+                    wSetter1?.let { s -> if (key == wKey1 && ver == wVer1) { s(base, scope, idx, newValue); return } }
+                    wSetter2?.let { s -> if (key == wKey2 && ver == wVer2) {
+                        val tk = wKey2; val tv = wVer2; val ts = wSetter2
+                        wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
+                        wKey1 = tk; wVer1 = tv; wSetter1 = ts
+                        s(base, scope, idx, newValue); return
+                    } }
+                    if (net.sergeych.lyng.PerfFlags.INDEX_PIC_SIZE_4) wSetter3?.let { s -> if (key == wKey3 && ver == wVer3) {
+                        val tk = wKey3; val tv = wVer3; val ts = wSetter3
+                        wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
+                        wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
+                        wKey1 = tk; wVer1 = tv; wSetter1 = ts
+                        s(base, scope, idx, newValue); return
+                    } }
+                    if (net.sergeych.lyng.PerfFlags.INDEX_PIC_SIZE_4) wSetter4?.let { s -> if (key == wKey4 && ver == wVer4) {
+                        val tk = wKey4; val tv = wVer4; val ts = wSetter4
+                        wKey4 = wKey3; wVer4 = wVer3; wSetter4 = wSetter3
+                        wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
+                        wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
+                        wKey1 = tk; wVer1 = tv; wSetter1 = ts
+                        s(base, scope, idx, newValue); return
+                    } }
+                    // Miss: perform write and install generic handler
+                    base.putAt(scope, idx, newValue)
+                    if (net.sergeych.lyng.PerfFlags.INDEX_PIC_SIZE_4) {
+                        wKey4 = wKey3; wVer4 = wVer3; wSetter4 = wSetter3
+                        wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
+                    }
+                    wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
+                    wKey1 = key; wVer1 = ver; wSetter1 = { obj, sc, ix, v -> obj.putAt(sc, ix, v) }
+                    return
+                }
             }
         }
         base.putAt(scope, idx, newValue)
@@ -752,6 +987,63 @@ class MethodCallRef(
     private var mKey3: Long = 0L; private var mVer3: Int = -1; private var mInvoker3: (suspend (Obj, Scope, Arguments) -> Obj)? = null
     private var mKey4: Long = 0L; private var mVer4: Int = -1; private var mInvoker4: (suspend (Obj, Scope, Arguments) -> Obj)? = null
 
+    // Adaptive PIC (2→4) for methods
+    private var mAccesses: Int = 0; private var mMisses: Int = 0; private var mPromotedTo4: Boolean = false
+    // Heuristic: windowed miss-rate tracking and temporary freeze back to size=2
+    private var mFreezeWindowsLeft: Int = 0
+    private var mWindowAccesses: Int = 0
+    private var mWindowMisses: Int = 0
+    private inline fun size4MethodsEnabled(): Boolean =
+        net.sergeych.lyng.PerfFlags.METHOD_PIC_SIZE_4 ||
+            ((net.sergeych.lyng.PerfFlags.PIC_ADAPTIVE_2_TO_4 || net.sergeych.lyng.PerfFlags.PIC_ADAPTIVE_METHODS_ONLY) && mPromotedTo4 && mFreezeWindowsLeft == 0)
+    private fun noteMethodHit() {
+        if (!(net.sergeych.lyng.PerfFlags.PIC_ADAPTIVE_2_TO_4 || net.sergeych.lyng.PerfFlags.PIC_ADAPTIVE_METHODS_ONLY)) return
+        val a = (mAccesses + 1).coerceAtMost(1_000_000)
+        mAccesses = a
+        if (net.sergeych.lyng.PerfFlags.PIC_ADAPTIVE_HEURISTIC) {
+            // Windowed tracking
+            mWindowAccesses = (mWindowAccesses + 1).coerceAtMost(1_000_000)
+            if (mWindowAccesses >= 256) endHeuristicWindow()
+        }
+    }
+    private fun noteMethodMiss() {
+        if (!(net.sergeych.lyng.PerfFlags.PIC_ADAPTIVE_2_TO_4 || net.sergeych.lyng.PerfFlags.PIC_ADAPTIVE_METHODS_ONLY)) return
+        val a = (mAccesses + 1).coerceAtMost(1_000_000)
+        mAccesses = a
+        mMisses = (mMisses + 1).coerceAtMost(1_000_000)
+        if (!mPromotedTo4 && mFreezeWindowsLeft == 0 && a >= 256) {
+            if (mMisses * 100 / a > 20) mPromotedTo4 = true
+            mAccesses = 0; mMisses = 0
+        }
+        if (net.sergeych.lyng.PerfFlags.PIC_ADAPTIVE_HEURISTIC) {
+            mWindowAccesses = (mWindowAccesses + 1).coerceAtMost(1_000_000)
+            mWindowMisses = (mWindowMisses + 1).coerceAtMost(1_000_000)
+            if (mWindowAccesses >= 256) endHeuristicWindow()
+        }
+    }
+
+    private fun endHeuristicWindow() {
+        // Called only when PIC_ADAPTIVE_HEURISTIC is true
+        val accesses = mWindowAccesses
+        val misses = mWindowMisses
+        // Reset window
+        mWindowAccesses = 0
+        mWindowMisses = 0
+        // Count down freeze if active
+        if (mFreezeWindowsLeft > 0) {
+            mFreezeWindowsLeft = (mFreezeWindowsLeft - 1).coerceAtLeast(0)
+            return
+        }
+        // If promoted, but still high miss rate, freeze back to 2 for a few windows
+        if (mPromotedTo4 && accesses >= 256) {
+            val rate = misses * 100 / accesses
+            if (rate >= 25) {
+                mPromotedTo4 = false
+                mFreezeWindowsLeft = 4 // freeze next 4 windows
+            }
+        }
+    }
+
     override suspend fun get(scope: Scope): ObjRecord {
         val fastRval = net.sergeych.lyng.PerfFlags.RVAL_FASTPATH
         val methodPic = net.sergeych.lyng.PerfFlags.METHOD_PIC
@@ -763,14 +1055,17 @@ class MethodCallRef(
             val (key, ver) = receiverKeyAndVersion(base)
             mInvoker1?.let { inv -> if (key == mKey1 && ver == mVer1) {
                 if (picCounters) net.sergeych.lyng.PerfStats.methodPicHit++
+                noteMethodHit()
                 return inv(base, scope, callArgs).asReadonly
             } }
             mInvoker2?.let { inv -> if (key == mKey2 && ver == mVer2) {
                 if (picCounters) net.sergeych.lyng.PerfStats.methodPicHit++
+                noteMethodHit()
                 return inv(base, scope, callArgs).asReadonly
             } }
-            mInvoker3?.let { inv -> if (key == mKey3 && ver == mVer3) {
+            if (size4MethodsEnabled()) mInvoker3?.let { inv -> if (key == mKey3 && ver == mVer3) {
                 if (picCounters) net.sergeych.lyng.PerfStats.methodPicHit++
+                noteMethodHit()
                 // move-to-front: promote 3→1
                 val tK = mKey3; val tV = mVer3; val tI = mInvoker3
                 mKey3 = mKey2; mVer3 = mVer2; mInvoker3 = mInvoker2
@@ -778,8 +1073,9 @@ class MethodCallRef(
                 mKey1 = tK; mVer1 = tV; mInvoker1 = tI
                 return inv(base, scope, callArgs).asReadonly
             } }
-            mInvoker4?.let { inv -> if (key == mKey4 && ver == mVer4) {
+            if (size4MethodsEnabled()) mInvoker4?.let { inv -> if (key == mKey4 && ver == mVer4) {
                 if (picCounters) net.sergeych.lyng.PerfStats.methodPicHit++
+                noteMethodHit()
                 // move-to-front: promote 4→1
                 val tK = mKey4; val tV = mVer4; val tI = mInvoker4
                 mKey4 = mKey3; mVer4 = mVer3; mInvoker4 = mInvoker3
@@ -790,6 +1086,7 @@ class MethodCallRef(
             } }
             // Slow path
             if (picCounters) net.sergeych.lyng.PerfStats.methodPicMiss++
+            noteMethodMiss()
             val result = try {
                 base.invokeInstanceMethod(scope, name, callArgs)
             } catch (e: ExecutionError) {
@@ -800,9 +1097,11 @@ class MethodCallRef(
                 mKey1 = key; mVer1 = ver; mInvoker1 = { _, sc, _ -> sc.raiseError(e.message ?: "method not found: $name") }
                 throw e
             }
-            // Install move-to-front with a handle-aware invoker: shift 1→2→3→4, put new at 1
-            mKey4 = mKey3; mVer4 = mVer3; mInvoker4 = mInvoker3
-            mKey3 = mKey2; mVer3 = mVer2; mInvoker3 = mInvoker2
+            // Install move-to-front with a handle-aware invoker; honor PIC size flag
+            if (size4MethodsEnabled()) {
+                mKey4 = mKey3; mVer4 = mVer3; mInvoker4 = mInvoker3
+                mKey3 = mKey2; mVer3 = mVer2; mInvoker3 = mInvoker2
+            }
             mKey2 = mKey1; mVer2 = mVer1; mInvoker2 = mInvoker1
             when (base) {
                 is ObjInstance -> {
@@ -889,6 +1188,18 @@ class LocalVarRef(private val name: String, private val atPos: Pos) : ObjRef {
         return scope[name] ?: scope.raiseError("symbol not defined: '$name'")
     }
 
+    override suspend fun evalValue(scope: Scope): Obj {
+        scope.pos = atPos
+        if (!PerfFlags.LOCAL_SLOT_PIC) {
+            scope.getSlotIndexOf(name)?.let { return scope.getSlotRecord(it).value }
+            return (scope[name] ?: scope.raiseError("symbol not defined: '$name'")).value
+        }
+        val hit = (cachedFrameId == scope.frameId && cachedSlot >= 0 && cachedSlot < scope.slotCount())
+        val slot = if (hit) cachedSlot else resolveSlot(scope)
+        if (slot >= 0) return scope.getSlotRecord(slot).value
+        return (scope[name] ?: scope.raiseError("symbol not defined: '$name'")).value
+    }
+
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
         scope.pos = atPos
         if (!PerfFlags.LOCAL_SLOT_PIC) {
@@ -927,6 +1238,11 @@ class BoundLocalVarRef(
     override suspend fun get(scope: Scope): ObjRecord {
         scope.pos = atPos
         return scope.getSlotRecord(slot)
+    }
+
+    override suspend fun evalValue(scope: Scope): Obj {
+        scope.pos = atPos
+        return scope.getSlotRecord(slot).value
     }
 
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
@@ -987,6 +1303,15 @@ class FastLocalVarRef(
             if (ownerValid) net.sergeych.lyng.PerfStats.fastLocalHit++ else net.sergeych.lyng.PerfStats.fastLocalMiss++
         }
         return actualOwner.getSlotRecord(slot)
+    }
+
+    override suspend fun evalValue(scope: Scope): Obj {
+        scope.pos = atPos
+        val ownerValid = isOwnerValidFor(scope)
+        val slot = if (ownerValid && cachedSlot >= 0) cachedSlot else resolveSlotInAncestry(scope)
+        val actualOwner = cachedOwnerScope
+        if (slot < 0 || actualOwner == null) scope.raiseError("local '$name' is not available in this scope")
+        return actualOwner.getSlotRecord(slot).value
     }
 
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {

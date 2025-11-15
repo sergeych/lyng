@@ -10,15 +10,35 @@ Optimizations are controlled by runtime‑mutable flags in `net.sergeych.lyng.Pe
 
 All flags are `var` and can be flipped at runtime (e.g., from tests or host apps) for A/B comparisons.
 
+### Workload presets (JVM‑first)
+
+To simplify switching between recommended flag sets for different workloads, use `net.sergeych.lyng.PerfProfiles`:
+
+```
+val snap = PerfProfiles.apply(PerfProfiles.Preset.BENCH)  // or BASELINE / BOOKS
+// ... run workload ...
+PerfProfiles.restore(snap)  // restore previous flags
+```
+
+- BASELINE: restores platform defaults from `PerfDefaults` (good rollback point).
+- BENCH: expression‑heavy micro‑bench focus (aggressive R‑value and PIC optimizations on JVM).
+- BOOKS: documentation workloads (prefers simpler paths; disables some PIC/arg builder features shown neutral/negative for this load in A/B).
+
 ## Key flags
 
 - `LOCAL_SLOT_PIC` — Runtime cache in `LocalVarRef` to avoid repeated name→slot lookups per frame (ON JVM default).
 - `EMIT_FAST_LOCAL_REFS` — Compiler emits `FastLocalVarRef` for identifiers known to be locals/params (ON JVM default).
 - `ARG_BUILDER` — Efficient argument building: small‑arity no‑alloc and pooled builder on JVM (ON JVM default).
+- `ARG_SMALL_ARITY_12` — Extends small‑arity no‑alloc call paths from 0–8 to 0–12 arguments (JVM‑first exploration; OFF by default). Use for codebases with many 9–12 arg calls; A/B before enabling.
 - `SKIP_ARGS_ON_NULL_RECEIVER` — Early return on optional‑null receivers before building args (semantics‑compatible). A/B only.
 - `SCOPE_POOL` — Scope frame pooling for calls (JVM, per‑thread ThreadLocal pool). ON by default on JVM; togglable at runtime.
 - `FIELD_PIC` — 2‑entry polymorphic inline cache for field reads/writes keyed by `(classId, layoutVersion)` (ON JVM default).
 - `METHOD_PIC` — 2‑entry PIC for instance method calls keyed by `(classId, layoutVersion)` (ON JVM default).
+- `FIELD_PIC_SIZE_4` — Increases Field PIC size from 2 to 4 entries (JVM-first tuning; OFF by default). Use for sites with >2 receiver shapes.
+- `METHOD_PIC_SIZE_4` — Increases Method PIC size from 2 to 4 entries (JVM-first tuning; OFF by default).
+- `PIC_ADAPTIVE_2_TO_4` — Adaptive growth of Field/Method PICs from 2→4 entries per-site when miss rate >20% over ≥256 accesses (JVM-first; OFF by default).
+- `INDEX_PIC` — Enables polymorphic inline cache for indexing (e.g., `a[i]`) and related fast paths. Defaults to follow `FIELD_PIC` on init; can be toggled independently.
+- `INDEX_PIC_SIZE_4` — Increases Index PIC size from 2 to 4 entries (JVM-first tuning). Default: ON for JVM; OFF elsewhere by default.
 - `PIC_DEBUG_COUNTERS` — Enable lightweight hit/miss counters via `PerfStats` (OFF by default).
 - `PRIMITIVE_FASTOPS` — Fast paths for `(ObjInt, ObjInt)` arithmetic/comparisons and `(ObjBool, ObjBool)` logic (ON JVM default).
 - `RVAL_FASTPATH` — Bypass `ObjRecord` in pure expression evaluation via `ObjRef.evalValue` (ON JVM default, OFF elsewhere).
@@ -28,10 +48,20 @@ See `src/commonMain/kotlin/net/sergeych/lyng/PerfFlags.kt` and `PerfDefaults.*.k
 ## Where optimizations apply
 
 - Locals: `FastLocalVarRef`, `LocalVarRef` per‑frame cache (PIC).
-- Calls: small‑arity zero‑alloc paths (0–8 args), pooled builder (JVM), and child frame pooling (optional).
-- Properties/methods: Field/Method PICs with receiver shape `(classId, layoutVersion)` and handle‑aware caches.
+- Calls: small‑arity zero‑alloc paths (0–8 args; optionally 0–12 with `ARG_SMALL_ARITY_12`), pooled builder (JVM), and child frame pooling (optional).
+- Properties/methods: Field/Method PICs with receiver shape `(classId, layoutVersion)` and handle‑aware caches; configurable 2→4 entries under flags.
 - Expressions: R‑value fast paths in hot nodes (`UnaryOpRef`, `BinaryOpRef`, `ElvisRef`, logical ops, `RangeRef`, `IndexRef` read, `FieldRef` receiver eval, `ListLiteralRef` elements, `CallRef` callee, `MethodCallRef` receiver, assignment RHS).
 - Primitives: Direct boolean/int ops where safe.
+
+### Compiler constant folding (conservative)
+- The compiler folds a safe subset of literal‑only expressions at compile time to reduce runtime work:
+  - Integer arithmetic: `+ - * / %` (division/modulo only when divisor ≠ 0).
+  - Bitwise integer ops: `& ^ | << >>`.
+  - Comparisons and equality for ints/strings/chars: `== != < <= > >=`.
+  - Boolean logic for literal booleans: `|| &&` and unary `!`.
+  - String concatenation of literal strings: `"a" + "b"`.
+- Non‑literal operands or side‑effecting constructs are not folded.
+- Semantics remain unchanged; tests verify parity.
 
 ## Running JVM micro‑benchmarks
 
@@ -46,8 +76,11 @@ Run individual tests to avoid multiplatform matrices:
 ./gradlew :lynglib:jvmTest --tests CallSplatBenchmarkTest
 ./gradlew :lynglib:jvmTest --tests PicBenchmarkTest
 ./gradlew :lynglib:jvmTest --tests PicInvalidationJvmTest
+./gradlew :lynglib:jvmTest --tests PicAdaptiveABTest
 ./gradlew :lynglib:jvmTest --tests ArithmeticBenchmarkTest
 ./gradlew :lynglib:jvmTest --tests ExpressionBenchmarkTest
+./gradlew :lynglib:jvmTest --tests IndexPicABTest
+./gradlew :lynglib:jvmTest --tests IndexWritePathABTest
 ./gradlew :lynglib:jvmTest --tests CallPoolingBenchmarkTest
 ./gradlew :lynglib:jvmTest --tests MethodPoolingBenchmarkTest
 ./gradlew :lynglib:jvmTest --tests MixedBenchmarkTest
@@ -61,6 +94,18 @@ Typical output (example):
 ```
 
 Lower time is better. Run the same bench with a flag OFF vs ON to compare.
+
+### Optional JFR allocation profiling (JVM)
+
+When running end‑to‑end “book” workloads or heavier benches, you can enable JFR to capture allocation and GC details:
+
+```
+./gradlew :lynglib:jvmTest --tests BookAllocationProfileTest -Dlyng.jfr=true \
+  -Dlyng.profile.warmup=1 -Dlyng.profile.repeats=3 -Dlyng.profile.shuffle=true
+```
+
+- Dumps are saved to `lynglib/build/jfr_*.jfr` if the JVM supports Flight Recorder.
+- The test also records GC counts/time and median time/heap deltas to `lynglib/build/book_alloc_profile.txt`.
 
 ## Toggling flags in tests
 
@@ -88,17 +133,46 @@ Available counters in `PerfStats`:
 
 - Field PIC: `fieldPicHit`, `fieldPicMiss`, `fieldPicSetHit`, `fieldPicSetMiss`
 - Method PIC: `methodPicHit`, `methodPicMiss`
+- Index PIC: `indexPicHit`, `indexPicMiss`
 - Locals: `localVarPicHit`, `localVarPicMiss`, `fastLocalHit`, `fastLocalMiss`
 - Primitive ops: `primitiveFastOpsHit`
 
 Print a summary at the end of a bench/test as needed. Remember to turn counters OFF after the test.
+
+## A/B scenarios and guidance (JVM)
+
+### Adaptive PIC (fields/methods)
+- Flags: `FIELD_PIC=true`, `METHOD_PIC=true`, `FIELD_PIC_SIZE_4=false`, `METHOD_PIC_SIZE_4=false`, toggle `PIC_ADAPTIVE_2_TO_4` OFF vs ON.
+- Benchmarks: `PicBenchmarkTest`, `MixedBenchmarkTest`, `PicAdaptiveABTest`.
+- Expect wins at sites with >2 receiver shapes; counters should show fewer misses with adaptivity ON.
+
+### Index PIC and size
+- Flags: toggle `INDEX_PIC` OFF vs ON; then `INDEX_PIC_SIZE_4` OFF vs ON.
+- Benchmarks: `ExpressionBenchmarkTest` (list indexing) and `IndexPicABTest` (string/map indexing).
+- Expect wins when the same index shape recurs; counters should show higher `indexPicHit`.
+
+### Index WRITE paths (Map and List)
+- Flags: toggle `INDEX_PIC` OFF vs ON; then `INDEX_PIC_SIZE_4` OFF vs ON.
+- Benchmark: `IndexWritePathABTest` (Map[String] put, List[Int] set) — writes results to `lynglib/build/index_write_ab_results.txt`.
+- Direct fast‑paths are used on R‑value paths where safe and semantics‑preserving (e.g., optional‑chaining no‑ops on null receivers; bounds exceptions unchanged).
 
 ## Guidance per flag (JVM)
 
 - Keep `RVAL_FASTPATH = true` unless debugging a suspected expression‑semantics issue.
 - Use `SCOPE_POOL = true` only for benchmarks or once pooling passes the deep stress tests and broader validation; currently OFF by default.
 - `FIELD_PIC` and `METHOD_PIC` should remain ON; they are validated with invalidation tests.
+- Consider enabling `FIELD_PIC_SIZE_4`/`METHOD_PIC_SIZE_4` for sites with 3–4 receiver shapes; measure first.
+- `PIC_ADAPTIVE_2_TO_4` is useful on polymorphic sites and may outperform fixed size 2 on mixed-shape workloads. Validate with `PicAdaptiveABTest`.
+- `INDEX_PIC` is generally beneficial on JVM; leave ON when measuring index‑heavy workloads.
+- `INDEX_PIC_SIZE_4` is ON by default on JVM as A/B showed consistent wins on String[Int] and Map[String] workloads. You can disable it by setting `PerfFlags.INDEX_PIC_SIZE_4 = false` if needed.
 - `ARG_BUILDER` should remain ON; switch OFF only to get a baseline.
+- `ARG_SMALL_ARITY_12` is experimental and OFF by default. Enable it only if your workload frequently calls functions with 9–12 arguments and A/B shows consistent wins.
+
+### Workload‑specific recommendations (JVM)
+
+- “Books”/documentation loads (BookTest): prefer simpler paths; in A/B these often benefit from the BOOKS preset (e.g., `ARG_BUILDER=false`, `SCOPE_POOL=false`, `INDEX_PIC=false`). Use `PerfProfiles.apply(PerfProfiles.Preset.BOOKS)` before the run and `restore(...)` after.
+- Expression‑heavy benches: use the BENCH preset (PICs and R‑value fast‑paths enabled, `INDEX_PIC_SIZE_4=true`).
+- Always verify with local A/B on your environment; rollback is a flag flip or applying BASELINE.
 
 ## Notes on correctness & safety
 
@@ -110,6 +184,12 @@ Print a summary at the end of a bench/test as needed. Remember to turn counters 
 
 - Non‑JVM defaults keep `RVAL_FASTPATH=false` for now; other low‑risk flags may be ON.
 - Once JVM path is fully validated and measured, add lightweight benches for JS/Wasm/Native and enable flags incrementally.
+
+## Range fast iteration (experimental)
+
+- Flag: `RANGE_FAST_ITER` (default OFF).
+- When enabled and applicable, simple ascending integer ranges (`0..n`, `0..<n`) use a specialized non‑allocating iterator (`ObjFastIntRangeIterator`).
+- Benchmark: `RangeIterationBenchmarkTest` records OFF/ON timings for inclusive, exclusive, reversed, negative, and empty ranges. Semantics are preserved; non‑int or complex ranges fall back to the generic iterator.
 
 ## Troubleshooting
 

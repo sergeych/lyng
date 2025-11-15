@@ -161,6 +161,18 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
             }
             addFn("iterator") {
                 val self = thisAs<ObjRange>()
+                if (net.sergeych.lyng.PerfFlags.RANGE_FAST_ITER) {
+                    val s = self.start
+                    val e = self.end
+                    if (s is ObjInt && e is ObjInt) {
+                        val start = s.value.toInt()
+                        val endExclusive = (if (self.isEndInclusive) e.value.toInt() + 1 else e.value.toInt())
+                        // Only for ascending simple ranges; fall back otherwise
+                        if (start <= endExclusive) {
+                            return@addFn ObjFastIntRangeIterator(start, endExclusive)
+                        }
+                    }
+                }
                 ObjRangeIterator(self).apply { init() }
             }
         }

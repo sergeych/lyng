@@ -27,6 +27,11 @@ actual object PerfDefaults {
 
     actual val FIELD_PIC: Boolean = true
     actual val METHOD_PIC: Boolean = true
+    actual val FIELD_PIC_SIZE_4: Boolean = false
+    actual val METHOD_PIC_SIZE_4: Boolean = false
+    actual val PIC_ADAPTIVE_2_TO_4: Boolean = false
+    actual val PIC_ADAPTIVE_METHODS_ONLY: Boolean = false
+    actual val PIC_ADAPTIVE_HEURISTIC: Boolean = false
 
     actual val PIC_DEBUG_COUNTERS: Boolean = false
 
@@ -35,4 +40,13 @@ actual object PerfDefaults {
 
     // Regex caching (JVM-first): enabled by default on JVM
     actual val REGEX_CACHE: Boolean = true
+
+    // Extended small-arity calls 9..12 (experimental; keep OFF by default)
+    actual val ARG_SMALL_ARITY_12: Boolean = false
+
+    // Index PIC size (beneficial on JVM in A/B): enable size=4 by default
+    actual val INDEX_PIC_SIZE_4: Boolean = true
+
+    // Range fast-iteration (experimental; OFF by default)
+    actual val RANGE_FAST_ITER: Boolean = false
 }

@@ -27,6 +27,11 @@ actual object PerfDefaults {
 
     actual val FIELD_PIC: Boolean = true
     actual val METHOD_PIC: Boolean = true
+    actual val FIELD_PIC_SIZE_4: Boolean = false
+    actual val METHOD_PIC_SIZE_4: Boolean = false
+    actual val PIC_ADAPTIVE_2_TO_4: Boolean = false
+    actual val PIC_ADAPTIVE_METHODS_ONLY: Boolean = false
+    actual val PIC_ADAPTIVE_HEURISTIC: Boolean = false
 
     actual val PIC_DEBUG_COUNTERS: Boolean = false
 
@@ -34,4 +39,7 @@ actual object PerfDefaults {
     actual val RVAL_FASTPATH: Boolean = true
     // Regex caching aligns with JVM behavior on Android (Dalvik/ART)
     actual val REGEX_CACHE: Boolean = true
+    actual val ARG_SMALL_ARITY_12: Boolean = false
+    actual val INDEX_PIC_SIZE_4: Boolean = false
+    actual val RANGE_FAST_ITER: Boolean = false
 }
