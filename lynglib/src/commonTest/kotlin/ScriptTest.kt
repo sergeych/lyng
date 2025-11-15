@@ -15,14 +15,17 @@
  *
  */
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import net.sergeych.lyng.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.InlineSourcesImportProvider
+import net.sergeych.mp_tools.globalDefer
 import net.sergeych.tools.bm
 import kotlin.test.*
 import kotlin.time.Duration.Companion.seconds
@@ -2525,6 +2528,103 @@ class ScriptTest {
                 
         """.trimIndent()
         )
+    }
+
+    class ObjTestFoo(val value: ObjString): Obj() {
+
+        override val objClass: ObjClass = klass
+
+        companion object {
+
+            val klass = ObjClass("TestFoo").apply {
+                addFn("test") {
+                    thisAs<ObjTestFoo>().value
+                }
+            }
+        }
+    }
+
+    @Test
+    fun TestApplyFromKotlin() = runTest {
+        val scope = Script.newScope()
+        scope.addConst("testfoo", ObjTestFoo(ObjString("bar2")))
+        scope.eval("""
+            assertEquals(testfoo.test(), "bar2")
+            testfoo.apply {
+                println(test())
+                assertEquals(test(), "bar2")
+            }
+        """.trimIndent())
+    }
+
+    @Test
+    fun testParallels() = runTest {
+        withContext(Dispatchers.Default) {
+            withTimeout(1.seconds) {
+                val s = Script.newScope()
+                s.eval("""
+                    fun dosomething() {
+                        var x = 0
+                        for( i in 1..100) {
+                            x += i
+                        }
+                        delay(100)
+                        println("-> "+x)
+                        assert(x == 5050)
+                    }
+                """.trimIndent())
+                (0..100).map {
+                    globalDefer {
+                        s.eval("dosomething()")
+                    }
+                }.toList().shuffled().forEach { it.await() }
+            }
+        }
+    }
+
+    @Test
+    fun testParallels2() = runTest {
+        withContext(Dispatchers.Default) {
+            withTimeout(1.seconds) {
+                val s = Script.newScope()
+                s.eval("""
+                    // it is intentionally not optimal to provoke
+                    // RC errors:
+                    class AtomicCounter {
+                        private val m = Mutex()
+                        private var counter = 0
+                        
+                        fun increment() {
+                            m.withLock { 
+                                val a = counter
+                                delay(1)
+                                counter = a+1
+                            }
+                        }
+                        
+                        fun getCounter() { counter }
+                    }
+                    
+                    val ac = AtomicCounter() 
+                    
+                    fun dosomething() {
+                        var x = 0
+                        for( i in 1..100) {
+                            x += i
+                        }
+                        delay(100)
+                        ac.increment()
+                        x
+                    }
+                    
+                    (1..100).map { launch { dosomething() } }.forEach { 
+                        assertEquals(5050, it.await())
+                     }
+                     assertEquals( 100, ac.getCounter() )
+                    
+                """.trimIndent())
+            }
+        }
     }
 
     @Test
