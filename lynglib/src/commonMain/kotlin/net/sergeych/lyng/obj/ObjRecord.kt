@@ -27,6 +27,8 @@ data class ObjRecord(
     var value: Obj,
     val isMutable: Boolean,
     val visibility: Visibility = Visibility.Public,
+    /** If non-null, denotes the class that declared this member (field/method). */
+    val declaringClass: ObjClass? = null,
     var importedFrom: Scope? = null,
     val isTransient: Boolean = false,
     val type: Type = Type.Other

@@ -253,6 +253,49 @@ class BinaryOpRef(private val op: BinOp, private val left: ObjRef, private val r
     }
 }
 
+/** Cast operator reference: left `as` rightType or `as?` (nullable). */
+class CastRef(
+    private val valueRef: ObjRef,
+    private val typeRef: ObjRef,
+    private val isNullable: Boolean,
+    private val atPos: Pos,
+) : ObjRef {
+    override suspend fun get(scope: Scope): ObjRecord {
+        val v0 = if (net.sergeych.lyng.PerfFlags.RVAL_FASTPATH) valueRef.evalValue(scope) else valueRef.get(scope).value
+        val t = if (net.sergeych.lyng.PerfFlags.RVAL_FASTPATH) typeRef.evalValue(scope) else typeRef.get(scope).value
+        val target = (t as? ObjClass) ?: scope.raiseClassCastError("${'$'}t is not the class instance")
+        // unwrap qualified views
+        val v = when (v0) {
+            is ObjQualifiedView -> v0.instance
+            else -> v0
+        }
+        return if (v.isInstanceOf(target)) {
+            // For instances, return a qualified view to enforce ancestor-start dispatch
+            if (v is ObjInstance) ObjQualifiedView(v, target).asReadonly else v.asReadonly
+        } else {
+            if (isNullable) ObjNull.asReadonly else scope.raiseClassCastError(
+                "Cannot cast ${'$'}{(v as? Obj)?.objClass?.className ?: v::class.simpleName} to ${'$'}{target.className}"
+            )
+        }
+    }
+}
+
+/** Qualified `this@Type`: resolves to a view of current `this` starting dispatch from the ancestor Type. */
+class QualifiedThisRef(private val typeName: String, private val atPos: Pos) : ObjRef {
+    override suspend fun get(scope: Scope): ObjRecord {
+        val thisObj = scope.thisObj
+        val t = scope[typeName]?.value as? ObjClass
+            ?: scope.raiseError("unknown type $typeName")
+        val inst = (thisObj as? ObjInstance)
+            ?: scope.raiseClassCastError("this is not an instance")
+        if (!inst.objClass.allParentsSet.contains(t) && inst.objClass !== t)
+            scope.raiseClassCastError(
+                "Qualifier ${'$'}{t.className} is not an ancestor of ${'$'}{inst.objClass.className} (order: ${'$'}{inst.objClass.renderLinearization(true)})"
+            )
+        return ObjQualifiedView(inst, t).asReadonly
+    }
+}
+
 /** Assignment compound op: target op= value */
 class AssignOpRef(
     private val op: BinOp,
@@ -1168,13 +1211,20 @@ class LocalVarRef(private val name: String, private val atPos: Pos) : ObjRef {
 
     override suspend fun get(scope: Scope): ObjRecord {
         scope.pos = atPos
+        // 1) Try fast slot/local
         if (!PerfFlags.LOCAL_SLOT_PIC) {
-            scope.getSlotIndexOf(name)?.let { 
+            scope.getSlotIndexOf(name)?.let {
                 if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.localVarPicHit++
-                return scope.getSlotRecord(it) 
+                return scope.getSlotRecord(it)
             }
             if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.localVarPicMiss++
-            return scope[name] ?: scope.raiseError("symbol not defined: '$name'")
+            // 2) Fallback to current-scope object or field on `this`
+            scope[name]?.let { return it }
+            val th = scope.thisObj
+            return when (th) {
+                is Obj -> th.readField(scope, name)
+                else -> scope.raiseError("symbol not defined: '$name'")
+            }
         }
         val hit = (cachedFrameId == scope.frameId && cachedSlot >= 0 && cachedSlot < scope.slotCount())
         val slot = if (hit) cachedSlot else resolveSlot(scope)
@@ -1185,19 +1235,37 @@ class LocalVarRef(private val name: String, private val atPos: Pos) : ObjRef {
             return scope.getSlotRecord(slot)
         }
         if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) net.sergeych.lyng.PerfStats.localVarPicMiss++
-        return scope[name] ?: scope.raiseError("symbol not defined: '$name'")
+        // 2) Fallback name in scope or field on `this`
+        scope[name]?.let { return it }
+        val th = scope.thisObj
+        return when (th) {
+            is Obj -> th.readField(scope, name)
+            else -> scope.raiseError("symbol not defined: '$name'")
+        }
     }
 
     override suspend fun evalValue(scope: Scope): Obj {
         scope.pos = atPos
         if (!PerfFlags.LOCAL_SLOT_PIC) {
             scope.getSlotIndexOf(name)?.let { return scope.getSlotRecord(it).value }
-            return (scope[name] ?: scope.raiseError("symbol not defined: '$name'")).value
+            // fallback to current-scope object or field on `this`
+            scope[name]?.let { return it.value }
+            val th = scope.thisObj
+            return when (th) {
+                is Obj -> th.readField(scope, name).value
+                else -> scope.raiseError("symbol not defined: '$name'")
+            }
         }
         val hit = (cachedFrameId == scope.frameId && cachedSlot >= 0 && cachedSlot < scope.slotCount())
         val slot = if (hit) cachedSlot else resolveSlot(scope)
         if (slot >= 0) return scope.getSlotRecord(slot).value
-        return (scope[name] ?: scope.raiseError("symbol not defined: '$name'")).value
+        // Fallback name in scope or field on `this`
+        scope[name]?.let { return it.value }
+        val th = scope.thisObj
+        return when (th) {
+            is Obj -> th.readField(scope, name).value
+            else -> scope.raiseError("symbol not defined: '$name'")
+        }
     }
 
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
@@ -1209,10 +1277,18 @@ class LocalVarRef(private val name: String, private val atPos: Pos) : ObjRef {
                 rec.value = newValue
                 return
             }
-            val stored = scope[name] ?: scope.raiseError("symbol not defined: '$name'")
-            if (stored.isMutable) stored.value = newValue
-            else scope.raiseError("Cannot assign to immutable value")
-            return
+            scope[name]?.let { stored ->
+                if (stored.isMutable) stored.value = newValue
+                else scope.raiseError("Cannot assign to immutable value")
+                return
+            }
+            // Fallback: write to field on `this`
+            val th = scope.thisObj
+            if (th is Obj) {
+                th.writeField(scope, name, newValue)
+                return
+            }
+            scope.raiseError("symbol not defined: '$name'")
         }
         val slot = if (cachedFrameId == scope.frameId && cachedSlot >= 0 && cachedSlot < scope.slotCount()) cachedSlot else resolveSlot(scope)
         if (slot >= 0) {
@@ -1221,9 +1297,17 @@ class LocalVarRef(private val name: String, private val atPos: Pos) : ObjRef {
             rec.value = newValue
             return
         }
-        val stored = scope[name] ?: scope.raiseError("symbol not defined: '$name'")
-        if (stored.isMutable) stored.value = newValue
-        else scope.raiseError("Cannot assign to immutable value")
+        scope[name]?.let { stored ->
+            if (stored.isMutable) stored.value = newValue
+            else scope.raiseError("Cannot assign to immutable value")
+            return
+        }
+        val th = scope.thisObj
+        if (th is Obj) {
+            th.writeField(scope, name, newValue)
+            return
+        }
+        scope.raiseError("symbol not defined: '$name'")
     }
 }
 
@@ -1298,11 +1382,32 @@ class FastLocalVarRef(
         val ownerValid = isOwnerValidFor(scope)
         val slot = if (ownerValid && cachedSlot >= 0) cachedSlot else resolveSlotInAncestry(scope)
         val actualOwner = cachedOwnerScope
-        if (slot < 0 || actualOwner == null) scope.raiseError("local '$name' is not available in this scope")
-        if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) {
-            if (ownerValid) net.sergeych.lyng.PerfStats.fastLocalHit++ else net.sergeych.lyng.PerfStats.fastLocalMiss++
+        if (slot >= 0 && actualOwner != null) {
+            if (net.sergeych.lyng.PerfFlags.PIC_DEBUG_COUNTERS) {
+                if (ownerValid) net.sergeych.lyng.PerfStats.fastLocalHit++ else net.sergeych.lyng.PerfStats.fastLocalMiss++
+            }
+            return actualOwner.getSlotRecord(slot)
         }
-        return actualOwner.getSlotRecord(slot)
+        // Try per-frame local binding maps in the ancestry first (locals declared in frames)
+        run {
+            var s: Scope? = scope
+            while (s != null) {
+                s.localBindings[name]?.let { return it }
+                s = s.parent
+            }
+        }
+        // Try to find a direct local binding in the current ancestry (without invoking name resolution that may prefer fields)
+        var s: Scope? = scope
+        while (s != null) {
+            s.objects[name]?.let { return it }
+            s = s.parent
+        }
+        // Fallback to standard name lookup (locals or closure chain) if the slot owner changed across suspension
+        scope[name]?.let { return it }
+        // As a last resort, treat as field on `this`
+        val th = scope.thisObj
+        if (th is Obj) return th.readField(scope, name)
+        scope.raiseError("local '$name' is not available in this scope")
     }
 
     override suspend fun evalValue(scope: Scope): Obj {
@@ -1310,8 +1415,26 @@ class FastLocalVarRef(
         val ownerValid = isOwnerValidFor(scope)
         val slot = if (ownerValid && cachedSlot >= 0) cachedSlot else resolveSlotInAncestry(scope)
         val actualOwner = cachedOwnerScope
-        if (slot < 0 || actualOwner == null) scope.raiseError("local '$name' is not available in this scope")
-        return actualOwner.getSlotRecord(slot).value
+        if (slot >= 0 && actualOwner != null) return actualOwner.getSlotRecord(slot).value
+        // Try per-frame local binding maps in the ancestry first
+        run {
+            var s: Scope? = scope
+            while (s != null) {
+                s.localBindings[name]?.let { return it.value }
+                s = s.parent
+            }
+        }
+        // Try to find a direct local binding in the current ancestry first
+        var s: Scope? = scope
+        while (s != null) {
+            s.objects[name]?.let { return it.value }
+            s = s.parent
+        }
+        // Fallback to standard name lookup (locals or closure chain)
+        scope[name]?.let { return it.value }
+        val th = scope.thisObj
+        if (th is Obj) return th.readField(scope, name).value
+        scope.raiseError("local '$name' is not available in this scope")
     }
 
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
@@ -1319,10 +1442,37 @@ class FastLocalVarRef(
         val owner = if (isOwnerValidFor(scope)) cachedOwnerScope else null
         val slot = if (owner != null && cachedSlot >= 0) cachedSlot else resolveSlotInAncestry(scope)
         val actualOwner = cachedOwnerScope
-        if (slot < 0 || actualOwner == null) scope.raiseError("local '$name' is not available in this scope")
-        val rec = actualOwner.getSlotRecord(slot)
-        if (!rec.isMutable) scope.raiseError("Cannot assign to immutable value")
-        rec.value = newValue
+        if (slot >= 0 && actualOwner != null) {
+            val rec = actualOwner.getSlotRecord(slot)
+            if (!rec.isMutable) scope.raiseError("Cannot assign to immutable value")
+            rec.value = newValue
+            return
+        }
+        // Try per-frame local binding maps in the ancestry first
+        run {
+            var s: Scope? = scope
+            while (s != null) {
+                val rec = s.localBindings[name]
+                if (rec != null) {
+                    if (!rec.isMutable) scope.raiseError("Cannot assign to immutable value")
+                    rec.value = newValue
+                    return
+                }
+                s = s.parent
+            }
+        }
+        // Fallback to standard name lookup
+        scope[name]?.let { stored ->
+            if (stored.isMutable) stored.value = newValue
+            else scope.raiseError("Cannot assign to immutable value")
+            return
+        }
+        val th = scope.thisObj
+        if (th is Obj) {
+            th.writeField(scope, name, newValue)
+            return
+        }
+        scope.raiseError("local '$name' is not available in this scope")
     }
 }
 
@@ -1385,3 +1535,5 @@ class AssignRef(
         return v.asReadonly
     }
 }
+
+    // (duplicate LocalVarRef removed; the canonical implementation is defined earlier in this file)

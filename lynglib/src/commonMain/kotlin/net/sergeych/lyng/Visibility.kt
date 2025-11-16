@@ -23,3 +23,17 @@ enum class Visibility {
     @Suppress("unused")
     val isProtected by lazy { this == Protected }
 }
+
+/** MI-aware visibility check: whether [caller] can access a member declared in [decl] with [visibility]. */
+fun canAccessMember(visibility: Visibility, decl: net.sergeych.lyng.obj.ObjClass?, caller: net.sergeych.lyng.obj.ObjClass?): Boolean {
+    return when (visibility) {
+        Visibility.Public -> true
+        Visibility.Private -> (decl != null && caller === decl)
+        Visibility.Protected -> when {
+            decl == null -> false
+            caller == null -> false
+            caller === decl -> true
+            else -> (caller.allParentsSet.contains(decl))
+        }
+    }
+}

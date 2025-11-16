@@ -71,6 +71,99 @@ Functions defined inside a class body are methods, and unless declared
     void
     >>> void
 
+## Multiple Inheritance (MI)
+
+Lyng supports declaring a class with multiple direct base classes. The syntax is:
+
+```
+class Foo(val a) {
+    var tag = "F"
+    fun runA() { "ResultA:" + a }
+    fun common() { "CommonA" }
+    private fun privateInFoo() {}
+    protected fun protectedInFoo() {}
+}
+
+class Bar(val b) {
+    var tag = "B"
+    fun runB() { "ResultB:" + b }
+    fun common() { "CommonB" }
+}
+
+// Multiple inheritance with per‑base constructor arguments
+class FooBar(a, b) : Foo(a), Bar(b) {
+    // You can disambiguate via qualified this or casts
+    fun fromFoo() { this@Foo.common() }
+    fun fromBar() { this@Bar.common() }
+}
+
+val fb = FooBar(1, 2)
+assertEquals("ResultA:1", fb.runA())
+assertEquals("ResultB:2", fb.runB())
+// Unqualified ambiguous member resolves to the first base (leftmost)
+assertEquals("CommonA", fb.common())
+// Disambiguation via casts
+assertEquals("CommonB", (fb as Bar).common())
+assertEquals("CommonA", (fb as Foo).common())
+
+// Field inheritance with name collisions
+assertEquals("F", fb.tag)            // unqualified: leftmost base
+assertEquals("F", (fb as Foo).tag)   // qualified read: Foo.tag
+assertEquals("B", (fb as Bar).tag)   // qualified read: Bar.tag
+
+fb.tag = "X"                         // unqualified write updates leftmost base
+assertEquals("X", (fb as Foo).tag)
+assertEquals("B", (fb as Bar).tag)
+
+(fb as Bar).tag = "Y"                 // qualified write updates Bar.tag
+assertEquals("X", (fb as Foo).tag)
+assertEquals("Y", (fb as Bar).tag)
+```
+
+Key rules and features:
+
+- Syntax
+  - `class Derived(args) : Base1(b1Args), Base2(b2Args)`
+  - Each direct base may receive constructor arguments specified in the header. Only direct bases receive header args; indirect bases must either be default‑constructible or receive their args through their direct child (future extensions may add more control).
+
+- Resolution order (C3 MRO — active)
+  - Member lookup is deterministic and follows C3 linearization (Python‑like), which provides a monotonic, predictable order for complex hierarchies and diamonds.
+  - Intuition: for `class D() : B(), C()` where `B()` and `C()` both derive from `A()`, the C3 order is `D → B → C → A`.
+  - The first visible match along this order wins.
+
+- Qualified dispatch
+  - Inside a class body, use `this@Type.member(...)` to start lookup at the specified ancestor.
+  - For arbitrary receivers, use casts: `(expr as Type).member(...)` or `(expr as? Type)?.member(...)` (safe‑call `?.` is already available in Lyng).
+  - Qualified access does not relax visibility.
+
+- Field inheritance (`val`/`var`) and collisions
+  - Instance storage is kept per declaring class, internally disambiguated; unqualified read/write resolves to the first match in the resolution order (leftmost base).
+  - Qualified read/write (via `this@Type` or casts) targets the chosen ancestor’s storage.
+  - `val` remains read‑only; attempting to write raises an error as usual.
+
+- Constructors and initialization
+  - During construction, direct bases are initialized left‑to‑right in the declaration order. Each ancestor is initialized at most once (diamond‑safe de‑duplication).
+  - Arguments in the header are evaluated in the instance scope and passed to the corresponding direct base constructor.
+  - The most‑derived class’s constructor runs after the bases.
+
+- Visibility
+  - `private`: accessible only inside the declaring class body; not visible in subclasses and cannot be accessed via `this@Type` or casts.
+  - `protected`: accessible in the declaring class and in any of its transitive subclasses (including MI), but not from unrelated contexts; qualification/casts do not bypass it.
+
+- Diagnostics
+  - When a member/field is not found, error messages include the receiver class name and the considered linearization order, with suggestions to disambiguate using `this@Type` or casts if appropriate.
+  - Qualifying with a non‑ancestor in `this@Type` reports a clear error mentioning the receiver lineage.
+  - `as`/`as?` cast errors mention the actual and target types.
+
+Compatibility notes:
+
+- Existing single‑inheritance code continues to work unchanged; its resolution order reduces to the single base.
+- If your previous code accidentally relied on non‑deterministic parent set iteration, it may change behavior — the new deterministic order is a correctness fix.
+
+### Migration note (declaration‑order → C3)
+
+Earlier drafts and docs described a declaration‑order depth‑first linearization. Lyng now uses C3 MRO for member lookup and disambiguation. Most code should continue to work unchanged, but in rare edge cases involving diamonds or complex multiple inheritance, the chosen base for an ambiguous member may change to reflect C3. If needed, disambiguate explicitly using `this@Type.member(...)` inside class bodies or casts `(expr as Type).member(...)` from outside.
+
 ## fields and visibility
 
 It is possible to add non-constructor fields:
@@ -129,6 +222,25 @@ Private fields are visible only _inside the class instance_:
     assertThrows { c.count }
     void
     >>> void
+
+### Protected members
+
+Protected members are available to the declaring class and all of its transitive subclasses (including via MI), but not from unrelated contexts:
+
+```
+class A() {
+    protected fun ping() { "pong" }
+}
+class B() : A() {
+    fun call() { this@A.ping() }
+}
+
+val b = B()
+assertEquals("pong", b.call())
+
+// Unrelated access is forbidden, even via cast
+assertThrows { (b as A).ping() }
+```
 
 It is possible to provide private constructor parameters so they can be
 set at construction but not available outside the class:

@@ -25,7 +25,7 @@ import net.sergeych.lynon.LynonType
 /**
  * Special variant of [ObjClass] to be used in [ObjInstance], e.g. for Lyng compiled classes
  */
-class ObjInstanceClass(val name: String) : ObjClass(name) {
+class ObjInstanceClass(val name: String, vararg parents: ObjClass) : ObjClass(name, *parents) {
 
     override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj {
         val args = decoder.decodeAnyList(scope)
@@ -41,7 +41,6 @@ class ObjInstanceClass(val name: String) : ObjClass(name) {
 
     init {
         addFn("toString", true) {
-            println("-------------- tos! --------------")
             ObjString(thisObj.toString())
         }
     }

@@ -479,6 +479,8 @@ class Compiler(
         val callStatement = statement {
             // and the source closure of the lambda which might have other thisObj.
             val context = this.applyClosure(closure!!)
+            // Execute lambda body in a closure-aware context. Blocks inside the lambda
+            // will create child scopes as usual, so re-declarations inside loops work.
             if (argsDeclaration == null) {
                 // no args: automatic var 'it'
                 val l = args.list
@@ -700,6 +702,37 @@ class Compiler(
         return args to lastBlockArgument
     }
 
+    /**
+     * Parse arguments inside parentheses without consuming any optional trailing block after the RPAREN.
+     * Useful in contexts where a following '{' has different meaning (e.g., class bodies after base lists).
+     */
+    private suspend fun parseArgsNoTailBlock(): List<ParsedArgument> {
+        val args = mutableListOf<ParsedArgument>()
+        do {
+            val t = cc.next()
+            when (t.type) {
+                Token.Type.NEWLINE,
+                Token.Type.RPAREN, Token.Type.COMMA -> {
+                }
+
+                Token.Type.ELLIPSIS -> {
+                    parseStatement()?.let { args += ParsedArgument(it, t.pos, isSplat = true) }
+                        ?: throw ScriptError(t.pos, "Expecting arguments list")
+                }
+
+                else -> {
+                    cc.previous()
+                    parseExpression()?.let { args += ParsedArgument(it, t.pos) }
+                        ?: throw ScriptError(t.pos, "Expecting arguments list")
+                    if (cc.current().type == Token.Type.COLON)
+                        parseTypeDeclaration()
+                }
+            }
+        } while (t.type != Token.Type.RPAREN)
+        // Do NOT peek for a trailing block; leave it to the outer parser
+        return args
+    }
+
 
     private suspend fun parseFunctionCall(
         left: ObjRef,
@@ -750,7 +783,18 @@ class Compiler(
             }
 
             Token.Type.ID -> {
-                when (t.value) {
+                // Special case: qualified this -> this@Type
+                if (t.value == "this") {
+                    val pos = cc.savePos()
+                    val next = cc.next()
+                    if (next.pos.line == t.pos.line && next.type == Token.Type.ATLABEL) {
+                        QualifiedThisRef(next.value, t.pos)
+                    } else {
+                        cc.restorePos(pos)
+                        // plain this
+                        LocalVarRef("this", t.pos)
+                    }
+                } else when (t.value) {
                     "void" -> ConstRef(ObjVoid.asReadonly)
                     "null" -> ConstRef(ObjNull.asReadonly)
                     "true" -> ConstRef(ObjTrue.asReadonly)
@@ -818,6 +862,40 @@ class Compiler(
     private suspend fun parseKeywordStatement(id: Token): Statement? = when (id.value) {
         "val" -> parseVarDeclaration(false, Visibility.Public)
         "var" -> parseVarDeclaration(true, Visibility.Public)
+        // Ensure function declarations are recognized in all contexts (including class bodies)
+        "fun" -> parseFunctionDeclaration(isOpen = false, isExtern = false, isStatic = false)
+        "fn" -> parseFunctionDeclaration(isOpen = false, isExtern = false, isStatic = false)
+        // Visibility modifiers for declarations: private/protected val/var/fun/fn
+        "private" -> {
+            var k = cc.requireToken(Token.Type.ID, "declaration expected after 'private'")
+            var isStatic = false
+            if (k.value == "static") {
+                isStatic = true
+                k = cc.requireToken(Token.Type.ID, "declaration expected after 'private static'")
+            }
+            when (k.value) {
+                "val" -> parseVarDeclaration(false, Visibility.Private, isStatic = isStatic)
+                "var" -> parseVarDeclaration(true, Visibility.Private, isStatic = isStatic)
+                "fun" -> parseFunctionDeclaration(visibility = Visibility.Private, isOpen = false, isExtern = false, isStatic = isStatic)
+                "fn" -> parseFunctionDeclaration(visibility = Visibility.Private, isOpen = false, isExtern = false, isStatic = isStatic)
+                else -> k.raiseSyntax("unsupported private declaration kind: ${k.value}")
+            }
+        }
+        "protected" -> {
+            var k = cc.requireToken(Token.Type.ID, "declaration expected after 'protected'")
+            var isStatic = false
+            if (k.value == "static") {
+                isStatic = true
+                k = cc.requireToken(Token.Type.ID, "declaration expected after 'protected static'")
+            }
+            when (k.value) {
+                "val" -> parseVarDeclaration(false, Visibility.Protected, isStatic = isStatic)
+                "var" -> parseVarDeclaration(true, Visibility.Protected, isStatic = isStatic)
+                "fun" -> parseFunctionDeclaration(visibility = Visibility.Protected, isOpen = false, isExtern = false, isStatic = isStatic)
+                "fn" -> parseFunctionDeclaration(visibility = Visibility.Protected, isOpen = false, isExtern = false, isStatic = isStatic)
+                else -> k.raiseSyntax("unsupported protected declaration kind: ${k.value}")
+            }
+        }
         "while" -> parseWhileStatement()
         "do" -> parseDoWhileStatement()
         "for" -> parseForStatement()
@@ -1162,19 +1240,40 @@ class Compiler(
                     "Bad class declaration: expected ')' at the end of the primary constructor"
                 )
 
+            // Optional base list: ":" Base ("," Base)* where Base := ID ( "(" args? ")" )?
+            data class BaseSpec(val name: String, val args: List<ParsedArgument>?)
+            val baseSpecs = mutableListOf<BaseSpec>()
+            if (cc.skipTokenOfType(Token.Type.COLON, isOptional = true)) {
+                do {
+                    val baseId = cc.requireToken(Token.Type.ID, "base class name expected")
+                    var argsList: List<ParsedArgument>? = null
+                    // Optional constructor args of the base — parse and ignore for now (MVP), just to consume tokens
+                    if (cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true)) {
+                        // Parse args without consuming any following block so that a class body can follow safely
+                        argsList = parseArgsNoTailBlock()
+                    }
+                    baseSpecs += BaseSpec(baseId.value, argsList)
+                } while (cc.skipTokenOfType(Token.Type.COMMA, isOptional = true))
+            }
+
             cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
-            val t = cc.next()
 
             pushInitScope()
 
-            val bodyInit: Statement? = if (t.type == Token.Type.LBRACE) {
-                // parse body
-                parseScript().also {
-                    cc.skipTokens(Token.Type.RBRACE)
+            // Robust body detection: peek next non-whitespace token; if it's '{', consume and parse the body
+            val bodyInit: Statement? = run {
+                val saved = cc.savePos()
+                val next = cc.nextNonWhitespace()
+                if (next.type == Token.Type.LBRACE) {
+                    // parse body
+                    parseScript().also {
+                        cc.skipTokens(Token.Type.RBRACE)
+                    }
+                } else {
+                    // restore if no body starts here
+                    cc.restorePos(saved)
+                    null
                 }
-            } else {
-                cc.previous()
-                null
             }
 
             val initScope = popInitScope()
@@ -1191,31 +1290,60 @@ class Compiler(
             val constructorCode = statement {
                 // constructor code is registered with class instance and is called over
                 // new `thisObj` already set by class to ObjInstance.instanceContext
-                thisObj as ObjInstance
-
-                // the context now is a "class creation context", we must use its args to initialize
-                // fields. Note that 'this' is already set by class
-                constructorArgsDeclaration?.assignToContext(this)
-                bodyInit?.execute(this)
-
-                thisObj
+                val instance = thisObj as ObjInstance
+                // Constructor parameters have been assigned to instance scope by ObjClass.callOn before
+                // invoking parent/child constructors.
+                // IMPORTANT: do not execute class body here; class body was executed once in the class scope
+                // to register methods and prepare initializers. Instance constructor should be empty unless
+                // we later add explicit constructor body syntax.
+                instance
             }
-            // inheritance must alter this code:
-            val newClass = ObjInstanceClass(className).apply {
-                instanceConstructor = constructorCode
-                constructorMeta = constructorArgsDeclaration
-            }
-
             statement {
                 // the main statement should create custom ObjClass instance with field
                 // accessors, constructor registration, etc.
+                // Resolve parent classes by name at execution time
+                val parentClasses = baseSpecs.map { baseSpec ->
+                    val rec = this[baseSpec.name] ?: throw ScriptError(nameToken.pos, "unknown base class: ${baseSpec.name}")
+                    (rec.value as? ObjClass) ?: throw ScriptError(nameToken.pos, "${baseSpec.name} is not a class")
+                }
+
+                val newClass = ObjInstanceClass(className, *parentClasses.toTypedArray()).also {
+                    it.instanceConstructor = constructorCode
+                    it.constructorMeta = constructorArgsDeclaration
+                    // Attach per-parent constructor args (thunks) if provided
+                    for (i in parentClasses.indices) {
+                        val argsList = baseSpecs[i].args
+                        if (argsList != null) it.directParentArgs[parentClasses[i]] = argsList
+                    }
+                }
+
                 addItem(className, false, newClass)
+                // Prepare class scope for class-scope members (static) and future registrations
+                val classScope = createChildScope(newThisObj = newClass)
+                // Set lexical class context for visibility tagging inside class body
+                classScope.currentClassCtx = newClass
+                newClass.classScope = classScope
+                // Execute class body once in class scope to register instance methods and prepare instance field initializers
+                bodyInit?.execute(classScope)
                 if (initScope.isNotEmpty()) {
-                    val classScope = createChildScope(newThisObj = newClass)
-                    newClass.classScope = classScope
                     for (s in initScope)
                         s.execute(classScope)
                 }
+                // Fallback: ensure any functions declared in class scope are also present as instance methods
+                // (defensive in case some paths skipped cls.addFn during parsing/execution ordering)
+                for ((k, rec) in classScope.objects) {
+                    val v = rec.value
+                    if (v is Statement) {
+                        if (newClass.members[k] == null) {
+                            newClass.addFn(k, isOpen = true) {
+                                (thisObj as? ObjInstance)?.let { i ->
+                                    v.execute(ClosureScope(this, i.instanceScope))
+                                } ?: v.execute(thisObj.autoInstanceScope(this))
+                            }
+                        }
+                    }
+                }
+                // Debug summary: list registered instance methods and class-scope functions for this class
                 newClass
             }
         }
@@ -1686,6 +1814,7 @@ class Compiler(
                 }
                 fnStatements.execute(context)
             }
+            val enclosingCtx = parentContext
             val fnCreateStatement = statement(start) { context ->
                 // we added fn in the context. now we must save closure
                 // for the function, unless we're in the class scope:
@@ -1699,7 +1828,7 @@ class Compiler(
                     // class extension method
                     val type = context[typeName]?.value ?: context.raiseSymbolNotFound("class $typeName not found")
                     if (type !is ObjClass) context.raiseClassCastError("$typeName is not the class instance")
-                    type.addFn(name, isOpen = true) {
+                    type.addFn(name, isOpen = true, visibility = visibility) {
                         // ObjInstance has a fixed instance scope, so we need to build a closure
                         (thisObj as? ObjInstance)?.let { i ->
                             annotatedFnBody.execute(ClosureScope(this, i.instanceScope))
@@ -1709,7 +1838,31 @@ class Compiler(
                     }
                 }
                 // regular function/method
-                    ?: context.addItem(name, false, annotatedFnBody, visibility)
+                    ?: run {
+                        val th = context.thisObj
+                        if (!isStatic && th is ObjClass) {
+                            // Instance method declared inside a class body: register on the class
+                            val cls: ObjClass = th
+                            cls.addFn(name, isOpen = true, visibility = visibility) {
+                                // Execute with the instance as receiver; set caller lexical class for visibility
+                                val savedCtx = this.currentClassCtx
+                                this.currentClassCtx = cls
+                                try {
+                                    (thisObj as? ObjInstance)?.let { i ->
+                                        annotatedFnBody.execute(ClosureScope(this, i.instanceScope))
+                                    } ?: annotatedFnBody.execute(thisObj.autoInstanceScope(this))
+                                } finally {
+                                    this.currentClassCtx = savedCtx
+                                }
+                            }
+                            // also expose the symbol in the class scope for possible references
+                            context.addItem(name, false, annotatedFnBody, visibility)
+                            annotatedFnBody
+                        } else {
+                            // top-level or nested function
+                            context.addItem(name, false, annotatedFnBody, visibility)
+                        }
+                    }
                 // as the function can be called from anywhere, we have
                 // saved the proper context in the closure
                 annotatedFnBody
@@ -1791,9 +1944,18 @@ class Compiler(
             return NopStatement
         }
 
+        // Determine declaring class (if inside class body) at compile time, capture it in the closure
+        val declaringClassNameCaptured = (codeContexts.lastOrNull() as? CodeContext.ClassBody)?.name
+
         return statement(nameToken.pos) { context ->
-            if (context.containsLocal(name))
-                throw ScriptError(nameToken.pos, "Variable $name is already defined")
+            // In true class bodies (not inside a function), store fields under a class-qualified key to support MI collisions
+            // Do NOT infer declaring class from runtime thisObj here; only the compile-time captured
+            // ClassBody qualifies for class-field storage. Otherwise, this is a plain local.
+            val declaringClassName = declaringClassNameCaptured
+            if (declaringClassName == null) {
+                if (context.containsLocal(name))
+                    throw ScriptError(nameToken.pos, "Variable $name is already defined")
+            }
 
             // Register the local name so subsequent identifiers can be emitted as fast locals
             if (!isStatic) declareLocalName(name)
@@ -1818,11 +1980,32 @@ class Compiler(
 //                    context.addItem(name, isMutable, it, visibility, recordType = ObjRecord.Type.Field)
 //                }
             } else {
-                // init value could be a val; when we initialize by-value type var with it, we need to
-                // create a separate copy:
-                val initValue = initialExpression?.execute(context)?.byValueCopy() ?: ObjNull
-                context.addItem(name, isMutable, initValue, visibility, recordType = ObjRecord.Type.Field)
-                initValue
+                if (declaringClassName != null && !isStatic) {
+                    val storageName = "$declaringClassName::$name"
+                    // If we are in class scope now (defining instance field), defer initialization to instance time
+                    val isClassScope = context.thisObj is ObjClass && (context.thisObj !is ObjInstance)
+                    if (isClassScope) {
+                        val cls = context.thisObj as ObjClass
+                        // Defer: at instance construction, evaluate initializer in instance scope and store under mangled name
+                        val initStmt = statement(nameToken.pos) { scp ->
+                            val initValue = initialExpression?.execute(scp)?.byValueCopy() ?: ObjNull
+                            scp.addOrUpdateItem(storageName, initValue, visibility, recordType = ObjRecord.Type.Field)
+                            ObjVoid
+                        }
+                        cls.instanceInitializers += initStmt
+                        ObjVoid
+                    } else {
+                        // We are in instance scope already: perform initialization immediately
+                        val initValue = initialExpression?.execute(context)?.byValueCopy() ?: ObjNull
+                        context.addOrUpdateItem(storageName, initValue, visibility, recordType = ObjRecord.Type.Field)
+                        initValue
+                    }
+                } else {
+                    // Not in class body: regular local/var declaration
+                    val initValue = initialExpression?.execute(context)?.byValueCopy() ?: ObjNull
+                    context.addItem(name, isMutable, initValue, visibility, recordType = ObjRecord.Type.Field)
+                    initValue
+                }
             }
         }
     }
@@ -2026,6 +2209,13 @@ class Compiler(
             },
             Operator(Token.Type.NOTIS, lastPriority) { _, a, b ->
                 BinaryOpRef(BinOp.NOTIS, a, b)
+            },
+            // casts: as / as?
+            Operator(Token.Type.AS, lastPriority) { pos, a, b ->
+                CastRef(a, b, false, pos)
+            },
+            Operator(Token.Type.ASNULL, lastPriority) { pos, a, b ->
+                CastRef(a, b, true, pos)
             },
 
             Operator(Token.Type.ELVIS, ++lastPriority, 2) { _, a, b ->

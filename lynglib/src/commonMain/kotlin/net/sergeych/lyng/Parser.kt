@@ -342,6 +342,11 @@ private class Parser(fromPos: Pos) {
                         when (text) {
                             "in" -> Token("in", from, Token.Type.IN)
                             "is" -> Token("is", from, Token.Type.IS)
+                            "as" -> {
+                                // support both `as` and tight `as?` without spaces
+                                if (currentChar == '?') { pos.advance(); Token("as?", from, Token.Type.ASNULL) }
+                                else Token("as", from, Token.Type.AS)
+                            }
                             else -> Token(text, from, Token.Type.ID)
                         }
                 } else

@@ -43,6 +43,8 @@ data class Token(val value: String, val pos: Pos, val type: Type) {
         SHL, SHR,
         SINLGE_LINE_COMMENT, MULTILINE_COMMENT,
         LABEL, ATLABEL, // label@ at@label
+        // type-checking/casting
+        AS, ASNULL,
         //PUBLIC, PROTECTED, INTERNAL, EXPORT, OPEN, INLINE, OVERRIDE, ABSTRACT, SEALED, EXTERNAL, VAL, VAR, CONST, TYPE, FUN, CLASS, INTERFACE, ENUM, OBJECT, TRAIT, THIS,
         ELLIPSIS, DOTDOT, DOTDOTLT,
         NEWLINE,

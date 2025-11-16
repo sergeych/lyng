@@ -46,6 +46,8 @@ open class Scope(
     var thisObj: Obj = ObjVoid,
     var skipScopeCreation: Boolean = false,
 ) {
+    /** Lexical class context for visibility checks (propagates from parent). */
+    var currentClassCtx: net.sergeych.lyng.obj.ObjClass? = parent?.currentClassCtx
     // Unique id per scope frame for PICs; regenerated on each borrow from the pool.
     var frameId: Long = nextFrameId()
 
@@ -53,6 +55,12 @@ open class Scope(
     // Enabled by default for child scopes; module/class scopes can ignore it.
     private val slots: MutableList<ObjRecord> = mutableListOf()
     private val nameToSlot: MutableMap<String, Int> = mutableMapOf()
+    /**
+     * Auxiliary per-frame map of local bindings (locals declared in this frame).
+     * This helps resolving locals across suspension when slot ownership isn't
+     * directly discoverable from the current frame.
+     */
+    internal val localBindings: MutableMap<String, ObjRecord> = mutableMapOf()
 
     /**
      * Hint internal collections to reduce reallocations for upcoming parameter/local assignments.
@@ -162,11 +170,15 @@ open class Scope(
     open operator fun get(name: String): ObjRecord? =
         if (name == "this") thisObj.asReadonly
         else {
+            // Prefer direct locals/bindings declared in this frame
             (objects[name]
+                // Then, check known local bindings in this frame (helps after suspension)
+                ?: localBindings[name]
+                // Walk up ancestry
                 ?: parent?.get(name)
-                ?: thisObj.objClass
-                    .getInstanceMemberOrNull(name)
-                    )
+                // Finally, fallback to class members on thisObj
+                ?: thisObj.objClass.getInstanceMemberOrNull(name)
+                )
         }
 
     // Slot fast-path API
@@ -199,6 +211,7 @@ open class Scope(
         objects.clear()
         slots.clear()
         nameToSlot.clear()
+        localBindings.clear()
         // Pre-size local slots for upcoming parameter assignment where possible
         reserveLocalCapacity(args.list.size + 4)
     }
@@ -258,6 +271,13 @@ open class Scope(
             if( !it.isMutable )
                 raiseIllegalAssignment("symbol is readonly: $name")
             it.value = value
+            // keep local binding index consistent within the frame
+            localBindings[name] = it
+            // If we are a ClosureScope, mirror binding into the caller frame to keep it discoverable
+            // across suspension when resumed on the call frame
+            if (this is ClosureScope) {
+                callScope.localBindings[name] = it
+            }
             it
         } ?: addItem(name, true, value, visibility, recordType)
 
@@ -268,8 +288,23 @@ open class Scope(
         visibility: Visibility = Visibility.Public,
         recordType: ObjRecord.Type = ObjRecord.Type.Other
     ): ObjRecord {
-        val rec = ObjRecord(value, isMutable, visibility, type = recordType)
+        val rec = ObjRecord(value, isMutable, visibility, declaringClass = currentClassCtx, type = recordType)
         objects[name] = rec
+        // Index this binding within the current frame to help resolve locals across suspension
+        localBindings[name] = rec
+        // If we are a ClosureScope, mirror binding into the caller frame to keep it discoverable
+        // across suspension when resumed on the call frame
+        if (this is ClosureScope) {
+            callScope.localBindings[name] = rec
+            // Additionally, expose the binding in caller's objects and slot map so identifier
+            // resolution after suspension can still find it even if the active scope is a child
+            // of the callScope (e.g., due to internal withChildFrame usage).
+            // This keeps visibility within the method body but prevents leaking outside the caller frame.
+            callScope.objects[name] = rec
+            if (callScope.getSlotIndexOf(name) == null) {
+                callScope.allocateSlotFor(name, rec)
+            }
+        }
         // Map to a slot for fast local access (if not already mapped)
         if (getSlotIndexOf(name) == null) {
             allocateSlotFor(name, rec)

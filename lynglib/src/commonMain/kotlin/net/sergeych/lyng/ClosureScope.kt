@@ -29,17 +29,23 @@ class ClosureScope(val callScope: Scope, val closureScope: Scope) :
     // we captured, not to the caller's `this` (e.g., FlowBuilder).
     Scope(callScope, callScope.args, thisObj = closureScope.thisObj) {
 
+    init {
+        // Preserve the lexical class context from where the lambda was defined (closure),
+        // so that visibility checks (private/protected) inside lambdas executed within other
+        // methods (e.g., Mutex.withLock) still see the original declaring class context.
+        this.currentClassCtx = closureScope.currentClassCtx
+    }
+
     override fun get(name: String): ObjRecord? {
         // Priority:
-        // 1) Arguments from the caller scope (if present in this frame)
+        // 1) Locals and arguments declared in this lambda frame (including values defined before suspension)
         // 2) Instance/class members of the captured receiver (`closureScope.thisObj`), e.g., fields like `coll`, `factor`
         // 3) Symbols from the captured closure scope (its locals and parents)
         // 4) Instance members of the caller's `this` (e.g., FlowBuilder.emit)
         // 5) Fallback to the standard chain (this frame -> parent (callScope) -> class members)
 
-        // note using super, not callScope, as arguments are assigned by the constructor
-        // and are not yet exposed via callScope.get at this point:
-        super.objects[name]?.let { if (it.type.isArgument) return it }
+        // First, prefer locals/arguments bound in this frame
+        super.objects[name]?.let { return it }
 
         // Prefer instance fields/methods declared on the captured receiver:
         // First, resolve real instance fields stored in the instance scope (constructor vars like `coll`, `factor`)

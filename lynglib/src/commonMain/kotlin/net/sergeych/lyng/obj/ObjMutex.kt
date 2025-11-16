@@ -33,6 +33,9 @@ class ObjMutex(val mutex: Mutex): Obj() {
         }.apply {
             addFn("withLock") {
                 val f = requiredArg<Statement>(0)
+                // Execute user lambda directly in the current scope to preserve the active scope
+                // ancestry across suspension points. The lambda still constructs a ClosureScope
+                // on top of this frame, and parseLambdaExpression sets skipScopeCreation for its body.
                 thisAs<ObjMutex>().mutex.withLock { f.execute(this) }
             }
         }

@@ -80,13 +80,26 @@ open class Obj {
         args: Arguments = Arguments.EMPTY,
         onNotFoundResult: (() -> Obj?)? = null
     ): Obj {
-        return objClass.getInstanceMemberOrNull(name)?.value?.invoke(
-            scope,
-            this,
-            args
-        )
-            ?: onNotFoundResult?.invoke()
-            ?: scope.raiseSymbolNotFound(name)
+        val rec = objClass.getInstanceMemberOrNull(name)
+        if (rec != null) {
+            val decl = rec.declaringClass ?: objClass.findDeclaringClassOf(name)
+            val caller = scope.currentClassCtx
+            if (!canAccessMember(rec.visibility, decl, caller))
+                scope.raiseError(ObjAccessException(scope, "can't invoke ${name}: not visible (declared in ${decl?.className ?: "?"}, caller ${caller?.className ?: "?"})"))
+            // Propagate declaring class as current class context during method execution
+            val saved = scope.currentClassCtx
+            scope.currentClassCtx = decl
+            try {
+                return rec.value.invoke(scope, this, args)
+            } finally {
+                scope.currentClassCtx = saved
+            }
+        }
+        return onNotFoundResult?.invoke()
+            ?: scope.raiseError(
+                "no such member: $name on ${objClass.className}. Considered order: ${objClass.renderLinearization(true)}. " +
+                        "Tip: try this@Base.$name(...) or (obj as Base).$name(...) if ambiguous"
+            )
     }
 
     open suspend fun getInstanceMethod(
@@ -258,7 +271,13 @@ open class Obj {
 
     open suspend fun readField(scope: Scope, name: String): ObjRecord {
         // could be property or class field:
-        val obj = objClass.getInstanceMemberOrNull(name) ?: scope.raiseError("no such field: $name")
+        val obj = objClass.getInstanceMemberOrNull(name) ?: scope.raiseError(
+            "no such field: $name on ${objClass.className}. Considered order: ${objClass.renderLinearization(true)}"
+        )
+        val decl = obj.declaringClass ?: objClass.findDeclaringClassOf(name)
+        val caller = scope.currentClassCtx
+        if (!canAccessMember(obj.visibility, decl, caller))
+            scope.raiseError(ObjAccessException(scope, "can't access field ${name}: not visible (declared in ${decl?.className ?: "?"}, caller ${caller?.className ?: "?"})"))
         return when (val value = obj.value) {
             is Statement -> {
                 ObjRecord(value.execute(scope.createChildScope(scope.pos, newThisObj = this)), obj.isMutable)
@@ -271,7 +290,13 @@ open class Obj {
 
     open suspend fun writeField(scope: Scope, name: String, newValue: Obj) {
         willMutate(scope)
-        val field = objClass.getInstanceMemberOrNull(name) ?: scope.raiseError("no such field: $name")
+        val field = objClass.getInstanceMemberOrNull(name) ?: scope.raiseError(
+            "no such field: $name on ${objClass.className}. Considered order: ${objClass.renderLinearization(true)}"
+        )
+        val decl = field.declaringClass ?: objClass.findDeclaringClassOf(name)
+        val caller = scope.currentClassCtx
+        if (!canAccessMember(field.visibility, decl, caller))
+            scope.raiseError(ObjAccessException(scope, "can't assign field ${name}: not visible (declared in ${decl?.className ?: "?"}, caller ${caller?.className ?: "?"})"))
         if (field.isMutable) field.value = newValue else scope.raiseError("can't assign to read-only field: $name")
     }
 

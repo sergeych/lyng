@@ -1,27 +1,3 @@
----
-gitea: none
-include_toc: true
----
-
-# Lyng tutorial
-
-Lyng is a very simple language, where we take only most important and popular features from
-other scripts and languages. In particular, we adopt _principle of minimal confusion_[^1].
-In other word, the code usually works as expected when you see it. So, nothing unusual.
-
-__Other documents to read__ maybe after this one:
-
-- [Advanced topics](advanced_topics.md), [declaring arguments](declaring_arguments.md)
-- [OOP notes](OOP.md), [exception handling](exceptions_handling.md)
-- [math in Lyng](math.md)
-- [time](time.md) and [parallelism](parallelism.md)
-- [parallelism] - multithreaded code, coroutines, etc.
-- Some class
-  references: [List], [Set], [Map], [Real], [Range], [Iterable], [Iterator], [time manipulation](time.md), [Array], [RingBuffer], [Buffer].
-- Some samples: [combinatorics](samples/combinatorics.lyng.md), national vars and
-  loops: [сумма ряда](samples/сумма_ряда.lyng.md). More at [samples folder](samples)
-
-# Expressions
 
 Everything is an expression in Lyng. Even an empty block:
 
@@ -1426,3 +1402,66 @@ Lambda avoid unnecessary execution if assertion is not failed. for example:
 [Array]: Array.md
 
 [Regex]: Regex.md
+
+## Multiple Inheritance (quick start)
+
+Lyng supports multiple inheritance (MI) with simple, predictable rules. For a full reference see OOP notes, this is a quick, copy‑paste friendly overview.
+
+Declare a class with multiple bases and pass constructor arguments to each base in the header:
+
+```
+class Foo(val a) {
+    var tag = "F"
+    fun runA() { "ResultA:" + a }
+    fun common() { "CommonA" }
+    private fun privateInFoo() {}
+    protected fun protectedInFoo() {}
+}
+
+class Bar(val b) {
+    var tag = "B"
+    fun runB() { "ResultB:" + b }
+    fun common() { "CommonB" }
+}
+
+class FooBar(a, b) : Foo(a), Bar(b) {
+    // Inside class bodies you can qualify with this@Type
+    fun fromFoo() { this@Foo.common() }
+    fun fromBar() { this@Bar.common() }
+}
+
+val fb = FooBar(1, 2)
+assertEquals("ResultA:1", fb.runA())
+assertEquals("ResultB:2", fb.runB())
+
+// Unqualified ambiguous member uses the first base (leftmost)
+assertEquals("CommonA", fb.common())
+
+// Disambiguate with casts
+assertEquals("CommonB", (fb as Bar).common())
+assertEquals("CommonA", (fb as Foo).common())
+
+// Field collisions: unqualified read/write uses the first in order
+assertEquals("F", fb.tag)
+fb.tag = "X"
+assertEquals("X", fb.tag)          // Foo.tag updated
+assertEquals("X", (fb as Foo).tag) // qualified read: Foo.tag
+assertEquals("B", (fb as Bar).tag) // qualified read: Bar.tag
+
+// Qualified write targets the chosen base storage
+(fb as Bar).tag = "Y"
+assertEquals("X", (fb as Foo).tag)
+assertEquals("Y", (fb as Bar).tag)
+
+// Optional casts with safe call
+class Buzz : Bar(3)
+val buzz = Buzz()
+assertEquals("ResultB:3", buzz.runB())
+assertEquals("ResultB:3", (buzz as? Bar)?.runB())
+assertEquals(null, (buzz as? Foo)?.runA())
+```
+
+Notes:
+- Resolution order uses C3 MRO (active): deterministic, monotonic order suitable for diamonds and complex hierarchies. Example: for `class D() : B(), C()` where both `B()` and `C()` derive from `A()`, the C3 order is `D → B → C → A`. The first visible match wins.
+- `private` is visible only inside the declaring class; `protected` is visible from the declaring class and any of its transitive subclasses. Qualification (`this@Type`) or casts do not bypass visibility.
+- Safe‑call `?.` works with `as?` for optional dispatch.

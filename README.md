@@ -174,8 +174,8 @@ Ready features:
 
 ###  Under way: 
 
-- [ ] regular exceptions + extended `when`
-- [ ] multiple inheritance for user classes
+- [x] regular exceptions + extended `when`
+- [x] multiple inheritance for user classes
 - [ ] site with integrated interpreter to give a try
 - [ ] kotlin part public API good docs, integration focused
 
