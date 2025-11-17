@@ -1770,7 +1770,7 @@ class ScriptTest {
     @Test
     fun testIntExponentRealForm() = runTest {
         when(val x = eval("1e-6").toString()) {
-            "0.000001", "1E-6", "1e-6" -> true
+            "0.000001", "1E-6", "1e-6" -> {}
             else -> fail("Excepted 1e-6 got $x")
         }
 //        assertEquals("1.0E-6", eval("1e-6").toString())
@@ -3460,7 +3460,7 @@ class ScriptTest {
     }
 
 
-    ///@Test
+//    @Test
     fun testMinimumOptimization() = runTest {
         for (i in 1..200) {
             bm {
@@ -3501,4 +3501,22 @@ class ScriptTest {
                 .trimIndent()
         )
     }
+
+    @Test
+    fun extensionsMustBeLocalPerScope() = runTest {
+        val scope1 = Script.newScope()
+
+        // extension foo should be local to scope1
+        assertEquals("a_foo", scope1.eval("""
+            fun String.foo() { this + "_foo" }
+            "a".foo()
+        """.trimIndent()).toString())
+
+        val scope2 = Script.newScope()
+        assertEquals("a_bar", scope2.eval("""
+            fun String.foo() { this + "_bar" }
+            "a".foo()
+        """.trimIndent()).toString())
+    }
+
 }
