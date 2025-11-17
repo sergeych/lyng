@@ -332,7 +332,9 @@ class LynonTests {
                 val encoded = Lynon.encode(value)
                 println(encoded.toDump())
                 println("Encoded size %d: %s"(encoded.size, value))
-                assertEquals( value, Lynon.decode(encoded) )
+                Lynon.decode(encoded).also {
+                    assertEquals( value, it )
+                }
             }
             """.trimIndent()
             )
@@ -698,6 +700,29 @@ class Wallet( id, ownerKey, balance=0, createdAt=Instant.now().truncateToSecond(
 //        println(t2.readField(s, "balance"))
     }
 
+
+    @Test
+    fun testMISerialization() = runTest {
+        val s = testScope()
+        s.eval("""
+            import lyng.serialization
+            
+            class Point(x,y)
+            class Color(r,g,b)
+            
+            class ColoredPoint(x, y, r, g, b): Point(x,y), Color(r,g,b)
+            
+            val cp = ColoredPoint(1,2,30,40,50)
+            val d = testEncode( cp )
+            assert(d is ColoredPoint)
+            assert(d is Point)
+            assert(d is Color)
+            val p = d as Point
+            val c = d as Color
+            val cp2 = ColoredPoint(p.x, p.y, c.r, c.g, c.b)
+            assertEquals(cp, cp2)
+        """)
+    }
 }
 
 

@@ -64,7 +64,7 @@ open class ObjClass(
 
     /**
      * All ancestors as a Set for fast `isInstanceOf` checks. Order is not guaranteed here and
-     * must not be used for resolution — use [parentsLinearized] instead.
+     * must not be used for resolution
      */
     val allParentsSet: Set<ObjClass> =
         buildSet {
@@ -173,7 +173,19 @@ open class ObjClass(
             if (isRoot) {
                 c.constructorMeta?.let { meta ->
                     val argsHere = argsForThis ?: Arguments.EMPTY
+                    // Assign constructor params into instance scope (unmangled)
                     meta.assignToContext(instance.instanceScope, argsHere)
+                    // Also expose them under MI-mangled storage keys `${Class}::name` so qualified views can access them
+                    // and so that base-class casts like `(obj as Base).field` work.
+                    for (p in meta.params) {
+                        val rec = instance.instanceScope.objects[p.name]
+                        if (rec != null) {
+                            val mangled = "${c.className}::${p.name}"
+                            // Always point the mangled name to the current record to keep writes consistent
+                            // across re-bindings (e.g., second pass before ctor)
+                            instance.instanceScope.objects[mangled] = rec
+                        }
+                    }
                 }
             }
             // Initialize direct parents first, in order
@@ -203,6 +215,15 @@ open class ObjClass(
                 c.constructorMeta?.let { meta ->
                     val argsHere = argsForThis ?: Arguments.EMPTY
                     meta.assignToContext(instance.instanceScope, argsHere)
+                    // Ensure mangled aliases exist for qualified access starting from this class
+                    for (p in meta.params) {
+                        val rec = instance.instanceScope.objects[p.name]
+                        if (rec != null) {
+                            val mangled = "${c.className}::${p.name}"
+                            // Overwrite to ensure alias refers to the latest ObjRecord after re-binding
+                            instance.instanceScope.objects[mangled] = rec
+                        }
+                    }
                 }
                 val execScope = instance.instanceScope.createChildScope(args = argsForThis ?: Arguments.EMPTY, newThisObj = instance)
                 ctor.execute(execScope)
@@ -259,7 +280,7 @@ open class ObjClass(
     fun addFn(
         name: String,
         isOpen: Boolean = false,
-        visibility: net.sergeych.lyng.Visibility = net.sergeych.lyng.Visibility.Public,
+        visibility: Visibility = Visibility.Public,
         code: suspend Scope.() -> Obj
     ) {
         val stmt = statement { code() }

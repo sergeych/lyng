@@ -150,5 +150,49 @@ assertEquals(null, (buzz as? Foo)?.runA())
 // - Foo.protectedInFoo() is accessible inside Foo and any subclass bodies (including FooBar),
 //   but not from unrelated classes/instances.
         """.trimIndent())
-    } 
+    }
+
+    @Test
+    fun testMITypes() = runTest {
+        eval("""
+            import lyng.serialization
+            
+            class Point(x,y)
+            class Color(r,g,b)
+            
+            class ColoredPoint(x, y, r, g, b): Point(x,y), Color(r,g,b)
+            
+            
+            val cp = ColoredPoint(1,2,30,40,50)
+
+            // cp is Color, Point and ColoredPoint:
+            assert(cp is ColoredPoint)
+            assert(cp is Point)
+            assert(cp is Color)
+            
+            // Color fields must be in ColoredPoint: 
+            assertEquals(30, cp.r)
+            assertEquals(40, cp.g)
+            assertEquals(50, cp.b)
+
+            // point fields must be available too:
+            assertEquals(1, cp.x)
+            assertEquals(2, cp.y)
+
+
+            // if we convert type to color, the fields should be available also:
+            val color = cp as Color
+            assert(color is Color)
+            assertEquals(30, color.r)
+            assertEquals(40, color.g)
+            assertEquals(50, color.b)
+            
+            // converted to Point, cp fields are still available:
+            val p = cp as Point
+            assert(p is Point)
+            assertEquals(1, p.x)
+            assertEquals(2, p.y)
+        """)
+    }
+
 }

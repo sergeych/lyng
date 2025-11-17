@@ -159,7 +159,10 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             ?: super.invokeInstanceMethod(scope, name, args, onNotFoundResult)
 
     private val publicFields: Map<String, ObjRecord>
-        get() = instanceScope.objects.filter { it.value.visibility.isPublic && it.value.type.serializable }
+        get() = instanceScope.objects.filter {
+            // Expose only human-facing fields: skip MI-mangled storage entries like "Class::name"
+            !it.key.contains("::") && it.value.visibility.isPublic && it.value.type.serializable
+        }
 
     override fun toString(): String {
         val fields = publicFields.map { "${it.key}=${it.value.value}" }.joinToString(",")
@@ -237,7 +240,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
             // Visibility: declaring class is the qualified ancestor for mangled storage
             val decl = rec.declaringClass ?: startClass
             val caller = scope.currentClassCtx
-            if (!net.sergeych.lyng.canAccessMember(rec.visibility, decl, caller))
+            if (!canAccessMember(rec.visibility, decl, caller))
                 scope.raiseError(ObjAccessException(scope, "can't access field $name (declared in ${decl.className})"))
             return rec
         }
@@ -246,7 +249,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
             instance.instanceScope[name]?.let { rec ->
                 val decl = rec.declaringClass ?: instance.objClass.findDeclaringClassOf(name)
                 val caller = scope.currentClassCtx
-                if (!net.sergeych.lyng.canAccessMember(rec.visibility, decl, caller))
+                if (!canAccessMember(rec.visibility, decl, caller))
                     scope.raiseError(ObjAccessException(scope, "can't access field $name (declared in ${decl?.className ?: "?"})"))
                 return rec
             }
@@ -255,7 +258,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
         val r = memberFromAncestor(name) ?: scope.raiseError("no such field: $name")
         val decl = r.declaringClass ?: startClass
         val caller = scope.currentClassCtx
-        if (!net.sergeych.lyng.canAccessMember(r.visibility, decl, caller))
+        if (!canAccessMember(r.visibility, decl, caller))
             scope.raiseError(ObjAccessException(scope, "can't access field $name (declared in ${decl.className})"))
         return when (val value = r.value) {
             is net.sergeych.lyng.Statement -> ObjRecord(value.execute(instance.instanceScope.createChildScope(scope.pos, newThisObj = instance)), r.isMutable)
@@ -269,7 +272,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
         instance.instanceScope.objects[mangled]?.let { f ->
             val decl = f.declaringClass ?: startClass
             val caller = scope.currentClassCtx
-            if (!net.sergeych.lyng.canAccessMember(f.visibility, decl, caller))
+            if (!canAccessMember(f.visibility, decl, caller))
                 ObjIllegalAssignmentException(scope, "can't assign to field $name (declared in ${decl.className})").raise()
             if (!f.isMutable) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
             if (f.value.assign(scope, newValue) == null) f.value = newValue
@@ -280,7 +283,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
             instance.instanceScope[name]?.let { f ->
                 val decl = f.declaringClass ?: instance.objClass.findDeclaringClassOf(name)
                 val caller = scope.currentClassCtx
-                if (!net.sergeych.lyng.canAccessMember(f.visibility, decl, caller))
+                if (!canAccessMember(f.visibility, decl, caller))
                     ObjIllegalAssignmentException(scope, "can't assign to field $name (declared in ${decl?.className ?: "?"})").raise()
                 if (!f.isMutable) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
                 if (f.value.assign(scope, newValue) == null) f.value = newValue
@@ -290,7 +293,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
         val r = memberFromAncestor(name) ?: scope.raiseError("no such field: $name")
         val decl = r.declaringClass ?: startClass
         val caller = scope.currentClassCtx
-        if (!net.sergeych.lyng.canAccessMember(r.visibility, decl, caller))
+        if (!canAccessMember(r.visibility, decl, caller))
             ObjIllegalAssignmentException(scope, "can't assign to field $name (declared in ${decl.className})").raise()
         if (!r.isMutable) scope.raiseError("can't assign to read-only field: $name")
         if (r.value.assign(scope, newValue) == null) r.value = newValue
@@ -301,7 +304,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
         memberFromAncestor(name)?.let { rec ->
             val decl = rec.declaringClass ?: startClass
             val caller = scope.currentClassCtx
-            if (!net.sergeych.lyng.canAccessMember(rec.visibility, decl, caller))
+            if (!canAccessMember(rec.visibility, decl, caller))
                 scope.raiseError(ObjAccessException(scope, "can't invoke method $name (declared in ${decl.className})"))
             val saved = instance.instanceScope.currentClassCtx
             instance.instanceScope.currentClassCtx = decl
@@ -316,7 +319,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
             instance.instanceScope[name]?.let { rec ->
                 val decl = rec.declaringClass ?: instance.objClass.findDeclaringClassOf(name)
                 val caller = scope.currentClassCtx
-                if (!net.sergeych.lyng.canAccessMember(rec.visibility, decl, caller))
+                if (!canAccessMember(rec.visibility, decl, caller))
                     scope.raiseError(ObjAccessException(scope, "can't invoke method $name (declared in ${decl?.className ?: "?"})"))
                 val saved = instance.instanceScope.currentClassCtx
                 instance.instanceScope.currentClassCtx = decl
