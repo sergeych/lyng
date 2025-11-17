@@ -1,6 +1,6 @@
 # Lyng: modern scripting for kotlin multiplatform
 
-A KMP library and a standalone interpreter
+A KMP library and a standalone interpreter. v1.0.0-SNAPSHOT is now available.
 
 - simple, compact, intuitive and elegant modern code:
 
@@ -146,7 +146,7 @@ flowchart
     
 ```
 
-## v1.0.0 "Make it happen"
+## v1.0.0 "Make it happen" - done!
 
 Planned autumn 2025. Complete dynamic language with sufficient standard library:
 
@@ -172,30 +172,25 @@ Ready features:
 - [x] function annotations
 - [x] better stack reporting
 
-###  Under way: 
 
 - [x] regular exceptions + extended `when`
 - [x] multiple inheritance for user classes
+
+## plan: v1.0 - v1.5 Stability, integration, optimizations
+
 - [ ] site with integrated interpreter to give a try
 - [ ] kotlin part public API good docs, integration focused
-
-## plan: v1.0 - v1.5 "Rich and stable"
-
-Estimated spring of 2026
-
-Planned features.
-
 - [ ] type specifications
 - [ ] language server or compose-based lyng-aware editor
 - [ ] source docs and maybe lyng.md to a standard
 - [ ] metadata first class access from lyng
+- [ ] aggressive optimizations
 
 ## After 1.5 "Ideal scripting"
 
-Estimated winter 2027
+  Estimated winter 2027
 
 - [ ] client with GUI support based on compose multiplatform somehow
 - [ ] notebook - style workbooks with graphs, formulae, etc.
-- [ ] aggressive optimizations
 
 [parallelism]: docs/parallelism.md
