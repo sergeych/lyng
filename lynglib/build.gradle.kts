@@ -23,21 +23,13 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 group = "net.sergeych"
 version = "1.0.0-SNAPSHOT"
 
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.4.0")
-        classpath("com.codingfeline.buildkonfig:buildkonfig-gradle-plugin:latest_version")
-    }
-}
+// Removed legacy buildscript classpath declarations; plugins are applied via the plugins DSL below
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidLibrary)
 //    alias(libs.plugins.vanniktech.mavenPublish)
-    kotlin("plugin.serialization") version "2.1.0"
+    kotlin("plugin.serialization") version "2.2.21"
     id("com.codingfeline.buildkonfig") version "0.17.1"
     `maven-publish`
 }
@@ -84,9 +76,10 @@ kotlin {
         all {
             languageSettings.optIn("kotlinx.coroutines.ExperimentalCoroutinesApi")
             languageSettings.optIn("kotlin.ExperimentalUnsignedTypes")
-            languageSettings.optIn("kotlin.coroutines.DelicateCoroutinesApi")
+            // Correct opt-in markers for coroutines
+            languageSettings.optIn("kotlinx.coroutines.DelicateCoroutinesApi")
             languageSettings.optIn("kotlin.contracts.ExperimentalContracts")
-            languageSettings.optIn("kotlinx.coroutines.flow.DelicateCoroutinesApi")
+            languageSettings.optIn("kotlinx.coroutines.FlowPreview")
         }
 
         val commonMain by getting {

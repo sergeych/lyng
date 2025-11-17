@@ -36,3 +36,4 @@ dependencyResolutionManagement {
 rootProject.name = "lyng"
 include(":lynglib")
 include(":lyng")
+include(":site")
