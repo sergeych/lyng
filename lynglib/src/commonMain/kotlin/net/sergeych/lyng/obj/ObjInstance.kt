@@ -32,9 +32,15 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         // Direct (unmangled) lookup first
         instanceScope[name]?.let {
             val decl = it.declaringClass ?: objClass.findDeclaringClassOf(name)
-            val caller = scope.currentClassCtx ?: instanceScope.currentClassCtx
-            val allowed = if (it.visibility == net.sergeych.lyng.Visibility.Private) (decl === objClass) else canAccessMember(it.visibility, decl, caller)
-            if (!allowed)
+            // When execution passes through suspension points (e.g., withLock),
+            // currentClassCtx could be lost. Fall back to the instance scope class ctx
+            // to preserve correct visibility semantics for private/protected members
+            // accessed from within the class methods.
+            // Allow unconditional access when accessing through `this` of the same instance
+            if (scope.thisObj === this) return it
+            val caller0 = scope.currentClassCtx ?: instanceScope.currentClassCtx
+            val caller = caller0 // do not default to objClass for outsiders
+            if (!canAccessMember(it.visibility, decl, caller))
                 scope.raiseError(ObjAccessException(scope, "can't access field $name (declared in ${decl?.className ?: "?"})"))
             return it
         }
@@ -51,15 +57,15 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             return null
         }
         findMangled()?.let { rec ->
-            val declName = rec.importedFrom?.packageName // unused; use mangled key instead
             // derive declaring class by mangled prefix: try self then parents
             val declaring = when {
                 instanceScope.objects.containsKey("${cls.className}::$name") -> cls
                 else -> cls.mroParents.firstOrNull { instanceScope.objects.containsKey("${it.className}::$name") }
             }
-            val caller = scope.currentClassCtx ?: instanceScope.currentClassCtx
-            val allowed = if (rec.visibility == net.sergeych.lyng.Visibility.Private) (declaring === objClass) else canAccessMember(rec.visibility, declaring, caller)
-            if (!allowed)
+            if (scope.thisObj === this) return rec
+            val caller0 = scope.currentClassCtx ?: instanceScope.currentClassCtx
+            val caller = caller0 // do not default to objClass for outsiders
+            if (!canAccessMember(rec.visibility, declaring, caller))
                 scope.raiseError(ObjAccessException(scope, "can't access field $name (declared in ${declaring?.className ?: "?"})"))
             return rec
         }
@@ -71,10 +77,14 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         // Direct (unmangled) first
         instanceScope[name]?.let { f ->
             val decl = f.declaringClass ?: objClass.findDeclaringClassOf(name)
-            val caller = scope.currentClassCtx ?: instanceScope.currentClassCtx
-            val allowed = if (f.visibility == net.sergeych.lyng.Visibility.Private) (decl === objClass) else canAccessMember(f.visibility, decl, caller)
-            if (!allowed)
-                ObjIllegalAssignmentException(scope, "can't assign to field $name (declared in ${decl?.className ?: "?"})").raise()
+            if (scope.thisObj === this) {
+                // direct self-assignment allowed; enforce mutability below
+            } else {
+                val caller0 = scope.currentClassCtx ?: instanceScope.currentClassCtx
+                val caller = caller0 // do not default to objClass for outsiders
+                if (!canAccessMember(f.visibility, decl, caller))
+                    ObjIllegalAssignmentException(scope, "can't assign to field $name (declared in ${decl?.className ?: "?"})").raise()
+            }
             if (!f.isMutable) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
             if (f.value.assign(scope, newValue) == null)
                 f.value = newValue
@@ -95,10 +105,12 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 instanceScope.objects.containsKey("${cls.className}::$name") -> cls
                 else -> cls.mroParents.firstOrNull { instanceScope.objects.containsKey("${it.className}::$name") }
             }
-            val caller = scope.currentClassCtx ?: instanceScope.currentClassCtx
-            val allowed = if (rec.visibility == net.sergeych.lyng.Visibility.Private) (declaring === objClass) else canAccessMember(rec.visibility, declaring, caller)
-            if (!allowed)
-                ObjIllegalAssignmentException(scope, "can't assign to field $name (declared in ${declaring?.className ?: "?"})").raise()
+            if (scope.thisObj !== this) {
+                val caller0 = scope.currentClassCtx ?: instanceScope.currentClassCtx
+                val caller = caller0 // do not default to objClass for outsiders
+                if (!canAccessMember(rec.visibility, declaring, caller))
+                    ObjIllegalAssignmentException(scope, "can't assign to field $name (declared in ${declaring?.className ?: "?"})").raise()
+            }
             if (!rec.isMutable) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
             if (rec.value.assign(scope, newValue) == null)
                 rec.value = newValue
@@ -111,9 +123,9 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                                               onNotFoundResult: (()->Obj?)?): Obj =
         instanceScope[name]?.let { rec ->
             val decl = rec.declaringClass ?: objClass.findDeclaringClassOf(name)
-            val caller = scope.currentClassCtx ?: instanceScope.currentClassCtx
-            val allowed = if (rec.visibility == net.sergeych.lyng.Visibility.Private) (decl === objClass) else canAccessMember(rec.visibility, decl, caller)
-            if (!allowed)
+            val caller0 = scope.currentClassCtx ?: instanceScope.currentClassCtx
+            val caller = caller0 ?: if (scope.thisObj === this) objClass else null
+            if (!canAccessMember(rec.visibility, decl, caller))
                 scope.raiseError(ObjAccessException(scope, "can't invoke method $name (declared in ${decl?.className ?: "?"})"))
             // execute with lexical class context propagated to declaring class
             val saved = instanceScope.currentClassCtx
@@ -131,7 +143,8 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 // fallback: class-scope function (registered during class body execution)
                 objClass.classScope?.objects?.get(name)?.let { rec ->
                     val decl = rec.declaringClass ?: objClass.findDeclaringClassOf(name)
-                    val caller = scope.currentClassCtx
+                    val caller0 = scope.currentClassCtx ?: instanceScope.currentClassCtx
+                    val caller = caller0 ?: if (scope.thisObj === this) objClass else null
                     if (!canAccessMember(rec.visibility, decl, caller))
                         scope.raiseError(ObjAccessException(scope, "can't invoke method $name (declared in ${decl?.className ?: "?"})"))
                     val saved = instanceScope.currentClassCtx

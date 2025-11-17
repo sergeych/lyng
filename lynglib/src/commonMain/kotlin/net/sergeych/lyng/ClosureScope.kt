@@ -30,10 +30,11 @@ class ClosureScope(val callScope: Scope, val closureScope: Scope) :
     Scope(callScope, callScope.args, thisObj = closureScope.thisObj) {
 
     init {
-        // Preserve the lexical class context from where the lambda was defined (closure),
-        // so that visibility checks (private/protected) inside lambdas executed within other
-        // methods (e.g., Mutex.withLock) still see the original declaring class context.
-        this.currentClassCtx = closureScope.currentClassCtx
+        // Preserve the lexical class context of the closure by default. This ensures that lambdas
+        // created inside a class method keep access to that class's private/protected members even
+        // when executed from within another object's method (e.g., Mutex.withLock), which may set
+        // its own currentClassCtx temporarily. If the closure has no class context, inherit caller's.
+        this.currentClassCtx = closureScope.currentClassCtx ?: callScope.currentClassCtx
     }
 
     override fun get(name: String): ObjRecord? {

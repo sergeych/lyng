@@ -253,6 +253,24 @@ class BinaryOpRef(private val op: BinOp, private val left: ObjRef, private val r
     }
 }
 
+/** Conditional (ternary) operator reference: cond ? a : b */
+class ConditionalRef(
+    private val condition: ObjRef,
+    private val ifTrue: ObjRef,
+    private val ifFalse: ObjRef
+) : ObjRef {
+    override suspend fun get(scope: Scope): ObjRecord {
+        val condVal = if (net.sergeych.lyng.PerfFlags.RVAL_FASTPATH) condition.evalValue(scope) else condition.get(scope).value
+        val condTrue = when (condVal) {
+            is ObjBool -> condVal.value
+            is ObjInt -> condVal.value != 0L
+            else -> condVal.toBool()
+        }
+        val branch = if (condTrue) ifTrue else ifFalse
+        return branch.get(scope)
+    }
+}
+
 /** Cast operator reference: left `as` rightType or `as?` (nullable). */
 class CastRef(
     private val valueRef: ObjRef,

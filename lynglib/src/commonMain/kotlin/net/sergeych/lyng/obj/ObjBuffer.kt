@@ -62,7 +62,10 @@ open class ObjBuffer(val byteArray: UByteArray) : Obj() {
     val size by byteArray::size
 
     override fun hashCode(): Int {
-        return byteArray.hashCode()
+        // On some platforms (notably JS), UByteArray.hashCode() is not content-based.
+        // For map/set keys we must ensure hash is consistent with equals(contentEquals).
+        // Convert to ByteArray and use contentHashCode() which is value-based and stable.
+        return byteArray.asByteArray().contentHashCode()
     }
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {

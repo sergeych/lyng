@@ -224,8 +224,19 @@ class Compiler(
         while (true) {
 
             val opToken = cc.next()
-            val op = byLevel[level][opToken.type]
+        val op = byLevel[level][opToken.type]
             if (op == null) {
+                // handle ternary conditional at the top precedence level only: a ? b : c
+                if (opToken.type == Token.Type.QUESTION && level == 0) {
+                    val thenRef = parseExpressionLevel(level + 1)
+                        ?: throw ScriptError(opToken.pos, "Expecting expression after '?'")
+                    val colon = cc.next()
+                    if (colon.type != Token.Type.COLON) colon.raiseSyntax("missing ':'")
+                    val elseRef = parseExpressionLevel(level + 1)
+                        ?: throw ScriptError(colon.pos, "Expecting expression after ':'")
+                    lvalue = ConditionalRef(lvalue!!, thenRef, elseRef)
+                    continue
+                }
                 cc.previous()
                 break
             }
