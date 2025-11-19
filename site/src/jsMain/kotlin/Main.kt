@@ -16,15 +16,17 @@
  */
 
 import androidx.compose.runtime.*
-import org.jetbrains.compose.web.dom.*
-import org.jetbrains.compose.web.renderComposable
+import externals.marked
+import kotlinx.browser.document
 import kotlinx.browser.window
 import kotlinx.coroutines.await
+import org.jetbrains.compose.web.dom.*
+import org.jetbrains.compose.web.renderComposable
+import org.w3c.dom.HTMLAnchorElement
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.HTMLHeadingElement
-import org.w3c.dom.HTMLAnchorElement
 import org.w3c.dom.HTMLImageElement
-import externals.marked
+import org.w3c.dom.HTMLLinkElement
 
 data class TocItem(val level: Int, val id: String, val title: String)
 
@@ -34,7 +36,9 @@ fun App() {
     var html by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var toc by remember { mutableStateOf<List<TocItem>>(emptyList()) }
+    var activeTocId by remember { mutableStateOf<String?>(null) }
     var contentEl by remember { mutableStateOf<HTMLElement?>(null) }
+    var theme by remember { mutableStateOf(detectInitialTheme()) }
     val isDocsRoute = route.startsWith("docs/")
     // A stable key for the current document path (without fragment). Used to avoid
     // re-fetching when only the in-page anchor changes.
@@ -81,6 +85,8 @@ fun App() {
                 window.location.hash = "#/$newRoute"
             }
             toc = buildToc(el)
+            // Reset active TOC id on new content
+            activeTocId = toc.firstOrNull()?.id
 
             // If the current hash includes an anchor (e.g., #/docs/file.md#section), scroll to it
             val frag = anchorFromHash(window.location.hash)
@@ -102,6 +108,45 @@ fun App() {
                 (target as? HTMLElement)?.scrollIntoView()
             }
         }, 0)
+    }
+
+    // Scrollspy: highlight active heading in TOC while scrolling
+    DisposableEffect(toc, contentEl) {
+        if (toc.isEmpty() || contentEl == null || !isDocsRoute) return@DisposableEffect onDispose {}
+
+        var scheduled = false
+        fun computeActive() {
+            scheduled = false
+            // Determine tops relative to viewport for each heading
+            val tops = toc.mapNotNull { item ->
+                contentEl!!.ownerDocument?.getElementById(item.id)
+                    ?.let { (it as? HTMLElement)?.getBoundingClientRect()?.top?.toDouble() }
+            }
+            if (tops.isEmpty()) return
+            val idx = activeIndexForTops(tops, offsetPx = 80.0)
+            val newId = toc.getOrNull(idx)?.id
+            if (newId != null && newId != activeTocId) {
+                activeTocId = newId
+            }
+        }
+
+        val scrollListener: (org.w3c.dom.events.Event) -> Unit = {
+            if (!scheduled) {
+                scheduled = true
+                window.requestAnimationFrame { computeActive() }
+            }
+        }
+        val resizeListener = scrollListener
+
+        // Initial compute
+        computeActive()
+        window.addEventListener("scroll", scrollListener)
+        window.addEventListener("resize", resizeListener)
+
+        onDispose {
+            window.removeEventListener("scroll", scrollListener)
+            window.removeEventListener("resize", resizeListener)
+        }
     }
 
     // Layout
@@ -127,6 +172,11 @@ fun App() {
                                     attr("href", tocHref)
                                     attr("style", "padding-left: $pad")
                                     classes("link-body-emphasis", "text-decoration-none")
+                                    // Highlight active item
+                                    if (activeTocId == item.id) {
+                                        classes("fw-semibold", "text-primary")
+                                        attr("aria-current", "true")
+                                    }
                                     onClick {
                                         it.preventDefault()
                                         // Update location hash to include the document route and section id
@@ -152,6 +202,24 @@ fun App() {
                         attr("href", "#/reference")
                         onClick { it.preventDefault(); window.location.hash = "#/reference" }
                     }) { Text("Reference") }
+
+                    // Theme toggle
+                    Button(attrs = {
+                        classes("btn", "btn-sm", "btn-outline-secondary")
+                        onClick {
+                            theme = if (theme == Theme.Dark) Theme.Light else Theme.Dark
+                            applyTheme(theme)
+                            saveThemePreference(theme)
+                        }
+                    }) {
+                        if (theme == Theme.Dark) {
+                            I({ classes("bi", "bi-sun") })
+                            Text(" Light")
+                        } else {
+                            I({ classes("bi", "bi-moon") })
+                            Text(" Dark")
+                        }
+                    }
 
                     // Sample quick links
                     DocLink("Iterable.md")
@@ -312,6 +380,44 @@ private fun ReferencePage() {
         docs == null -> P { Text("Loading index…") }
         docs!!.isEmpty() -> P { Text("No documents found.") }
         else -> UnsafeRawHtml(renderReferenceListHtml(docs!!))
+    }
+}
+
+// ---- Theme handling ----
+
+private enum class Theme { Light, Dark }
+
+private fun detectInitialTheme(): Theme {
+    // Try user preference from localStorage
+    val stored = try { window.localStorage.getItem("theme") } catch (_: Throwable) { null }
+    if (stored == "dark") return Theme.Dark
+    if (stored == "light") return Theme.Light
+    // Fallback to system preference
+    val prefersDark = try {
+        window.matchMedia("(prefers-color-scheme: dark)").matches
+    } catch (_: Throwable) { false }
+    val t = if (prefersDark) Theme.Dark else Theme.Light
+    // Apply immediately so first render uses correct theme
+    applyTheme(t)
+    return t
+}
+
+private fun saveThemePreference(theme: Theme) {
+    try { window.localStorage.setItem("theme", if (theme == Theme.Dark) "dark" else "light") } catch (_: Throwable) {}
+}
+
+private fun applyTheme(theme: Theme) {
+    // Toggle Bootstrap theme attribute
+    document.body?.setAttribute("data-bs-theme", if (theme == Theme.Dark) "dark" else "light")
+    // Toggle GitHub Markdown CSS light/dark
+    val light = document.getElementById("md-light") as? HTMLLinkElement
+    val dark = document.getElementById("md-dark") as? HTMLLinkElement
+    if (theme == Theme.Dark) {
+        light?.setAttribute("disabled", "")
+        dark?.removeAttribute("disabled")
+    } else {
+        dark?.setAttribute("disabled", "")
+        light?.removeAttribute("disabled")
     }
 }
 
@@ -501,6 +607,20 @@ private fun normalizePath(path: String): String {
         }
     }
     return parts.joinToString("/")
+}
+
+// ---- Scrollspy helpers ----
+// Given a list of heading top positions relative to viewport (in px),
+// returns the index of the active section using an offset. The active section
+// is the last heading whose top is above or at the offset line.
+// If none are above the offset, returns 0. If list is empty, returns 0.
+fun activeIndexForTops(tops: List<Double>, offsetPx: Double): Int {
+    if (tops.isEmpty()) return 0
+    for (i in tops.indices) {
+        if (tops[i] - offsetPx > 0.0) return i
+    }
+    // If all headings are above the offset, select the last one
+    return tops.size - 1
 }
 
 fun main() {
