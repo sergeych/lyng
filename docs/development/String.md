@@ -1,3 +1,5 @@
+[//]: # (excludeFromIndex)
+
 # String
 
 # This document is for developer notes only

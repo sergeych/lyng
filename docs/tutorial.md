@@ -1,3 +1,22 @@
+# Lyng tutorial
+
+Lyng is a very simple language, where we take only most important and popular features from
+other scripts and languages. In particular, we adopt _principle of minimal confusion_[^1].
+In other word, the code usually works as expected when you see it. So, nothing unusual.
+
+__Other documents to read__ maybe after this one:
+
+- [Advanced topics](advanced_topics.md), [declaring arguments](declaring_arguments.md)
+- [OOP notes](OOP.md), [exception handling](exceptions_handling.md)
+- [math in Lyng](math.md)
+- [time](time.md) and [parallelism](parallelism.md)
+- [parallelism] - multithreaded code, coroutines, etc.
+- Some class
+  references: [List], [Set], [Map], [Real], [Range], [Iterable], [Iterator], [time manipulation](time.md), [Array], [RingBuffer], [Buffer].
+- Some samples: [combinatorics](samples/combinatorics.lyng.md), national vars and
+  loops: [сумма ряда](samples/сумма_ряда.lyng.md). More at [samples folder](samples)
+
+# Expressions
 
 Everything is an expression in Lyng. Even an empty block:
 
@@ -1465,3 +1484,5 @@ Notes:
 - Resolution order uses C3 MRO (active): deterministic, monotonic order suitable for diamonds and complex hierarchies. Example: for `class D() : B(), C()` where both `B()` and `C()` derive from `A()`, the C3 order is `D → B → C → A`. The first visible match wins.
 - `private` is visible only inside the declaring class; `protected` is visible from the declaring class and any of its transitive subclasses. Qualification (`this@Type`) or casts do not bypass visibility.
 - Safe‑call `?.` works with `as?` for optional dispatch.
+
+To get details on OOP in Lyng, see [OOP notes](oop.md).

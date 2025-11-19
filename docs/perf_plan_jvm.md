@@ -1,5 +1,7 @@
 # JVM-only Performance Optimization Plan (Saved)
 
+[//]: # (excludeFromIndex)
+
 Date: 2025-11-10 22:14 (local)
 
 This document captures the agreed next optimization steps so we can restore the plan later if needed.

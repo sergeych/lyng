@@ -53,6 +53,7 @@ kotlin {
                 implementation(project(":lynglib"))
                 // Markdown parser (NPM)
                 implementation(npm("marked", "12.0.2"))
+                // MathJax is loaded via CDN in index.html; no npm dependency required
             }
             // Serve project docs and images as static resources in the site
             resources.srcDir(rootProject.projectDir.resolve("docs"))

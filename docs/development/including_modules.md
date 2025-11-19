@@ -1,5 +1,7 @@
 # Modules inclusion
 
+[//]: # (excludeFromIndex)
+
 Module is, at the low level, a statement that modifies a given context by adding
 here local and exported symbols, performing some tasks and even returning some value
 we don't need for now.

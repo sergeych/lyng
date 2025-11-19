@@ -1,6 +1,8 @@
 
 This document explains how to enable and measure the performance optimizations added to the Lyng interpreter. The focus is JVM‑first with safe, flag‑guarded rollouts and quick A/B testing. Other targets (JS/Wasm/Native) keep conservative defaults until validated.
 
+[//]: # (excludeFromIndex)
+
 ## Overview
 
 Optimizations are controlled by runtime‑mutable flags in `net.sergeych.lyng.PerfFlags`, initialized from platform‑specific static defaults `net.sergeych.lyng.PerfDefaults` (KMP `expect/actual`).
