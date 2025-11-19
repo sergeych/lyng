@@ -19,22 +19,89 @@ import androidx.compose.runtime.*
 import externals.marked
 import kotlinx.browser.document
 import kotlinx.browser.window
-import kotlinx.coroutines.await
+import kotlinx.coroutines.*
 import org.jetbrains.compose.web.dom.*
 import org.jetbrains.compose.web.renderComposable
 import org.w3c.dom.HTMLAnchorElement
+import org.w3c.dom.HTMLDivElement
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.HTMLHeadingElement
 import org.w3c.dom.HTMLImageElement
+import org.w3c.dom.HTMLInputElement
 import org.w3c.dom.HTMLLinkElement
 
 data class TocItem(val level: Int, val id: String, val title: String)
+
+// --------------- Lightweight debug logging ---------------
+// Disable debug logging by default
+private var SEARCH_DEBUG: Boolean = false
+private fun dlog(tag: String, msg: String) {
+    if (!SEARCH_DEBUG) return
+    try {
+        console.log("[LYNG][$tag] $msg")
+    } catch (_: dynamic) { }
+}
+
+@Suppress("unused")
+private fun exposeSearchDebugToggle() {
+    try {
+        val w = window.asDynamic()
+        w.setLyngSearchDebug = { enabled: Boolean ->
+            SEARCH_DEBUG = enabled
+            dlog("debug", "SEARCH_DEBUG=$enabled")
+        }
+        // Extra runtime helpers to diagnose search at runtime
+        w.lyngSearchForceReindex = {
+            try {
+                dlog("debug", "lyngSearchForceReindex() called")
+                searchIndex = null
+                searchBuilding = false
+                MainScopeProvider.scope.launch {
+                    buildSearchIndexOnce()
+                    val count = searchIndex?.size ?: -1
+                    dlog("search", "forceReindex complete: indexed=$count")
+                    searchIndex?.take(5)?.forEachIndexed { i, rec ->
+                        dlog("search", "sample[$i]: ${rec.path} | ${rec.title}")
+                    }
+                }
+            } catch (_: dynamic) { }
+        }
+        w.lyngSearchQuery = { q: String ->
+            try {
+                dlog("debug", "lyngSearchQuery('$q') called")
+                MainScopeProvider.scope.launch {
+                    if (searchIndex == null) buildSearchIndexOnce()
+                    val idxSize = searchIndex?.size ?: -1
+                    val res = performSearch(q)
+                    dlog("search", "query '$q' on idx=$idxSize -> ${res.size} hits")
+                    res.take(5).forEachIndexed { i, r ->
+                        dlog("search", "hit[$i]: score=${scoreQuery(q, r)} path=${r.path} title=${r.title}")
+                    }
+                }
+            } catch (_: dynamic) { }
+        }
+        dlog("debug", "window.setLyngSearchDebug(Boolean) is available in console")
+    } catch (_: dynamic) { }
+}
 
 // MathJax v3 global API (loaded via CDN in index.html)
 external object MathJax {
     fun typesetPromise(elements: Array<dynamic> = definedExternally): dynamic
     fun typeset(elements: Array<dynamic> = definedExternally)
 }
+
+// Ensure MathJax loader is bundled (self-host): importing the ES5 CHTML bundle has side effects
+@JsModule("mathjax/es5/tex-chtml.js")
+@JsNonModule
+external val mathjaxBundle: dynamic
+
+// JS JSON parser binding (avoid inline js("JSON.parse(...)"))
+external object JSON {
+    fun parse(text: String): dynamic
+}
+
+// JS global encodeURI binding (to safely request paths that may contain non-ASCII)
+external fun encodeURI(uri: String): String
 
 @Composable
 fun App() {
@@ -50,7 +117,14 @@ fun App() {
 
     // Initialize dynamic Documentation dropdown once
     LaunchedEffect(Unit) {
+        dlog("init", "initDocsDropdown()")
         initDocsDropdown()
+    }
+
+    // Initialize site-wide search (lazy index build on first use)
+    LaunchedEffect(Unit) {
+        dlog("init", "initTopSearch()")
+        initTopSearch()
     }
 
     // Listen to hash changes (routing)
@@ -282,7 +356,9 @@ private fun DocsPage(
 
         val path = routeToPath(route)
         try {
-            val resp = window.fetch(path).await()
+            // Use encoded relative URL to handle non-ASCII filenames and ensure correct base
+            val url = "./" + encodeURI(path)
+            val resp = window.fetch(url).await()
             if (!resp.ok) {
                 setError("Not found: $path (${resp.status})")
             } else {
@@ -411,28 +487,48 @@ private fun extractTitleFromMarkdown(md: String): String? {
 
 private suspend fun initDocsDropdown() {
     try {
-        val menu = document.getElementById("docsDropdownMenu") ?: return
+        dlog("docs-dd", "initDocsDropdown start")
+        val menu = document.getElementById("docsDropdownMenu") ?: run {
+            dlog("docs-dd", "#docsDropdownMenu not found")
+            return
+        }
         // Fetch docs index
         val resp = window.fetch("docs-index.json").await()
-        if (!resp.ok) return
+        if (!resp.ok) {
+            dlog("docs-dd", "docs-index.json fetch failed: status=${resp.status}")
+            return
+        }
         val text = resp.text().await()
-        val arr = js("JSON.parse(text)") as Array<String>
+        val arr = JSON.parse(text) as Array<String>
         val all = arr.toList().sorted()
+        dlog("docs-dd", "index entries=${all.size}")
         // Filter excluded by reading each markdown and looking for the marker
         val filtered = mutableListOf<String>()
+        var excluded = 0
+        var failed = 0
         for (path in all) {
             try {
-                val r = window.fetch(path).await()
-                if (!r.ok) continue
+                val url = "./" + encodeURI(path)
+                val r = window.fetch(url).await()
+                if (!r.ok) {
+                    failed++
+                    dlog("docs-dd", "fetch fail ${r.status} for $url")
+                    continue
+                }
                 val body = r.text().await()
                 if (!body.contains("[//]: # (excludeFromIndex)")) {
                     filtered.add(path)
-                }
-            } catch (_: Throwable) {}
+                } else excluded++
+            } catch (t: Throwable) {
+                failed++
+                dlog("docs-dd", "exception fetching $path : ${t.message}")
+            }
         }
+        dlog("docs-dd", "filtered=${filtered.size} excluded=$excluded failed=$failed")
         // Sort entries by display name (file name) case-insensitively
         val sortedFiltered = filtered.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.substringAfterLast('/') })
         // Build items after the static first two existing children (tutorial + divider)
+        var appended = 0
         sortedFiltered.forEach { path ->
             val name = path.substringAfterLast('/')
             val li = document.createElement("li")
@@ -444,13 +540,17 @@ private suspend fun initDocsDropdown() {
             // Ensure SPA navigation and close navbar collapse on small screens
             a.onclick = { ev ->
                 ev.preventDefault()
+                dlog("nav", "docs dropdown -> navigate #/$path")
                 window.location.hash = "#/$path"
                 closeNavbarCollapse()
             }
             li.appendChild(a)
             menu.appendChild(li)
+            appended++
         }
+        dlog("docs-dd", "appended=$appended docs to dropdown")
     } catch (_: Throwable) {
+        dlog("docs-dd", "exception during initDocsDropdown")
     }
 }
 
@@ -463,6 +563,309 @@ private fun closeNavbarCollapse() {
         val t = togglers.item(0) as? HTMLElement
         t?.setAttribute("aria-expanded", "false")
     }
+}
+
+// ---------------- Site-wide search (client-side) ----------------
+
+private data class DocRecord(val path: String, val title: String, val text: String)
+
+private var searchIndex: List<DocRecord>? = null
+private var searchBuilding = false
+private var searchInitDone = false
+
+private fun norm(s: String): String = s.lowercase()
+    .replace("`", " ")
+    .replace("*", " ")
+    .replace("#", " ")
+    .replace("[", " ")
+    .replace("]", " ")
+    .replace("(", " ")
+    .replace(")", " ")
+    .replace(Regex("\\n+"), " ")
+    .replace(Regex("\\s+"), " ").trim()
+
+private fun plainFromMarkdown(md: String): String {
+    // Construct Regex instances at call time inside try/catch to avoid module init crashes
+    // in browsers that are strict about Unicode RegExp parsing (Safari/Chrome).
+    // Use non-greedy dot-all equivalents ("[\n\r\s\S]") instead of character classes with ']' where possible.
+    try {
+        // Safer patterns (avoid unescaped ']' inside character classes):
+        val reCodeBlocks = Regex("```[\\s\\S]*?```")
+        val reInlineCode = Regex("`[^`]*`")
+        val reBlockquote = Regex("^> +", setOf(RegexOption.MULTILINE))
+        val reHeadings = Regex("^#+ +", setOf(RegexOption.MULTILINE))
+        // Images: ![alt](url) — capture alt lazily with [\s\S]*? to avoid character class pitfalls
+        val reImage = Regex("!\\[([\\s\\S]*?)]\\([^)]*\\)")
+        // Links: [text](url) — same approach, keep the link text in group 1
+        val reLink = Regex("\\[([\\s\\S]*?)]\\([^)]*\\)")
+
+        var t = md
+        // Triple-backtick code blocks across lines
+        t = t.replace(reCodeBlocks, " ")
+        // Inline code
+        t = t.replace(reInlineCode, " ")
+        // Strip blockquotes and headings markers
+        t = t.replace(reBlockquote, "")
+        t = t.replace(reHeadings, "")
+        // Images and links
+        t = t.replace(reImage, " ")
+        // Keep link text (group 1). Kotlin string needs "$" escaped once to pass "$1"
+        t = t.replace(reLink, "\$1")
+        return norm(t)
+    } catch (e: Throwable) {
+        dlog("search", "plainFromMarkdown error: ${e.message}")
+        // Minimal safe fallback: strip code blocks and inline code, then normalize
+        var t = md
+        t = t.replace(Regex("```[\\s\\S]*?```"), " ")
+        t = t.replace(Regex("`[^`]*`"), " ")
+        return norm(t)
+    }
+}
+
+private suspend fun buildSearchIndexOnce() {
+    if (searchIndex != null || searchBuilding) return
+    searchBuilding = true
+    dlog("search", "buildSearchIndexOnce: start")
+    try {
+        val resp = window.fetch("docs-index.json").await()
+        if (!resp.ok) {
+            dlog("search", "docs-index.json fetch failed: status=${resp.status}")
+            return
+        }
+        val text = resp.text().await()
+        val arr = JSON.parse(text) as Array<String>
+        val all = arr.toList().sorted()
+        dlog("search", "docs-index entries=${all.size}")
+        val list = mutableListOf<DocRecord>()
+        var excluded = 0
+        var failed = 0
+        var loggedFailures = 0
+        for (path in all) {
+            try {
+                // Always fetch via a relative URL from site root and encode non-ASCII safely
+                val url = "./" + encodeURI(path)
+                val r = window.fetch(url).await()
+                if (!r.ok) {
+                    failed++
+                    if (loggedFailures < 3) {
+                        dlog("search", "fetch fail ${r.status} for $url")
+                        loggedFailures++
+                    }
+                    continue
+                }
+                val body = r.text().await()
+                if (body.contains("[//]: # (excludeFromIndex)")) { excluded++; continue }
+                val title = extractTitleFromMarkdown(body) ?: path.substringAfterLast('/')
+                val plain = plainFromMarkdown(body)
+                list += DocRecord(path = path, title = title, text = plain)
+            } catch (t: Throwable) {
+                failed++
+                if (loggedFailures < 3) {
+                    dlog("search", "exception processing $path : ${t.message}")
+                    loggedFailures++
+                }
+            }
+        }
+        searchIndex = list
+        dlog("search", "buildSearchIndexOnce: done, indexed=${list.size} excluded=$excluded failed=$failed")
+        list.take(5).forEachIndexed { i, rec ->
+            dlog("search", "indexed[$i]: ${rec.path} | ${rec.title} (len=${rec.text.length})")
+        }
+    } catch (_: Throwable) {
+        dlog("search", "buildSearchIndexOnce: exception")
+    } finally {
+        searchBuilding = false
+    }
+}
+
+private fun scoreQuery(q: String, rec: DocRecord): Int {
+    val query = norm(q)
+    if (query.isBlank()) return 0
+    var score = 0
+    val title = norm(rec.title)
+    val text = rec.text
+    // Title startsWith gets high score
+    if (title.startsWith(query)) score += 100
+    if (title.contains(query)) score += 60
+    // Body occurrences (basic)
+    val idx = text.indexOf(query)
+    if (idx >= 0) score += 30
+    // Shorter files slightly preferred
+    score += (200 - kotlin.math.min(200, text.length / 500))
+    return score
+}
+
+private fun renderSearchResults(input: HTMLInputElement, menu: HTMLDivElement, q: String, results: List<DocRecord>) {
+    dlog("search-ui", "renderSearchResults q='$q' results=${results.size} building=$searchBuilding")
+    if (q.isBlank()) {
+        dlog("search-ui", "blank query -> hide menu")
+        menu.classList.remove("show")
+        menu.innerHTML = ""
+        return
+    }
+    if (results.isEmpty()) {
+        // If index is building, show a transient indexing indicator instead of hiding everything
+        if (searchBuilding) {
+            dlog("search-ui", "indexing in progress -> show placeholder")
+            menu.innerHTML = "<div class=\"dropdown-item disabled\">Indexing documentation…</div>"
+            menu.classList.add("show")
+        } else {
+            dlog("search-ui", "no results -> show 'No results' item")
+            val safeQ = q.replace("<", "&lt;").replace(">", "&gt;")
+            menu.innerHTML = "<div class=\"dropdown-item disabled\">No results for ‘$safeQ’</div>"
+            menu.classList.add("show")
+        }
+        return
+    }
+    val top = results.sortedByDescending { scoreQuery(q, it) }.take(8)
+    val items = buildString {
+        top.forEach { rec ->
+            append("<a href=\"#/${rec.path}\" class=\"dropdown-item\" data-path=\"${rec.path}\">")
+            append("<strong>")
+            append(rec.title)
+            append("</strong><br><small class=\"text-muted\">")
+            append(rec.path.substringAfter("docs/"))
+            append("</small></a>")
+        }
+    }
+    menu.innerHTML = items
+    // Position and show
+    menu.classList.add("show")
+    // Attach click handlers to enforce SPA navigation
+    val children = menu.getElementsByClassName("dropdown-item")
+    for (i in 0 until children.length) {
+        val a = children.item(i) as? HTMLAnchorElement ?: continue
+        a.onclick = { ev ->
+            ev.preventDefault()
+            val path = a.getAttribute("data-path")
+            if (path != null) {
+                dlog("nav", "search click -> navigate #/$path")
+                window.location.hash = "#/$path"
+                menu.classList.remove("show")
+                closeNavbarCollapse()
+            }
+        }
+    }
+}
+
+private fun hideSearchResults(menu: HTMLDivElement) {
+    dlog("search-ui", "hideSearchResults")
+    menu.classList.remove("show")
+    menu.innerHTML = ""
+}
+
+private suspend fun performSearch(q: String): List<DocRecord> {
+    if (searchIndex == null) buildSearchIndexOnce()
+    val idx = searchIndex ?: run {
+        dlog("search", "performSearch: index is null after build attempt")
+        return emptyList()
+    }
+    if (q.isBlank()) return emptyList()
+    val query = norm(q)
+    val res = idx.filter { rec ->
+        norm(rec.title).contains(query) || rec.text.contains(query)
+    }
+    dlog("search", "performSearch: q='$q' idx=${idx.size} -> ${res.size} results")
+    return res
+}
+
+private fun debounce(scope: CoroutineScope, delayMs: Long, block: suspend () -> Unit): () -> Unit {
+    var job: Job? = null
+    return {
+        job?.cancel()
+        job = scope.launch {
+            delay(delayMs)
+            block()
+        }
+    }
+}
+
+private fun initTopSearch(attempt: Int = 0) {
+    if (searchInitDone) return
+    val input = document.getElementById("topSearch") as? HTMLInputElement
+    val menu = document.getElementById("topSearchMenu") as? HTMLDivElement
+    if (input == null || menu == null) {
+        // Retry a few times in case DOM is not fully ready yet
+        if (attempt < 10) {
+            dlog("init", "initTopSearch: missing nodes (input=$input, menu=$menu) retry $attempt")
+            window.setTimeout({ initTopSearch(attempt + 1) }, 50)
+        }
+        return
+    }
+    dlog("init", "initTopSearch: wiring handlers")
+    val scope = MainScopeProvider.scope
+
+    // Debounced search runner
+    val runSearch = debounce(scope, 120L) {
+        val q = input.value
+        dlog("search", "debounced runSearch execute q='$q'")
+        val results = performSearch(q)
+        renderSearchResults(input, menu, q, results)
+    }
+
+    // Keep the input focused when interacting with the dropdown so it doesn't blur/close
+    menu.onmousedown = { ev ->
+        ev.preventDefault()
+        input.focus()
+    }
+
+    input.oninput = {
+        dlog("event", "search oninput value='${input.value}'")
+        runSearch()
+    }
+    input.onfocus = {
+        // Proactively build the index on first focus for faster first results
+        dlog("event", "search onfocus")
+        scope.launch {
+            if (searchIndex == null && !searchBuilding) {
+                dlog("search", "onfocus -> buildSearchIndexOnce")
+                buildSearchIndexOnce()
+            }
+        }
+        runSearch()
+    }
+    input.onkeydown = { ev ->
+        val key = ev.asDynamic().key as String
+        dlog("event", "search onkeydown key='$key'")
+        when (ev.asDynamic().key as String) {
+            "Escape" -> {
+                hideSearchResults(menu)
+            }
+            "Enter" -> {
+                // Navigate to the best match
+                scope.launch {
+                    val q = input.value
+                    // If index is building and results would be empty, wait for it once
+                    if (searchIndex == null || searchBuilding) {
+                        dlog("search", "Enter -> ensure index")
+                        buildSearchIndexOnce()
+                    }
+                    val results = performSearch(q)
+                    val best = results.maxByOrNull { scoreQuery(q, it) }
+                    if (best != null) {
+                        dlog("nav", "Enter -> navigate #/${best.path}")
+                        window.location.hash = "#/${best.path}"
+                        hideSearchResults(menu)
+                        closeNavbarCollapse()
+                    } else {
+                        dlog("search", "Enter -> no results for q='$q'")
+                    }
+                }
+            }
+        }
+    }
+    // Hide on blur after a short delay to allow click
+    input.onblur = {
+        dlog("event", "search onblur -> hide after delay")
+        window.setTimeout({ hideSearchResults(menu) }, 150)
+    }
+    searchInitDone = true
+    dlog("init", "initTopSearch: done")
+}
+
+// Provide a global coroutine scope for utilities without introducing a framework
+private object MainScopeProvider {
+    val scope: CoroutineScope by lazy { kotlinx.coroutines.MainScope() }
 }
 
 @Composable
