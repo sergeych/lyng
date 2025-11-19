@@ -1,0 +1,111 @@
+#!/bin/bash
+
+#
+# Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+#
+
+function checkState() {
+  if [[ $? != 0 ]]; then
+    echo
+    echo -- rsync failed. deploy was not finished. deployed version has not been affected
+    echo
+    exit 100
+  fi
+
+}
+
+# default target settings
+case $1 in
+  com)
+    SSH_HOST=sergeych@lynglang.com # host to deploy to
+    SSH_PORT=22                             # ssh port on it
+    ROOT=/bigstore/sergeych_pub/lyng                 # directory to rsync to
+    ;;
+#  com)
+#    SSH_HOST=vvk@front-01.neurodatalab.com
+#    ROOT=/home/vvk
+#    ;;
+  *)
+    echo "*** ERROR: target not specified (use deploy com | dev)"
+    echo "*** stop"
+    exit 101
+esac
+
+die() { echo "ERROR: $*" 1>&2 ; exit 1; }
+#rm build/distributions/*.js > /dev/null
+#rm build/distributions/*.js.map > /dev/null
+
+#./gradlew clean incrementRevision jsBrowserDistribution || die "compilation failed"
+#./gradlew incrementRevision jsBrowserDistribution
+#./gradlew jsBrowserDistribution
+./gradlew incrementRevision jsBrowserDistribution
+#./gradlew jsBrowserDistribution
+
+if [[ $? != 0 ]]; then
+  echo
+  echo -- build failed. deploy aborted.
+  echo
+  exit 100
+fi
+
+#exit 0
+
+# Prepare working dir
+ssh -p ${SSH_PORT} ${SSH_HOST} "
+  cd ${ROOT}
+  rm -rd build 2>/dev/null
+  if [ -d release ]; then
+    echo copying current release
+    cp -r release build
+  else
+    echo creating first release
+    mkdir release
+    mkdir build
+  fi
+";
+
+# sync files
+SRC=./build/dist/js/productionExecutable
+rsync -e "ssh -p ${SSH_PORT}" -avz -r -d --delete ${SRC}/* ${SSH_HOST}:${ROOT}/build/dist
+checkState
+rsync -e "ssh -p ${SSH_PORT}" -avz  ./static/* ${SSH_HOST}:${ROOT}/build/dist
+#checkState
+#rsync -e "ssh -p ${SSH_PORT}" -avz -r -d --delete private_data/* ${SSH_HOST}:${ROOT}/build/private_data
+#checkState
+
+echo
+echo finalizing the deploy...
+ssh -p ${SSH_PORT} ${SSH_HOST} "
+  cd ${ROOT}
+  rm -rd release~
+  mv release release~
+  mv build release
+  cd release
+  # in this project we needn't restart back when we deploy the front
+  #  ~/bin/restart_service
+";
+
+if [[ $? != 0 ]]; then
+  echo
+  echo -- finalization failed. the rease might be corrupt. rolling back is not yet implemented.
+  echo
+  exit 100
+fi
+
+echo
+echo Deploy successful
+echo
+

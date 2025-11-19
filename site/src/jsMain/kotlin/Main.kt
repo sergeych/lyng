@@ -371,7 +371,9 @@ private fun DocsPage(
         }
     }
 
-    PageTemplate(title = title, showBack = true) {
+    // Do not render a separate header here. We will show the markdown's own H1
+    // and inject a back button inline to that H1 after the content mounts.
+    PageTemplate(title = null, showBack = false) {
         if (error != null) {
             Div({ classes("alert", "alert-danger") }) { Text(error) }
         } else if (html == null) {
@@ -395,6 +397,31 @@ private fun DocsPage(
         val el = contentEl ?: return@LaunchedEffect
         if (html == null) return@LaunchedEffect
         window.requestAnimationFrame {
+            // Insert an inline back button to the left of the first H1
+            try {
+                val firstH1 = el.querySelector("h1") as? HTMLElement
+                if (firstH1 != null && firstH1.querySelector(".doc-back-btn") == null) {
+                    val back = el.ownerDocument!!.createElement("div") as HTMLDivElement
+                    back.className = "btn btn-outline btn-sm me-2 align-middle doc-back-btn "
+                    back.setAttribute("aria-label","Back")
+                    back.onclick = { ev ->
+                        ev.preventDefault()
+                        try {
+                            if (window.history.length > 1) window.history.back() else window.location.hash = "#"
+                        } catch (e: dynamic) {
+                            window.location.hash = "#"
+                        }
+                        null
+                    }
+                    val icon = el.ownerDocument!!.createElement("i") as HTMLElement
+                    icon.className = "bi bi-arrow-left"
+                    back.appendChild(icon)
+                    // Insert at the start of H1 content
+                    firstH1.insertBefore(back, firstH1.firstChild)
+                }
+            } catch (_: Throwable) {
+                // best-effort; ignore DOM issues
+            }
             val currentPath = routeToPath(route) // without fragment
             val basePath = currentPath.substringBeforeLast('/', "docs")
             rewriteImages(el, basePath)
@@ -872,6 +899,8 @@ private object MainScopeProvider {
 private fun ReferencePage() {
     var docs by remember { mutableStateOf<List<String>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Titles resolved from the first H1 of each markdown document
+    var titles by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
     // Load docs index once
     LaunchedEffect(Unit) {
@@ -890,6 +919,28 @@ private fun ReferencePage() {
         }
     }
 
+    // Once we have the docs list, fetch their titles (H1) progressively
+    LaunchedEffect(docs) {
+        val list = docs ?: return@LaunchedEffect
+        // Reset titles when list changes
+        titles = emptyMap()
+        // Fetch sequentially to avoid flooding; fast enough for small/medium doc sets
+        for (path in list) {
+            try {
+                val mdPath = if (path.startsWith("docs/")) path else "docs/$path"
+                val url = "./" + encodeURI(mdPath)
+                val resp = window.fetch(url).await()
+                if (!resp.ok) continue
+                val text = resp.text().await()
+                val title = extractTitleFromMarkdown(text) ?: path.substringAfterLast('/')
+                // Update state incrementally
+                titles = titles + (path to title)
+            } catch (_: Throwable) {
+                // ignore individual failures; fallback will be filename
+            }
+        }
+    }
+
     H2({ classes("h5", "mb-3") }) { Text("Reference") }
     P({ classes("text-muted") }) { Text("Browse all documentation pages included in this build.") }
 
@@ -897,7 +948,24 @@ private fun ReferencePage() {
         error != null -> Div({ classes("alert", "alert-danger") }) { Text(error!!) }
         docs == null -> P { Text("Loading index…") }
         docs!!.isEmpty() -> P { Text("No documents found.") }
-        else -> UnsafeRawHtml(renderReferenceListHtml(docs!!))
+        else -> {
+            Ul({ classes("list-group") }) {
+                docs!!.sorted().forEach { path ->
+                    val displayTitle = titles[path] ?: path.substringAfterLast('/')
+                    Li({ classes("list-group-item", "d-flex", "justify-content-between", "align-items-center") }) {
+                        Div({}) {
+                            A(attrs = {
+                                classes("link-body-emphasis", "text-decoration-none")
+                                attr("href", "#/$path")
+                            }) { Text(displayTitle) }
+                            Br()
+                            Small({ classes("text-muted") }) { Text(path) }
+                        }
+                        I({ classes("bi", "bi-chevron-right") })
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1316,6 +1384,8 @@ internal fun rewriteAnchors(
     val asEl = root.querySelectorAll("a")
     for (i in 0 until asEl.length) {
         val a = asEl.item(i) as? HTMLAnchorElement ?: continue
+        // Skip the inline Docs back button we inject before the first H1
+        if (a.classList.contains("doc-back-btn") || a.getAttribute("data-no-spa") == "true") continue
         val href = a.getAttribute("href") ?: continue
         // Skip external and already-SPA hashes
         if (
