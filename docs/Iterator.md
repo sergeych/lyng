@@ -9,6 +9,9 @@ To implement the iterator you need to implement only two abstract methods:
 
 ### hasNext(): Bool
 
+    // lets test
+    // offset
+
 Should return `true` if call to `next()` will return valid next element.
 
 ### next(): Obj

@@ -49,6 +49,8 @@ kotlin {
                 implementation("org.jetbrains.compose.html:html-core:1.9.3")
                 // Coroutines for JS (used for fetching docs)
                 implementation(libs.kotlinx.coroutines.core)
+                // Lyng highlighter (common, used from JS)
+                implementation(project(":lynglib"))
                 // Markdown parser (NPM)
                 implementation(npm("marked", "12.0.2"))
             }

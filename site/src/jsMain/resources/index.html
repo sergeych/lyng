@@ -46,15 +46,59 @@
       href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
     />
     <style>
-      /* Visual polish for markdown area */
+      /* Unify markdown and page backgrounds with Bootstrap theme variables */
       .markdown-body {
         box-sizing: border-box;
         min-width: 200px;
         line-height: 1.6;
+        background: var(--bs-body-bg) !important;
+        color: var(--bs-body-color) !important;
       }
       .markdown-body > :first-child { margin-top: 0 !important; }
       .markdown-body table { margin: 1rem 0; }
-      .markdown-body pre { padding: .75rem; border-radius: .375rem; }
+      .markdown-body pre {
+        padding: .75rem;
+        border-radius: .375rem;
+        background: var(--bs-tertiary-bg);
+        border: 1px solid var(--bs-border-color);
+      }
+      /* Style only inline code, avoid affecting code blocks inside <pre> to prevent first-line extra indent */
+      .markdown-body :not(pre) > code:not([class]) {
+        background: var(--bs-tertiary-bg);
+        padding: .15rem .3rem;
+        border-radius: .25rem;
+      }
+
+      /* Lyng syntax highlighting palette (inspired by default GitHub/VS Code) */
+      /* Light theme */
+      .hl-kw  { color: #d73a49; font-weight: 600; }
+      .hl-ty  { color: #6f42c1; }
+      .hl-id  { color: #24292e; }
+      .hl-num { color: #005cc5; }
+      .hl-str { color: #032f62; }
+      .hl-ch  { color: #032f62; }
+      .hl-rx  { color: #116329; }
+      .hl-cmt { color: #6a737d; font-style: italic; }
+      .hl-op  { color: #8250df; }
+      .hl-punc{ color: #57606a; }
+      .hl-lbl { color: #e36209; }
+      .hl-dir { color: #6f42c1; }
+      .hl-err { color: #b31d28; text-decoration: underline wavy #b31d28; }
+
+      /* Dark theme overrides (GitHub Dark-like) */
+      [data-bs-theme="dark"] .hl-id   { color: #c9d1d9; }
+      [data-bs-theme="dark"] .hl-op   { color: #d2a8ff; }
+      [data-bs-theme="dark"] .hl-punc { color: #8b949e; }
+      [data-bs-theme="dark"] .hl-kw   { color: #ff7b72; }
+      [data-bs-theme="dark"] .hl-ty   { color: #d2a8ff; }
+      [data-bs-theme="dark"] .hl-num  { color: #79c0ff; }
+      [data-bs-theme="dark"] .hl-str,
+      [data-bs-theme="dark"] .hl-ch   { color: #a5d6ff; }
+      [data-bs-theme="dark"] .hl-rx   { color: #7ee787; }
+      [data-bs-theme="dark"] .hl-cmt  { color: #8b949e; }
+      [data-bs-theme="dark"] .hl-lbl  { color: #ffa657; }
+      [data-bs-theme="dark"] .hl-dir  { color: #d2a8ff; }
+      [data-bs-theme="dark"] .hl-err  { color: #ffa198; text-decoration-color: #ffa198; }
     </style>
   </head>
   <body>

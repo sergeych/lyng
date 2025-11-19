@@ -84,12 +84,12 @@ private class Parser(fromPos: Pos) {
                 when (currentChar) {
                     '+' -> {
                         pos.advance()
-                        Token("+", from, Token.Type.PLUS2)
+                        Token("++", from, Token.Type.PLUS2)
                     }
 
                     '=' -> {
                         pos.advance()
-                        Token("+", from, Token.Type.PLUSASSIGN)
+                        Token("+=", from, Token.Type.PLUSASSIGN)
                     }
 
                     else ->
@@ -106,7 +106,7 @@ private class Parser(fromPos: Pos) {
 
                     '=' -> {
                         pos.advance()
-                        Token("-", from, Token.Type.MINUSASSIGN)
+                        Token("-=", from, Token.Type.MINUSASSIGN)
                     }
 
                     '>' -> {
@@ -129,17 +129,17 @@ private class Parser(fromPos: Pos) {
             '/' -> when (currentChar) {
                 '/' -> {
                     pos.advance()
-                    Token(loadToEndOfLine().trim(), from, Token.Type.SINLGE_LINE_COMMENT)
+                    val body = loadToEndOfLine()
+                    // Include the leading '//' and do not trim; keep exact lexeme (excluding preceding codepoint)
+                    Token("//" + body, from, Token.Type.SINLGE_LINE_COMMENT)
                 }
 
                 '*' -> {
                     pos.advance()
-                    Token(
-                        loadTo("*/")?.trim()
-                            ?: throw ScriptError(from, "Unterminated multiline comment"),
-                        from,
-                        Token.Type.MULTILINE_COMMENT
-                    )
+                    val content = loadTo("*/")
+                        ?: throw ScriptError(from, "Unterminated multiline comment")
+                    // loadTo consumes the closing fragment, so we are already after */
+                    Token("/*" + content + "*/", from, Token.Type.MULTILINE_COMMENT)
                 }
 
                 '=' -> {
@@ -403,7 +403,8 @@ private class Parser(fromPos: Pos) {
             // could be integer, also hex:
             if (currentChar == 'x' && p1 == "0") {
                 pos.advance()
-                Token(loadChars { it in hexDigits }, start, Token.Type.HEX).also {
+                val hex = loadChars { it in hexDigits }
+                Token(hex, start, Token.Type.HEX).also {
                     if (currentChar.isLetter())
                         raise("invalid hex literal")
                 }
@@ -541,11 +542,11 @@ private class Parser(fromPos: Pos) {
 
     private fun loadToEndOfLine(): String {
         val result = StringBuilder()
-        val l = pos.line
-        do {
+        // Read characters up to but not including the line break
+        while (!pos.end && pos.currentChar != '\n') {
             result.append(pos.currentChar)
             pos.advance()
-        } while (pos.line == l)
+        }
         return result.toString()
     }
 

@@ -38,7 +38,6 @@ fun App() {
     var toc by remember { mutableStateOf<List<TocItem>>(emptyList()) }
     var activeTocId by remember { mutableStateOf<String?>(null) }
     var contentEl by remember { mutableStateOf<HTMLElement?>(null) }
-    var theme by remember { mutableStateOf(detectInitialTheme()) }
     val isDocsRoute = route.startsWith("docs/")
     // A stable key for the current document path (without fragment). Used to avoid
     // re-fetching when only the in-page anchor changes.
@@ -203,24 +202,6 @@ fun App() {
                         onClick { it.preventDefault(); window.location.hash = "#/reference" }
                     }) { Text("Reference") }
 
-                    // Theme toggle
-                    Button(attrs = {
-                        classes("btn", "btn-sm", "btn-outline-secondary")
-                        onClick {
-                            theme = if (theme == Theme.Dark) Theme.Light else Theme.Dark
-                            applyTheme(theme)
-                            saveThemePreference(theme)
-                        }
-                    }) {
-                        if (theme == Theme.Dark) {
-                            I({ classes("bi", "bi-sun") })
-                            Text(" Light")
-                        } else {
-                            I({ classes("bi", "bi-moon") })
-                            Text(" Dark")
-                        }
-                    }
-
                     // Sample quick links
                     DocLink("Iterable.md")
                     DocLink("Iterator.md")
@@ -316,10 +297,12 @@ fun routeToPath(route: String): String {
 fun stripFragment(route: String): String = route.substringBefore('#')
 
 fun renderMarkdown(src: String): String =
-    ensureBootstrapCodeBlocks(
-        ensureBootstrapTables(
-            ensureDefinitionLists(
-                marked.parse(src)
+    highlightLyngHtml(
+        ensureBootstrapCodeBlocks(
+            ensureBootstrapTables(
+                ensureDefinitionLists(
+                    marked.parse(src)
+                )
             )
         )
     )
@@ -383,41 +366,45 @@ private fun ReferencePage() {
     }
 }
 
-// ---- Theme handling ----
+// ---- Theme handling: follow system theme automatically ----
 
-private enum class Theme { Light, Dark }
-
-private fun detectInitialTheme(): Theme {
-    // Try user preference from localStorage
-    val stored = try { window.localStorage.getItem("theme") } catch (_: Throwable) { null }
-    if (stored == "dark") return Theme.Dark
-    if (stored == "light") return Theme.Light
-    // Fallback to system preference
-    val prefersDark = try {
-        window.matchMedia("(prefers-color-scheme: dark)").matches
-    } catch (_: Throwable) { false }
-    val t = if (prefersDark) Theme.Dark else Theme.Light
-    // Apply immediately so first render uses correct theme
-    applyTheme(t)
-    return t
-}
-
-private fun saveThemePreference(theme: Theme) {
-    try { window.localStorage.setItem("theme", if (theme == Theme.Dark) "dark" else "light") } catch (_: Throwable) {}
-}
-
-private fun applyTheme(theme: Theme) {
+private fun applyTheme(isDark: Boolean) {
     // Toggle Bootstrap theme attribute
-    document.body?.setAttribute("data-bs-theme", if (theme == Theme.Dark) "dark" else "light")
+    document.body?.setAttribute("data-bs-theme", if (isDark) "dark" else "light")
     // Toggle GitHub Markdown CSS light/dark
     val light = document.getElementById("md-light") as? HTMLLinkElement
     val dark = document.getElementById("md-dark") as? HTMLLinkElement
-    if (theme == Theme.Dark) {
+    if (isDark) {
         light?.setAttribute("disabled", "")
         dark?.removeAttribute("disabled")
     } else {
         dark?.setAttribute("disabled", "")
         light?.removeAttribute("disabled")
+    }
+}
+
+private fun initAutoTheme() {
+    val mql = try { window.matchMedia("(prefers-color-scheme: dark)") } catch (_: Throwable) { null }
+    if (mql == null) {
+        applyTheme(false)
+        return
+    }
+    // Set initial
+    applyTheme(mql.matches)
+    // React to changes (modern browsers)
+    try {
+        mql.addEventListener("change", { ev ->
+            val isDark = try { (ev.asDynamic().matches as Boolean) } catch (_: Throwable) { mql.matches }
+            applyTheme(isDark)
+        })
+    } catch (_: Throwable) {
+        // Legacy API fallback
+        try {
+            (mql.asDynamic()).addListener { mq: dynamic ->
+                val isDark = try { mq.matches as Boolean } catch (_: Throwable) { false }
+                applyTheme(isDark)
+            }
+        } catch (_: Throwable) {}
     }
 }
 
@@ -527,6 +514,178 @@ private fun ensureBootstrapCodeBlocks(html: String): String {
     }
 }
 
+// ---- Lyng syntax highlighting over rendered HTML ----
+// This post-processor finds <pre><code class="language-lyng">…</code></pre> blocks and replaces the
+// inner code HTML with token-wrapped spans using the common Lyng highlighter.
+// It performs a minimal HTML entity decode on the code content to obtain the original text,
+// runs the highlighter, then escapes segments back and wraps with <span class="hl-…">.
+internal fun highlightLyngHtml(html: String): String {
+    // Regex to find <pre> ... <code class="language-lyng ...">(content)</code> ... </pre>
+    val preCodeRegex = Regex(
+        pattern = """<pre(\s+[^>]*)?>\s*<code([^>]*)>([\s\S]*?)</code>\s*</pre>""",
+        options = setOf(RegexOption.IGNORE_CASE)
+    )
+    val classAttrRegex = Regex("""\bclass\s*=\s*(["'])(.*?)\1""", RegexOption.IGNORE_CASE)
+
+    return preCodeRegex.replace(html) { m ->
+        val preAttrs = m.groups[1]?.value ?: ""
+        val codeAttrs = m.groups[2]?.value ?: ""
+        val codeHtml = m.groups[3]?.value ?: ""
+
+        val codeHasLyng = run {
+            val cls = classAttrRegex.find(codeAttrs)?.groupValues?.getOrNull(2) ?: ""
+            cls.split("\\s+".toRegex()).any { it.equals("language-lyng", ignoreCase = true) }
+        }
+        // If not explicitly Lyng, check if the <code> has any language class; if none, treat as Lyng by default
+        val hasAnyLanguage = run {
+            val cls = classAttrRegex.find(codeAttrs)?.groupValues?.getOrNull(2) ?: ""
+            cls.split("\\s+".toRegex()).any { it.startsWith("language-", ignoreCase = true) }
+        }
+
+        val treatAsLyng = codeHasLyng || !hasAnyLanguage
+        if (!treatAsLyng) return@replace m.value // leave untouched for non-Lyng languages
+
+        val text = htmlUnescape(codeHtml)
+
+        // If block has no explicit language (unfenced/indented), support doctest tail (trailing lines starting with ">>>")
+        val (headText, tailTextOrNull) = if (!codeHasLyng && !hasAnyLanguage) splitDoctestTail(text) else text to null
+
+        val headHighlighted = try {
+            applyLyngHighlightToText(headText)
+        } catch (_: Throwable) {
+            return@replace m.value
+        }
+        val tailHighlighted = tailTextOrNull?.let { renderDoctestTailAsComments(it) } ?: ""
+
+        val highlighted = headHighlighted + tailHighlighted
+
+        // Preserve original attrs; ensure <pre> has existing attrs (Bootstrap '.code' was handled earlier)
+        "<pre$preAttrs><code$codeAttrs>$highlighted</code></pre>"
+    }
+}
+
+// Split trailing doctest tail: consecutive lines at the end whose trimmedStart starts with ">>>".
+// Returns Pair(head, tail) where tail is null if no doctest lines found.
+private fun splitDoctestTail(text: String): Pair<String, String?> {
+    if (text.isEmpty()) return "" to null
+    // Normalize to \n for splitting; remember if original ended with newline
+    val hasTrailingNewline = text.endsWith("\n")
+    val lines = text.split("\n")
+    var i = lines.size - 1
+    // Skip trailing completely empty lines before looking for doctest markers
+    while (i >= 0 && lines[i].isEmpty()) i--
+    var count = 0
+    while (i >= 0) {
+        val line = lines[i]
+        // If last line is empty due to trailing newline, include it into tail only if there are already doctest lines
+        val trimmed = line.trimStart()
+        if (trimmed.isNotEmpty() && !trimmed.startsWith(">>>")) break
+        // Accept empty line only if it follows some doctest lines (keeps spacing), else stop
+        if (trimmed.isEmpty()) {
+            if (count == 0) break else { count++; i--; continue }
+        }
+        // doctest line
+        count++
+        i--
+    }
+    if (count == 0) return text to null
+    val splitIndex = lines.size - count
+    val head = buildString {
+        for (idx in 0 until splitIndex) {
+            append(lines[idx])
+            if (idx < lines.size - 1 || hasTrailingNewline) append('\n')
+        }
+    }
+    val tail = buildString {
+        for (idx in splitIndex until lines.size) {
+            append(lines[idx])
+            if (idx < lines.size - 1 || hasTrailingNewline) append('\n')
+        }
+    }
+    return head to tail
+}
+
+// Render the doctest tail as comment-highlighted lines. Expects the original textual tail including newlines.
+private fun renderDoctestTailAsComments(tail: String): String {
+    if (tail.isEmpty()) return ""
+    val sb = StringBuilder(tail.length + 32)
+    var start = 0
+    while (start <= tail.lastIndex) {
+        val nl = tail.indexOf('\n', start)
+        val line = if (nl >= 0) tail.substring(start, nl) else tail.substring(start)
+        // Wrap the whole line in comment styling
+        sb.append("<span class=\"hl-cmt\">")
+        sb.append(htmlEscape(line))
+        sb.append("</span>")
+        if (nl >= 0) sb.append('\n')
+        if (nl < 0) break else start = nl + 1
+    }
+    return sb.toString()
+}
+
+// Apply Lyng highlighter to raw code text, producing HTML with span classes.
+internal fun applyLyngHighlightToText(text: String): String {
+    val highlighter = net.sergeych.lyng.highlight.SimpleLyngHighlighter()
+    // Use spans as produced by the fixed lynglib highlighter (comments already extend to EOL there)
+    val spans = highlighter.highlight(text)
+    if (spans.isEmpty()) return htmlEscape(text)
+    val sb = StringBuilder(text.length + spans.size * 16)
+    var pos = 0
+    for (s in spans) {
+        if (s.range.start > pos) {
+            sb.append(htmlEscape(text.substring(pos, s.range.start)))
+        }
+        val cls = cssClassForKind(s.kind)
+        sb.append('<').append("span class=\"").append(cls).append('\"').append('>')
+        sb.append(htmlEscape(text.substring(s.range.start, s.range.endExclusive)))
+        sb.append("</span>")
+        pos = s.range.endExclusive
+    }
+    if (pos < text.length) sb.append(htmlEscape(text.substring(pos)))
+    return sb.toString()
+}
+
+// Note: No site-side span post-processing — we rely on lynglib's SimpleLyngHighlighter for correctness.
+
+private fun cssClassForKind(kind: net.sergeych.lyng.highlight.HighlightKind): String = when (kind) {
+    net.sergeych.lyng.highlight.HighlightKind.Keyword -> "hl-kw"
+    net.sergeych.lyng.highlight.HighlightKind.TypeName -> "hl-ty"
+    net.sergeych.lyng.highlight.HighlightKind.Identifier -> "hl-id"
+    net.sergeych.lyng.highlight.HighlightKind.Number -> "hl-num"
+    net.sergeych.lyng.highlight.HighlightKind.String -> "hl-str"
+    net.sergeych.lyng.highlight.HighlightKind.Char -> "hl-ch"
+    net.sergeych.lyng.highlight.HighlightKind.Regex -> "hl-rx"
+    net.sergeych.lyng.highlight.HighlightKind.Comment -> "hl-cmt"
+    net.sergeych.lyng.highlight.HighlightKind.Operator -> "hl-op"
+    net.sergeych.lyng.highlight.HighlightKind.Punctuation -> "hl-punc"
+    net.sergeych.lyng.highlight.HighlightKind.Label -> "hl-lbl"
+    net.sergeych.lyng.highlight.HighlightKind.Directive -> "hl-dir"
+    net.sergeych.lyng.highlight.HighlightKind.Error -> "hl-err"
+}
+
+// Minimal HTML escaping for text nodes
+private fun htmlEscape(s: String): String = buildString(s.length) {
+    for (ch in s) when (ch) {
+        '<' -> append("&lt;")
+        '>' -> append("&gt;")
+        '&' -> append("&amp;")
+        '"' -> append("&quot;")
+        '\'' -> append("&#39;")
+        else -> append(ch)
+    }
+}
+
+// Minimal unescape for code inner HTML produced by marked
+private fun htmlUnescape(s: String): String {
+    // handle common entities only
+    return s
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+}
+
 private fun rewriteImages(root: HTMLElement, basePath: String) {
     val imgs = root.querySelectorAll("img")
     for (i in 0 until imgs.length) {
@@ -624,6 +783,8 @@ fun activeIndexForTops(tops: List<Double>, offsetPx: Double): Int {
 }
 
 fun main() {
+    // Initialize automatic system theme before rendering UI
+    initAutoTheme()
     renderComposable(rootElementId = "root") { App() }
 }
 

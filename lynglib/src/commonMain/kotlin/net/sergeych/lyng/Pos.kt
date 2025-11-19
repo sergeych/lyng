@@ -97,8 +97,5 @@ class MutablePos(private val from: Pos) {
     }
 
     override fun toString() = "($line:$column)"
-
-    init {
-        if( lines[0].isEmpty()) advance()
-    }
+    
 }

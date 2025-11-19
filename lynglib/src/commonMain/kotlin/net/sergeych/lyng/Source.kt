@@ -19,9 +19,13 @@ package net.sergeych.lyng
 
 import net.sergeych.lyng.obj.ObjString
 
-class Source(val fileName: String, text: String) {
+class Source(val fileName: String, val text: String) {
 
-    val lines = text.lines().map { it.trimEnd() }
+    // Preserve original text characters exactly; do not trim trailing spaces.
+    // Split by "\n" boundaries as the lexer models line breaks uniformly as a single newline
+    // between logical lines, regardless of original platform line endings.
+    // We intentionally do NOT trim line ends to keep columns accurate.
+    val lines: List<String> = text.split('\n')
 
     val objSourceName by lazy { ObjString(fileName) }
 
