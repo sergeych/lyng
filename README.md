@@ -1,5 +1,7 @@
 # Lyng: modern scripting for kotlin multiplatform
 
+Please visit the project homepage: [https://lynglang.com](https://lynglang.com)
+
 A KMP library and a standalone interpreter. v1.0.0-SNAPSHOT is now available.
 
 - simple, compact, intuitive and elegant modern code:
@@ -171,8 +173,6 @@ Ready features:
 - [x] dynamic fields
 - [x] function annotations
 - [x] better stack reporting
-
-
 - [x] regular exceptions + extended `when`
 - [x] multiple inheritance for user classes
 

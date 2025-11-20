@@ -1,0 +1,95 @@
+/*
+ * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+import androidx.compose.runtime.Composable
+import org.jetbrains.compose.web.dom.*
+
+@Composable
+fun HomePage() {
+    // Hero section
+    Section({ classes("py-4", "py-lg-5") }) {
+        Div({ classes("text-center") }) {
+            H1({ classes("display-5", "fw-bold", "mb-3") }) { Text("Welcome to Lyng") }
+            P({ classes("lead", "text-muted", "mb-4") }) {
+                Text("A lightweight, expressive scripting language designed for clarity, composability, and fun. ")
+                Br()
+                Text("Run it anywhere Kotlin runs — share logic across JS, JVM, and more.")
+            }
+            Div({ classes("d-flex", "justify-content-center", "gap-2", "flex-wrap", "mb-4") }) {
+                // Benefits pills
+                listOf(
+                    "Clean, familiar syntax",
+                    "Immutable-first collections",
+                    "Batteries-included standard library",
+                    "Embeddable and testable"
+                ).forEach { b ->
+                    Span({ classes("badge", "text-bg-secondary", "rounded-pill") }) { Text(b) }
+                }
+            }
+            // CTA buttons
+            Div({ classes("d-flex", "justify-content-center", "gap-2", "mb-4") }) {
+                A(attrs = {
+                    classes("btn", "btn-primary", "btn-lg")
+                    attr("href", "#/docs/tutorial.md")
+                }) {
+                    I({ classes("bi", "bi-play-fill", "me-1") })
+                    Text("Start the tutorial")
+                }
+                A(attrs = {
+                    classes("btn", "btn-outline-secondary", "btn-lg")
+                    attr("href", "#/reference")
+                }) {
+                    I({ classes("bi", "bi-journal-text", "me-1") })
+                    Text("Browse reference")
+                }
+            }
+        }
+    }
+
+    // Code sample
+    val code = """
+// Create, transform, and verify — the Lyng way
+val data = [1, 2, 3, 4, 5]
+val evens = data.filter { it % 2 == 0 }.map { it * it }
+assertEquals([4, 16], evens)
+>>> void
+""".trimIndent()
+
+    val codeHtml = "<pre><code>" + htmlEscape(code) + "</code></pre>"
+    Div({ classes("markdown-body") }) {
+        UnsafeRawHtml(highlightLyngHtml(ensureBootstrapCodeBlocks(codeHtml)))
+    }
+
+    // Short features list
+    Div({ classes("row", "g-4", "mt-1") }) {
+        listOf(
+            Triple("Fast to learn", "Familiar constructs and readable patterns — be productive in minutes.", "lightning"),
+            Triple("Portable", "Runs wherever Kotlin runs: reuse logic across platforms.", "globe2"),
+            Triple("Pragmatic", "A standard library that solves real problems without ceremony.", "gear-fill")
+        ).forEach { (title, text, icon) ->
+            Div({ classes("col-12", "col-md-4") }) {
+                Div({ classes("h-100", "p-3", "border", "rounded-3", "bg-body-tertiary") }) {
+                    Div({ classes("d-flex", "align-items-center", "mb-2", "fs-4") }) {
+                        I({ classes("bi", "bi-$icon", "me-2") })
+                        Span({ classes("fw-semibold") }) { Text(title) }
+                    }
+                    P({ classes("mb-0", "text-muted") }) { Text(text) }
+                }
+            }
+        }
+    }
+}

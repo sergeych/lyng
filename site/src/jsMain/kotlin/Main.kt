@@ -15,27 +15,17 @@
  *
  */
 
-import androidx.compose.runtime.*
 import externals.marked
 import kotlinx.browser.document
 import kotlinx.browser.window
 import kotlinx.coroutines.*
-import org.jetbrains.compose.web.dom.*
 import org.jetbrains.compose.web.renderComposable
-import org.w3c.dom.HTMLAnchorElement
-import org.w3c.dom.HTMLDivElement
-import org.w3c.dom.HTMLElement
-import org.w3c.dom.HTMLHeadingElement
-import org.w3c.dom.HTMLImageElement
-import org.w3c.dom.HTMLInputElement
-import org.w3c.dom.HTMLLinkElement
-
-data class TocItem(val level: Int, val id: String, val title: String)
+import org.w3c.dom.*
 
 // --------------- Lightweight debug logging ---------------
 // Disable debug logging by default
 private var SEARCH_DEBUG: Boolean = false
-private fun dlog(tag: String, msg: String) {
+fun dlog(tag: String, msg: String) {
     if (!SEARCH_DEBUG) return
     try {
         console.log("[LYNG][$tag] $msg")
@@ -84,31 +74,11 @@ private fun exposeSearchDebugToggle() {
     } catch (_: dynamic) { }
 }
 
-// MathJax v3 global API (loaded via CDN in index.html)
-external object MathJax {
-    fun typesetPromise(elements: Array<dynamic> = definedExternally): dynamic
-    fun typeset(elements: Array<dynamic> = definedExternally)
-}
-
-// Ensure MathJax loader is bundled (self-host): importing the ES5 CHTML bundle has side effects
-@JsModule("mathjax/es5/tex-chtml.js")
-@JsNonModule
-external val mathjaxBundle: dynamic
-
-// JS JSON parser binding (avoid inline js("JSON.parse(...)"))
-external object JSON {
-    fun parse(text: String): dynamic
-}
-
-// JS global encodeURI binding (to safely request paths that may contain non-ASCII)
-external fun encodeURI(uri: String): String
-// URL encoding helpers for query parameters
-external fun encodeURIComponent(s: String): String
-external fun decodeURIComponent(s: String): String
+// externals moved to Externals.kt
 
 // Ensure global scroll offset styles and keep a CSS var with the real fixed-top navbar height.
 // This guarantees that scrolling to anchors or search hits is not hidden underneath the top bar.
-private fun ensureScrollOffsetStyles() {
+fun ensureScrollOffsetStyles() {
     try {
         val doc = window.document
         if (doc.getElementById("scroll-offset-style") == null) {
@@ -144,20 +114,20 @@ private fun ensureScrollOffsetStyles() {
 }
 
 // Measure the current fixed-top navbar height and update the CSS variable
-private fun updateNavbarOffsetVar(): Int {
+fun updateNavbarOffsetVar(): Int {
     return try {
         val doc = window.document
         val nav = doc.querySelector("nav.navbar.fixed-top") as? HTMLElement
         val px = if (nav != null) kotlin.math.round(nav.getBoundingClientRect().height).toInt() else 0
         doc.documentElement?.let { root ->
-            root.asDynamic().style?.setProperty?.invoke(root.asDynamic().style, "--navbar-offset", "${'$'}{px}px")
+            root.asDynamic().style?.setProperty?.invoke(root.asDynamic().style, "--navbar-offset", "${px}px")
         }
         px
     } catch (_: Throwable) { 0 }
 }
 
 // Ensure global CSS for search highlights is present (bright, visible everywhere)
-private fun ensureSearchHighlightStyles() {
+fun ensureSearchHighlightStyles() {
     try {
         val doc = window.document
         if (doc.getElementById("search-hit-style") == null) {
@@ -189,7 +159,7 @@ private fun ensureSearchHighlightStyles() {
 }
 
 // Ensure docs layout tweaks (reduce markdown body top margin to align with TOC)
-private fun ensureDocsLayoutStyles() {
+fun ensureDocsLayoutStyles() {
     try {
         val doc = window.document
         if (doc.getElementById("docs-layout-style") == null) {
@@ -220,165 +190,9 @@ private fun ensureDocsLayoutStyles() {
     }
 }
 
-@Composable
-fun App() {
-    var route by remember { mutableStateOf(currentRoute()) }
-    var html by remember { mutableStateOf<String?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var toc by remember { mutableStateOf<List<TocItem>>(emptyList()) }
-    var activeTocId by remember { mutableStateOf<String?>(null) }
-    var contentEl by remember { mutableStateOf<HTMLElement?>(null) }
-    val isDocsRoute = route.startsWith("docs/")
-    // A stable key for the current document path (without fragment). Used by DocsPage.
-    val docKey = stripFragment(route)
+// App() moved to App.kt
 
-    // Initialize dynamic Documentation dropdown once
-    LaunchedEffect(Unit) {
-        dlog("init", "initDocsDropdown()")
-        initDocsDropdown()
-    }
-
-    // Initialize site-wide search (lazy index build on first use)
-    LaunchedEffect(Unit) {
-        dlog("init", "initTopSearch()")
-        initTopSearch()
-    }
-
-    // Ensure global docs layout styles are present once
-    LaunchedEffect(Unit) {
-        ensureDocsLayoutStyles()
-    }
-
-    // Ensure scroll offset styles exist and keep navbar offset in sync
-    LaunchedEffect(Unit) {
-        ensureScrollOffsetStyles()
-        updateNavbarOffsetVar()
-    }
-
-    // Recompute navbar offset on resize and when effect is disposed
-    DisposableEffect(Unit) {
-        val handler: (org.w3c.dom.events.Event) -> Unit = { updateNavbarOffsetVar() }
-        window.addEventListener("resize", handler)
-        onDispose { window.removeEventListener("resize", handler) }
-    }
-
-    // Listen to hash changes (routing)
-    DisposableEffect(Unit) {
-        val listener: (org.w3c.dom.events.Event) -> Unit = {
-            route = currentRoute()
-        }
-        window.addEventListener("hashchange", listener)
-        onDispose { window.removeEventListener("hashchange", listener) }
-    }
-
-    // Docs-specific fetching and effects are handled inside DocsPage now
-
-    // Layout
-    PageTemplate(title = when {
-        isDocsRoute -> null // title will be shown inside DocsPage from MD H1
-        route.startsWith("reference") -> "Reference"
-        route.isBlank() -> null // Home has its own big title/hero
-        else -> null
-    }) {
-        Div({ classes("row", "gy-4") }) {
-            // Sidebar TOC: show only on docs pages
-            if (isDocsRoute) {
-                Div({ classes("col-12", "col-lg-3") }) {
-                    // Keep the TOC nav sticky below the fixed navbar. Use the same CSS var that
-                    // drives body padding so the offsets always match the real navbar height.
-                    Nav({
-                        classes("position-sticky")
-                        attr("style", "top: calc(var(--navbar-offset) + 1rem)")
-                    }) {
-                        H2({ classes("h6", "text-uppercase", "text-muted") }) { Text("On this page") }
-                        Ul({ classes("list-unstyled") }) {
-                            toc.forEach { item ->
-                                Li({ classes("mb-1") }) {
-                                    val pad = when (item.level) {
-                                        1 -> "0"
-                                        2 -> "0.75rem"
-                                        else -> "1.5rem"
-                                    }
-                                    val routeNoFrag = route.substringBefore('#')
-                                    val tocHref = "#/$routeNoFrag#${item.id}"
-                                    A(attrs = {
-                                        attr("href", tocHref)
-                                        attr("style", "padding-left: $pad")
-                                        classes("link-body-emphasis", "text-decoration-none")
-                                        // Highlight active item
-                                        if (activeTocId == item.id) {
-                                            classes("fw-semibold", "text-primary")
-                                            attr("aria-current", "true")
-                                        }
-                                        onClick {
-                                            it.preventDefault()
-                                            // Update location hash to include the document route and section id
-                                            window.location.hash = tocHref
-                                            // Perform immediate scroll for snappier UX (effects will also handle it)
-                                            contentEl?.ownerDocument?.getElementById(item.id)
-                                                ?.let { (it as? HTMLElement)?.scrollIntoView() }
-                                        }
-                                    }) { Text(item.title) }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Main content
-            Div({ classes("col-12", if (isDocsRoute) "col-lg-9" else "col-lg-12") }) {
-                when {
-                    route.isBlank() -> HomePage()
-                    !isDocsRoute -> ReferencePage()
-                    else -> DocsPage(
-                        route = route,
-                        html = html,
-                        error = error,
-                        contentEl = contentEl,
-                        onContentEl = { contentEl = it },
-                        setError = { error = it },
-                        setHtml = { html = it },
-                        toc = toc,
-                        setToc = { toc = it },
-                        activeTocId = activeTocId,
-                        setActiveTocId = { activeTocId = it },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DocLink(name: String) {
-    A(attrs = {
-        classes("btn", "btn-sm", "btn-outline-secondary")
-        onClick {
-            window.location.hash = "#/docs/$name"
-            it.preventDefault()
-        }
-        attr("href", "#/docs/$name")
-    }) { Text(name) }
-}
-
-@Composable
-private fun UnsafeRawHtml(html: String) {
-    // Compose HTML lacks a direct element for raw insertion; set innerHTML via ref
-    // Use a <div> and set its innerHTML via side effect
-    val holder = remember { mutableStateOf<HTMLElement?>(null) }
-    LaunchedEffect(html) {
-        holder.value?.innerHTML = html
-    }
-    Div({
-        ref {
-            holder.value = it
-            onDispose {
-                if (holder.value === it) holder.value = null
-            }
-        }
-    }) {}
-}
+// DocLink and UnsafeRawHtml moved to Components.kt
 
 fun currentRoute(): String = window.location.hash.removePrefix("#/")
 
@@ -407,10 +221,9 @@ fun extractSearchTerms(route: String): List<String> {
 
 // Highlight words in root that start with any of the terms (case-insensitive). Returns count of hits.
 fun highlightSearchHits(root: HTMLElement, terms: List<String>): Int {
-    if (terms.isEmpty()) return 0
     // Make sure CSS for highlighting is injected
     ensureSearchHighlightStyles()
-    // Remove previous highlights
+    // Always remove previous highlights first so calling with empty terms clears them
     try {
         val prev = root.getElementsByClassName("search-hit")
         // Because HTMLCollection is live, copy to array first
@@ -421,6 +234,8 @@ fun highlightSearchHits(root: HTMLElement, terms: List<String>): Int {
             parent?.replaceChild(textNode, mark)
         }
     } catch (_: Throwable) {}
+
+    if (terms.isEmpty()) return 0
 
     // Allow highlighting even inside CODE and PRE per request; still skip scripts, styles, and keyboard samples
     val skipTags = setOf("SCRIPT", "STYLE", "KBD", "SAMP")
@@ -453,12 +268,21 @@ fun highlightSearchHits(root: HTMLElement, terms: List<String>): Int {
                     if (start > pos) container.appendChild(doc.createTextNode(text.substring(pos, start)))
                     val token = m.value
                     val tokenLower = token.lowercase()
-                    val match = terms.any { tokenLower.startsWith(it) }
-                    if (match) {
+                    // choose the longest term that is a prefix of the token
+                    var bestLen = 0
+                    if (terms.isNotEmpty()) {
+                        for (t in terms) {
+                            if (t.isNotEmpty() && tokenLower.startsWith(t) && t.length > bestLen) bestLen = t.length
+                        }
+                    }
+                    if (bestLen > 0 && bestLen <= token.length) {
+                        val prefix = token.substring(0, bestLen)
+                        val suffix = token.substring(bestLen)
                         val mark = doc.createElement("mark") as HTMLElement
                         mark.className = "search-hit"
-                        mark.textContent = token
+                        mark.textContent = prefix
                         container.appendChild(mark)
+                        if (suffix.isNotEmpty()) container.appendChild(doc.createTextNode(suffix))
                         hits++
                     } else {
                         container.appendChild(doc.createTextNode(token))
@@ -511,240 +335,17 @@ fun renderReferenceListHtml(docs: List<String>): String {
     return "<ul class=\"list-group\">$items</ul>"
 }
 
-// --------------- New Composables: PageTemplate and DocsPage ---------------
+// PageTemplate moved to Components.kt
 
-@Composable
-private fun PageTemplate(title: String?, showBack: Boolean = false, content: @Composable () -> Unit) {
-    Div({ classes("container", "py-4") }) {
-        // Render header row only when we have a title, to avoid a floating back icon before data loads
-        if (!title.isNullOrBlank()) {
-            Div({ classes("d-flex", "align-items-center", "gap-2", "mb-3") }) {
-                if (showBack) {
-                    A(attrs = {
-                        classes("btn", "btn-outline", "btn-sm")
-                        attr("href", "#")
-                        attr("aria-label", "Back")
-                        onClick {
-                            it.preventDefault()
-                            try {
-                                if (window.history.length > 1) window.history.back()
-                                else window.location.hash = "#"
-                            } catch (e: dynamic) {
-                                window.location.hash = "#"
-                            }
-                        }
-                    }) {
-                        I({ classes("bi", "bi-arrow-left") })
-                    }
-                }
-                if (!title.isNullOrBlank()) {
-                    H1({ classes("h4", "mb-0") }) { Text(title) }
-                }
-            }
-        }
+// DocsPage moved to Pages.kt
 
-        content()
-    }
-}
-
-@Composable
-private fun DocsPage(
-    route: String,
-    html: String?,
-    error: String?,
-    contentEl: HTMLElement?,
-    onContentEl: (HTMLElement?) -> Unit,
-    setError: (String?) -> Unit,
-    setHtml: (String?) -> Unit,
-    toc: List<TocItem>,
-    setToc: (List<TocItem>) -> Unit,
-    activeTocId: String?,
-    setActiveTocId: (String?) -> Unit,
-) {
-    // Title is extracted from the first H1 in markdown
-    var title by remember { mutableStateOf<String?>(null) }
-
-    // Fetch markdown and compute title
-    val docKey = stripFragment(route)
-    LaunchedEffect(docKey) {
-        // Reset page-specific state early to avoid stale UI (e.g., empty TOC persisting)
-        setError(null)
-        setHtml(null)
-        setToc(emptyList())
-        setActiveTocId(null)
-
-        val path = routeToPath(route)
-        try {
-            // Use encoded relative URL to handle non-ASCII filenames and ensure correct base
-            val url = "./" + encodeURI(path)
-            val resp = window.fetch(url).await()
-            if (!resp.ok) {
-                setError("Not found: $path (${resp.status})")
-            } else {
-                val text = resp.text().await()
-                title = extractTitleFromMarkdown(text) ?: path.substringAfterLast('/')
-                setHtml(renderMarkdown(text))
-            }
-        } catch (t: Throwable) {
-            setError("Failed to load: $path — ${t.message}")
-        }
-    }
-
-    // Do not render a separate header here. We will show the markdown's own H1
-    // and inject a back button inline to that H1 after the content mounts.
-    PageTemplate(title = null, showBack = false) {
-        if (error != null) {
-            Div({ classes("alert", "alert-danger") }) { Text(error) }
-        } else if (html == null) {
-            P { Text("Loading…") }
-        } else {
-            Div({
-                classes("markdown-body")
-                ref {
-                    onContentEl(it)
-                    onDispose { onContentEl(null) }
-                }
-            }) {
-                UnsafeRawHtml(html)
-            }
-        }
-    }
-
-    // Post-process links, images and build TOC after html injection
-    // Run when both html is present and content element is mounted to avoid races (e.g., Home → Tutorial)
-    LaunchedEffect(html, contentEl) {
-        val el = contentEl ?: return@LaunchedEffect
-        if (html == null) return@LaunchedEffect
-        window.requestAnimationFrame {
-            // Insert an inline back button to the left of the first H1
-            try {
-                val firstH1 = el.querySelector("h1") as? HTMLElement
-                if (firstH1 != null && firstH1.querySelector(".doc-back-btn") == null) {
-                    val back = el.ownerDocument!!.createElement("div") as HTMLDivElement
-                    back.className = "btn btn-outline btn-sm me-2 align-middle doc-back-btn "
-                    back.setAttribute("aria-label","Back")
-                    back.onclick = { ev ->
-                        ev.preventDefault()
-                        try {
-                            if (window.history.length > 1) window.history.back() else window.location.hash = "#"
-                        } catch (e: dynamic) {
-                            window.location.hash = "#"
-                        }
-                        null
-                    }
-                    val icon = el.ownerDocument!!.createElement("i") as HTMLElement
-                    icon.className = "bi bi-arrow-left"
-                    back.appendChild(icon)
-                    // Insert at the start of H1 content
-                    firstH1.insertBefore(back, firstH1.firstChild)
-                }
-            } catch (_: Throwable) {
-                // best-effort; ignore DOM issues
-            }
-            val currentPath = routeToPath(route) // without fragment
-            val basePath = currentPath.substringBeforeLast('/', "docs")
-            rewriteImages(el, basePath)
-            rewriteAnchors(el, basePath, currentPath) { newRoute ->
-                window.location.hash = "#/$newRoute"
-            }
-            // Render math using MathJax v3 when available; retry shortly if still initializing.
-            val tryTypeset: () -> Unit = {
-                try {
-                    val ready = try { js("typeof MathJax !== 'undefined' && MathJax.typeset") as Boolean } catch (_: dynamic) { false }
-                    if (ready) {
-                        try { MathJax.typeset(arrayOf(el)) } catch (_: dynamic) { /* ignore */ }
-                    } else {
-                        // retry once after a short delay
-                        window.setTimeout({
-                            try { MathJax.typeset(arrayOf(el)) } catch (_: dynamic) { /* ignore */ }
-                        }, 50)
-                    }
-                } catch (_: dynamic) { /* ignore */ }
-            }
-            tryTypeset()
-            val newToc = buildToc(el)
-            setToc(newToc)
-            // Set initial active section: prefer fragment if present, else first heading
-            val frag = anchorFromHash(window.location.hash)
-            val initialId = frag ?: newToc.firstOrNull()?.id
-            setActiveTocId(initialId)
-
-            // Highlight search hits if navigated via search (?q=...) and scroll to the first occurrence
-            val terms = extractSearchTerms(route)
-            if (terms.isNotEmpty()) {
-                // Perform highlighting after typesetting and TOC build
-                val count = try { highlightSearchHits(el, terms) } catch (_: Throwable) { 0 }
-                if (count > 0 && frag == null) {
-                    try {
-                        val first = el.getElementsByClassName("search-hit").item(0) as? HTMLElement
-                        first?.scrollIntoView()
-                    } catch (_: Throwable) {}
-                }
-            }
-
-            if (!frag.isNullOrBlank()) {
-                val target = el.ownerDocument?.getElementById(frag)
-                (target as? HTMLElement)?.scrollIntoView()
-            }
-        }
-    }
-
-    // When only the fragment changes on the same document, scroll to the target without re-fetching
-    LaunchedEffect(route) {
-        val el = contentEl ?: return@LaunchedEffect
-        window.setTimeout({
-            val frag = anchorFromHash(window.location.hash)
-            if (!frag.isNullOrBlank()) {
-                val target = el.ownerDocument?.getElementById(frag)
-                (target as? HTMLElement)?.scrollIntoView()
-            }
-        }, 0)
-    }
-
-    // Scrollspy: highlight active heading in TOC while scrolling (reuse existing logic)
-    DisposableEffect(toc, contentEl) {
-        if (toc.isEmpty() || contentEl == null) return@DisposableEffect onDispose {}
-        var scheduled = false
-        fun computeActive() {
-            scheduled = false
-            val tops = toc.mapNotNull { item ->
-                contentEl.ownerDocument?.getElementById(item.id)
-                    ?.let { (it as? HTMLElement)?.getBoundingClientRect()?.top?.toDouble() }
-            }
-            if (tops.isEmpty()) return
-            val idx = activeIndexForTops(tops, offsetPx = 80.0)
-            val newId = toc.getOrNull(idx)?.id
-            if (newId != null && newId != activeTocId) {
-                setActiveTocId(newId)
-            }
-        }
-
-        val scrollListener: (org.w3c.dom.events.Event) -> Unit = {
-            if (!scheduled) {
-                scheduled = true
-                window.requestAnimationFrame { computeActive() }
-            }
-        }
-        val resizeListener = scrollListener
-
-        computeActive()
-        window.addEventListener("scroll", scrollListener)
-        window.addEventListener("resize", resizeListener)
-
-        onDispose {
-            window.removeEventListener("scroll", scrollListener)
-            window.removeEventListener("resize", resizeListener)
-        }
-    }
-}
-
-private fun extractTitleFromMarkdown(md: String): String? {
+fun extractTitleFromMarkdown(md: String): String? {
     val lines = md.lines()
     val h1 = lines.firstOrNull { it.trimStart().startsWith("# ") }
     return h1?.trimStart()?.removePrefix("# ")?.trim()
 }
 
-private suspend fun initDocsDropdown() {
+suspend fun initDocsDropdown() {
     try {
         dlog("docs-dd", "initDocsDropdown start")
         val menu = document.getElementById("docsDropdownMenu") ?: run {
@@ -938,18 +539,38 @@ private suspend fun buildSearchIndexOnce() {
 }
 
 private fun scoreQuery(q: String, rec: DocRecord): Int {
-    val query = norm(q)
-    if (query.isBlank()) return 0
+    val terms = q.trim().split(Regex("\\s+")).map { it.lowercase() }.filter { it.isNotEmpty() }
+    if (terms.isEmpty()) return 0
     var score = 0
     val title = norm(rec.title)
     val text = rec.text
-    // Title startsWith gets high score
-    if (title.startsWith(query)) score += 100
-    if (title.contains(query)) score += 60
-    // Body occurrences (basic)
-    val idx = text.indexOf(query)
-    if (idx >= 0) score += 30
-    // Shorter files slightly preferred
+    // Title bonuses: longer prefix matches get higher score
+    for (t in terms) {
+        if (title.startsWith(t)) score += 120 + t.length
+        else if (title.split(Regex("[A-Za-z0-9_]+")).isEmpty()) { /* no-op */ }
+        else {
+            // title words prefix
+            val wr = Regex("[A-Za-z0-9_]+")
+            if (wr.findAll(title).any { it.value.startsWith(t) }) score += 70 + t.length
+        }
+    }
+    // Body: count how many tokens start with any term, weight by term length (cap to avoid giant docs dominating)
+    run {
+        val wr = Regex("[A-Za-z0-9_]+")
+        var matches = 0
+        for (m in wr.findAll(text)) {
+            val token = m.value
+            val tl = token.lowercase()
+            var best = 0
+            for (t in terms) if (tl.startsWith(t) && t.length > best) best = t.length
+            if (best > 0) {
+                matches++
+                score += 2 * best
+                if (matches >= 50) break // cap
+            }
+        }
+    }
+    // Prefer shorter files a bit
     score += (200 - kotlin.math.min(200, text.length / 500))
     return score
 }
@@ -1023,9 +644,18 @@ private suspend fun performSearch(q: String): List<DocRecord> {
         return emptyList()
     }
     if (q.isBlank()) return emptyList()
-    val query = norm(q)
+    val terms = q.trim().split(Regex("\\s+")).map { it.lowercase() }.filter { it.isNotEmpty() }
+    if (terms.isEmpty()) return emptyList()
+    val wordRegex = Regex("[A-Za-z0-9_]+")
+    fun hasPrefixWord(s: String): Boolean {
+        for (m in wordRegex.findAll(s)) {
+            val tl = m.value.lowercase()
+            for (t in terms) if (tl.startsWith(t)) return true
+        }
+        return false
+    }
     val res = idx.filter { rec ->
-        norm(rec.title).contains(query) || rec.text.contains(query)
+        hasPrefixWord(norm(rec.title)) || hasPrefixWord(rec.text)
     }
     dlog("search", "performSearch: q='$q' idx=${idx.size} -> ${res.size} results")
     return res
@@ -1042,7 +672,7 @@ private fun debounce(scope: CoroutineScope, delayMs: Long, block: suspend () -> 
     }
 }
 
-private fun initTopSearch(attempt: Int = 0) {
+fun initTopSearch(attempt: Int = 0) {
     if (searchInitDone) return
     val input = document.getElementById("topSearch") as? HTMLInputElement
     val menu = document.getElementById("topSearchMenu") as? HTMLDivElement
@@ -1063,6 +693,18 @@ private fun initTopSearch(attempt: Int = 0) {
         dlog("search", "debounced runSearch execute q='$q'")
         val results = performSearch(q)
         renderSearchResults(input, menu, q, results)
+        // Also update highlights on the currently visible page content
+        try {
+            val root = document.querySelector(".markdown-body") as? HTMLElement
+            if (root != null) {
+                val terms = q.trim()
+                    .split(Regex("\\s+"))
+                    .map { it.lowercase() }
+                    .filter { it.isNotEmpty() }
+                val hits = highlightSearchHits(root, terms)
+                dlog("search", "live highlight updated, hits=$hits, terms=$terms")
+            }
+        } catch (_: Throwable) { }
     }
 
     // Keep the input focused when interacting with the dropdown so it doesn't blur/close
@@ -1131,155 +773,8 @@ private object MainScopeProvider {
     val scope: CoroutineScope by lazy { kotlinx.coroutines.MainScope() }
 }
 
-@Composable
-private fun ReferencePage() {
-    var docs by remember { mutableStateOf<List<String>?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    // Titles resolved from the first H1 of each markdown document
-    var titles by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
-
-    // Load docs index once
-    LaunchedEffect(Unit) {
-        try {
-            val resp = window.fetch("docs-index.json").await()
-            if (!resp.ok) {
-                error = "Failed to load docs index (${resp.status})"
-            } else {
-                val text = resp.text().await()
-                // Simple JSON parse into dynamic array of strings
-                val arr = js("JSON.parse(text)") as Array<String>
-                docs = arr.toList()
-            }
-        } catch (t: Throwable) {
-            error = t.message
-        }
-    }
-
-    // Once we have the docs list, fetch their titles (H1) progressively
-    LaunchedEffect(docs) {
-        val list = docs ?: return@LaunchedEffect
-        // Reset titles when list changes
-        titles = emptyMap()
-        // Fetch sequentially to avoid flooding; fast enough for small/medium doc sets
-        for (path in list) {
-            try {
-                val mdPath = if (path.startsWith("docs/")) path else "docs/$path"
-                val url = "./" + encodeURI(mdPath)
-                val resp = window.fetch(url).await()
-                if (!resp.ok) continue
-                val text = resp.text().await()
-                val title = extractTitleFromMarkdown(text) ?: path.substringAfterLast('/')
-                // Update state incrementally
-                titles = titles + (path to title)
-            } catch (_: Throwable) {
-                // ignore individual failures; fallback will be filename
-            }
-        }
-    }
-
-    H2({ classes("h5", "mb-3") }) { Text("Reference") }
-    P({ classes("text-muted") }) { Text("Browse all documentation pages included in this build.") }
-
-    when {
-        error != null -> Div({ classes("alert", "alert-danger") }) { Text(error!!) }
-        docs == null -> P { Text("Loading index…") }
-        docs!!.isEmpty() -> P { Text("No documents found.") }
-        else -> {
-            Ul({ classes("list-group") }) {
-                docs!!.sorted().forEach { path ->
-                    val displayTitle = titles[path] ?: path.substringAfterLast('/')
-                    Li({ classes("list-group-item", "d-flex", "justify-content-between", "align-items-center") }) {
-                        Div({}) {
-                            A(attrs = {
-                                classes("link-body-emphasis", "text-decoration-none")
-                                attr("href", "#/$path")
-                            }) { Text(displayTitle) }
-                            Br()
-                            Small({ classes("text-muted") }) { Text(path) }
-                        }
-                        I({ classes("bi", "bi-chevron-right") })
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun HomePage() {
-    // Hero section
-    Section({ classes("py-4", "py-lg-5") }) {
-        Div({ classes("text-center") }) {
-            H1({ classes("display-5", "fw-bold", "mb-3") }) { Text("Welcome to Lyng") }
-            P({ classes("lead", "text-muted", "mb-4") }) {
-                Text("A lightweight, expressive scripting language designed for clarity, composability, and fun. ")
-                Br()
-                Text("Run it anywhere Kotlin runs — share logic across JS, JVM, and more.")
-            }
-            Div({ classes("d-flex", "justify-content-center", "gap-2", "flex-wrap", "mb-4") }) {
-                // Benefits pills
-                listOf(
-                    "Clean, familiar syntax",
-                    "Immutable-first collections",
-                    "Batteries-included standard library",
-                    "Embeddable and testable"
-                ).forEach { b ->
-                    Span({ classes("badge", "text-bg-secondary", "rounded-pill") }) { Text(b) }
-                }
-            }
-            // CTA buttons
-            Div({ classes("d-flex", "justify-content-center", "gap-2", "mb-4") }) {
-                A(attrs = {
-                    classes("btn", "btn-primary", "btn-lg")
-                    attr("href", "#/docs/tutorial.md")
-                }) {
-                    I({ classes("bi", "bi-play-fill", "me-1") })
-                    Text("Start the tutorial")
-                }
-                A(attrs = {
-                    classes("btn", "btn-outline-secondary", "btn-lg")
-                    attr("href", "#/reference")
-                }) {
-                    I({ classes("bi", "bi-journal-text", "me-1") })
-                    Text("Browse reference")
-                }
-            }
-        }
-    }
-
-    // Code sample
-    val code = """
-// Create, transform, and verify — the Lyng way
-val data = [1, 2, 3, 4, 5]
-val evens = data.filter { it % 2 == 0 }.map { it * it }
-assertEquals([4, 16], evens)
->>> void
-""".trimIndent()
-
-    val codeHtml = "<pre><code>" + htmlEscape(code) + "</code></pre>"
-    Div({ classes("markdown-body") }) {
-        UnsafeRawHtml(highlightLyngHtml(ensureBootstrapCodeBlocks(codeHtml)))
-    }
-
-    // Short features list
-    Div({ classes("row", "g-4", "mt-1") }) {
-        listOf(
-            Triple("Fast to learn", "Familiar constructs and readable patterns — be productive in minutes.", "lightning"),
-            Triple("Portable", "Runs wherever Kotlin runs: reuse logic across platforms.", "globe2"),
-            Triple("Pragmatic", "A standard library that solves real problems without ceremony.", "gear-fill")
-        ).forEach { (title, text, icon) ->
-            Div({ classes("col-12", "col-md-4") }) {
-                Div({ classes("h-100", "p-3", "border", "rounded-3", "bg-body-tertiary") }) {
-                    Div({ classes("d-flex", "align-items-center", "mb-2", "fs-4") }) {
-                        I({ classes("bi", "bi-$icon", "me-2") })
-                        Span({ classes("fw-semibold") }) { Text(title) }
-                    }
-                    P({ classes("mb-0", "text-muted") }) { Text(text) }
-                }
-            }
-        }
-    }
-}
+// ReferencePage moved to ReferencePage.kt
+// HomePage moved to HomePage.kt
 
 // ---- Theme handling: follow system theme automatically ----
 
@@ -1402,7 +897,7 @@ private fun ensureBootstrapTables(html: String): String {
 }
 
 // Ensure all markdown-rendered code blocks (<pre>...</pre>) have Bootstrap-like `.code` class
-private fun ensureBootstrapCodeBlocks(html: String): String {
+fun ensureBootstrapCodeBlocks(html: String): String {
     // Target opening <pre ...> tags (case-insensitive)
     val preTagRegex = Regex("<pre(\\s+[^>]*)?>", RegexOption.IGNORE_CASE)
     val classAttrRegex = Regex("\\bclass\\s*=\\s*([\"'])(.*?)\\1", RegexOption.IGNORE_CASE)
@@ -1579,7 +1074,7 @@ private fun cssClassForKind(kind: net.sergeych.lyng.highlight.HighlightKind): St
 }
 
 // Minimal HTML escaping for text nodes
-private fun htmlEscape(s: String): String = buildString(s.length) {
+fun htmlEscape(s: String): String = buildString(s.length) {
     for (ch in s) when (ch) {
         '<' -> append("&lt;")
         '>' -> append("&gt;")
@@ -1601,7 +1096,7 @@ private fun htmlUnescape(s: String): String {
         .replace("&#39;", "'")
 }
 
-private fun rewriteImages(root: HTMLElement, basePath: String) {
+fun rewriteImages(root: HTMLElement, basePath: String) {
     val imgs = root.querySelectorAll("img")
     for (i in 0 until imgs.length) {
         val el = imgs.item(i) as? HTMLImageElement ?: continue
@@ -1611,7 +1106,7 @@ private fun rewriteImages(root: HTMLElement, basePath: String) {
     }
 }
 
-internal fun rewriteAnchors(
+fun rewriteAnchors(
     root: HTMLElement,
     basePath: String,
     currentDocPath: String,
@@ -1667,7 +1162,7 @@ internal fun rewriteAnchors(
     }
 }
 
-internal fun buildToc(root: HTMLElement): List<TocItem> {
+fun buildToc(root: HTMLElement): List<TocItem> {
     val out = mutableListOf<TocItem>()
     val used = hashSetOf<String>()
     val hs = root.querySelectorAll("h1, h2, h3")
