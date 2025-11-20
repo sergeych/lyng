@@ -28,7 +28,7 @@ function checkState() {
 }
 
 # default target settings
-case $1 in
+case "com" in
   com)
     SSH_HOST=sergeych@lynglang.com # host to deploy to
     SSH_PORT=22                             # ssh port on it
@@ -48,11 +48,7 @@ die() { echo "ERROR: $*" 1>&2 ; exit 1; }
 #rm build/distributions/*.js > /dev/null
 #rm build/distributions/*.js.map > /dev/null
 
-#./gradlew clean incrementRevision jsBrowserDistribution || die "compilation failed"
-#./gradlew incrementRevision jsBrowserDistribution
-#./gradlew jsBrowserDistribution
-./gradlew incrementRevision jsBrowserDistribution
-#./gradlew jsBrowserDistribution
+./gradlew site:clean site:jsBrowserDistribution || die "compilation failed"
 
 if [[ $? != 0 ]]; then
   echo
@@ -78,7 +74,7 @@ ssh -p ${SSH_PORT} ${SSH_HOST} "
 ";
 
 # sync files
-SRC=./build/dist/js/productionExecutable
+SRC=./site/build/dist/js/productionExecutable
 rsync -e "ssh -p ${SSH_PORT}" -avz -r -d --delete ${SRC}/* ${SSH_HOST}:${ROOT}/build/dist
 checkState
 rsync -e "ssh -p ${SSH_PORT}" -avz  ./static/* ${SSH_HOST}:${ROOT}/build/dist

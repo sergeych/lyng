@@ -102,6 +102,123 @@ external object JSON {
 
 // JS global encodeURI binding (to safely request paths that may contain non-ASCII)
 external fun encodeURI(uri: String): String
+// URL encoding helpers for query parameters
+external fun encodeURIComponent(s: String): String
+external fun decodeURIComponent(s: String): String
+
+// Ensure global scroll offset styles and keep a CSS var with the real fixed-top navbar height.
+// This guarantees that scrolling to anchors or search hits is not hidden underneath the top bar.
+private fun ensureScrollOffsetStyles() {
+    try {
+        val doc = window.document
+        if (doc.getElementById("scroll-offset-style") == null) {
+            val style = doc.createElement("style") as org.w3c.dom.HTMLStyleElement
+            style.id = "scroll-offset-style"
+            style.textContent = (
+                """
+                /* Keep a dynamic CSS variable with the measured navbar height */
+                :root { --navbar-offset: 56px; }
+
+                /* Make native hash jumps and programmatic scroll account for the fixed header */
+                html, body { scroll-padding-top: calc(var(--navbar-offset) + 8px); }
+
+                /* When scrolled into view, keep headings and any id-targeted element below the topbar */
+                .markdown-body h1,
+                .markdown-body h2,
+                .markdown-body h3,
+                .markdown-body h4,
+                .markdown-body h5,
+                .markdown-body h6,
+                .markdown-body [id] { scroll-margin-top: calc(var(--navbar-offset) + 8px); }
+
+                /* Also offset search highlights as they can be the initial scroll target */
+                mark.search-hit { scroll-margin-top: calc(var(--navbar-offset) + 8px) !important; }
+                """
+                .trimIndent()
+            )
+            doc.head?.appendChild(style)
+        }
+    } catch (_: Throwable) {
+        // Best-effort
+    }
+}
+
+// Measure the current fixed-top navbar height and update the CSS variable
+private fun updateNavbarOffsetVar(): Int {
+    return try {
+        val doc = window.document
+        val nav = doc.querySelector("nav.navbar.fixed-top") as? HTMLElement
+        val px = if (nav != null) kotlin.math.round(nav.getBoundingClientRect().height).toInt() else 0
+        doc.documentElement?.let { root ->
+            root.asDynamic().style?.setProperty?.invoke(root.asDynamic().style, "--navbar-offset", "${'$'}{px}px")
+        }
+        px
+    } catch (_: Throwable) { 0 }
+}
+
+// Ensure global CSS for search highlights is present (bright, visible everywhere)
+private fun ensureSearchHighlightStyles() {
+    try {
+        val doc = window.document
+        if (doc.getElementById("search-hit-style") == null) {
+            val style = doc.createElement("style") as org.w3c.dom.HTMLStyleElement
+            style.id = "search-hit-style"
+            // Use strong colors and !important to outshine theme/code styles
+            style.textContent = (
+                """
+                mark.search-hit { 
+                  background: #ffeb3b !important; /* bright yellow */
+                  color: #000 !important;
+                  padding: 0 .1em; 
+                  border-radius: 2px; 
+                  box-shadow: 0 0 0 2px #ffeb3b inset !important;
+                }
+                code mark.search-hit, pre mark.search-hit {
+                  background: #ffd54f !important; /* slightly deeper in code blocks */
+                  color: #000 !important;
+                  box-shadow: 0 0 0 2px #ffd54f inset !important;
+                }
+                """
+                .trimIndent()
+            )
+            doc.head?.appendChild(style)
+        }
+    } catch (_: Throwable) {
+        // Best-effort; if styles can't be injected we still proceed
+    }
+}
+
+// Ensure docs layout tweaks (reduce markdown body top margin to align with TOC)
+private fun ensureDocsLayoutStyles() {
+    try {
+        val doc = window.document
+        if (doc.getElementById("docs-layout-style") == null) {
+            val style = doc.createElement("style") as org.w3c.dom.HTMLStyleElement
+            style.id = "docs-layout-style"
+            style.textContent = (
+                """
+                /* Align the markdown content top edge with the TOC */
+                .markdown-body {
+                  margin-top: 0 !important;      /* remove extra outer spacing */
+                  padding-top: 0 !important;     /* override GitHub markdown default top padding */
+                }
+                /* Ensure the first element inside markdown body doesn't add extra space */
+                .markdown-body > :first-child {
+                  margin-top: 0 !important;
+                }
+                /* Some markdown renderers give H1 extra top margin; neutralize when first */
+                .markdown-body h1:first-child {
+                  margin-top: 0 !important;
+                }
+                """
+                .trimIndent()
+            )
+            doc.head?.appendChild(style)
+        }
+    } catch (_: Throwable) {
+        // Best-effort
+    }
+}
 
 @Composable
 fun App() {
@@ -125,6 +242,24 @@ fun App() {
     LaunchedEffect(Unit) {
         dlog("init", "initTopSearch()")
         initTopSearch()
+    }
+
+    // Ensure global docs layout styles are present once
+    LaunchedEffect(Unit) {
+        ensureDocsLayoutStyles()
+    }
+
+    // Ensure scroll offset styles exist and keep navbar offset in sync
+    LaunchedEffect(Unit) {
+        ensureScrollOffsetStyles()
+        updateNavbarOffsetVar()
+    }
+
+    // Recompute navbar offset on resize and when effect is disposed
+    DisposableEffect(Unit) {
+        val handler: (org.w3c.dom.events.Event) -> Unit = { updateNavbarOffsetVar() }
+        window.addEventListener("resize", handler)
+        onDispose { window.removeEventListener("resize", handler) }
     }
 
     // Listen to hash changes (routing)
@@ -248,12 +383,96 @@ private fun UnsafeRawHtml(html: String) {
 fun currentRoute(): String = window.location.hash.removePrefix("#/")
 
 fun routeToPath(route: String): String {
-    val noFrag = stripFragment(route)
-    return if (noFrag.startsWith("docs/")) noFrag else "docs/$noFrag"
+    val noParams = stripQuery(stripFragment(route))
+    return if (noParams.startsWith("docs/")) noParams else "docs/$noParams"
 }
 
 // Strip trailing fragment from a route like "docs/file.md#anchor" -> "docs/file.md"
 fun stripFragment(route: String): String = route.substringBefore('#')
+
+// Strip query from a route like "docs/file.md?q=term" -> "docs/file.md"
+fun stripQuery(route: String): String = route.substringBefore('?')
+
+// Extract lowercase search terms from route query string (?q=...)
+fun extractSearchTerms(route: String): List<String> {
+    val queryPart = route.substringAfter('?', "")
+    if (queryPart.isEmpty()) return emptyList()
+    val params = queryPart.split('&')
+    val qParam = params.firstOrNull { it.startsWith("q=") }?.substringAfter('=') ?: return emptyList()
+    val decoded = try { decodeURIComponent(qParam) } catch (_: dynamic) { qParam }
+    return decoded.trim().split(Regex("\\s+"))
+        .map { it.lowercase() }
+        .filter { it.isNotEmpty() }
+}
+
+// Highlight words in root that start with any of the terms (case-insensitive). Returns count of hits.
+fun highlightSearchHits(root: HTMLElement, terms: List<String>): Int {
+    if (terms.isEmpty()) return 0
+    // Make sure CSS for highlighting is injected
+    ensureSearchHighlightStyles()
+    // Remove previous highlights
+    try {
+        val prev = root.getElementsByClassName("search-hit")
+        // Because HTMLCollection is live, copy to array first
+        val arr = (0 until prev.length).mapNotNull { prev.item(it) as? HTMLElement }.toList()
+        arr.forEach { mark ->
+            val parent = mark.parentNode
+            val textNode = root.ownerDocument!!.createTextNode(mark.textContent ?: "")
+            parent?.replaceChild(textNode, mark)
+        }
+    } catch (_: Throwable) {}
+
+    // Allow highlighting even inside CODE and PRE per request; still skip scripts, styles, and keyboard samples
+    val skipTags = setOf("SCRIPT", "STYLE", "KBD", "SAMP")
+    var hits = 0
+
+    fun processNode(node: org.w3c.dom.Node) {
+        when (node.nodeType) {
+            org.w3c.dom.Node.ELEMENT_NODE -> {
+                val el = node.unsafeCast<HTMLElement>()
+                if (skipTags.contains(el.tagName)) return
+                if (el.classList.contains("no-search")) return
+                // copy list as array, because modifying tree during iteration
+                val children = mutableListOf<org.w3c.dom.Node>()
+                val cn = el.childNodes
+                for (i in 0 until cn.length) children.add(cn.item(i)!!)
+                children.forEach { processNode(it) }
+            }
+            org.w3c.dom.Node.TEXT_NODE -> {
+                val text = node.nodeValue ?: return
+                if (text.isBlank()) return
+                // Tokenize by words and rebuild
+                val parent = node.parentNode ?: return
+                val doc = root.ownerDocument!!
+                val container = doc.createDocumentFragment()
+                var pos = 0
+                val wordRegex = Regex("[A-Za-z0-9_]+")
+                for (m in wordRegex.findAll(text)) {
+                    val start = m.range.first
+                    val end = m.range.last + 1
+                    if (start > pos) container.appendChild(doc.createTextNode(text.substring(pos, start)))
+                    val token = m.value
+                    val tokenLower = token.lowercase()
+                    val match = terms.any { tokenLower.startsWith(it) }
+                    if (match) {
+                        val mark = doc.createElement("mark") as HTMLElement
+                        mark.className = "search-hit"
+                        mark.textContent = token
+                        container.appendChild(mark)
+                        hits++
+                    } else {
+                        container.appendChild(doc.createTextNode(token))
+                    }
+                    pos = end
+                }
+                if (pos < text.length) container.appendChild(doc.createTextNode(text.substring(pos)))
+                parent.replaceChild(container, node)
+            }
+        }
+    }
+    processNode(root)
+    return hits
+}
 
 fun renderMarkdown(src: String): String =
     highlightLyngHtml(
@@ -449,6 +668,19 @@ private fun DocsPage(
             val frag = anchorFromHash(window.location.hash)
             val initialId = frag ?: newToc.firstOrNull()?.id
             setActiveTocId(initialId)
+
+            // Highlight search hits if navigated via search (?q=...) and scroll to the first occurrence
+            val terms = extractSearchTerms(route)
+            if (terms.isNotEmpty()) {
+                // Perform highlighting after typesetting and TOC build
+                val count = try { highlightSearchHits(el, terms) } catch (_: Throwable) { 0 }
+                if (count > 0 && frag == null) {
+                    try {
+                        val first = el.getElementsByClassName("search-hit").item(0) as? HTMLElement
+                        first?.scrollIntoView()
+                    } catch (_: Throwable) {}
+                }
+            }
 
             if (!frag.isNullOrBlank()) {
                 val target = el.ownerDocument?.getElementById(frag)
@@ -766,8 +998,11 @@ private fun renderSearchResults(input: HTMLInputElement, menu: HTMLDivElement, q
             ev.preventDefault()
             val path = a.getAttribute("data-path")
             if (path != null) {
-                dlog("nav", "search click -> navigate #/$path")
-                window.location.hash = "#/$path"
+                val inputEl = input
+                val q = inputEl.value
+                val suffix = if (q.isNotBlank()) "?q=" + encodeURIComponent(q) else ""
+                dlog("nav", "search click -> navigate #/$path$suffix")
+                window.location.hash = "#/$path$suffix"
                 menu.classList.remove("show")
                 closeNavbarCollapse()
             }
@@ -870,8 +1105,9 @@ private fun initTopSearch(attempt: Int = 0) {
                     val results = performSearch(q)
                     val best = results.maxByOrNull { scoreQuery(q, it) }
                     if (best != null) {
-                        dlog("nav", "Enter -> navigate #/${best.path}")
-                        window.location.hash = "#/${best.path}"
+                        val suffix = if (q.isNotBlank()) "?q=" + encodeURIComponent(q) else ""
+                        dlog("nav", "Enter -> navigate #/${best.path}$suffix")
+                        window.location.hash = "#/${best.path}$suffix"
                         hideSearchResults(menu)
                         closeNavbarCollapse()
                     } else {
@@ -1028,7 +1264,7 @@ assertEquals([4, 16], evens)
     // Short features list
     Div({ classes("row", "g-4", "mt-1") }) {
         listOf(
-            Triple("Fast to learn", "Familiar constructs and readable patterns — be productive in minutes.", "bolt"),
+            Triple("Fast to learn", "Familiar constructs and readable patterns — be productive in minutes.", "lightning"),
             Triple("Portable", "Runs wherever Kotlin runs: reuse logic across platforms.", "globe2"),
             Triple("Pragmatic", "A standard library that solves real problems without ceremony.", "gear-fill")
         ).forEach { (title, text, icon) ->

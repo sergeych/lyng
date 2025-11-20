@@ -68,9 +68,9 @@
       :root { --navbar-offset: 56px; }
       body {
         /* Fallback padding; JS will keep this equal to the real navbar height */
-        padding-top: var(--navbar-offset);
+        /*padding-top: var(--navbar-offset);*/
         /* Make native hash jumps account for the fixed header */
-        scroll-padding-top: calc(var(--navbar-offset) + 8px);
+        /*scroll-padding-top: calc(var(--navbar-offset) + 8px);*/
       }
       /* Also offset scroll for headings and any element targeted by an id */
       .markdown-body h1,
@@ -80,7 +80,7 @@
       .markdown-body h5,
       .markdown-body h6,
       [id] {
-        scroll-margin-top: calc(var(--navbar-offset) + 8px);
+        /*scroll-margin-top: calc(var(--navbar-offset) + 8px);*/
       }
       /* Unify markdown and page backgrounds with Bootstrap theme variables */
       .markdown-body {
@@ -226,7 +226,7 @@
           // Keep legacy inline padding for older browsers
           document.body.style.paddingTop = px;
           // And expose as a CSS variable used by scroll-padding/scroll-margin rules
-          document.documentElement.style.setProperty('--navbar-offset', px);
+          // document.documentElement.style.setProperty('--navbar-offset', px);
         }
         window.addEventListener('load', adjustPadding);
         window.addEventListener('resize', adjustPadding);
