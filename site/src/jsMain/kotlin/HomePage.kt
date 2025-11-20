@@ -71,7 +71,7 @@ fun HomePage() {
     // Code sample
     val code = """
 // Create, transform, and verify — the Lyng way
-val data = [1, 2, 3, 4, 5]
+val data = 1..5
 val evens = data.filter { it % 2 == 0 }.map { it * it }
 assertEquals([4, 16], evens)
 >>> void

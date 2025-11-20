@@ -17,9 +17,9 @@
 
 import androidx.compose.runtime.*
 import kotlinx.coroutines.launch
+import net.sergeych.lyng.Scope
 import org.jetbrains.compose.web.attributes.placeholder
 import org.jetbrains.compose.web.dom.*
-import net.sergeych.lyng.Scope
 
 @Composable
 fun TryLyngPage() {
@@ -31,7 +31,7 @@ fun TryLyngPage() {
             // Try changing the data and press Ctrl+Enter or click Run.
             import lyng.stdlib
 
-            val data = [1, 2, 3, 4, 5]
+            val data = 1..5
             val evens = data.filter { it % 2 == 0 }.map { it * it }
             evens
             """.trimIndent()
@@ -103,7 +103,7 @@ fun TryLyngPage() {
     PageTemplate(title = "Try Lyng", showBack = true) {
         // Intro
         P({ classes("lead", "text-muted", "mb-3") }) {
-            Text("Type or paste Lyng code and run it right in your browser.")
+            Text("Type or paste Lyng code and run it right in your browser with embedded Lyng interpreter")
         }
 
         // Editor
