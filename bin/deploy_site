@@ -45,8 +45,6 @@ case "com" in
 esac
 
 die() { echo "ERROR: $*" 1>&2 ; exit 1; }
-#rm build/distributions/*.js > /dev/null
-#rm build/distributions/*.js.map > /dev/null
 
 ./gradlew site:clean site:jsBrowserDistribution || die "compilation failed"
 

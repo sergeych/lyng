@@ -56,8 +56,7 @@ kotlin {
                 // Self-host MathJax via npm and bundle it with webpack
                 implementation(npm("mathjax", "3.2.2"))
             }
-            // Serve project docs and images as static resources in the site
-            resources.srcDir(rootProject.projectDir.resolve("docs"))
+            // Serve images as static resources in the site
             resources.srcDir(rootProject.projectDir.resolve("images"))
             // Also include generated resources (e.g., docs index JSON)
             // Use Gradle's layout to properly reference the build directory provider
@@ -126,6 +125,14 @@ listOf(
 ).forEach { taskName ->
     tasks.matching { it.name == taskName }.configureEach {
         dependsOn(generateDocsIndex)
+    }
+}
+
+// Copy Markdown docs into the "docs/" folder in the final resources, so paths in docs-index.json match files
+tasks.named<Copy>("jsProcessResources").configure {
+    // Ensure we don't end up with two copies at root; we no longer add docs as a plain resources srcDir
+    from(rootProject.projectDir.resolve("docs")) {
+        into("docs")
     }
 }
 
