@@ -194,7 +194,12 @@ fun ensureDocsLayoutStyles() {
 
 // DocLink and UnsafeRawHtml moved to Components.kt
 
-fun currentRoute(): String = window.location.hash.removePrefix("#/")
+fun currentRoute(): String {
+    val h = window.location.hash
+    // Support both "#/path" and "#path" formats
+    val noHash = if (h.startsWith("#")) h.substring(1) else h
+    return noHash.removePrefix("/")
+}
 
 fun routeToPath(route: String): String {
     val noParams = stripQuery(stripFragment(route))

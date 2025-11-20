@@ -105,6 +105,7 @@ fun App() {
             Div({ classes("col-12", if (isDocsRoute) "col-lg-9" else "col-lg-12") }) {
                 when {
                     route.isBlank() -> HomePage()
+                    route == "tryling" -> TryLyngPage()
                     !isDocsRoute -> ReferencePage()
                     else -> DocsPage(
                         route = route,

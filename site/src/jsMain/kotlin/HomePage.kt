@@ -56,6 +56,14 @@ fun HomePage() {
                     I({ classes("bi", "bi-journal-text", "me-1") })
                     Text("Browse reference")
                 }
+                A(attrs = {
+                    classes("btn", "btn-success", "btn-lg")
+                    // Use the hash path requested by the user: "#tryling"
+                    attr("href", "#tryling")
+                }) {
+                    I({ classes("bi", "bi-code-slash", "me-1") })
+                    Text("Try Lyng")
+                }
             }
         }
     }
