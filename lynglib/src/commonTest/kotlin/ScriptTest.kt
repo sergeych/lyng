@@ -3519,4 +3519,21 @@ class ScriptTest {
         """.trimIndent()).toString())
     }
 
+    @Test
+    fun testThrowReportsSource() = runTest {
+        try {
+            eval(
+                """
+            // line 1
+            // line 2
+            throw "the test"
+        """.trimIndent()
+            )
+        } catch (se: ScriptError) {
+            println(se.message)
+            // Pos.line is zero-based
+            assertEquals(2, se.pos.line)
+        }
+    }
+
 }

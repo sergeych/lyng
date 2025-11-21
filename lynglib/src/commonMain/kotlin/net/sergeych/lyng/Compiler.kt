@@ -389,7 +389,7 @@ class Compiler(
                         }
 
                         "throw" -> {
-                            val s = parseThrowStatement()
+                            val s = parseThrowStatement(t.pos)
                             operand = StatementRef(s)
                         }
 
@@ -916,7 +916,7 @@ class Compiler(
         "class" -> parseClassDeclaration()
         "enum" -> parseEnumDeclaration()
         "try" -> parseTryStatement()
-        "throw" -> parseThrowStatement()
+        "throw" -> parseThrowStatement(id.pos)
         "when" -> parseWhenStatement()
         else -> {
             // triples
@@ -1080,15 +1080,26 @@ class Compiler(
         }
     }
 
-    private suspend fun parseThrowStatement(): Statement {
+    private suspend fun parseThrowStatement(start: Pos): Statement {
         val throwStatement = parseStatement() ?: throw ScriptError(cc.currentPos(), "throw object expected")
-        return statement {
-            var errorObject = throwStatement.execute(this)
-            if (errorObject is ObjString)
-                errorObject = ObjException(this, errorObject.value)
-            if (errorObject is ObjException)
-                raiseError(errorObject)
-            else raiseError("this is not an exception object: $errorObject")
+        // Important: bind the created statement to the position of the `throw` keyword so that
+        // any raised error reports the correct source location.
+        return statement(start) { sc ->
+            var errorObject = throwStatement.execute(sc)
+            // Rebind error scope to the throw-site position so ScriptError.pos is accurate
+            val throwScope = sc.createChildScope(pos = start)
+            errorObject = when (errorObject) {
+                is ObjString -> ObjException(throwScope, errorObject.value)
+                is ObjException -> ObjException(
+                    errorObject.exceptionClass,
+                    throwScope,
+                    errorObject.message,
+                    errorObject.extraData,
+                    errorObject.useStackTrace
+                )
+                else -> throwScope.raiseError("this is not an exception object: $errorObject")
+            }
+            throwScope.raiseError(errorObject as ObjException)
         }
     }
 
