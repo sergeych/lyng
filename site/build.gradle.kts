@@ -51,6 +51,8 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.core)
                 // Lyng highlighter (common, used from JS)
                 implementation(project(":lynglib"))
+                // Shared web editor and highlighting utilities
+                implementation(project(":lyngweb"))
                 // Markdown parser (NPM)
                 implementation(npm("marked", "12.0.2"))
                 // Self-host MathJax via npm and bundle it with webpack

@@ -16,18 +16,25 @@
  */
 
 /*
- * Thin site-side wrapper for highlighting text with lynglib and producing HTML spans
- * with the same CSS classes as used in Main.kt.
+ * Site-like wrapper for Lyng highlighter that renders HTML spans with CSS classes
+ * compatible with the site styles. Kept in package net.sergeych.site for backwards
+ * compatibility with existing code and tests.
  */
 package net.sergeych.site
 
 import net.sergeych.lyng.highlight.HighlightKind
 import net.sergeych.lyng.highlight.SimpleLyngHighlighter
+import net.sergeych.lyngweb.htmlEscape
 
-// Kept only to avoid breaking imports if any remain; actual implementation moved to :lyngweb
-// Use net.sergeych.site.SiteHighlight from :lyngweb instead. This local copy is renamed and unused.
-@Deprecated("Use lyngweb: net.sergeych.site.SiteHighlight")
-object SiteHighlightLocal {
+/**
+ * Minimal HTML renderer for Lyng syntax highlighting, compatible with the site CSS.
+ *
+ * This object is kept in the legacy package `net.sergeych.site` to preserve
+ * backward compatibility with existing imports and tests in dependent modules.
+ * It renders spans with the `hl-*` classes used by the site (e.g., `hl-kw`,
+ * `hl-id`, `hl-num`).
+ */
+object SiteHighlight {
     private fun cssClassForKind(kind: HighlightKind): String = when (kind) {
         HighlightKind.Keyword -> "hl-kw"
         HighlightKind.TypeName -> "hl-ty"
@@ -44,17 +51,22 @@ object SiteHighlightLocal {
         HighlightKind.Error -> "hl-err"
     }
 
-    private fun htmlEscape(s: String): String = buildString(s.length) {
-        for (ch in s) when (ch) {
-            '<' -> append("&lt;")
-            '>' -> append("&gt;")
-            '&' -> append("&amp;")
-            '"' -> append("&quot;")
-            '\'' -> append("&#39;")
-            else -> append(ch)
-        }
-    }
-
+    /**
+     * Converts plain Lyng source [text] into HTML with `<span>` wrappers using
+     * site-compatible `hl-*` classes.
+     *
+     * Non-highlighted parts are HTML-escaped. If the highlighter returns no
+     * tokens, the entire string is returned as an escaped plain text.
+     *
+     * Example:
+     * ```kotlin
+     * val html = SiteHighlight.renderHtml("assertEquals(1, 1)")
+     * // => "<span class=\"hl-id\">assertEquals</span><span class=\"hl-punc\">(</span>..."
+     * ```
+     *
+     * @param text Lyng code to render (plain text).
+     * @return HTML string with `hl-*` styled tokens.
+     */
     fun renderHtml(text: String): String {
         val highlighter = SimpleLyngHighlighter()
         val spans = highlighter.highlight(text)

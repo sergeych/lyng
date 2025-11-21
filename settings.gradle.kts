@@ -37,3 +37,4 @@ rootProject.name = "lyng"
 include(":lynglib")
 include(":lyng")
 include(":site")
+include(":lyngweb")

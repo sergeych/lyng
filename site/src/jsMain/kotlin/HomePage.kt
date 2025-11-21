@@ -16,6 +16,9 @@
  */
 
 import androidx.compose.runtime.Composable
+import net.sergeych.lyngweb.ensureBootstrapCodeBlocks
+import net.sergeych.lyngweb.highlightLyngHtml
+import net.sergeych.lyngweb.htmlEscape
 import org.jetbrains.compose.web.dom.*
 
 @Composable
