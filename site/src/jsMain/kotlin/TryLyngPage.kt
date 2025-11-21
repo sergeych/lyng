@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import kotlinx.browser.window
 import kotlinx.coroutines.launch
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScriptError
 import net.sergeych.site.SiteHighlight
 import org.jetbrains.compose.web.attributes.placeholder
 import org.jetbrains.compose.web.dom.*
@@ -44,6 +45,7 @@ fun TryLyngPage() {
     var running by remember { mutableStateOf(false) }
     var output by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var extendedError by remember { mutableStateOf<String?>(null) }
 
     fun runCode() {
         if (running) return
@@ -91,18 +93,27 @@ fun TryLyngPage() {
                 // Prefer detailed message including stack if available (K/JS)
                 val errText = buildString {
                     append(t.toString())
-                    try {
-                        val st = t.asDynamic().stack as? String
-                        if (!st.isNullOrBlank()) {
-                            append("\n")
-                            append(st)
+                    if (t !is ScriptError) {
+                        try {
+                            val st = t.asDynamic().stack as? String
+                            if (!st.isNullOrBlank()) {
+                                append("\n")
+                                append(st)
+                            }
+                        } catch (_: Throwable) {
                         }
-                    } catch (_: Throwable) {}
+                    }
                 }
                 if (printed.isNotEmpty()) {
                     output = printed.toString()
                 }
-                error = errText
+                if (t is ScriptError) {
+                    error = t.errorMessage
+                    extendedError = errText
+                } else {
+                    error = t.message
+                    extendedError = errText
+                }
             } finally {
                 running = false
             }
@@ -182,10 +193,10 @@ fun TryLyngPage() {
                     if (output != null) {
                         Pre({ classes("mb-0") }) { Code { Text(output!!) } }
                     }
-                    if (error != null) {
+                    if (extendedError != null) {
                         if (output != null) Hr({})
                         Div({ classes("alert", "alert-danger", "mb-0") }) {
-                            Pre({ classes("mb-0") }) { Code { Text(error!!) } }
+                            Pre({ classes("mb-0") }) { Code { Text(extendedError!!) } }
                         }
                     }
                 }
@@ -275,8 +286,8 @@ private fun EditorWithOverlay(
         }
 
         fun appendSentinel(html: String): String =
-            // Append a zero-width space sentinel to keep the last line box from collapsing
-            // in some browsers, which can otherwise cause caret size/position glitches
+        // Append a zero-width space sentinel to keep the last line box from collapsing
+        // in some browsers, which can otherwise cause caret size/position glitches
             // when the caret is at end-of-line.
             html + "<span data-sentinel=\"1\">&#8203;</span>"
 
@@ -357,6 +368,7 @@ private fun EditorWithOverlay(
             val ta = taEl ?: return@LaunchedEffect
             val ov = overlayEl ?: return@LaunchedEffect
             val cs = window.getComputedStyle(ta)
+
             // Resolve a concrete pixel line-height; some browsers return "normal" or unitless
             fun ensurePxLineHeight(): String {
                 val lh = cs.lineHeight ?: ""
@@ -368,10 +380,14 @@ private fun EditorWithOverlay(
                     probe.textContent = "M"
                     val fw = try {
                         (cs.asDynamic().fontWeight as? String) ?: cs.getPropertyValue("font-weight")
-                    } catch (_: Throwable) { null }
+                    } catch (_: Throwable) {
+                        null
+                    }
                     val fs = try {
                         (cs.asDynamic().fontStyle as? String) ?: cs.getPropertyValue("font-style")
-                    } catch (_: Throwable) { null }
+                    } catch (_: Throwable) {
+                        null
+                    }
                     probe.setAttribute(
                         "style",
                         buildString {
@@ -393,6 +409,7 @@ private fun EditorWithOverlay(
                 val approx = if (fsPx != null) fsPx * 1.2 else 16.0 * 1.2
                 return "${'$'}{approx}px"
             }
+
             val lineHeightPx = ensurePxLineHeight()
             // copy key properties
             val style = buildString {
@@ -408,11 +425,15 @@ private fun EditorWithOverlay(
                 // Try to mirror weight and style to eliminate metric differences
                 val fw = try {
                     (cs.asDynamic().fontWeight as? String) ?: cs.getPropertyValue("font-weight")
-                } catch (_: Throwable) { null }
+                } catch (_: Throwable) {
+                    null
+                }
                 if (!fw.isNullOrBlank()) append("font-weight:").append(fw).append(";")
                 val fs = try {
                     (cs.asDynamic().fontStyle as? String) ?: cs.getPropertyValue("font-style")
-                } catch (_: Throwable) { null }
+                } catch (_: Throwable) {
+                    null
+                }
                 if (!fs.isNullOrBlank()) append("font-style:").append(fs).append(";")
                 // Disable ligatures in overlay to keep glyph advances identical to textarea
                 append("font-variant-ligatures:none;")
@@ -433,8 +454,10 @@ private fun EditorWithOverlay(
                 if (!existing.contains("line-height")) {
                     ta.setAttribute("style", existing + " line-height: " + lineHeightPx + ";")
                 }
-            } catch (_: Throwable) {}
-        } catch (_: Throwable) {}
+            } catch (_: Throwable) {
+            }
+        } catch (_: Throwable) {
+        }
     }
 
     // container
@@ -558,7 +581,8 @@ private fun EditorWithOverlay(
                             if (start != end) {
                                 // Indent selected lines
                                 val regionStart = currentLineStartIndex(code, start)
-                                val regionEnd = code.indexOf('\n', startIndex = end).let { if (it == -1) code.length else it }
+                                val regionEnd =
+                                    code.indexOf('\n', startIndex = end).let { if (it == -1) code.length else it }
                                 val region = code.substring(regionStart, regionEnd)
                                 val lines = region.split("\n")
                                 val indentStr = " ".repeat(tabSize)
@@ -591,6 +615,7 @@ private fun EditorWithOverlay(
                             }
                         }
                     }
+
                     "Enter" -> {
                         ev.preventDefault()
                         val before = code.substring(0, start)
@@ -610,6 +635,7 @@ private fun EditorWithOverlay(
                         pendingScrollLeft = savedScrollLeft
                         setCode(newCode)
                     }
+
                     "}" -> {
                         // If the current line contains only indentation up to the caret,
                         // outdent by one indent level (tab or up to tabSize spaces) before inserting '}'.
