@@ -23,7 +23,12 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
     id("org.jetbrains.kotlin.plugin.compose") version "2.2.21"
     id("org.jetbrains.compose") version "1.9.3"
+    `maven-publish`
 }
+
+group = "net.sergeych"
+version = "0.0.1-SNAPSHOT"
+
 
 kotlin {
     js(IR) {
@@ -46,6 +51,24 @@ kotlin {
         }
         val jsTest by getting {
             dependencies { implementation(libs.kotlin.test) }
+        }
+    }
+}
+
+publishing {
+    val mavenToken by lazy {
+        File("${System.getProperty("user.home")}/.gitea_token").readText()
+    }
+    repositories {
+        maven {
+            credentials(HttpHeaderCredentials::class) {
+                name = "Authorization"
+                value = mavenToken
+            }
+            url = uri("https://gitea.sergeych.net/api/packages/SergeychWorks/maven")
+            authentication {
+                create("Authorization", HttpHeaderAuthentication::class)
+            }
         }
     }
 }

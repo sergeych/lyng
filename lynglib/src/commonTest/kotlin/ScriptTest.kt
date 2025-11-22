@@ -3536,4 +3536,12 @@ class ScriptTest {
         }
     }
 
+    @Test
+    fun testRangeIsIterable() = runTest {
+        eval("""
+            val r = 1..10
+            assert( r is Iterable )
+        """.trimIndent())
+    }
+
 }

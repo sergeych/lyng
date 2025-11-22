@@ -30,10 +30,10 @@ fun TryLyngPage() {
             """
             // Welcome to Lyng! Edit and run.
             // Try changing the data and press Ctrl+Enter or click Run.
-
-            val data = 1..5
-            val evens = data.filter { it % 2 == 0 }.map { it * it }
-            evens
+            import lyng.stdlib
+            
+            val data = 1..5 // or [1, 2, 3, 4, 5]
+            data.filter { it % 2 == 0 }.map { it * it }
             """.trimIndent()
         )
     }
@@ -47,6 +47,7 @@ fun TryLyngPage() {
         running = true
         output = null
         error = null
+        extendedError = null
         scope.launch {
             // keep this outside try so we can show partial prints if evaluation fails
             val printed = StringBuilder()
