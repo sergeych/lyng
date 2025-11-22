@@ -20,6 +20,7 @@ package net.sergeych.site
 import net.sergeych.lyng.highlight.HighlightKind
 import net.sergeych.lyng.highlight.HighlightSpan
 import net.sergeych.lyng.highlight.SimpleLyngHighlighter
+import net.sergeych.lyngweb.SiteHighlight
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertTrue

@@ -19,7 +19,6 @@ package net.sergeych.lyngweb
 
 import androidx.compose.runtime.*
 import kotlinx.browser.window
-import net.sergeych.site.SiteHighlight
 import org.jetbrains.compose.web.attributes.placeholder
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.events.SyntheticKeyboardEvent
@@ -48,6 +47,10 @@ fun EditorWithOverlay(
     setCode: (String) -> Unit,
     tabSize: Int = 4,
     onKeyDown: ((SyntheticKeyboardEvent) -> Unit)? = null,
+    // New sizing controls
+    minRows: Int = 6,
+    maxRows: Int? = null,
+    autoGrow: Boolean = false,
 ) {
     var overlayEl by remember { mutableStateOf<HTMLElement?>(null) }
     var taEl by remember { mutableStateOf<HTMLTextAreaElement?>(null) }
@@ -57,6 +60,47 @@ fun EditorWithOverlay(
     var pendingSelEnd by remember { mutableStateOf<Int?>(null) }
     var pendingScrollTop by remember { mutableStateOf<Double?>(null) }
     var pendingScrollLeft by remember { mutableStateOf<Double?>(null) }
+    var cachedLineHeight by remember { mutableStateOf<Double?>(null) }
+    var cachedVInsets by remember { mutableStateOf<Double?>(null) }
+
+    fun ensureMetrics(ta: HTMLTextAreaElement) {
+        if (cachedLineHeight == null || cachedVInsets == null) {
+            val cs = window.getComputedStyle(ta)
+            val lhStr = cs.getPropertyValue("line-height").trim()
+            val lh = lhStr.removeSuffix("px").toDoubleOrNull() ?: 20.0
+            fun parsePx(name: String): Double {
+                val v = cs.getPropertyValue(name).trim().removeSuffix("px").toDoubleOrNull()
+                return v ?: 0.0
+            }
+            val pt = parsePx("padding-top")
+            val pb = parsePx("padding-bottom")
+            val bt = parsePx("border-top-width")
+            val bb = parsePx("border-bottom-width")
+            cachedLineHeight = lh
+            cachedVInsets = pt + pb + bt + bb
+        }
+    }
+
+    fun rowsToPx(rows: Int): Double? {
+        val lh = cachedLineHeight ?: return null
+        val ins = cachedVInsets ?: 0.0
+        return lh * rows + ins
+    }
+
+    fun adjustTextareaHeight() {
+        val ta = taEl ?: return
+        if (!autoGrow) return
+        ensureMetrics(ta)
+        // reset to auto to measure full scrollHeight
+        ta.style.height = "auto"
+        val minPx = rowsToPx(minRows)
+        val maxPx = maxRows?.let { rowsToPx(it) }
+        var target = ta.scrollHeight.toDouble()
+        if (minPx != null && target < minPx) target = minPx
+        if (maxPx != null && target > maxPx) target = maxPx
+        // Apply target height
+        ta.style.height = "${target}px"
+    }
 
     // Update overlay HTML whenever code changes
     LaunchedEffect(code) {
@@ -139,6 +183,8 @@ fun EditorWithOverlay(
         overlayEl?.scrollLeft = sl
         pendingScrollTop = null
         pendingScrollLeft = null
+        // If text changed and autoGrow enabled, adjust height
+        adjustTextareaHeight()
     }
 
     fun setSelection(start: Int, end: Int = start) {
@@ -177,6 +223,9 @@ fun EditorWithOverlay(
         org.jetbrains.compose.web.dom.TextArea(value = code, attrs = {
             ref { ta ->
                 taEl = ta
+                // Cache metrics and adjust size on first mount
+                ensureMetrics(ta)
+                adjustTextareaHeight()
                 onDispose { if (taEl === ta) taEl = null }
             }
             // Avoid relying on external classes; still allow host app to override via CSS
@@ -184,7 +233,7 @@ fun EditorWithOverlay(
             attr(
                 "style",
                 buildString {
-                    append("width:100%; min-height:220px; background:transparent; position:relative; z-index:1; tab-size:")
+                    append("width:100%; background:transparent; position:relative; z-index:1; tab-size:")
                     append(tabSize)
                     append("; color:transparent; -webkit-text-fill-color:transparent; ")
                     // Make caret visible even though text color is transparent
@@ -196,6 +245,8 @@ fun EditorWithOverlay(
                     append(" outline: none; box-shadow: none;")
                     // Typography and rendering
                     append(" font-variant-ligatures: none; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace;")
+                    // Keep previous visual minimum for TryLyng unless overridden by rows logic
+                    append(" min-height:220px;")
                 }
             )
             // Disable browser corrections for a code editor
@@ -203,11 +254,14 @@ fun EditorWithOverlay(
             attr("autocorrect", "off")
             attr("autocapitalize", "off")
             attr("autocomplete", "off")
+            // Provide a baseline number of rows for browsers that use it
+            attr("rows", minRows.toString())
             placeholder("Enter Lyng code here…")
 
             onInput { ev ->
                 val v = (ev.target as HTMLTextAreaElement).value
                 setCode(v)
+                adjustTextareaHeight()
             }
 
             onKeyDown { ev ->

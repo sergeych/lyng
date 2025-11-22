@@ -145,7 +145,9 @@ fun TryLyngPage() {
                         ev.preventDefault()
                         runCode()
                     }
-                }
+                },
+                // Keep current initial size but allow the editor to grow with content
+                autoGrow = true
             )
         }
 
