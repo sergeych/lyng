@@ -86,6 +86,7 @@ class BookAllocationProfileTest {
         runDocTests("../docs/Set.md")
         runDocTests("../docs/Map.md")
         runDocTests("../docs/Buffer.md")
+        runDocTests("../docs/when.md")
         // Samples folder, bookMode=true
         for (bt in Files.list(Paths.get("../docs/samples")).toList()) {
             if (bt.extension == "md") runDocTests(bt.toString(), bookMode = true)

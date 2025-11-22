@@ -8,7 +8,7 @@ __Other documents to read__ maybe after this one:
 
 - [Advanced topics](advanced_topics.md), [declaring arguments](declaring_arguments.md)
 - [OOP notes](OOP.md), [exception handling](exceptions_handling.md)
-- [math in Lyng](math.md)
+- [math in Lyng](math.md), [the `when` statement](when.md)
 - [time](time.md) and [parallelism](parallelism.md)
 - [parallelism] - multithreaded code, coroutines, etc.
 - Some class
@@ -711,6 +711,8 @@ Or, more neat:
     >>> void
 
 ## When
+
+See also: [Comprehensive guide to `when`](when.md)
 
 It is very much like the kotlin's:
 
