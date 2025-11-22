@@ -53,7 +53,7 @@ fun HomePage() {
                     Text("Start the tutorial")
                 }
                 A(attrs = {
-                    classes("btn", "btn-outline-secondary", "btn-lg")
+                    classes("btn", "btn-outline-info", "btn-lg")
                     attr("href", "#/reference")
                 }) {
                     I({ classes("bi", "bi-journal-text", "me-1") })
@@ -64,7 +64,7 @@ fun HomePage() {
                     // Use the hash path requested by the user: "#tryling"
                     attr("href", "#tryling")
                 }) {
-                    I({ classes("bi", "bi-code-slash", "me-1") })
+                    I({ classes("bi", "bi-braces", "me-1") })
                     Text("Try Lyng")
                 }
             }
