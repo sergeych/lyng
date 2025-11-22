@@ -269,6 +269,13 @@ fun EditorWithOverlay(
                 onKeyDown?.invoke(ev)
                 val ta = taEl ?: return@onKeyDown
                 val key = ev.key
+                // If user pressed Ctrl/Cmd + Enter, treat it as a shortcut (e.g., Run)
+                // and DO NOT insert a newline here. Let the host handler act.
+                // Also prevent default so the textarea won't add a line.
+                if ((ev.ctrlKey || ev.metaKey) && key == "Enter") {
+                    ev.preventDefault()
+                    return@onKeyDown
+                }
                 if (key == "Tab") {
                     ev.preventDefault()
                     val start = ta.selectionStart ?: 0
