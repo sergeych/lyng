@@ -178,13 +178,14 @@ Ready features:
 
 ## plan: v1.0 - v1.5 Stability, integration, optimizations
 
-- [ ] site with integrated interpreter to give a try
-- [ ] kotlin part public API good docs, integration focused
+- [x] site with integrated interpreter to give a try
+- [x] kotlin part public API good docs, integration focused
 - [ ] type specifications
 - [ ] language server or compose-based lyng-aware editor
 - [ ] source docs and maybe lyng.md to a standard
 - [ ] metadata first class access from lyng
-- [ ] aggressive optimizations
+- [x] aggressive optimizations
+- [ ] JVM bytecode optimizations
 
 ## After 1.5 "Ideal scripting"
 
