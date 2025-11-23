@@ -37,7 +37,16 @@ fun Source.offsetOf(pos: Pos): Int {
 
 private val reservedIdKeywords = setOf("constructor", "property")
 // Fallback textual keywords that might come from the lexer as ID in some contexts (e.g., snippets)
-private val fallbackKeywordIds = setOf("and", "or", "not")
+private val fallbackKeywordIds = setOf(
+    // boolean operators
+    "and", "or", "not",
+    // declarations & modifiers
+    "fun", "fn", "class", "enum", "val", "var", "import", "package",
+    "private", "protected", "static", "open", "extern",
+    // control flow and misc
+    "if", "else", "when", "while", "do", "for", "try", "catch", "finally",
+    "throw", "return", "break", "continue", "this", "null", "true", "false"
+)
 
 /** Maps lexer token type (and sometimes value) to a [HighlightKind]. */
 private fun kindOf(type: Type, value: String): HighlightKind? = when (type) {
@@ -135,6 +144,11 @@ class SimpleLyngHighlighter : LyngHighlighter {
             val range = when (t.type) {
                 Type.STRING, Type.STRING2 -> adjustQuoteSpan(start, '"')
                 Type.CHAR -> adjustQuoteSpan(start, '\'')
+                Type.HEX -> {
+                    // Parser returns HEX token value without the leading "0x"; include it in highlight span
+                    val end = (start + 2 + t.value.length).coerceAtMost(text.length)
+                    TextRange(start, end)
+                }
                 else -> TextRange(start, (start + t.value.length).coerceAtMost(text.length))
             }
             if (range.endExclusive > range.start) raw += HighlightSpan(range, k)

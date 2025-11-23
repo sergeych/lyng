@@ -18,6 +18,8 @@
 package net.sergeych.lyng
 
 import ObjEnumClass
+import net.sergeych.lyng.Compiler.Companion.compile
+import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportProvider
 
@@ -61,7 +63,59 @@ class Compiler(
 
     var packageName: String? = null
 
-    class Settings
+    class Settings(
+        val miniAstSink: MiniAstSink? = null,
+    )
+
+    // Optional sink for mini-AST streaming (null by default, zero overhead when not used)
+    private val miniSink: MiniAstSink? = settings.miniAstSink
+
+    // --- Doc-comment collection state (for immediate preceding declarations) ---
+    private val pendingDocLines = mutableListOf<String>()
+    private var pendingDocStart: Pos? = null
+    private var prevWasComment: Boolean = false
+
+    private fun stripCommentLexeme(raw: String): String {
+        return when {
+            raw.startsWith("//") -> raw.removePrefix("//")
+            raw.startsWith("/*") && raw.endsWith("*/") -> {
+                val inner = raw.substring(2, raw.length - 2)
+                // Trim leading "*" prefixes per line like Javadoc style
+                inner.lines().joinToString("\n") { line ->
+                    val t = line.trimStart()
+                    if (t.startsWith("*")) t.removePrefix("*").trimStart() else line
+                }
+            }
+            else -> raw
+        }
+    }
+
+    private fun pushPendingDocToken(t: Token) {
+        val s = stripCommentLexeme(t.value)
+        if (pendingDocStart == null) pendingDocStart = t.pos
+        pendingDocLines += s
+        prevWasComment = true
+    }
+
+    private fun clearPendingDoc() {
+        pendingDocLines.clear()
+        pendingDocStart = null
+        prevWasComment = false
+    }
+
+    private fun consumePendingDoc(): MiniDoc? {
+        if (pendingDocLines.isEmpty()) return null
+        val raw = pendingDocLines.joinToString("\n").trimEnd()
+        val summary = raw.lines().firstOrNull { it.isNotBlank() }?.trim()
+        val start = pendingDocStart ?: cc.currentPos()
+        val doc = MiniDoc(MiniRange(start, start), raw = raw, summary = summary)
+        clearPendingDoc()
+        return doc
+    }
+
+    // Set just before entering a declaration parse, taken from keyword token position
+    private var pendingDeclStart: Pos? = null
+    private var pendingDeclDoc: MiniDoc? = null
 
     private val initStack = mutableListOf<MutableList<Statement>>()
 
@@ -74,6 +128,9 @@ class Compiler(
     private fun popInitScope(): MutableList<Statement> = initStack.removeLast()
 
     private val codeContexts = mutableListOf<CodeContext>(CodeContext.Module(null))
+
+    // Last parsed block range (for Mini-AST function body attachment)
+    private var lastParsedBlockRange: MiniRange? = null
 
     private suspend fun <T> inCodeContext(context: CodeContext, f: suspend () -> T): T {
         return try {
@@ -90,9 +147,19 @@ class Compiler(
         // Track locals at script level for fast local refs
         return withLocalNames(emptySet()) {
             // package level declarations
+            // Notify sink about script start
+            miniSink?.onScriptStart(start)
             do {
                 val t = cc.current()
                 if (t.type == Token.Type.NEWLINE || t.type == Token.Type.SINLGE_LINE_COMMENT || t.type == Token.Type.MULTILINE_COMMENT) {
+                    when (t.type) {
+                        Token.Type.SINLGE_LINE_COMMENT, Token.Type.MULTILINE_COMMENT -> pushPendingDocToken(t)
+                        Token.Type.NEWLINE -> {
+                            // A standalone newline not immediately following a comment resets doc buffer
+                            if (!prevWasComment) clearPendingDoc() else prevWasComment = false
+                        }
+                        else -> {}
+                    }
                     cc.next()
                     continue
                 }
@@ -114,6 +181,30 @@ class Compiler(
                             cc.next()
                             val pos = cc.currentPos()
                             val name = loadQualifiedName()
+                            // Emit MiniImport with approximate per-segment ranges
+                            run {
+                                try {
+                                    val parts = name.split('.')
+                                    if (parts.isNotEmpty()) {
+                                        var col = pos.column
+                                        val segs = parts.map { p ->
+                                            val start = Pos(pos.source, pos.line, col)
+                                            val end = Pos(pos.source, pos.line, col + p.length)
+                                            col += p.length + 1 // account for following '.' between segments
+                                            net.sergeych.lyng.miniast.MiniImport.Segment(p, net.sergeych.lyng.miniast.MiniRange(start, end))
+                                        }
+                                        val lastEnd = segs.last().range.end
+                                        miniSink?.onImport(
+                                            net.sergeych.lyng.miniast.MiniImport(
+                                                net.sergeych.lyng.miniast.MiniRange(pos, lastEnd),
+                                                segs
+                                            )
+                                        )
+                                    }
+                                } catch (_: Throwable) {
+                                    // best-effort; ignore import mini emission failures
+                                }
+                            }
                             val module = importManager.prepareImport(pos, name, null)
                             statements += statement {
                                 module.importInto(this, null)
@@ -121,6 +212,17 @@ class Compiler(
                             }
                             continue
                         }
+                    }
+                    // Fast-path: top-level function declarations. Handle here to ensure
+                    // Mini-AST emission even if qualifier matcher paths change.
+                    if (t.value == "fun" || t.value == "fn") {
+                        // Consume the keyword and delegate to the function parser
+                        cc.next()
+                        pendingDeclStart = t.pos
+                        pendingDeclDoc = consumePendingDoc()
+                        val st = parseFunctionDeclaration(isOpen = false, isExtern = false, isStatic = false)
+                        statements += st
+                        continue
                     }
                 }
                 val s = parseStatement(braceMeansLambda = true)?.also {
@@ -137,6 +239,9 @@ class Compiler(
 
             } while (true)
             Script(start, statements)
+        }.also {
+            // Best-effort script end notification (use current position)
+            miniSink?.onScriptEnd(cc.currentPos(), net.sergeych.lyng.miniast.MiniScript(MiniRange(start, cc.currentPos())))
         }
     }
 
@@ -608,12 +713,13 @@ class Compiler(
                     cc.ifNextIs(Token.Type.ASSIGN) {
                         defaultValue = parseExpression()
                     }
-                    // type information
-                    val typeInfo = parseTypeDeclaration()
+                    // type information (semantic + mini syntax)
+                    val (typeInfo, miniType) = parseTypeDeclarationWithMini()
                     val isEllipsis = cc.skipTokenOfType(Token.Type.ELLIPSIS, isOptional = true)
                     result += ArgsDeclaration.Item(
                         t.value,
                         typeInfo,
+                        miniType,
                         t.pos,
                         isEllipsis,
                         defaultValue,
@@ -657,11 +763,87 @@ class Compiler(
     }
 
     private fun parseTypeDeclaration(): TypeDecl {
-        return if (cc.skipTokenOfType(Token.Type.COLON, isOptional = true)) {
-            val tt = cc.requireToken(Token.Type.ID, "type name or type expression required")
-            val isNullable = cc.skipTokenOfType(Token.Type.QUESTION, isOptional = true)
-            TypeDecl.Simple(tt.value, isNullable)
-        } else TypeDecl.TypeAny
+        return parseTypeDeclarationWithMini().first
+    }
+
+    // Minimal helper to parse a type annotation and simultaneously build a MiniTypeRef.
+    // Currently supports a simple identifier with optional nullable '?'.
+    private fun parseTypeDeclarationWithMini(): Pair<TypeDecl, MiniTypeRef?> {
+        // Only parse a type if a ':' follows; otherwise keep current behavior
+        if (!cc.skipTokenOfType(Token.Type.COLON, isOptional = true)) return Pair(TypeDecl.TypeAny, null)
+
+        // Parse a qualified base name: ID ('.' ID)*
+        val segments = mutableListOf<MiniTypeName.Segment>()
+        var first = true
+        val typeStart = cc.currentPos()
+        var lastEnd = typeStart
+        while (true) {
+            val idTok = if (first) cc.requireToken(Token.Type.ID, "type name or type expression required") else cc.requireToken(Token.Type.ID, "identifier expected after '.' in type")
+            first = false
+            segments += MiniTypeName.Segment(idTok.value, MiniRange(idTok.pos, idTok.pos))
+            lastEnd = cc.currentPos()
+            val dotPos = cc.savePos()
+            val t = cc.next()
+            if (t.type == Token.Type.DOT) {
+                // continue
+                continue
+            } else {
+                cc.restorePos(dotPos)
+                break
+            }
+        }
+
+        // Helper to build MiniTypeRef (base or generic)
+        fun buildBaseRef(rangeEnd: Pos, args: List<MiniTypeRef>?, nullable: Boolean): MiniTypeRef {
+            val base = MiniTypeName(MiniRange(typeStart, rangeEnd), segments.toList(), nullable = false)
+            return if (args == null || args.isEmpty()) base.copy(range = MiniRange(typeStart, rangeEnd), nullable = nullable)
+            else net.sergeych.lyng.miniast.MiniGenericType(MiniRange(typeStart, rangeEnd), base, args, nullable)
+        }
+
+        // Optional generic arguments: '<' Type (',' Type)* '>' — single-level only (no nested generics for now)
+        var args: MutableList<MiniTypeRef>? = null
+        val afterBasePos = cc.savePos()
+        if (cc.skipTokenOfType(Token.Type.LT, isOptional = true)) {
+            args = mutableListOf()
+            do {
+                // Parse argument as simple or qualified type (single level), with optional nullable '?'
+                val argSegs = mutableListOf<MiniTypeName.Segment>()
+                var argFirst = true
+                val argStart = cc.currentPos()
+                while (true) {
+                    val idTok = if (argFirst) cc.requireToken(Token.Type.ID, "type argument name expected") else cc.requireToken(Token.Type.ID, "identifier expected after '.' in type argument")
+                    argFirst = false
+                    argSegs += MiniTypeName.Segment(idTok.value, MiniRange(idTok.pos, idTok.pos))
+                    val p = cc.savePos()
+                    val tt = cc.next()
+                    if (tt.type == Token.Type.DOT) continue else { cc.restorePos(p); break }
+                }
+                val argNullable = cc.skipTokenOfType(Token.Type.QUESTION, isOptional = true)
+                val argEnd = cc.currentPos()
+                val argRef = MiniTypeName(MiniRange(argStart, argEnd), argSegs.toList(), nullable = argNullable)
+                args += argRef
+
+                val sep = cc.next()
+                when (sep.type) {
+                    Token.Type.COMMA -> { /* continue */ }
+                    Token.Type.GT -> break
+                    else -> sep.raiseSyntax("expected ',' or '>' in generic arguments")
+                }
+            } while (true)
+            lastEnd = cc.currentPos()
+        } else {
+            cc.restorePos(afterBasePos)
+        }
+
+        // Nullable suffix after base or generic
+        val isNullable = cc.skipTokenOfType(Token.Type.QUESTION, isOptional = true)
+        val endPos = cc.currentPos()
+
+        val miniRef = buildBaseRef(if (args != null) endPos else lastEnd, args, isNullable)
+        // Semantic: keep simple for now, just use qualified base name with nullable flag
+        val qualified = segments.joinToString(".") { it.name }
+        val sem = TypeDecl.Simple(qualified, isNullable)
+        return Pair(sem, miniRef)
     }
 
     /**
@@ -871,11 +1053,27 @@ class Compiler(
      * @return parsed statement or null if, for example. [id] is not among keywords
      */
     private suspend fun parseKeywordStatement(id: Token): Statement? = when (id.value) {
-        "val" -> parseVarDeclaration(false, Visibility.Public)
-        "var" -> parseVarDeclaration(true, Visibility.Public)
+        "val" -> {
+            pendingDeclStart = id.pos
+            pendingDeclDoc = consumePendingDoc()
+            parseVarDeclaration(false, Visibility.Public)
+        }
+        "var" -> {
+            pendingDeclStart = id.pos
+            pendingDeclDoc = consumePendingDoc()
+            parseVarDeclaration(true, Visibility.Public)
+        }
         // Ensure function declarations are recognized in all contexts (including class bodies)
-        "fun" -> parseFunctionDeclaration(isOpen = false, isExtern = false, isStatic = false)
-        "fn" -> parseFunctionDeclaration(isOpen = false, isExtern = false, isStatic = false)
+        "fun" -> {
+            pendingDeclStart = id.pos
+            pendingDeclDoc = consumePendingDoc()
+            parseFunctionDeclaration(isOpen = false, isExtern = false, isStatic = false)
+        }
+        "fn" -> {
+            pendingDeclStart = id.pos
+            pendingDeclDoc = consumePendingDoc()
+            parseFunctionDeclaration(isOpen = false, isExtern = false, isStatic = false)
+        }
         // Visibility modifiers for declarations: private/protected val/var/fun/fn
         "private" -> {
             var k = cc.requireToken(Token.Type.ID, "declaration expected after 'private'")
@@ -913,8 +1111,16 @@ class Compiler(
         "break" -> parseBreakStatement(id.pos)
         "continue" -> parseContinueStatement(id.pos)
         "if" -> parseIfStatement()
-        "class" -> parseClassDeclaration()
-        "enum" -> parseEnumDeclaration()
+        "class" -> {
+            pendingDeclStart = id.pos
+            pendingDeclDoc = consumePendingDoc()
+            parseClassDeclaration()
+        }
+        "enum" -> {
+            pendingDeclStart = id.pos
+            pendingDeclDoc = consumePendingDoc()
+            parseEnumDeclaration()
+        }
         "try" -> parseTryStatement()
         "throw" -> parseThrowStatement(id.pos)
         "when" -> parseWhenStatement()
@@ -923,7 +1129,10 @@ class Compiler(
             cc.previous()
             val isExtern = cc.skipId("extern")
             when {
-                cc.matchQualifiers("fun", "private") -> parseFunctionDeclaration(Visibility.Private, isExtern)
+                cc.matchQualifiers("fun", "private") -> {
+                    pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc();
+                    parseFunctionDeclaration(Visibility.Private, isExtern)
+                }
                 cc.matchQualifiers("fun", "private", "static") -> parseFunctionDeclaration(
                     Visibility.Private,
                     isExtern,
@@ -940,27 +1149,27 @@ class Compiler(
                 cc.matchQualifiers("fun", "open") -> parseFunctionDeclaration(isOpen = true, isExtern = isExtern)
                 cc.matchQualifiers("fn", "open") -> parseFunctionDeclaration(isOpen = true, isExtern = isExtern)
 
-                cc.matchQualifiers("fun") -> parseFunctionDeclaration(isOpen = false, isExtern = isExtern)
-                cc.matchQualifiers("fn") -> parseFunctionDeclaration(isOpen = false, isExtern = isExtern)
+                cc.matchQualifiers("fun") -> { pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseFunctionDeclaration(isOpen = false, isExtern = isExtern) }
+                cc.matchQualifiers("fn") -> { pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseFunctionDeclaration(isOpen = false, isExtern = isExtern) }
 
-                cc.matchQualifiers("val", "private", "static") -> parseVarDeclaration(
+                cc.matchQualifiers("val", "private", "static") -> { pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(
                     false,
                     Visibility.Private,
                     isStatic = true
-                )
+                ) }
 
-                cc.matchQualifiers("val", "static") -> parseVarDeclaration(false, Visibility.Public, isStatic = true)
-                cc.matchQualifiers("val", "private") -> parseVarDeclaration(false, Visibility.Private)
-                cc.matchQualifiers("var", "static") -> parseVarDeclaration(true, Visibility.Public, isStatic = true)
-                cc.matchQualifiers("var", "static", "private") -> parseVarDeclaration(
+                cc.matchQualifiers("val", "static") -> { pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(false, Visibility.Public, isStatic = true) }
+                cc.matchQualifiers("val", "private") -> { pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(false, Visibility.Private) }
+                cc.matchQualifiers("var", "static") -> { pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(true, Visibility.Public, isStatic = true) }
+                cc.matchQualifiers("var", "static", "private") -> { pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(
                     true,
                     Visibility.Private,
                     isStatic = true
-                )
+                ) }
 
-                cc.matchQualifiers("var", "private") -> parseVarDeclaration(true, Visibility.Private)
-                cc.matchQualifiers("val", "open") -> parseVarDeclaration(false, Visibility.Private, true)
-                cc.matchQualifiers("var", "open") -> parseVarDeclaration(true, Visibility.Private, true)
+                cc.matchQualifiers("var", "private") -> { pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(true, Visibility.Private) }
+                cc.matchQualifiers("val", "open") -> { pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(false, Visibility.Private, true) }
+                cc.matchQualifiers("var", "open") -> { pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(true, Visibility.Private, true) }
                 else -> {
                     cc.next()
                     null
@@ -1283,19 +1492,56 @@ class Compiler(
             pushInitScope()
 
             // Robust body detection: peek next non-whitespace token; if it's '{', consume and parse the body
+            var classBodyRange: MiniRange? = null
             val bodyInit: Statement? = run {
                 val saved = cc.savePos()
                 val next = cc.nextNonWhitespace()
                 if (next.type == Token.Type.LBRACE) {
                     // parse body
-                    parseScript().also {
-                        cc.skipTokens(Token.Type.RBRACE)
-                    }
+                    val bodyStart = next.pos
+                    val st = parseScript()
+                    val rbTok = cc.next()
+                    if (rbTok.type != Token.Type.RBRACE) throw ScriptError(rbTok.pos, "unbalanced braces in class body")
+                    classBodyRange = MiniRange(bodyStart, rbTok.pos)
+                    st
                 } else {
                     // restore if no body starts here
                     cc.restorePos(saved)
                     null
                 }
+            }
+
+            // Emit MiniClassDecl with collected base names; bodyRange is omitted for now
+            run {
+                val declRange = MiniRange(pendingDeclStart ?: nameToken.pos, cc.currentPos())
+                val bases = baseSpecs.map { it.name }
+                // Collect constructor fields declared as val/var in primary constructor
+                val ctorFields = mutableListOf<net.sergeych.lyng.miniast.MiniCtorField>()
+                constructorArgsDeclaration?.let { ad ->
+                    for (p in ad.params) {
+                        val at = p.accessType
+                        if (at != null) {
+                            val mutable = at == AccessType.Var
+                            ctorFields += net.sergeych.lyng.miniast.MiniCtorField(
+                                name = p.name,
+                                mutable = mutable,
+                                type = p.miniType,
+                                nameStart = p.pos
+                            )
+                        }
+                    }
+                }
+                val node = MiniClassDecl(
+                    range = declRange,
+                    name = nameToken.value,
+                    bases = bases,
+                    bodyRange = classBodyRange,
+                    ctorFields = ctorFields,
+                    doc = pendingDeclDoc,
+                    nameStart = nameToken.pos
+                )
+                miniSink?.onClassDecl(node)
+                pendingDeclDoc = null
             }
 
             val initScope = popInitScope()
@@ -1773,6 +2019,7 @@ class Compiler(
         var name = if (t.type != Token.Type.ID)
             throw ScriptError(t.pos, "Expected identifier after 'fun'")
         else t.value
+        var nameStartPos: Pos = t.pos
 
         val annotation = lastAnnotation
         val parentContext = codeContexts.last()
@@ -1785,6 +2032,7 @@ class Compiler(
             if (t.type != Token.Type.ID)
                 throw ScriptError(t.pos, "illegal extension format: expected function name")
             name = t.value
+            nameStartPos = t.pos
             t = cc.next()
         }
 
@@ -1798,7 +2046,36 @@ class Compiler(
                 "Bad function definition: expected valid argument declaration or () after 'fn ${name}'"
             )
 
-        if (cc.current().type == Token.Type.COLON) parseTypeDeclaration()
+        // Optional return type
+        val returnTypeMini: MiniTypeRef? = if (cc.current().type == Token.Type.COLON) {
+            parseTypeDeclarationWithMini().second
+        } else null
+
+        // Capture doc locally to reuse even if we need to emit later
+        val declDocLocal = pendingDeclDoc
+
+        // Emit MiniFunDecl before body parsing (body range unknown yet)
+        run {
+            val params = argsDeclaration.params.map { p ->
+                MiniParam(
+                    name = p.name,
+                    type = p.miniType,
+                    nameStart = p.pos
+                )
+            }
+            val declRange = MiniRange(pendingDeclStart ?: start, cc.currentPos())
+            val node = MiniFunDecl(
+                range = declRange,
+                name = name,
+                params = params,
+                returnType = returnTypeMini,
+                body = null,
+                doc = declDocLocal,
+                nameStart = nameStartPos
+            )
+            miniSink?.onFunDecl(node)
+            pendingDeclDoc = null
+        }
 
         return inCodeContext(CodeContext.Function(name)) {
 
@@ -1894,6 +2171,27 @@ class Compiler(
                 NopStatement
             } else
                 fnCreateStatement
+        }.also {
+            val bodyRange = lastParsedBlockRange
+            // Also emit a post-parse MiniFunDecl to be robust in case early emission was skipped by some path
+            val params = argsDeclaration.params.map { p ->
+                MiniParam(
+                    name = p.name,
+                    type = p.miniType,
+                    nameStart = p.pos
+                )
+            }
+            val declRange = MiniRange(pendingDeclStart ?: start, cc.currentPos())
+            val node = MiniFunDecl(
+                range = declRange,
+                name = name,
+                params = params,
+                returnType = returnTypeMini,
+                body = bodyRange?.let { MiniBlock(it) },
+                doc = declDocLocal,
+                nameStart = nameStartPos
+            )
+            miniSink?.onFunDecl(node)
         }
     }
 
@@ -1912,6 +2210,10 @@ class Compiler(
             val t1 = cc.next()
             if (t1.type != Token.Type.RBRACE)
                 throw ScriptError(t1.pos, "unbalanced braces: expected block body end: }")
+            // Record last parsed block range and notify Mini-AST sink
+            val range = MiniRange(startPos, t1.pos)
+            lastParsedBlockRange = range
+            miniSink?.onBlock(MiniBlock(range))
         }
     }
 
@@ -1926,6 +2228,11 @@ class Compiler(
         if (nameToken.type != Token.Type.ID)
             throw ScriptError(nameToken.pos, "Expected identifier here")
         val name = nameToken.value
+
+        // Optional explicit type annotation
+        val varTypeMini: MiniTypeRef? = if (cc.current().type == Token.Type.COLON) {
+            parseTypeDeclarationWithMini().second
+        } else null
 
         val eqToken = cc.next()
         var setNull = false
@@ -1950,6 +2257,23 @@ class Compiler(
         val initialExpression = if (setNull) null
         else parseStatement(true)
             ?: throw ScriptError(eqToken.pos, "Expected initializer expression")
+
+        // Emit MiniValDecl for this declaration (before execution wiring), attach doc if any
+        run {
+            val declRange = MiniRange(pendingDeclStart ?: start, cc.currentPos())
+            val initR = if (setNull) null else MiniRange(eqToken.pos, cc.currentPos())
+            val node = MiniValDecl(
+                range = declRange,
+                name = name,
+                mutable = isMutable,
+                type = varTypeMini,
+                initRange = initR,
+                doc = pendingDeclDoc,
+                nameStart = nameToken.pos
+            )
+            miniSink?.onValDecl(node)
+            pendingDeclDoc = null
+        }
 
         if (isStatic) {
             // find objclass instance: this is tricky: this code executes in object initializer,
@@ -2048,6 +2372,18 @@ class Compiler(
         suspend fun compile(source: Source, importManager: ImportProvider): Script {
             return Compiler(CompilerContext(parseLyng(source)), importManager).parseScript()
         }
+
+        /**
+         * Compile [source] while streaming a Mini-AST into the provided [sink].
+         * When [sink] is null, behaves like [compile].
+         */
+        suspend fun compileWithMini(source: Source, importManager: ImportProvider, sink: net.sergeych.lyng.miniast.MiniAstSink?): Script {
+            return Compiler(CompilerContext(parseLyng(source)), importManager, Settings(miniAstSink = sink)).parseScript()
+        }
+
+        /** Convenience overload to compile raw [code] with a Mini-AST [sink]. */
+        suspend fun compileWithMini(code: String, sink: net.sergeych.lyng.miniast.MiniAstSink?): Script =
+            compileWithMini(Source("<eval>", code), Script.defaultImportManager, sink)
 
         private var lastPriority = 0
         // Helpers for conservative constant folding (literal-only). Only pure, side-effect-free ops.

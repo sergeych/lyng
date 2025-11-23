@@ -49,7 +49,12 @@ class HighlightSmokeTest {
         val text = "assertEquals( [9,10], r.takeLast(2).toList() )"
         val html = SiteHighlight.renderHtml(text)
         // Ensure important parts are wrapped with expected classes
-        assertContains(html, "<span class=\"hl-id\">assertEquals</span>")
+        // In the new renderer, call-sites are marked as functions (hl-fn). Accept either id or fn.
+        assertTrue(
+            html.contains("<span class=\"hl-id\">assertEquals</span>") ||
+            html.contains("<span class=\"hl-fn\">assertEquals</span>"),
+            "assertEquals should be highlighted as identifier or function call"
+        )
         assertContains(html, "<span class=\"hl-num\">9</span>")
         assertContains(html, "<span class=\"hl-num\">10</span>")
         assertContains(html, "<span class=\"hl-num\">2</span>")

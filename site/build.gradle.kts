@@ -67,6 +67,11 @@ kotlin {
         val jsTest by getting {
             dependencies {
                 implementation(libs.kotlin.test)
+                // Compose test support (renderComposable)
+                implementation("org.jetbrains.compose.runtime:runtime:1.9.3")
+                implementation("org.jetbrains.compose.html:html-core:1.9.3")
+                implementation(project(":lyngweb"))
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
             }
         }
     }

@@ -57,7 +57,8 @@ fun DocsPage(
             } else {
                 val text = resp.text().await()
                 title = extractTitleFromMarkdown(text) ?: path.substringAfterLast('/')
-                setHtml(renderMarkdown(text))
+                // Use AST-backed highlighting for code blocks
+                setHtml(renderMarkdownAsync(text))
             }
         } catch (t: Throwable) {
             setError("Failed to load: $path — ${t.message}")

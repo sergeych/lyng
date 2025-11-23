@@ -33,8 +33,18 @@ version = "0.0.1-SNAPSHOT"
 kotlin {
     js(IR) {
         browser {
+            testTask {
+                useKarma {
+                    useChromeHeadless()
+                }
+            }
             commonWebpackConfig {
                 cssSupport { enabled.set(true) }
+            }
+        }
+        nodejs {
+            testTask {
+                useMocha()
             }
         }
         binaries.library()

@@ -104,6 +104,12 @@ fun EditorWithOverlay(
 
     // Update overlay HTML whenever code changes
     LaunchedEffect(code) {
+        fun clamp(i: Int, lo: Int, hi: Int): Int = if (i < lo) lo else if (i > hi) hi else i
+        fun safeSubstring(text: String, start: Int, end: Int): String {
+            val s = clamp(start, 0, text.length)
+            val e = clamp(end, 0, text.length)
+            return if (e <= s) "" else text.substring(s, e)
+        }
         fun htmlEscapeLocal(s: String): String = buildString(s.length) {
             for (ch in s) when (ch) {
                 '<' -> append("&lt;")
@@ -125,9 +131,9 @@ fun EditorWithOverlay(
             while (i < n && textCount < prefixChars) {
                 val ch = html[i]
                 if (ch == '<') {
-                    val close = html.indexOf('>', i)
+                    val close = html.indexOf('>', i).let { if (it < 0) n - 1 else it }
                     if (close == -1) break
-                    val tag = html.substring(i, close + 1)
+                    val tag = safeSubstring(html, i, close + 1)
                     out.append(tag)
                     val tagLower = tag.lowercase()
                     if (tagLower.startsWith("<span")) {
@@ -135,13 +141,13 @@ fun EditorWithOverlay(
                     } else if (tagLower.startsWith("</span")) {
                         if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex)
                     }
-                    i = close + 1
+                    i = (close + 1).coerceAtMost(n)
                 } else if (ch == '&') {
                     val semi = html.indexOf(';', i + 1).let { if (it == -1) n - 1 else it }
-                    val entity = html.substring(i, semi + 1)
+                    val entity = safeSubstring(html, i, semi + 1)
                     out.append(entity)
                     textCount += 1
-                    i = semi + 1
+                    i = (semi + 1).coerceAtMost(n)
                 } else {
                     out.append(ch)
                     textCount += 1
@@ -156,7 +162,8 @@ fun EditorWithOverlay(
             html + "<span data-sentinel=\"1\">&#8203;</span>"
 
         try {
-            val html = SiteHighlight.renderHtml(code)
+            // Prefer AST-backed highlighting for precise roles; it gracefully falls back.
+            val html = SiteHighlight.renderHtmlAsync(code)
             overlayEl?.innerHTML = appendSentinel(html)
             lastGoodHtml = html
             lastGoodText = code
@@ -276,36 +283,41 @@ fun EditorWithOverlay(
                     ev.preventDefault()
                     return@onKeyDown
                 }
-                if (key == "Tab") {
+                if (key == "Tab" && ev.shiftKey) {
+                    // Shift+Tab: outdent current line(s)
+                    ev.preventDefault()
+                    val current = ta.value
+                    val selStart = ta.selectionStart ?: 0
+                    val selEnd = ta.selectionEnd ?: selStart
+                    val res = applyShiftTab(current, selStart, selEnd, tabSize)
+                    setCode(res.text)
+                    pendingSelStart = res.selStart
+                    pendingSelEnd = res.selEnd
+                } else if (key == "Tab") {
                     ev.preventDefault()
                     val start = ta.selectionStart ?: 0
                     val end = ta.selectionEnd ?: start
                     val current = ta.value
-                    val before = current.substring(0, start)
-                    val after = current.substring(end)
-                    val spaces = " ".repeat(tabSize)
-                    val updated = before + spaces + after
-                    pendingSelStart = start + spaces.length
-                    pendingSelEnd = pendingSelStart
-                    setCode(updated)
+                    val res = applyTab(current, start, end, tabSize)
+                    // Update code first
+                    setCode(res.text)
+                    // Apply selection synchronously to avoid race with next key events
+                    try { ta.setSelectionRange(res.selStart, res.selEnd) } catch (_: Throwable) {}
+                    // Keep pending selection as a fallback for compose recompose
+                    pendingSelStart = res.selStart
+                    pendingSelEnd = res.selEnd
                 } else if (key == "Enter") {
-                    // Smart indent: copy leading spaces from current line
-                    val start = ta.selectionStart ?: 0
-                    val cur = ta.value
-                    val lineStart = run {
-                        var i = start - 1
-                        while (i >= 0 && cur[i] != '\n') i--
-                        i + 1
-                    }
-                    var indent = 0
-                    while (lineStart + indent < cur.length && cur[lineStart + indent] == ' ') indent++
-                    val before = cur.substring(0, start)
-                    val after = cur.substring(start)
-                    val insertion = "\n" + " ".repeat(indent)
-                    pendingSelStart = start + insertion.length
-                    pendingSelEnd = pendingSelStart
-                    setCode(before + insertion + after)
+                    // Smart indent / outdent around braces
                     ev.preventDefault()
+                    val start = ta.selectionStart ?: 0
+                    val endSel = ta.selectionEnd ?: start
+                    val cur = ta.value
+                    val res = applyEnter(cur, start, endSel, tabSize)
+                    setCode(res.text)
+                    // Apply selection synchronously to ensure caret is where logic expects
+                    try { ta.setSelectionRange(res.selStart, res.selEnd) } catch (_: Throwable) {}
+                    pendingSelStart = res.selStart
+                    pendingSelEnd = res.selEnd
                 }
             }
 

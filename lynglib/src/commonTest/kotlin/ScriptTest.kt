@@ -3544,4 +3544,25 @@ class ScriptTest {
         """.trimIndent())
     }
 
+
+//    @Ignore
+//    @Test
+//    fun interpolationTest() = runTest {
+//        eval($$$"""
+//
+//            val foo = "bar"
+//            val buzz = ["foo", "bar"]
+//
+//            // 1. simple interpolation
+//            assertEquals( "bar", "$foo" )
+//            assertEquals( "bar", "${foo}" )
+//
+//            // 2. escaping the dollar sign
+//            assertEquals( "$", "\$foo"[0] )
+//            assertEquals( "foo, "\$foo"[1..] )
+//
+//            // 3. interpolation with expression
+//            assertEquals( "foo!. bar?", "${buzz[0]+"!"}. ${buzz[1]+"?"}" )
+//        """.trimIndent())
+//    }
 }

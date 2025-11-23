@@ -314,6 +314,18 @@ fun renderMarkdown(src: String): String =
         )
     )
 
+// Suspend variant that uses the AST-backed highlighter for Lyng code blocks.
+suspend fun renderMarkdownAsync(src: String): String =
+    net.sergeych.lyngweb.highlightLyngHtmlAsync(
+        net.sergeych.lyngweb.ensureBootstrapCodeBlocks(
+            ensureBootstrapTables(
+                ensureDefinitionLists(
+                    marked.parse(src)
+                )
+            )
+        )
+    )
+
 // Pure function to render the Reference list HTML from a list of doc paths.
 // Returns a Bootstrap-styled <ul> list with links to the docs routes.
 fun renderReferenceListHtml(docs: List<String>): String {

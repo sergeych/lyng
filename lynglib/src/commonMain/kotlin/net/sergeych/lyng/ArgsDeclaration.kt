@@ -17,6 +17,7 @@
 
 package net.sergeych.lyng
 
+import net.sergeych.lyng.miniast.MiniTypeRef
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjList
 import net.sergeych.lyng.obj.ObjRecord
@@ -135,6 +136,7 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
     data class Item(
         val name: String,
         val type: TypeDecl = TypeDecl.TypeAny,
+        val miniType: MiniTypeRef? = null,
         val pos: Pos = Pos.builtIn,
         val isEllipsis: Boolean = false,
         /**

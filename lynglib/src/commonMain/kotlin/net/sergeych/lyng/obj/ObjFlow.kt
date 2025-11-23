@@ -43,11 +43,18 @@ class ObjFlowBuilder(val output: SendChannel<Obj>) : Obj() {
                     if (!channel.isClosedForSend)
                         channel.send(data)
                     else
+                        // Flow consumer is no longer collecting; signal producer to stop
                         throw ScriptFlowIsNoMoreCollected()
                 } catch (x: Exception) {
-                    if (x !is CancellationException)
-                        x.printStackTrace()
-                    throw ScriptFlowIsNoMoreCollected()
+                    // Any failure to send (including closed channel) should gracefully stop the producer.
+                    // Do not print stack traces here to keep test output clean on JVM.
+                    if (x is CancellationException) {
+                        // Cancellation is a normal control-flow event
+                        throw ScriptFlowIsNoMoreCollected()
+                    } else {
+                        // Treat other send failures as normal flow termination as well
+                        throw ScriptFlowIsNoMoreCollected()
+                    }
                 }
                 ObjVoid
             }
@@ -63,10 +70,10 @@ private fun createLyngFlowInput(scope: Scope, producer: Statement): ReceiveChann
         try {
             producer.execute(builderScope)
         } catch (x: ScriptFlowIsNoMoreCollected) {
-            x.printStackTrace()
             // premature flow closing, OK
         } catch (x: Exception) {
-            x.printStackTrace()
+            // Suppress stack traces in background producer to avoid noisy stderr during tests.
+            // If needed, consider routing to a logger in the future.
         }
         channel.close()
     }

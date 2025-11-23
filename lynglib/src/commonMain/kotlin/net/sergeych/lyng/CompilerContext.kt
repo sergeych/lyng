@@ -69,7 +69,15 @@ class CompilerContext(val tokens: List<Token>) {
         throw ScriptError(currentPos(), message)
     }
 
-    fun currentPos(): Pos = tokens[currentIndex].pos
+    fun currentPos(): Pos {
+        if (tokens.isEmpty()) return Pos.builtIn
+        val idx = when {
+            currentIndex < 0 -> 0
+            currentIndex >= tokens.size -> tokens.size - 1
+            else -> currentIndex
+        }
+        return tokens[idx].pos
+    }
 
     /**
      * If the next token is identifier `name`, skip it and return `true`.
