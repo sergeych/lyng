@@ -1,0 +1,25 @@
+{
+  "name": "lyng-textmate",
+  "displayName": "Lyng",
+  "description": "TextMate grammar for the Lyng language (for JetBrains IDEs via TextMate Bundles and VS Code).",
+  "version": "0.0.2",
+  "publisher": "lyng",
+  "license": "Apache-2.0",
+  "engines": { "vscode": "^1.0.0" },
+  "contributes": {
+    "languages": [
+      {
+        "id": "lyng",
+        "aliases": ["Lyng", "lyng"],
+        "extensions": [".lyng"]
+      }
+    ],
+    "grammars": [
+      {
+        "language": "lyng",
+        "scopeName": "source.lyng",
+        "path": "./syntaxes/lyng.tmLanguage.json"
+      }
+    ]
+  }
+}

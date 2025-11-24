@@ -1,0 +1,53 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Lyng",
+  "scopeName": "source.lyng",
+  "fileTypes": ["lyng"],
+  "patterns": [
+    { "include": "#shebang" },
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#char" },
+    { "include": "#numbers" },
+    { "include": "#declarations" },
+    { "include": "#keywords" },
+    { "include": "#constants" },
+    { "include": "#types" },
+    { "include": "#annotations" },
+    { "include": "#labels" },
+    { "include": "#directives" },
+    { "include": "#operators" },
+    { "include": "#punctuation" }
+  ],
+  "repository": {
+    "shebang": { "patterns": [ { "name": "comment.line.shebang.lyng", "match": "^#!.*$" } ] },
+    "comments": {
+      "patterns": [
+        { "name": "comment.line.double-slash.lyng", "match": "//.*$" },
+        { "name": "comment.block.lyng", "begin": "/\\*", "end": "\\*/" }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        { "name": "string.quoted.double.lyng", "begin": "\"", "end": "\"", "patterns": [ { "match": "\\\\.", "name": "constant.character.escape.lyng" } ] },
+        { "name": "string.quoted.single.lyng", "begin": "'", "end": "'", "patterns": [ { "match": "\\\\.", "name": "constant.character.escape.lyng" } ] }
+      ]
+    },
+    "char": { "patterns": [ { "name": "constant.character.lyng", "match": "'(?:[^\\\\']|\\\\.)'" } ] },
+    "numbers": {
+      "patterns": [
+        { "name": "constant.numeric.hex.lyng", "match": "0x[0-9A-Fa-f_]+" },
+        { "name": "constant.numeric.decimal.lyng", "match": "(?<![A-Za-z_])(?:[0-9][0-9_]*)\\.(?:[0-9_]+)(?:[eE][+-]?[0-9_]+)?|(?<![A-Za-z_])(?:[0-9][0-9_]*)(?:[eE][+-]?[0-9_]+)?" }
+      ]
+    },
+    "annotations": { "patterns": [ { "name": "entity.name.label.at.lyng", "match": "@[\\p{L}_][\\p{L}\\p{N}_]*:" }, { "name": "storage.modifier.annotation.lyng", "match": "@[\\p{L}_][\\p{L}\\p{N}_]*" } ] },
+    "labels": { "patterns": [ { "name": "entity.name.label.lyng", "match": "[\\p{L}_][\\p{L}\\p{N}_]*:" } ] },
+    "directives": { "patterns": [ { "name": "meta.directive.lyng", "match": "^\\s*#[_A-Za-z][_A-Za-z0-9]*" } ] },
+    "declarations": { "patterns": [ { "name": "meta.function.declaration.lyng", "match": "\\b(?:fun|fn)\\s+([\\p{L}_][\\p{L}\\p{N}_]*)", "captures": { "1": { "name": "entity.name.function.lyng" } } }, { "name": "meta.type.declaration.lyng", "match": "\\b(?:class|enum)\\s+([\\p{L}_][\\p{L}\\p{N}_]*)", "captures": { "1": { "name": "entity.name.type.lyng" } } }, { "name": "meta.variable.declaration.lyng", "match": "\\b(?:val|var)\\s+([\\p{L}_][\\p{L}\\p{N}_]*)", "captures": { "1": { "name": "variable.other.declaration.lyng" } } } ] },
+    "keywords": { "patterns": [ { "name": "keyword.control.lyng", "match": "\\b(?:if|else|when|while|do|for|try|catch|finally|throw|return|break|continue)\\b" }, { "name": "keyword.declaration.lyng", "match": "\\b(?:fun|fn|class|enum|val|var|import|package|constructor|property|open|extern|private|protected|static)\\b" }, { "name": "keyword.operator.word.lyng", "match": "\\bnot\\s+(?:in|is)\\b" }, { "name": "keyword.operator.word.lyng", "match": "\\b(?:and|or|not|in|is|as|as\\?)\\b" } ] },
+    "constants": { "patterns": [ { "name": "constant.language.lyng", "match": "(?:\\b(?:true|false|null|this)\\b|π)" } ] },
+    "types": { "patterns": [ { "name": "storage.type.lyng", "match": "\\b(?:Int|Real|String|Bool|Char|Regex)\\b" }, { "name": "entity.name.type.lyng", "match": "\\b[A-Z][A-Za-z0-9_]*\\b(?!\\s*\\()" } ] },
+    "operators": { "patterns": [ { "name": "keyword.operator.comparison.lyng", "match": "===|!==|==|!=|<=|>=|<|>" }, { "name": "keyword.operator.shuttle.lyng", "match": "<=>" }, { "name": "keyword.operator.arrow.lyng", "match": "=>|->|::" }, { "name": "keyword.operator.range.lyng", "match": "\\.\\.\\.|\\.\\.<|\\.\\." }, { "name": "keyword.operator.nullsafe.lyng", "match": "\\?\\.|\\?\\[|\\?\\(|\\?\\{|\\?:|\\?\\?" }, { "name": "keyword.operator.assignment.lyng", "match": "(?:\\+=|-=|\\*=|/=|%=|=)" }, { "name": "keyword.operator.logical.lyng", "match": "&&|\\|\\|" }, { "name": "keyword.operator.bitwise.lyng", "match": "<<|>>|&|\\||\\^|~" }, { "name": "keyword.operator.match.lyng", "match": "=~|!~" }, { "name": "keyword.operator.arithmetic.lyng", "match": "\\+\\+|--|[+\\-*/%]" }, { "name": "keyword.operator.other.lyng", "match": "[!?]" } ] },
+    "punctuation": { "patterns": [ { "name": "punctuation.separator.comma.lyng", "match": "," }, { "name": "punctuation.terminator.statement.lyng", "match": ";" }, { "name": "punctuation.section.block.begin.lyng", "match": "[(]{1}|[{]{1}|\\[" }, { "name": "punctuation.section.block.end.lyng", "match": "[)]{1}|[}]{1}|\\]" }, { "name": "punctuation.accessor.dot.lyng", "match": "\\." }, { "name": "punctuation.separator.colon.lyng", "match": ":" } ] }
+  }
+}
