@@ -35,8 +35,8 @@ class Compiler(
 
     // Stack of parameter-to-slot plans for current function being parsed (by declaration index)
     private val paramSlotPlanStack = mutableListOf<Map<String, Int>>()
-    private val currentParamSlotPlan: Map<String, Int>?
-        get() = paramSlotPlanStack.lastOrNull()
+//    private val currentParamSlotPlan: Map<String, Int>?
+//        get() = paramSlotPlanStack.lastOrNull()
 
     // Track identifiers known to be locals/parameters in the current function for fast local emission
     private val localNamesStack = mutableListOf<MutableSet<String>>()
@@ -50,7 +50,11 @@ class Compiler(
 
     private inline fun <T> withLocalNames(names: Set<String>, block: () -> T): T {
         localNamesStack.add(names.toMutableSet())
-        return try { block() } finally { localNamesStack.removeLast() }
+        return try {
+            block()
+        } finally {
+            localNamesStack.removeLast()
+        }
     }
 
     private fun declareLocalName(name: String) {
@@ -86,6 +90,7 @@ class Compiler(
                     if (t.startsWith("*")) t.removePrefix("*").trimStart() else line
                 }
             }
+
             else -> raw
         }
     }
@@ -158,6 +163,7 @@ class Compiler(
                             // A standalone newline not immediately following a comment resets doc buffer
                             if (!prevWasComment) clearPendingDoc() else prevWasComment = false
                         }
+
                         else -> {}
                     }
                     cc.next()
@@ -191,12 +197,15 @@ class Compiler(
                                             val start = Pos(pos.source, pos.line, col)
                                             val end = Pos(pos.source, pos.line, col + p.length)
                                             col += p.length + 1 // account for following '.' between segments
-                                            net.sergeych.lyng.miniast.MiniImport.Segment(p, net.sergeych.lyng.miniast.MiniRange(start, end))
+                                            MiniImport.Segment(
+                                                p,
+                                                MiniRange(start, end)
+                                            )
                                         }
                                         val lastEnd = segs.last().range.end
                                         miniSink?.onImport(
-                                            net.sergeych.lyng.miniast.MiniImport(
-                                                net.sergeych.lyng.miniast.MiniRange(pos, lastEnd),
+                                            MiniImport(
+                                                MiniRange(pos, lastEnd),
                                                 segs
                                             )
                                         )
@@ -241,7 +250,10 @@ class Compiler(
             Script(start, statements)
         }.also {
             // Best-effort script end notification (use current position)
-            miniSink?.onScriptEnd(cc.currentPos(), net.sergeych.lyng.miniast.MiniScript(MiniRange(start, cc.currentPos())))
+            miniSink?.onScriptEnd(
+                cc.currentPos(),
+                MiniScript(MiniRange(start, cc.currentPos()))
+            )
         }
     }
 
@@ -327,9 +339,8 @@ class Compiler(
         var lvalue: ObjRef? = parseExpressionLevel(level + 1) ?: return null
 
         while (true) {
-
             val opToken = cc.next()
-        val op = byLevel[level][opToken.type]
+            val op = byLevel[level][opToken.type]
             if (op == null) {
                 // handle ternary conditional at the top precedence level only: a ? b : c
                 if (opToken.type == Token.Type.QUESTION && level == 0) {
@@ -424,7 +435,7 @@ class Compiler(
                                     // single lambda arg, like assertThrows { ... }
                                     cc.next()
                                     isCall = true
-                                                val lambda = parseLambdaExpression()
+                                    val lambda = parseLambdaExpression()
                                     val argStmt = statement { lambda.get(this).value }
                                     val args = listOf(ParsedArgument(argStmt, next.pos))
                                     operand = MethodCallRef(left, next.value, args, true, isOptional)
@@ -552,11 +563,14 @@ class Compiler(
 
                 Token.Type.LBRACE, Token.Type.NULL_COALESCE_BLOCKINVOKE -> {
                     operand = operand?.let { left ->
-                        cc.previous()
+                        // Trailing block-argument function call: the leading '{' is already consumed,
+                        // and the lambda must be parsed as a single argument BEFORE any following
+                        // selectors like ".foo" are considered. Do NOT rewind here, otherwise
+                        // the expression parser may capture ".foo" as part of the lambda expression.
                         parseFunctionCall(
                             left,
                             blockArgument = true,
-                            t.type == Token.Type.NULL_COALESCE_BLOCKINVOKE
+                            isOptional = t.type == Token.Type.NULL_COALESCE_BLOCKINVOKE
                         )
                     } ?: parseLambdaExpression()
                 }
@@ -778,7 +792,11 @@ class Compiler(
         val typeStart = cc.currentPos()
         var lastEnd = typeStart
         while (true) {
-            val idTok = if (first) cc.requireToken(Token.Type.ID, "type name or type expression required") else cc.requireToken(Token.Type.ID, "identifier expected after '.' in type")
+            val idTok =
+                if (first) cc.requireToken(Token.Type.ID, "type name or type expression required") else cc.requireToken(
+                    Token.Type.ID,
+                    "identifier expected after '.' in type"
+                )
             first = false
             segments += MiniTypeName.Segment(idTok.value, MiniRange(idTok.pos, idTok.pos))
             lastEnd = cc.currentPos()
@@ -796,8 +814,11 @@ class Compiler(
         // Helper to build MiniTypeRef (base or generic)
         fun buildBaseRef(rangeEnd: Pos, args: List<MiniTypeRef>?, nullable: Boolean): MiniTypeRef {
             val base = MiniTypeName(MiniRange(typeStart, rangeEnd), segments.toList(), nullable = false)
-            return if (args == null || args.isEmpty()) base.copy(range = MiniRange(typeStart, rangeEnd), nullable = nullable)
-            else net.sergeych.lyng.miniast.MiniGenericType(MiniRange(typeStart, rangeEnd), base, args, nullable)
+            return if (args == null || args.isEmpty()) base.copy(
+                range = MiniRange(typeStart, rangeEnd),
+                nullable = nullable
+            )
+            else MiniGenericType(MiniRange(typeStart, rangeEnd), base, args, nullable)
         }
 
         // Optional generic arguments: '<' Type (',' Type)* '>' — single-level only (no nested generics for now)
@@ -811,12 +832,17 @@ class Compiler(
                 var argFirst = true
                 val argStart = cc.currentPos()
                 while (true) {
-                    val idTok = if (argFirst) cc.requireToken(Token.Type.ID, "type argument name expected") else cc.requireToken(Token.Type.ID, "identifier expected after '.' in type argument")
+                    val idTok = if (argFirst) cc.requireToken(
+                        Token.Type.ID,
+                        "type argument name expected"
+                    ) else cc.requireToken(Token.Type.ID, "identifier expected after '.' in type argument")
                     argFirst = false
                     argSegs += MiniTypeName.Segment(idTok.value, MiniRange(idTok.pos, idTok.pos))
                     val p = cc.savePos()
                     val tt = cc.next()
-                    if (tt.type == Token.Type.DOT) continue else { cc.restorePos(p); break }
+                    if (tt.type == Token.Type.DOT) continue else {
+                        cc.restorePos(p); break
+                    }
                 }
                 val argNullable = cc.skipTokenOfType(Token.Type.QUESTION, isOptional = true)
                 val argEnd = cc.currentPos()
@@ -825,7 +851,9 @@ class Compiler(
 
                 val sep = cc.next()
                 when (sep.type) {
-                    Token.Type.COMMA -> { /* continue */ }
+                    Token.Type.COMMA -> { /* continue */
+                    }
+
                     Token.Type.GT -> break
                     else -> sep.raiseSyntax("expected ',' or '>' in generic arguments")
                 }
@@ -934,11 +962,14 @@ class Compiler(
     ): ObjRef {
         var detectedBlockArgument = blockArgument
         val args = if (blockArgument) {
-            val blockArg = ParsedArgument(
-                parseExpression()
-                    ?: throw ScriptError(cc.currentPos(), "lambda body expected"), cc.currentPos()
-            )
-            listOf(blockArg)
+            // Leading '{' has already been consumed by the caller token branch.
+            // Parse only the lambda expression as the last argument and DO NOT
+            // allow any subsequent selectors (like ".last()") to be absorbed
+            // into the lambda body. This ensures expected order:
+            //   foo { ... }.bar()  ==  (foo { ... }).bar()
+            val callableAccessor = parseLambdaExpression()
+            val argStmt = statement { callableAccessor.get(this).value }
+            listOf(ParsedArgument(argStmt, cc.currentPos()))
         } else {
             val r = parseArgs()
             detectedBlockArgument = r.second
@@ -1058,6 +1089,7 @@ class Compiler(
             pendingDeclDoc = consumePendingDoc()
             parseVarDeclaration(false, Visibility.Public)
         }
+
         "var" -> {
             pendingDeclStart = id.pos
             pendingDeclDoc = consumePendingDoc()
@@ -1069,6 +1101,7 @@ class Compiler(
             pendingDeclDoc = consumePendingDoc()
             parseFunctionDeclaration(isOpen = false, isExtern = false, isStatic = false)
         }
+
         "fn" -> {
             pendingDeclStart = id.pos
             pendingDeclDoc = consumePendingDoc()
@@ -1085,11 +1118,24 @@ class Compiler(
             when (k.value) {
                 "val" -> parseVarDeclaration(false, Visibility.Private, isStatic = isStatic)
                 "var" -> parseVarDeclaration(true, Visibility.Private, isStatic = isStatic)
-                "fun" -> parseFunctionDeclaration(visibility = Visibility.Private, isOpen = false, isExtern = false, isStatic = isStatic)
-                "fn" -> parseFunctionDeclaration(visibility = Visibility.Private, isOpen = false, isExtern = false, isStatic = isStatic)
+                "fun" -> parseFunctionDeclaration(
+                    visibility = Visibility.Private,
+                    isOpen = false,
+                    isExtern = false,
+                    isStatic = isStatic
+                )
+
+                "fn" -> parseFunctionDeclaration(
+                    visibility = Visibility.Private,
+                    isOpen = false,
+                    isExtern = false,
+                    isStatic = isStatic
+                )
+
                 else -> k.raiseSyntax("unsupported private declaration kind: ${k.value}")
             }
         }
+
         "protected" -> {
             var k = cc.requireToken(Token.Type.ID, "declaration expected after 'protected'")
             var isStatic = false
@@ -1100,11 +1146,24 @@ class Compiler(
             when (k.value) {
                 "val" -> parseVarDeclaration(false, Visibility.Protected, isStatic = isStatic)
                 "var" -> parseVarDeclaration(true, Visibility.Protected, isStatic = isStatic)
-                "fun" -> parseFunctionDeclaration(visibility = Visibility.Protected, isOpen = false, isExtern = false, isStatic = isStatic)
-                "fn" -> parseFunctionDeclaration(visibility = Visibility.Protected, isOpen = false, isExtern = false, isStatic = isStatic)
+                "fun" -> parseFunctionDeclaration(
+                    visibility = Visibility.Protected,
+                    isOpen = false,
+                    isExtern = false,
+                    isStatic = isStatic
+                )
+
+                "fn" -> parseFunctionDeclaration(
+                    visibility = Visibility.Protected,
+                    isOpen = false,
+                    isExtern = false,
+                    isStatic = isStatic
+                )
+
                 else -> k.raiseSyntax("unsupported protected declaration kind: ${k.value}")
             }
         }
+
         "while" -> parseWhileStatement()
         "do" -> parseDoWhileStatement()
         "for" -> parseForStatement()
@@ -1116,11 +1175,13 @@ class Compiler(
             pendingDeclDoc = consumePendingDoc()
             parseClassDeclaration()
         }
+
         "enum" -> {
             pendingDeclStart = id.pos
             pendingDeclDoc = consumePendingDoc()
             parseEnumDeclaration()
         }
+
         "try" -> parseTryStatement()
         "throw" -> parseThrowStatement(id.pos)
         "when" -> parseWhenStatement()
@@ -1130,9 +1191,10 @@ class Compiler(
             val isExtern = cc.skipId("extern")
             when {
                 cc.matchQualifiers("fun", "private") -> {
-                    pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc();
+                    pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc()
                     parseFunctionDeclaration(Visibility.Private, isExtern)
                 }
+
                 cc.matchQualifiers("fun", "private", "static") -> parseFunctionDeclaration(
                     Visibility.Private,
                     isExtern,
@@ -1149,27 +1211,78 @@ class Compiler(
                 cc.matchQualifiers("fun", "open") -> parseFunctionDeclaration(isOpen = true, isExtern = isExtern)
                 cc.matchQualifiers("fn", "open") -> parseFunctionDeclaration(isOpen = true, isExtern = isExtern)
 
-                cc.matchQualifiers("fun") -> { pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseFunctionDeclaration(isOpen = false, isExtern = isExtern) }
-                cc.matchQualifiers("fn") -> { pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseFunctionDeclaration(isOpen = false, isExtern = isExtern) }
+                cc.matchQualifiers("fun") -> {
+                    pendingDeclStart = id.pos; pendingDeclDoc =
+                        consumePendingDoc(); parseFunctionDeclaration(isOpen = false, isExtern = isExtern)
+                }
 
-                cc.matchQualifiers("val", "private", "static") -> { pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(
-                    false,
-                    Visibility.Private,
-                    isStatic = true
-                ) }
+                cc.matchQualifiers("fn") -> {
+                    pendingDeclStart = id.pos; pendingDeclDoc =
+                        consumePendingDoc(); parseFunctionDeclaration(isOpen = false, isExtern = isExtern)
+                }
 
-                cc.matchQualifiers("val", "static") -> { pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(false, Visibility.Public, isStatic = true) }
-                cc.matchQualifiers("val", "private") -> { pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(false, Visibility.Private) }
-                cc.matchQualifiers("var", "static") -> { pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(true, Visibility.Public, isStatic = true) }
-                cc.matchQualifiers("var", "static", "private") -> { pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(
-                    true,
-                    Visibility.Private,
-                    isStatic = true
-                ) }
+                cc.matchQualifiers("val", "private", "static") -> {
+                    pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(
+                        false,
+                        Visibility.Private,
+                        isStatic = true
+                    )
+                }
 
-                cc.matchQualifiers("var", "private") -> { pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(true, Visibility.Private) }
-                cc.matchQualifiers("val", "open") -> { pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(false, Visibility.Private, true) }
-                cc.matchQualifiers("var", "open") -> { pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(true, Visibility.Private, true) }
+                cc.matchQualifiers("val", "static") -> {
+                    pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(
+                        false,
+                        Visibility.Public,
+                        isStatic = true
+                    )
+                }
+
+                cc.matchQualifiers("val", "private") -> {
+                    pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(
+                        false,
+                        Visibility.Private
+                    )
+                }
+
+                cc.matchQualifiers("var", "static") -> {
+                    pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(
+                        true,
+                        Visibility.Public,
+                        isStatic = true
+                    )
+                }
+
+                cc.matchQualifiers("var", "static", "private") -> {
+                    pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(
+                        true,
+                        Visibility.Private,
+                        isStatic = true
+                    )
+                }
+
+                cc.matchQualifiers("var", "private") -> {
+                    pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(
+                        true,
+                        Visibility.Private
+                    )
+                }
+
+                cc.matchQualifiers("val", "open") -> {
+                    pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(
+                        false,
+                        Visibility.Private,
+                        true
+                    )
+                }
+
+                cc.matchQualifiers("var", "open") -> {
+                    pendingDeclStart = id.pos; pendingDeclDoc = consumePendingDoc(); parseVarDeclaration(
+                        true,
+                        Visibility.Private,
+                        true
+                    )
+                }
+
                 else -> {
                     cc.next()
                     null
@@ -1306,9 +1419,10 @@ class Compiler(
                     errorObject.extraData,
                     errorObject.useStackTrace
                 )
+
                 else -> throwScope.raiseError("this is not an exception object: $errorObject")
             }
-            throwScope.raiseError(errorObject as ObjException)
+            throwScope.raiseError(errorObject)
         }
     }
 
@@ -1473,6 +1587,7 @@ class Compiler(
 
             // Optional base list: ":" Base ("," Base)* where Base := ID ( "(" args? ")" )?
             data class BaseSpec(val name: String, val args: List<ParsedArgument>?)
+
             val baseSpecs = mutableListOf<BaseSpec>()
             if (cc.skipTokenOfType(Token.Type.COLON, isOptional = true)) {
                 do {
@@ -1516,13 +1631,13 @@ class Compiler(
                 val declRange = MiniRange(pendingDeclStart ?: nameToken.pos, cc.currentPos())
                 val bases = baseSpecs.map { it.name }
                 // Collect constructor fields declared as val/var in primary constructor
-                val ctorFields = mutableListOf<net.sergeych.lyng.miniast.MiniCtorField>()
+                val ctorFields = mutableListOf<MiniCtorField>()
                 constructorArgsDeclaration?.let { ad ->
                     for (p in ad.params) {
                         val at = p.accessType
                         if (at != null) {
                             val mutable = at == AccessType.Var
-                            ctorFields += net.sergeych.lyng.miniast.MiniCtorField(
+                            ctorFields += MiniCtorField(
                                 name = p.name,
                                 mutable = mutable,
                                 type = p.miniType,
@@ -1571,7 +1686,8 @@ class Compiler(
                 // accessors, constructor registration, etc.
                 // Resolve parent classes by name at execution time
                 val parentClasses = baseSpecs.map { baseSpec ->
-                    val rec = this[baseSpec.name] ?: throw ScriptError(nameToken.pos, "unknown base class: ${baseSpec.name}")
+                    val rec =
+                        this[baseSpec.name] ?: throw ScriptError(nameToken.pos, "unknown base class: ${baseSpec.name}")
                     (rec.value as? ObjClass) ?: throw ScriptError(nameToken.pos, "${baseSpec.name} is not a class")
                 }
 
@@ -2082,7 +2198,7 @@ class Compiler(
             val paramNames: Set<String> = argsDeclaration.params.map { it.name }.toSet()
 
             // Parse function body while tracking declared locals to compute precise capacity hints
-            val fnLocalDeclStart = currentLocalDeclCount
+            currentLocalDeclCount
             localDeclCountStack.add(0)
             val fnStatements = if (isExtern)
                 statement { raiseError("extern function not provided: $name") }
@@ -2113,7 +2229,7 @@ class Compiler(
                 }
                 fnStatements.execute(context)
             }
-            val enclosingCtx = parentContext
+            parentContext
             val fnCreateStatement = statement(start) { context ->
                 // we added fn in the context. now we must save closure
                 // for the function, unless we're in the class scope:
@@ -2363,7 +2479,7 @@ class Compiler(
     ) {
 //        fun isLeftAssociative() = tokenType != Token.Type.OR && tokenType != Token.Type.AND
 
-        companion object {}
+        companion object
 
     }
 
@@ -2377,15 +2493,24 @@ class Compiler(
          * Compile [source] while streaming a Mini-AST into the provided [sink].
          * When [sink] is null, behaves like [compile].
          */
-        suspend fun compileWithMini(source: Source, importManager: ImportProvider, sink: net.sergeych.lyng.miniast.MiniAstSink?): Script {
-            return Compiler(CompilerContext(parseLyng(source)), importManager, Settings(miniAstSink = sink)).parseScript()
+        suspend fun compileWithMini(
+            source: Source,
+            importManager: ImportProvider,
+            sink: MiniAstSink?
+        ): Script {
+            return Compiler(
+                CompilerContext(parseLyng(source)),
+                importManager,
+                Settings(miniAstSink = sink)
+            ).parseScript()
         }
 
         /** Convenience overload to compile raw [code] with a Mini-AST [sink]. */
-        suspend fun compileWithMini(code: String, sink: net.sergeych.lyng.miniast.MiniAstSink?): Script =
+        suspend fun compileWithMini(code: String, sink: MiniAstSink?): Script =
             compileWithMini(Source("<eval>", code), Script.defaultImportManager, sink)
 
         private var lastPriority = 0
+
         // Helpers for conservative constant folding (literal-only). Only pure, side-effect-free ops.
         private fun constOf(r: ObjRef): Obj? = (r as? ConstRef)?.constValue
 
@@ -2404,30 +2529,35 @@ class Compiler(
                     a is ObjChar && b is ObjChar -> if (a.value == b.value) ObjTrue else ObjFalse
                     else -> null
                 }
+
                 BinOp.NEQ -> when {
                     a is ObjInt && b is ObjInt -> if (a.value != b.value) ObjTrue else ObjFalse
                     a is ObjString && b is ObjString -> if (a.value != b.value) ObjTrue else ObjFalse
                     a is ObjChar && b is ObjChar -> if (a.value != b.value) ObjTrue else ObjFalse
                     else -> null
                 }
+
                 BinOp.LT -> when {
                     a is ObjInt && b is ObjInt -> if (a.value < b.value) ObjTrue else ObjFalse
                     a is ObjString && b is ObjString -> if (a.value < b.value) ObjTrue else ObjFalse
                     a is ObjChar && b is ObjChar -> if (a.value < b.value) ObjTrue else ObjFalse
                     else -> null
                 }
+
                 BinOp.LTE -> when {
                     a is ObjInt && b is ObjInt -> if (a.value <= b.value) ObjTrue else ObjFalse
                     a is ObjString && b is ObjString -> if (a.value <= b.value) ObjTrue else ObjFalse
                     a is ObjChar && b is ObjChar -> if (a.value <= b.value) ObjTrue else ObjFalse
                     else -> null
                 }
+
                 BinOp.GT -> when {
                     a is ObjInt && b is ObjInt -> if (a.value > b.value) ObjTrue else ObjFalse
                     a is ObjString && b is ObjString -> if (a.value > b.value) ObjTrue else ObjFalse
                     a is ObjChar && b is ObjChar -> if (a.value > b.value) ObjTrue else ObjFalse
                     else -> null
                 }
+
                 BinOp.GTE -> when {
                     a is ObjInt && b is ObjInt -> if (a.value >= b.value) ObjTrue else ObjFalse
                     a is ObjString && b is ObjString -> if (a.value >= b.value) ObjTrue else ObjFalse
@@ -2441,6 +2571,7 @@ class Compiler(
                     a is ObjString && b is ObjString -> ObjString(a.value + b.value)
                     else -> null
                 }
+
                 BinOp.MINUS -> if (a is ObjInt && b is ObjInt) ObjInt(a.value - b.value) else null
                 BinOp.STAR -> if (a is ObjInt && b is ObjInt) ObjInt(a.value * b.value) else null
                 BinOp.SLASH -> if (a is ObjInt && b is ObjInt && b.value != 0L) ObjInt(a.value / b.value) else null
@@ -2468,6 +2599,7 @@ class Compiler(
                     is ObjReal -> ObjReal(-a.value)
                     else -> null
                 }
+
                 UnaryOp.BITNOT -> if (a is ObjInt) ObjInt(a.value.inv()) else null
             }
         }
@@ -2638,5 +2770,5 @@ class Compiler(
     }
 }
 
-suspend fun eval(code: String) = Compiler.compile(code).execute()
+suspend fun eval(code: String) = compile(code).execute()
 

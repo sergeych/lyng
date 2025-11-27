@@ -3544,6 +3544,40 @@ class ScriptTest {
         """.trimIndent())
     }
 
+    @Test
+    fun testCallAndResultOrder() = runTest {
+        eval("""
+            import lyng.stdlib
+            
+            fun test(a="a", b="b", c="c") { [a, b, c] }
+            
+            // the parentheses here are in fact unnecessary:
+            val ok1 = (test { void }).last() 
+            assert( ok1 is Callable)
+            
+            // it should work without them, as the call test() {} must be executed
+            // first, then the result should be used to call methods on it:
+            
+            // the parentheses here are in fact unnecessary:
+            val ok2 = test { void }.last() 
+            assert( ok2 is Callable)
+        """.trimIndent())
+
+    }
+
+//    @Test
+//    fun namedArgsProposal() = runTest {
+//        eval("""
+//            import lyng.stdlib
+//
+//            fun test(a="a", b="b", c="c") { [a, b, c] }
+//
+//            val l = (test{ void }).last()
+//            println(l)
+//
+//        """.trimIndent())
+//    }
+
 
 //    @Ignore
 //    @Test

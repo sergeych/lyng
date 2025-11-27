@@ -1,7 +1,7 @@
+#!/bin/env lyng
 /*
     Calculate the limit of Sum( f(n) )
     until it reaches asymptotic limit 0.00001% change
-
     return null or found limit
 */
 fun findSumLimit(f) {
