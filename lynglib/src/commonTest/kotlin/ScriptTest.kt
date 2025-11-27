@@ -2446,7 +2446,7 @@ class ScriptTest {
             for( x in set ) println(x)
             assert([1,2,3] == set.toList())
             set += 4
-            assert(set.toList() == [1,2,3,4])
+            assertEquals(set.toList(), [1,2,3,4])
             assert(set == Set(1,2,3,4))
             
             val s1 = [1, 2].toSet()
@@ -2464,6 +2464,18 @@ class ScriptTest {
             assertEquals( Set( ...[1,false,"ok"]), Set("ok", 1, false) )
         """.trimIndent()
         )
+    }
+
+    @Test
+    fun testSetAddRemoveSet() = runTest {
+        eval("""
+            val s1 = Set( 1, 2 3)
+            val s2 = Set( 3, 4 5)
+            assertEquals( Set(1,2,3,4,5), s1 + s2 )
+            assertEquals( Set(1,2,3,4,5), s1 + s2.toList() )
+            assertEquals( Set(1,2), s1 - s2 )
+            assertEquals( Set(1,2), s1 - s2.toList() )
+        """.trimIndent())
     }
 
     @Test

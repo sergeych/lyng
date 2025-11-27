@@ -34,8 +34,19 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
         return ObjSet(
             if (other is ObjSet)
                 (set + other.set).toMutableSet()
-            else
-                (set + other).toMutableSet()
+            else {
+                if( other.isInstanceOf(ObjIterable) ) {
+                    val otherSet = mutableSetOf<Obj>()
+                    other.enumerate(scope) {
+                        otherSet += it
+                        true
+                    }
+                    (set + otherSet).toMutableSet()
+                }
+                else {
+                    (set + other).toMutableSet()
+                }
+            }
         )
     }
 
@@ -51,12 +62,14 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
 
             else -> {
                 if (other.isInstanceOf(ObjIterable)) {
-                    val i = other.invokeInstanceMethod(scope, "iterable")
-                    while (i.invokeInstanceMethod(scope, "hasNext").toBool()) {
-                        set += i.invokeInstanceMethod(scope, "next")
+                    val otherSet = mutableSetOf<Obj>()
+                    other.enumerate(scope) {
+                        otherSet += it
+                        true
                     }
+                    set += otherSet
                 }
-                set += other
+                else set += other
             }
         }
         return this
@@ -70,9 +83,19 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
     }
 
     override suspend fun minus(scope: Scope, other: Obj): Obj {
-        if (other !is ObjSet)
-            scope.raiseIllegalArgument("set operator - requires another set")
-        return ObjSet(set.minus(other.set).toMutableSet())
+        return when {
+            other is ObjSet -> ObjSet(set.minus(other.set).toMutableSet())
+            other.isInstanceOf(ObjIterable) -> {
+                val otherSet = mutableSetOf<Obj>()
+                other.enumerate(scope) {
+                    otherSet += it
+                    true
+                }
+                ObjSet((set - otherSet).toMutableSet())
+            }
+            else ->
+                scope.raiseIllegalArgument("set operator - requires another set or Iterable")
+        }
     }
 
     override fun toString(): String {
