@@ -5,7 +5,7 @@ lambdas and class declarations.
 
 ## Regular
 
-## default values
+## Default values
 
 Default parameters should not be mixed with mandatory ones:
 
@@ -95,6 +95,53 @@ There could be any number of splats at any positions. You can splat any other [I
     testSplat("start", ...range, "end")
     >>> [start,1,2,3,end]
     >>> void
+
+## Named arguments in calls
+
+Lyng supports named arguments at call sites using colon syntax `name: value`:
+
+```lyng
+    fun test(a="foo", b="bar", c="bazz") { [a, b, c] }
+
+    assertEquals(["foo", "b", "bazz"], test(b: "b"))
+    assertEquals(["a", "bar", "c"], test("a", c: "c"))
+```
+
+Rules:
+
+- Named arguments must follow positional arguments. After the first named argument, no positional arguments may appear inside the parentheses.
+- The only exception is the syntactic trailing block after the call: `f(args) { ... }`. This block is outside the parentheses and is handled specially (see below).
+- A named argument cannot reassign a parameter already set positionally.
+- If the last parameter has already been assigned by a named argument (or named splat), a trailing block is not allowed and results in an error.
+
+Why `:` and not `=` at call sites? In Lyng, `=` is an expression (assignment), so we use `:` to avoid ambiguity. Declarations continue to use `:` for types, while call sites use `as` / `as?` for type operations.
+
+## Named splats (map splats)
+
+Splat (`...`) of a Map provides named arguments to the call. Only string keys are allowed:
+
+```lyng
+    fun test(a="a", b="b", c="c", d="d") { [a, b, c, d] }
+    val r = test("A?", ...Map("d" => "D!", "b" => "B!"))
+    assertEquals(["A?","B!","c","D!"], r)
+```
+
+Constraints:
+
+- Map splat keys must be strings; otherwise, a clean error is thrown.
+- Named splats cannot duplicate parameters already assigned (by positional or named arguments).
+- Named splats must follow all positional arguments and positional splats.
+- Ellipsis parameters (variadic) remain positional-only and cannot be assigned by name.
+
+## Trailing-lambda rule interaction
+
+If a call is immediately followed by a block `{ ... }`, it is treated as an extra last argument and bound to the last parameter. However, if the last parameter is already assigned by a named argument or a named splat, using a trailing block is an error:
+
+```lyng
+    fun f(x, onDone) { onDone(x) }
+    f(x: 1) { 42 }   // ERROR
+    f(1) { 42 }      // OK
+```
     
 
 [tutorial]: tutorial.md

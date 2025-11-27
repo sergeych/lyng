@@ -25,6 +25,7 @@ Files
   - Operators including ranges (`..`, `..<`, `...`), null-safe (`?.`, `?[`, `?(`, `?{`, `?:`, `??`), arrows (`->`, `=>`, `::`), match operators (`=~`, `!~`), bitwise, arithmetic, etc.
   - Shuttle operator `<=>`
   - Division operator `/` (note: Lyng has no regex literal syntax; `/` is always division)
+  - Named arguments at call sites `name: value` (the `name` part is highlighted as `variable.parameter.named.lyng` and the `:` as punctuation). The rule is anchored to `(` or `,` and excludes `::` to avoid conflicts.
 
 Install in IntelliJ IDEA (and other JetBrains IDEs)
 ---------------------------------------------------
@@ -56,6 +57,7 @@ Notes and limitations
 ---------------------
 - Type highlighting is heuristic (Capitalized identifiers). The IntelliJ plugin will use language semantics and avoid false positives.
 - If your language adds or changes tokens, please update patterns in `lyng.tmLanguage.json`. The Kotlin sources in `lynglib/src/commonMain/kotlin/net/sergeych/lyng/highlight/` are a good reference for token kinds.
+- Labels `name:` at statement level remain supported and are kept distinct from named call arguments by context. The grammar prefers named-argument matching when a `name:` appears right after `(` or `,`.
 
 Lyng specifics
 --------------

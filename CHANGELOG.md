@@ -2,6 +2,23 @@
 
 ### Unreleased
 
+- Language: Named arguments and named splats
+  - New call-site syntax for named arguments using colon: `name: value`.
+    - Positional arguments must come before named; positionals after a named argument inside parentheses are rejected.
+    - Trailing-lambda interaction: if the last parameter is already assigned by name (or via a named splat), a trailing `{ ... }` block is illegal.
+  - Named splats: `...` can now expand a Map into named arguments.
+    - Only string keys are allowed; non-string keys raise a clear error.
+    - Duplicate assignment across named args and named splats is an error.
+    - Ellipsis (variadic) parameters remain positional-only and cannot be named.
+  - Rationale: `=` is assignment and an expression in Lyng; `:` at call sites avoids ambiguity. Declarations keep `name: Type`; call-site casts continue to use `as` / `as?`.
+  - Documentation updated: proposals and declaring-arguments sections now cover named args/splats and error cases.
+  - Tests added covering success cases and errors for named args/splats and trailing-lambda interactions.
+
+- Tooling: Highlighters and TextMate bundle updated for named args
+  - Website/editor highlighter (lyngweb + site) works with `name: value` and `...Map("k" => v)`; added JS tests covering punctuation/operator spans for `:` and `...`.
+  - TextMate grammar updated to recognize named call arguments: `name: value` after `(` or `,` with `name` highlighted as `variable.parameter.named.lyng` and `:` as punctuation; excludes `::`.
+  - TextMate bundle version bumped to 0.0.3; README updated with details and guidance.
+
 - Multiple Inheritance (MI) completed and enabled by default:
   - Active C3 Method Resolution Order (MRO) for deterministic, monotonic lookup across complex hierarchies and diamonds.
   - Qualified dispatch:

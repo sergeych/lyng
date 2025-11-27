@@ -881,6 +881,21 @@ class Compiler(
     private suspend fun parseArgs(): Pair<List<ParsedArgument>, Boolean> {
 
         val args = mutableListOf<ParsedArgument>()
+        suspend fun tryParseNamedArg(): ParsedArgument? {
+            val save = cc.savePos()
+            val t1 = cc.next()
+            if (t1.type == Token.Type.ID) {
+                val t2 = cc.next()
+                if (t2.type == Token.Type.COLON) {
+                    // name: expr
+                    val name = t1.value
+                    val rhs = parseExpression() ?: t2.raiseSyntax("expected expression after named argument '${name}:'")
+                    return ParsedArgument(rhs, t1.pos, isSplat = false, name = name)
+                }
+            }
+            cc.restorePos(save)
+            return null
+        }
         do {
             val t = cc.next()
             when (t.type) {
@@ -895,10 +910,14 @@ class Compiler(
 
                 else -> {
                     cc.previous()
-                    parseExpression()?.let { args += ParsedArgument(it, t.pos) }
-                        ?: throw ScriptError(t.pos, "Expecting arguments list")
-                    if (cc.current().type == Token.Type.COLON)
-                        parseTypeDeclaration()
+                    val named = tryParseNamedArg()
+                    if (named != null) {
+                        args += named
+                    } else {
+                        parseExpression()?.let { args += ParsedArgument(it, t.pos) }
+                            ?: throw ScriptError(t.pos, "Expecting arguments list")
+                        // In call-site arguments, ':' is reserved for named args. Do not parse type declarations here.
+                    }
                     // Here should be a valid termination:
                 }
             }
@@ -929,6 +948,20 @@ class Compiler(
      */
     private suspend fun parseArgsNoTailBlock(): List<ParsedArgument> {
         val args = mutableListOf<ParsedArgument>()
+        suspend fun tryParseNamedArg(): ParsedArgument? {
+            val save = cc.savePos()
+            val t1 = cc.next()
+            if (t1.type == Token.Type.ID) {
+                val t2 = cc.next()
+                if (t2.type == Token.Type.COLON) {
+                    val name = t1.value
+                    val rhs = parseExpression() ?: t2.raiseSyntax("expected expression after named argument '${name}:'")
+                    return ParsedArgument(rhs, t1.pos, isSplat = false, name = name)
+                }
+            }
+            cc.restorePos(save)
+            return null
+        }
         do {
             val t = cc.next()
             when (t.type) {
@@ -943,10 +976,14 @@ class Compiler(
 
                 else -> {
                     cc.previous()
-                    parseExpression()?.let { args += ParsedArgument(it, t.pos) }
-                        ?: throw ScriptError(t.pos, "Expecting arguments list")
-                    if (cc.current().type == Token.Type.COLON)
-                        parseTypeDeclaration()
+                    val named = tryParseNamedArg()
+                    if (named != null) {
+                        args += named
+                    } else {
+                        parseExpression()?.let { args += ParsedArgument(it, t.pos) }
+                            ?: throw ScriptError(t.pos, "Expecting arguments list")
+                        // Do not parse type declarations in call args
+                    }
                 }
             }
         } while (t.type != Token.Type.RPAREN)

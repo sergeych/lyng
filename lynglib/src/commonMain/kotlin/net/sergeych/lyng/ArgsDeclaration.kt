@@ -57,72 +57,137 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
                 recordType = ObjRecord.Type.Argument)
         }
 
-        // will be used with last lambda arg fix
+        // Prepare positional args and parameter count, handle tail-block binding
         val callArgs: List<Obj>
         val paramsSize: Int
-
-        if( arguments.tailBlockMode ) {
+        if (arguments.tailBlockMode) {
+            // If last parameter is already assigned by a named argument, it's an error
+            val lastParam = params.last()
+            if (arguments.named.containsKey(lastParam.name))
+                scope.raiseIllegalArgument("trailing block cannot be used when the last parameter is already assigned by a named argument")
             paramsSize = params.size - 1
-            assign(params.last(), arguments.list.last())
+            assign(lastParam, arguments.list.last())
             callArgs = arguments.list.dropLast(1)
         } else {
             paramsSize = params.size
             callArgs = arguments.list
         }
 
-        suspend fun processHead(index: Int): Int {
+        // Compute which parameter indexes are inevitably covered by positional arguments
+        // based on the number of supplied positionals, defaults and ellipsis placement.
+        val coveredByPositional = BooleanArray(paramsSize)
+        run {
+            // Count required (non-default, non-ellipsis) params in head and in tail
+            var headRequired = 0
+            var tailRequired = 0
+            val ellipsisIdx = params.subList(0, paramsSize).indexOfFirst { it.isEllipsis }
+            if (ellipsisIdx >= 0) {
+                for (i in 0 until ellipsisIdx) if (!params[i].isEllipsis && params[i].defaultValue == null) headRequired++
+                for (i in paramsSize - 1 downTo ellipsisIdx + 1) if (params[i].defaultValue == null) tailRequired++
+            } else {
+                for (i in 0 until paramsSize) if (params[i].defaultValue == null) headRequired++
+            }
+            val P = callArgs.size
+            if (ellipsisIdx < 0) {
+                // No ellipsis: all positionals go to head until exhausted
+                val k = minOf(P, paramsSize)
+                for (i in 0 until k) coveredByPositional[i] = true
+            } else {
+                // With ellipsis: head takes min(P, headRequired) first
+                val headTake = minOf(P, headRequired)
+                for (i in 0 until headTake) coveredByPositional[i] = true
+                val remaining = P - headTake
+                // tail takes min(remaining, tailRequired) from the end
+                val tailTake = minOf(remaining, tailRequired)
+                var j = paramsSize - 1
+                var taken = 0
+                while (j > ellipsisIdx && taken < tailTake) {
+                    coveredByPositional[j] = true
+                    j--
+                    taken++
+                }
+            }
+        }
+
+        // Prepare arrays for named assignments
+        val assignedByName = BooleanArray(paramsSize)
+        val namedValues = arrayOfNulls<Obj>(paramsSize)
+        if (arguments.named.isNotEmpty()) {
+            for ((k, v) in arguments.named) {
+                val idx = params.subList(0, paramsSize).indexOfFirst { it.name == k }
+                if (idx < 0) scope.raiseIllegalArgument("unknown parameter '$k'")
+                if (params[idx].isEllipsis) scope.raiseIllegalArgument("ellipsis (variadic) parameter cannot be assigned by name: '$k'")
+                if (coveredByPositional[idx]) scope.raiseIllegalArgument("argument '$k' is already set by positional argument")
+                if (assignedByName[idx]) scope.raiseIllegalArgument("argument '$k' is already set")
+                assignedByName[idx] = true
+                namedValues[idx] = v
+            }
+        }
+
+        // Helper: assign head part, consuming from headPos; stop at ellipsis
+        suspend fun processHead(index: Int, headPos: Int): Pair<Int, Int> {
             var i = index
-            while (i != paramsSize) {
+            var hp = headPos
+            while (i < paramsSize) {
                 val a = params[i]
                 if (a.isEllipsis) break
-                val value = when {
-                    i < callArgs.size -> callArgs[i]
-                    a.defaultValue != null -> a.defaultValue.execute(scope)
-                    else -> {
-//                        println("callArgs: ${callArgs.joinToString()}")
-//                        println("tailBlockMode: ${arguments.tailBlockMode}")
-                        scope.raiseIllegalArgument("too few arguments for the call")
-                    }
+                if (assignedByName[i]) {
+                    assign(a, namedValues[i]!!)
+                } else {
+                    val value = if (hp < callArgs.size) callArgs[hp++]
+                    else a.defaultValue?.execute(scope)
+                        ?: scope.raiseIllegalArgument("too few arguments for the call")
+                    assign(a, value)
                 }
-                assign(a, value)
                 i++
             }
-            return i
+            return i to hp
         }
 
-        suspend fun processTail(index: Int): Int {
+        // Helper: assign tail part from the end, consuming from tailPos; stop before ellipsis index
+        // Do not consume elements below headPosBound to avoid overlap with head consumption
+        suspend fun processTail(startExclusive: Int, tailStart: Int, headPosBound: Int): Int {
             var i = paramsSize - 1
-            var j = callArgs.size - 1
-            while (i > index) {
+            var tp = tailStart
+            while (i > startExclusive) {
                 val a = params[i]
                 if (a.isEllipsis) break
-                val value = when {
-                    j >= index -> {
-                        callArgs[j--]
-                    }
-
-                    a.defaultValue != null -> a.defaultValue.execute(scope)
-                    else -> scope.raiseIllegalArgument("too few arguments for the call")
+                if (i < assignedByName.size && assignedByName[i]) {
+                    assign(a, namedValues[i]!!)
+                } else {
+                    val value = if (tp >= headPosBound) callArgs[tp--]
+                    else a.defaultValue?.execute(scope)
+                        ?: scope.raiseIllegalArgument("too few arguments for the call")
+                    assign(a, value)
                 }
-                assign(a, value)
                 i--
             }
-            return j
+            return tp
         }
 
-        fun processEllipsis(index: Int, toFromIndex: Int) {
+        fun processEllipsis(index: Int, headPos: Int, tailPos: Int) {
             val a = params[index]
-            val l = if (index > toFromIndex) ObjList()
-            else ObjList(callArgs.subList(index, toFromIndex + 1).toMutableList())
+            val from = headPos
+            val to = tailPos
+            val l = if (from > to) ObjList()
+            else ObjList(callArgs.subList(from, to + 1).toMutableList())
             assign(a, l)
         }
 
-        val leftIndex = processHead(0)
-        if (leftIndex < paramsSize) {
-            val end = processTail(leftIndex)
-            processEllipsis(leftIndex, end)
+        // Locate ellipsis index within considered parameters
+        val ellipsisIndex = params.subList(0, paramsSize).indexOfFirst { it.isEllipsis }
+
+        if (ellipsisIndex >= 0) {
+            // Assign head first to know how many positionals are consumed from the start
+            val (afterHead, headConsumedTo) = processHead(0, 0)
+            // Then assign tail consuming from the end down to headConsumedTo boundary
+            val tailConsumedFrom = processTail(ellipsisIndex, callArgs.size - 1, headConsumedTo)
+            // Assign ellipsis list from remaining positionals between headConsumedTo..tailConsumedFrom
+            processEllipsis(ellipsisIndex, headConsumedTo, tailConsumedFrom)
         } else {
-            if (leftIndex < callArgs.size)
+            // No ellipsis: assign head only; any leftover positionals → error
+            val (_, headConsumedTo) = processHead(0, 0)
+            if (headConsumedTo != callArgs.size)
                 scope.raiseIllegalArgument("too many arguments for the call")
         }
     }

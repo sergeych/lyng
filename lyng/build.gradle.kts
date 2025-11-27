@@ -31,6 +31,15 @@ repositories {
 }
 
 kotlin {
+    // Suppress Beta warning for expect/actual classes across all targets in this module
+    targets.configureEach {
+        compilations.configureEach {
+            compilerOptions.configure {
+                freeCompilerArgs.add("-Xexpect-actual-classes")
+            }
+        }
+    }
+
     jvm {
         binaries {
             executable {

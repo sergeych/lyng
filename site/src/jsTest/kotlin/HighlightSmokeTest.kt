@@ -63,4 +63,29 @@ class HighlightSmokeTest {
         assertTrue(html.contains("hl-op"))
     }
 
+    @Test
+    fun highlightNamedArgsAndMapSplat() {
+        val text = """
+            fun test(a,b,c,d) { [a,b,c,d] }
+            val r = test("A?", c: "C!", ...Map("d" => "D!", "b" => "B!"))
+        """.trimIndent()
+        val spans = SimpleLyngHighlighter().highlight(text)
+        val labeled = spansToLabeled(text, spans)
+        // Ensure identifier for function name appears
+        assertTrue(labeled.any { it.first == "test" && it.second == HighlightKind.Identifier })
+        // Ensure colon for named argument is tokenized as punctuation
+        assertTrue(labeled.any { it.first == ":" && it.second == HighlightKind.Punctuation })
+        // Ensure ellipsis operator present
+        assertTrue(labeled.any { it.first == "..." && it.second == HighlightKind.Operator })
+        // Ensure Map identifier is present
+        assertTrue(labeled.any { it.first == "Map" && it.second == HighlightKind.Identifier })
+    }
+
+    @Test
+    fun highlightNamedArgsHtml() {
+        val text = "val res = test( a: 1, b: 2 )"
+        val html = SiteHighlight.renderHtml(text)
+        // Expect a colon wrapped as punctuation span
+        assertTrue(html.contains("<span class=\"hl-punc\">:</span>"))
+    }
 }

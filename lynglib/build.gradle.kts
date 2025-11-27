@@ -21,7 +21,7 @@ import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 group = "net.sergeych"
-version = "1.0.0-SNAPSHOT"
+version = "1.0.1-SNAPSHOT"
 
 // Removed legacy buildscript classpath declarations; plugins are applied via the plugins DSL below
 
@@ -70,6 +70,15 @@ kotlin {
     wasmJs() {
         browser()
         nodejs()
+    }
+
+    // Suppress Beta warning for expect/actual classes across all targets
+    targets.configureEach {
+        compilations.configureEach {
+            compilerOptions.configure {
+                freeCompilerArgs.add("-Xexpect-actual-classes")
+            }
+        }
     }
 
     sourceSets {
