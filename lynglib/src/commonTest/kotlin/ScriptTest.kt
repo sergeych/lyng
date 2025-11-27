@@ -37,6 +37,97 @@ class ScriptTest {
         println("version = ${LyngVersion}")
     }
 
+    // --- Helpers to test iterator cancellation semantics ---
+    class ObjTestIterable : Obj() {
+
+        var cancelCount: Int = 0
+
+        override val objClass: ObjClass = type
+
+        companion object {
+            val type = ObjClass("TestIterable", ObjIterable).apply {
+                addFn("iterator") {
+                    ObjTestIterator(thisAs<ObjTestIterable>())
+                }
+                addFn("cancelCount") { thisAs<ObjTestIterable>().cancelCount.toObj() }
+            }
+        }
+    }
+
+    class ObjTestIterator(private val owner: ObjTestIterable) : Obj() {
+        override val objClass: ObjClass = type
+        private var i = 0
+
+        private fun hasNext(): Boolean = i < 5
+        private fun next(): Obj = ObjInt((++i).toLong())
+        private fun cancelIteration() {
+            owner.cancelCount += 1
+        }
+
+        companion object {
+            val type = ObjClass("TestIterator", ObjIterator).apply {
+                addFn("hasNext") { thisAs<ObjTestIterator>().hasNext().toObj() }
+                addFn("next") { thisAs<ObjTestIterator>().next() }
+                addFn("cancelIteration") {
+                    thisAs<ObjTestIterator>().cancelIteration()
+                    ObjVoid
+                }
+            }
+        }
+    }
+
+    @Test
+    fun testForLoopDoesNotCancelOnNaturalCompletion() = runTest {
+        val scope = Script.newScope()
+        val ti = ObjTestIterable()
+        scope.addConst("ti", ti)
+        scope.eval(
+            """
+                var s = 0
+                for( i in ti ) {
+                    s += i
+                }
+                s
+            """.trimIndent()
+        )
+        assertEquals(0, ti.cancelCount)
+    }
+
+    @Test
+    fun testForLoopCancelsOnBreak() = runTest {
+        val scope = Script.newScope()
+        val ti = ObjTestIterable()
+        scope.addConst("ti", ti)
+        scope.eval(
+            """
+                for( i in ti ) {
+                    break
+                }
+            """.trimIndent()
+        )
+        assertEquals(1, ti.cancelCount)
+    }
+
+    @Test
+    fun testForLoopCancelsOnException() = runTest {
+        val scope = Script.newScope()
+        val ti = ObjTestIterable()
+        scope.addConst("ti", ti)
+        try {
+            scope.eval(
+                """
+                    for( i in ti ) {
+                        throw "boom"
+                    }
+                """.trimIndent()
+            )
+            fail("Exception expected")
+        } catch (_: Exception) {
+            // ignore
+        }
+        assertEquals(1, ti.cancelCount)
+    }
+
     @Test
     fun parseNewlines() {
         fun check(expected: String, type: Token.Type, row: Int, col: Int, src: String, offset: Int = 0) {

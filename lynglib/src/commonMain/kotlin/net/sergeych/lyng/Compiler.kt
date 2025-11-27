@@ -34,6 +34,7 @@ class Compiler(
 ) {
 
     // Stack of parameter-to-slot plans for current function being parsed (by declaration index)
+    @Suppress("unused")
     private val paramSlotPlanStack = mutableListOf<Map<String, Int>>()
 //    private val currentParamSlotPlan: Map<String, Int>?
 //        get() = paramSlotPlanStack.lastOrNull()
@@ -727,7 +728,7 @@ class Compiler(
 
         // Commit to map literal parsing
         cc.skipWsTokens()
-        val entries = mutableListOf<net.sergeych.lyng.obj.MapLiteralEntry>()
+        val entries = mutableListOf<MapLiteralEntry>()
         val usedKeys = mutableSetOf<String>()
 
         while (true) {
@@ -736,7 +737,7 @@ class Compiler(
             when (t0.type) {
                 Token.Type.RBRACE -> {
                     // end of map literal
-                    return net.sergeych.lyng.obj.MapLiteralRef(entries)
+                    return MapLiteralRef(entries)
                 }
                 Token.Type.COMMA -> {
                     // allow stray commas; continue
@@ -745,7 +746,7 @@ class Compiler(
                 Token.Type.ELLIPSIS -> {
                     // spread element: ... expression
                     val expr = parseExpressionLevel() ?: throw ScriptError(t0.pos, "invalid map spread: expecting expression")
-                    entries += net.sergeych.lyng.obj.MapLiteralEntry.Spread(expr)
+                    entries += MapLiteralEntry.Spread(expr)
                     // Expect comma or '}' next; loop will handle
                 }
                 Token.Type.STRING, Token.Type.ID -> {
@@ -769,14 +770,14 @@ class Compiler(
                         if (next.type == Token.Type.RBRACE) cc.previous()
                         // Duplicate detection for literals only
                         if (!usedKeys.add(keyName)) throw ScriptError(t0.pos, "duplicate key '$keyName'")
-                        entries += net.sergeych.lyng.obj.MapLiteralEntry.Named(keyName, net.sergeych.lyng.obj.LocalVarRef(keyName, t0.pos))
+                        entries += MapLiteralEntry.Named(keyName, LocalVarRef(keyName, t0.pos))
                         // If the token was COMMA, the loop continues; if it's RBRACE, next iteration will end
                     } else {
                         // There is a value expression: push back token and parse expression
                         cc.previous()
                         val valueRef = parseExpressionLevel() ?: throw ScriptError(colon.pos, "expecting map entry value")
                         if (!usedKeys.add(keyName)) throw ScriptError(t0.pos, "duplicate key '$keyName'")
-                        entries += net.sergeych.lyng.obj.MapLiteralEntry.Named(keyName, valueRef)
+                        entries += MapLiteralEntry.Named(keyName, valueRef)
                         // After value, allow optional comma; do not require it
                         cc.skipTokenOfType(Token.Type.COMMA, isOptional = true)
                         // The loop will continue and eventually see '}'
@@ -893,6 +894,7 @@ class Compiler(
         return ArgsDeclaration(result, endTokenType)
     }
 
+    @Suppress("unused")
     private fun parseTypeDeclaration(): TypeDecl {
         return parseTypeDeclarationWithMini().first
     }
@@ -2052,24 +2054,36 @@ class Compiler(
     ): Obj {
         val iterObj = sourceObj.invokeInstanceMethod(forScope, "iterator")
         var result: Obj = ObjVoid
-        while (iterObj.invokeInstanceMethod(forScope, "hasNext").toBool()) {
-            if (catchBreak)
-                try {
+        var completedNaturally = false
+        try {
+            while (iterObj.invokeInstanceMethod(forScope, "hasNext").toBool()) {
+                if (catchBreak)
+                    try {
+                        loopVar.value = iterObj.invokeInstanceMethod(forScope, "next")
+                        result = body.execute(forScope)
+                    } catch (lbe: LoopBreakContinueException) {
+                        if (lbe.label == label || lbe.label == null) {
+                            if (lbe.doContinue) continue
+                            // premature finish, will trigger cancel in finally
+                            return lbe.result
+                        }
+                        throw lbe
+                    }
+                else {
                     loopVar.value = iterObj.invokeInstanceMethod(forScope, "next")
                     result = body.execute(forScope)
-                } catch (lbe: LoopBreakContinueException) {
-                    if (lbe.label == label || lbe.label == null) {
-                        if (lbe.doContinue) continue
-                        return lbe.result
-                    }
-                    throw lbe
                 }
-            else {
-                loopVar.value = iterObj.invokeInstanceMethod(forScope, "next")
-                result = body.execute(forScope)
+            }
+            completedNaturally = true
+            return elseStatement?.execute(forScope) ?: result
+        } finally {
+            if (!completedNaturally) {
+                // Best-effort cancellation on premature termination
+                runCatching {
+                    iterObj.invokeInstanceMethod(forScope, "cancelIteration") { ObjVoid }
+                }
             }
         }
-        return elseStatement?.execute(forScope) ?: result
     }
 
     @Suppress("UNUSED_VARIABLE")
@@ -2383,7 +2397,7 @@ class Compiler(
                 }
                 fnStatements.execute(context)
             }
-            parentContext
+//            parentContext
             val fnCreateStatement = statement(start) { context ->
                 // we added fn in the context. now we must save closure
                 // for the function, unless we're in the class scope:

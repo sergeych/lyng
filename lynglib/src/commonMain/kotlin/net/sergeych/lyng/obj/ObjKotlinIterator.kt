@@ -87,13 +87,25 @@ suspend fun Obj.enumerate(scope: Scope, callback: suspend (Obj) -> Boolean) {
     val hasNext = iterator.getInstanceMethod(scope, "hasNext")
     val next = iterator.getInstanceMethod(scope, "next")
     var closeIt = false
-    while (hasNext.invoke(scope, iterator).toBool()) {
-        val nextValue = next.invoke(scope, iterator)
-        if (!callback(nextValue)) {
-            closeIt = true
-            break
+    try {
+        while (hasNext.invoke(scope, iterator).toBool()) {
+            val nextValue = next.invoke(scope, iterator)
+            val shouldContinue = try {
+                callback(nextValue)
+            } catch (e: Exception) {
+                // iteration aborted due to exception in callback
+                closeIt = true
+                throw e
+            }
+            if (!shouldContinue) {
+                closeIt = true
+                break
+            }
+        }
+    } finally {
+        if (closeIt) {
+            // Best-effort cancel on premature termination
+            iterator.invokeInstanceMethod(scope, "cancelIteration") { ObjVoid }
         }
     }
-    if (closeIt)
-        iterator.invokeInstanceMethod(scope, "cancelIteration") { ObjVoid }
 }
