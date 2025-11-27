@@ -165,9 +165,9 @@ data class ParsedArgument(
          if (x.name != null) {
              // Named argument
              if (named == null) named = linkedMapOf()
-             if (named!!.containsKey(x.name)) scope.raiseIllegalArgument("argument '${x.name}' is already set")
+             if (named.containsKey(x.name)) scope.raiseIllegalArgument("argument '${x.name}' is already set")
              val v = x.value.execute(scope)
-             named!![x.name] = v
+             named[x.name] = v
              namedSeen = true
              continue
          }
@@ -181,8 +181,8 @@ data class ParsedArgument(
                      for ((k, v) in value.map) {
                          if (k !is ObjString) scope.raiseIllegalArgument("named splat expects a Map with string keys")
                          val key = k.value
-                         if (named!!.containsKey(key)) scope.raiseIllegalArgument("argument '$key' is already set")
-                         named!![key] = v
+                         if (named.containsKey(key)) scope.raiseIllegalArgument("argument '$key' is already set")
+                         named[key] = v
                      }
                      namedSeen = true
                  }
@@ -226,17 +226,16 @@ data class ParsedArgument(
  
      fun firstAndOnly(pos: Pos = Pos.UNKNOWN): Obj {
          if (list.size != 1) throw ScriptError(pos, "expected one argument, got ${list.size}")
-         val v = list.first()
          // Tiny micro-alloc win: avoid byValueCopy for immutable singletons
-         return when (v) {
-             net.sergeych.lyng.obj.ObjNull,
-             net.sergeych.lyng.obj.ObjTrue,
-            net.sergeych.lyng.obj.ObjFalse,
+         return when (val v = list.first()) {
+             ObjNull,
+             ObjTrue,
+             ObjFalse,
             // Immutable scalars: safe to return directly
-            is net.sergeych.lyng.obj.ObjInt,
-            is net.sergeych.lyng.obj.ObjReal,
-            is net.sergeych.lyng.obj.ObjChar,
-            is net.sergeych.lyng.obj.ObjString -> v
+            is ObjInt,
+            is ObjReal,
+            is ObjChar,
+            is ObjString -> v
              else -> v.byValueCopy()
          }
      }

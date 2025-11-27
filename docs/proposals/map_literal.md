@@ -55,9 +55,10 @@ Special syntax allows to insert key-value pair from the variable which name shou
 ```
     val foo = "bar"
     val bar = "buzz"
-    assertEquals( {foo: "bar", bar: "buzz"}, { foo, bar } )
+    assertEquals( {foo: "bar", bar: "buzz"}, { *foo, *bar } )
 ```
 
+Question to the AI: maybe better syntax than asterisk for that case?
 
 So, summarizing, overwriting/duplication rules are:
 
@@ -74,7 +75,8 @@ This approach resolves the ambiguity from lambda syntax, as
     map_literal start = "{", ws, (s1 | s2 | s3)
     s1 = string_literal, ws, ":", ws, expression
     s2 = "...", string_literal
-    s3 = string_literal, ("," | "}")
+    s3 = "*", string_literal
 ```
-is not a valid lambda beginning.
+
+as we can see, `map_literal_start` is not a valid lambda beginning so it is not create ambiguity.
 

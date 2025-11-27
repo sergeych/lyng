@@ -2569,7 +2569,6 @@ class ScriptTest {
                             x += i
                         }
                         delay(100)
-                        println("-> "+x)
                         assert(x == 5050)
                     }
                 """.trimIndent())
