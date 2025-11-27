@@ -13,6 +13,7 @@
     { "include": "#keywords" },
     { "include": "#constants" },
     { "include": "#types" },
+    { "include": "#mapLiterals" },
     { "include": "#namedArgs" },
     { "include": "#annotations" },
     { "include": "#labels" },
@@ -42,6 +43,25 @@
       ]
     },
     "annotations": { "patterns": [ { "name": "entity.name.label.at.lyng", "match": "@[\\p{L}_][\\p{L}\\p{N}_]*:" }, { "name": "storage.modifier.annotation.lyng", "match": "@[\\p{L}_][\\p{L}\\p{N}_]*" } ] },
+    "mapLiterals": {
+      "patterns": [
+        {
+          "name": "meta.map.entry.lyng",
+          "match": "(?:(?<=\\{|,))\\s*(\"[^\"]*\"|[\\p{L}_][\\p{L}\\p{N}_]*)\\s*(:)(?!:)",
+          "captures": {
+            "1": { "name": "variable.other.property.key.lyng" },
+            "2": { "name": "punctuation.separator.colon.lyng" }
+          }
+        },
+        {
+          "name": "meta.map.spread.lyng",
+          "match": "(?:(?<=\\{|,))\\s*(\\.\\.\\.)",
+          "captures": {
+            "1": { "name": "keyword.operator.spread.lyng" }
+          }
+        }
+      ]
+    },
     "namedArgs": {
       "patterns": [
         {

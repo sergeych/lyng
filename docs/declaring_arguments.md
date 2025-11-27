@@ -126,6 +126,14 @@ Splat (`...`) of a Map provides named arguments to the call. Only string keys ar
     assertEquals(["A?","B!","c","D!"], r)
 ```
 
+The same with a map literal is often more concise. Define the literal, then splat the variable:
+
+    fun test(a="a", b="b", c="c", d="d") { [a, b, c, d] }
+    val patch = { d: "D!", b: "B!" }
+    val r = test("A?", ...patch)
+    assertEquals(["A?","B!","c","D!"], r)
+    >>> void
+
 Constraints:
 
 - Map splat keys must be strings; otherwise, a clean error is thrown.

@@ -45,6 +45,26 @@ class HighlightSmokeTest {
     }
 
     @Test
+    fun highlightMapLiteralHtml() {
+        val text = """
+            val base = { a: 1, b: }
+            val m = { "a": 1, b: , ...base, }
+        """.trimIndent()
+        val html = SiteHighlight.renderHtml(text)
+        // Curly braces and commas are punctuation
+        assertContains(html, "<span class=\"hl-punc\">{</span>")
+        assertContains(html, "<span class=\"hl-punc\">}</span>")
+        assertTrue(html.contains("hl-punc") && html.contains(","), "comma should be punctuation")
+        // Colon after key is punctuation
+        assertContains(html, "<span class=\"hl-punc\">:</span>")
+        // Spread operator present
+        assertContains(html, "<span class=\"hl-op\">...</span>")
+        // String key and identifier key appear
+        assertContains(html, "<span class=\"hl-str\">\"a\"</span>")
+        assertContains(html, "<span class=\"hl-id\">b</span>")
+    }
+
+    @Test
     fun renderHtmlContainsCorrectClasses() {
         val text = "assertEquals( [9,10], r.takeLast(2).toList() )"
         val html = SiteHighlight.renderHtml(text)

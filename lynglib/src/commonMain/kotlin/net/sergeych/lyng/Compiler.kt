@@ -572,7 +572,15 @@ class Compiler(
                             blockArgument = true,
                             isOptional = t.type == Token.Type.NULL_COALESCE_BLOCKINVOKE
                         )
-                    } ?: parseLambdaExpression()
+                    } ?: run {
+                        // Disambiguate between lambda and map literal.
+                        // Heuristic: if there is a top-level '->' before the closing '}', it's a lambda.
+                        // Otherwise, try to parse a map literal; if it fails, fall back to lambda.
+                        val isLambda = hasTopLevelArrowBeforeRbrace()
+                        if (!isLambda) {
+                            parseMapLiteralOrNull() ?: parseLambdaExpression()
+                        } else parseLambdaExpression()
+                    }
                 }
 
                 Token.Type.RBRACKET, Token.Type.RPAREN -> {
@@ -671,6 +679,115 @@ class Compiler(
             }
 
             else -> throw ScriptError(t.pos, "Unknown scope operation: ${t.value}")
+        }
+    }
+
+    /**
+     * Look ahead from current position (right after a leading '{') to find a top-level '->' before the matching '}'.
+     * Returns true if such arrow is found, meaning the construct should be parsed as a lambda.
+     * The scanner respects nested braces depth; only depth==1 arrows count.
+     * The current cursor is restored on exit.
+     */
+    private fun hasTopLevelArrowBeforeRbrace(): Boolean {
+        val start = cc.savePos()
+        var depth = 1
+        var found = false
+        while (cc.hasNext()) {
+            val t = cc.next()
+            when (t.type) {
+                Token.Type.LBRACE -> depth++
+                Token.Type.RBRACE -> {
+                    depth--
+                    if (depth == 0) break
+                }
+                Token.Type.ARROW -> if (depth == 1) {
+                    found = true
+                    // Do not break; we still restore position below
+                }
+                else -> {}
+            }
+        }
+        cc.restorePos(start)
+        return found
+    }
+
+    /**
+     * Attempt to parse a map literal starting at the position after '{'.
+     * Returns null if the sequence does not look like a map literal (e.g., empty or first token is not STRING/ID/ELLIPSIS),
+     * in which case caller should treat it as a lambda/block.
+     * When it recognizes a map literal, it commits and throws on syntax errors.
+     */
+    private suspend fun parseMapLiteralOrNull(): ObjRef? {
+        val startAfterLbrace = cc.savePos()
+        // Peek first non-ws token to decide whether it's likely a map literal
+        val first = cc.peekNextNonWhitespace()
+        // Empty {} should NOT be taken as a map literal to preserve block/lambda semantics
+        if (first.type == Token.Type.RBRACE) return null
+        if (first.type !in listOf(Token.Type.STRING, Token.Type.ID, Token.Type.ELLIPSIS)) return null
+
+        // Commit to map literal parsing
+        cc.skipWsTokens()
+        val entries = mutableListOf<net.sergeych.lyng.obj.MapLiteralEntry>()
+        val usedKeys = mutableSetOf<String>()
+
+        while (true) {
+            // Skip whitespace/comments/newlines between entries
+            val t0 = cc.nextNonWhitespace()
+            when (t0.type) {
+                Token.Type.RBRACE -> {
+                    // end of map literal
+                    return net.sergeych.lyng.obj.MapLiteralRef(entries)
+                }
+                Token.Type.COMMA -> {
+                    // allow stray commas; continue
+                    continue
+                }
+                Token.Type.ELLIPSIS -> {
+                    // spread element: ... expression
+                    val expr = parseExpressionLevel() ?: throw ScriptError(t0.pos, "invalid map spread: expecting expression")
+                    entries += net.sergeych.lyng.obj.MapLiteralEntry.Spread(expr)
+                    // Expect comma or '}' next; loop will handle
+                }
+                Token.Type.STRING, Token.Type.ID -> {
+                    val isIdKey = t0.type == Token.Type.ID
+                    val keyName = if (isIdKey) t0.value else t0.value
+                    // After key we require ':'
+                    cc.skipWsTokens()
+                    val colon = cc.next()
+                    if (colon.type != Token.Type.COLON) {
+                        // Not a map literal after all; backtrack and signal null
+                        cc.restorePos(startAfterLbrace)
+                        return null
+                    }
+                    // Check for shorthand (only for id-keys): if next non-ws is ',' or '}'
+                    cc.skipWsTokens()
+                    val next = cc.next()
+                    if ((next.type == Token.Type.COMMA || next.type == Token.Type.RBRACE)) {
+                        if (!isIdKey) throw ScriptError(next.pos, "missing value after string-literal key '$keyName'")
+                        // id: shorthand; value is the variable with the same name
+                        // rewind one step if RBRACE so outer loop can handle it
+                        if (next.type == Token.Type.RBRACE) cc.previous()
+                        // Duplicate detection for literals only
+                        if (!usedKeys.add(keyName)) throw ScriptError(t0.pos, "duplicate key '$keyName'")
+                        entries += net.sergeych.lyng.obj.MapLiteralEntry.Named(keyName, net.sergeych.lyng.obj.LocalVarRef(keyName, t0.pos))
+                        // If the token was COMMA, the loop continues; if it's RBRACE, next iteration will end
+                    } else {
+                        // There is a value expression: push back token and parse expression
+                        cc.previous()
+                        val valueRef = parseExpressionLevel() ?: throw ScriptError(colon.pos, "expecting map entry value")
+                        if (!usedKeys.add(keyName)) throw ScriptError(t0.pos, "duplicate key '$keyName'")
+                        entries += net.sergeych.lyng.obj.MapLiteralEntry.Named(keyName, valueRef)
+                        // After value, allow optional comma; do not require it
+                        cc.skipTokenOfType(Token.Type.COMMA, isOptional = true)
+                        // The loop will continue and eventually see '}'
+                    }
+                }
+                else -> {
+                    // Not a map literal; backtrack and let caller treat as lambda
+                    cc.restorePos(startAfterLbrace)
+                    return null
+                }
+            }
         }
     }
 

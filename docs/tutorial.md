@@ -676,14 +676,63 @@ Please see [Set] for detailed description.
 
 # Maps
 
-Maps are unordered collection of key-value pairs, where keys are unique. See [Map] for details. Map also
-are [Iterable]:
+Maps are unordered collections of key-value pairs, where keys are unique. Maps are also [Iterable].
 
-    val m = Map( "foo" => 77, "bar" => "buzz" )
-    assertEquals( m["foo"], 77 )
+You can create them either with the classic constructor (still supported):
+
+    val old = Map( "foo" => 77, "bar" => "buzz" )
+    assertEquals( old["foo"], 77 )
     >>> void
 
-Please see [Map] reference for detailed description on using Maps.
+…or with map literals, which are often more convenient:
+
+    val x = 10
+    val y = 10
+    val m = { "a": 1, x: x * 2, y: }
+    // identifier keys become strings; `y:` is shorthand for y: y
+    assertEquals(1, m["a"])      // string-literal key
+    assertEquals(20, m["x"])     // identifier key
+    assertEquals(10, m["y"])     // shorthand
+    >>> void
+
+Map literals support trailing commas for nicer diffs:
+
+    val m2 = {
+        "a": 1,
+        b: 2,
+    }
+    assertEquals(1, m2["a"]) 
+    assertEquals(2, m2["b"]) 
+    >>> void
+
+You can spread other maps inside a literal with `...`. Items merge left-to-right and the rightmost value wins:
+
+    val base = { a: 1, b: 2 }
+    val merged = { a: 0, ...base, b: 3, c: 4 }
+    assertEquals(1, merged["a"])  // base overwrites a:0
+    assertEquals(3, merged["b"])  // literal overwrites spread
+    assertEquals(4, merged["c"])  // new key
+    >>> void
+
+Merging also works with `+` and `+=`, and you can combine maps and entries conveniently:
+
+    val m3 = { "a": 10 } + ("b" => 20)
+    assertEquals(10, m3["a"]) 
+    assertEquals(20, m3["b"]) 
+
+    var m4 = ("x" => 1) + ("y" => 2)      // entry + entry → Map
+    m4 += { z: 3 }                          // merge literal
+    assertEquals(1, m4["x"]) 
+    assertEquals(2, m4["y"]) 
+    assertEquals(3, m4["z"]) 
+    >>> void
+
+Notes:
+- Access keys with brackets: `m["key"]`. There is no `m.key` sugar.
+- Empty `{}` remains a block/lambda; use `Map()` to create an empty map.
+- When you need computed (expression) keys or non-string keys, use `Map(...)` constructor with entries, e.g. `Map( ("a" + "b") => 1 )`, then merge with a literal if needed: `{ base: } + (computedKey => 42)`.
+
+Please see the [Map] reference for a deeper guide.
 
 # Flow control operators
 

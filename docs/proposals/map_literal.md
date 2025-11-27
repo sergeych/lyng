@@ -1,82 +1,93 @@
-Note for AI. please ignore this file until this remark is removed.
 
-# Map literals proposal
+# Map literals — refined proposal
 
-Note to the AI: please ignore this file until this note is removed.
+Implement JavaScript-like literals for maps. The syntax and semantics align with named arguments in function calls, but map literals are expressions that construct `Map` values.
 
-Implement javascript-like literals for maps. It uses the similar syntax already adopted for named arguments in function calls so it should be organic and familiar, as the purpose is similar.
+Keys can be either:
+- string literals: `{ "some key": value }`, or
+- identifiers: `{ name: expr }`, where the key becomes the string `"name"`.
 
-String literal keys
+Identifier shorthand inside map literals is supported:
+- `{ name: }` desugars to `{ "name": name }`.
 
-```lyng
-    val m = { a: "foo", b: "bar" }
-    assertEqual(m.a, "foo")
-    assertEqual(m.b, "bar")
-```
+Property access sugar is not provided for maps: use bracket access only, e.g. `m["a"]`, not `m.a`.
 
-The map literal is a map with keys that are string literals only. This is important. In a relatively rare case when keys are calculated, or extravagant but still possible case when keys are of different types, literal could be combined with "=>":
+Examples:
 
 ```lyng
-    val k1 = "bar"
-    val m = { "foo": 123 } + k1 => "buzz"
-    // this is same as Map("foo" => 123) + Map("bar" => k2) but can be optimized by compiler
-    assertEqual(m["foo"], 123)
-    assertEqual(m["bar"], "buzz")
+val x = 2
+val m = { "a": 1, x: x*10, y: }
+assertEquals(1, m["a"])      // string-literal key
+assertEquals(20, m["x"])     // identifier key
+assertEquals(2, m["y"])      // identifier shorthand
 ```
 
-The lambda syntax is different, it can start with the `map_lteral_start` above, it should produce compile time error, so we can add map literals of this sort.
+Spreads (splats) in map literals are allowed and merged left-to-right with “rightmost wins” semantics:
 
-Also, we will allow splats in map literals:
-
-```
-    val m = { foo: "bar", ...{bar: "buzz"} }
-    assertEquals("bar",m["foo"])
-    assertEquals("buzz", m["bar"])
-```
-
-When the literal argument and splats are used together, they must be evaluated left-to-right with allowed overwriting
-between named elements and splats, allowing any combination and multiple splats:
-
-```
-    val m = { foo: "bar", ...{bar: "buzz"}, ...{foo: "foobar"}, bar: "bar" }
-    assertEquals("foobar",m["foo"])
-    assertEquals("bar", m["bar"])
+```lyng
+val base = { a: 1, b: 2 }
+val m = { a: 0, ...base, b: 3, c: 4 }
+assertEquals(1, m["a"])  // base overwrites a:0
+assertEquals(3, m["b"])  // literal overwrites spread
+assertEquals(4, m["c"])  // new key
 ```
 
-Still we disallow duplicating _string literals_:
+Trailing commas are allowed (optional):
 
-```
-    // this is an compile-time exception:
-    { foo: 1, bar: 2, foo: 3 }
-```
-
-Special syntax allows to insert key-value pair from the variable which name should be the key, and content is value:
-
-```
-    val foo = "bar"
-    val bar = "buzz"
-    assertEquals( {foo: "bar", bar: "buzz"}, { *foo, *bar } )
+```lyng
+val m = {
+  "a": 1,
+  b: 2,
+  ...other,
+}
 ```
 
-Question to the AI: maybe better syntax than asterisk for that case?
+Duplicate keys among literal entries (including identifier shorthand) are a compile-time error:
 
-So, summarizing, overwriting/duplication rules are:
-
-- string literals can't duplicate 
-- splats add or update content, effectively overwrite preceding content,
-- string literals overwrite content received from preceding splats (as no duplication string literal keys allowed)
-- the priority and order is left-to-right, rightmost wins.
-- var inclusion is treated as form of the literal
-
-This approach resolves the ambiguity from lambda syntax, as
-
-```ebnf
-    ws = zero or more whitespace characters including newline
-    map_literal start = "{", ws, (s1 | s2 | s3)
-    s1 = string_literal, ws, ":", ws, expression
-    s2 = "...", string_literal
-    s3 = "*", string_literal
+```lyng
+{ foo: 1, "foo": 2 }   // error: duplicate key "foo"
+{ foo:, foo: 2 }        // error: duplicate key "foo"
 ```
 
-as we can see, `map_literal_start` is not a valid lambda beginning so it is not create ambiguity.
+Spreads are evaluated at runtime. Overlaps from spreads are resolved by last write wins. If a spread is not a map, or yields a map with non-string keys, it’s a runtime error.
+
+Merging with `+`/`+=` and entries:
+
+```lyng
+("1" => 10) + ("2" => 20)     // Map("1"=>10, "2"=>20)
+{ "1": 10 } + ("2" => 20)     // same
+{ "1": 10 } + { "2": 20 }    // same
+
+var m = { "a": 1 }
+m += ("b" => 2)                 // m = { "a":1, "b":2 }
+```
+
+Rightmost wins on duplicates consistently across spreads and merges. All map merging operations require string keys; encountering a non-string key during merge is a runtime error.
+
+Empty map literal `{}` is not supported to avoid ambiguity with blocks/lambdas. Use `Map()` for an empty map.
+
+Lambda disambiguation
+- A `{ ... }` with typed lambda parameters must have a top-level `->` in its header. The compiler disambiguates by looking for a top-level `->`. If none is found, it attempts to parse a map literal; if that fails, it is parsed as a lambda or block.
+
+Grammar (EBNF)
+
+```
+ws                    = zero or more whitespace (incl. newline/comments)
+map_literal           = '{' ws map_entries ws '}'
+map_entries           = map_entry ( ws ',' ws map_entry )* ( ws ',' )?
+map_entry             = map_key ws ':' ws map_value_opt
+                      | '...' ws expression
+map_key               = string_literal | ID
+map_value_opt         = expression | ε   // ε allowed only if map_key is ID
+```
+
+Notes:
+- Identifier shorthand (`id:`) is allowed only for identifiers, not string-literal keys.
+- Spreads accept any expression; at runtime it must yield a `Map` with string keys.
+- Duplicate keys are detected at compile time among literal keys; spreads are merged at runtime with last-wins.
+
+Rationale
+- The `{ name: value }` style is familiar and ergonomic.
+- Disambiguation with lambdas leverages the required `->` in typed lambda headers.
+- Avoiding `m.a` sidesteps method/field shadowing and keeps semantics clear.
 

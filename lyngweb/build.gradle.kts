@@ -56,7 +56,7 @@ kotlin {
                 implementation("org.jetbrains.compose.runtime:runtime:1.9.3")
                 implementation("org.jetbrains.compose.html:html-core:1.9.3")
                 implementation(libs.kotlinx.coroutines.core)
-                implementation(project(":lynglib"))
+                api(project(":lynglib"))
             }
         }
         val jsTest by getting {

@@ -1492,6 +1492,37 @@ class ListLiteralRef(private val entries: List<ListEntry>) : ObjRef {
     }
 }
 
+// --- Map literal support ---
+
+sealed class MapLiteralEntry {
+    data class Named(val key: String, val value: ObjRef) : MapLiteralEntry()
+    data class Spread(val ref: ObjRef) : MapLiteralEntry()
+}
+
+class MapLiteralRef(private val entries: List<MapLiteralEntry>) : ObjRef {
+    override suspend fun get(scope: Scope): ObjRecord {
+        val result = ObjMap(mutableMapOf())
+        for (e in entries) {
+            when (e) {
+                is MapLiteralEntry.Named -> {
+                    val v = if (PerfFlags.RVAL_FASTPATH) e.value.evalValue(scope) else e.value.get(scope).value
+                    result.map[ObjString(e.key)] = v
+                }
+                is MapLiteralEntry.Spread -> {
+                    val m = if (PerfFlags.RVAL_FASTPATH) e.ref.evalValue(scope) else e.ref.get(scope).value
+                    if (m !is ObjMap) scope.raiseIllegalArgument("spread element in map literal must be a Map")
+                    // Enforce string keys for map literals
+                    for ((k, v) in m.map) {
+                        val sKey = k as? ObjString ?: scope.raiseIllegalArgument("spread map must have string keys; got $k")
+                        result.map[sKey] = v
+                    }
+                }
+            }
+        }
+        return result.asReadonly
+    }
+}
+
 /**
  * Range literal: left .. right or left ..< right. Right may be omitted in certain contexts.
  */

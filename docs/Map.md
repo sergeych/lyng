@@ -1,19 +1,22 @@
 # Map
 
-Map is a mutable collection of key-value pars, where keys are unique. Maps could be created with
-constructor or `.toMap` methods. When constructing from a list, each list item must be a [Collection] with exactly 2 elements, for example, a [List].
+Map is a mutable collection of key-value pairs, where keys are unique. You can create maps in two ways:
+- with the constructor `Map(...)` or `.toMap()` helpers; and
+- with map literals using braces: `{ "key": value, id: expr, id: }`.
+
+When constructing from a list, each list item must be a [Collection] with exactly 2 elements, for example, a [List].
 
 Important thing is that maps can't contain `null`: it is used to return from missing elements.
 
-Constructed map instance is of class `Map` and implements `Collection` (and therefore `Iterable`)
+Constructed map instance is of class `Map` and implements `Collection` (and therefore `Iterable`).
 
-    val map = Map( "foo" => 1, "bar" => "buzz" )
-    assert(map is Map)
-    assert(map.size == 2)
-    assert(map is Iterable)
+    val oldForm = Map( "foo" => 1, "bar" => "buzz" )
+    assert(oldForm is Map)
+    assert(oldForm.size == 2)
+    assert(oldForm is Iterable)
     >>> void
 
-Notice usage of the `=>` operator that creates `MapEntry`, which implements also [Collection] of
+Notice usage of the `=>` operator that creates `MapEntry`, which also implements [Collection] of
 two items, first, at index zero, is a key, second, at index 1, is the value. You can use lists too.
 Map keys could be any objects (hashable, e.g. with reasonable hashCode, most of standard types are). You can access elements with indexing operator:
 
@@ -28,6 +31,36 @@ Map keys could be any objects (hashable, e.g. with reasonable hashCode, most of 
     map["foo"] = -1
     assert( map["foo"] == -1)
     >>> void
+
+## Map literals { ... }
+
+Lyng supports JavaScript-like map literals. Keys can be string literals or identifiers, and there is a handy identifier shorthand:
+
+- String key: `{ "a": 1 }`
+- Identifier key: `{ foo: 2 }` is the same as `{ "foo": 2 }`
+- Identifier shorthand: `{ foo: }` is the same as `{ "foo": foo }`
+
+Access uses brackets: `m["a"]`.
+
+    val x = 10
+    val y = 10
+    val m = { "a": 1, x: x * 2, y: }
+    assertEquals(1, m["a"])      // string-literal key
+    assertEquals(20, m["x"])     // identifier key
+    assertEquals(10, m["y"])     // identifier shorthand expands to y: y
+    >>> void
+
+Trailing commas are allowed for nicer diffs and multiline formatting:
+
+    val m = {
+        "a": 1,
+        b: 2,
+    }
+    assertEquals(1, m["a"]) 
+    assertEquals(2, m["b"]) 
+    >>> void
+
+Empty `{}` is reserved for blocks/lambdas; use `Map()` for an empty map.
 
 To remove item from the collection. use `remove`. It returns last removed item or null. Be careful if you 
 hold nulls in the map - this is not a recommended practice when using `remove` returned value. `clear()` 
@@ -109,5 +142,37 @@ is equal.
     // different maps:
     assert( m1 != m3 )
     >>> void
+
+## Spreads and merging
+
+Inside map literals you can spread another map with `...` and items will be merged left-to-right; rightmost wins:
+
+    val base = { a: 1, b: 2 }
+    val m = { a: 0, ...base, b: 3, c: 4 }
+    assertEquals(1, m["a"])  // base overwrites a:0
+    assertEquals(3, m["b"])  // literal overwrites spread
+    assertEquals(4, m["c"])  // new key
+    >>> void
+
+Maps and entries can also be merged with `+` and `+=`:
+
+    val m1 = ("x" => 1) + ("y" => 2)
+    assertEquals(1, m1["x"])
+    assertEquals(2, m1["y"])
+
+    val m2 = { "a": 10 } + ("b" => 20)
+    assertEquals(10, m2["a"])
+    assertEquals(20, m2["b"])
+
+    var m3 = { a: 1 }
+    m3 += ("b" => 2)
+    assertEquals(1, m3["a"])
+    assertEquals(2, m3["b"])
+    >>> void
+
+Notes:
+- Map literals always use string keys (identifier keys are converted to strings).
+- Spreads inside map literals and `+`/`+=` merges require string keys on the right-hand side; this aligns with named-argument splats.
+- When you need computed or non-string keys, use the constructor form `Map(...)` or build entries with `=>` and then merge.
 
 [Collection](Collection.md)

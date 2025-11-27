@@ -75,6 +75,12 @@ class ObjMapEntry(val key: Obj, val value: Obj) : Obj() {
             addFn("size") { 2.toObj() }
         }
     }
+
+    override suspend fun plus(scope: Scope, other: Obj): Obj {
+        // Build a new map starting from this entry, then merge `other`.
+        val result = ObjMap(mutableMapOf(key to value))
+        return result.plus(scope, other)
+    }
 }
 
 class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
@@ -96,7 +102,22 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
         if( other is ObjMap && other.map == map) return 0
         return -1
     }
-    override fun toString(): String = map.toString()
+
+    override suspend fun toString(scope: Scope, calledFromLyng: Boolean): ObjString {
+        val reusult = buildString {
+            append("Map(")
+            var first = true
+            for( (k,v) in map) {
+                if( !first ) append(",")
+                append(k.inspect(scope))
+                append(" => ")
+                append(v.toString(scope).value)
+                first = false
+            }
+            append(")")
+        }
+        return ObjString(reusult)
+    }
 
     override fun hashCode(): Int {
         return map.hashCode()
@@ -185,6 +206,46 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
             addFn("iterator") {
                 ObjKotlinIterator(thisAs<ObjMap>().map.entries.iterator())
             }
+        }
+    }
+
+    // Merge operations
+    override suspend fun plus(scope: Scope, other: Obj): Obj {
+        val result = ObjMap(map.toMutableMap())
+        result.mergeIn(scope, other)
+        return result
+    }
+
+    override suspend fun plusAssign(scope: Scope, other: Obj): Obj {
+        mergeIn(scope, other)
+        return this
+    }
+
+    private suspend fun mergeIn(scope: Scope, other: Obj) {
+        when (other) {
+            is ObjMap -> {
+                // Rightmost wins: copy all entries from `other` over existing ones
+                for ((k, v) in other.map) {
+                    val key = k as? ObjString ?: scope.raiseIllegalArgument("map merge expects string keys; got $k")
+                    map[key] = v
+                }
+            }
+            is ObjMapEntry -> {
+                val key = other.key as? ObjString ?: scope.raiseIllegalArgument("map merge expects string keys; got ${other.key}")
+                map[key] = other.value
+            }
+            is ObjList -> {
+                // Treat as list of map entries
+                for (e in other.list) {
+                    val entry = when (e) {
+                        is ObjMapEntry -> e
+                        else -> scope.raiseIllegalArgument("map can only be merged with MapEntry elements; got $e")
+                    }
+                    val key = entry.key as? ObjString ?: scope.raiseIllegalArgument("map merge expects string keys; got ${entry.key}")
+                    map[key] = entry.value
+                }
+            }
+            else -> scope.raiseIllegalArgument("map can only be merged with Map, MapEntry, or List<MapEntry>")
         }
     }
 }

@@ -80,12 +80,19 @@ import lyng.stdlib
 val data = 1..5 // or [1,2,3,4,5]
 val evens2 = data.filter { it % 2 == 0 }.map { it * it }
 assertEquals([4, 16], evens2)
+
+// Map literal with identifier keys, shorthand, and spread
+val base = { a: 1, b: 2 }
+val patch = { b: 3, c: }
+val m = { "a": 0, ...base, ...patch, d: 4 }
+assertEquals(1, m["a"]) // base overwrites 0
+assertEquals(3, m["b"]) // patch overwrites base
+assertEquals(4, m["d"]) // literal key
 >>> void
 """.trimIndent()
-
-    val codeHtml = "<pre><code>" + htmlEscape(code) + "</code></pre>"
-    Div({ classes("markdown-body") }) {
-        UnsafeRawHtml(highlightLyngHtml(ensureBootstrapCodeBlocks(codeHtml)))
+    val mapHtml = "<pre><code>" + htmlEscape(code) + "</code></pre>"
+    Div({ classes("markdown-body", "mt-3") }) {
+        UnsafeRawHtml(highlightLyngHtml(ensureBootstrapCodeBlocks(mapHtml)))
     }
 
     // Short features list

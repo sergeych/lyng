@@ -17,6 +17,7 @@
 
 import androidx.compose.runtime.*
 import kotlinx.coroutines.launch
+import net.sergeych.lyng.LyngVersion
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.ScriptError
 import net.sergeych.lyngweb.EditorWithOverlay
@@ -134,7 +135,7 @@ fun TryLyngPage() {
 
         // Editor
         Div({ classes("mb-3") }) {
-            Div({ classes("form-label", "fw-semibold") }) { Text("Code") }
+            Div({ classes("form-label", "fw-semibold") }) { Text("Code (v${LyngVersion})") }
             EditorWithOverlay(
                 code = code,
                 setCode = { code = it },
