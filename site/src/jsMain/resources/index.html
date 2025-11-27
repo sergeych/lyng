@@ -146,9 +146,44 @@
       [data-bs-theme="dark"] .hl-lbl  { color: #ffa657; }
       [data-bs-theme="dark"] .hl-dir  { color: #d2a8ff; }
       [data-bs-theme="dark"] .hl-err  { color: #ffa198; text-decoration-color: #ffa198; }
+
+      /* Top-left corner ribbon for version label */
+      .corner-ribbon {
+        position: fixed;
+        /* Place below the fixed navbar (Bootstrap fixed-top ~ z-index: 1030) */
+        z-index: 1020; /* above content, below navbar */
+        top: var(--navbar-offset, 56px);
+        left: 0;
+        width: 162px; /* 10% narrower than 180px */
+        text-align: center;
+        /* Slightly asymmetric padding to visually center text within rotated band (desktop) */
+        /* Nudge text a bit lower on large screens */
+        padding: .42rem 0 .28rem;
+        font-weight: 600;
+        font-size: .75rem; /* make text smaller by default */
+        line-height: 1.1; /* stabilize vertical centering */
+        transform: translate(-52px, 10px) rotate(-45deg);
+        box-shadow: 0 0.25rem 0.5rem rgba(0,0,0,.2);
+        border: 1px solid rgba(0,0,0,.15);
+        pointer-events: none; /* decorative; don't block clicks underneath */
+      }
+      @media (max-width: 576px) {
+        .corner-ribbon {
+          width: 135px; /* 10% narrower than 150px */
+          transform: translate(-50px, 8px) rotate(-45deg);
+          font-size: .7rem; /* even smaller on phones */
+          padding: .32rem 0 .28rem; /* keep mobile text centered too */
+        }
+      }
     </style>
   </head>
   <body>
+    <!-- Top-left version ribbon -->
+    <div class="corner-ribbon bg-danger text-white">
+        <span class="me-3">
+            v1.0.1
+        </span>
+    </div>
     <!-- Fixed top navbar for the whole site -->
     <a href="#root" class="visually-hidden-focusable position-absolute top-0 start-0 m-2 px-2 py-1 bg-body border rounded">Skip to content</a>
     <nav class="navbar navbar-expand-lg bg-body-tertiary fixed-top border-bottom" role="navigation" aria-label="Primary">

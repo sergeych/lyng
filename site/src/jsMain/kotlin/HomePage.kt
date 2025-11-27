@@ -67,6 +67,7 @@ fun HomePage() {
                     I({ classes("bi", "bi-braces", "me-1") })
                     Text("Try Lyng")
                 }
+                // (Telegram button moved to the bottom of the page)
             }
         }
     }
@@ -103,6 +104,19 @@ assertEquals([4, 16], evens2)
                     P({ classes("mb-0", "text-muted") }) { Text(text) }
                 }
             }
+        }
+    }
+
+    // Bottom section with a small Telegram button
+    Div({ classes("text-center", "mt-5", "pb-4") }) {
+        A(attrs = {
+            classes("btn", "btn-outline-primary", "btn-sm")
+            attr("href", "https://t.me/lynglang")
+            attr("target", "_blank")
+            attr("rel", "noopener noreferrer")
+        }) {
+            I({ classes("bi", "bi-telegram", "me-1") })
+            Text("Join our Telegram channel")
         }
     }
 }
