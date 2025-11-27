@@ -141,6 +141,40 @@ tasks.withType<org.gradle.api.tasks.testing.Test> {
         showStandardStreams = true
     }
     maxParallelForks = 1
+
+    // Benchmarks toggle: disabled by default, enable when optimizing locally.
+    // Enable via any of the following:
+    //  - Gradle property:  ./gradlew :lynglib:jvmTest -Pbenchmarks=true
+    //  - JVM system prop:  ./gradlew :lynglib:jvmTest -Dbenchmarks=true
+    //  - Environment var:  BENCHMARKS=true ./gradlew :lynglib:jvmTest
+    val benchmarksEnabled: Boolean = run {
+        val p = (project.findProperty("benchmarks") as String?)?.toBooleanStrictOrNull()
+        val s = System.getProperty("benchmarks")?.lowercase()?.let { it == "true" || it == "1" || it == "yes" }
+        val e = System.getenv("BENCHMARKS")?.lowercase()?.let { it == "true" || it == "1" || it == "yes" }
+        p ?: s ?: e ?: false
+    }
+
+    // Make the flag visible inside tests if they want to branch on it
+    systemProperty("LYNG_BENCHMARKS", benchmarksEnabled.toString())
+
+    if (!benchmarksEnabled) {
+        // Exclude all JVM tests whose class name ends with or contains BenchmarkTest
+        // This keeps CI fast and avoids noisy timing logs by default.
+        filter {
+            excludeTestsMatching("*BenchmarkTest")
+            // Also guard against alternative naming
+            excludeTestsMatching("*Bench*Test")
+            // Exclude A/B performance tests unless explicitly enabled
+            excludeTestsMatching("*ABTest")
+            // Exclude stress/perf soak tests
+            excludeTestsMatching("*Stress*Test")
+            // Exclude allocation profiling tests by default
+            excludeTestsMatching("*AllocationProfileTest")
+        }
+        logger.lifecycle("[tests] Benchmarks are DISABLED. To enable: -Pbenchmarks=true or -Dbenchmarks=true or set BENCHMARKS=true")
+    } else {
+        logger.lifecycle("[tests] Benchmarks are ENABLED: *BenchmarkTest will run")
+    }
 }
 
 //mavenPublishing {
