@@ -1,0 +1,11 @@
+# robots.txt for the Lyng site
+# Basic, safe policy: allow all well-behaved crawlers to access the site.
+
+User-agent: *
+Allow: /
+
+# Optional crawl delay for polite bots (Google ignores this directive)
+Crawl-delay: 5
+
+# Add your sitemap URL once available, e.g.:
+# Sitemap: https://your-domain.example/sitemap.xml

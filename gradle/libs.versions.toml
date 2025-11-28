@@ -20,6 +20,7 @@ mp_bintools = { module = "net.sergeych:mp_bintools", version.ref = "mp_bintools"
 firebase-crashlytics-buildtools = { group = "com.google.firebase", name = "firebase-crashlytics-buildtools", version.ref = "firebaseCrashlyticsBuildtools" }
 okio = { module = "com.squareup.okio:okio", version.ref = "okioVersion" }
 okio-fakefilesystem = { module = "com.squareup.okio:okio-fakefilesystem", version.ref = "okioVersion" }
+okio-nodefilesystem = { module = "com.squareup.okio:okio-nodefilesystem", version.ref = "okioVersion" }
 compiler = { group = "androidx.databinding", name = "compiler", version.ref = "compiler" }
 
 [plugins]

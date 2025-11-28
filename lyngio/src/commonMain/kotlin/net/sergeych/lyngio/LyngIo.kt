@@ -15,27 +15,16 @@
  *
  */
 
-pluginManagement {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
-}
+package net.sergeych.lyngio
 
-dependencyResolutionManagement {
-    repositories {
-        google()
-        mavenCentral()
-        maven("https://maven.universablockchain.com/")
-        maven("https://gitea.sergeych.net/api/packages/SergeychWorks/maven")
-        mavenLocal()
-    }
+/**
+ * LyngIO: foundation for uniform file access APIs across JVM, Native and JS.
+ *
+ * This module depends on `:lynglib` and is configured as a Compose Multiplatform
+ * library, but it does not require Compose at runtime. Actual file system APIs
+ * will be added after we agree on the backend choices (Okio, NodeJS FS, browser VFS).
+ */
+object LyngIoInfo {
+    val name: String = "LyngIO"
+    val version: String = "0.0.1-SNAPSHOT"
 }
-
-rootProject.name = "lyng"
-include(":lynglib")
-include(":lyng")
-include(":site")
-include(":lyngweb")
-include(":lyngio")

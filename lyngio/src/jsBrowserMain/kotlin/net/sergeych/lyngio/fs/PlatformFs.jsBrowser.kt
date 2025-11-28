@@ -15,27 +15,6 @@
  *
  */
 
-pluginManagement {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
-}
+package net.sergeych.lyngio.fs
 
-dependencyResolutionManagement {
-    repositories {
-        google()
-        mavenCentral()
-        maven("https://maven.universablockchain.com/")
-        maven("https://gitea.sergeych.net/api/packages/SergeychWorks/maven")
-        mavenLocal()
-    }
-}
-
-rootProject.name = "lyng"
-include(":lynglib")
-include(":lyng")
-include(":site")
-include(":lyngweb")
-include(":lyngio")
+// Browser-specific actuals are provided in jsMain to avoid duplicate actuals per JS target.

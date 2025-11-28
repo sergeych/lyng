@@ -30,7 +30,9 @@ import net.sergeych.lyng.LyngVersion
 import net.sergeych.lyng.Script
 import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.Source
+import net.sergeych.lyng.io.fs.createFs
 import net.sergeych.lyng.obj.*
+import net.sergeych.lyngio.fs.security.PermitAllAccessPolicy
 import net.sergeych.mp_tools.globalDefer
 import okio.FileSystem
 import okio.Path.Companion.toPath
@@ -62,6 +64,9 @@ val baseScopeDefer = globalDefer {
             exit(requireOnlyArg<ObjInt>().toInt())
             ObjVoid
         }
+        // Install lyng.io.fs module with full access by default for the CLI tool's Scope.
+        // Scripts still need to `import lyng.io.fs` to use Path API.
+        createFs(PermitAllAccessPolicy, this)
     }
 }
 

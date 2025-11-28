@@ -15,27 +15,19 @@
  *
  */
 
-pluginManagement {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
+package net.sergeych.lyngio.fs
+
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import okio.FileSystem
+import okio.fakefilesystem.FakeFileSystem
+
+@Suppress("UnsafeCastFromDynamic")
+private fun systemFsOrNull(): FileSystem? = try {
+    FileSystem.asDynamic().SYSTEM.unsafeCast<FileSystem>()
+} catch (e: Throwable) {
+    null
 }
 
-dependencyResolutionManagement {
-    repositories {
-        google()
-        mavenCentral()
-        maven("https://maven.universablockchain.com/")
-        maven("https://gitea.sergeych.net/api/packages/SergeychWorks/maven")
-        mavenLocal()
-    }
-}
-
-rootProject.name = "lyng"
-include(":lynglib")
-include(":lyng")
-include(":site")
-include(":lyngweb")
-include(":lyngio")
+actual fun platformAsyncFs(): LyngFs = OkioAsyncFs(systemFsOrNull() ?: FakeFileSystem())
+actual val LyngIoDispatcher: CoroutineDispatcher = Dispatchers.Default

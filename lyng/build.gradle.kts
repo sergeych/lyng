@@ -57,6 +57,9 @@ kotlin {
             dependencies {
                 implementation(kotlin("stdlib-common"))
                 implementation(project(":lynglib"))
+                // Provide Lyng FS module to the CLI tool so it can install
+                // filesystem access into the execution Scope by default.
+                implementation(project(":lyngio"))
                 implementation(libs.okio)
                 implementation(libs.clikt)
                 implementation(kotlin("stdlib-common"))
@@ -70,6 +73,12 @@ kotlin {
                 implementation(kotlin("test-annotations-common"))
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.okio.fakefilesystem)
+            }
+        }
+        val jvmTest by getting {
+            dependencies {
+                implementation(kotlin("test"))
+                implementation(kotlin("test-junit"))
             }
         }
 //        val nativeMain by getting {

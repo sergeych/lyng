@@ -15,27 +15,11 @@
  *
  */
 
-pluginManagement {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
-}
+package net.sergeych.lyngio.fs
 
-dependencyResolutionManagement {
-    repositories {
-        google()
-        mavenCentral()
-        maven("https://maven.universablockchain.com/")
-        maven("https://gitea.sergeych.net/api/packages/SergeychWorks/maven")
-        mavenLocal()
-    }
-}
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import okio.fakefilesystem.FakeFileSystem
 
-rootProject.name = "lyng"
-include(":lynglib")
-include(":lyng")
-include(":site")
-include(":lyngweb")
-include(":lyngio")
+actual fun platformAsyncFs(): LyngFs = OkioAsyncFs(FakeFileSystem())
+actual val LyngIoDispatcher: CoroutineDispatcher = Dispatchers.Default

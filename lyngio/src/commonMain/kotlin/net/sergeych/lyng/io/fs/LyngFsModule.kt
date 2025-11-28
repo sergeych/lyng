@@ -1,0 +1,473 @@
+/*
+ * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+/*
+ * Lyng FS module installer and bindings
+ */
+
+package net.sergeych.lyng.io.fs
+
+import net.sergeych.lyng.ModuleScope
+import net.sergeych.lyng.Scope
+import net.sergeych.lyng.obj.*
+import net.sergeych.lyng.pacman.ImportManager
+import net.sergeych.lyngio.fs.LyngFS
+import net.sergeych.lyngio.fs.LyngFs
+import net.sergeych.lyngio.fs.LyngPath
+import net.sergeych.lyngio.fs.security.AccessDeniedException
+import net.sergeych.lyngio.fs.security.FsAccessPolicy
+import net.sergeych.lyngio.fs.security.LyngFsSecured
+import okio.Path.Companion.toPath
+
+/**
+ * Install Lyng module `lyng.io.fs` into the given scope's ImportManager.
+ * Returns true if installed, false if it was already registered in this manager.
+ */
+fun createFsModule(policy: FsAccessPolicy, scope: Scope): Boolean =
+    createFsModule(policy, scope.importManager)
+
+// Alias as requested earlier in discussions
+fun createFs(policy: FsAccessPolicy, scope: Scope): Boolean = createFsModule(policy, scope)
+
+/** Same as [createFsModule] but with explicit [ImportManager]. */
+fun createFsModule(policy: FsAccessPolicy, manager: ImportManager): Boolean {
+    val name = "lyng.io.fs"
+    // Avoid re-registering in this ImportManager
+    if (manager.packageNames.contains(name)) return false
+
+    manager.addPackage(name) { module ->
+        buildFsModule(module, policy)
+    }
+    return true
+}
+
+// Alias overload for ImportManager
+fun createFs(policy: FsAccessPolicy, manager: ImportManager): Boolean = createFsModule(policy, manager)
+
+// --- Module builder ---
+
+private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
+    // Per-module secured FS, captured by all factories and methods
+    val base: LyngFs = LyngFS.system()
+    val secured = LyngFsSecured(base, policy)
+
+    // Path class bound to this module
+    val pathType = object : ObjClass("Path") {
+        override suspend fun callOn(scope: Scope): Obj {
+            val arg = scope.requireOnlyArg<ObjString>()
+            val str = arg.value
+            return ObjPath(this, secured, str.toPath())
+        }
+    }.apply {
+        addFn("name") {
+            val self = thisAs<ObjPath>()
+            self.path.name.toObj()
+        }
+        addFn("parent") {
+            val self = thisAs<ObjPath>()
+            self.path.parent?.let {
+                ObjPath( this@apply, self.secured, it)
+            } ?: ObjNull
+        }
+        addFn("segments") {
+            val self = thisAs<ObjPath>()
+            ObjList(self.path.segments.map { ObjString(it) }.toMutableList())
+        }
+        // exists(): Bool
+        addFn("exists") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                (self.secured.exists(self.path)).toObj()
+            }
+        }
+        // isFile(): Bool — cached metadata
+        addFn("isFile") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                self.ensureMetadata().let { ObjBool(it.isRegularFile) }
+            }
+        }
+        // isDirectory(): Bool — cached metadata
+        addFn("isDirectory") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                self.ensureMetadata().let { ObjBool(it.isDirectory) }
+            }
+        }
+        // size(): Int? — null when unavailable
+        addFn("size") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                val m = self.ensureMetadata()
+                m.size?.let { ObjInt(it) } ?: ObjNull
+            }
+        }
+        // createdAt(): Instant? — Lyng Instant, null when unavailable
+        addFn("createdAt") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                val m = self.ensureMetadata()
+                m.createdAtMillis?.let { ObjInstant(kotlinx.datetime.Instant.fromEpochMilliseconds(it)) } ?: ObjNull
+            }
+        }
+        // createdAtMillis(): Int? — milliseconds since epoch or null
+        addFn("createdAtMillis") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                val m = self.ensureMetadata()
+                m.createdAtMillis?.let { ObjInt(it) } ?: ObjNull
+            }
+        }
+        // modifiedAt(): Instant? — Lyng Instant, null when unavailable
+        addFn("modifiedAt") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                val m = self.ensureMetadata()
+                m.modifiedAtMillis?.let { ObjInstant(kotlinx.datetime.Instant.fromEpochMilliseconds(it)) } ?: ObjNull
+            }
+        }
+        // modifiedAtMillis(): Int? — milliseconds since epoch or null
+        addFn("modifiedAtMillis") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                val m = self.ensureMetadata()
+                m.modifiedAtMillis?.let { ObjInt(it) } ?: ObjNull
+            }
+        }
+        // list(): List<Path>
+        addFn("list") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                val items = self.secured.list(self.path).map { ObjPath(self.objClass, self.secured, it) }
+                ObjList(items.toMutableList())
+            }
+        }
+        // readBytes(): Buffer
+        addFn("readBytes") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                val bytes = self.secured.readBytes(self.path)
+                ObjBuffer(bytes.asUByteArray())
+            }
+        }
+        // writeBytes(bytes: Buffer)
+        addFn("writeBytes") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                val buf = requiredArg<ObjBuffer>(0)
+                self.secured.writeBytes(self.path, buf.byteArray.asByteArray(), append = false)
+                ObjVoid
+            }
+        }
+        // appendBytes(bytes: Buffer)
+        addFn("appendBytes") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                val buf = requiredArg<ObjBuffer>(0)
+                self.secured.writeBytes(self.path, buf.byteArray.asByteArray(), append = true)
+                ObjVoid
+            }
+        }
+        // readUtf8(): String
+        addFn("readUtf8") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                self.secured.readUtf8(self.path).toObj()
+            }
+        }
+        // writeUtf8(text: String)
+        addFn("writeUtf8") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                val text = requireOnlyArg<ObjString>().value
+                self.secured.writeUtf8(self.path, text, append = false)
+                ObjVoid
+            }
+        }
+        // appendUtf8(text: String)
+        addFn("appendUtf8") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                val text = requireOnlyArg<ObjString>().value
+                self.secured.writeUtf8(self.path, text, append = true)
+                ObjVoid
+            }
+        }
+        // metadata(): Map
+        addFn("metadata") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                val m = self.secured.metadata(self.path)
+                ObjMap(mutableMapOf(
+                    ObjString("isFile") to ObjBool(m.isRegularFile),
+                    ObjString("isDirectory") to ObjBool(m.isDirectory),
+                    ObjString("size") to (m.size?.toLong() ?: 0L).toObj(),
+                    ObjString("createdAtMillis") to ((m.createdAtMillis ?: 0L)).toObj(),
+                    ObjString("modifiedAtMillis") to ((m.modifiedAtMillis ?: 0L)).toObj(),
+                    ObjString("isSymlink") to ObjBool(m.isSymlink),
+                ))
+            }
+        }
+        // mkdirs(mustCreate: Bool=false)
+        addFn("mkdirs") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                val mustCreate = args.list.getOrNull(0)?.toBool() ?: false
+                self.secured.createDirectories(self.path, mustCreate)
+                ObjVoid
+            }
+        }
+        // move(to: Path|String, overwrite: Bool=false)
+        addFn("move") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                val toPath = parsePathArg(this, self, requiredArg<Obj>(0))
+                val overwrite = args.list.getOrNull(1)?.toBool() ?: false
+                self.secured.move(self.path, toPath, overwrite)
+                ObjVoid
+            }
+        }
+        // delete(mustExist: Bool=false, recursively: Bool=false)
+        addFn("delete") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                val mustExist = args.list.getOrNull(0)?.toBool() ?: false
+                val recursively = args.list.getOrNull(1)?.toBool() ?: false
+                self.secured.delete(self.path, mustExist, recursively)
+                ObjVoid
+            }
+        }
+        // copy(to: Path|String, overwrite: Bool=false)
+        addFn("copy") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                val toPath = parsePathArg(this, self, requiredArg<Obj>(0))
+                val overwrite = args.list.getOrNull(1)?.toBool() ?: false
+                self.secured.copy(self.path, toPath, overwrite)
+                ObjVoid
+            }
+        }
+        // glob(pattern: String): List<Path>
+        addFn("glob") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                val pattern = requireOnlyArg<ObjString>().value
+                val matches = self.secured.glob(self.path, pattern)
+                ObjList(matches.map { ObjPath(self.objClass, self.secured, it) }.toMutableList())
+            }
+        }
+
+        // --- streaming readers (initial version: chunk from whole content, API stable) ---
+
+        // readChunks(size: Int = 65536) -> Iterator<Buffer>
+        addFn("readChunks") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                val size = args.list.getOrNull(0)?.toInt() ?: 65536
+                val bytes = self.secured.readBytes(self.path)
+                ObjFsBytesIterator(bytes, size)
+            }
+        }
+
+        // readUtf8Chunks(size: Int = 65536) -> Iterator<String>
+        addFn("readUtf8Chunks") {
+            fsGuard {
+                val self = this.thisObj as ObjPath
+                val size = args.list.getOrNull(0)?.toInt() ?: 65536
+                val text = self.secured.readUtf8(self.path)
+                ObjFsStringChunksIterator(text, size)
+            }
+        }
+
+        // lines() -> Iterator<String>, implemented via readUtf8Chunks
+        addFn("lines") {
+            fsGuard {
+                val chunkIt = thisObj.invokeInstanceMethod(this, "readUtf8Chunks")
+                ObjFsLinesIterator(chunkIt)
+            }
+        }
+    }
+
+    // Export into the module scope
+    module.addConst("Path", pathType)
+    // Alias as requested (Path(s) style)
+    module.addConst("Paths", pathType)
+}
+
+// --- Helper classes and utilities ---
+
+private fun parsePathArg(scope: Scope, self: ObjPath, arg: Obj): LyngPath {
+    return when (arg) {
+        is ObjString -> arg.value.toPath()
+        is ObjPath -> arg.path
+        else -> scope.raiseIllegalArgument("expected Path or String argument")
+    }
+}
+
+// Map Fs access denials to Lyng runtime exceptions for script-friendly errors
+private suspend inline fun Scope.fsGuard(crossinline block: suspend () -> Obj): Obj {
+    return try {
+        block()
+    } catch (e: AccessDeniedException) {
+        raiseError(ObjIllegalOperationException(this, e.reasonDetail ?: "access denied"))
+    }
+}
+
+/** Kotlin-side instance backing the Lyng class `Path`. */
+class ObjPath(
+    private val klass: ObjClass,
+    val secured: LyngFs,
+    val path: LyngPath,
+) : Obj() {
+    // Cache for metadata to avoid repeated FS calls within the same object instance usage
+    private var _metadata: net.sergeych.lyngio.fs.LyngMetadata? = null
+
+    override val objClass: ObjClass get() = klass
+    override fun toString(): String = path.toString()
+
+    suspend fun ensureMetadata(): net.sergeych.lyngio.fs.LyngMetadata {
+        val cached = _metadata
+        if (cached != null) return cached
+        val m = secured.metadata(path)
+        _metadata = m
+        return m
+    }
+}
+
+/** Iterator over byte chunks as Buffers. */
+class ObjFsBytesIterator(
+    private val data: ByteArray,
+    private val chunkSize: Int,
+) : Obj() {
+    private var pos = 0
+
+    override val objClass: ObjClass = BytesIteratorType
+
+    companion object {
+        val BytesIteratorType = object : ObjClass("BytesIterator", ObjIterator) {
+            init {
+                // make it usable in for-loops
+                addFn("iterator") { thisObj }
+                addFn("hasNext") {
+                    val self = thisAs<ObjFsBytesIterator>()
+                    (self.pos < self.data.size).toObj()
+                }
+                addFn("next") {
+                    val self = thisAs<ObjFsBytesIterator>()
+                    if (self.pos >= self.data.size) raiseIllegalState("iterator exhausted")
+                    val end = minOf(self.pos + self.chunkSize, self.data.size)
+                    val chunk = self.data.copyOfRange(self.pos, end)
+                    self.pos = end
+                    ObjBuffer(chunk.asUByteArray())
+                }
+                addFn("cancelIteration") {
+                    val self = thisAs<ObjFsBytesIterator>()
+                    self.pos = self.data.size
+                    ObjVoid
+                }
+            }
+        }
+    }
+}
+
+/** Iterator over utf-8 text chunks (character-counted chunks). */
+class ObjFsStringChunksIterator(
+    private val text: String,
+    private val chunkChars: Int,
+) : Obj() {
+    private var pos = 0
+
+    override val objClass: ObjClass = StringChunksIteratorType
+
+    companion object {
+        val StringChunksIteratorType = object : ObjClass("StringChunksIterator", ObjIterator) {
+            init {
+                // make it usable in for-loops
+                addFn("iterator") { thisObj }
+                addFn("hasNext") {
+                    val self = thisAs<ObjFsStringChunksIterator>()
+                    (self.pos < self.text.length).toObj()
+                }
+                addFn("next") {
+                    val self = thisAs<ObjFsStringChunksIterator>()
+                    if (self.pos >= self.text.length) raiseIllegalState("iterator exhausted")
+                    val end = minOf(self.pos + self.chunkChars, self.text.length)
+                    val chunk = self.text.substring(self.pos, end)
+                    self.pos = end
+                    ObjString(chunk)
+                }
+                addFn("cancelIteration") { ObjVoid }
+            }
+        }
+    }
+}
+
+/** Iterator that yields lines using an underlying chunks iterator. */
+class ObjFsLinesIterator(
+    private val chunksIterator: Obj,
+) : Obj() {
+    private var buffer: String = ""
+    private var exhausted = false
+
+    override val objClass: ObjClass = LinesIteratorType
+
+    companion object {
+        val LinesIteratorType = object : ObjClass("LinesIterator", ObjIterator) {
+            init {
+                // make it usable in for-loops
+                addFn("iterator") { thisObj }
+                addFn("hasNext") {
+                    val self = thisAs<ObjFsLinesIterator>()
+                    self.ensureBufferFilled(this)
+                    (self.buffer.isNotEmpty() || !self.exhausted).toObj()
+                }
+                addFn("next") {
+                    val self = thisAs<ObjFsLinesIterator>()
+                    self.ensureBufferFilled(this)
+                    if (self.buffer.isEmpty() && self.exhausted) raiseIllegalState("iterator exhausted")
+                    val idx = self.buffer.indexOf('\n')
+                    val line = if (idx >= 0) {
+                        val l = self.buffer.substring(0, idx)
+                        self.buffer = self.buffer.substring(idx + 1)
+                        l
+                    } else {
+                        // last line without trailing newline
+                        val l = self.buffer
+                        self.buffer = ""
+                        self.exhausted = true
+                        l
+                    }
+                    ObjString(line)
+                }
+                addFn("cancelIteration") { ObjVoid }
+            }
+        }
+    }
+
+    private suspend fun ensureBufferFilled(scope: Scope) {
+        if (buffer.contains('\n') || exhausted) return
+        // Pull next chunk from the underlying iterator
+        val it = chunksIterator.invokeInstanceMethod(scope, "iterator")
+        val hasNext = it.invokeInstanceMethod(scope, "hasNext").toBool()
+        if (!hasNext) {
+            exhausted = true
+            return
+        }
+        val next = it.invokeInstanceMethod(scope, "next")
+        buffer += next.toString()
+    }
+}

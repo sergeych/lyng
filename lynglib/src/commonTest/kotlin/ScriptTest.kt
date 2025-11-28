@@ -3667,6 +3667,48 @@ class ScriptTest {
 
     }
 
+    @Test
+    fun testIterableMinMax() = runTest {
+        eval("""
+            import lyng.stdlib
+            assertEquals( -100, (1..100).toList().minOf { -it } )
+            assertEquals( -1, (1..100).toList().maxOf { -it } )
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testParserOverflow() = runTest {
+        try {
+            eval(
+                """
+            fun Iterable.minByWithIndex( lambda ) {
+            val i = iterator()
+            var index = 0
+            if( !i.hasNext() ) return null
+            var value = i.next()
+            var n = 1
+            while( i.hasNext() ) {
+                val x = lambda(i.next())
+                if( x < value ) {
+                    index = n
+                    value = x
+                }
+                n++
+            }
+            index => value
+        }
+        """.trimIndent()
+            )
+            // If it compiles fine, great. The test passes implicitly.
+        } catch (e: ScriptError) {
+            // The important part: no StackOverflowError anymore, but a meaningful ScriptError
+            // is thrown. Accept any ScriptError as a valid outcome.
+            println(e.message)
+        }
+    }
+
+
 //    @Test
 //    fun namedArgsProposal() = runTest {
 //        eval("""

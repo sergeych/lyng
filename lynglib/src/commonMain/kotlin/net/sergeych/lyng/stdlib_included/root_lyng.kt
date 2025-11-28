@@ -14,8 +14,8 @@
  * limitations under the License.
  *
  */
-
 package net.sergeych.lyng.stdlib_included
+
 internal val rootLyng = """
 package lyng.stdlib
     
@@ -121,6 +121,26 @@ fun Iterable.sumOf(f) {
         result
     }
     else null
+}
+
+fun Iterable.minOf( lambda ) {
+val i = iterator()
+    var minimum = lambda( i.next() )
+    while( i.hasNext() ) {
+        val x = lambda(i.next())
+        if( x < minimum ) minimum = x
+    }
+    minimum
+}
+
+fun Iterable.maxOf( lambda ) {
+    val i = iterator()
+    var maximum = lambda( i.next() )
+    while( i.hasNext() ) {
+        val x = lambda(i.next())
+        if( x > maximum ) maximum = x
+    }
+    maximum
 }
 
 fun Iterable.sorted() {

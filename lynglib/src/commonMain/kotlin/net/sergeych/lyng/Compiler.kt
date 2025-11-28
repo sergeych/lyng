@@ -494,9 +494,25 @@ class Compiler(
                     when (t.value) {
                         in stopKeywords -> {
                             if (operand != null) throw ScriptError(t.pos, "unexpected keyword")
-                            cc.previous()
-                            val s = parseStatement() ?: throw ScriptError(t.pos, "Expecting valid statement")
-                            operand = StatementRef(s)
+                            // Allow certain statement-like constructs to act as expressions
+                            // when they appear in expression position (e.g., `if (...) ... else ...`).
+                            // Other keywords should be handled by the outer statement parser.
+                            when (t.value) {
+                                "if" -> {
+                                    val s = parseIfStatement()
+                                    operand = StatementRef(s)
+                                }
+                                "when" -> {
+                                    val s = parseWhenStatement()
+                                    operand = StatementRef(s)
+                                }
+                                else -> {
+                                    // Do not consume the keyword as part of a term; backtrack
+                                    // and return null so outer parser handles it.
+                                    cc.previous()
+                                    return null
+                                }
+                            }
                         }
 
                         "else", "break", "continue" -> {
@@ -2922,7 +2938,11 @@ class Compiler(
 //            assigner.generate(context.pos, left, right)
 //        }
 
-        val lastLevel = lastPriority + 1
+        // Compute levels from the actual operator table rather than relying on
+        // the mutable construction counter. This prevents accidental inflation
+        // of precedence depth that could lead to deep recursive descent and
+        // StackOverflowError during parsing.
+        val lastLevel = (allOps.maxOf { it.priority }) + 1
 
         val byLevel: List<Map<Token.Type, Operator>> = (0..<lastLevel).map { l ->
             allOps.filter { it.priority == l }.associateBy { it.tokenType }

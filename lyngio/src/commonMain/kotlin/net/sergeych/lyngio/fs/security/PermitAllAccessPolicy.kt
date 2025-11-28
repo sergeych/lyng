@@ -15,27 +15,13 @@
  *
  */
 
-pluginManagement {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
-}
+package net.sergeych.lyngio.fs.security
 
-dependencyResolutionManagement {
-    repositories {
-        google()
-        mavenCentral()
-        maven("https://maven.universablockchain.com/")
-        maven("https://gitea.sergeych.net/api/packages/SergeychWorks/maven")
-        mavenLocal()
-    }
-}
+/**
+ * Minimal policy that allows every operation. Useful as a default or for tests.
+ */
+object PermitAllAccessPolicy : FsAccessPolicy {
+    private val allow = AccessDecision(Decision.Allow)
 
-rootProject.name = "lyng"
-include(":lynglib")
-include(":lyng")
-include(":site")
-include(":lyngweb")
-include(":lyngio")
+    override suspend fun check(op: AccessOp, ctx: AccessContext): AccessDecision = allow
+}
