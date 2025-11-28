@@ -1,0 +1,10 @@
+#!/bin/env lyng
+
+val переменная = "значение"
+
+val data = { greeting: "привет", переменная:, поле: "содержимое" }
+
+assertEquals(data["переменная"], "значение")
+assertEquals(data["поле"], "содержимое")
+
+println(data)
