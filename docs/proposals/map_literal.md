@@ -1,6 +1,8 @@
 
 # Map literals — refined proposal
 
+[//]: # (excludeFromIndex)
+
 Implement JavaScript-like literals for maps. The syntax and semantics align with named arguments in function calls, but map literals are expressions that construct `Map` values.
 
 Keys can be either:

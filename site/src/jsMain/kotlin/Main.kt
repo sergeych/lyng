@@ -379,8 +379,9 @@ suspend fun initDocsDropdown() {
         val arr = JSON.parse(text) as Array<String>
         val all = arr.toList().sorted()
         dlog("docs-dd", "index entries=${all.size}")
-        // Filter excluded by reading each markdown and looking for the marker
+        // Filter excluded by reading each markdown and looking for the marker, and collect titles
         val filtered = mutableListOf<String>()
+        val titles = mutableMapOf<String, String>()
         var excluded = 0
         var failed = 0
         for (path in all) {
@@ -393,8 +394,12 @@ suspend fun initDocsDropdown() {
                     continue
                 }
                 val body = r.text().await()
-                if (!body.contains("[//]: # (excludeFromIndex)")) {
+                if (!body.contains("[//]: # (excludeFromIndex)") &&
+                    body.contains("[//]: # (topMenu)") ) {
                     filtered.add(path)
+                    // Reuse shared title extractor: first H1 or fallback to file name
+                    val title = extractTitleFromMarkdown(body) ?: path.substringAfterLast('/')
+                    titles[path] = title
                 } else excluded++
             } catch (t: Throwable) {
                 failed++
@@ -404,10 +409,10 @@ suspend fun initDocsDropdown() {
         dlog("docs-dd", "filtered=${filtered.size} excluded=$excluded failed=$failed")
         // Sort entries by display name (file name) case-insensitively
         val sortedFiltered = filtered.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.substringAfterLast('/') })
-        // Build items after the static first two existing children (tutorial + divider)
+        // Build items after the static first items (tutorial, optional static entries, divider)
         var appended = 0
         sortedFiltered.forEach { path ->
-            val name = path.substringAfterLast('/')
+            val name = titles[path] ?: path.substringAfterLast('/')
             val li = document.createElement("li")
             val a = document.createElement("a") as HTMLAnchorElement
             a.className = "dropdown-item"

@@ -1,4 +1,7 @@
-# Named arguments proposal
+# Named arguments in calls
+
+[//]: # (excludeFromIndex)
+
 
 Extend function/method calls to allow setting arguments by name using colon syntax at call sites. This is especially convenient with many parameters and default values.
 

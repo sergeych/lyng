@@ -1,6 +1,10 @@
-# OO implementation in Lyng
+# Object-oriented programming
 
-## Declaration 
+[//]: # (topMenu)
+
+Lyng supports first class OOP constructs, based on classes with multiple inheritance.
+
+## Class Declaration 
 
 The class clause looks like
 

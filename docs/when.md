@@ -1,5 +1,7 @@
 # The `when` statement (expression)
 
+[//]: # (topMenu)
+
 Lyng provides a concise multi-branch selection with `when`, heavily inspired by Kotlin. In Lyng, `when` is an expression: it evaluates to a value. If the selected branch contains no value (e.g., it ends with `void` or calls a void function like `println`), the whole `when` expression evaluates to `void`.
 
 Currently, Lyng implements the "subject" form: `when(value) { ... }`. The subject-less form `when { condition -> ... }` is not implemented yet.

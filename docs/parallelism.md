@@ -1,4 +1,6 @@
-# Parallelism in Lyng
+# Multithreading/parallel execution
+
+[//]: # (topMenu)
 
 Lyng is built to me multithreaded where possible (e.g. all targets byt JS and wasmJS as for now)
 and cooperatively parallel (coroutine based) everywhere.

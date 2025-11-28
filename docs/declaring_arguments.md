@@ -1,5 +1,7 @@
 # Declaring arguments in Lyng
 
+[//]: # (topMenu)
+
 It is a common thing that occurs in many places in Lyng, function declarations, 
 lambdas and class declarations.
 
