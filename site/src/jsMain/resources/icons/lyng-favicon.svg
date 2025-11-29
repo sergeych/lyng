@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Lyng favicon: scalable SVG that adapts to light/dark themes -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-label="Lyng favicon">
+  <style>
+    :root { color-scheme: light dark; color: #000; }
+    @media (prefers-color-scheme: dark) { :root { color: #fff; } }
+    .mark { fill: currentColor; }
+    .math { font-family: 'STIX Two Math', 'Cambria Math', 'Times New Roman', serif; }
+  </style>
+  <g class="mark math">
+    <!-- Keep favicon legible: lambda with superscript y only -->
+    <text x="3" y="17" font-size="16" font-weight="700">λ</text>
+    <text x="11.2" y="8" font-size="9">y</text>
+  </g>
+</svg>

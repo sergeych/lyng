@@ -21,6 +21,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Lyng language</title>
+    <!-- Site favicon (SVG, adapts to light/dark) -->
+    <link rel="icon" type="image/svg+xml" href="icons/lyng-favicon.svg" />
     <!-- GitHub Markdown CSS (light and dark). We toggle these from the app. -->
     <link
       id="md-light"
@@ -189,7 +191,15 @@
     <nav class="navbar navbar-expand-lg bg-body-tertiary fixed-top border-bottom" role="navigation" aria-label="Primary">
       <div class="container-fluid">
         <a class="navbar-brand d-flex align-items-center gap-2" href="#">
-          <i class="bi bi-braces-asterisk"></i>
+          <!-- Inline SVG brand icon: λ with superscript y and subscript ng. Uses currentColor to match theme. -->
+          <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" role="img" aria-hidden="true">
+            <g fill="currentColor" color="inherit" font-family="'STIX Two Math', 'Cambria Math', 'Times New Roman', serif">
+              <!-- Main lambda -->
+              <text x="3" y="17" font-size="16" font-weight="700">λ</text>
+              <!-- Superscript y -->
+              <text x="11.2" y="8" font-size="10">y</text>
+            </g>
+          </svg>
           Lyng
         </a>
         <button
