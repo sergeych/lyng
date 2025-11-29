@@ -8,6 +8,10 @@ This module provides a uniform, suspend-first filesystem API to Lyng scripts, ba
 
 It exposes a Lyng class `Path` with methods for file and directory operations, including streaming readers for large files.
 
+It is a separate library because access to teh filesystem is a security risk we compensate with a separate API that user must explicitly include to the dependency and allow. Together with `FsAceessPolicy` that is required to `createFs()` which actually adds the filesystem to the scope, the security risk is isolated.
+
+Also, it helps keep Lyng core small and focused.
+
 ---
 
 #### Add the library to your project (Gradle)
@@ -16,19 +20,19 @@ If you use this repository as a multi-module project, add a dependency on `:lyng
 
 ```kotlin
 dependencies {
-    implementation(project(":lyngio"))
-}
-```
-
-If you consume it as a published artifact (group and version may vary):
-
-```kotlin
-dependencies {
     implementation("net.sergeych:lyngio:0.0.1-SNAPSHOT")
 }
 ```
+Note on maven repository. Lyngio uses ths same maven as Lyng code (`lynglib`) so it is most likely already in your project. If ont, add it to the proper section of your `build.gradle.kts` or settings.gradle.kts:
+
+```kotlin
+    repositories {
+        maven("https://gitea.sergeych.net/api/packages/SergeychWorks/maven")
+    }
+```
 
 This brings in:
+
 - `:lynglib` (Lyng engine)
 - Okio (`okio`, `okio-fakefilesystem`, and `okio-nodefilesystem` for JS)
 - Kotlin coroutines

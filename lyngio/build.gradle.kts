@@ -26,6 +26,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidLibrary)
+    `maven-publish`
 }
 
 group = "net.sergeych"
@@ -68,6 +69,14 @@ kotlin {
     }
 
     sourceSets {
+        all {
+            languageSettings.optIn("kotlin.ExperimentalUnsignedTypes")
+//            languageSettings.optIn("kotlinx.coroutines.ExperimentalCoroutinesApi")
+            // Correct opt-in markers for coroutines
+//            languageSettings.optIn("kotlinx.coroutines.DelicateCoroutinesApi")
+//            languageSettings.optIn("kotlin.contracts.ExperimentalContracts")
+//            languageSettings.optIn("kotlinx.coroutines.FlowPreview")
+        }
         val commonMain by getting {
             dependencies {
                 api(project(":lynglib"))
@@ -122,4 +131,22 @@ android {
 // until AGP and Kotlin versions align perfectly in the environment.
 tasks.matching { it.name.startsWith("lint", ignoreCase = true) }.configureEach {
     this.enabled = false
+}
+
+publishing {
+    val mavenToken by lazy {
+        File("${System.getProperty("user.home")}/.gitea_token").readText()
+    }
+    repositories {
+        maven {
+            credentials(HttpHeaderCredentials::class) {
+                name = "Authorization"
+                value = mavenToken
+            }
+            url = uri("https://gitea.sergeych.net/api/packages/SergeychWorks/maven")
+            authentication {
+                create("Authorization", HttpHeaderAuthentication::class)
+            }
+        }
+    }
 }
