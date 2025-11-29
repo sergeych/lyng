@@ -3,7 +3,7 @@
   <style>
     :root { color-scheme: light dark; color: #000; }
     @media (prefers-color-scheme: dark) { :root { color: #fff; } }
-    .mark { fill: currentColor; }
+    .mark { fill: #fff; }
     .math { font-family: 'STIX Two Math', 'Cambria Math', 'Times New Roman', serif; }
   </style>
   <g class="mark math">
