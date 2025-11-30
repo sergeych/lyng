@@ -14,29 +14,10 @@
  * limitations under the License.
  *
  */
+package net.sergeych.lyng.idea.editor
 
-pluginManagement {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
-}
-
-dependencyResolutionManagement {
-    repositories {
-        google()
-        mavenCentral()
-        maven("https://maven.universablockchain.com/")
-        maven("https://gitea.sergeych.net/api/packages/SergeychWorks/maven")
-        mavenLocal()
-    }
-}
-
-rootProject.name = "lyng"
-include(":lynglib")
-include(":lyng")
-include(":site")
-include(":lyngweb")
-include(":lyngio")
-include(":lyng-idea")
+/**
+ * Placeholder for 2024.3+ RawText-based CopyPastePreProcessor.
+ * Not compiled against current SDK classpath; kept for future activation.
+ */
+class LyngCopyPastePreProcessor243Disabled

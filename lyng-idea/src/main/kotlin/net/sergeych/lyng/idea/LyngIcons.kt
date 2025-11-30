@@ -14,29 +14,11 @@
  * limitations under the License.
  *
  */
+package net.sergeych.lyng.idea
 
-pluginManagement {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
+import com.intellij.openapi.util.IconLoader
+import javax.swing.Icon
+
+object LyngIcons {
+    val FILE: Icon = IconLoader.getIcon("/icons/lyng_file.svg", LyngIcons::class.java)
 }
-
-dependencyResolutionManagement {
-    repositories {
-        google()
-        mavenCentral()
-        maven("https://maven.universablockchain.com/")
-        maven("https://gitea.sergeych.net/api/packages/SergeychWorks/maven")
-        mavenLocal()
-    }
-}
-
-rootProject.name = "lyng"
-include(":lynglib")
-include(":lyng")
-include(":site")
-include(":lyngweb")
-include(":lyngio")
-include(":lyng-idea")

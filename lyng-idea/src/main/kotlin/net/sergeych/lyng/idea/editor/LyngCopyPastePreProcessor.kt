@@ -14,29 +14,10 @@
  * limitations under the License.
  *
  */
+package net.sergeych.lyng.idea.editor
 
-pluginManagement {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
-}
-
-dependencyResolutionManagement {
-    repositories {
-        google()
-        mavenCentral()
-        maven("https://maven.universablockchain.com/")
-        maven("https://gitea.sergeych.net/api/packages/SergeychWorks/maven")
-        mavenLocal()
-    }
-}
-
-rootProject.name = "lyng"
-include(":lynglib")
-include(":lyng")
-include(":site")
-include(":lyngweb")
-include(":lyngio")
-include(":lyng-idea")
+/**
+ * Disabled placeholder. We currently use the EditorPaste action handler (LyngPasteHandler)
+ * which works across IDE builds without relying on RawText API.
+ */
+class LyngCopyPastePreProcessorDisabled

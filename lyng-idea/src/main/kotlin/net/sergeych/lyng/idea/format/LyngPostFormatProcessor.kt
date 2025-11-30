@@ -14,29 +14,9 @@
  * limitations under the License.
  *
  */
+package net.sergeych.lyng.idea.format
 
-pluginManagement {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
-}
-
-dependencyResolutionManagement {
-    repositories {
-        google()
-        mavenCentral()
-        maven("https://maven.universablockchain.com/")
-        maven("https://gitea.sergeych.net/api/packages/SergeychWorks/maven")
-        mavenLocal()
-    }
-}
-
-rootProject.name = "lyng"
-include(":lynglib")
-include(":lyng")
-include(":site")
-include(":lyngweb")
-include(":lyngio")
-include(":lyng-idea")
+// Placeholder: we planned a post-format processor fallback, but the 2024.3 platform
+// does not expose the older PostFormatProcessor API in our current dependency set.
+// Reformat Code will use the registered lang.formatter + LineIndentProvider.
+internal object LyngPostFormatProcessorPlaceholder

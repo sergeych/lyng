@@ -72,6 +72,11 @@ val baseScopeDefer = globalDefer {
 
 fun runMain(args: Array<String>) {
     if(args.isNotEmpty()) {
+        // CLI formatter: lyng fmt [--check] [--in-place] <files...>
+        if (args[0] == "fmt") {
+            formatCli(args.drop(1))
+            return
+        }
         if( args.size >= 2 && args[0] == "--" ) {
             // -- -file.lyng <args>
             executeFileWithArgs(args[1], args.drop(2))
@@ -84,6 +89,52 @@ fun runMain(args: Array<String>) {
     }
     // normal processing
     Lyng { runBlocking { it() } }.main(args)
+}
+
+private fun formatCli(args: List<String>) {
+    var checkOnly = false
+    var inPlace = true
+    var enableSpacing = false
+    var enableWrapping = false
+    val files = mutableListOf<String>()
+    for (a in args) {
+        when (a) {
+            "--check" -> { checkOnly = true; inPlace = false }
+            "--in-place", "-i" -> inPlace = true
+            "--spacing" -> enableSpacing = true
+            "--wrap", "--wrapping" -> enableWrapping = true
+            else -> files += a
+        }
+    }
+    if (files.isEmpty()) {
+        println("Usage: lyng fmt [--check] [--in-place|-i] [--spacing] [--wrap] <file1.lyng> [file2.lyng ...]")
+        exit(1)
+        return
+    }
+    var changed = false
+    val cfg = net.sergeych.lyng.format.LyngFormatConfig(
+        applySpacing = enableSpacing,
+        applyWrapping = enableWrapping,
+    )
+    for (path in files) {
+        val p = path.toPath()
+        val original = FileSystem.SYSTEM.source(p).use { it.buffer().use { bs -> bs.readUtf8() } }
+        val formatted = net.sergeych.lyng.format.LyngFormatter.format(original, cfg)
+        if (formatted != original) {
+            changed = true
+            if (checkOnly) {
+                println(path)
+            } else if (inPlace) {
+                FileSystem.SYSTEM.write(p) { writeUtf8(formatted) }
+            } else {
+                // default to stdout if not in-place and not --check
+                println("--- $path (formatted) ---\n$formatted")
+            }
+        }
+    }
+    if (checkOnly) {
+        exit(if (changed) 2 else 0)
+    }
 }
 
 private class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() {

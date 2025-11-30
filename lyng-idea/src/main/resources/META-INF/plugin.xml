@@ -1,0 +1,82 @@
+<!--
+  ~ Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  ~
+  -->
+
+<idea-plugin>
+    <id>net.sergeych.lyng.idea</id>
+    <name>Lyng Language Support</name>
+    <vendor email="real.sergeych@gmail.com">Sergeych Works</vendor>
+
+    <description>
+        <![CDATA[
+        Basic Lyng language support: file type, syntax highlighting scaffold, and quick docs/highlighter stubs.
+        ]]>
+    </description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <!-- Needed for editor language features (syntax highlighting, etc.) -->
+    <depends>com.intellij.modules.lang</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Language and file type -->
+        <fileType implementationClass="net.sergeych.lyng.idea.LyngFileType" name="Lyng" extensions="lyng" fieldName="INSTANCE" language="Lyng"/>
+
+        <!-- Minimal parser/PSI to fully wire editor services for the language -->
+        <lang.parserDefinition language="Lyng" implementationClass="net.sergeych.lyng.idea.psi.LyngParserDefinition"/>
+
+        <!-- Syntax highlighter: register under language EP -->
+        <lang.syntaxHighlighterFactory language="Lyng" implementationClass="net.sergeych.lyng.idea.highlight.LyngSyntaxHighlighterFactory"/>
+
+        <!-- Color settings page -->
+        <colorSettingsPage implementation="net.sergeych.lyng.idea.highlight.LyngColorSettingsPage"/>
+
+        <!-- External annotator for semantic highlighting -->
+        <externalAnnotator language="Lyng" implementationClass="net.sergeych.lyng.idea.annotators.LyngExternalAnnotator"/>
+
+        <!-- Quick documentation provider bound to Lyng language -->
+        <lang.documentationProvider language="Lyng" implementationClass="net.sergeych.lyng.idea.docs.LyngDocumentationProvider"/>
+
+        <!-- Comment toggling support -->
+        <lang.commenter language="Lyng" implementationClass="net.sergeych.lyng.idea.comment.LyngCommenter"/>
+
+        <!-- Indentation provider to improve auto-indent and reformat behavior -->
+        <lineIndentProvider implementation="net.sergeych.lyng.idea.format.LyngLineIndentProvider"/>
+
+        <!-- Formatting model so Reformat Code (Ctrl+Alt+L) applies indentation across the file -->
+        <lang.formatter language="Lyng" implementationClass="net.sergeych.lyng.idea.format.LyngFormattingModelBuilder"/>
+
+        <!-- Ensure idempotent line indentation before formatting using our LineIndentProvider -->
+        <preFormatProcessor implementation="net.sergeych.lyng.idea.format.LyngPreFormatProcessor"/>
+
+        <!-- Settings UI -->
+        <projectConfigurable instance="net.sergeych.lyng.idea.settings.LyngFormatterSettingsConfigurable"
+                              displayName="Lyng Formatter"/>
+
+        <!-- Smart Enter handler -->
+        <enterHandlerDelegate implementation="net.sergeych.lyng.idea.editor.LyngEnterHandler"/>
+
+        <!-- Smart Backspace handler (deferred) -->
+        <!-- <backspaceHandlerDelegate implementation="net.sergeych.lyng.idea.editor.LyngBackspaceHandler"/> -->
+
+        <!-- Smart Paste via action handler (ensure our handler participates first) -->
+        <editorActionHandler action="EditorPaste" order="first" implementationClass="net.sergeych.lyng.idea.editor.LyngPasteHandler"/>
+
+        <!-- If targeting SDKs with stable RawText API, the EP below can be enabled instead: -->
+        <!-- <copyPastePreProcessor implementation="net.sergeych.lyng.idea.editor.LyngCopyPastePreProcessor"/> -->
+    </extensions>
+
+    <actions/>
+</idea-plugin>

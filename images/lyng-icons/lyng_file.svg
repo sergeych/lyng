@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  - Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+  -
+  - Licensed under the Apache License, Version 2.0 (the "License");
+  - you may not use this file except in compliance with the License.
+  - You may obtain a copy of the License at
+  -
+  -     http://www.apache.org/licenses/LICENSE-2.0
+  -
+  - Unless required by applicable law or agreed to in writing, software
+  - distributed under the License is distributed on an "AS IS" BASIS,
+  - WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  - See the License for the specific language governing permissions and
+  - limitations under the License.
+  -
+  -->
+
+<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" aria-labelledby="title" role="img">
+  <title>Lyng File Icon (temporary λ)</title>
+  <defs>
+    <style>
+      .g { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+  <!-- Keep shapes crisp on small canvas; slight inset to avoid clipping -->
+  <g transform="translate(0.5,0.5)">
+    <!-- Stylized lambda fitted to 14x14 -->
+    <path class="g" d="M4.5 2.5 L7 9.5 C7.6 11.2 9.0 12.5 11.0 12.5 L14.5 12.5"/>
+    <path class="g" d="M7 9.5 L2.5 14.5"/>
+  </g>
+</svg>

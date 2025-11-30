@@ -14,29 +14,14 @@
  * limitations under the License.
  *
  */
+package net.sergeych.lyng.idea
 
-pluginManagement {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
+import com.intellij.openapi.fileTypes.LanguageFileType
+import javax.swing.Icon
+
+object LyngFileType : LanguageFileType(LyngLanguage) {
+    override fun getName(): String = "Lyng"
+    override fun getDescription(): String = "Lyng language file"
+    override fun getDefaultExtension(): String = "lyng"
+    override fun getIcon(): Icon? = LyngIcons.FILE
 }
-
-dependencyResolutionManagement {
-    repositories {
-        google()
-        mavenCentral()
-        maven("https://maven.universablockchain.com/")
-        maven("https://gitea.sergeych.net/api/packages/SergeychWorks/maven")
-        mavenLocal()
-    }
-}
-
-rootProject.name = "lyng"
-include(":lynglib")
-include(":lyng")
-include(":site")
-include(":lyngweb")
-include(":lyngio")
-include(":lyng-idea")

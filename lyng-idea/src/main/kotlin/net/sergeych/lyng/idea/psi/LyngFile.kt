@@ -14,29 +14,15 @@
  * limitations under the License.
  *
  */
+package net.sergeych.lyng.idea.psi
 
-pluginManagement {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
+import com.intellij.extapi.psi.PsiFileBase
+import com.intellij.openapi.fileTypes.FileType
+import com.intellij.psi.FileViewProvider
+import net.sergeych.lyng.idea.LyngFileType
+import net.sergeych.lyng.idea.LyngLanguage
+
+class LyngFile(viewProvider: FileViewProvider) : PsiFileBase(viewProvider, LyngLanguage) {
+    override fun getFileType(): FileType = LyngFileType
+    override fun toString(): String = "Lyng File"
 }
-
-dependencyResolutionManagement {
-    repositories {
-        google()
-        mavenCentral()
-        maven("https://maven.universablockchain.com/")
-        maven("https://gitea.sergeych.net/api/packages/SergeychWorks/maven")
-        mavenLocal()
-    }
-}
-
-rootProject.name = "lyng"
-include(":lynglib")
-include(":lyng")
-include(":site")
-include(":lyngweb")
-include(":lyngio")
-include(":lyng-idea")

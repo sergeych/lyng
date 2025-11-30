@@ -14,29 +14,24 @@
  * limitations under the License.
  *
  */
+package net.sergeych.lyng.format
 
-pluginManagement {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
+/**
+ * Formatting configuration for Lyng source code.
+ * Defaults are Kotlin-like.
+ */
+data class LyngFormatConfig(
+    val indentSize: Int = 4,
+    val useTabs: Boolean = false,
+    val continuationIndentSize: Int = 4,
+    val maxLineLength: Int = 120,
+    val applySpacing: Boolean = false,
+    val applyWrapping: Boolean = false,
+    val trailingComma: Boolean = false,
+) {
+    init {
+        require(indentSize > 0) { "indentSize must be > 0" }
+        require(continuationIndentSize > 0) { "continuationIndentSize must be > 0" }
+        require(maxLineLength > 0) { "maxLineLength must be > 0" }
     }
 }
-
-dependencyResolutionManagement {
-    repositories {
-        google()
-        mavenCentral()
-        maven("https://maven.universablockchain.com/")
-        maven("https://gitea.sergeych.net/api/packages/SergeychWorks/maven")
-        mavenLocal()
-    }
-}
-
-rootProject.name = "lyng"
-include(":lynglib")
-include(":lyng")
-include(":site")
-include(":lyngweb")
-include(":lyngio")
-include(":lyng-idea")

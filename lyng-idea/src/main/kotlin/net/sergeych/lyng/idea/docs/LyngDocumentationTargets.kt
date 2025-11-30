@@ -14,29 +14,8 @@
  * limitations under the License.
  *
  */
+package net.sergeych.lyng.idea.docs
 
-pluginManagement {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
-}
-
-dependencyResolutionManagement {
-    repositories {
-        google()
-        mavenCentral()
-        maven("https://maven.universablockchain.com/")
-        maven("https://gitea.sergeych.net/api/packages/SergeychWorks/maven")
-        mavenLocal()
-    }
-}
-
-rootProject.name = "lyng"
-include(":lynglib")
-include(":lyng")
-include(":site")
-include(":lyngweb")
-include(":lyngio")
-include(":lyng-idea")
+// 243: We do not use DocumentationTarget API here. Quick Docs works via
+// AbstractDocumentationProvider registered as lang.documentationProvider.
+internal object LyngDocumentationTargetsPlaceholder

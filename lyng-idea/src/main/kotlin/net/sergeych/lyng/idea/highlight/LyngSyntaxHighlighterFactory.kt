@@ -15,28 +15,11 @@
  *
  */
 
-pluginManagement {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
-}
+package net.sergeych.lyng.idea.highlight
 
-dependencyResolutionManagement {
-    repositories {
-        google()
-        mavenCentral()
-        maven("https://maven.universablockchain.com/")
-        maven("https://gitea.sergeych.net/api/packages/SergeychWorks/maven")
-        mavenLocal()
-    }
-}
+import com.intellij.openapi.fileTypes.SingleLazyInstanceSyntaxHighlighterFactory
+import com.intellij.openapi.fileTypes.SyntaxHighlighter
 
-rootProject.name = "lyng"
-include(":lynglib")
-include(":lyng")
-include(":site")
-include(":lyngweb")
-include(":lyngio")
-include(":lyng-idea")
+class LyngSyntaxHighlighterFactory : SingleLazyInstanceSyntaxHighlighterFactory() {
+    override fun createHighlighter(): SyntaxHighlighter = LyngSyntaxHighlighter()
+}
