@@ -181,7 +181,8 @@ Ready features:
 - [x] site with integrated interpreter to give a try
 - [x] kotlin part public API good docs, integration focused
 - [ ] type specifications
-- [ ] language server or compose-based lyng-aware editor
+- [x] Texmate Bundle
+- [x] IDEA plugin
 - [ ] source docs and maybe lyng.md to a standard
 - [ ] metadata first class access from lyng
 - [x] aggressive optimizations
@@ -189,9 +190,16 @@ Ready features:
 
 ## After 1.5 "Ideal scripting"
 
-  Estimated winter 2027
+  Estimated summer 2026
 
-- [ ] client with GUI support based on compose multiplatform somehow
 - [ ] notebook - style workbooks with graphs, formulae, etc.
+
+## Authors
+
+@-links are for contacting authors on [project home](https://gitea.sergeych.net/SergeychWorks/lyng): this simplest s to open issue for the person you need to convey any information about this project.
+
+__Sergey Chernov__ @sergeych: Initial idea and architecture, language concept, design, implementation.
+
+__Yulia Nezhinskaya__ @AlterEgoJuliaN: System analysis, math and features design.
 
 [parallelism]: docs/parallelism.md
