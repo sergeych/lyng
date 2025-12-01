@@ -17,15 +17,18 @@
   -->
 
 <svg
-        viewBox="0 0 16.114843 20.543751"
+        viewBox="0 0 32.129775 32.129776"
         role="img"
         aria-label="Lyng favicon"
         version="1.1"
         id="svg2"
-        sodipodi:docname="lyng_file.svg"
-        width="16.114843"
-        height="20.543751"
+        sodipodi:docname="lyngicon.svg"
+        width="32.129776"
+        height="32.129776"
         inkscape:version="1.4.2 (1:1.4.2+202505120737+ebf0e940d0)"
+        inkscape:export-filename="lyngicon.png"
+        inkscape:export-xdpi="1529.7959"
+        inkscape:export-ydpi="1529.7959"
         xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
         xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
         xmlns="http://www.w3.org/2000/svg"
@@ -41,9 +44,9 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="49.791667"
-     inkscape:cx="8.9271967"
-     inkscape:cy="10.574059"
+     inkscape:zoom="16"
+     inkscape:cx="12.65625"
+     inkscape:cy="5.90625"
      inkscape:window-width="2512"
      inkscape:window-height="1403"
      inkscape:window-x="0"
@@ -56,10 +59,17 @@
         .mark { fill: currentColor; }
         .math { font-family: 'STIX Two Math', 'Cambria Math', 'Times New Roman', serif; }
     </style>
+  <circle
+     style="fill:#2b0022;stroke:none;stroke-width:10.6332"
+     id="path2"
+     cx="16.064888"
+     cy="16.064888"
+     r="16.064888" />
   <g
      class="mark math"
      id="g2"
-     transform="translate(-3.0726562,3.39375)">
+     transform="translate(4.8666825,8.3889988)"
+     style="fill:#00aa44;stroke:#005522">
     <!-- Keep favicon legible: lambda with superscript y only -->
     <text
        x="3"
@@ -69,7 +79,8 @@
        color="#009000"
        stroke="#002000"
        stroke-width="0.3"
-       id="text1">λ</text>
+       id="text1"
+       style="fill:#00aa44;stroke:#005522">λ</text>
     <text
        x="11.2"
        y="4"
@@ -77,6 +88,7 @@
        color="#009000"
        stroke="#002000"
        stroke-width="0.1"
-       id="text2">y</text>
+       id="text2"
+       style="fill:#00aa44;stroke:#005522">y</text>
   </g>
 </svg>

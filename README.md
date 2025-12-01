@@ -136,21 +136,8 @@ Designed to add scripting to kotlin multiplatform application in easy and effici
 
 # Language Roadmap
 
-```mermaid
-flowchart
-    v0([the idea])
-    v1([v1: make it happen])
-    v2([v1.5: testmake it fasted and rich featured])
-    v3([v2: ideal script language])
-    v0 --code MVP--> v1
-    v1 --refine and extend--> v2
-    v2 -- optimize --> v3
-    
-```
-
-## v1.0.0 "Make it happen" - done!
-
-Planned autumn 2025. Complete dynamic language with sufficient standard library:
+We are now at **v1.0**: basic optimization performed, battery included: standard library is 90% here, initial
+support in HTML, popular editors, and IDEA; tools to syntax highlight and format code are ready. It was released closed to schedule.
 
 Ready features:
 
@@ -176,23 +163,23 @@ Ready features:
 - [x] regular exceptions + extended `when`
 - [x] multiple inheritance for user classes
 
-## plan: v1.0 - v1.5 Stability, integration, optimizations
+## plan: towards v1.5 Enhancing
 
 - [x] site with integrated interpreter to give a try
 - [x] kotlin part public API good docs, integration focused
 - [ ] type specifications
-- [x] Texmate Bundle
+- [x] Textmate Bundle
 - [x] IDEA plugin
 - [ ] source docs and maybe lyng.md to a standard
 - [ ] metadata first class access from lyng
 - [x] aggressive optimizations
-- [ ] JVM bytecode optimizations
+- [ ] compile to JVM bytecode optimization
 
 ## After 1.5 "Ideal scripting"
 
-  Estimated summer 2026
+Estimated summer 2026
 
-- [ ] notebook - style workbooks with graphs, formulae, etc.
+- propose your feature! 
 
 ## Authors
 
