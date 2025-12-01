@@ -198,6 +198,58 @@ object Binder {
             }
         }
 
+        // Extra pass: detect local val/var declarations that are not present in mini.declarations
+        // (e.g., locals inside blocks and top-level statements). Use token stream heuristics.
+        run {
+            val spans = highlighter.highlight(text)
+            var iTok = 0
+            while (iTok < spans.size) {
+                val t = spans[iTok]
+                if (t.kind == HighlightKind.Keyword) {
+                    val kw = try { text.substring(t.range.start, t.range.endExclusive) } catch (_: Throwable) { "" }
+                    if (kw.equals("val", ignoreCase = true) || kw.equals("var", ignoreCase = true)) {
+                        // Find the next Identifier span which should be the declared name
+                        var j = iTok + 1
+                        var nameStart = -1
+                        var nameEnd = -1
+                        while (j < spans.size) {
+                            val s = spans[j]
+                            if (s.kind == HighlightKind.Identifier) {
+                                nameStart = s.range.start
+                                nameEnd = s.range.endExclusive
+                                break
+                            }
+                            // Stop if we hit newline/comment too far ahead (avoid wide scans)
+                            if (s.kind == HighlightKind.Comment) break
+                            j++
+                        }
+                        if (nameStart >= 0 && nameEnd > nameStart) {
+                            // Skip if a symbol with exactly this decl range already exists
+                            val exists = symbols.any { it.declStart == nameStart && it.declEnd == nameEnd }
+                            if (!exists) {
+                                // Determine enclosing function body (if any) to attach as local; else treat as top-level
+                                val inFn = functions.asSequence()
+                                    .filter { it.rangeEnd > it.rangeStart && nameStart >= it.rangeStart && nameStart <= it.rangeEnd }
+                                    .maxByOrNull { it.rangeEnd - it.rangeStart }
+                                val kind = if (kw.equals("var", true)) SymbolKind.Var else SymbolKind.Val
+                                if (inFn != null) {
+                                    val localSym = Symbol(nextId++, text.substring(nameStart, nameEnd), kind, nameStart, nameEnd, containerId = inFn.id)
+                                    symbols += localSym
+                                    inFn.locals += localSym.id
+                                } else {
+                                    val localSym = Symbol(nextId++, text.substring(nameStart, nameEnd), kind, nameStart, nameEnd, containerId = null)
+                                    symbols += localSym
+                                    topLevelByName.getOrPut(localSym.name) { mutableListOf() }.add(localSym.id)
+                                }
+                            }
+                        }
+                        iTok = j // continue from the name or comment
+                    }
+                }
+                iTok++
+            }
+        }
+
         // Build name -> symbol ids index per function (locals+params) and per class (fields) for faster resolution
         data class Idx(val byName: Map<String, List<Int>>)
         fun buildIndex(ids: List<Int>): Idx {

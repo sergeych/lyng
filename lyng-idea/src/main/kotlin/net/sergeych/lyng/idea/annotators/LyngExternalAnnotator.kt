@@ -28,6 +28,10 @@ import com.intellij.psi.PsiFile
 import kotlinx.coroutines.runBlocking
 import net.sergeych.lyng.Compiler
 import net.sergeych.lyng.Source
+import net.sergeych.lyng.binding.Binder
+import net.sergeych.lyng.binding.SymbolKind
+import net.sergeych.lyng.highlight.HighlightKind
+import net.sergeych.lyng.highlight.SimpleLyngHighlighter
 import net.sergeych.lyng.highlight.offsetOf
 import net.sergeych.lyng.idea.highlight.LyngHighlighterColors
 import net.sergeych.lyng.idea.util.IdeLenientImportProvider
@@ -59,7 +63,8 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
             val src = Source("<ide>", text)
             val provider = IdeLenientImportProvider.create()
             runBlocking { Compiler.compileWithMini(src, provider, sink) }
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is com.intellij.openapi.progress.ProcessCanceledException) throw e
             // Fail softly: no semantic layer this pass
             return Result(collectedInfo.modStamp, emptyList())
         }
@@ -67,7 +72,7 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
         val mini = sink.build() ?: return Result(collectedInfo.modStamp, emptyList())
         val source = Source("<ide>", text)
 
-        val out = ArrayList<Span>(64)
+        val out = ArrayList<Span>(256)
 
         fun putRange(start: Int, end: Int, key: com.intellij.openapi.editor.colors.TextAttributesKey) {
             if (start in 0..end && end <= text.length && start < end) out += Span(start, end, key)
@@ -85,7 +90,7 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
         // Declarations
         for (d in mini.declarations) {
             when (d) {
-                is MiniFunDecl -> putName(d.nameStart, d.name, LyngHighlighterColors.FUNCTION)
+                is MiniFunDecl -> putName(d.nameStart, d.name, LyngHighlighterColors.FUNCTION_DECLARATION)
                 is MiniClassDecl -> putName(d.nameStart, d.name, LyngHighlighterColors.TYPE)
                 is MiniValDecl -> putName(
                     d.nameStart,
@@ -142,6 +147,86 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
         }
 
         ProgressManager.checkCanceled()
+
+        // Semantic usages via Binder (best-effort)
+        try {
+            val binding = Binder.bind(text, mini)
+
+            // Map declaration ranges to avoid duplicating them as usages
+            val declKeys = HashSet<Pair<Int, Int>>(binding.symbols.size * 2)
+            for (sym in binding.symbols) declKeys += (sym.declStart to sym.declEnd)
+
+            fun keyForKind(k: SymbolKind) = when (k) {
+                SymbolKind.Function -> LyngHighlighterColors.FUNCTION
+                SymbolKind.Class, SymbolKind.Enum -> LyngHighlighterColors.TYPE
+                SymbolKind.Param -> LyngHighlighterColors.PARAMETER
+                SymbolKind.Val -> LyngHighlighterColors.VALUE
+                SymbolKind.Var -> LyngHighlighterColors.VARIABLE
+            }
+
+            // Track covered ranges to not override later heuristics
+            val covered = HashSet<Pair<Int, Int>>()
+
+            for (ref in binding.references) {
+                val key = ref.start to ref.end
+                if (declKeys.contains(key)) continue
+                val sym = binding.symbols.firstOrNull { it.id == ref.symbolId } ?: continue
+                val color = keyForKind(sym.kind)
+                putRange(ref.start, ref.end, color)
+                covered += key
+            }
+
+            // Heuristics on top of binder: function call-sites and simple name-based roles
+            ProgressManager.checkCanceled()
+
+            val tokens = try { SimpleLyngHighlighter().highlight(text) } catch (_: Throwable) { emptyList() }
+
+            fun isFollowedByParenOrBlock(rangeEnd: Int): Boolean {
+                var i = rangeEnd
+                while (i < text.length) {
+                    val ch = text[i]
+                    if (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') { i++; continue }
+                    return ch == '(' || ch == '{'
+                }
+                return false
+            }
+
+            // Build simple name -> role map for top-level vals/vars and parameters
+            val nameRole = HashMap<String, com.intellij.openapi.editor.colors.TextAttributesKey>(8)
+            for (d in mini.declarations) when (d) {
+                is MiniValDecl -> nameRole[d.name] = if (d.mutable) LyngHighlighterColors.VARIABLE else LyngHighlighterColors.VALUE
+                is MiniFunDecl -> d.params.forEach { p -> nameRole[p.name] = LyngHighlighterColors.PARAMETER }
+                else -> {}
+            }
+
+            for (s in tokens) if (s.kind == HighlightKind.Identifier) {
+                val start = s.range.start
+                val end = s.range.endExclusive
+                val key = start to end
+                if (key in covered || key in declKeys) continue
+
+                // Call-site detection first so it wins over var/param role
+                if (isFollowedByParenOrBlock(end)) {
+                    putRange(start, end, LyngHighlighterColors.FUNCTION)
+                    covered += key
+                    continue
+                }
+
+                // Simple role by known names
+                val ident = try { text.substring(start, end) } catch (_: Throwable) { null }
+                if (ident != null) {
+                    val roleKey = nameRole[ident]
+                    if (roleKey != null) {
+                        putRange(start, end, roleKey)
+                        covered += key
+                    }
+                }
+            }
+        } catch (e: Throwable) {
+            // Must rethrow cancellation; otherwise ignore binder failures (best-effort)
+            if (e is com.intellij.openapi.progress.ProcessCanceledException) throw e
+        }
+
         return Result(collectedInfo.modStamp, out)
     }
 

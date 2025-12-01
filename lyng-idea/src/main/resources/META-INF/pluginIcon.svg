@@ -15,16 +15,17 @@
   - limitations under the License.
   -
   -->
-
-<svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" aria-labelledby="title" role="img">
-  <title>Lyng Plugin Icon (temporary λ)</title>
-  <defs>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-label="Lyng favicon">
     <style>
-      .glyph { fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+        :root { color-scheme: light dark; }
+        .mark { fill: currentColor; }
+        .math { font-family: 'STIX Two Math', 'Cambria Math', 'Times New Roman', serif; }
     </style>
-  </defs>
-  <g transform="translate(2,2)">
-    <path class="glyph" d="M12 6 L18 22 C19.2 25.5 22.2 28 26 28 L32 28"/>
-    <path class="glyph" d="M18 22 L8 34"/>
-  </g>
+    <g class="mark math">
+        <!-- Keep favicon legible: lambda with superscript y only -->
+        <text x="3" y="17" font-size="19" font-weight="700"
+        color="#009000" stroke="#002000" stroke-width="0.3">λ</text>
+        <text x="11.2" y="4" font-size="16" color="#009000" stroke="#002000"
+              stroke-width="0.1">y</text>
+    </g>
 </svg>

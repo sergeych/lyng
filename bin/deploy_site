@@ -46,6 +46,7 @@ esac
 
 die() { echo "ERROR: $*" 1>&2 ; exit 1; }
 
+#./gradlew site:clean site:jsBrowserDistribution || die "compilation failed"
 ./gradlew site:clean site:jsBrowserDistribution || die "compilation failed"
 
 if [[ $? != 0 ]]; then
@@ -77,8 +78,8 @@ rsync -e "ssh -p ${SSH_PORT}" -avz -r -d --delete ${SRC}/* ${SSH_HOST}:${ROOT}/b
 checkState
 #rsync -e "ssh -p ${SSH_PORT}" -avz  ./static/* ${SSH_HOST}:${ROOT}/build/dist
 #checkState
-#rsync -e "ssh -p ${SSH_PORT}" -avz -r -d --delete private_data/* ${SSH_HOST}:${ROOT}/build/private_data
-#checkState
+rsync -e "ssh -p ${SSH_PORT}" -avz -r -d --delete distributables/* ${SSH_HOST}:${ROOT}/build/dist/distributables
+checkState
 
 echo
 echo finalizing the deploy...

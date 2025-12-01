@@ -60,6 +60,7 @@ class LyngColorSettingsPage : ColorSettingsPage {
         AttributesDescriptor("Variable (semantic)", LyngHighlighterColors.VARIABLE),
         AttributesDescriptor("Value (semantic)", LyngHighlighterColors.VALUE),
         AttributesDescriptor("Function (semantic)", LyngHighlighterColors.FUNCTION),
+        AttributesDescriptor("Function declaration (semantic)", LyngHighlighterColors.FUNCTION_DECLARATION),
         AttributesDescriptor("Type (semantic)", LyngHighlighterColors.TYPE),
         AttributesDescriptor("Namespace (semantic)", LyngHighlighterColors.NAMESPACE),
         AttributesDescriptor("Parameter (semantic)", LyngHighlighterColors.PARAMETER),

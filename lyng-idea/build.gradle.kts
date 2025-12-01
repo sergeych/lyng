@@ -21,7 +21,7 @@ plugins {
 }
 
 group = "net.sergeych.lyng"
-version = "0.0.1-SNAPSHOT"
+version = "0.0.2-SNAPSHOT"
 
 kotlin {
     jvmToolchain(17)
@@ -41,8 +41,10 @@ dependencies {
 
 intellij {
     type.set("IC")
-    // Run sandbox on IntelliJ IDEA 2024.3.x
+    // Build against a modern baseline. Install range is controlled by since/until below.
     version.set("2024.3.1")
+    // We manage <idea-version> ourselves in plugin.xml to keep it open-ended (no upper cap)
+    updateSinceUntilBuild.set(false)
     // Include only available bundled plugins for this IDE build
     plugins.set(listOf(
         "com.intellij.java"
@@ -51,8 +53,24 @@ intellij {
 
 tasks {
     patchPluginXml {
-        // Compatible with 2024.3+
-        sinceBuild.set("243")
-        untilBuild.set(null as String?)
+        // Keep version and other metadata patched by Gradle, but since/until are controlled in plugin.xml.
+        // (intellij.updateSinceUntilBuild=false prevents Gradle from injecting an until-build cap)
+    }
+
+    // Build an installable plugin zip and copy it to $PROJECT_ROOT/distributables
+    // Usage: ./gradlew :lyng-idea:buildInstallablePlugin
+    // It depends on buildPlugin and overwrites any existing file with the same name
+    register<Copy>("buildInstallablePlugin") {
+        dependsOn("buildPlugin")
+
+        // The Gradle IntelliJ Plugin produces: build/distributions/<project.name>-<version>.zip
+        val zipName = "${project.name}-${project.version}.zip"
+        val sourceZip = layout.buildDirectory.file("distributions/$zipName")
+
+        from(sourceZip)
+        into(rootProject.layout.projectDirectory.dir("distributables"))
+
+        // Overwrite if a file with the same name exists
+        duplicatesStrategy = DuplicatesStrategy.INCLUDE
     }
 }

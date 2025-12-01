@@ -1,4 +1,4 @@
-//#!/bin/env lyng
+#!/bin/env lyng
 
 import lyng.io.fs
 import lyng.stdlib
@@ -6,23 +6,14 @@ import lyng.stdlib
 val files = Path("../..").list().toList()
 val longestNameLength = files.maxOf { it.name.length }
 
-/*
-The comment for our test1.
-There are _more_ data
-*/
-fun test21() {
-21
-}
 
-
-val format = "%-"+(longestNameLength+1) +"s %d"
+val format = "%"+(longestNameLength+1) +"s %d"
 for( f in files )
 {
-var name = f.name
-if( f.isDirectory() )
-name += "/"
-println( format(name, f.size()) )
+    var name = f.name
+    if( f.isDirectory() )
+        name += "/"
+    println( format(name, f.size()) )
 }
 
-test21()
 

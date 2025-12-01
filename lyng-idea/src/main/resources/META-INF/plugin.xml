@@ -16,13 +16,17 @@
   -->
 
 <idea-plugin>
+    <!-- Open-ended compatibility: 2024.3+ (build 243 and newer) -->
+    <idea-version since-build="243"/>
     <id>net.sergeych.lyng.idea</id>
     <name>Lyng Language Support</name>
-    <vendor email="real.sergeych@gmail.com">Sergeych Works</vendor>
+    <vendor email="real.sergeych@gmail.com">Sergey Chernov</vendor>
 
     <description>
         <![CDATA[
-        Basic Lyng language support: file type, syntax highlighting scaffold, and quick docs/highlighter stubs.
+        Basic Lyng language support: file type, syntax highlighting,
+        editing assistance (on Enter indent), reformatting code (indents and spaces),
+        and quick docs.
         ]]>
     </description>
 

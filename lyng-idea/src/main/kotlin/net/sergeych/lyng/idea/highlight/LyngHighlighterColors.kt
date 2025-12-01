@@ -46,15 +46,22 @@ object LyngHighlighterColors {
         "LYNG_PUNCT", DefaultLanguageHighlighterColors.DOT
     )
 
-    // Semantic layer keys (placeholders for now)
+    // Semantic layer keys
     val VARIABLE: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
-        "LYNG_VARIABLE", DefaultLanguageHighlighterColors.LOCAL_VARIABLE
+        // Use a distinctive default to ensure visibility across common themes.
+        // Users can still customize it separately from VALUE.
+        "LYNG_VARIABLE", DefaultLanguageHighlighterColors.INSTANCE_FIELD
     )
     val VALUE: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
         "LYNG_VALUE", DefaultLanguageHighlighterColors.INSTANCE_FIELD
     )
     val FUNCTION: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
-        "LYNG_FUNCTION", DefaultLanguageHighlighterColors.FUNCTION_CALL
+        // Primary approach: make function calls as visible as declarations by default
+        // (users can still customize separately in the color scheme UI).
+        "LYNG_FUNCTION", DefaultLanguageHighlighterColors.FUNCTION_DECLARATION
+    )
+    val FUNCTION_DECLARATION: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
+        "LYNG_FUNCTION_DECLARATION", DefaultLanguageHighlighterColors.FUNCTION_DECLARATION
     )
     val TYPE: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
         "LYNG_TYPE", DefaultLanguageHighlighterColors.CLASS_REFERENCE
