@@ -340,7 +340,10 @@ open class Scope(
         }
     }
 
+    // --- removed doc-aware overloads to keep runtime lean ---
+
     fun addConst(name: String, value: Obj) = addItem(name, false, value)
+
 
     suspend fun eval(code: String): Obj =
         eval(code.toSource())

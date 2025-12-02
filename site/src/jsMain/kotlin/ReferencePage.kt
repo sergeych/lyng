@@ -18,6 +18,7 @@
 import androidx.compose.runtime.*
 import kotlinx.browser.window
 import kotlinx.coroutines.await
+import net.sergeych.lyng.miniast.*
 import org.jetbrains.compose.web.dom.*
 
 @Composable
@@ -92,4 +93,86 @@ fun ReferencePage() {
             }
         }
     }
+
+    // Built-in APIs (from registry)
+    Hr()
+    H2({ classes("h5", "mb-3", "mt-4") }) { Text("Built-in APIs") }
+    val modules = remember { BuiltinDocRegistry.allModules().sorted() }
+    if (modules.isEmpty()) {
+        P({ classes("text-muted") }) { Text("No built-in modules registered.") }
+    } else {
+        modules.forEach { modName ->
+            val decls = BuiltinDocRegistry.docsForModule(modName)
+            if (decls.isEmpty()) return@forEach
+            H3({ classes("h6", "mt-3") }) { Text(modName) }
+            Ul({ classes("list-group", "mb-3") }) {
+                decls.forEach { d ->
+                    Li({ classes("list-group-item") }) {
+                        when (d) {
+                            is MiniFunDecl -> {
+                                val sig = signatureOf(d)
+                                Div { Text("fun ${d.name}$sig") }
+                                d.doc?.summary?.let { Small({ classes("text-muted") }) { Text(it) } }
+                            }
+                            is MiniValDecl -> {
+                                val kind = if (d.mutable) "var" else "val"
+                                val t = typeOf(d.type)
+                                Div { Text("$kind ${d.name}$t") }
+                                d.doc?.summary?.let { Small({ classes("text-muted") }) { Text(it) } }
+                            }
+                            is MiniClassDecl -> {
+                                Div { Text("class ${d.name}") }
+                                d.doc?.summary?.let { Small({ classes("text-muted") }) { Text(it) } }
+                                if (d.members.isNotEmpty()) {
+                                    Ul({ classes("mt-2") }) {
+                                        d.members.forEach { m ->
+                                            when (m) {
+                                                is MiniMemberFunDecl -> {
+                                                    val params = m.params.joinToString(", ") { p ->
+                                                        val ts = typeOf(p.type)
+                                                        if (ts.isNotBlank()) "${p.name}${ts}" else p.name
+                                                    }
+                                                    val ret = typeOf(m.returnType)
+                                                    val staticStr = if (m.isStatic) "static " else ""
+                                                    Li { Text("${staticStr}method ${d.name}.${m.name}(${params})${ret}") }
+                                                }
+                                                is MiniMemberValDecl -> {
+                                                    val ts = typeOf(m.type)
+                                                    val kindM = if (m.mutable) "var" else "val"
+                                                    val staticStr = if (m.isStatic) "static " else ""
+                                                    Li { Text("${staticStr}${kindM} ${d.name}.${m.name}${ts}") }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- helpers (mirror IDE provider minimal renderers) ---
+private fun typeOf(t: MiniTypeRef?): String = when (t) {
+    is MiniTypeName -> ": " + t.segments.joinToString(".") { it.name } + if (t.nullable) "?" else ""
+    is MiniGenericType -> {
+        val base = typeOf(t.base).removePrefix(": ")
+        val args = t.args.joinToString(", ") { typeOf(it).removePrefix(": ") }
+        ": ${base}<${args}>" + if (t.nullable) "?" else ""
+    }
+    is MiniFunctionType -> ": (..) -> .." + if (t.nullable) "?" else ""
+    is MiniTypeVar -> ": ${t.name}" + if (t.nullable) "?" else ""
+    null -> ""
+}
+
+private fun signatureOf(fn: MiniFunDecl): String {
+    val params = fn.params.joinToString(", ") { p ->
+        val ts = typeOf(p.type)
+        if (ts.isNotBlank()) "${p.name}${ts}" else p.name
+    }
+    val ret = typeOf(fn.returnType)
+    return "(${params})${ret}"
 }

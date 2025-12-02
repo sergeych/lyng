@@ -130,7 +130,9 @@ data class MiniClassDecl(
     val ctorFields: List<MiniCtorField> = emptyList(),
     val classFields: List<MiniCtorField> = emptyList(),
     override val doc: MiniDoc?,
-    override val nameStart: Pos
+    override val nameStart: Pos,
+    // Built-in extension: list of member declarations (functions and fields)
+    val members: List<MiniMemberDecl> = emptyList()
 ) : MiniDecl
 
 data class MiniCtorField(
@@ -152,6 +154,34 @@ data class MiniIdentifier(
     val name: String,
     val role: IdRole
 ) : MiniNode
+
+// --- Class member declarations (for built-in/registry docs) ---
+sealed interface MiniMemberDecl : MiniNode {
+    val name: String
+    val doc: MiniDoc?
+    val nameStart: Pos
+    val isStatic: Boolean
+}
+
+data class MiniMemberFunDecl(
+    override val range: MiniRange,
+    override val name: String,
+    val params: List<MiniParam>,
+    val returnType: MiniTypeRef?,
+    override val doc: MiniDoc?,
+    override val nameStart: Pos,
+    override val isStatic: Boolean = false,
+) : MiniMemberDecl
+
+data class MiniMemberValDecl(
+    override val range: MiniRange,
+    override val name: String,
+    val mutable: Boolean,
+    val type: MiniTypeRef?,
+    override val doc: MiniDoc?,
+    override val nameStart: Pos,
+    override val isStatic: Boolean = false,
+) : MiniMemberDecl
 
 // Streaming sink to collect mini-AST during parsing. Implementations may assemble a tree or process events.
 interface MiniAstSink {

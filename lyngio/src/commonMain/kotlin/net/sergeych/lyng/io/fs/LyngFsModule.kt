@@ -23,6 +23,7 @@ package net.sergeych.lyng.io.fs
 
 import net.sergeych.lyng.ModuleScope
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyngio.fs.LyngFS
@@ -73,43 +74,79 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
             return ObjPath(this, secured, str.toPath())
         }
     }.apply {
-        addFn("name") {
+        addFnDoc(
+            name = "name",
+            doc = "Base name of the path (last segment).",
+            returns = type("lyng.String"),
+            moduleName = module.packageName
+        ) {
             val self = thisAs<ObjPath>()
             self.path.name.toObj()
         }
-        addFn("parent") {
+        addFnDoc(
+            name = "parent",
+            doc = "Parent directory as a Path or null if none.",
+            returns = type("Path", nullable = true),
+            moduleName = module.packageName
+        ) {
             val self = thisAs<ObjPath>()
             self.path.parent?.let {
                 ObjPath( this@apply, self.secured, it)
             } ?: ObjNull
         }
-        addFn("segments") {
+        addFnDoc(
+            name = "segments",
+            doc = "List of path segments.",
+            // returns: List<String>
+            returns = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.String"))),
+            moduleName = module.packageName
+        ) {
             val self = thisAs<ObjPath>()
             ObjList(self.path.segments.map { ObjString(it) }.toMutableList())
         }
         // exists(): Bool
-        addFn("exists") {
+        addFnDoc(
+            name = "exists",
+            doc = "Check whether this path exists.",
+            returns = type("lyng.Bool"),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 (self.secured.exists(self.path)).toObj()
             }
         }
         // isFile(): Bool — cached metadata
-        addFn("isFile") {
+        addFnDoc(
+            name = "isFile",
+            doc = "True if this path is a regular file (based on cached metadata).",
+            returns = type("lyng.Bool"),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 self.ensureMetadata().let { ObjBool(it.isRegularFile) }
             }
         }
         // isDirectory(): Bool — cached metadata
-        addFn("isDirectory") {
+        addFnDoc(
+            name = "isDirectory",
+            doc = "True if this path is a directory (based on cached metadata).",
+            returns = type("lyng.Bool"),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 self.ensureMetadata().let { ObjBool(it.isDirectory) }
             }
         }
         // size(): Int? — null when unavailable
-        addFn("size") {
+        addFnDoc(
+            name = "size",
+            doc = "File size in bytes, or null when unavailable.",
+            returns = type("lyng.Int", nullable = true),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 val m = self.ensureMetadata()
@@ -117,7 +154,12 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
             }
         }
         // createdAt(): Instant? — Lyng Instant, null when unavailable
-        addFn("createdAt") {
+        addFnDoc(
+            name = "createdAt",
+            doc = "Creation time as `Instant`, or null when unavailable.",
+            returns = type("lyng.Instant", nullable = true),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 val m = self.ensureMetadata()
@@ -125,7 +167,12 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
             }
         }
         // createdAtMillis(): Int? — milliseconds since epoch or null
-        addFn("createdAtMillis") {
+        addFnDoc(
+            name = "createdAtMillis",
+            doc = "Creation time in milliseconds since epoch, or null when unavailable.",
+            returns = type("lyng.Int", nullable = true),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 val m = self.ensureMetadata()
@@ -133,7 +180,12 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
             }
         }
         // modifiedAt(): Instant? — Lyng Instant, null when unavailable
-        addFn("modifiedAt") {
+        addFnDoc(
+            name = "modifiedAt",
+            doc = "Last modification time as `Instant`, or null when unavailable.",
+            returns = type("lyng.Instant", nullable = true),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 val m = self.ensureMetadata()
@@ -141,7 +193,12 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
             }
         }
         // modifiedAtMillis(): Int? — milliseconds since epoch or null
-        addFn("modifiedAtMillis") {
+        addFnDoc(
+            name = "modifiedAtMillis",
+            doc = "Last modification time in milliseconds since epoch, or null when unavailable.",
+            returns = type("lyng.Int", nullable = true),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 val m = self.ensureMetadata()
@@ -149,7 +206,12 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
             }
         }
         // list(): List<Path>
-        addFn("list") {
+        addFnDoc(
+            name = "list",
+            doc = "List directory entries as `Path` objects.",
+            returns = TypeGenericDoc(type("lyng.List"), listOf(type("Path"))),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 val items = self.secured.list(self.path).map { ObjPath(self.objClass, self.secured, it) }
@@ -157,7 +219,12 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
             }
         }
         // readBytes(): Buffer
-        addFn("readBytes") {
+        addFnDoc(
+            name = "readBytes",
+            doc = "Read the file into a binary buffer.",
+            returns = type("lyng.Buffer"),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 val bytes = self.secured.readBytes(self.path)
@@ -165,7 +232,12 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
             }
         }
         // writeBytes(bytes: Buffer)
-        addFn("writeBytes") {
+        addFnDoc(
+            name = "writeBytes",
+            doc = "Write a binary buffer to the file, replacing content.",
+            params = listOf(ParamDoc("bytes", type("lyng.Buffer"))),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 val buf = requiredArg<ObjBuffer>(0)
@@ -174,7 +246,12 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
             }
         }
         // appendBytes(bytes: Buffer)
-        addFn("appendBytes") {
+        addFnDoc(
+            name = "appendBytes",
+            doc = "Append a binary buffer to the end of the file.",
+            params = listOf(ParamDoc("bytes", type("lyng.Buffer"))),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 val buf = requiredArg<ObjBuffer>(0)
@@ -183,14 +260,24 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
             }
         }
         // readUtf8(): String
-        addFn("readUtf8") {
+        addFnDoc(
+            name = "readUtf8",
+            doc = "Read the file as a UTF-8 string.",
+            returns = type("lyng.String"),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 self.secured.readUtf8(self.path).toObj()
             }
         }
         // writeUtf8(text: String)
-        addFn("writeUtf8") {
+        addFnDoc(
+            name = "writeUtf8",
+            doc = "Write a UTF-8 string to the file, replacing content.",
+            params = listOf(ParamDoc("text", type("lyng.String"))),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 val text = requireOnlyArg<ObjString>().value
@@ -199,7 +286,12 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
             }
         }
         // appendUtf8(text: String)
-        addFn("appendUtf8") {
+        addFnDoc(
+            name = "appendUtf8",
+            doc = "Append UTF-8 text to the end of the file.",
+            params = listOf(ParamDoc("text", type("lyng.String"))),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 val text = requireOnlyArg<ObjString>().value
@@ -208,7 +300,12 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
             }
         }
         // metadata(): Map
-        addFn("metadata") {
+        addFnDoc(
+            name = "metadata",
+            doc = "Fetch cached metadata as a map of fields: `isFile`, `isDirectory`, `size`, `createdAtMillis`, `modifiedAtMillis`, `isSymlink`.",
+            returns = TypeGenericDoc(type("lyng.Map"), listOf(type("lyng.String"), type("lyng.Any"))),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 val m = self.secured.metadata(self.path)
@@ -223,7 +320,12 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
             }
         }
         // mkdirs(mustCreate: Bool=false)
-        addFn("mkdirs") {
+        addFnDoc(
+            name = "mkdirs",
+            doc = "Create directories (like `mkdir -p`). Optional `mustCreate` enforces error if target exists.",
+            params = listOf(ParamDoc("mustCreate", type("lyng.Bool"))),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 val mustCreate = args.list.getOrNull(0)?.toBool() ?: false
@@ -232,7 +334,13 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
             }
         }
         // move(to: Path|String, overwrite: Bool=false)
-        addFn("move") {
+        addFnDoc(
+            name = "move",
+            doc = "Move this path to a new location. `to` may be a `Path` or `String`. Use `overwrite` to replace existing target.",
+            // types vary; keep generic description in doc
+            params = listOf(ParamDoc("to"), ParamDoc("overwrite", type("lyng.Bool"))),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 val toPath = parsePathArg(this, self, requiredArg<Obj>(0))
@@ -242,7 +350,12 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
             }
         }
         // delete(mustExist: Bool=false, recursively: Bool=false)
-        addFn("delete") {
+        addFnDoc(
+            name = "delete",
+            doc = "Delete this path. Optional flags: `mustExist` and `recursively`.",
+            params = listOf(ParamDoc("mustExist", type("lyng.Bool")), ParamDoc("recursively", type("lyng.Bool"))),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 val mustExist = args.list.getOrNull(0)?.toBool() ?: false
@@ -252,7 +365,12 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
             }
         }
         // copy(to: Path|String, overwrite: Bool=false)
-        addFn("copy") {
+        addFnDoc(
+            name = "copy",
+            doc = "Copy this path to a new location. `to` may be a `Path` or `String`. Use `overwrite` to replace existing target.",
+            params = listOf(ParamDoc("to"), ParamDoc("overwrite", type("lyng.Bool"))),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 val toPath = parsePathArg(this, self, requiredArg<Obj>(0))
@@ -262,7 +380,13 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
             }
         }
         // glob(pattern: String): List<Path>
-        addFn("glob") {
+        addFnDoc(
+            name = "glob",
+            doc = "List entries matching a glob pattern (no recursion).",
+            params = listOf(ParamDoc("pattern", type("lyng.String"))),
+            returns = TypeGenericDoc(type("lyng.List"), listOf(type("Path"))),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 val pattern = requireOnlyArg<ObjString>().value
@@ -274,7 +398,13 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
         // --- streaming readers (initial version: chunk from whole content, API stable) ---
 
         // readChunks(size: Int = 65536) -> Iterator<Buffer>
-        addFn("readChunks") {
+        addFnDoc(
+            name = "readChunks",
+            doc = "Read file in fixed-size chunks as an iterator of `Buffer`.",
+            params = listOf(ParamDoc("size", type("lyng.Int"))),
+            returns = TypeGenericDoc(type("lyng.Iterator"), listOf(type("lyng.Buffer"))),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 val size = args.list.getOrNull(0)?.toInt() ?: 65536
@@ -284,7 +414,13 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
         }
 
         // readUtf8Chunks(size: Int = 65536) -> Iterator<String>
-        addFn("readUtf8Chunks") {
+        addFnDoc(
+            name = "readUtf8Chunks",
+            doc = "Read UTF-8 text in fixed-size chunks as an iterator of `String`.",
+            params = listOf(ParamDoc("size", type("lyng.Int"))),
+            returns = TypeGenericDoc(type("lyng.Iterator"), listOf(type("lyng.String"))),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 val size = args.list.getOrNull(0)?.toInt() ?: 65536
@@ -294,7 +430,12 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
         }
 
         // lines() -> Iterator<String>, implemented via readUtf8Chunks
-        addFn("lines") {
+        addFnDoc(
+            name = "lines",
+            doc = "Iterate lines of the file as `String` values.",
+            returns = TypeGenericDoc(type("lyng.Iterator"), listOf(type("lyng.String"))),
+            moduleName = module.packageName
+        ) {
             fsGuard {
                 val chunkIt = thisObj.invokeInstanceMethod(this, "readUtf8Chunks")
                 ObjFsLinesIterator(chunkIt)
@@ -302,10 +443,22 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
         }
     }
 
-    // Export into the module scope
-    module.addConst("Path", pathType)
+    // Export into the module scope with docs
+    module.addConstDoc(
+        name = "Path",
+        value = pathType,
+        doc = "Filesystem path class. Construct with a string: `Path(\"/tmp\")`.",
+        type = type("Path"),
+        moduleName = module.packageName
+    )
     // Alias as requested (Path(s) style)
-    module.addConst("Paths", pathType)
+    module.addConstDoc(
+        name = "Paths",
+        value = pathType,
+        doc = "Alias of `Path` for those who prefer plural form.",
+        type = type("Path"),
+        moduleName = module.packageName
+    )
 }
 
 // --- Helper classes and utilities ---
@@ -361,12 +514,27 @@ class ObjFsBytesIterator(
         val BytesIteratorType = object : ObjClass("BytesIterator", ObjIterator) {
             init {
                 // make it usable in for-loops
-                addFn("iterator") { thisObj }
-                addFn("hasNext") {
+                addFnDoc(
+                    name = "iterator",
+                    doc = "Return this iterator instance (enables `for` loops).",
+                    returns = type("BytesIterator"),
+                    moduleName = "lyng.io.fs"
+                ) { thisObj }
+                addFnDoc(
+                    name = "hasNext",
+                    doc = "Whether there is another chunk available.",
+                    returns = type("lyng.Bool"),
+                    moduleName = "lyng.io.fs"
+                ) {
                     val self = thisAs<ObjFsBytesIterator>()
                     (self.pos < self.data.size).toObj()
                 }
-                addFn("next") {
+                addFnDoc(
+                    name = "next",
+                    doc = "Return the next chunk as a `Buffer`.",
+                    returns = type("lyng.Buffer"),
+                    moduleName = "lyng.io.fs"
+                ) {
                     val self = thisAs<ObjFsBytesIterator>()
                     if (self.pos >= self.data.size) raiseIllegalState("iterator exhausted")
                     val end = minOf(self.pos + self.chunkSize, self.data.size)
@@ -374,7 +542,11 @@ class ObjFsBytesIterator(
                     self.pos = end
                     ObjBuffer(chunk.asUByteArray())
                 }
-                addFn("cancelIteration") {
+                addFnDoc(
+                    name = "cancelIteration",
+                    doc = "Stop the iteration early; subsequent `hasNext` returns false.",
+                    moduleName = "lyng.io.fs"
+                ) {
                     val self = thisAs<ObjFsBytesIterator>()
                     self.pos = self.data.size
                     ObjVoid
@@ -397,12 +569,27 @@ class ObjFsStringChunksIterator(
         val StringChunksIteratorType = object : ObjClass("StringChunksIterator", ObjIterator) {
             init {
                 // make it usable in for-loops
-                addFn("iterator") { thisObj }
-                addFn("hasNext") {
+                addFnDoc(
+                    name = "iterator",
+                    doc = "Return this iterator instance (enables `for` loops).",
+                    returns = type("StringChunksIterator"),
+                    moduleName = "lyng.io.fs"
+                ) { thisObj }
+                addFnDoc(
+                    name = "hasNext",
+                    doc = "Whether there is another chunk available.",
+                    returns = type("lyng.Bool"),
+                    moduleName = "lyng.io.fs"
+                ) {
                     val self = thisAs<ObjFsStringChunksIterator>()
                     (self.pos < self.text.length).toObj()
                 }
-                addFn("next") {
+                addFnDoc(
+                    name = "next",
+                    doc = "Return the next UTF-8 chunk as a `String`.",
+                    returns = type("lyng.String"),
+                    moduleName = "lyng.io.fs"
+                ) {
                     val self = thisAs<ObjFsStringChunksIterator>()
                     if (self.pos >= self.text.length) raiseIllegalState("iterator exhausted")
                     val end = minOf(self.pos + self.chunkChars, self.text.length)
@@ -410,7 +597,11 @@ class ObjFsStringChunksIterator(
                     self.pos = end
                     ObjString(chunk)
                 }
-                addFn("cancelIteration") { ObjVoid }
+                addFnDoc(
+                    name = "cancelIteration",
+                    doc = "Stop the iteration early; subsequent `hasNext` returns false.",
+                    moduleName = "lyng.io.fs"
+                ) { ObjVoid }
             }
         }
     }
@@ -429,13 +620,28 @@ class ObjFsLinesIterator(
         val LinesIteratorType = object : ObjClass("LinesIterator", ObjIterator) {
             init {
                 // make it usable in for-loops
-                addFn("iterator") { thisObj }
-                addFn("hasNext") {
+                addFnDoc(
+                    name = "iterator",
+                    doc = "Return this iterator instance (enables `for` loops).",
+                    returns = type("LinesIterator"),
+                    moduleName = "lyng.io.fs"
+                ) { thisObj }
+                addFnDoc(
+                    name = "hasNext",
+                    doc = "Whether another line is available.",
+                    returns = type("lyng.Bool"),
+                    moduleName = "lyng.io.fs"
+                ) {
                     val self = thisAs<ObjFsLinesIterator>()
                     self.ensureBufferFilled(this)
                     (self.buffer.isNotEmpty() || !self.exhausted).toObj()
                 }
-                addFn("next") {
+                addFnDoc(
+                    name = "next",
+                    doc = "Return the next line as `String`.",
+                    returns = type("lyng.String"),
+                    moduleName = "lyng.io.fs"
+                ) {
                     val self = thisAs<ObjFsLinesIterator>()
                     self.ensureBufferFilled(this)
                     if (self.buffer.isEmpty() && self.exhausted) raiseIllegalState("iterator exhausted")
@@ -453,7 +659,11 @@ class ObjFsLinesIterator(
                     }
                     ObjString(line)
                 }
-                addFn("cancelIteration") { ObjVoid }
+                addFnDoc(
+                    name = "cancelIteration",
+                    doc = "Stop the iteration early; subsequent `hasNext` returns false.",
+                    moduleName = "lyng.io.fs"
+                ) { ObjVoid }
             }
         }
     }

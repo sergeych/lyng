@@ -39,6 +39,8 @@ import net.sergeych.lyng.miniast.*
  */
 class LyngDocumentationProvider : AbstractDocumentationProvider() {
     private val log = Logger.getInstance(LyngDocumentationProvider::class.java)
+    // Toggle to trace inheritance-based resolutions in Quick Docs. Keep false for normal use.
+    private val DEBUG_INHERITANCE = false
     override fun generateDoc(element: PsiElement?, originalElement: PsiElement?): String? {
         if (element == null) return null
         val file: PsiFile = element.containingFile ?: return null
@@ -57,10 +59,10 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
 
         // Build MiniAst for this file (fast and resilient). Best-effort; on failure return null.
         val sink = MiniAstBuilder()
+        // Use lenient import provider so unresolved imports (e.g., lyng.io.fs) don't break docs
+        val provider = IdeLenientImportProvider.create()
         try {
-            // Use lenient import provider so unresolved imports (e.g., lyng.io.fs) don't break docs
             val src = Source("<ide>", text)
-            val provider = IdeLenientImportProvider.create()
             runBlocking { Compiler.compileWithMini(src, provider, sink) }
         } catch (t: Throwable) {
             log.warn("[LYNG_DEBUG] QuickDoc: compileWithMini failed: ${t.message}")
@@ -96,6 +98,71 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
             return renderDeclDoc(it)
         }
 
+        // 4) Consult BuiltinDocRegistry for imported modules (top-level and class members)
+        var importedModules = mini.imports.map { it.segments.joinToString(".") { s -> s.name } }
+        // Core-module fallback: in scratch/repl-like files without imports, consult stdlib by default
+        if (importedModules.isEmpty()) importedModules = listOf("lyng.stdlib")
+        // 4a) try top-level decls
+        for (mod in importedModules) {
+            val docs = BuiltinDocRegistry.docsForModule(mod)
+            val matches = docs.filterIsInstance<MiniFunDecl>().filter { it.name == ident }
+            if (matches.isNotEmpty()) {
+                // Prefer overload by arity when caret is in a call position; otherwise show first
+                val arity = callArity(text, idRange.endOffset)
+                val chosen = arity?.let { a -> matches.firstOrNull { it.params.size == a } } ?: matches.first()
+                // If multiple and none matched arity, consider showing an overloads list
+                if (arity != null && chosen.params.size != arity && matches.size > 1) {
+                    return renderOverloads(ident, matches)
+                }
+                return renderDeclDoc(chosen)
+            }
+            // Also allow values/consts
+            docs.filterIsInstance<MiniValDecl>().firstOrNull { it.name == ident }?.let { return renderDeclDoc(it) }
+            // And classes
+            docs.filterIsInstance<MiniClassDecl>().firstOrNull { it.name == ident }?.let { return renderDeclDoc(it) }
+        }
+        // 4b) try class members like ClassName.member with inheritance fallback
+        val lhs = previousWordBefore(text, idRange.startOffset)
+        if (lhs != null && hasDotBetween(text, lhs.endOffset, idRange.startOffset)) {
+            val className = text.substring(lhs.startOffset, lhs.endOffset)
+            resolveMemberWithInheritance(importedModules, className, ident)?.let { (owner, member) ->
+                if (DEBUG_INHERITANCE) log.info("[LYNG_DEBUG] Inheritance resolved $className.$ident to $owner.${member.name}")
+                return when (member) {
+                    is MiniMemberFunDecl -> renderMemberFunDoc(owner, member)
+                    is MiniMemberValDecl -> renderMemberValDoc(owner, member)
+                }
+            }
+        } else {
+            // Heuristics when LHS is not an identifier (literals or call results):
+            //  - List literal like [..].member → assume class List
+            //  - Otherwise, try to find a unique class across imported modules that defines this member
+            val dotPos = findDotLeft(text, idRange.startOffset)
+            if (dotPos != null) {
+                val guessed = when {
+                    looksLikeListLiteralBefore(text, dotPos) -> "List"
+                    else -> null
+                }
+                if (guessed != null) {
+                    resolveMemberWithInheritance(importedModules, guessed, ident)?.let { (owner, member) ->
+                        if (DEBUG_INHERITANCE) log.info("[LYNG_DEBUG] Heuristic '$guessed.$ident' resolved via inheritance to $owner.${member.name}")
+                        return when (member) {
+                            is MiniMemberFunDecl -> renderMemberFunDoc(owner, member)
+                            is MiniMemberValDecl -> renderMemberValDoc(owner, member)
+                        }
+                    }
+                } else {
+                    // Search across classes; prefer Iterable, then Iterator, then List for common ops
+                    findMemberAcrossClasses(importedModules, ident)?.let { (owner, member) ->
+                        if (DEBUG_INHERITANCE) log.info("[LYNG_DEBUG] Cross-class '$ident' resolved to $owner.${member.name}")
+                        return when (member) {
+                            is MiniMemberFunDecl -> renderMemberFunDoc(owner, member)
+                            is MiniMemberValDecl -> renderMemberValDoc(owner, member)
+                        }
+                    }
+                }
+            }
+        }
+
         log.info("[LYNG_DEBUG] QuickDoc: nothing found for ident='$ident'")
         return null
     }
@@ -119,10 +186,11 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
             else -> d.name
         }
         // Show full detailed documentation, not just the summary
-        val doc = d.doc?.raw?.let { htmlEscape(it).replace("\n", "<br/>") }
+        val raw = d.doc?.raw
+        val doc: String? = if (raw.isNullOrBlank()) null else MarkdownRenderer.render(raw)
         val sb = StringBuilder()
         sb.append("<div class='doc-title'>").append(htmlEscape(title)).append("</div>")
-        if (!doc.isNullOrBlank()) sb.append("<div class='doc-body'>").append(doc).append("</div>")
+        if (!doc.isNullOrBlank()) sb.append(styledMarkdown(doc!!))
         return sb.toString()
     }
 
@@ -131,11 +199,44 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         return "<div class='doc-title'>${htmlEscape(title)}</div>"
     }
 
+    private fun renderMemberFunDoc(className: String, m: MiniMemberFunDecl): String {
+        val params = m.params.joinToString(", ") { p ->
+            val ts = typeOf(p.type)
+            if (ts.isNotBlank()) "${p.name}${ts}" else p.name
+        }
+        val ret = typeOf(m.returnType)
+        val staticStr = if (m.isStatic) "static " else ""
+        val title = "${staticStr}method $className.${m.name}(${params})${ret}"
+        val raw = m.doc?.raw
+        val doc: String? = if (raw.isNullOrBlank()) null else MarkdownRenderer.render(raw)
+        val sb = StringBuilder()
+        sb.append("<div class='doc-title'>").append(htmlEscape(title)).append("</div>")
+        if (!doc.isNullOrBlank()) sb.append(styledMarkdown(doc!!))
+        return sb.toString()
+    }
+
+    private fun renderMemberValDoc(className: String, m: MiniMemberValDecl): String {
+        val ts = typeOf(m.type)
+        val kind = if (m.mutable) "var" else "val"
+        val staticStr = if (m.isStatic) "static " else ""
+        val title = "${staticStr}${kind} $className.${m.name}${ts}"
+        val raw = m.doc?.raw
+        val doc: String? = if (raw.isNullOrBlank()) null else MarkdownRenderer.render(raw)
+        val sb = StringBuilder()
+        sb.append("<div class='doc-title'>").append(htmlEscape(title)).append("</div>")
+        if (!doc.isNullOrBlank()) sb.append(styledMarkdown(doc!!))
+        return sb.toString()
+    }
+
     private fun typeOf(t: MiniTypeRef?): String = when (t) {
-        is MiniTypeName -> ": ${t.segments.joinToString(".") { it.name }}"
-        is MiniGenericType -> ": ${typeOf(t.base).removePrefix(": ")}<${t.args.joinToString(", ") { typeOf(it).removePrefix(": ") }}>"
-        is MiniFunctionType -> ": (..) -> .."
-        is MiniTypeVar -> ": ${t.name}"
+        is MiniTypeName -> ": ${t.segments.joinToString(".") { it.name }}${if (t.nullable) "?" else ""}"
+        is MiniGenericType -> {
+            val base = typeOf(t.base).removePrefix(": ")
+            val args = t.args.joinToString(", ") { typeOf(it).removePrefix(": ") }
+            ": ${base}<${args}>${if (t.nullable) "?" else ""}"
+        }
+        is MiniFunctionType -> ": (..) -> ..${if (t.nullable) "?" else ""}"
+        is MiniTypeVar -> ": ${t.name}${if (t.nullable) "?" else ""}"
         null -> ""
     }
 
@@ -160,6 +261,73 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         )
     }
 
+    private fun styledMarkdown(html: String): String {
+        // IntelliJ doc renderer sanitizes and may surface <style> content as text.
+        // Strip any style tags defensively and keep markup lean; rely on platform defaults.
+        val safe = stripStyleTags(html)
+        return """
+            <div class="lyng-doc-md" style="max-width:72ch; line-height:1.4; font-size:0.96em;">
+              $safe
+            </div>
+        """.trimIndent()
+    }
+
+    private fun stripStyleTags(src: String): String {
+        // Remove any <style>...</style> blocks (case-insensitive, dotall)
+        val styleRegex = Regex("(?is)<style[^>]*>.*?</style>")
+        return src.replace(styleRegex, "")
+    }
+
+    // --- Simple helpers to support overload selection and heuristics ---
+    /**
+     * If identifier at [rightAfterIdent] is followed by a call like `(a, b)`,
+     * return the argument count; otherwise return null. Nested parentheses are
+     * handled conservatively to skip commas inside lambdas/parentheses.
+     */
+    private fun callArity(text: String, rightAfterIdent: Int): Int? {
+        var i = rightAfterIdent
+        // Skip whitespace
+        while (i < text.length && text[i].isWhitespace()) i++
+        if (i >= text.length || text[i] != '(') return null
+        i++
+        var depth = 0
+        var commas = 0
+        var hasToken = false
+        while (i < text.length) {
+            val ch = text[i]
+            when (ch) {
+                '(' -> { depth++; hasToken = true }
+                ')' -> {
+                    if (depth == 0) {
+                        // Empty parentheses => arity 0 if no token and no commas
+                        if (!hasToken && commas == 0) return 0
+                        return commas + 1
+                    } else depth--
+                }
+                ',' -> if (depth == 0) { commas++; hasToken = false }
+                '\n' -> {}
+                else -> if (!ch.isWhitespace()) hasToken = true
+            }
+            i++
+        }
+        return null
+    }
+
+    private fun renderOverloads(name: String, overloads: List<MiniFunDecl>): String {
+        val sb = StringBuilder()
+        sb.append("<div class='doc-title'>Overloads for ").append(htmlEscape(name)).append("</div>")
+        sb.append("<ul>")
+        overloads.forEach { fn ->
+            sb.append("<li><code>")
+                .append(htmlEscape("fun ${fn.name}${signatureOf(fn)}"))
+                .append("</code>")
+            fn.doc?.summary?.let { sum -> sb.append(" — ").append(htmlEscape(sum)) }
+            sb.append("</li>")
+        }
+        sb.append("</ul>")
+        return sb.toString()
+    }
+
     private fun wordRangeAt(text: String, offset: Int): TextRange? {
         if (text.isEmpty()) return null
         var s = offset.coerceIn(0, text.length)
@@ -169,5 +337,100 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         return if (e > s) TextRange(s, e) else null
     }
 
+    private fun previousWordBefore(text: String, offset: Int): TextRange? {
+        // skip spaces and dots to the left, but stop after hitting a non-identifier or dot boundary
+        var i = (offset - 1).coerceAtLeast(0)
+        // first, move left past spaces
+        while (i > 0 && text[i].isWhitespace()) i--
+        // remember position to check for dot between words
+        val end = i + 1
+        // now find the start of the identifier
+        while (i >= 0 && isIdentChar(text[i])) i--
+        val start = (i + 1)
+        return if (start < end && start >= 0) TextRange(start, end) else null
+    }
+
+    private fun hasDotBetween(text: String, leftEnd: Int, rightStart: Int): Boolean {
+        val s = leftEnd.coerceAtLeast(0)
+        val e = rightStart.coerceAtMost(text.length)
+        if (e <= s) return false
+        for (i in s until e) if (text[i] == '.') return true
+        return false
+    }
+
     private fun isIdentChar(c: Char): Boolean = c == '_' || c.isLetterOrDigit()
+
+    // --- Helpers for inheritance-aware and heuristic member lookup ---
+
+    private fun aggregateClasses(importedModules: List<String>): Map<String, MiniClassDecl> {
+        val map = LinkedHashMap<String, MiniClassDecl>()
+        for (mod in importedModules) {
+            val docs = BuiltinDocRegistry.docsForModule(mod)
+            docs.filterIsInstance<MiniClassDecl>().forEach { cls ->
+                // Prefer the first occurrence; allow later duplicates to be ignored
+                map.putIfAbsent(cls.name, cls)
+            }
+        }
+        return map
+    }
+
+    private fun resolveMemberWithInheritance(importedModules: List<String>, className: String, member: String): Pair<String, MiniMemberDecl>? {
+        val classes = aggregateClasses(importedModules)
+        fun dfs(name: String, visited: MutableSet<String>): Pair<String, MiniMemberDecl>? {
+            val cls = classes[name] ?: return null
+            cls.members.firstOrNull { it.name == member }?.let { return name to it }
+            if (!visited.add(name)) return null
+            for (baseName in cls.bases) {
+                dfs(baseName, visited)?.let { return it }
+            }
+            return null
+        }
+        return dfs(className, mutableSetOf())
+    }
+
+    private fun findMemberAcrossClasses(importedModules: List<String>, member: String): Pair<String, MiniMemberDecl>? {
+        val classes = aggregateClasses(importedModules)
+        // Preferred order for ambiguous common ops
+        val preference = listOf("Iterable", "Iterator", "List")
+        // First, try preference order
+        for (name in preference) {
+            resolveMemberWithInheritance(importedModules, name, member)?.let { return it }
+        }
+        // Then, scan all
+        for ((name, cls) in classes) {
+            cls.members.firstOrNull { it.name == member }?.let { return name to it }
+        }
+        return null
+    }
+
+    private fun findDotLeft(text: String, rightStart: Int): Int? {
+        var i = (rightStart - 1).coerceAtLeast(0)
+        while (i >= 0 && text[i].isWhitespace()) i--
+        while (i >= 0) {
+            val ch = text[i]
+            if (ch == '.') return i
+            if (ch == '\n') return null
+            i--
+        }
+        return null
+    }
+
+    private fun looksLikeListLiteralBefore(text: String, dotPos: Int): Boolean {
+        // Look left for a closing ']' possibly with spaces, then a matching '[' before a comma or assignment
+        var i = (dotPos - 1).coerceAtLeast(0)
+        while (i >= 0 && text[i].isWhitespace()) i--
+        if (i < 0 || text[i] != ']') return false
+        var depth = 0
+        i--
+        while (i >= 0) {
+            val ch = text[i]
+            when (ch) {
+                ']' -> depth++
+                '[' -> if (depth == 0) return true else depth--
+                '\n' -> return false
+            }
+            i--
+        }
+        return false
+    }
 }

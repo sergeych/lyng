@@ -37,6 +37,8 @@ repositories {
 
 dependencies {
     implementation(project(":lynglib"))
+    // Rich Markdown renderer for Quick Docs
+    implementation("com.vladsch.flexmark:flexmark-all:0.64.8")
 }
 
 intellij {

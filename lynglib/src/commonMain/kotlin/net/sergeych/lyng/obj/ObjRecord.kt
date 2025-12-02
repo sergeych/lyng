@@ -16,7 +16,6 @@
  */
 
 package net.sergeych.lyng.obj
-
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Visibility
 
@@ -31,7 +30,7 @@ data class ObjRecord(
     val declaringClass: ObjClass? = null,
     var importedFrom: Scope? = null,
     val isTransient: Boolean = false,
-    val type: Type = Type.Other
+    val type: Type = Type.Other,
 ) {
     enum class Type(val comparable: Boolean = false,val serializable: Boolean = false) {
         Field(true, true),

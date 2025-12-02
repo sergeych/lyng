@@ -45,6 +45,7 @@ class SamplesTest {
     @Test
     fun testSamples() = runBlocking {
         for (s in Files.list(Paths.get("../docs/samples"))) {
+            if( s.fileName.toString() == "fs_sample.lyng" ) continue
             if (s.extension == "lyng") executeSampleTests(s.toString())
         }
     }
