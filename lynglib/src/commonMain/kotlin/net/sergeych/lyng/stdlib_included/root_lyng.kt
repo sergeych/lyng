@@ -124,7 +124,7 @@ fun Iterable.sumOf(f) {
 }
 
 fun Iterable.minOf( lambda ) {
-val i = iterator()
+    val i = iterator()
     var minimum = lambda( i.next() )
     while( i.hasNext() ) {
         val x = lambda(i.next())
@@ -133,6 +133,9 @@ val i = iterator()
     minimum
 }
 
+/*
+    Return maximum value of the given function applied to elements of the collection.
+*/    
 fun Iterable.maxOf( lambda ) {
     val i = iterator()
     var maximum = lambda( i.next() )

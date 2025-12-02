@@ -27,6 +27,7 @@ import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiFile
 import kotlinx.coroutines.runBlocking
 import net.sergeych.lyng.Compiler
+import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.Source
 import net.sergeych.lyng.binding.Binder
 import net.sergeych.lyng.binding.SymbolKind
@@ -42,14 +43,16 @@ import net.sergeych.lyng.miniast.*
  * and applies semantic highlighting comparable with the web highlighter.
  */
 class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, LyngExternalAnnotator.Result>() {
-    data class Input(val text: String, val modStamp: Long)
+    data class Input(val text: String, val modStamp: Long, val previousSpans: List<Span>?)
 
     data class Span(val start: Int, val end: Int, val key: com.intellij.openapi.editor.colors.TextAttributesKey)
-    data class Result(val modStamp: Long, val spans: List<Span>)
+    data class Error(val start: Int, val end: Int, val message: String)
+    data class Result(val modStamp: Long, val spans: List<Span>, val error: Error? = null)
 
     override fun collectInformation(file: PsiFile): Input? {
         val doc: Document = file.viewProvider.document ?: return null
-        return Input(doc.text, doc.modificationStamp)
+        val prev = file.getUserData(CACHE_KEY)?.spans
+        return Input(doc.text, doc.modificationStamp, prev)
     }
 
     override fun doAnnotate(collectedInfo: Input?): Result? {
@@ -58,19 +61,29 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
         val text = collectedInfo.text
         // Build Mini-AST using the same mechanism as web highlighter
         val sink = MiniAstBuilder()
+        val source = Source("<ide>", text)
         try {
             // Call suspend API from blocking context
-            val src = Source("<ide>", text)
             val provider = IdeLenientImportProvider.create()
-            runBlocking { Compiler.compileWithMini(src, provider, sink) }
+            runBlocking { Compiler.compileWithMini(source, provider, sink) }
         } catch (e: Throwable) {
             if (e is com.intellij.openapi.progress.ProcessCanceledException) throw e
-            // Fail softly: no semantic layer this pass
-            return Result(collectedInfo.modStamp, emptyList())
+            // On script parse error: keep previous spans and report the error location
+            if (e is ScriptError) {
+                val off = try { source.offsetOf(e.pos) } catch (_: Throwable) { -1 }
+                val start0 = off.coerceIn(0, text.length.coerceAtLeast(0))
+                val (start, end) = expandErrorRange(text, start0)
+                return Result(
+                    collectedInfo.modStamp,
+                    collectedInfo.previousSpans ?: emptyList(),
+                    Error(start, end, e.errorMessage)
+                )
+            }
+            // Other failures: keep previous spans without error
+            return Result(collectedInfo.modStamp, collectedInfo.previousSpans ?: emptyList(), null)
         }
         ProgressManager.checkCanceled()
-        val mini = sink.build() ?: return Result(collectedInfo.modStamp, emptyList())
-        val source = Source("<ide>", text)
+        val mini = sink.build() ?: return Result(collectedInfo.modStamp, collectedInfo.previousSpans ?: emptyList())
 
         val out = ArrayList<Span>(256)
 
@@ -227,7 +240,7 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
             if (e is com.intellij.openapi.progress.ProcessCanceledException) throw e
         }
 
-        return Result(collectedInfo.modStamp, out)
+        return Result(collectedInfo.modStamp, out, null)
     }
 
     override fun apply(file: PsiFile, annotationResult: Result?, holder: AnnotationHolder) {
@@ -245,9 +258,48 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
                 .textAttributes(s.key)
                 .create()
         }
+
+        // Show syntax error if present
+        val err = result.error
+        if (err != null) {
+            val start = err.start.coerceIn(0, (doc?.textLength ?: 0))
+            val end = err.end.coerceIn(start, (doc?.textLength ?: start))
+            if (end > start) {
+                holder.newAnnotation(HighlightSeverity.ERROR, err.message)
+                    .range(TextRange(start, end))
+                    .create()
+            }
+        }
     }
 
     companion object {
         private val CACHE_KEY: Key<Result> = Key.create("LYNG_SEMANTIC_CACHE")
+    }
+
+    /**
+     * Make the error highlight a bit wider than a single character so it is easier to see and click.
+     * Strategy:
+     *  - If the offset points inside an identifier-like token (letters/digits/underscore), expand to the full token.
+     *  - Otherwise select a small range starting at the offset with a minimum width, but not crossing the line end.
+     */
+    private fun expandErrorRange(text: String, rawStart: Int): Pair<Int, Int> {
+        if (text.isEmpty()) return 0 to 0
+        val len = text.length
+        val start = rawStart.coerceIn(0, len)
+        fun isWord(ch: Char) = ch == '_' || ch.isLetterOrDigit()
+
+        if (start < len && isWord(text[start])) {
+            var s = start
+            var e = start
+            while (s > 0 && isWord(text[s - 1])) s--
+            while (e < len && isWord(text[e])) e++
+            return s to e
+        }
+
+        // Not inside a word: select a short, visible range up to EOL
+        val lineEnd = text.indexOf('\n', start).let { if (it == -1) len else it }
+        val minWidth = 4
+        val end = (start + minWidth).coerceAtMost(lineEnd).coerceAtLeast((start + 1).coerceAtMost(lineEnd))
+        return start to end
     }
 }

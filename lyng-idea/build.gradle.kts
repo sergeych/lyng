@@ -21,7 +21,7 @@ plugins {
 }
 
 group = "net.sergeych.lyng"
-version = "0.0.2-SNAPSHOT"
+version = "0.0.3-SNAPSHOT"
 
 kotlin {
     jvmToolchain(17)

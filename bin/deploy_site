@@ -27,6 +27,58 @@ function checkState() {
 
 }
 
+# Update docs/idea_plugin.md to point to the latest built IDEA plugin zip
+# from ./distributables before building the site. The change is temporary and
+# the original file is restored right after the build.
+DOC_IDEA_PLUGIN="docs/idea_plugin.md"
+DOC_IDEA_PLUGIN_BACKUP="${DOC_IDEA_PLUGIN}.deploy_backup"
+
+function updateIdeaPluginDownloadLink() {
+  if [[ ! -f "$DOC_IDEA_PLUGIN" ]]; then
+    echo "WARN: $DOC_IDEA_PLUGIN not found; skipping plugin link update"
+    return 0
+  fi
+
+  # Find the most recently modified plugin zip
+  local latest
+  latest=$(ls -t distributables/lyng-idea-*.zip 2>/dev/null | head -n 1)
+  if [[ -z "$latest" ]]; then
+    echo "WARN: no distributables/lyng-idea-*.zip found; leaving $DOC_IDEA_PLUGIN unchanged"
+    return 0
+  fi
+
+  local base
+  base=$(basename "$latest")
+  local version
+  version="${base#lyng-idea-}"
+  version="${version%.zip}"
+  local url
+  url="https://lynglang.com/distributables/${base}"
+  local newline
+  newline="### [Download plugin v${version}](${url})"
+
+  # Backup and rewrite the specific markdown line if present
+  cp "$DOC_IDEA_PLUGIN" "$DOC_IDEA_PLUGIN_BACKUP" || {
+    echo "ERROR: can't backup $DOC_IDEA_PLUGIN"; return 1; }
+
+  # Replace the line that starts with the download header; if not found, append it
+  awk -v repl="$newline" 'BEGIN{done=0} \
+    /^### \[Download plugin v/ { print repl; done=1; next } \
+    { print } \
+    END { if (done==0) exit 42 }' "$DOC_IDEA_PLUGIN_BACKUP" > "$DOC_IDEA_PLUGIN"
+
+  local rc=$?
+  if [[ $rc -eq 42 ]]; then
+    echo "WARN: download link not found in $DOC_IDEA_PLUGIN; appending generated link"
+    echo >> "$DOC_IDEA_PLUGIN"
+    echo "$newline" >> "$DOC_IDEA_PLUGIN"
+  elif [[ $rc -ne 0 ]]; then
+    echo "ERROR: failed to update $DOC_IDEA_PLUGIN; restoring original"
+    mv -f "$DOC_IDEA_PLUGIN_BACKUP" "$DOC_IDEA_PLUGIN" 2>/dev/null
+    return 1
+  fi
+}
+
 # default target settings
 case "com" in
   com)
@@ -46,15 +98,24 @@ esac
 
 die() { echo "ERROR: $*" 1>&2 ; exit 1; }
 
-#./gradlew site:clean site:jsBrowserDistribution || die "compilation failed"
-./gradlew site:clean site:jsBrowserDistribution || die "compilation failed"
+# Update the IDEA plugin download link in docs (temporarily), then build, then restore the doc
+updateIdeaPluginDownloadLink || echo "WARN: proceeding without updating IDEA plugin download link"
 
-if [[ $? != 0 ]]; then
+./gradlew site:clean site:jsBrowserDistribution
+BUILD_RC=$?
+
+# Always restore original doc if backup exists
+if [[ -f "$DOC_IDEA_PLUGIN_BACKUP" ]]; then
+  mv -f "$DOC_IDEA_PLUGIN_BACKUP" "$DOC_IDEA_PLUGIN"
+fi
+
+if [[ $BUILD_RC -ne 0 ]]; then
   echo
   echo -- build failed. deploy aborted.
   echo
   exit 100
 fi
+
 
 #exit 0
 
