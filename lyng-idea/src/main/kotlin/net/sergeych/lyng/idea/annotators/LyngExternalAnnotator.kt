@@ -54,7 +54,9 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
 
     override fun collectInformation(file: PsiFile): Input? {
         val doc: Document = file.viewProvider.document ?: return null
-        val prev = file.getUserData(CACHE_KEY)?.spans
+        val cached = file.getUserData(CACHE_KEY)
+        // Fast fix (1): reuse cached spans only if they were computed for the same modification stamp
+        val prev = if (cached != null && cached.modStamp == doc.modificationStamp) cached.spans else null
         return Input(doc.text, doc.modificationStamp, prev)
     }
 
@@ -76,9 +78,11 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
                 val off = try { source.offsetOf(e.pos) } catch (_: Throwable) { -1 }
                 val start0 = off.coerceIn(0, text.length.coerceAtLeast(0))
                 val (start, end) = expandErrorRange(text, start0)
+                // Fast fix (5): clear cached highlighting after the error start position
+                val trimmed = collectedInfo.previousSpans?.filter { it.end <= start } ?: emptyList()
                 return Result(
                     collectedInfo.modStamp,
-                    collectedInfo.previousSpans ?: emptyList(),
+                    trimmed,
                     Error(start, end, e.errorMessage)
                 )
             }
