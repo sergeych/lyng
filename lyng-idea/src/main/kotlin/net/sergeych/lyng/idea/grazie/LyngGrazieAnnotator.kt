@@ -129,22 +129,10 @@ class LyngGrazieAnnotator : ExternalAnnotator<LyngGrazieAnnotator.Input, LyngGra
         }
         log.info("LyngGrazieAnnotator.apply: used=${chosenEntry ?: "<none>"}, totalFindings=$totalReturned, painting=${findings.size}")
 
-        // Guarded fallback: if Grazie returned nothing but we clearly have fragments, try legacy spellchecker via reflection
-        if (findings.isEmpty() && fragments.isNotEmpty()) {
-            val added = fallbackWithLegacySpellcheckerIfAvailable(file, fragments, holder)
-            log.info("LyngGrazieAnnotator.apply: fallback painted=$added (0 means no legacy and heuristic may have painted separately)")
-            // Ensure at least one visible mark for diagnostics: paint a small WARNING at the first fragment range
-            try {
-                val first = fragments.first().second
-                val diagRange = TextRange(first.startOffset, (first.startOffset + 2).coerceAtMost(first.endOffset))
-                val ab = holder.newAnnotation(HighlightSeverity.INFORMATION, "[LyngSpell] active").range(diagRange)
-                applyTypoStyleIfRequested(file, ab)
-                ab.create()
-                log.info("LyngGrazieAnnotator.apply: painted diagnostic marker at ${diagRange.startOffset}..${diagRange.endOffset}")
-            } catch (_: Throwable) {
-                // ignore
-            }
-        }
+        // IMPORTANT: Do NOT fallback to the tiny bundled vocabulary on modern IDEs.
+        // If Grazie/Natural Languages processing returned nothing, we simply exit here
+        // to avoid low‑quality results from the legacy dictionary.
+        if (findings.isEmpty()) return
 
         for (f in findings) {
             val ab = holder.newAnnotation(HighlightSeverity.INFORMATION, f.message).range(f.range)

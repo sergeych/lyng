@@ -4,6 +4,7 @@ import lyng.io.fs
 import lyng.stdlib
 
 val files = Path("../..").list().toList()
+// most long is longest?
 val longestNameLength = files.maxOf { it.name.length }
 
 
