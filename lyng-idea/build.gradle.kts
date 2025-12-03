@@ -49,7 +49,11 @@ intellij {
     updateSinceUntilBuild.set(false)
     // Include only available bundled plugins for this IDE build
     plugins.set(listOf(
-        "com.intellij.java"
+        "com.intellij.java",
+        // Provide Grazie API on compile classpath (bundled in 2024.3+, but add here for compilation)
+        "tanvd.grazi"
+        // Do not list com.intellij.spellchecker here: it is expected to be bundled with the IDE.
+        // Listing it causes Gradle to search for a separate plugin artifact and fail on IC 2024.3.
     ))
 }
 

@@ -33,6 +33,12 @@
     <depends>com.intellij.modules.platform</depends>
     <!-- Needed for editor language features (syntax highlighting, etc.) -->
     <depends>com.intellij.modules.lang</depends>
+    <!-- Spellchecker support (optional). If present, load spellchecker.xml which registers our strategy. -->
+    <depends optional="true" config-file="spellchecker.xml">com.intellij.spellchecker</depends>
+    <!-- Grazie (Lite/Pro) grammar checker support (optional). If present, load grazie-lite.xml -->
+    <depends optional="true" config-file="grazie-lite.xml">tanvd.grazi</depends>
+    <!-- Some IDE builds may expose Grazie/Natural Languages under another ID; load grazie-bundled.xml -->
+    <depends optional="true" config-file="grazie-bundled.xml">com.intellij.grazie</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <!-- Language and file type -->
@@ -49,6 +55,9 @@
 
         <!-- External annotator for semantic highlighting -->
         <externalAnnotator language="Lyng" implementationClass="net.sergeych.lyng.idea.annotators.LyngExternalAnnotator"/>
+
+        <!-- Grazie-backed spell/grammar annotator (runs only when Grazie is installed) -->
+        <externalAnnotator language="Lyng" implementationClass="net.sergeych.lyng.idea.grazie.LyngGrazieAnnotator"/>
 
         <!-- Quick documentation provider bound to Lyng language -->
         <lang.documentationProvider language="Lyng" implementationClass="net.sergeych.lyng.idea.docs.LyngDocumentationProvider"/>
@@ -80,6 +89,7 @@
 
         <!-- If targeting SDKs with stable RawText API, the EP below can be enabled instead: -->
         <!-- <copyPastePreProcessor implementation="net.sergeych.lyng.idea.editor.LyngCopyPastePreProcessor"/> -->
+
     </extensions>
 
     <actions/>

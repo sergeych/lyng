@@ -47,7 +47,10 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
 
     data class Span(val start: Int, val end: Int, val key: com.intellij.openapi.editor.colors.TextAttributesKey)
     data class Error(val start: Int, val end: Int, val message: String)
-    data class Result(val modStamp: Long, val spans: List<Span>, val error: Error? = null)
+    data class Result(val modStamp: Long, val spans: List<Span>, val error: Error? = null,
+                      val spellIdentifiers: List<IntRange> = emptyList(),
+                      val spellComments: List<IntRange> = emptyList(),
+                      val spellStrings: List<IntRange> = emptyList())
 
     override fun collectInformation(file: PsiFile): Input? {
         val doc: Document = file.viewProvider.document ?: return null
@@ -240,7 +243,29 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
             if (e is com.intellij.openapi.progress.ProcessCanceledException) throw e
         }
 
-        return Result(collectedInfo.modStamp, out, null)
+        // Build spell index payload: identifiers from symbols + references; comments/strings from simple highlighter
+        val idRanges = mutableSetOf<IntRange>()
+        try {
+            val binding = Binder.bind(text, mini)
+            for (sym in binding.symbols) {
+                val s = sym.declStart; val e = sym.declEnd
+                if (s in 0..e && e <= text.length && s < e) idRanges += (s until e)
+            }
+            for (ref in binding.references) {
+                val s = ref.start; val e = ref.end
+                if (s in 0..e && e <= text.length && s < e) idRanges += (s until e)
+            }
+        } catch (_: Throwable) {
+            // Best-effort; no identifiers if binder fails
+        }
+        val tokens = try { SimpleLyngHighlighter().highlight(text) } catch (_: Throwable) { emptyList() }
+        val commentRanges = tokens.filter { it.kind == HighlightKind.Comment }.map { it.range.start until it.range.endExclusive }
+        val stringRanges = tokens.filter { it.kind == HighlightKind.String }.map { it.range.start until it.range.endExclusive }
+
+        return Result(collectedInfo.modStamp, out, null,
+            spellIdentifiers = idRanges.toList(),
+            spellComments = commentRanges,
+            spellStrings = stringRanges)
     }
 
     override fun apply(file: PsiFile, annotationResult: Result?, holder: AnnotationHolder) {
@@ -251,6 +276,32 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
         val cached = file.getUserData(CACHE_KEY)
         val result = if (cached != null && currentStamp != null && cached.modStamp == currentStamp) cached else annotationResult
         file.putUserData(CACHE_KEY, result)
+
+        // Store spell index for spell/grammar engines to consume (suspend until ready)
+        val ids = result.spellIdentifiers.map { TextRange(it.first, it.last + 1) }
+        val coms = result.spellComments.map { TextRange(it.first, it.last + 1) }
+        val strs = result.spellStrings.map { TextRange(it.first, it.last + 1) }
+        net.sergeych.lyng.idea.spell.LyngSpellIndex.store(file,
+            net.sergeych.lyng.idea.spell.LyngSpellIndex.Data(
+                modStamp = result.modStamp,
+                identifiers = ids,
+                comments = coms,
+                strings = strs
+            )
+        )
+
+        // Optional diagnostic overlay: visualize the ranges we will feed to spellcheckers
+        val settings = net.sergeych.lyng.idea.settings.LyngFormatterSettings.getInstance(file.project)
+        if (settings.debugShowSpellFeed) {
+            fun paint(r: TextRange, label: String) {
+                holder.newAnnotation(HighlightSeverity.WEAK_WARNING, "spell-feed: $label")
+                    .range(r)
+                    .create()
+            }
+            ids.forEach { paint(it, "id") }
+            coms.forEach { paint(it, "comment") }
+            if (settings.spellCheckStringLiterals) strs.forEach { paint(it, "string") }
+        }
 
         for (s in result.spans) {
             holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
