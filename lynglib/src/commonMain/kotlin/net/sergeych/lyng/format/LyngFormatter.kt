@@ -26,13 +26,15 @@ object LyngFormatter {
 
     /** Returns the input with indentation recomputed from scratch, line by line. */
     fun reindent(text: String, config: LyngFormatConfig = LyngFormatConfig()): String {
-        val lines = text.split('\n')
+        // Normalize tabs to spaces globally before any transformation; results must contain no tabs
+        val normalized = if (text.indexOf('\t') >= 0) text.replace("\t", " ".repeat(config.indentSize)) else text
+        val lines = normalized.split('\n')
         val sb = StringBuilder(text.length + lines.size)
         var blockLevel = 0
         var parenBalance = 0
         var bracketBalance = 0
         var prevBracketContinuation = false
-        val bracketBaseStack = ArrayDeque<String>()
+        // We don't keep per-"[" base alignment; continuation rules define alignment.
 
         fun codePart(s: String): String {
             val idx = s.indexOf("//")
@@ -40,8 +42,8 @@ object LyngFormatter {
         }
 
         fun indentOf(level: Int, continuation: Int): String =
-            if (config.useTabs) "\t".repeat(level) + " ".repeat(continuation)
-            else " ".repeat(level * config.indentSize + continuation)
+            // Always produce spaces; tabs are not allowed in resulting code
+            " ".repeat(level * config.indentSize + continuation)
 
         var awaitingSingleIndent = false
         fun isControlHeaderNoBrace(s: String): Boolean {
@@ -92,6 +94,11 @@ object LyngFormatter {
                 else -> 0
             }
 
+            // Special rule: inside bracket lists, do not add base block indent for element lines.
+            if (bracketBalance > 0 && firstChar != ']') {
+                effectiveLevel = 0
+            }
+
             // Replace leading whitespace with the exact target indent; but keep fully blank lines truly empty
             val contentStart = line.indexOfFirst { it != ' ' && it != '\t' }.let { if (it < 0) line.length else it }
             var content = line.substring(contentStart)
@@ -99,15 +106,15 @@ object LyngFormatter {
             if (content.startsWith("[")) {
                 content = "[" + content.drop(1).trimStart()
             }
-            // Determine base indent: for bracket blocks, preserve the exact leading whitespace
-            val leadingWs = if (contentStart > 0) line.substring(0, contentStart) else ""
-            val currentBracketBase = if (bracketBaseStack.isNotEmpty()) bracketBaseStack.last() else null
-            val indentString = if (currentBracketBase != null) {
-                val cont = if (continuation > 0) {
-                    if (config.useTabs) "\t" else " ".repeat(continuation)
-                } else ""
-                currentBracketBase + cont
-            } else indentOf(effectiveLevel, continuation)
+            // Normalize empty block on a single line: "{   }" -> "{}" (safe, idempotent)
+            run {
+                val t = content.trim()
+                if (t.length >= 2 && t.first() == '{' && t.last() == '}' && t.substring(1, t.length - 1).isBlank()) {
+                    content = "{}"
+                }
+            }
+            // Determine base indent using structural level and continuation only (spaces only)
+            val indentString = indentOf(effectiveLevel, continuation)
             if (content.isEmpty()) {
                 // preserve truly blank line as empty to avoid trailing spaces on empty lines
                 // (also keeps continuation blocks visually clean)
@@ -147,16 +154,14 @@ object LyngFormatter {
             // Reset one-shot flag after we used it on this line
             if (prevBracketContinuation) prevBracketContinuation = false
             // Set for the next iteration if current line ends with '['
+            // Record whether THIS line ends with an opening '[' so the NEXT line gets a one-shot
+            // continuation indent for the first element.
             if (endsWithBracket) {
+                // One-shot continuation for the very next line
                 prevBracketContinuation = true
-                // Push base indent of the '[' line for subsequent lines in this bracket block
-                bracketBaseStack.addLast(leadingWs)
-            }
-
-            // If this line starts with ']' (closing bracket), pop the preserved base for this bracket level
-            if (trimmedStart.startsWith("]") && bracketBaseStack.isNotEmpty()) {
-                // ensure stack stays in sync with bracket levels
-                bracketBaseStack.removeLast()
+            } else {
+                // Reset the one-shot flag if the previous line didn't end with '['
+                prevBracketContinuation = false
             }
         }
         return sb.toString()
@@ -263,7 +268,8 @@ object LyngFormatter {
                 }
                 i++
             }
-            var baseIndent = if (onlyWs) base.toString() else ""
+            // Normalize collected base indent: replace tabs with spaces
+            var baseIndent = if (onlyWs) base.toString().replace("\t", " ".repeat(config.indentSize)) else ""
             var parentBaseIndent: String? = baseIndent
             if (baseIndent.isEmpty()) {
                 // Fallback: use the indent of the nearest previous non-empty line as base.
@@ -304,10 +310,11 @@ object LyngFormatter {
                 if (foundIndent != null) {
                     // If we are right after a line that opens a block, the base for the pasted
                     // content should be one indent unit deeper than that line's base.
-                    parentBaseIndent = foundIndent
+                    val normFound = foundIndent.replace("\t", " ".repeat(config.indentSize))
+                    parentBaseIndent = normFound
                     baseIndent = if (prevLineEndsWithOpenBrace) {
-                        if (config.useTabs) foundIndent + "\t" else foundIndent + " ".repeat(config.indentSize.coerceAtLeast(1))
-                    } else foundIndent
+                        normFound + " ".repeat(config.indentSize.coerceAtLeast(1))
+                    } else normFound
                 }
                 if (baseIndent.isEmpty()) {
                     // Second fallback: compute structural block level up to this line and use it as base.
@@ -329,8 +336,8 @@ object LyngFormatter {
                         iScan = if (lineEnd < text.length) lineEnd + 1 else lineEnd
                     }
                     if (level > 0) {
-                        parentBaseIndent = if (config.useTabs) "\t".repeat(level - 1) else " ".repeat((level - 1).coerceAtLeast(0) * config.indentSize.coerceAtLeast(1))
-                        baseIndent = if (config.useTabs) "\t".repeat(level) else " ".repeat(level * config.indentSize.coerceAtLeast(1))
+                        parentBaseIndent = " ".repeat((level - 1).coerceAtLeast(0) * config.indentSize.coerceAtLeast(1))
+                        baseIndent = " ".repeat(level * config.indentSize.coerceAtLeast(1))
                     }
                 }
             }
@@ -343,9 +350,9 @@ object LyngFormatter {
                     if (lineEnd < 0) lineEnd = formattedZero.length
                     val line = formattedZero.substring(lineStart, lineEnd)
                     if (line.isNotEmpty()) {
-                        val isCloser = line.dropWhile { it == ' ' || it == '\t' }.startsWith("}")
-                        val indentToUse = if (isCloser && parentBaseIndent != null) parentBaseIndent!! else baseIndent
-                        sb.append(indentToUse).append(line)
+                        // Apply the SAME base indent to all lines in the slice, including '}' lines.
+                        // Structural alignment of braces is already handled inside formattedZero.
+                        sb.append(baseIndent).append(line)
                     } else sb.append(line)
                     if (lineEnd < formattedZero.length) sb.append('\n')
                     i = lineEnd + 1

@@ -3743,4 +3743,27 @@ class ScriptTest {
 //            assertEquals( "foo!. bar?", "${buzz[0]+"!"}. ${buzz[1]+"?"}" )
 //        """.trimIndent())
 //    }
+
+    @Test
+    fun testInlineArrayLiteral() = runTest {
+       eval("""
+           val res = []
+           for( i in [4,3,1] ) {
+                res.add(i)
+            }   
+            assertEquals( [4,3,1], res )
+       """.trimIndent())
+    }
+
+    @Test
+    fun testInlineMapLiteral() = runTest {
+       eval("""
+           val res = {}
+           for( i in {foo: "bar"} ) {
+                res[i.key] = i.value
+            }   
+            assertEquals( {foo: "bar"}, res )
+       """.trimIndent())
+    }
+
 }

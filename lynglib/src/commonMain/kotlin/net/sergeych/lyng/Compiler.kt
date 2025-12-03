@@ -738,8 +738,12 @@ class Compiler(
         val startAfterLbrace = cc.savePos()
         // Peek first non-ws token to decide whether it's likely a map literal
         val first = cc.peekNextNonWhitespace()
-        // Empty {} should NOT be taken as a map literal to preserve block/lambda semantics
-        if (first.type == Token.Type.RBRACE) return null
+        // Empty {} should be parsed as an empty map literal in expression context
+        if (first.type == Token.Type.RBRACE) {
+            // consume '}' and return empty map literal
+            cc.next() // consume the RBRACE
+            return MapLiteralRef(emptyList())
+        }
         if (first.type !in listOf(Token.Type.STRING, Token.Type.ID, Token.Type.ELLIPSIS)) return null
 
         // Commit to map literal parsing
@@ -1932,7 +1936,11 @@ class Compiler(
         val tOp = cc.next()
         if (tOp.value == "in") {
             // in loop
-            val source = parseStatement() ?: throw ScriptError(start, "Bad for statement: expected expression")
+            // We must parse an expression here. Using parseStatement() would treat a leading '{'
+            // as a block, breaking inline map literals like: for (i in {foo: "bar"}) { ... }
+            // So we parse an expression explicitly and wrap it into a StatementRef.
+            val exprAfterIn = parseExpression() ?: throw ScriptError(start, "Bad for statement: expected expression")
+            val source: Statement = exprAfterIn
             ensureRparen()
 
             // Expose the loop variable name to the parser so identifiers inside the loop body
