@@ -163,6 +163,7 @@ fun ensureLyngHighlightStyles() {
                 .hl-op  { color: #8250df; }
                 .hl-punc{ color: #57606a; }
                 .hl-lbl { color: #e36209; }
+                .hl-ann { color: #e36209; font-style: italic; }
                 .hl-dir { color: #6f42c1; }
                 .hl-err { color: #b31d28; text-decoration: underline wavy #b31d28; }
 
@@ -183,6 +184,7 @@ fun ensureLyngHighlightStyles() {
                 [data-bs-theme="dark"] .hl-rx   { color: #7ee787; }
                 [data-bs-theme="dark"] .hl-cmt  { color: #8b949e; }
                 [data-bs-theme="dark"] .hl-lbl  { color: #ffa657; }
+                [data-bs-theme="dark"] .hl-ann  { color: #ffa657; font-style: italic; }
                 [data-bs-theme="dark"] .hl-dir  { color: #d2a8ff; }
                 [data-bs-theme="dark"] .hl-err  { color: #ffa198; text-decoration-color: #ffa198; }
                 """
@@ -316,6 +318,10 @@ fun applyLyngHighlightToText(text: String): String {
         if (s.range.start > pos) sb.append(htmlEscape(safeSubstring(pos, s.range.start)))
         val cls = when (s.kind) {
             HighlightKind.Identifier -> overrides[s.range.start to s.range.endExclusive] ?: cssClassForKind(s.kind)
+            HighlightKind.Label -> {
+                val lex = safeSubstring(s.range.start, s.range.endExclusive)
+                if (lex.startsWith("@")) "hl-ann" else cssClassForKind(s.kind)
+            }
             else -> cssClassForKind(s.kind)
         }
         sb.append('<').append("span class=\"").append(cls).append('\"').append('>')

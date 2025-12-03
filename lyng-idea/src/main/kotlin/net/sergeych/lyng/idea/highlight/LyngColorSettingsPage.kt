@@ -57,6 +57,7 @@ class LyngColorSettingsPage : ColorSettingsPage {
         AttributesDescriptor("Identifier", LyngHighlighterColors.IDENTIFIER),
         AttributesDescriptor("Punctuation", LyngHighlighterColors.PUNCT),
         // Semantic
+        AttributesDescriptor("Annotation (semantic)", LyngHighlighterColors.ANNOTATION),
         AttributesDescriptor("Variable (semantic)", LyngHighlighterColors.VARIABLE),
         AttributesDescriptor("Value (semantic)", LyngHighlighterColors.VALUE),
         AttributesDescriptor("Function (semantic)", LyngHighlighterColors.FUNCTION),

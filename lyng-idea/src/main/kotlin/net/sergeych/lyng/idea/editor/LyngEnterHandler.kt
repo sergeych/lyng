@@ -35,7 +35,6 @@ import com.intellij.psi.codeStyle.CodeStyleManager
 import net.sergeych.lyng.format.LyngFormatConfig
 import net.sergeych.lyng.format.LyngFormatter
 import net.sergeych.lyng.idea.LyngLanguage
-import net.sergeych.lyng.idea.settings.LyngFormatterSettings
 
 class LyngEnterHandler : EnterHandlerDelegate {
     private val log = Logger.getInstance(LyngEnterHandler::class.java)
@@ -82,11 +81,9 @@ class LyngEnterHandler : EnterHandlerDelegate {
             // consider only code part before // comment
             val code = trimmed.substringBefore("//").trim()
             if (code == "}") {
-                // Optionally reindent the enclosed block without manually touching the '}' line.
-                val settings = LyngFormatterSettings.getInstance(project)
-                if (settings.reindentClosedBlockOnEnter) {
-                    reindentClosedBlockAroundBrace(project, file, doc, prevLine)
-                }
+                // Previously we reindented the enclosed block on Enter after a lone '}'.
+                // Per new behavior, this action is now bound to typing '}' instead.
+                // Keep Enter flow limited to indenting the new line only.
             }
         }
         // Adjust indent for the current (new) line

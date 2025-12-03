@@ -72,4 +72,9 @@ object LyngHighlighterColors {
     val PARAMETER: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
         "LYNG_PARAMETER", DefaultLanguageHighlighterColors.PARAMETER
     )
+
+    // Annotations (@Something) — use Kotlin/Java metadata default color
+    val ANNOTATION: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
+        "LYNG_ANNOTATION", DefaultLanguageHighlighterColors.METADATA
+    )
 }

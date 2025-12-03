@@ -81,4 +81,44 @@ class HighlightMappingTest {
         assertTrue(labeled.any { it.first == "(" && it.second == HighlightKind.Punctuation })
         assertTrue(labeled.any { it.first == ")" && it.second == HighlightKind.Punctuation })
     }
+
+    @Test
+    fun annotationsIncludeAtAndFullName() {
+        // Simple standalone annotation must include full token including '@'
+        run {
+            val text = "@Ann"
+            val spans = SimpleLyngHighlighter().highlight(text)
+            val annSpans = spans.filter { it.kind == HighlightKind.Label }
+            assertTrue(annSpans.size == 1)
+            val frag = text.substring(annSpans[0].range.start, annSpans[0].range.endExclusive)
+            assertTrue(frag == "@Ann")
+        }
+        // Qualified name: we at least must not drop the last character of the @segment
+        run {
+            val text = "@Qualified.Name"
+            val spans = SimpleLyngHighlighter().highlight(text)
+            val annSpans = spans.filter { it.kind == HighlightKind.Label }
+            assertTrue(annSpans.size == 1)
+            val s = annSpans[0]
+            val frag = text.substring(s.range.start, s.range.endExclusive)
+            assertTrue(frag.startsWith("@Qualified"))
+            // Ensure we did not miss the last char of this segment
+            assertTrue(frag.last() == 'd')
+            // Next token after the span should be '.'
+            assertTrue(text.getOrNull(s.range.endExclusive) == '.')
+        }
+        // Multiple annotations: every Label span must include '@' and end on an identifier boundary
+        run {
+            val text = "@Ann @Another(1) fun x() {}"
+            val spans = SimpleLyngHighlighter().highlight(text)
+            val annSpans = spans.filter { it.kind == HighlightKind.Label }
+            assertTrue(annSpans.size >= 2)
+            for (s in annSpans) {
+                val frag = text.substring(s.range.start, s.range.endExclusive)
+                assertTrue(frag.startsWith("@"))
+                // last char must be letter/digit/underscore/tilde/dollar per idNextChars
+                assertTrue(frag.last().isLetterOrDigit() || frag.last() == '_' || frag.last() == '$' || frag.last() == '~')
+            }
+        }
+    }
 }

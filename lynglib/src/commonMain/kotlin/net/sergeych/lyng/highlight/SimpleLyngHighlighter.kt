@@ -140,16 +140,22 @@ class SimpleLyngHighlighter : LyngHighlighter {
 
         for (t in tokens) {
             val k = kindOf(t.type, t.value) ?: continue
-            val start = src.offsetOf(t.pos)
+            val start0 = src.offsetOf(t.pos)
             val range = when (t.type) {
-                Type.STRING, Type.STRING2 -> adjustQuoteSpan(start, '"')
-                Type.CHAR -> adjustQuoteSpan(start, '\'')
+                Type.STRING, Type.STRING2 -> adjustQuoteSpan(start0, '"')
+                Type.CHAR -> adjustQuoteSpan(start0, '\'')
                 Type.HEX -> {
                     // Parser returns HEX token value without the leading "0x"; include it in highlight span
-                    val end = (start + 2 + t.value.length).coerceAtMost(text.length)
-                    TextRange(start, end)
+                    val end = (start0 + 2 + t.value.length).coerceAtMost(text.length)
+                    TextRange(start0, end)
                 }
-                else -> TextRange(start, (start + t.value.length).coerceAtMost(text.length))
+                Type.ATLABEL -> {
+                    // Parser returns value without leading '@'; token pos points at '@'.
+                    // So we need to include '@' (1 char) + the identifier length.
+                    val end = (start0 + 1 + t.value.length).coerceAtMost(text.length)
+                    TextRange(start0, end)
+                }
+                else -> TextRange(start0, (start0 + t.value.length).coerceAtMost(text.length))
             }
             if (range.endExclusive > range.start) raw += HighlightSpan(range, k)
         }

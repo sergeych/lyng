@@ -243,6 +243,21 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
             if (e is com.intellij.openapi.progress.ProcessCanceledException) throw e
         }
 
+        // Add annotation coloring using token highlighter (treat @Label as annotation)
+        run {
+            val tokens = try { SimpleLyngHighlighter().highlight(text) } catch (_: Throwable) { emptyList() }
+            for (s in tokens) if (s.kind == HighlightKind.Label) {
+                val start = s.range.start
+                val end = s.range.endExclusive
+                if (start in 0..end && end <= text.length && start < end) {
+                    val lexeme = try { text.substring(start, end) } catch (_: Throwable) { null }
+                    if (lexeme != null && lexeme.startsWith("@")) {
+                        putRange(start, end, LyngHighlighterColors.ANNOTATION)
+                    }
+                }
+            }
+        }
+
         // Build spell index payload: identifiers from symbols + references; comments/strings from simple highlighter
         val idRanges = mutableSetOf<IntRange>()
         try {

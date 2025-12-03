@@ -81,6 +81,9 @@
         <!-- Smart Enter handler -->
         <enterHandlerDelegate implementation="net.sergeych.lyng.idea.editor.LyngEnterHandler"/>
 
+        <!-- Trigger reindent of enclosed block when typing a standalone '}' -->
+        <typedHandler implementation="net.sergeych.lyng.idea.editor.LyngTypedHandler"/>
+
         <!-- Smart Backspace handler (deferred) -->
         <!-- <backspaceHandlerDelegate implementation="net.sergeych.lyng.idea.editor.LyngBackspaceHandler"/> -->
 
