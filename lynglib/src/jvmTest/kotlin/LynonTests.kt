@@ -723,6 +723,61 @@ class Wallet( id, ownerKey, balance=0, createdAt=Instant.now().truncateToSecond(
             assertEquals(cp, cp2)
         """)
     }
+
+    @Test
+    fun testClassSerializationSizes() = runTest {
+        testScope().eval("""
+            class Point(x=0,y=0)
+            // 1 bit - nonnull
+            // 4 bits type record
+            // 8 bits size (5)
+            // 1 bit uncompressed
+            // 40 bits "Point"
+            // 54 total:
+            assertEquals( 54, Lynon.encode("Point").size )
+            assertEquals( 7, Lynon.encode("Point").toBuffer().size )
+            
+            // 1 bit - nonnull
+            // 4 bits type record            
+            assertEquals( 5, Lynon.encode(0).size )
+            
+            class Empty()
+            // 1 bit non-null
+            // 4 bits type record
+            // 54 bits "Empty"
+            // 4 bits list size
+            // dont know where 1 bit for not cached
+            assertEquals( 64, Lynon.encode(Empty()).size )
+            assertEquals( Empty(), Lynon.decode(Lynon.encode(Empty())) )
+            
+            // Here the situation is dofferent: we have 2 in zeroes plus int size, but cache shrinks it
+            assertEquals( 70, Lynon.encode(Point()).size )
+            // two 1's added 16 bit (each short int is 8 bits)
+            assertEquals( 86, Lynon.encode(Point(1,1)).size )
+            assertEquals( 86, Lynon.encode(Point(1,2)).size )
+            
+            // Now let's make it more complex: we add 1 var to save:
+            class Poin2(x=0,y=0) {
+                val z = x + y
+            }
+            // val must not be serialized so no change here:
+            assertEquals( 86, Lynon.encode(Poin2(1,2)).size )
+            
+            // lets check size of homogenous list of one small int
+            // 8 bits 3
+            // 4 bits type
+            // 8 bits list size
+            // 2 bits not cached and not null
+            // 4 bits element type
+            assertEquals( 27, Lynon.encode([3]).size)
+            
+            class Poin3(x=0,y=0) {
+                var z = x + y
+            }
+            // var must be serialized, but caching could reduce size:
+            assert( Lynon.encode(Poin3(1,2)).size <= 110)
+        """.trimIndent())
+    }
 }
 
 

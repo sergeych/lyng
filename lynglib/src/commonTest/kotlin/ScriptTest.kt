@@ -3815,20 +3815,43 @@ class ScriptTest {
         assertEquals(JSTest1("bar", 1, true), x.decodeSerializable<JSTest1>())
     }
 
-//    @Test
-//    fun testInstanceVars() = runTest {
-//        val x = eval("""
-//            class T(x,y)
-//            T(1, 2)
-//        """.trimIndent()) as ObjInstance
-//        println(x.serializingVars.map { "${it.key}=${it.value.value}"})
-//    }
+    @Test
+    fun testInstanceVars() = runTest {
+        var x = eval("""
+            // in this case, x and y are constructor parameters, not instance variables:
+            class T(x,y) {
+                // and z is val and therefore needn't serialization either:
+                val z = x + y
+            }
+            T(1, 2)
+        """.trimIndent()) as ObjInstance
+        println(x.serializingVars.map { "${it.key}=${it.value.value}"})
+        // so serializingVars is empty:
+        assertEquals(emptyMap(), x.serializingVars)
+
+        x = eval("""
+            class T(x,y) {
+                // variable z  though should be serialized:
+                var z = x + y
+            }
+            val x = T(1, 2)
+            x.z = 100
+            assertEquals(100, x.z)
+            x
+        """.trimIndent()) as ObjInstance
+        // z is instance var, it must present
+        val z = x.serializingVars["z"] ?: x.serializingVars["T::z"]
+        // and be mutable:
+        assertTrue( z!!.isMutable )
+        println(x.serializingVars.map { "${it.key}=${it.value.value}"})
+    }
 
     @Test
     fun memberValCantBeAssigned() = runTest {
         eval("""
             class Point(foo,bar) {
                 val t = 42
+                var r = 142
             }
             val p = Point(1,2)
             // val should not be assignable:
@@ -3837,8 +3860,13 @@ class ScriptTest {
             // val field must be readonly:
             assertThrows { p.t = "bad" }
            
+            p.r = 123
+           
             // and the value should not be changed
             assertEqual(42, p.t)
+            
+            // but r should be changed:
+            assertEqual(123, p.r)
         """)
     }
 

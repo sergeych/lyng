@@ -210,8 +210,13 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
 
         // using objlist allow for some optimizations:
         val params = meta.params.map { readField(scope, it.name).value }
+        println("serializing $objClass with params: $params")
         encoder.encodeAnyList(scope, params)
-        serializeStateVars(scope, encoder)
+        val vars = serializingVars.values.map { it.value }
+        println("encoding vars: $vars")
+        if (vars.isNotEmpty<Obj>()) {
+            encoder.encodeAnyList(scope, vars)
+        }
     }
 
     override suspend fun toJson(scope: Scope): JsonElement {
@@ -232,9 +237,9 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         return JsonObject(result)
     }
 
-    val instanceVars: Map<String, ObjRecord> by lazy {
-        instanceScope.objects.filter { it.value.type.serializable }
-    }
+//    val instanceVars: Map<String, ObjRecord> by lazy {
+//        instanceScope.objects.filter { it.value.type.serializable }
+//    }
 
     val serializingVars: Map<String, ObjRecord> by lazy {
         instanceScope.objects.filter {
@@ -243,18 +248,11 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                     it.value.isMutable  }
     }
 
-    protected suspend fun serializeStateVars(scope: Scope, encoder: LynonEncoder) {
-        val vars = instanceVars.values.map { it.value }
-        if (vars.isNotEmpty()) {
-            encoder.encodeAnyList(scope, vars)
-        }
-    }
-
     internal suspend fun deserializeStateVars(scope: Scope, decoder: LynonDecoder) {
-        val localVars = instanceVars.values.toList()
+        val localVars = serializingVars.values.toList()
         if (localVars.isNotEmpty()) {
             val vars = decoder.decodeAnyList(scope)
-            if (vars.size > instanceVars.size)
+            if (vars.size > serializingVars.size)
                 scope.raiseIllegalArgument("serialized vars has bigger size than instance vars")
             for ((i, v) in vars.withIndex()) {
                 localVars[i].value = v
