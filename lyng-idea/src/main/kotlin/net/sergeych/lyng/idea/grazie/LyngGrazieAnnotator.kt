@@ -46,6 +46,27 @@ import net.sergeych.lyng.idea.spell.LyngSpellIndex
 class LyngGrazieAnnotator : ExternalAnnotator<LyngGrazieAnnotator.Input, LyngGrazieAnnotator.Result>(), DumbAware {
     private val log = Logger.getInstance(LyngGrazieAnnotator::class.java)
 
+    companion object {
+        // Cache GrammarChecker availability to avoid repeated reflection + noisy logs
+        @Volatile
+        private var grammarCheckerAvailable: Boolean? = null
+
+        @Volatile
+        private var grammarCheckerMissingLogged: Boolean = false
+
+        private fun isGrammarCheckerKnownMissing(): Boolean = (grammarCheckerAvailable == false)
+
+        private fun markGrammarCheckerMissingOnce(log: Logger, message: String) {
+            if (!grammarCheckerMissingLogged) {
+                // Downgrade to debug to reduce log noise across projects/sessions
+                log.debug(message)
+                grammarCheckerMissingLogged = true
+            }
+        }
+
+        private val RETRY_KEY: Key<Long> = Key.create("LYNG_GRAZIE_ANN_RETRY_STAMP")
+    }
+
     data class Input(val modStamp: Long)
     data class Finding(val range: TextRange, val message: String)
     data class Result(val modStamp: Long, val findings: List<Finding>)
@@ -209,10 +230,14 @@ class LyngGrazieAnnotator : ExternalAnnotator<LyngGrazieAnnotator.Input, LyngGra
 
     private fun runGrazieChecksWithTracing(file: PsiFile, content: TextContent): Pair<Collection<Any>?, String?> {
         // Try known entry points via reflection to avoid hard dependencies on Grazie internals
+        if (isGrammarCheckerKnownMissing()) return null to null
         try {
             // 1) Static GrammarChecker.check(TextContent)
-            val checkerCls = try { Class.forName("com.intellij.grazie.grammar.GrammarChecker") } catch (t: Throwable) {
-                log.info("LyngGrazieAnnotator: GrammarChecker class not found: ${t.javaClass.simpleName}: ${t.message}")
+            val checkerCls = try {
+                Class.forName("com.intellij.grazie.grammar.GrammarChecker").also { grammarCheckerAvailable = true }
+            } catch (t: Throwable) {
+                grammarCheckerAvailable = false
+                markGrammarCheckerMissingOnce(log, "LyngGrazieAnnotator: GrammarChecker class not found: ${t.javaClass.simpleName}: ${t.message}")
                 null
             }
             if (checkerCls != null) {
@@ -350,9 +375,6 @@ class LyngGrazieAnnotator : ExternalAnnotator<LyngGrazieAnnotator.Input, LyngGra
         } catch (_: Throwable) { null }
     }
 
-    companion object {
-        private val RETRY_KEY: Key<Long> = Key.create("LYNG_GRAZIE_ANN_RETRY_STAMP")
-    }
 
     // Fallback that uses legacy SpellCheckerManager (if present) via reflection to validate words in fragments.
     // Returns number of warnings painted.

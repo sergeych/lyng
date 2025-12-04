@@ -110,6 +110,72 @@ kotlin {
     }
 }
 
+// ---- Build-time generation of stdlib text from .lyng files into a Kotlin constant ----
+// The .lyng source of the stdlib lives here (module-relative path):
+val lyngStdlibDir = layout.projectDirectory.dir("stdlib/lyng")
+// The generated Kotlin source will be placed here and added to commonMain sources:
+val generatedLyngStdlibDir = layout.buildDirectory.dir("generated/source/lyngStdlib/commonMain/kotlin")
+
+val generateLyngStdlib by tasks.registering {
+    group = "build"
+    description = "Generate Kotlin source with embedded lyng stdlib text"
+    inputs.dir(lyngStdlibDir)
+    outputs.dir(generatedLyngStdlibDir)
+    // Simpler: opt out of configuration cache for this ad-hoc generator task
+    notCompatibleWithConfigurationCache("Uses dynamic file IO in doLast; trivial generator")
+
+    doLast {
+        val targetPkg = "net.sergeych.lyng.stdlib_included"
+        val targetDir = generatedLyngStdlibDir.get().asFile.resolve(targetPkg.replace('.', '/'))
+        targetDir.mkdirs()
+
+        val files = lyngStdlibDir.asFileTree.matching { include("**/*.lyng") }.files.sortedBy { it.name }
+        val content = if (files.isEmpty()) "" else buildString {
+            files.forEachIndexed { idx, f ->
+                val text = f.readText()
+                if (idx > 0) append("\n\n")
+                append(text)
+            }
+        }
+
+        // Emit as a regular quoted Kotlin string to avoid triple-quote edge cases
+        fun escapeForQuoted(s: String): String = buildString {
+            for (ch in s) when (ch) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                '\n' -> append("\\n")
+                '\r' -> {} // drop CR
+                '\t' -> append("\\t")
+                else -> append(ch)
+            }
+        }
+        val body = escapeForQuoted(content)
+
+        val sb = StringBuilder()
+        sb.append("package ").append(targetPkg).append("\n\n")
+        sb.append("@Suppress(\"Unused\", \"MemberVisibilityCanBePrivate\")\n")
+        sb.append("internal val rootLyng = \"")
+        sb.append(body)
+        sb.append("\"\n")
+
+        targetDir.resolve("root_lyng.generated.kt").writeText(sb.toString())
+    }
+}
+
+// Add the generated directory to commonMain sources
+kotlin.sourceSets.named("commonMain") {
+    kotlin.srcDir(generatedLyngStdlibDir)
+}
+
+// Ensure ALL Kotlin compilations (all targets/variants) depend on the generator
+kotlin.targets.configureEach {
+    compilations.configureEach {
+        compileTaskProvider.configure {
+            dependsOn(generateLyngStdlib)
+        }
+    }
+}
+
 android {
     namespace = "org.jetbrains.kotlinx.multiplatform.library.template"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
