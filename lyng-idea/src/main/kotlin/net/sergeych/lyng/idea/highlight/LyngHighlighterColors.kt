@@ -77,4 +77,9 @@ object LyngHighlighterColors {
     val ANNOTATION: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
         "LYNG_ANNOTATION", DefaultLanguageHighlighterColors.METADATA
     )
+
+    // Enum constant (declaration or usage)
+    val ENUM_CONSTANT: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
+        "LYNG_ENUM_CONSTANT", DefaultLanguageHighlighterColors.STATIC_FIELD
+    )
 }

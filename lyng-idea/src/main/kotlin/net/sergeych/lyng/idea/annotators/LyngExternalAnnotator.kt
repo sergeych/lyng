@@ -262,6 +262,18 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
             }
         }
 
+        // Map Enum constants from token highlighter to IDEA enum constant color
+        run {
+            val tokens = try { SimpleLyngHighlighter().highlight(text) } catch (_: Throwable) { emptyList() }
+            for (s in tokens) if (s.kind == HighlightKind.EnumConstant) {
+                val start = s.range.start
+                val end = s.range.endExclusive
+                if (start in 0..end && end <= text.length && start < end) {
+                    putRange(start, end, LyngHighlighterColors.ENUM_CONSTANT)
+                }
+            }
+        }
+
         // Build spell index payload: identifiers from symbols + references; comments/strings from simple highlighter
         val idRanges = mutableSetOf<IntRange>()
         try {

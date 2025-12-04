@@ -117,6 +117,7 @@
       .hl-class { color: #5a32a3; font-weight: 600; }
       .hl-val { color: #1b7f5a; }
       .hl-var { color: #1b7f5a; text-decoration: underline dotted currentColor; }
+      .hl-enumc { color: #b08800; font-weight: 600; }
       .hl-param { color: #0969da; font-style: italic; }
       .hl-num { color: #005cc5; }
       .hl-str { color: #032f62; }
@@ -139,6 +140,7 @@
       [data-bs-theme="dark"] .hl-class{ color: #d2a8ff; font-weight: 700; }
       [data-bs-theme="dark"] .hl-val  { color: #7ee787; }
       [data-bs-theme="dark"] .hl-var  { color: #7ee787; text-decoration: underline dotted currentColor; }
+      [data-bs-theme="dark"] .hl-enumc{ color: #f2cc60; font-weight: 700; }
       [data-bs-theme="dark"] .hl-param{ color: #a5d6ff; font-style: italic; }
       [data-bs-theme="dark"] .hl-num  { color: #79c0ff; }
       [data-bs-theme="dark"] .hl-str,
@@ -156,7 +158,7 @@
         z-index: 1020; /* above content, below navbar */
         top: var(--navbar-offset, 56px);
         left: 0;
-        width: 162px; /* 10% narrower than 180px */
+        width: 242px; /* 10% narrower than 180px */
         text-align: center;
         /* Slightly asymmetric padding to visually center text within rotated band (desktop) */
         /* Nudge text a bit lower on large screens */
@@ -171,9 +173,9 @@
       }
       @media (max-width: 576px) {
         .corner-ribbon {
-          width: 135px; /* 10% narrower than 150px */
+          width: 195px; /* 10% narrower than 150px */
           transform: translate(-50px, 8px) rotate(-45deg);
-          font-size: .7rem; /* even smaller on phones */
+          font-size: .6rem; /* even smaller on phones */
           padding: .32rem 0 .28rem; /* keep mobile text centered too */
         }
       }
@@ -182,8 +184,8 @@
   <body>
     <!-- Top-left version ribbon -->
     <div class="corner-ribbon bg-danger text-white">
-        <span class="me-3">
-            v1.0.3
+        <span style="margin-left: -5em">
+            v1.0.6-SNAPSHOT
         </span>
     </div>
     <!-- Fixed top navbar for the whole site -->

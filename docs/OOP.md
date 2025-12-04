@@ -168,6 +168,80 @@ Compatibility notes:
 
 Earlier drafts and docs described a declaration‑order depth‑first linearization. Lyng now uses C3 MRO for member lookup and disambiguation. Most code should continue to work unchanged, but in rare edge cases involving diamonds or complex multiple inheritance, the chosen base for an ambiguous member may change to reflect C3. If needed, disambiguate explicitly using `this@Type.member(...)` inside class bodies or casts `(expr as Type).member(...)` from outside.
 
+## Enums
+
+Lyng provides lightweight enums for representing a fixed set of named constants. Enums are classes whose instances are predefined and singletons.
+
+Current syntax supports simple enum declarations with just entry names:
+
+    enum Color {
+        RED, GREEN, BLUE
+    }
+
+Usage:
+
+- Type of entries: every entry is an instance of its enum type.
+
+      assert( Color.RED is Color )
+
+- Order and names: each entry has zero‑based `ordinal` and string `name`.
+
+      assertEquals(0, Color.RED.ordinal)
+      assertEquals("BLUE", Color.BLUE.name)
+
+- All entries as a list in declaration order: `EnumType.entries`.
+
+      assertEquals([Color.RED, Color.GREEN, Color.BLUE], Color.entries)
+
+- Lookup by name: `EnumType.valueOf("NAME")` → entry.
+
+      assertEquals(Color.GREEN, Color.valueOf("GREEN"))
+
+- Equality and comparison:
+  - Equality uses identity of entries, e.g., `Color.RED == Color.valueOf("RED")`.
+  - Cross‑enum comparisons are not allowed.
+  - Ordering comparisons use `ordinal`.
+
+      assert( Color.RED == Color.valueOf("RED") )
+      assert( Color.RED.ordinal < Color.BLUE.ordinal )
+      >>> void
+
+### Enums with `when`
+
+Use `when(subject)` with equality branches for enums. See full `when` guide: [The `when` statement](when.md).
+
+    enum Color { RED, GREEN, BLUE }
+
+    fun describe(c) {
+        when(c) {
+            Color.RED, Color.GREEN -> "primary-like"
+            Color.BLUE -> "blue"
+            else -> "unknown"   // if you pass something that is not a Color
+        }
+    }
+    assertEquals("primary-like", describe(Color.RED))
+    assertEquals("blue", describe(Color.BLUE))
+    >>> void
+
+### Serialization
+
+Enums are serialized compactly with Lynon: the encoded value stores just the entry ordinal within the enum type, which is both space‑efficient and fast.
+
+    import lyng.serialization
+
+    enum Color { RED, GREEN, BLUE }
+
+    val e = Lynon.encode(Color.BLUE)
+    val decoded = Lynon.decode(e)
+    assertEquals(Color.BLUE, decoded)
+    >>> void
+
+Notes and limitations (current version):
+
+- Enum declarations support only simple entry lists: no per‑entry bodies, no custom constructors, and no user‑defined methods/fields on the enum itself yet.
+- `name` and `ordinal` are read‑only properties of an entry.
+- `entries` is a read‑only list owned by the enum type.
+
 ## fields and visibility
 
 It is possible to add non-constructor fields:

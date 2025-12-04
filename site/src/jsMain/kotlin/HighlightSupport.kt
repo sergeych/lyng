@@ -42,6 +42,7 @@ object SiteHighlightLocal {
         HighlightKind.Label -> "hl-lbl"
         HighlightKind.Directive -> "hl-dir"
         HighlightKind.Error -> "hl-err"
+        HighlightKind.EnumConstant -> "hl-enumc"
     }
 
     private fun htmlEscape(s: String): String = buildString(s.length) {

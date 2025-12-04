@@ -65,6 +65,7 @@ class LyngColorSettingsPage : ColorSettingsPage {
         AttributesDescriptor("Type (semantic)", LyngHighlighterColors.TYPE),
         AttributesDescriptor("Namespace (semantic)", LyngHighlighterColors.NAMESPACE),
         AttributesDescriptor("Parameter (semantic)", LyngHighlighterColors.PARAMETER),
+        AttributesDescriptor("Enum constant (semantic)", LyngHighlighterColors.ENUM_CONSTANT),
     )
 
     override fun getColorDescriptors(): Array<ColorDescriptor> = ColorDescriptor.EMPTY_ARRAY

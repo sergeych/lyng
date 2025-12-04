@@ -66,6 +66,26 @@ You can use blocks in if statement, as expected:
     limited
     >>> 120.0
 
+## Enums (quick intro)
+
+Lyng supports simple enums for a fixed set of named constants. Declare with `enum Name { ... }` and use entries as `Name.ENTRY`.
+
+    enum Color {
+        RED, GREEN, BLUE
+    }
+
+    assert( Color.RED is Color )
+    assertEquals( 0, Color.RED.ordinal )
+    assertEquals( "BLUE", Color.BLUE.name )
+
+    // All entries as a list, in order:
+    assertEquals( [Color.RED, Color.GREEN, Color.BLUE], Color.entries )
+
+    // Lookup by name:
+    assertEquals( Color.GREEN, Color.valueOf("GREEN") )
+
+For more details (usage patterns, `when` switching, serialization), see OOP notes: [Enums in detail](OOP.md#enums).
+
 When putting multiple statments in the same line it is convenient and recommended to use `;`:
 
     var from; var to
