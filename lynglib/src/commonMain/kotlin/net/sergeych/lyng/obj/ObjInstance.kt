@@ -232,8 +232,11 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             ?: scope.raiseError("can't serialize non-serializable object (no constructor meta)")
         for (entry in meta.params)
             result[entry.name] = readField(scope, entry.name).value.toJson(scope)
-        for (i in serializingVars)
-            result[i.key] = i.value.value.toJson(scope)
+        for (i in serializingVars) {
+            // remove T:: prefix from the field name for JSON
+            val parts = i.key.split("::")
+            result[if( parts.size == 1 ) parts[0] else parts.last()] = i.value.value.toJson(scope)
+        }
         return JsonObject(result)
     }
 

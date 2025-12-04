@@ -928,10 +928,10 @@ class ScriptTest {
         assertEquals(7, c.eval("x++").toInt())
         assertEquals(
             8, c.eval("x")
-            .also {
-                println("${it.toDouble()} ${it.toInt()} ${it.toLong()} ${it.toInt()}")
-            }
-            .toInt())
+                .also {
+                    println("${it.toDouble()} ${it.toInt()} ${it.toLong()} ${it.toInt()}")
+                }
+                .toInt())
     }
 
     @Test
@@ -1878,7 +1878,7 @@ class ScriptTest {
 
     @Test
     fun testIntExponentRealForm() = runTest {
-        when(val x = eval("1e-6").toString()) {
+        when (val x = eval("1e-6").toString()) {
             "0.000001", "1E-6", "1e-6" -> {}
             else -> fail("Excepted 1e-6 got $x")
         }
@@ -2577,14 +2577,16 @@ class ScriptTest {
 
     @Test
     fun testSetAddRemoveSet() = runTest {
-        eval("""
+        eval(
+            """
             val s1 = Set( 1, 2 3)
             val s2 = Set( 3, 4 5)
             assertEquals( Set(1,2,3,4,5), s1 + s2 )
             assertEquals( Set(1,2,3,4,5), s1 + s2.toList() )
             assertEquals( Set(1,2), s1 - s2 )
             assertEquals( Set(1,2), s1 - s2.toList() )
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
@@ -2651,7 +2653,7 @@ class ScriptTest {
         )
     }
 
-    class ObjTestFoo(val value: ObjString): Obj() {
+    class ObjTestFoo(val value: ObjString) : Obj() {
 
         override val objClass: ObjClass = klass
 
@@ -2669,13 +2671,15 @@ class ScriptTest {
     fun TestApplyFromKotlin() = runTest {
         val scope = Script.newScope()
         scope.addConst("testfoo", ObjTestFoo(ObjString("bar2")))
-        scope.eval("""
+        scope.eval(
+            """
             assertEquals(testfoo.test(), "bar2")
             testfoo.apply {
                 println(test())
                 assertEquals(test(), "bar2")
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
@@ -2683,7 +2687,8 @@ class ScriptTest {
         withContext(Dispatchers.Default) {
             withTimeout(1.seconds) {
                 val s = Script.newScope()
-                s.eval("""
+                s.eval(
+                    """
                     fun dosomething() {
                         var x = 0
                         for( i in 1..100) {
@@ -2692,7 +2697,8 @@ class ScriptTest {
                         delay(100)
                         assert(x == 5050)
                     }
-                """.trimIndent())
+                """.trimIndent()
+                )
                 (0..100).map {
                     globalDefer {
                         s.eval("dosomething()")
@@ -2707,7 +2713,8 @@ class ScriptTest {
         withContext(Dispatchers.Default) {
             withTimeout(1.seconds) {
                 val s = Script.newScope()
-                s.eval("""
+                s.eval(
+                    """
                     // it is intentionally not optimal to provoke
                     // RC errors:
                     class AtomicCounter {
@@ -2742,7 +2749,8 @@ class ScriptTest {
                      }
                      assertEquals( 100, ac.getCounter() )
                     
-                """.trimIndent())
+                """.trimIndent()
+                )
             }
         }
     }
@@ -3580,7 +3588,7 @@ class ScriptTest {
     }
 
 
-//    @Test
+    //    @Test
     fun testMinimumOptimization() = runTest {
         for (i in 1..200) {
             bm {
@@ -3627,16 +3635,24 @@ class ScriptTest {
         val scope1 = Script.newScope()
 
         // extension foo should be local to scope1
-        assertEquals("a_foo", scope1.eval("""
+        assertEquals(
+            "a_foo", scope1.eval(
+                """
             fun String.foo() { this + "_foo" }
             "a".foo()
-        """.trimIndent()).toString())
+        """.trimIndent()
+            ).toString()
+        )
 
         val scope2 = Script.newScope()
-        assertEquals("a_bar", scope2.eval("""
+        assertEquals(
+            "a_bar", scope2.eval(
+                """
             fun String.foo() { this + "_bar" }
             "a".foo()
-        """.trimIndent()).toString())
+        """.trimIndent()
+            ).toString()
+        )
     }
 
     @Test
@@ -3658,15 +3674,18 @@ class ScriptTest {
 
     @Test
     fun testRangeIsIterable() = runTest {
-        eval("""
+        eval(
+            """
             val r = 1..10
             assert( r is Iterable )
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testCallAndResultOrder() = runTest {
-        eval("""
+        eval(
+            """
             import lyng.stdlib
             
             fun test(a="a", b="b", c="c") { [a, b, c] }
@@ -3681,13 +3700,15 @@ class ScriptTest {
             // the parentheses here are in fact unnecessary:
             val ok2 = test { void }.last() 
             assert( ok2 is Callable)
-        """.trimIndent())
+        """.trimIndent()
+        )
 
     }
 
     @Test
     fun testIterableMinMax() = runTest {
-        eval("""
+        eval(
+            """
             import lyng.stdlib
             assertEquals( -100, (1..100).toList().minOf { -it } )
             assertEquals( -1, (1..100).toList().maxOf { -it } )
@@ -3764,29 +3785,34 @@ class ScriptTest {
 
     @Test
     fun testInlineArrayLiteral() = runTest {
-       eval("""
+        eval(
+            """
            val res = []
            for( i in [4,3,1] ) {
                 res.add(i)
             }   
             assertEquals( [4,3,1], res )
-       """.trimIndent())
+       """.trimIndent()
+        )
     }
 
     @Test
     fun testInlineMapLiteral() = runTest {
-       eval("""
+        eval(
+            """
            val res = {}
            for( i in {foo: "bar"} ) {
                 res[i.key] = i.value
             }   
             assertEquals( {foo: "bar"}, res )
-       """.trimIndent())
+       """.trimIndent()
+        )
     }
 
     @Test
     fun testCommentsInClassConstructor() = runTest {
-        eval("""
+        eval(
+            """
            class T(
                // comment 1
                val x: Int,
@@ -3801,7 +3827,7 @@ class ScriptTest {
     }
 
     @Serializable
-    data class JSTest1(val foo: String,val one: Int, val ok: Boolean)
+    data class JSTest1(val foo: String, val one: Int, val ok: Boolean)
 
     @Test
     fun testToJson() = runTest {
@@ -3810,26 +3836,30 @@ class ScriptTest {
         assertEquals(x.toJson().toString(), """{"foo":"bar","one":1,"ok":true}""")
         assertEquals(
             (eval("""{ "foo": "bar", "one": 1, "ok": true }.toJsonString()""") as ObjString).value,
-            """{"foo":"bar","one":1,"ok":true}""")
+            """{"foo":"bar","one":1,"ok":true}"""
+        )
         println(x.decodeSerializable<JSTest1>())
         assertEquals(JSTest1("bar", 1, true), x.decodeSerializable<JSTest1>())
     }
 
     @Test
     fun testInstanceVars() = runTest {
-        var x = eval("""
+        var x = eval(
+            """
             // in this case, x and y are constructor parameters, not instance variables:
             class T(x,y) {
                 // and z is val and therefore needn't serialization either:
                 val z = x + y
             }
             T(1, 2)
-        """.trimIndent()) as ObjInstance
-        println(x.serializingVars.map { "${it.key}=${it.value.value}"})
+        """.trimIndent()
+        ) as ObjInstance
+        println(x.serializingVars.map { "${it.key}=${it.value.value}" })
         // so serializingVars is empty:
         assertEquals(emptyMap(), x.serializingVars)
 
-        x = eval("""
+        x = eval(
+            """
             class T(x,y) {
                 // variable z  though should be serialized:
                 var z = x + y
@@ -3838,17 +3868,19 @@ class ScriptTest {
             x.z = 100
             assertEquals(100, x.z)
             x
-        """.trimIndent()) as ObjInstance
+        """.trimIndent()
+        ) as ObjInstance
         // z is instance var, it must present
         val z = x.serializingVars["z"] ?: x.serializingVars["T::z"]
         // and be mutable:
-        assertTrue( z!!.isMutable )
-        println(x.serializingVars.map { "${it.key}=${it.value.value}"})
+        assertTrue(z!!.isMutable)
+        println(x.serializingVars.map { "${it.key}=${it.value.value}" })
     }
 
     @Test
     fun memberValCantBeAssigned() = runTest {
-        eval("""
+        eval(
+            """
             class Point(foo,bar) {
                 val t = 42
                 var r = 142
@@ -3867,23 +3899,46 @@ class ScriptTest {
             
             // but r should be changed:
             assertEqual(123, p.r)
-        """)
+        """
+        )
     }
 
-//    @Test
-//    fun testClassToJson() = runTest {
-//        val x = eval("""
-//            import lyng.serialization
-//            class Point(foo,bar) {
-//                val t = 42
-//            }
-//            val p = Point(1,2)
-//            p.t = 121
-//            println(Point(10,"bar").toJsonString())
-//            Lynon.encode(Point(1,2))
-//        """.trimIndent())
-//        println((x as ObjBitBuffer).bitArray.asUByteArray().toDump())
-//
-//    }
+    @Test
+    fun testClassToJson() = runTest {
+        eval(
+            """
+            import lyng.serialization
+            class Point(foo,bar) {
+                val t = 42
+            }
+            // val is not serialized
+            assertEquals( "{\"foo\":1,\"bar\":2}", Point(1,2).toJsonString() )
+            class Point2(foo,bar) {
+                var reason = 42
+            }
+            // var is serialized instead
+            assertEquals( "{\"foo\":1,\"bar\":2,\"reason\":42}", Point2(1,2).toJsonString() )
+        """.trimIndent()
+        )
 
+    }
+
+    @Test
+    fun testCustomClassToJson() = runTest {
+        eval(
+            """
+            import lyng.serialization
+           
+            class Point2(foo,bar) {
+                var reason = 42
+                // but we override json serialization:
+                fun toJsonObject() {
+                    { "custom": true }
+                }
+            }
+            // var is serialized instead
+            assertEquals( "{\"custom\":true}", Point2(1,2).toJsonString() )
+        """.trimIndent()
+        )
+    }
 }

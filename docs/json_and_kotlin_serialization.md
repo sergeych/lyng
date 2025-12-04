@@ -1,17 +1,69 @@
 # Json support
 
-Since 1.0.5 we start adding JSON support. 
+Since 1.0.5 we start adding JSON support. Versions 1,0,6* support serialization of the basic types, including lists and maps, and simple classes. Multiple inheritance may produce incorrect results, it is work in progress.
 
-Right now we only support basic types: maps, lists, strings, numbers, booleans. It is not yet capable of serializing classes. This functionality will be added in the 1.0.6 release.
-
-## Serializae to kotlin string
+## Serialization in Lyng
 
     // in lyng
     assertEquals("{\"a\":1}", {a: 1}.toJsonString())
     void
     >>> void
 
-From the kotln side, you can use `Obj.toJson()` and deserialization helpers:
+Simple classes serialization is supported:
+
+    import lyng.serialization
+    class Point(foo,bar) {
+        val t = 42
+    }
+    // val is not serialized
+    assertEquals( "{\"foo\":1,\"bar\":2}", Point(1,2).toJsonString() )
+    >>> void
+
+Note that mutable members are serialized:
+
+    import lyng.serialization
+    
+    class Point2(foo,bar) {
+        var reason = 42
+        // but we override json serialization:
+        fun toJsonObject() {
+            { "custom": true }
+        }
+    }
+    // var is serialized instead
+    assertEquals( "{\"custom\":true}", Point2(1,2).toJsonString() )
+    >>> void
+
+Custom serialization of user classes is possible by overriding `toJsonObject` method. It must return an object which is serializable to Json. Most often it is a map, but any object is accepted, that makes it very flexible:
+
+    import lyng.serialization
+    
+    class Point2(foo,bar) {
+        var reason = 42
+        // but we override json serialization:
+        fun toJsonObject() {
+            { "custom": true }
+        }
+    }
+    class Custom {
+        fun toJsonObject() {
+            "full freedom"
+        }
+    }
+    // var is serialized instead
+    assertEquals( "\"full freedom\"", Custom().toJsonString() )
+    >>> void
+
+Please note that `toJsonString` should be used to get serialized string representation of the object. Don't call `toJsonObject` directly, it is not intended to be used outside the serialization library.
+
+
+## Kotlin side interfaces
+
+The "Batteries included" principle is also applied to serialization.
+
+- `Obj.toJson()` provides Kotlin `JsonElement`
+- `Obj.toJsonString()` provides Json string representation
+- `Obj.decodeSerializableWith()` and `Obj.decodeSerializable()` allows to decode Lyng classes as Kotlin objects using `kotlinx.serialization`:
 
 ```kotlin
 /**
@@ -38,6 +90,6 @@ suspend inline fun <reified T>Obj.decodeSerializable(scope: Scope= Scope()) =
     decodeSerializableWith<T>(serializer<T>(), scope)
 ```
 
-Note that lyng-2-kotlin deserialization with `kotlinx.serialization` is working based on JsonElement as information carrier, without formatting and parsing actual Json strings. This is why we use `Json.decodeFromJsonElement` instead of `Json.decodeFromString`. Such approach gives satisfactory performance without writing and supporting custom `kotlinx.serialization` codecs.
+Note that lyng-2-kotlin deserialization with `kotlinx.serialization` uses JsonElement as information carrier without formatting and parsing actual Json strings. This is why we use `Json.decodeFromJsonElement` instead of `Json.decodeFromString`. Such an approach gives satisfactory performance without writing and supporting custom `kotlinx.serialization` codecs.
 
 
