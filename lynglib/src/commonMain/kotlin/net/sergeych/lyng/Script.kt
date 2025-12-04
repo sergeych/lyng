@@ -172,6 +172,13 @@ class Script(
                 if( a.compareTo(this, b) != 0 )
                     raiseError(ObjAssertionFailedException(this,"Assertion failed: ${a.inspect(this)} == ${b.inspect(this)}"))
             }
+            // alias used in tests
+            addVoidFn("assertEqual") {
+                val a = requiredArg<Obj>(0)
+                val b = requiredArg<Obj>(1)
+                if( a.compareTo(this, b) != 0 )
+                    raiseError(ObjAssertionFailedException(this,"Assertion failed: ${a.inspect(this)} == ${b.inspect(this)}"))
+            }
             addVoidFn("assertNotEquals") {
                 val a = requiredArg<Obj>(0)
                 val b = requiredArg<Obj>(1)

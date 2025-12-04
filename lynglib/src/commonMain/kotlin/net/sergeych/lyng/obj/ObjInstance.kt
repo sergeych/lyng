@@ -17,6 +17,8 @@
 
 package net.sergeych.lyng.obj
 
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import net.sergeych.lyng.Arguments
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.canAccessMember
@@ -41,11 +43,17 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             val caller0 = scope.currentClassCtx ?: instanceScope.currentClassCtx
             val caller = caller0 // do not default to objClass for outsiders
             if (!canAccessMember(it.visibility, decl, caller))
-                scope.raiseError(ObjAccessException(scope, "can't access field $name (declared in ${decl?.className ?: "?"})"))
+                scope.raiseError(
+                    ObjAccessException(
+                        scope,
+                        "can't access field $name (declared in ${decl?.className ?: "?"})"
+                    )
+                )
             return it
         }
         // Try MI-mangled lookup along linearization (C3 MRO): ClassName::name
         val cls = objClass
+
         // self first, then parents
         fun findMangled(): ObjRecord? {
             // self
@@ -66,7 +74,12 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             val caller0 = scope.currentClassCtx ?: instanceScope.currentClassCtx
             val caller = caller0 // do not default to objClass for outsiders
             if (!canAccessMember(rec.visibility, declaring, caller))
-                scope.raiseError(ObjAccessException(scope, "can't access field $name (declared in ${declaring?.className ?: "?"})"))
+                scope.raiseError(
+                    ObjAccessException(
+                        scope,
+                        "can't access field $name (declared in ${declaring?.className ?: "?"})"
+                    )
+                )
             return rec
         }
         // Fall back to methods/properties on class
@@ -83,7 +96,10 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 val caller0 = scope.currentClassCtx ?: instanceScope.currentClassCtx
                 val caller = caller0 // do not default to objClass for outsiders
                 if (!canAccessMember(f.visibility, decl, caller))
-                    ObjIllegalAssignmentException(scope, "can't assign to field $name (declared in ${decl?.className ?: "?"})").raise()
+                    ObjIllegalAssignmentException(
+                        scope,
+                        "can't assign to field $name (declared in ${decl?.className ?: "?"})"
+                    ).raise()
             }
             if (!f.isMutable) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
             if (f.value.assign(scope, newValue) == null)
@@ -99,6 +115,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             }
             return null
         }
+
         val rec = findMangled()
         if (rec != null) {
             val declaring = when {
@@ -109,7 +126,10 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 val caller0 = scope.currentClassCtx ?: instanceScope.currentClassCtx
                 val caller = caller0 // do not default to objClass for outsiders
                 if (!canAccessMember(rec.visibility, declaring, caller))
-                    ObjIllegalAssignmentException(scope, "can't assign to field $name (declared in ${declaring?.className ?: "?"})").raise()
+                    ObjIllegalAssignmentException(
+                        scope,
+                        "can't assign to field $name (declared in ${declaring?.className ?: "?"})"
+                    ).raise()
             }
             if (!rec.isMutable) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
             if (rec.value.assign(scope, newValue) == null)
@@ -119,14 +139,21 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         super.writeField(scope, name, newValue)
     }
 
-    override suspend fun invokeInstanceMethod(scope: Scope, name: String, args: Arguments,
-                                              onNotFoundResult: (()->Obj?)?): Obj =
+    override suspend fun invokeInstanceMethod(
+        scope: Scope, name: String, args: Arguments,
+        onNotFoundResult: (() -> Obj?)?
+    ): Obj =
         instanceScope[name]?.let { rec ->
             val decl = rec.declaringClass ?: objClass.findDeclaringClassOf(name)
             val caller0 = scope.currentClassCtx ?: instanceScope.currentClassCtx
             val caller = caller0 ?: if (scope.thisObj === this) objClass else null
             if (!canAccessMember(rec.visibility, decl, caller))
-                scope.raiseError(ObjAccessException(scope, "can't invoke method $name (declared in ${decl?.className ?: "?"})"))
+                scope.raiseError(
+                    ObjAccessException(
+                        scope,
+                        "can't invoke method $name (declared in ${decl?.className ?: "?"})"
+                    )
+                )
             // execute with lexical class context propagated to declaring class
             val saved = instanceScope.currentClassCtx
             instanceScope.currentClassCtx = decl
@@ -134,7 +161,8 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 rec.value.invoke(
                     instanceScope,
                     this,
-                    args)
+                    args
+                )
             } finally {
                 instanceScope.currentClassCtx = saved
             }
@@ -146,7 +174,12 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                     val caller0 = scope.currentClassCtx ?: instanceScope.currentClassCtx
                     val caller = caller0 ?: if (scope.thisObj === this) objClass else null
                     if (!canAccessMember(rec.visibility, decl, caller))
-                        scope.raiseError(ObjAccessException(scope, "can't invoke method $name (declared in ${decl?.className ?: "?"})"))
+                        scope.raiseError(
+                            ObjAccessException(
+                                scope,
+                                "can't invoke method $name (declared in ${decl?.className ?: "?"})"
+                            )
+                        )
                     val saved = instanceScope.currentClassCtx
                     instanceScope.currentClassCtx = decl
                     try {
@@ -181,20 +214,45 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         serializeStateVars(scope, encoder)
     }
 
-    protected val instanceVars: Map<String, ObjRecord> by lazy {
+    override suspend fun toJson(scope: Scope): JsonElement {
+        // Call the class-provided map serializer:
+        val custom = invokeInstanceMethod(scope, "toJsonObject", Arguments.EMPTY, { ObjVoid })
+        if (custom != ObjVoid) {
+            // class json serializer returned something, so use it:
+            return custom.toJson(scope)
+        }
+        // no class serializer, serialize from constructor
+        val result = mutableMapOf<String, JsonElement>()
+        val meta = objClass.constructorMeta
+            ?: scope.raiseError("can't serialize non-serializable object (no constructor meta)")
+        for (entry in meta.params)
+            result[entry.name] = readField(scope, entry.name).value.toJson(scope)
+        for (i in serializingVars)
+            result[i.key] = i.value.value.toJson(scope)
+        return JsonObject(result)
+    }
+
+    val instanceVars: Map<String, ObjRecord> by lazy {
         instanceScope.objects.filter { it.value.type.serializable }
     }
 
-    protected suspend fun serializeStateVars(scope: Scope,encoder: LynonEncoder) {
+    val serializingVars: Map<String, ObjRecord> by lazy {
+        instanceScope.objects.filter {
+            it.value.type.serializable &&
+                    it.value.type == ObjRecord.Type.Field &&
+                    it.value.isMutable  }
+    }
+
+    protected suspend fun serializeStateVars(scope: Scope, encoder: LynonEncoder) {
         val vars = instanceVars.values.map { it.value }
-        if( vars.isNotEmpty()) {
+        if (vars.isNotEmpty()) {
             encoder.encodeAnyList(scope, vars)
         }
     }
 
     internal suspend fun deserializeStateVars(scope: Scope, decoder: LynonDecoder) {
         val localVars = instanceVars.values.toList()
-        if( localVars.isNotEmpty() ) {
+        if (localVars.isNotEmpty()) {
             val vars = decoder.decodeAnyList(scope)
             if (vars.size > instanceVars.size)
                 scope.raiseIllegalArgument("serialized vars has bigger size than instance vars")
@@ -250,7 +308,12 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
                 val decl = rec.declaringClass ?: instance.objClass.findDeclaringClassOf(name)
                 val caller = scope.currentClassCtx
                 if (!canAccessMember(rec.visibility, decl, caller))
-                    scope.raiseError(ObjAccessException(scope, "can't access field $name (declared in ${decl?.className ?: "?"})"))
+                    scope.raiseError(
+                        ObjAccessException(
+                            scope,
+                            "can't access field $name (declared in ${decl?.className ?: "?"})"
+                        )
+                    )
                 return rec
             }
         }
@@ -261,7 +324,15 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
         if (!canAccessMember(r.visibility, decl, caller))
             scope.raiseError(ObjAccessException(scope, "can't access field $name (declared in ${decl.className})"))
         return when (val value = r.value) {
-            is net.sergeych.lyng.Statement -> ObjRecord(value.execute(instance.instanceScope.createChildScope(scope.pos, newThisObj = instance)), r.isMutable)
+            is net.sergeych.lyng.Statement -> ObjRecord(
+                value.execute(
+                    instance.instanceScope.createChildScope(
+                        scope.pos,
+                        newThisObj = instance
+                    )
+                ), r.isMutable
+            )
+
             else -> r
         }
     }
@@ -273,7 +344,10 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
             val decl = f.declaringClass ?: startClass
             val caller = scope.currentClassCtx
             if (!canAccessMember(f.visibility, decl, caller))
-                ObjIllegalAssignmentException(scope, "can't assign to field $name (declared in ${decl.className})").raise()
+                ObjIllegalAssignmentException(
+                    scope,
+                    "can't assign to field $name (declared in ${decl.className})"
+                ).raise()
             if (!f.isMutable) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
             if (f.value.assign(scope, newValue) == null) f.value = newValue
             return
@@ -284,7 +358,10 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
                 val decl = f.declaringClass ?: instance.objClass.findDeclaringClassOf(name)
                 val caller = scope.currentClassCtx
                 if (!canAccessMember(f.visibility, decl, caller))
-                    ObjIllegalAssignmentException(scope, "can't assign to field $name (declared in ${decl?.className ?: "?"})").raise()
+                    ObjIllegalAssignmentException(
+                        scope,
+                        "can't assign to field $name (declared in ${decl?.className ?: "?"})"
+                    ).raise()
                 if (!f.isMutable) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
                 if (f.value.assign(scope, newValue) == null) f.value = newValue
                 return
@@ -299,7 +376,12 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
         if (r.value.assign(scope, newValue) == null) r.value = newValue
     }
 
-    override suspend fun invokeInstanceMethod(scope: Scope, name: String, args: Arguments, onNotFoundResult: (() -> Obj?)?): Obj {
+    override suspend fun invokeInstanceMethod(
+        scope: Scope,
+        name: String,
+        args: Arguments,
+        onNotFoundResult: (() -> Obj?)?
+    ): Obj {
         // Qualified method dispatch must start from the specified ancestor, not from the instance scope.
         memberFromAncestor(name)?.let { rec ->
             val decl = rec.declaringClass ?: startClass
@@ -320,7 +402,12 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
                 val decl = rec.declaringClass ?: instance.objClass.findDeclaringClassOf(name)
                 val caller = scope.currentClassCtx
                 if (!canAccessMember(rec.visibility, decl, caller))
-                    scope.raiseError(ObjAccessException(scope, "can't invoke method $name (declared in ${decl?.className ?: "?"})"))
+                    scope.raiseError(
+                        ObjAccessException(
+                            scope,
+                            "can't invoke method $name (declared in ${decl?.className ?: "?"})"
+                        )
+                    )
                 val saved = instance.instanceScope.currentClassCtx
                 instance.instanceScope.currentClassCtx = decl
                 try {

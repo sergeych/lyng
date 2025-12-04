@@ -40,6 +40,8 @@ enum class HighlightKind {
     Label,
     Directive,
     Error,
+    /** Enum constant (both declaration and usage). */
+    EnumConstant,
 }
 
 /** A highlighted span: character range and its semantic/lexical kind. */

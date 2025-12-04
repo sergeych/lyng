@@ -154,6 +154,7 @@ fun ensureLyngHighlightStyles() {
                 .hl-class { color: #5a32a3; font-weight: 600; }
                 .hl-val { color: #1b7f5a; }
                 .hl-var { color: #1b7f5a; text-decoration: underline dotted currentColor; }
+                .hl-enumc { color: #b08800; font-weight: 600; }
                 .hl-param { color: #0969da; font-style: italic; }
                 .hl-num { color: #005cc5; }
                 .hl-str { color: #032f62; }
@@ -177,6 +178,7 @@ fun ensureLyngHighlightStyles() {
                 [data-bs-theme="dark"] .hl-class{ color: #d2a8ff; font-weight: 700; }
                 [data-bs-theme="dark"] .hl-val  { color: #7ee787; }
                 [data-bs-theme="dark"] .hl-var  { color: #7ee787; text-decoration: underline dotted currentColor; }
+                [data-bs-theme="dark"] .hl-enumc{ color: #f2cc60; font-weight: 700; }
                 [data-bs-theme="dark"] .hl-param{ color: #a5d6ff; font-style: italic; }
                 [data-bs-theme="dark"] .hl-num  { color: #79c0ff; }
                 [data-bs-theme="dark"] .hl-str,
@@ -677,6 +679,7 @@ private fun cssClassForKind(kind: HighlightKind): String = when (kind) {
     HighlightKind.Label -> "hl-lbl"
     HighlightKind.Directive -> "hl-dir"
     HighlightKind.Error -> "hl-err"
+    HighlightKind.EnumConstant -> "hl-enumc"
 }
 
 /**

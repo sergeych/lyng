@@ -159,8 +159,10 @@ class SimpleLyngHighlighter : LyngHighlighter {
             }
             if (range.endExclusive > range.start) raw += HighlightSpan(range, k)
         }
+        // Heuristics: mark enum constants in declaration blocks and on qualified usages Foo.BAR
+        val overridden = applyEnumConstantHeuristics(text, src, tokens, raw)
         // Adjust single-line comment spans to extend till EOL to compensate for lexer offset/length quirks
-        val adjusted = extendSingleLineCommentsToEol(text, raw)
+        val adjusted = extendSingleLineCommentsToEol(text, overridden)
         // Spans are in order; merge adjacent of the same kind for compactness
         return mergeAdjacent(adjusted)
     }
@@ -201,4 +203,82 @@ private fun extendSingleLineCommentsToEol(
         i++
     }
     return out
+}
+
+/**
+ * Detect enum constants both in enum declarations and in qualified usages (TypeName.CONST)
+ * and override corresponding identifier spans with EnumConstant kind.
+ */
+private fun applyEnumConstantHeuristics(
+    text: String,
+    src: Source,
+    tokens: List<net.sergeych.lyng.Token>,
+    spans: MutableList<HighlightSpan>
+): MutableList<HighlightSpan> {
+    if (tokens.isEmpty() || spans.isEmpty()) return spans
+
+    // Build quick lookup from range start to span index for identifiers only
+    val byStart = HashMap<Int, Int>(spans.size * 2)
+    for (i in spans.indices) {
+        val s = spans[i]
+        if (s.kind == HighlightKind.Identifier) byStart[s.range.start] = i
+    }
+
+    fun overrideIdAtToken(idx: Int) {
+        val t = tokens[idx]
+        if (t.type != Type.ID) return
+        val start = src.offsetOf(t.pos)
+        val spanIndex = byStart[start] ?: return
+        spans[spanIndex] = HighlightSpan(spans[spanIndex].range, HighlightKind.EnumConstant)
+    }
+
+    // 1) Enum declarations: enum Name { CONST1, CONST2 }
+    var i = 0
+    while (i < tokens.size) {
+        val t = tokens[i]
+        if (t.type == Type.ID && t.value.equals("enum", ignoreCase = true)) {
+            // expect: ID(enum) ID(name) LBRACE (ID (COMMA ID)* ) RBRACE
+            var j = i + 1
+            // skip optional whitespace/newlines tokens are separate types, so we just check IDs and braces
+            if (j < tokens.size && tokens[j].type == Type.ID) j++ else { i++; continue }
+            if (j < tokens.size && tokens[j].type == Type.LBRACE) {
+                j++
+                while (j < tokens.size) {
+                    val tk = tokens[j]
+                    if (tk.type == Type.RBRACE) { j++; break }
+                    if (tk.type == Type.ID) {
+                        // enum entry declaration
+                        overrideIdAtToken(j)
+                        j++
+                        // optional comma
+                        if (j < tokens.size && tokens[j].type == Type.COMMA) { j++ ; continue }
+                        continue
+                    }
+                    // Any unexpected token ends enum entries scan
+                    break
+                }
+                i = j
+                continue
+            }
+        }
+        i++
+    }
+
+    // 2) Qualified usages: Something.CONST where CONST is ALL_UPPERCASE (with digits/underscores)
+    fun isAllUpperCase(name: String): Boolean = name.isNotEmpty() && name.all { it == '_' || it.isDigit() || (it.isLetter() && it.isUpperCase()) }
+    i = 1
+    while (i + 0 < tokens.size) {
+        val dotTok = tokens[i]
+        if (dotTok.type == Type.DOT && i + 1 < tokens.size) {
+            val next = tokens[i + 1]
+            if (next.type == Type.ID && isAllUpperCase(next.value)) {
+                overrideIdAtToken(i + 1)
+                i += 2
+                continue
+            }
+        }
+        i++
+    }
+
+    return spans
 }

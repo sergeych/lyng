@@ -3815,4 +3815,47 @@ class ScriptTest {
         assertEquals(JSTest1("bar", 1, true), x.decodeSerializable<JSTest1>())
     }
 
+//    @Test
+//    fun testInstanceVars() = runTest {
+//        val x = eval("""
+//            class T(x,y)
+//            T(1, 2)
+//        """.trimIndent()) as ObjInstance
+//        println(x.serializingVars.map { "${it.key}=${it.value.value}"})
+//    }
+
+    @Test
+    fun memberValCantBeAssigned() = runTest {
+        eval("""
+            class Point(foo,bar) {
+                val t = 42
+            }
+            val p = Point(1,2)
+            // val should not be assignable:
+            assertThrows { p = Point(3,4) }
+           
+            // val field must be readonly:
+            assertThrows { p.t = "bad" }
+           
+            // and the value should not be changed
+            assertEqual(42, p.t)
+        """)
+    }
+
+//    @Test
+//    fun testClassToJson() = runTest {
+//        val x = eval("""
+//            import lyng.serialization
+//            class Point(foo,bar) {
+//                val t = 42
+//            }
+//            val p = Point(1,2)
+//            p.t = 121
+//            println(Point(10,"bar").toJsonString())
+//            Lynon.encode(Point(1,2))
+//        """.trimIndent())
+//        println((x as ObjBitBuffer).bitArray.asUByteArray().toDump())
+//
+//    }
+
 }

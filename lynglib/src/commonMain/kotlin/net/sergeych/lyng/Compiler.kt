@@ -2644,7 +2644,8 @@ class Compiler(
                         // Defer: at instance construction, evaluate initializer in instance scope and store under mangled name
                         val initStmt = statement(nameToken.pos) { scp ->
                             val initValue = initialExpression?.execute(scp)?.byValueCopy() ?: ObjNull
-                            scp.addOrUpdateItem(storageName, initValue, visibility, recordType = ObjRecord.Type.Field)
+                            // Preserve mutability of declaration: do NOT use addOrUpdateItem here, as it creates mutable records
+                            scp.addItem(storageName, isMutable, initValue, visibility, recordType = ObjRecord.Type.Field)
                             ObjVoid
                         }
                         cls.instanceInitializers += initStmt
@@ -2652,7 +2653,8 @@ class Compiler(
                     } else {
                         // We are in instance scope already: perform initialization immediately
                         val initValue = initialExpression?.execute(context)?.byValueCopy() ?: ObjNull
-                        context.addOrUpdateItem(storageName, initValue, visibility, recordType = ObjRecord.Type.Field)
+                        // Preserve mutability of declaration: create record with correct mutability
+                        context.addItem(storageName, isMutable, initValue, visibility, recordType = ObjRecord.Type.Field)
                         initValue
                     }
                 } else {
