@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.Serializable
 import net.sergeych.lyng.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.InlineSourcesImportProvider
@@ -3797,8 +3798,21 @@ class ScriptTest {
            
         """
         )
+    }
 
+    @Serializable
+    data class JSTest1(val foo: String,val one: Int, val ok: Boolean)
 
+    @Test
+    fun testToJson() = runTest {
+        val x = eval("""{ "foo": "bar", "one": 1, "ok": true }""")
+        println(x.toJson())
+        assertEquals(x.toJson().toString(), """{"foo":"bar","one":1,"ok":true}""")
+        assertEquals(
+            (eval("""{ "foo": "bar", "one": 1, "ok": true }.toJsonString()""") as ObjString).value,
+            """{"foo":"bar","one":1,"ok":true}""")
+        println(x.decodeSerializable<JSTest1>())
+        assertEquals(JSTest1("bar", 1, true), x.decodeSerializable<JSTest1>())
     }
 
 }

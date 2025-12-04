@@ -17,6 +17,8 @@
 
 package net.sergeych.lyng.obj
 
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Statement
 import net.sergeych.lynon.LynonDecoder
@@ -139,6 +141,12 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
         val values = map.values.map { it.toObj() }
         encoder.encodeAnyList(scope, keys)
         encoder.encodeAnyList(scope, values, fixedSize = true)
+    }
+
+    override suspend fun toJson(scope: Scope): JsonElement {
+        return JsonObject(
+            map.map { it.key.toString(scope).value to it.value.toJson(scope) }.toMap()
+        )
     }
 
     companion object {

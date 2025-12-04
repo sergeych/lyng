@@ -17,6 +17,8 @@
 
 package net.sergeych.lyng.obj
 
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.statement
@@ -98,6 +100,10 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
 
     override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
         encoder.encodeReal(value)
+    }
+
+    override suspend fun toJson(scope: Scope): JsonElement {
+        return JsonPrimitive(value)
     }
 
     companion object {

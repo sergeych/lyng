@@ -19,6 +19,8 @@ package net.sergeych.lyng.obj
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.RegexCache
 import net.sergeych.lyng.Scope
@@ -114,6 +116,10 @@ data class ObjString(val value: String) : Obj() {
 
     override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
         encoder.encodeBinaryData(value.encodeToByteArray())
+    }
+
+    override suspend fun toJson(scope: Scope): JsonElement {
+        return JsonPrimitive(value)
     }
 
     companion object {

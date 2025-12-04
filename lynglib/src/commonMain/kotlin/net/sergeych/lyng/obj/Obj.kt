@@ -17,8 +17,13 @@
 
 package net.sergeych.lyng.obj
 
+import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.serializer
 import net.sergeych.lyng.*
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
@@ -376,6 +381,10 @@ open class Obj {
         return null
     }
 
+    open suspend fun toJson(scope: Scope = Scope()): JsonElement {
+        scope.raiseNotImplemented("toJson for ${objClass.className}")
+    }
+
     companion object {
 
         val rootObjectType = ObjClass("Obj").apply {
@@ -418,7 +427,9 @@ open class Obj {
                 thisObj.putAt(this, requiredArg<Obj>(0), newValue)
                 newValue
             }
-
+            addFn("toJsonString") {
+                thisObj.toJson(this).toString().toObj()
+            }
         }
 
 
@@ -520,6 +531,10 @@ object ObjNull : Obj() {
         }
     }
 
+    override suspend fun toJson(scope: Scope): JsonElement {
+        return JsonNull
+    }
+
     override val objClass: ObjClass by lazy {
         object : ObjClass("Null") {
             override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj {
@@ -572,4 +587,25 @@ data class ObjNamespace(val name: String) : Obj() {
     }
 }
 
+/**
+ * Decodes the current object into a deserialized form using the provided deserialization strategy.
+ * It is based on [Obj.toJson] and uses existing Kotlin Json serialization, without string representation
+ * (only `JsonElement` to carry information between Kotlin and Lyng serialization worlds), thus efficient.
+ *
+ * @param strategy The deserialization strategy that defines how the object should be decoded.
+ * @param scope An optional scope used during deserialization to define the context. Defaults to a new instance of Scope.
+ * @return The deserialized object of type T.
+ */
+suspend fun <T>Obj.decodeSerializableWith(strategy: DeserializationStrategy<T>, scope: Scope = Scope()): T =
+    Json.decodeFromJsonElement(strategy,toJson(scope))
 
+/**
+ * Decodes a serializable object of type [T] using the provided decoding scope. The deserialization uses
+ * [Obj.toJson] and existing Json based serialization ithout using actual string representation, thus
+ * efficient.
+ *
+ * @param T The type of the object to be decoded. Must be a reified type.
+ * @param scope The scope used during decoding. Defaults to a new instance of [Scope].
+ */
+suspend inline fun <reified T>Obj.decodeSerializable(scope: Scope= Scope()) =
+    decodeSerializableWith<T>(serializer<T>(), scope)

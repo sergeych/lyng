@@ -352,4 +352,9 @@ class BookTest {
     fun testRegex() = runBlocking {
         runDocTests("../docs/Regex.md")
     }
+
+    @Test
+    fun testJson() = runBlocking {
+        runDocTests("../docs/json_and_kotlin_serialization.md")
+    }
 }

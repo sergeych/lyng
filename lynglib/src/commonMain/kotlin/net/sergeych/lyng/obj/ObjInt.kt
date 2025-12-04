@@ -17,6 +17,8 @@
 
 package net.sergeych.lyng.obj
 
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.Scope
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
@@ -159,6 +161,10 @@ class ObjInt(var value: Long, override val isConst: Boolean = false) : Obj(), Nu
             LynonType.IntSigned -> encoder.encodeSigned(value)
             else -> scope.raiseIllegalArgument("Unsupported lynon type code for Int: $lynonType")
         }
+    }
+
+    override suspend fun toJson(scope: Scope): JsonElement {
+        return JsonPrimitive(value)
     }
 
     companion object {

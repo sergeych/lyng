@@ -17,6 +17,8 @@
 
 package net.sergeych.lyng.obj
 
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.Scope
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
@@ -60,6 +62,10 @@ data class ObjBool(val value: Boolean) : Obj() {
         other as ObjBool
 
         return value == other.value
+    }
+
+    override suspend fun toJson(scope: Scope): JsonElement {
+        return JsonPrimitive(value)
     }
 
     companion object {

@@ -17,6 +17,8 @@
 
 package net.sergeych.lyng.obj
 
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Statement
 import net.sergeych.lyng.statement
@@ -187,6 +189,10 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
     }
 
     override suspend fun lynonType(): LynonType = LynonType.List
+
+    override suspend fun toJson(scope: Scope): JsonElement {
+        return JsonArray(list.map { it.toJson(scope) })
+    }
 
     companion object {
         val type = object : ObjClass("List", ObjArray) {

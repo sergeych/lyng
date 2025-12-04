@@ -205,7 +205,7 @@ Much like let, but it does not alter returned value:
     >>> void
 
 While it is not altering return value, the source object could be changed:
-
+also
     class Point(x,y)
     val p = Point(1,2).also { it.x++ }
     assertEquals(p.x, 2)
@@ -1533,7 +1533,7 @@ assertEquals(null, (buzz as? Foo)?.runA())
 
 Notes:
 - Resolution order uses C3 MRO (active): deterministic, monotonic order suitable for diamonds and complex hierarchies. Example: for `class D() : B(), C()` where both `B()` and `C()` derive from `A()`, the C3 order is `D → B → C → A`. The first visible match wins.
-- `private` is visible only inside the declaring class; `protected` is visible from the declaring class and any of its transitive subclasses. Qualification (`this@Type`) or casts do not bypass visibility.
+- `private` is visible only inside the declaring class; `protected` is visible from the declaring class and any of its transitive subclasses. Qualialsofication (`this@Type`) or casts do not bypass visibility.
 - Safe‑call `?.` works with `as?` for optional dispatch.
 
 To get details on OOP in Lyng, see [OOP notes](oop.md).
