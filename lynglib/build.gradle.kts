@@ -176,6 +176,30 @@ kotlin.targets.configureEach {
     }
 }
 
+// Ensure any SourcesJar tasks (for all targets/variants) are properly wired to the generator
+tasks.withType<Jar>().configureEach {
+    if (name == "sourcesJar" || name.endsWith("SourcesJar")) {
+        // Declare both dependency and inputs to satisfy Gradle validation and up-to-date checks
+        dependsOn(generateLyngStdlib)
+        inputs.dir(generatedLyngStdlibDir)
+    }
+}
+
+// Extra safety: in case the SourcesJar task is not of type Jar (AGP/MPP variations),
+// wire it up by name as well. This guarantees the dependency even if the concrete type differs.
+tasks.configureEach {
+    if (name == "androidReleaseSourcesJar" || name == "sourcesJar" || name.endsWith("SourcesJar")) {
+        dependsOn(generateLyngStdlib)
+        inputs.dir(generatedLyngStdlibDir)
+    }
+}
+
+// Be explicit for the aggregate metadata sources task too
+tasks.named("sourcesJar").configure {
+    dependsOn(generateLyngStdlib)
+    inputs.dir(generatedLyngStdlibDir)
+}
+
 android {
     namespace = "org.jetbrains.kotlinx.multiplatform.library.template"
     compileSdk = libs.versions.android.compileSdk.get().toInt()

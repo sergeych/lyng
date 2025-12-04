@@ -832,6 +832,7 @@ class Compiler(
                 }
 
                 Token.Type.NEWLINE -> {}
+                Token.Type.MULTILINE_COMMENT, Token.Type.SINLGE_LINE_COMMENT -> {}
 
                 Token.Type.ID -> {
                     // visibility
