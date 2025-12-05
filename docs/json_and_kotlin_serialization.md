@@ -1,6 +1,7 @@
 # Json support
 
-Since 1.0.5 we start adding JSON support. Versions 1,0,6* support serialization of the basic types, including lists and maps, and simple classes. Multiple inheritance may produce incorrect results, it is work in progress.
+Since 1.0.5 we start adding JSON support. Versions 1,0,6* support serialization of the basic types, including lists and
+maps, and simple classes. Multiple inheritance may produce incorrect results, it is work in progress.
 
 ## Serialization in Lyng
 
@@ -34,7 +35,8 @@ Note that mutable members are serialized:
     assertEquals( "{\"custom\":true}", Point2(1,2).toJsonString() )
     >>> void
 
-Custom serialization of user classes is possible by overriding `toJsonObject` method. It must return an object which is serializable to Json. Most often it is a map, but any object is accepted, that makes it very flexible:
+Custom serialization of user classes is possible by overriding `toJsonObject` method. It must return an object which is
+serializable to Json. Most often it is a map, but any object is accepted, that makes it very flexible:
 
     import lyng.serialization
     
@@ -54,8 +56,8 @@ Custom serialization of user classes is possible by overriding `toJsonObject` me
     assertEquals( "\"full freedom\"", Custom().toJsonString() )
     >>> void
 
-Please note that `toJsonString` should be used to get serialized string representation of the object. Don't call `toJsonObject` directly, it is not intended to be used outside the serialization library.
-
+Please note that `toJsonString` should be used to get serialized string representation of the object. Don't call
+`toJsonObject` directly, it is not intended to be used outside the serialization library.
 
 ## Kotlin side interfaces
 
@@ -63,7 +65,8 @@ The "Batteries included" principle is also applied to serialization.
 
 - `Obj.toJson()` provides Kotlin `JsonElement`
 - `Obj.toJsonString()` provides Json string representation
-- `Obj.decodeSerializableWith()` and `Obj.decodeSerializable()` allows to decode Lyng classes as Kotlin objects using `kotlinx.serialization`:
+- `Obj.decodeSerializableWith()` and `Obj.decodeSerializable()` allows to decode Lyng classes as Kotlin objects using
+  `kotlinx.serialization`:
 
 ```kotlin
 /**
@@ -75,8 +78,8 @@ The "Batteries included" principle is also applied to serialization.
  * @param scope An optional scope used during deserialization to define the context. Defaults to a new instance of Scope.
  * @return The deserialized object of type T.
  */
-suspend fun <T>Obj.decodeSerializableWith(strategy: DeserializationStrategy<T>, scope: Scope = Scope()): T =
-    Json.decodeFromJsonElement(strategy,toJson(scope))
+suspend fun <T> Obj.decodeSerializableWith(strategy: DeserializationStrategy<T>, scope: Scope = Scope()): T =
+    Json.decodeFromJsonElement(strategy, toJson(scope))
 
 /**
  * Decodes a serializable object of type [T] using the provided decoding scope. The deserialization uses
@@ -86,10 +89,36 @@ suspend fun <T>Obj.decodeSerializableWith(strategy: DeserializationStrategy<T>, 
  * @param T The type of the object to be decoded. Must be a reified type.
  * @param scope The scope used during decoding. Defaults to a new instance of [Scope].
  */
-suspend inline fun <reified T>Obj.decodeSerializable(scope: Scope= Scope()) =
+suspend inline fun <reified T> Obj.decodeSerializable(scope: Scope = Scope()) =
     decodeSerializableWith<T>(serializer<T>(), scope)
 ```
 
-Note that lyng-2-kotlin deserialization with `kotlinx.serialization` uses JsonElement as information carrier without formatting and parsing actual Json strings. This is why we use `Json.decodeFromJsonElement` instead of `Json.decodeFromString`. Such an approach gives satisfactory performance without writing and supporting custom `kotlinx.serialization` codecs.
+Note that lyng-2-kotlin deserialization with `kotlinx.serialization` uses JsonElement as information carrier without
+formatting and parsing actual Json strings. This is why we use `Json.decodeFromJsonElement` instead of
+`Json.decodeFromString`. Such an approach gives satisfactory performance without writing and supporting custom
+`kotlinx.serialization` codecs.
 
+# List of supported types
+
+| Lyng type | JSON type | notes       |
+|-----------|-----------|-------------|
+| `Int`     | number    |             |
+| `Real`    | number    |             |
+| `String`  | string    |             |
+| `Bool`    | boolean   |             |
+| `null`    | null      |             |
+| `Instant` | string    | ISO8601 (1) |
+| `List`    | array     | (2)         |
+| `Map`     | object    | (2)         |
+
+
+(1)
+: ISO8601 flavor 1970-05-06T06:00:00.000Z in used; number of fractional digits depends on the truncation
+on [Instant](time.md), see `Instant.truncateTo...` functions.
+
+(2)
+: List may contain any objects serializable to Json.
+
+(3)
+: Map keys must be strings, map values may be any objects serializable to Json.
 
