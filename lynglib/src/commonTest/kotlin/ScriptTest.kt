@@ -3997,17 +3997,19 @@ class ScriptTest {
     }
 
     @Serializable
-    data class TestEnum(
-        val value: Int,
-        val inner: JsonObject
-    )
+    enum class TestEnum {
+        One, Two
+    }
+    @Serializable
+    data class TestJson4(val value: TestEnum)
+
     @Test
     fun deserializeEnumJsonTest() = runTest {
         val x = eval("""
             import lyng.serialization
-            enum 
-            { value: 12, inner: { "foo": 1, "bar": "two" }}
-        """.trimIndent()).decodeSerializable<TestJson3>()
-        assertEquals(TestJson3(12, JsonObject(mapOf("foo" to JsonPrimitive(1), "bar" to Json.encodeToJsonElement("two")))), x)
+            enum TestEnum { One, Two }
+            { value: TestEnum.One }
+        """.trimIndent()).decodeSerializable<TestJson4>()
+        assertEquals( TestJson4(TestEnum.One), x)
     }
 }

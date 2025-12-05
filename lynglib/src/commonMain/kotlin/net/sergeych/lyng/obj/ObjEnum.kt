@@ -15,6 +15,8 @@
  *
  */
 
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.obj.*
 import net.sergeych.lynon.LynonDecoder
@@ -36,6 +38,10 @@ open class ObjEnumEntry(enumClass: ObjEnumClass, val name: ObjString, val ordina
         if( other !is ObjEnumEntry) return -2
         if( other.objClass != objClass ) return -2
         return ordinal.compareTo(scope, other.ordinal)
+    }
+
+    override suspend fun toJson(scope: Scope): JsonElement {
+        return JsonPrimitive(name.value)
     }
 
 }
