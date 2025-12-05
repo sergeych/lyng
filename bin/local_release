@@ -21,9 +21,9 @@ set -e
 
 file=./lyng/build/bin/linuxX64/releaseExecutable/lyng.kexe
 
-#./gradlew :lyng:linkReleaseExecutableLinuxX64
-#strip $file
-#upx   $file
+./gradlew :lyng:linkReleaseExecutableLinuxX64
+strip $file
+upx   $file
 cp $file ~/bin/lyng
 cp $file ./distributables/lyng
 zip ./distributables/lyng-linuxX64 ./distributables/lyng
