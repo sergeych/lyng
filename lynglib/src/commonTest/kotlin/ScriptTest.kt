@@ -3992,7 +3992,22 @@ class ScriptTest {
         val x = eval("""
             import lyng.serialization
             { value: 12, inner: { "foo": 1, "bar": "two" }}
-        """.trimIndent()).decodeSerializable<TestJson3>()println(x)
+        """.trimIndent()).decodeSerializable<TestJson3>()
+        assertEquals(TestJson3(12, JsonObject(mapOf("foo" to JsonPrimitive(1), "bar" to Json.encodeToJsonElement("two")))), x)
+    }
+
+    @Serializable
+    data class TestEnum(
+        val value: Int,
+        val inner: JsonObject
+    )
+    @Test
+    fun deserializeEnumJsonTest() = runTest {
+        val x = eval("""
+            import lyng.serialization
+            enum 
+            { value: 12, inner: { "foo": 1, "bar": "two" }}
+        """.trimIndent()).decodeSerializable<TestJson3>()
         assertEquals(TestJson3(12, JsonObject(mapOf("foo" to JsonPrimitive(1), "bar" to Json.encodeToJsonElement("two")))), x)
     }
 }

@@ -43,3 +43,27 @@
 Notes:
 - Existing single-inheritance code continues to work; resolution reduces to the single base.
 - If code previously relied on non-deterministic parent set iteration, C3 MRO provides a predictable order; disambiguate explicitly if needed using `this@Type`/casts.
+
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## Unreleased
+
+- CLI: Added `fmt` as a first-class Clikt subcommand.
+  - Default behavior: formats files to stdout (no in-place edits by default).
+  - Options:
+    - `--check`: check only; print files that would change; exit with code 2 if any changes are needed.
+    - `-i, --in-place`: write formatted result back to files.
+    - `--spacing`: apply spacing normalization.
+    - `--wrap`, `--wrapping`: enable line wrapping.
+  - Mutually exclusive: `--check` and `--in-place` together now produce an error and exit with code 1.
+  - Multi-file stdout prints headers `--- <path> ---` per file.
+  - `lyng --help` shows `fmt`; `lyng fmt --help` displays dedicated help.
+
+- CLI: Preserved legacy script invocation fast-paths:
+  - `lyng script.lyng [args...]` executes the script directly.
+  - `lyng -- -file.lyng [args...]` executes a script whose name begins with `-`.
+
+- CLI: Fixed a regression where the root help banner could print before subcommands.
+  - Root command no longer prints help when a subcommand (e.g., `fmt`) is invoked.

@@ -19,6 +19,11 @@ package net.sergeych
 
 import kotlin.system.exitProcess
 
+// Allow tests to override JVM exit behavior without terminating the whole VM.
+// In production, this points to exitProcess; tests can replace it to throw.
+@PublishedApi
+internal var jvmExitImpl: (Int) -> Nothing = { code -> exitProcess(code) }
+
 actual fun exit(code: Int) {
-    exitProcess(code)
+    jvmExitImpl(code)
 }

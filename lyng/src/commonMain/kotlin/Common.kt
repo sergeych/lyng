@@ -20,6 +20,7 @@ package net.sergeych
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.core.main
+import com.github.ajalt.clikt.core.subcommands
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.multiple
 import com.github.ajalt.clikt.parameters.arguments.optional
@@ -71,69 +72,81 @@ val baseScopeDefer = globalDefer {
 }
 
 fun runMain(args: Array<String>) {
-    if(args.isNotEmpty()) {
-        // CLI formatter: lyng fmt [--check] [--in-place] <files...>
-        if (args[0] == "fmt") {
-            formatCli(args.drop(1))
-            return
-        }
-        if( args.size >= 2 && args[0] == "--" ) {
-            // -- -file.lyng <args>
+    // Fast paths for legacy/positional script execution that should work without requiring explicit options
+    if (args.isNotEmpty()) {
+        // Support: jyng -- -file.lyng <args>
+        if (args.size >= 2 && args[0] == "--") {
             executeFileWithArgs(args[1], args.drop(2))
             return
-        } else if( args[0][0] != '-') {
-            // file.lyng <args>
+        }
+        // Support: jyng script.lyng <args> (when first token is not an option and not a subcommand name)
+        if (!args[0].startsWith('-') && args[0] != "fmt") {
             executeFileWithArgs(args[0], args.drop(1))
             return
         }
     }
-    // normal processing
-    Lyng { runBlocking { it() } }.main(args)
+
+    // Delegate all other parsing and dispatching to Clikt with proper subcommands.
+    Lyng { runBlocking { it() } }
+        .subcommands(Fmt())
+        .main(args)
 }
 
-private fun formatCli(args: List<String>) {
-    var checkOnly = false
-    var inPlace = true
-    var enableSpacing = false
-    var enableWrapping = false
-    val files = mutableListOf<String>()
-    for (a in args) {
-        when (a) {
-            "--check" -> { checkOnly = true; inPlace = false }
-            "--in-place", "-i" -> inPlace = true
-            "--spacing" -> enableSpacing = true
-            "--wrap", "--wrapping" -> enableWrapping = true
-            else -> files += a
+private class Fmt : CliktCommand(name = "fmt") {
+    private val checkOnly by option("--check", help = "Check only; print files that would change").flag()
+    private val inPlace by option("-i", "--in-place", help = "Write changes back to files").flag()
+    private val enableSpacing by option("--spacing", help = "Apply spacing normalization").flag()
+    private val enableWrapping by option("--wrap", "--wrapping", help = "Enable line wrapping").flag()
+    private val files by argument(help = "One or more .lyng files to format").multiple()
+
+    override fun help(context: Context): String = "Format Lyng source files"
+
+    override fun run() {
+        // Validate inputs
+        if (files.isEmpty()) {
+            println("Error: no files specified. See --help for usage.")
+            exit(1)
         }
-    }
-    if (files.isEmpty()) {
-        println("Usage: lyng fmt [--check] [--in-place|-i] [--spacing] [--wrap] <file1.lyng> [file2.lyng ...]")
-        exit(1)
-        return
-    }
-    var changed = false
-    val cfg = net.sergeych.lyng.format.LyngFormatConfig(
-        applySpacing = enableSpacing,
-        applyWrapping = enableWrapping,
-    )
-    for (path in files) {
-        val p = path.toPath()
-        val original = FileSystem.SYSTEM.source(p).use { it.buffer().use { bs -> bs.readUtf8() } }
-        val formatted = net.sergeych.lyng.format.LyngFormatter.format(original, cfg)
-        if (formatted != original) {
-            changed = true
+        if (checkOnly && inPlace) {
+            println("Error: --check and --in-place cannot be used together")
+            exit(1)
+        }
+
+        val cfg = net.sergeych.lyng.format.LyngFormatConfig(
+            applySpacing = enableSpacing,
+            applyWrapping = enableWrapping,
+        )
+
+        var anyChanged = false
+        val multiFile = files.size > 1
+
+        for (path in files) {
+            val p = path.toPath()
+            val original = FileSystem.SYSTEM.source(p).use { it.buffer().use { bs -> bs.readUtf8() } }
+            val formatted = net.sergeych.lyng.format.LyngFormatter.format(original, cfg)
+            val changed = formatted != original
             if (checkOnly) {
-                println(path)
+                if (changed) {
+                    println(path)
+                    anyChanged = true
+                }
             } else if (inPlace) {
-                FileSystem.SYSTEM.write(p) { writeUtf8(formatted) }
+                // Write back regardless, but only touch file if content differs
+                if (changed) {
+                    FileSystem.SYSTEM.write(p) { writeUtf8(formatted) }
+                }
             } else {
-                // default to stdout if not in-place and not --check
-                println("--- $path (formatted) ---\n$formatted")
+                // Default: stdout output
+                if (multiFile) {
+                    println("--- $path ---")
+                }
+                println(formatted)
             }
         }
-    }
-    if (checkOnly) {
-        exit(if (changed) 2 else 0)
+
+        if (checkOnly) {
+            exit(if (anyChanged) 2 else 0)
+        }
     }
 }
 
@@ -162,6 +175,10 @@ private class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() 
         """.trimIndent()
 
     override fun run() {
+        // If a subcommand (like `fmt`) was invoked, do nothing in the root command.
+        // This prevents the root from printing help before the subcommand runs.
+        if (currentContext.invokedSubcommand != null) return
+
         runBlocking {
             val baseScope = baseScopeDefer.await()
             when {
@@ -188,13 +205,7 @@ private class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() 
 
                 else -> {
                     if (script == null) {
-                        println(
-                            """
-                        
-                        Error: no script specified.
-                        
-                    """.trimIndent()
-                        )
+                        println("Error: no script specified.\n")
                         echoFormattedHelp()
                     } else {
                         baseScope.addConst("ARGV", ObjList(args.map { ObjString(it) }.toMutableList()))
