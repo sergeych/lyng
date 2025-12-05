@@ -26,6 +26,10 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.encodeToJsonElement
 import net.sergeych.lyng.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.InlineSourcesImportProvider
@@ -3961,5 +3965,34 @@ class ScriptTest {
             assertEquals( "{\"custom\":true}", Point2(1,2).toJsonString() )
         """.trimIndent()
         )
+    }
+
+    @Serializable
+    data class TestJson2(
+        val value: Int,
+        val inner: Map<String,Int>
+    )
+
+    @Test
+    fun deserializeMapWithJsonTest() = runTest {
+        val x = eval("""
+            import lyng.serialization
+            { value: 1, inner: { "foo": 1, "bar": 2 }}
+        """.trimIndent()).decodeSerializable<TestJson2>()
+        assertEquals(TestJson2(1, mapOf("foo" to 1, "bar" to 2)), x)
+    }
+
+    @Serializable
+    data class TestJson3(
+        val value: Int,
+        val inner: JsonObject
+    )
+    @Test
+    fun deserializeAnyMapWithJsonTest() = runTest {
+        val x = eval("""
+            import lyng.serialization
+            { value: 12, inner: { "foo": 1, "bar": "two" }}
+        """.trimIndent()).decodeSerializable<TestJson3>()println(x)
+        assertEquals(TestJson3(12, JsonObject(mapOf("foo" to JsonPrimitive(1), "bar" to Json.encodeToJsonElement("two")))), x)
     }
 }

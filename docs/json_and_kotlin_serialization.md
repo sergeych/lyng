@@ -98,6 +98,49 @@ formatting and parsing actual Json strings. This is why we use `Json.decodeFromJ
 `Json.decodeFromString`. Such an approach gives satisfactory performance without writing and supporting custom
 `kotlinx.serialization` codecs.
 
+### Pitfall: JSON objects and Map<String, Any?>
+
+Kotlin serialization does not support `Map<String, Any?>` as a serializable type, more general, it can't serialize `Any`. This in particular means that you can deserialize Kotlin `Map<String, T>` as long as `T` is `@Serializable` in Kotlin: 
+
+```kotlin
+@Serializable
+data class TestJson2(
+    val value: Int,
+    val inner: Map<String,Int>
+)
+
+@Test
+fun deserializeMapWithJsonTest() = runTest {
+    val x = eval("""
+        import lyng.serialization
+        { value: 1, inner: { "foo": 1, "bar": 2 }}
+    """.trimIndent()).decodeSerializable<TestJson2>()
+    // That works perfectly well:
+    assertEquals(TestJson2(1, mapOf("foo" to 1, "bar" to 2)), x)
+}
+```
+
+But what if your map has objects of different types? The approach of using polymorphism is partially applicable, but what to do with `{ one: 1, two: "two" }`?
+
+The answer is pretty simple: use `JsonObject` in your deserializable object. This class is capable of holding any JSON types and structures and is sort of a silver bullet for such cases:
+
+~~~kotlin
+@Serializable
+data class TestJson3(
+    val value: Int,
+    val inner: JsonObject
+)
+@Test
+fun deserializeAnyMapWithJsonTest() = runTest {
+    val x = eval("""
+        import lyng.serialization
+        { value: 12, inner: { "foo": 1, "bar": "two" }}
+    """.trimIndent()).decodeSerializable<TestJson3>()
+    assertEquals(TestJson3(12, JsonObject(mapOf("foo" to JsonPrimitive(1), "bar" to Json.encodeToJsonElement("two")))), x)
+}
+~~~
+
+
 # List of supported types
 
 | Lyng type | JSON type | notes       |
