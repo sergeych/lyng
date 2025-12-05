@@ -23,6 +23,8 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import net.sergeych.lyng.*
 import net.sergeych.lyng.obj.*
@@ -3840,6 +3842,25 @@ class ScriptTest {
         )
         println(x.decodeSerializable<JSTest1>())
         assertEquals(JSTest1("bar", 1, true), x.decodeSerializable<JSTest1>())
+    }
+
+    @Test
+    fun testJsonTime() = runTest {
+        val now = Clock.System.now()
+        val x = eval("""
+            import lyng.time
+            Instant.now().truncateToSecond()
+            """.trimIndent()).decodeSerializable<Instant>()
+        println(x)
+        assertIs<Instant>(x)
+        assertTrue( (now - x).absoluteValue < 2.seconds)
+    }
+
+    @Test
+    fun testJsonNull() = runTest {
+        val x = eval("""null""".trimIndent()).decodeSerializable<Instant?>()
+        println(x)
+        assertNull(x)
     }
 
     @Test

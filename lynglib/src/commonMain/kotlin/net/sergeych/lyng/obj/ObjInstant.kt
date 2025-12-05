@@ -21,6 +21,8 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.isDistantFuture
 import kotlinx.datetime.isDistantPast
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.Scope
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
@@ -88,6 +90,9 @@ class ObjInstant(val instant: Instant,val truncateMode: LynonSettings.InstantTru
             }
         }
     }
+
+    override suspend fun toJson(scope: Scope): JsonElement = JsonPrimitive(instant.toString())
+
 
     companion object {
         val distantFuture by lazy {
