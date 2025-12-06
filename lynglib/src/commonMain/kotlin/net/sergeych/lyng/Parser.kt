@@ -213,25 +213,40 @@ private class Parser(fromPos: Pos) {
 
             '!' -> {
                 if (currentChar == 'i') {
+                    // Potentially !in / !is, but only if a word boundary follows
                     pos.advance()
                     when (currentChar) {
                         'n' -> {
                             pos.advance()
-                            Token("!in", from, Token.Type.NOTIN)
+                            // if next char continues an identifier, it's actually '!'+identifier starting with "in..."
+                            if (idNextChars(currentChar)) {
+                                // backtrack to right after '!'
+                                pos.back()
+                                pos.back()
+                                Token("!", from, Token.Type.NOT)
+                            } else
+                                Token("!in", from, Token.Type.NOTIN)
                         }
 
                         's' -> {
                             pos.advance()
-                            Token("!is", from, Token.Type.NOTIS)
+                            // if next char continues an identifier, it's actually '!'+identifier starting with "is..."
+                            if (idNextChars(currentChar)) {
+                                // backtrack to right after '!'
+                                pos.back()
+                                pos.back()
+                                Token("!", from, Token.Type.NOT)
+                            } else
+                                Token("!is", from, Token.Type.NOTIS)
                         }
 
                         else -> {
+                            // it was just '!i' followed by something else; revert one step and return '!'
                             pos.back()
                             Token("!", from, Token.Type.NOT)
                         }
                     }
-                } else
-                    if (currentChar == '=') {
+                } else if (currentChar == '=') {
                         pos.advance()
                         if (currentChar == '=') {
                             pos.advance()

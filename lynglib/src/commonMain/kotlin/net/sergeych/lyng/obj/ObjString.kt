@@ -173,6 +173,9 @@ data class ObjString(val value: String) : Obj() {
                     thisAs<ObjString>().value.map { ObjChar(it) }.toMutableList()
                 )
             }
+            addFn("last") {
+                ObjChar(thisAs<ObjString>().value.lastOrNull() ?: raiseNoSuchElement("empty string"))
+            }
             addFn("encodeUtf8") { ObjBuffer(thisAs<ObjString>().value.encodeToByteArray().asUByteArray()) }
             addFn("size") { ObjInt(thisAs<ObjString>().value.length.toLong()) }
             addFn("toReal") {

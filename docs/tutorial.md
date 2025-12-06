@@ -1385,6 +1385,7 @@ Typical set of String functions includes:
 | trim()             | trim space chars from both ends                            |
 | startsWith(prefix) | true if starts with a prefix                               |
 | endsWith(prefix)   | true if ends with a prefix                                 |
+| last()             | get last character of a string or throw                    |
 | take(n)            | get a new string from up to n first characters             |
 | takeLast(n)        | get a new string from up to n last characters              |
 | drop(n)            | get a new string dropping n first chars, or empty string   |

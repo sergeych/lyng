@@ -4012,4 +4012,41 @@ class ScriptTest {
         """.trimIndent()).decodeSerializable<TestJson4>()
         assertEquals( TestJson4(TestEnum.One), x)
     }
+
+    @Test
+    fun testLogicalNot() = runTest {
+        eval("""
+            val vf = false 
+            fun f() { false }
+            assert( !false )
+            assert( !vf )
+            assert( !f() )
+            
+            val vt = true
+            fun ft() { true }
+            if( !true )
+                throw "impossible"
+                
+            if( !ft() )
+                throw "impossible"
+                
+            if( !vt )
+                throw "impossible"
+                
+            // real world sample
+
+            fun isSignedByAdmin() {
+                // just ok
+                true
+            }
+            
+            fun requireAdmin() {
+                // this caused compilation error:
+                if( !isSignedByAdmin() )
+                    throw "Admin signature required"
+            }
+        
+        """.trimIndent()
+        )
+    }
 }
