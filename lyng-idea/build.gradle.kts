@@ -37,6 +37,8 @@ repositories {
 
 dependencies {
     implementation(project(":lynglib"))
+    // Include lyngio so Quick Docs can reflectively load fs docs registrar (FsBuiltinDocs)
+    implementation(project(":lyngio"))
     // Rich Markdown renderer for Quick Docs
     implementation("com.vladsch.flexmark:flexmark-all:0.64.8")
 }

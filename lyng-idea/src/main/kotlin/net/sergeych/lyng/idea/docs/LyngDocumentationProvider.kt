@@ -26,6 +26,7 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import kotlinx.coroutines.runBlocking
 import net.sergeych.lyng.Compiler
+import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Source
 import net.sergeych.lyng.highlight.offsetOf
 import net.sergeych.lyng.idea.LyngLanguage
@@ -42,6 +43,8 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
     // Toggle to trace inheritance-based resolutions in Quick Docs. Keep false for normal use.
     private val DEBUG_INHERITANCE = false
     override fun generateDoc(element: PsiElement?, originalElement: PsiElement?): String? {
+        // Try load external docs registrars (e.g., lyngio) if present on classpath
+        ensureExternalDocsRegistered()
         if (element == null) return null
         val file: PsiFile = element.containingFile ?: return null
         val document: Document = file.viewProvider.document ?: return null
@@ -57,23 +60,29 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         val ident = text.substring(idRange.startOffset, idRange.endOffset)
         log.info("[LYNG_DEBUG] QuickDoc: ident='$ident' at ${idRange.startOffset}..${idRange.endOffset} in ${file.name}")
 
-        // Build MiniAst for this file (fast and resilient). Best-effort; on failure return null.
+        // Build MiniAst for this file (fast and resilient). Best-effort; on failure continue with registry lookup only.
         val sink = MiniAstBuilder()
         // Use lenient import provider so unresolved imports (e.g., lyng.io.fs) don't break docs
         val provider = IdeLenientImportProvider.create()
-        try {
-            val src = Source("<ide>", text)
+        val src = Source("<ide>", text)
+        var mini: MiniScript? = try {
             runBlocking { Compiler.compileWithMini(src, provider, sink) }
+            sink.build()
         } catch (t: Throwable) {
+            // Do not bail out completely: we still can resolve built-in and imported docs (e.g., println)
             log.warn("[LYNG_DEBUG] QuickDoc: compileWithMini failed: ${t.message}")
-            return null
+            null
         }
-        val mini = sink.build() ?: return null
-        val source = Source("<ide>", text)
+        val haveMini = mini != null
+        if (mini == null) {
+            // Ensure we have a dummy script object to avoid NPE in downstream helpers that expect a MiniScript
+            mini = MiniScript(MiniRange(Pos(src, 1, 1), Pos(src, 1, 1)))
+        }
+        val source = src
 
         // Try resolve to: function param at position, function/class/val declaration at position
         // 1) Check declarations whose name range contains offset
-        for (d in mini.declarations) {
+        if (haveMini) for (d in mini.declarations) {
             val s = source.offsetOf(d.nameStart)
             val e = (s + d.name.length).coerceAtMost(text.length)
             if (offset in s until e) {
@@ -82,7 +91,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
             }
         }
         // 2) Check parameters of functions
-        for (fn in mini.declarations.filterIsInstance<MiniFunDecl>()) {
+        if (haveMini) for (fn in mini.declarations.filterIsInstance<MiniFunDecl>()) {
             for (p in fn.params) {
                 val s = source.offsetOf(p.nameStart)
                 val e = (s + p.name.length).coerceAtMost(text.length)
@@ -93,17 +102,25 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
             }
         }
         // 3) As a fallback, if the caret is on an identifier text that matches any declaration name, show that
-        mini.declarations.firstOrNull { it.name == ident }?.let {
+        if (haveMini) mini.declarations.firstOrNull { it.name == ident }?.let {
             log.info("[LYNG_DEBUG] QuickDoc: fallback by name '${it.name}' kind=${it::class.simpleName}")
             return renderDeclDoc(it)
         }
 
         // 4) Consult BuiltinDocRegistry for imported modules (top-level and class members)
-        var importedModules = mini.imports.map { it.segments.joinToString(".") { s -> s.name } }
-        // Core-module fallback: in scratch/repl-like files without imports, consult stdlib by default
-        if (importedModules.isEmpty()) importedModules = listOf("lyng.stdlib")
+        // Canonicalize import names using ImportManager, as users may write shortened names (e.g., "io.fs")
+        var importedModules = if (haveMini) DocLookupUtils.canonicalImportedModules(mini) else emptyList()
+        // If MiniAst failed or captured no imports, try a lightweight textual import scan
+        if (importedModules.isEmpty()) {
+            val fromText = extractImportsFromText(text)
+            if (fromText.isNotEmpty()) {
+                importedModules = fromText
+            }
+        }
+        // Always include stdlib as a fallback context
+        if (!importedModules.contains("lyng.stdlib")) importedModules = importedModules + "lyng.stdlib"
         // 4a) try top-level decls
-        for (mod in importedModules) {
+        importedModules.forEach { mod ->
             val docs = BuiltinDocRegistry.docsForModule(mod)
             val matches = docs.filterIsInstance<MiniFunDecl>().filter { it.name == ident }
             if (matches.isNotEmpty()) {
@@ -121,11 +138,19 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
             // And classes
             docs.filterIsInstance<MiniClassDecl>().firstOrNull { it.name == ident }?.let { return renderDeclDoc(it) }
         }
+        // Defensive fallback: if nothing found and it's a well-known stdlib function, render minimal inline docs
+        if (ident == "println" || ident == "print") {
+            val fallback = if (ident == "println")
+                "Print values to the standard output and append a newline. Accepts any number of arguments." else
+                "Print values to the standard output without a trailing newline. Accepts any number of arguments."
+            val title = "function $ident(values)"
+            return "<div class='doc-title'>${htmlEscape(title)}</div>" + styledMarkdown(htmlEscape(fallback))
+        }
         // 4b) try class members like ClassName.member with inheritance fallback
         val lhs = previousWordBefore(text, idRange.startOffset)
         if (lhs != null && hasDotBetween(text, lhs.endOffset, idRange.startOffset)) {
             val className = text.substring(lhs.startOffset, lhs.endOffset)
-            resolveMemberWithInheritance(importedModules, className, ident)?.let { (owner, member) ->
+            DocLookupUtils.resolveMemberWithInheritance(importedModules, className, ident)?.let { (owner, member) ->
                 if (DEBUG_INHERITANCE) log.info("[LYNG_DEBUG] Inheritance resolved $className.$ident to $owner.${member.name}")
                 return when (member) {
                     is MiniMemberFunDecl -> renderMemberFunDoc(owner, member)
@@ -140,10 +165,10 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
             if (dotPos != null) {
                 val guessed = when {
                     looksLikeListLiteralBefore(text, dotPos) -> "List"
-                    else -> null
+                    else -> DocLookupUtils.guessClassFromCallBefore(text, dotPos, importedModules)
                 }
                 if (guessed != null) {
-                    resolveMemberWithInheritance(importedModules, guessed, ident)?.let { (owner, member) ->
+                    DocLookupUtils.resolveMemberWithInheritance(importedModules, guessed, ident)?.let { (owner, member) ->
                         if (DEBUG_INHERITANCE) log.info("[LYNG_DEBUG] Heuristic '$guessed.$ident' resolved via inheritance to $owner.${member.name}")
                         return when (member) {
                             is MiniMemberFunDecl -> renderMemberFunDoc(owner, member)
@@ -152,7 +177,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                     }
                 } else {
                     // Search across classes; prefer Iterable, then Iterator, then List for common ops
-                    findMemberAcrossClasses(importedModules, ident)?.let { (owner, member) ->
+                    DocLookupUtils.findMemberAcrossClasses(importedModules, ident)?.let { (owner, member) ->
                         if (DEBUG_INHERITANCE) log.info("[LYNG_DEBUG] Cross-class '$ident' resolved to $owner.${member.name}")
                         return when (member) {
                             is MiniMemberFunDecl -> renderMemberFunDoc(owner, member)
@@ -165,6 +190,51 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
 
         log.info("[LYNG_DEBUG] QuickDoc: nothing found for ident='$ident'")
         return null
+    }
+
+    /**
+     * Very lenient import extractor for cases when MiniAst is unavailable.
+     * Looks for lines like `import xxx.yyy` and returns canonical module names
+     * (prefixing with `lyng.` if missing).
+     */
+    private fun extractImportsFromText(text: String): List<String> {
+        val result = LinkedHashSet<String>()
+        val re = Regex("(?m)^\\s*import\\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)*)")
+        re.findAll(text).forEach { m ->
+            val raw = m.groupValues.getOrNull(1)?.trim().orEmpty()
+            if (raw.isNotEmpty()) {
+                val canon = if (raw.startsWith("lyng.")) raw else "lyng.$raw"
+                result.add(canon)
+            }
+        }
+        return result.toList()
+    }
+
+    // External docs registrars discovery via reflection to avoid hard dependencies on optional modules
+    private val externalDocsLoaded: Boolean by lazy { tryLoadExternalDocs() }
+
+    private fun ensureExternalDocsRegistered() { @Suppress("UNUSED_EXPRESSION") externalDocsLoaded }
+
+    private fun tryLoadExternalDocs(): Boolean {
+        return try {
+            // Try known registrars; ignore failures if module is absent
+            val cls = Class.forName("net.sergeych.lyngio.docs.FsBuiltinDocs")
+            val m = cls.getMethod("ensure")
+            m.invoke(null)
+            log.info("[LYNG_DEBUG] QuickDoc: external docs loaded: net.sergeych.lyngio.docs.FsBuiltinDocs.ensure() OK")
+            true
+        } catch (_: Throwable) {
+            // Seed a minimal plugin-local fallback so Path docs still work without lyngio
+            val seeded = try {
+                FsDocsFallback.ensureOnce()
+            } catch (_: Throwable) { false }
+            if (seeded) {
+                log.info("[LYNG_DEBUG] QuickDoc: external docs NOT found; seeded plugin fallback for lyng.io.fs")
+            } else {
+                log.info("[LYNG_DEBUG] QuickDoc: external docs NOT found (lyngio absent on classpath)")
+            }
+            seeded
+        }
     }
 
     override fun getCustomDocumentationElement(
@@ -362,46 +432,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
 
     // --- Helpers for inheritance-aware and heuristic member lookup ---
 
-    private fun aggregateClasses(importedModules: List<String>): Map<String, MiniClassDecl> {
-        val map = LinkedHashMap<String, MiniClassDecl>()
-        for (mod in importedModules) {
-            val docs = BuiltinDocRegistry.docsForModule(mod)
-            docs.filterIsInstance<MiniClassDecl>().forEach { cls ->
-                // Prefer the first occurrence; allow later duplicates to be ignored
-                map.putIfAbsent(cls.name, cls)
-            }
-        }
-        return map
-    }
-
-    private fun resolveMemberWithInheritance(importedModules: List<String>, className: String, member: String): Pair<String, MiniMemberDecl>? {
-        val classes = aggregateClasses(importedModules)
-        fun dfs(name: String, visited: MutableSet<String>): Pair<String, MiniMemberDecl>? {
-            val cls = classes[name] ?: return null
-            cls.members.firstOrNull { it.name == member }?.let { return name to it }
-            if (!visited.add(name)) return null
-            for (baseName in cls.bases) {
-                dfs(baseName, visited)?.let { return it }
-            }
-            return null
-        }
-        return dfs(className, mutableSetOf())
-    }
-
-    private fun findMemberAcrossClasses(importedModules: List<String>, member: String): Pair<String, MiniMemberDecl>? {
-        val classes = aggregateClasses(importedModules)
-        // Preferred order for ambiguous common ops
-        val preference = listOf("Iterable", "Iterator", "List")
-        // First, try preference order
-        for (name in preference) {
-            resolveMemberWithInheritance(importedModules, name, member)?.let { return it }
-        }
-        // Then, scan all
-        for ((name, cls) in classes) {
-            cls.members.firstOrNull { it.name == member }?.let { return name to it }
-        }
-        return null
-    }
+    // Removed: member/class resolution helpers moved to lynglib DocLookupUtils for reuse
 
     private fun findDotLeft(text: String, rightStart: Int): Int? {
         var i = (rightStart - 1).coerceAtLeast(0)
@@ -433,4 +464,6 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         }
         return false
     }
+
+    // Removed: guessClassFromCallBefore moved to DocLookupUtils
 }

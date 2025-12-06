@@ -608,4 +608,4 @@ private fun buildStdlibDocs(): List<MiniDecl> {
     return decls
 }
 
-// (Registration is triggered from BuiltinDocRegistry.init)
+// (Registration for external modules is provided by their own libraries)

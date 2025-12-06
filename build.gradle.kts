@@ -20,3 +20,12 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform) apply  false
     alias(libs.plugins.vanniktech.mavenPublish) apply false
 }
+
+// Convenience alias to run the IntelliJ IDE with the Lyng plugin from the project root.
+// Usage: ./gradlew runIde
+// It simply delegates to :lyng-idea:runIde provided by the Gradle IntelliJ Plugin.
+tasks.register<org.gradle.api.DefaultTask>("runIde") {
+    group = "intellij"
+    description = "Run IntelliJ IDEA with the Lyng plugin (:lyng-idea)"
+    dependsOn(":lyng-idea:runIde")
+}
