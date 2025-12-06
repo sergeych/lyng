@@ -21,6 +21,9 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.miniast.addConstDoc
+import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.type
 import net.sergeych.lyng.statement
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
@@ -111,13 +114,22 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
             override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj =
                 ObjReal(decoder.unpackDouble())
         }.apply {
-            createField(
-                "roundToInt",
-                statement(Pos.builtIn) {
+            // roundToInt: number rounded to the nearest integer
+            addConstDoc(
+                name = "roundToInt",
+                value = statement(Pos.builtIn) {
                     (it.thisObj as ObjReal).value.roundToLong().toObj()
                 },
+                doc = "This real number rounded to the nearest integer.",
+                type = type("lyng.Int"),
+                moduleName = "lyng.stdlib"
             )
-            addFn("toInt") {
+            addFnDoc(
+                name = "toInt",
+                doc = "Truncate this real number toward zero to an integer.",
+                returns = type("lyng.Int"),
+                moduleName = "lyng.stdlib"
+            ) {
                 ObjInt(thisAs<ObjReal>().value.toLong())
             }
         }

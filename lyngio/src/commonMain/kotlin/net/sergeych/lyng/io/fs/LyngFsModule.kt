@@ -322,7 +322,7 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
         // mkdirs(mustCreate: Bool=false)
         addFnDoc(
             name = "mkdirs",
-            doc = "Create directories (like `mkdir -p`). Optional `mustCreate` enforces error if target exists.",
+            doc = "Create directories (like `mkdir -p`). If `mustCreate` is true and the path already exists, the call fails. Otherwise it is a no‑op when the directory exists.",
             params = listOf(ParamDoc("mustCreate", type("lyng.Bool"))),
             moduleName = module.packageName
         ) {
@@ -336,7 +336,7 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
         // move(to: Path|String, overwrite: Bool=false)
         addFnDoc(
             name = "move",
-            doc = "Move this path to a new location. `to` may be a `Path` or `String`. Use `overwrite` to replace existing target.",
+            doc = "Move this path to a new location. `to` may be a `Path` or `String`. When `overwrite` is false and the target exists, the operation fails (provider may throw `AccessDeniedException`).",
             // types vary; keep generic description in doc
             params = listOf(ParamDoc("to"), ParamDoc("overwrite", type("lyng.Bool"))),
             moduleName = module.packageName
@@ -352,7 +352,7 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
         // delete(mustExist: Bool=false, recursively: Bool=false)
         addFnDoc(
             name = "delete",
-            doc = "Delete this path. Optional flags: `mustExist` and `recursively`.",
+            doc = "Delete this path. `mustExist=true` causes failure if the path does not exist. `recursively=true` removes directories with their contents. Providers can throw `AccessDeniedException` on policy violations.",
             params = listOf(ParamDoc("mustExist", type("lyng.Bool")), ParamDoc("recursively", type("lyng.Bool"))),
             moduleName = module.packageName
         ) {
@@ -367,7 +367,7 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
         // copy(to: Path|String, overwrite: Bool=false)
         addFnDoc(
             name = "copy",
-            doc = "Copy this path to a new location. `to` may be a `Path` or `String`. Use `overwrite` to replace existing target.",
+            doc = "Copy this path to a new location. `to` may be a `Path` or `String`. When `overwrite` is false and the target exists, the operation fails (provider may throw `AccessDeniedException`).",
             params = listOf(ParamDoc("to"), ParamDoc("overwrite", type("lyng.Bool"))),
             moduleName = module.packageName
         ) {

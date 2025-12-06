@@ -25,6 +25,10 @@ import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import net.sergeych.lyng.*
+import net.sergeych.lyng.miniast.ParamDoc
+import net.sergeych.lyng.miniast.TypeGenericDoc
+import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.type
 import net.sergeych.mp_tools.globalLaunch
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -36,7 +40,13 @@ class ObjFlowBuilder(val output: SendChannel<Obj>) : Obj() {
     companion object {
         @OptIn(DelicateCoroutinesApi::class)
         val type = object : ObjClass("FlowBuilder") {}.apply {
-            addFn("emit") {
+            addFnDoc(
+                name = "emit",
+                doc = "Send a value to the flow consumer. Suspends if back‑pressured; no‑ops after consumer stops.",
+                params = listOf(ParamDoc("value", type("lyng.Any"))),
+                returns = type("lyng.Void"),
+                moduleName = "lyng.stdlib"
+            ) {
                 val data = requireOnlyArg<Obj>()
                 try {
                     val channel = thisAs<ObjFlowBuilder>().output
@@ -47,7 +57,6 @@ class ObjFlowBuilder(val output: SendChannel<Obj>) : Obj() {
                         throw ScriptFlowIsNoMoreCollected()
                 } catch (x: Exception) {
                     // Any failure to send (including closed channel) should gracefully stop the producer.
-                    // Do not print stack traces here to keep test output clean on JVM.
                     if (x is CancellationException) {
                         // Cancellation is a normal control-flow event
                         throw ScriptFlowIsNoMoreCollected()
@@ -90,7 +99,12 @@ class ObjFlow(val producer: Statement, val scope: Scope) : Obj() {
                 scope.raiseError("Flow constructor is not available")
             }
         }.apply {
-            addFn("iterator") {
+            addFnDoc(
+                name = "iterator",
+                doc = "Create a pull‑based iterator over this flow. Each step resumes the producer as needed.",
+                returns = TypeGenericDoc(type("lyng.Iterator"), listOf(type("lyng.Any"))),
+                moduleName = "lyng.stdlib"
+            ) {
                 val objFlow = thisAs<ObjFlow>()
                 ObjFlowIterator(statement {
                     objFlow.producer.execute(
@@ -146,14 +160,27 @@ class ObjFlowIterator(val producer: Statement) : Obj() {
         val type = object : ObjClass("FlowIterator", ObjIterator) {
 
         }.apply {
-            addFn("hasNext") {
-                thisAs<ObjFlowIterator>().hasNext(this).toObj()
-            }
-            addFn("next") {
+            addFnDoc(
+                name = "hasNext",
+                doc = "Whether another element is available from the flow.",
+                returns = type("lyng.Bool"),
+                moduleName = "lyng.stdlib"
+            ) { thisAs<ObjFlowIterator>().hasNext(this).toObj() }
+            addFnDoc(
+                name = "next",
+                doc = "Receive the next element from the flow or throw if completed.",
+                returns = type("lyng.Any"),
+                moduleName = "lyng.stdlib"
+            ) {
                 val x = thisAs<ObjFlowIterator>()
                 x.next(this)
             }
-            addFn("cancelIteration") {
+            addFnDoc(
+                name = "cancelIteration",
+                doc = "Stop iteration and cancel the underlying flow producer.",
+                returns = type("lyng.Void"),
+                moduleName = "lyng.stdlib"
+            ) {
                 val x = thisAs<ObjFlowIterator>()
                 x.cancel()
                 ObjVoid

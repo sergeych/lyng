@@ -19,6 +19,10 @@ package net.sergeych.lyng.obj
 
 import net.sergeych.bintools.encodeToHex
 import net.sergeych.lyng.*
+import net.sergeych.lyng.miniast.TypeGenericDoc
+import net.sergeych.lyng.miniast.addConstDoc
+import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.type
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
@@ -133,10 +137,21 @@ open class ObjException(
         }
 
         val Root = ExceptionClass("Exception").apply {
-            addConst("message", statement {
-                (thisObj as ObjException).message.toObj()
-            })
-            addFn("stackTrace") {
+            addConstDoc(
+                name = "message",
+                value = statement {
+                    (thisObj as ObjException).message.toObj()
+                },
+                doc = "Human‑readable error message.",
+                type = type("lyng.String"),
+                moduleName = "lyng.stdlib"
+            )
+            addFnDoc(
+                name = "stackTrace",
+                doc = "Stack trace captured at throw site as a list of `StackTraceEntry`.",
+                returns = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.StackTraceEntry"))),
+                moduleName = "lyng.stdlib"
+            ) {
                 (thisObj as ObjException).getStackTrace()
             }
         }

@@ -18,13 +18,73 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.*
+import net.sergeych.lyng.miniast.ParamDoc
+import net.sergeych.lyng.miniast.TypeGenericDoc
+import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.type
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonType
 
 // Simple id generator for class identities (not thread-safe; fine for scripts)
 private object ClassIdGen { var c: Long = 1L; fun nextId(): Long = c++ }
 
-val ObjClassType by lazy { ObjClass("Class") }
+val ObjClassType by lazy {
+    ObjClass("Class").apply {
+        addFnDoc(
+            name = "name",
+            doc = "Simple name of this class (without package).",
+            returns = type("lyng.String"),
+            moduleName = "lyng.stdlib"
+        ) { thisAs<ObjClass>().classNameObj }
+
+        addFnDoc(
+            name = "fields",
+            doc = "Declared instance fields of this class and its ancestors (C3 order), without duplicates.",
+            returns = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.String"))),
+            moduleName = "lyng.stdlib"
+        ) {
+            val cls = thisAs<ObjClass>()
+            val seen = hashSetOf<String>()
+            val names = mutableListOf<Obj>()
+            for (c in cls.mro) {
+                for ((n, rec) in c.members) {
+                    if (rec.value !is Statement && seen.add(n)) names += ObjString(n)
+                }
+            }
+            ObjList(names.toMutableList())
+        }
+
+        addFnDoc(
+            name = "methods",
+            doc = "Declared instance methods of this class and its ancestors (C3 order), without duplicates.",
+            returns = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.String"))),
+            moduleName = "lyng.stdlib"
+        ) {
+            val cls = thisAs<ObjClass>()
+            val seen = hashSetOf<String>()
+            val names = mutableListOf<Obj>()
+            for (c in cls.mro) {
+                for ((n, rec) in c.members) {
+                    if (rec.value is Statement && seen.add(n)) names += ObjString(n)
+                }
+            }
+            ObjList(names.toMutableList())
+        }
+
+        addFnDoc(
+            name = "get",
+            doc = "Lookup a member by name in this class (including ancestors) and return it, or null if absent.",
+            params = listOf(ParamDoc("name", type("lyng.String"))),
+            returns = type("lyng.Any", nullable = true),
+            moduleName = "lyng.stdlib"
+        ) {
+            val cls = thisAs<ObjClass>()
+            val name = requiredArg<ObjString>(0).value
+            val rec = cls.getInstanceMemberOrNull(name)
+            rec?.value ?: ObjNull
+        }
+    }
+}
 
 open class ObjClass(
     val className: String,

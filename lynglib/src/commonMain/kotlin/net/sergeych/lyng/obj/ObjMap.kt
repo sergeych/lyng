@@ -21,6 +21,10 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Statement
+import net.sergeych.lyng.miniast.ParamDoc
+import net.sergeych.lyng.miniast.TypeGenericDoc
+import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.type
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
@@ -72,9 +76,24 @@ class ObjMapEntry(val key: Obj, val value: Obj) : Obj() {
                 )
             }
         }.apply {
-            addFn("key") { thisAs<ObjMapEntry>().key }
-            addFn("value") { thisAs<ObjMapEntry>().value }
-            addFn("size") { 2.toObj() }
+            addFnDoc(
+                name = "key",
+                doc = "Key component of this map entry.",
+                returns = type("lyng.Any"),
+                moduleName = "lyng.stdlib"
+            ) { thisAs<ObjMapEntry>().key }
+            addFnDoc(
+                name = "value",
+                doc = "Value component of this map entry.",
+                returns = type("lyng.Any"),
+                moduleName = "lyng.stdlib"
+            ) { thisAs<ObjMapEntry>().value }
+            addFnDoc(
+                name = "size",
+                doc = "Number of components in this entry (always 2).",
+                returns = type("lyng.Int"),
+                moduleName = "lyng.stdlib"
+            ) { 2.toObj() }
         }
     }
 
@@ -184,34 +203,77 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
                 return ObjMap(keys.zip(values).toMap().toMutableMap())
             }
         }.apply {
-            addFn("getOrNull") {
+            addFnDoc(
+                name = "getOrNull",
+                doc = "Get value by key or return null if the key is absent.",
+                params = listOf(ParamDoc("key")),
+                returns = type("lyng.Any", nullable = true),
+                moduleName = "lyng.stdlib"
+            ) {
                 val key = args.firstAndOnly(pos)
                 thisAs<ObjMap>().map.getOrElse(key) { ObjNull }
             }
-            addFn("getOrPut") {
+            addFnDoc(
+                name = "getOrPut",
+                doc = "Get value by key or compute, store, and return the default from a lambda.",
+                params = listOf(ParamDoc("key"), ParamDoc("default")),
+                returns = type("lyng.Any"),
+                moduleName = "lyng.stdlib"
+            ) {
                 val key = requiredArg<Obj>(0)
                 thisAs<ObjMap>().map.getOrPut(key) {
                     val lambda = requiredArg<Statement>(1)
                     lambda.execute(this)
                 }
             }
-            addFn("size") {
+            addFnDoc(
+                name = "size",
+                doc = "Number of entries in the map.",
+                returns = type("lyng.Int"),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjMap>().map.size.toObj()
             }
-            addFn("remove") {
+            addFnDoc(
+                name = "remove",
+                doc = "Remove the entry by key and return the previous value or null if absent.",
+                params = listOf(ParamDoc("key")),
+                returns = type("lyng.Any", nullable = true),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjMap>().map.remove(requiredArg<Obj>(0))?.toObj() ?: ObjNull
             }
-            addFn("clear") {
+            addFnDoc(
+                name = "clear",
+                doc = "Remove all entries from this map. Returns the map.",
+                returns = type("lyng.Map"),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjMap>().map.clear()
                 thisObj
             }
-            addFn("keys") {
+            addFnDoc(
+                name = "keys",
+                doc = "List of keys in this map.",
+                returns = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.Any"))),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjMap>().map.keys.toObj()
             }
-            addFn("values") {
+            addFnDoc(
+                name = "values",
+                doc = "List of values in this map.",
+                returns = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.Any"))),
+                moduleName = "lyng.stdlib"
+            ) {
                 ObjList(thisAs<ObjMap>().map.values.toMutableList())
             }
-            addFn("iterator") {
+            addFnDoc(
+                name = "iterator",
+                doc = "Iterator over map entries as MapEntry objects.",
+                returns = TypeGenericDoc(type("lyng.Iterator"), listOf(type("lyng.MapEntry"))),
+                moduleName = "lyng.stdlib"
+            ) {
                 ObjKotlinIterator(thisAs<ObjMap>().map.entries.iterator())
             }
         }

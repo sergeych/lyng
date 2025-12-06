@@ -20,6 +20,10 @@ package net.sergeych.lyng.obj
 import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.RegexCache
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.miniast.ParamDoc
+import net.sergeych.lyng.miniast.TypeGenericDoc
+import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.type
 
 class ObjRegex(val regex: Regex) : Obj() {
     override val objClass = type
@@ -43,13 +47,31 @@ class ObjRegex(val regex: Regex) : Obj() {
                     return ObjRegex(re)
                 }
             }.apply {
-                addFn("matches") {
+                addFnDoc(
+                    name = "matches",
+                    doc = "Whether the entire string matches this regular expression.",
+                    params = listOf(ParamDoc("text", type("lyng.String"))),
+                    returns = type("lyng.Bool"),
+                    moduleName = "lyng.stdlib"
+                ) {
                     ObjBool(args.firstAndOnly().toString().matches(thisAs<ObjRegex>().regex))
                 }
-                addFn("find") {
+                addFnDoc(
+                    name = "find",
+                    doc = "Find the first match in the given string.",
+                    params = listOf(ParamDoc("text", type("lyng.String"))),
+                    returns = type("lyng.RegexMatch", nullable = true),
+                    moduleName = "lyng.stdlib"
+                ) {
                     thisAs<ObjRegex>().find(requireOnlyArg<ObjString>())
                 }
-                addFn("findAll") {
+                addFnDoc(
+                    name = "findAll",
+                    doc = "Find all matches in the given string.",
+                    params = listOf(ParamDoc("text", type("lyng.String"))),
+                    returns = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.RegexMatch"))),
+                    moduleName = "lyng.stdlib"
+                ) {
                     val s = requireOnlyArg<ObjString>().value
                     ObjList(thisAs<ObjRegex>().regex.findAll(s).map { ObjRegexMatch(it) }.toMutableList())
                 }
@@ -101,13 +123,28 @@ class ObjRegexMatch(val match: MatchResult) : Obj() {
                     scope.raiseError("RegexMatch can't be constructed directly")
                 }
             }.apply {
-                addFn("groups") {
+                addFnDoc(
+                    name = "groups",
+                    doc = "List of captured groups with index 0 as the whole match.",
+                    returns = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.String"))),
+                    moduleName = "lyng.stdlib"
+                ) {
                     thisAs<ObjRegexMatch>().objGroups
                 }
-                addFn("value") {
+                addFnDoc(
+                    name = "value",
+                    doc = "The matched substring.",
+                    returns = type("lyng.String"),
+                    moduleName = "lyng.stdlib"
+                ) {
                     thisAs<ObjRegexMatch>().objValue
                 }
-                addFn("range") {
+                addFnDoc(
+                    name = "range",
+                    doc = "Range of the match in the input (end-exclusive).",
+                    returns = type("lyng.Range"),
+                    moduleName = "lyng.stdlib"
+                ) {
                     thisAs<ObjRegexMatch>().objRange
                 }
             }

@@ -21,6 +21,10 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Statement
+import net.sergeych.lyng.miniast.ParamDoc
+import net.sergeych.lyng.miniast.addConstDoc
+import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.type
 import net.sergeych.lyng.statement
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
@@ -200,19 +204,32 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 return ObjList(decoder.decodeAnyList(scope))
             }
         }.apply {
-            createField("size",
-                statement {
+            addConstDoc(
+                name = "size",
+                value = statement {
                     (thisObj as ObjList).list.size.toObj()
-                }
+                },
+                doc = "Number of elements in this list.",
+                type = type("lyng.Int"),
+                moduleName = "lyng.stdlib"
             )
-            createField("add",
-                statement {
+            addConstDoc(
+                name = "add",
+                value = statement {
                     val l = thisAs<ObjList>().list
                     for (a in args) l.add(a)
                     ObjVoid
-                }
+                },
+                doc = "Append one or more elements to the end of this list.",
+                type = type("lyng.Callable"),
+                moduleName = "lyng.stdlib"
             )
-            addFn("insertAt") {
+            addFnDoc(
+                name = "insertAt",
+                doc = "Insert elements starting at the given index.",
+                params = listOf(ParamDoc("index", type("lyng.Int"))),
+                moduleName = "lyng.stdlib"
+            ) {
                 if (args.size < 2) raiseError("addAt takes 2+ arguments")
                 val l = thisAs<ObjList>()
                 var index = requiredArg<ObjInt>(0).value.toInt()
@@ -220,7 +237,12 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 ObjVoid
             }
 
-            addFn("removeAt") {
+            addFnDoc(
+                name = "removeAt",
+                doc = "Remove element at index, or a range [start,end) if two indices are provided. Returns the list.",
+                params = listOf(ParamDoc("start", type("lyng.Int")), ParamDoc("end", type("lyng.Int"))),
+                moduleName = "lyng.stdlib"
+            ) {
                 val self = thisAs<ObjList>()
                 val start = requiredArg<ObjInt>(0).value.toInt()
                 if (args.size == 2) {
@@ -231,7 +253,12 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 self
             }
 
-            addFn("removeLast") {
+            addFnDoc(
+                name = "removeLast",
+                doc = "Remove the last element or the last N elements if a count is provided. Returns the list.",
+                params = listOf(ParamDoc("count", type("lyng.Int"))),
+                moduleName = "lyng.stdlib"
+            ) {
                 val self = thisAs<ObjList>()
                 if (args.isNotEmpty()) {
                     val count = requireOnlyArg<ObjInt>().value.toInt()
@@ -242,7 +269,12 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 self
             }
 
-            addFn("removeRange") {
+            addFnDoc(
+                name = "removeRange",
+                doc = "Remove a range of elements. Accepts a Range or (start, endInclusive). Returns the list.",
+                params = listOf(ParamDoc("range")),
+                moduleName = "lyng.stdlib"
+            ) {
                 val self = thisAs<ObjList>()
                 val list = self.list
                 val range = requiredArg<Obj>(0)
@@ -283,19 +315,32 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 self
             }
 
-            addFn("sortWith") {
+            addFnDoc(
+                name = "sortWith",
+                doc = "Sort this list in-place using a comparator function (a, b) -> Int.",
+                params = listOf(ParamDoc("comparator")),
+                moduleName = "lyng.stdlib"
+            ) {
                 val comparator = requireOnlyArg<Statement>()
                 thisAs<ObjList>().quicksort { a, b -> comparator.call(this, a, b).toInt() }
                 ObjVoid
             }
-            addFn("shuffle") {
+            addFnDoc(
+                name = "shuffle",
+                doc = "Shuffle elements of this list in-place.",
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjList>().list.shuffle()
                 ObjVoid
             }
-            addFn("sum") {
+            addFnDoc(
+                name = "sum",
+                doc = "Sum elements using dynamic '+' or optimized integer path. Returns null for empty lists.",
+                moduleName = "lyng.stdlib"
+            ) {
                 val self = thisAs<ObjList>()
                 val l = self.list
-                if (l.isEmpty()) return@addFn ObjNull
+                if (l.isEmpty()) return@addFnDoc ObjNull
                 if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
                     // Fast path: all ints → accumulate as long
                     var i = 0
@@ -312,10 +357,10 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                                 res = res.plus(this, l[i])
                                 i++
                             }
-                            return@addFn res
+                            return@addFnDoc res
                         }
                     }
-                    return@addFn ObjInt(acc)
+                    return@addFnDoc ObjInt(acc)
                 }
                 // Generic path: dynamic '+' starting from first element
                 var res: Obj = l[0]
@@ -326,9 +371,13 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 }
                 res
             }
-            addFn("min") {
+            addFnDoc(
+                name = "min",
+                doc = "Minimum element by natural order. Returns null for empty lists.",
+                moduleName = "lyng.stdlib"
+            ) {
                 val l = thisAs<ObjList>().list
-                if (l.isEmpty()) return@addFn ObjNull
+                if (l.isEmpty()) return@addFnDoc ObjNull
                 if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
                     var i = 0
                     var hasOnlyInts = true
@@ -343,7 +392,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                         }
                         i++
                     }
-                    if (hasOnlyInts) return@addFn ObjInt(minVal)
+                    if (hasOnlyInts) return@addFnDoc ObjInt(minVal)
                 }
                 var res: Obj = l[0]
                 var i = 1
@@ -354,9 +403,13 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 }
                 res
             }
-            addFn("max") {
+            addFnDoc(
+                name = "max",
+                doc = "Maximum element by natural order. Returns null for empty lists.",
+                moduleName = "lyng.stdlib"
+            ) {
                 val l = thisAs<ObjList>().list
-                if (l.isEmpty()) return@addFn ObjNull
+                if (l.isEmpty()) return@addFnDoc ObjNull
                 if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
                     var i = 0
                     var hasOnlyInts = true
@@ -371,7 +424,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                         }
                         i++
                     }
-                    if (hasOnlyInts) return@addFn ObjInt(maxVal)
+                    if (hasOnlyInts) return@addFnDoc ObjInt(maxVal)
                 }
                 var res: Obj = l[0]
                 var i = 1
@@ -382,21 +435,27 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 }
                 res
             }
-            addFn("indexOf") {
+            addFnDoc(
+                name = "indexOf",
+                doc = "Index of the first occurrence of the given element, or -1 if not found.",
+                params = listOf(ParamDoc("element")),
+                returns = type("lyng.Int"),
+                moduleName = "lyng.stdlib"
+            ) {
                 val l = thisAs<ObjList>().list
                 val needle = args.firstAndOnly()
                 if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS && needle is ObjInt) {
                     var i = 0
                     while (i < l.size) {
                         val v = l[i]
-                        if (v is ObjInt && v.value == needle.value) return@addFn ObjInt(i.toLong())
+                        if (v is ObjInt && v.value == needle.value) return@addFnDoc ObjInt(i.toLong())
                         i++
                     }
-                    return@addFn ObjInt((-1).toLong())
+                    return@addFnDoc ObjInt((-1).toLong())
                 }
                 var i = 0
                 while (i < l.size) {
-                    if (l[i].compareTo(this, needle) == 0) return@addFn ObjInt(i.toLong())
+                    if (l[i].compareTo(this, needle) == 0) return@addFnDoc ObjInt(i.toLong())
                     i++
                 }
                 ObjInt((-1).toLong())

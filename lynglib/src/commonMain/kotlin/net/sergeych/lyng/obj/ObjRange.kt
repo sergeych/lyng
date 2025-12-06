@@ -18,6 +18,9 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.miniast.TypeGenericDoc
+import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.type
 
 class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Obj() {
 
@@ -141,25 +144,60 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
 
     companion object {
         val type = ObjClass("Range", ObjIterable).apply {
-            addFn("start") {
+            addFnDoc(
+                name = "start",
+                doc = "Start bound of the range or null if open.",
+                returns = type("lyng.Any", nullable = true),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjRange>().start ?: ObjNull
             }
-            addFn("end") {
+            addFnDoc(
+                name = "end",
+                doc = "End bound of the range or null if open.",
+                returns = type("lyng.Any", nullable = true),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjRange>().end ?: ObjNull
             }
-            addFn("isOpen") {
+            addFnDoc(
+                name = "isOpen",
+                doc = "Whether the range is open on either side (no start or no end).",
+                returns = type("lyng.Bool"),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjRange>().let { it.start == null || it.end == null }.toObj()
             }
-            addFn("isIntRange") {
+            addFnDoc(
+                name = "isIntRange",
+                doc = "True if both bounds are Int values.",
+                returns = type("lyng.Bool"),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjRange>().isIntRange.toObj()
             }
-            addFn("isCharRange") {
+            addFnDoc(
+                name = "isCharRange",
+                doc = "True if both bounds are Char values.",
+                returns = type("lyng.Bool"),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjRange>().isCharRange.toObj()
             }
-            addFn("isEndInclusive") {
+            addFnDoc(
+                name = "isEndInclusive",
+                doc = "Whether the end bound is inclusive.",
+                returns = type("lyng.Bool"),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjRange>().isEndInclusive.toObj()
             }
-            addFn("iterator") {
+            addFnDoc(
+                name = "iterator",
+                doc = "Iterator over elements in this range (optimized for Int ranges).",
+                returns = TypeGenericDoc(type("lyng.Iterator"), listOf(type("lyng.Any"))),
+                moduleName = "lyng.stdlib"
+            ) {
                 val self = thisAs<ObjRange>()
                 if (net.sergeych.lyng.PerfFlags.RANGE_FAST_ITER) {
                     val s = self.start
@@ -169,7 +207,7 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
                         val endExclusive = (if (self.isEndInclusive) e.value.toInt() + 1 else e.value.toInt())
                         // Only for ascending simple ranges; fall back otherwise
                         if (start <= endExclusive) {
-                            return@addFn ObjFastIntRangeIterator(start, endExclusive)
+                            return@addFnDoc ObjFastIntRangeIterator(start, endExclusive)
                         }
                     }
                 }

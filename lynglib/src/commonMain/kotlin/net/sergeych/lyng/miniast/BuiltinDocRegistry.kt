@@ -22,6 +22,7 @@
 package net.sergeych.lyng.miniast
 
 import net.sergeych.lyng.Pos
+import net.sergeych.lyng.stdlib_included.rootLyng
 
 // ---------------- Types DSL ----------------
 
@@ -262,7 +263,125 @@ internal fun TypeDoc.toMiniTypeRef(): MiniTypeRef = when (this) {
 
 // ---------------- Built-in module doc seeds ----------------
 
-// Seed docs for lyng.stdlib lazily to avoid init-order coupling.
+// ---------------- Inline docs support (.lyng source) ----------------
+
+/**
+ * Lightweight, single-pass scanner that extracts inline doc comments from the stdlib .lyng source
+ * and associates them with declarations (top-level functions, classes, and class methods).
+ * It is intentionally conservative and only recognizes simple patterns present in stdlib sources.
+ *
+ * The scan is cached; performed at most once per process.
+ */
+private object StdlibInlineDocIndex {
+    private var built = false
+
+    // Keys for matching declaration docs
+    private sealed interface Key {
+        data class TopFun(val name: String) : Key
+        data class Clazz(val name: String) : Key
+        data class Method(val className: String, val name: String) : Key
+    }
+
+    private val docs: MutableMap<Key, String> = mutableMapOf()
+
+    private fun putIfAbsent(k: Key, doc: String) {
+        if (doc.isBlank()) return
+        if (!docs.containsKey(k)) docs[k] = doc.trim()
+    }
+
+    private fun buildOnce() {
+        if (built) return
+        built = true
+        val text = try { rootLyng } catch (_: Throwable) { null } ?: return
+
+        // Simple line-based scan. Collect a doc block immediately preceding a declaration.
+        val lines = text.lines()
+        val buf = mutableListOf<String>()
+        var inBlock = false
+        var prevWasComment = false
+
+        fun flushTo(key: Key) {
+            if (buf.isNotEmpty()) {
+                val raw = buf.joinToString("\n").trimEnd()
+                putIfAbsent(key, raw)
+                buf.clear()
+            }
+        }
+
+        for (rawLine in lines) {
+            val line = rawLine.trim()
+            when {
+                // Multiline block comment begin/end
+                line.startsWith("/*") && !inBlock -> {
+                    inBlock = true
+                    val inner = line.removePrefix("/*").let { l -> if (l.endsWith("*/")) l.removeSuffix("*/") else l }
+                    buf += inner
+                    prevWasComment = true
+                    if (line.endsWith("*/")) inBlock = false
+                    continue
+                }
+                inBlock -> {
+                    val content = if (line.endsWith("*/")) {
+                        inBlock = false
+                        line.removeSuffix("*/")
+                    } else line
+                    // Trim leading '*' like Javadoc style
+                    val t = content.trimStart()
+                    buf += if (t.startsWith("*")) t.removePrefix("*").trimStart() else content
+                    prevWasComment = true
+                    continue
+                }
+                line.startsWith("//") -> {
+                    buf += line.removePrefix("//")
+                    prevWasComment = true
+                    continue
+                }
+                line.isBlank() -> {
+                    // Blank line breaks doc association unless it immediately follows a comment
+                    if (!prevWasComment) buf.clear()
+                    prevWasComment = false
+                    continue
+                }
+                else -> {
+                    // Non-comment, non-blank: try to match a declaration just after comments
+                    if (buf.isNotEmpty()) {
+                        // fun Class.name( ... )
+                        val mExt = Regex("^fun\\s+([A-Za-z_][A-Za-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)\\s*\\(").find(line)
+                        if (mExt != null) {
+                            val (cls, name) = mExt.destructured
+                            flushTo(Key.Method(cls, name))
+                        } else {
+                            // fun name( ... )
+                            val mTop = Regex("^fun\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(").find(line)
+                            if (mTop != null) {
+                                val (name) = mTop.destructured
+                                flushTo(Key.TopFun(name))
+                            } else {
+                                // class Name
+                                val mClass = Regex("^class\\s+([A-Za-z_][A-Za-z0-9_]*)\\b").find(line)
+                                if (mClass != null) {
+                                    val (name) = mClass.destructured
+                                    flushTo(Key.Clazz(name))
+                                } else {
+                                    // Unrecognized line – drop buffer to avoid leaking to unrelated code
+                                    buf.clear()
+                                }
+                            }
+                        }
+                    }
+                    prevWasComment = false
+                }
+            }
+        }
+    }
+
+    // Public API: fetch doc text if present
+    fun topFunDoc(name: String): String? { buildOnce(); return docs[Key.TopFun(name)] }
+    fun classDoc(name: String): String? { buildOnce(); return docs[Key.Clazz(name)] }
+    fun methodDoc(className: String, name: String): String? { buildOnce(); return docs[Key.Method(className, name)] }
+}
+
+// Seed docs for lyng.stdlib lazily to avoid init-order coupling and prefer inline docs where present.
 private fun buildStdlibDocs(): List<MiniDecl> {
     val decls = mutableListOf<MiniDecl>()
     // Use the same DSL builders to construct decls
@@ -270,7 +389,7 @@ private fun buildStdlibDocs(): List<MiniDecl> {
     // Printing
     mod.funDoc(
         name = "print",
-        doc = """
+        doc = StdlibInlineDocIndex.topFunDoc("print") ?: """
             Print values to the standard output without a trailing newline.
             Accepts any number of arguments and prints them separated by a space.
         """.trimIndent(),
@@ -279,7 +398,7 @@ private fun buildStdlibDocs(): List<MiniDecl> {
     )
     mod.funDoc(
         name = "println",
-        doc = """
+        doc = StdlibInlineDocIndex.topFunDoc("println") ?: """
             Print values to the standard output and append a newline.
             Accepts any number of arguments and prints them separated by a space.
         """.trimIndent(),
@@ -288,7 +407,7 @@ private fun buildStdlibDocs(): List<MiniDecl> {
     // Caching helper
     mod.funDoc(
         name = "cached",
-        doc = """
+        doc = StdlibInlineDocIndex.topFunDoc("cached") ?: """
             Wrap a `builder` into a zero-argument thunk that computes once and caches the result.
             The first call invokes `builder()` and stores the value; subsequent calls return the cached value.
         """.trimIndent(),
@@ -298,44 +417,44 @@ private fun buildStdlibDocs(): List<MiniDecl> {
     // Math helpers (scalar versions)
     fun math1(name: String) = mod.funDoc(
         name = name,
-        doc = "Compute $name(x).",
+        doc = StdlibInlineDocIndex.topFunDoc(name) ?: "Compute $name(x).",
         params = listOf(ParamDoc("x", type("lyng.Number")))
     )
     math1("sin"); math1("cos"); math1("tan"); math1("asin"); math1("acos"); math1("atan")
-    mod.funDoc(name = "floor", doc = "Round down the number to the nearest integer.", params = listOf(ParamDoc("x", type("lyng.Number"))))
-    mod.funDoc(name = "ceil", doc = "Round up the number to the nearest integer.", params = listOf(ParamDoc("x", type("lyng.Number"))))
-    mod.funDoc(name = "round", doc = "Round the number to the nearest integer.", params = listOf(ParamDoc("x", type("lyng.Number"))))
+    mod.funDoc(name = "floor", doc = StdlibInlineDocIndex.topFunDoc("floor") ?: "Round down the number to the nearest integer.", params = listOf(ParamDoc("x", type("lyng.Number"))))
+    mod.funDoc(name = "ceil", doc = StdlibInlineDocIndex.topFunDoc("ceil") ?: "Round up the number to the nearest integer.", params = listOf(ParamDoc("x", type("lyng.Number"))))
+    mod.funDoc(name = "round", doc = StdlibInlineDocIndex.topFunDoc("round") ?: "Round the number to the nearest integer.", params = listOf(ParamDoc("x", type("lyng.Number"))))
 
     // Hyperbolic and inverse hyperbolic
     math1("sinh"); math1("cosh"); math1("tanh"); math1("asinh"); math1("acosh"); math1("atanh")
 
     // Exponentials and logarithms
-    mod.funDoc(name = "exp", doc = "Euler's exponential e^x.", params = listOf(ParamDoc("x", type("lyng.Number"))))
-    mod.funDoc(name = "ln", doc = "Natural logarithm (base e).", params = listOf(ParamDoc("x", type("lyng.Number"))))
-    mod.funDoc(name = "log10", doc = "Logarithm base 10.", params = listOf(ParamDoc("x", type("lyng.Number"))))
-    mod.funDoc(name = "log2", doc = "Logarithm base 2.", params = listOf(ParamDoc("x", type("lyng.Number"))))
+    mod.funDoc(name = "exp", doc = StdlibInlineDocIndex.topFunDoc("exp") ?: "Euler's exponential e^x.", params = listOf(ParamDoc("x", type("lyng.Number"))))
+    mod.funDoc(name = "ln", doc = StdlibInlineDocIndex.topFunDoc("ln") ?: "Natural logarithm (base e).", params = listOf(ParamDoc("x", type("lyng.Number"))))
+    mod.funDoc(name = "log10", doc = StdlibInlineDocIndex.topFunDoc("log10") ?: "Logarithm base 10.", params = listOf(ParamDoc("x", type("lyng.Number"))))
+    mod.funDoc(name = "log2", doc = StdlibInlineDocIndex.topFunDoc("log2") ?: "Logarithm base 2.", params = listOf(ParamDoc("x", type("lyng.Number"))))
 
     // Power/roots and absolute value
     mod.funDoc(
         name = "pow",
-        doc = "Raise `x` to the power `y`.",
+        doc = StdlibInlineDocIndex.topFunDoc("pow") ?: "Raise `x` to the power `y`.",
         params = listOf(ParamDoc("x", type("lyng.Number")), ParamDoc("y", type("lyng.Number")))
     )
     mod.funDoc(
         name = "sqrt",
-        doc = "Square root of `x`.",
+        doc = StdlibInlineDocIndex.topFunDoc("sqrt") ?: "Square root of `x`.",
         params = listOf(ParamDoc("x", type("lyng.Number")))
     )
     mod.funDoc(
         name = "abs",
-        doc = "Absolute value of a number (works for Int and Real).",
+        doc = StdlibInlineDocIndex.topFunDoc("abs") ?: "Absolute value of a number (works for Int and Real).",
         params = listOf(ParamDoc("x", type("lyng.Number")))
     )
 
     // Assertions and checks
     mod.funDoc(
         name = "assert",
-        doc = """
+        doc = StdlibInlineDocIndex.topFunDoc("assert") ?: """
             Assert that `cond` is true, otherwise throw an `AssertionFailedException`.
             Optionally provide a `message`.
         """.trimIndent(),
@@ -343,17 +462,17 @@ private fun buildStdlibDocs(): List<MiniDecl> {
     )
     mod.funDoc(
         name = "assertEquals",
-        doc = "Assert that `a == b`, otherwise throw an assertion error.",
+        doc = StdlibInlineDocIndex.topFunDoc("assertEquals") ?: "Assert that `a == b`, otherwise throw an assertion error.",
         params = listOf(ParamDoc("a"), ParamDoc("b"))
     )
     mod.funDoc(
         name = "assertNotEquals",
-        doc = "Assert that `a != b`, otherwise throw an assertion error.",
+        doc = StdlibInlineDocIndex.topFunDoc("assertNotEquals") ?: "Assert that `a != b`, otherwise throw an assertion error.",
         params = listOf(ParamDoc("a"), ParamDoc("b"))
     )
     mod.funDoc(
         name = "assertThrows",
-        doc = """
+        doc = StdlibInlineDocIndex.topFunDoc("assertThrows") ?: """
             Execute `code` and return the thrown `Exception` object.
             If nothing is thrown, an assertion error is raised.
         """.trimIndent(),
@@ -364,119 +483,125 @@ private fun buildStdlibDocs(): List<MiniDecl> {
     // Utilities
     mod.funDoc(
         name = "dynamic",
-        doc = "Wrap a value into a dynamic object that defers resolution to runtime.",
+        doc = StdlibInlineDocIndex.topFunDoc("dynamic") ?: "Wrap a value into a dynamic object that defers resolution to runtime.",
         params = listOf(ParamDoc("value"))
     )
     mod.funDoc(
         name = "require",
-        doc = "Require `cond` to be true, else throw `IllegalArgumentException` with optional `message`.",
+        doc = StdlibInlineDocIndex.topFunDoc("require") ?: "Require `cond` to be true, else throw `IllegalArgumentException` with optional `message`.",
         params = listOf(ParamDoc("cond", type("lyng.Bool")), ParamDoc("message"))
     )
     mod.funDoc(
         name = "check",
-        doc = "Check `cond` is true, else throw `IllegalStateException` with optional `message`.",
+        doc = StdlibInlineDocIndex.topFunDoc("check") ?: "Check `cond` is true, else throw `IllegalStateException` with optional `message`.",
         params = listOf(ParamDoc("cond", type("lyng.Bool")), ParamDoc("message"))
     )
     mod.funDoc(
         name = "traceScope",
-        doc = "Print a debug trace of the current scope chain with an optional label.",
+        doc = StdlibInlineDocIndex.topFunDoc("traceScope") ?: "Print a debug trace of the current scope chain with an optional label.",
         params = listOf(ParamDoc("label", type("lyng.String")))
     )
     mod.funDoc(
         name = "delay",
-        doc = "Suspend for the specified number of milliseconds.",
+        doc = StdlibInlineDocIndex.topFunDoc("delay") ?: "Suspend for the specified number of milliseconds.",
         params = listOf(ParamDoc("ms", type("lyng.Number")))
     )
 
     // Concurrency helpers
     mod.funDoc(
         name = "launch",
-        doc = "Launch an asynchronous task and return a `Deferred`.",
+        doc = StdlibInlineDocIndex.topFunDoc("launch") ?: "Launch an asynchronous task and return a `Deferred`.",
         params = listOf(ParamDoc("code")),
         returns = type("lyng.Deferred")
     )
     mod.funDoc(
         name = "yield",
-        doc = "Yield to the scheduler, allowing other tasks to run."
+        doc = StdlibInlineDocIndex.topFunDoc("yield") ?: "Yield to the scheduler, allowing other tasks to run."
     )
     mod.funDoc(
         name = "flow",
-        doc = "Create a lazy iterable stream using the provided `builder`.",
+        doc = StdlibInlineDocIndex.topFunDoc("flow") ?: "Create a lazy iterable stream using the provided `builder`.",
         params = listOf(ParamDoc("builder")),
         returns = type("lyng.Iterable")
     )
 
     // Common Iterable helpers (document top-level extension-like APIs as class members)
-    mod.classDoc(name = "Iterable", doc = "Helper operations for iterable collections.") {
-        method(name = "filter", doc = "Filter elements by predicate.", params = listOf(ParamDoc("predicate")), returns = type("lyng.Iterable"))
-        method(name = "drop", doc = "Skip the first N elements.", params = listOf(ParamDoc("n", type("lyng.Int"))), returns = type("lyng.Iterable"))
-        method(name = "first", doc = "Return the first element or throw if empty.")
-        method(name = "last", doc = "Return the last element or throw if empty.")
-        method(name = "dropLast", doc = "Drop the last N elements.", params = listOf(ParamDoc("n", type("lyng.Int"))), returns = type("lyng.Iterable"))
-        method(name = "takeLast", doc = "Take the last N elements.", params = listOf(ParamDoc("n", type("lyng.Int"))), returns = type("lyng.List"))
-        method(name = "joinToString", doc = "Join elements into a string with an optional separator and transformer.", params = listOf(ParamDoc("prefix", type("lyng.String")), ParamDoc("transformer")), returns = type("lyng.String"))
-        method(name = "any", doc = "Return true if any element matches the predicate.", params = listOf(ParamDoc("predicate")), returns = type("lyng.Bool"))
-        method(name = "all", doc = "Return true if all elements match the predicate.", params = listOf(ParamDoc("predicate")), returns = type("lyng.Bool"))
-        method(name = "sum", doc = "Sum all elements; returns null for empty collections.", returns = type("lyng.Number", nullable = true))
-        method(name = "sumOf", doc = "Sum mapped values of elements; returns null for empty collections.", params = listOf(ParamDoc("f")))
-        method(name = "minOf", doc = "Minimum of mapped values.", params = listOf(ParamDoc("lambda")))
-        method(name = "maxOf", doc = "Maximum of mapped values.", params = listOf(ParamDoc("lambda")))
-        method(name = "sorted", doc = "Return elements sorted by natural order.", returns = type("lyng.Iterable"))
-        method(name = "sortedBy", doc = "Return elements sorted by the key selector.", params = listOf(ParamDoc("predicate")), returns = type("lyng.Iterable"))
-        method(name = "shuffled", doc = "Return a shuffled copy as a list.", returns = type("lyng.List"))
-        method(name = "map", doc = "Transform elements by applying `transform`.", params = listOf(ParamDoc("transform")), returns = type("lyng.Iterable"))
-        method(name = "toList", doc = "Collect elements of this iterable into a new list.", returns = type("lyng.List"))
+    mod.classDoc(name = "Iterable", doc = StdlibInlineDocIndex.classDoc("Iterable") ?: "Helper operations for iterable collections.") {
+        fun md(name: String, fallback: String) = StdlibInlineDocIndex.methodDoc("Iterable", name) ?: fallback
+        method(name = "filter", doc = md("filter", "Filter elements by predicate."), params = listOf(ParamDoc("predicate")), returns = type("lyng.Iterable"))
+        method(name = "drop", doc = md("drop", "Skip the first N elements."), params = listOf(ParamDoc("n", type("lyng.Int"))), returns = type("lyng.Iterable"))
+        method(name = "first", doc = md("first", "Return the first element or throw if empty."))
+        method(name = "last", doc = md("last", "Return the last element or throw if empty."))
+        method(name = "dropLast", doc = md("dropLast", "Drop the last N elements."), params = listOf(ParamDoc("n", type("lyng.Int"))), returns = type("lyng.Iterable"))
+        method(name = "takeLast", doc = md("takeLast", "Take the last N elements."), params = listOf(ParamDoc("n", type("lyng.Int"))), returns = type("lyng.List"))
+        method(name = "joinToString", doc = md("joinToString", "Join elements into a string with an optional separator and transformer."), params = listOf(ParamDoc("prefix", type("lyng.String")), ParamDoc("transformer")), returns = type("lyng.String"))
+        method(name = "any", doc = md("any", "Return true if any element matches the predicate."), params = listOf(ParamDoc("predicate")), returns = type("lyng.Bool"))
+        method(name = "all", doc = md("all", "Return true if all elements match the predicate."), params = listOf(ParamDoc("predicate")), returns = type("lyng.Bool"))
+        method(name = "sum", doc = md("sum", "Sum all elements; returns null for empty collections."), returns = type("lyng.Number", nullable = true))
+        method(name = "sumOf", doc = md("sumOf", "Sum mapped values of elements; returns null for empty collections."), params = listOf(ParamDoc("f")))
+        method(name = "minOf", doc = md("minOf", "Minimum of mapped values."), params = listOf(ParamDoc("lambda")))
+        method(name = "maxOf", doc = md("maxOf", "Maximum of mapped values."), params = listOf(ParamDoc("lambda")))
+        method(name = "sorted", doc = md("sorted", "Return elements sorted by natural order."), returns = type("lyng.Iterable"))
+        method(name = "sortedBy", doc = md("sortedBy", "Return elements sorted by the key selector."), params = listOf(ParamDoc("predicate")), returns = type("lyng.Iterable"))
+        method(name = "shuffled", doc = md("shuffled", "Return a shuffled copy as a list."), returns = type("lyng.List"))
+        method(name = "map", doc = md("map", "Transform elements by applying `transform`."), params = listOf(ParamDoc("transform")), returns = type("lyng.Iterable"))
+        method(name = "toList", doc = md("toList", "Collect elements of this iterable into a new list."), returns = type("lyng.List"))
     }
 
     // List helpers
-    mod.classDoc(name = "List", doc = "List-specific operations.", bases = listOf(type("Collection"), type("Iterable"))) {
-        method(name = "toString", doc = "Return string representation like [a,b,c].", returns = type("lyng.String"))
-        method(name = "sortBy", doc = "Sort list in-place by key selector.", params = listOf(ParamDoc("predicate")))
-        method(name = "sort", doc = "Sort list in-place by natural order.")
-        method(name = "toList", doc = "Return a shallow copy of this list (new list with the same elements).", returns = type("lyng.List"))
+    mod.classDoc(name = "List", doc = StdlibInlineDocIndex.classDoc("List") ?: "List-specific operations.", bases = listOf(type("Collection"), type("Iterable"))) {
+        fun md(name: String, fallback: String) = StdlibInlineDocIndex.methodDoc("List", name) ?: fallback
+        method(name = "toString", doc = md("toString", "Return string representation like [a,b,c]."), returns = type("lyng.String"))
+        method(name = "sortBy", doc = md("sortBy", "Sort list in-place by key selector."), params = listOf(ParamDoc("predicate")))
+        method(name = "sort", doc = md("sort", "Sort list in-place by natural order."))
+        method(name = "toList", doc = md("toList", "Return a shallow copy of this list (new list with the same elements)."), returns = type("lyng.List"))
     }
 
     // Collection helpers (supertype for sized collections)
-    mod.classDoc(name = "Collection", doc = "Collection operations common to sized collections.", bases = listOf(type("Iterable"))) {
-        method(name = "size", doc = "Number of elements in the collection.", returns = type("lyng.Int"))
-        method(name = "toList", doc = "Collect elements into a new list.", returns = type("lyng.List"))
+    mod.classDoc(name = "Collection", doc = StdlibInlineDocIndex.classDoc("Collection") ?: "Collection operations common to sized collections.", bases = listOf(type("Iterable"))) {
+        fun md(name: String, fallback: String) = StdlibInlineDocIndex.methodDoc("Collection", name) ?: fallback
+        method(name = "size", doc = md("size", "Number of elements in the collection."), returns = type("lyng.Int"))
+        method(name = "toList", doc = md("toList", "Collect elements into a new list."), returns = type("lyng.List"))
     }
 
     // Iterator helpers
-    mod.classDoc(name = "Iterator", doc = "Iterator protocol for sequential access.") {
-        method(name = "hasNext", doc = "Whether another element is available.", returns = type("lyng.Bool"))
-        method(name = "next", doc = "Return the next element.")
-        method(name = "cancelIteration", doc = "Stop the iteration early.")
-        method(name = "toList", doc = "Consume this iterator and collect elements into a list.", returns = type("lyng.List"))
+    mod.classDoc(name = "Iterator", doc = StdlibInlineDocIndex.classDoc("Iterator") ?: "Iterator protocol for sequential access.") {
+        fun md(name: String, fallback: String) = StdlibInlineDocIndex.methodDoc("Iterator", name) ?: fallback
+        method(name = "hasNext", doc = md("hasNext", "Whether another element is available."), returns = type("lyng.Bool"))
+        method(name = "next", doc = md("next", "Return the next element."))
+        method(name = "cancelIteration", doc = md("cancelIteration", "Stop the iteration early."))
+        method(name = "toList", doc = md("toList", "Consume this iterator and collect elements into a list."), returns = type("lyng.List"))
     }
 
     // Exceptions and utilities
-    mod.classDoc(name = "Exception", doc = "Exception helpers.") {
-        method(name = "printStackTrace", doc = "Print this exception and its stack trace to standard output.")
+    mod.classDoc(name = "Exception", doc = StdlibInlineDocIndex.classDoc("Exception") ?: "Exception helpers.") {
+        method(name = "printStackTrace", doc = StdlibInlineDocIndex.methodDoc("Exception", "printStackTrace") ?: "Print this exception and its stack trace to standard output.")
     }
 
-    mod.classDoc(name = "String", doc = "String helpers.") {
-        method(name = "re", doc = "Compile this string into a regular expression.", returns = type("lyng.Regex"))
+    mod.classDoc(name = "String", doc = StdlibInlineDocIndex.classDoc("String") ?: "String helpers.") {
+        // Only include inline-source method here; Kotlin-embedded methods are now documented via DocHelpers near definitions.
+        method(name = "re", doc = StdlibInlineDocIndex.methodDoc("String", "re") ?: "Compile this string into a regular expression.", returns = type("lyng.Regex"))
     }
 
     // StackTraceEntry structure
-    mod.classDoc(name = "StackTraceEntry", doc = "Represents a single stack trace element.") {
+    mod.classDoc(name = "StackTraceEntry", doc = StdlibInlineDocIndex.classDoc("StackTraceEntry") ?: "Represents a single stack trace element.") {
+        // Fields are not present as declarations in root.lyng's class header docs. Keep seeded defaults.
         field(name = "sourceName", doc = "Source (file) name.", type = type("lyng.String"))
         field(name = "line", doc = "Line number (1-based).", type = type("lyng.Int"))
         field(name = "column", doc = "Column number (0-based).", type = type("lyng.Int"))
         field(name = "sourceString", doc = "The source line text.", type = type("lyng.String"))
-        method(name = "toString", doc = "Formatted representation: source:line:column: text.", returns = type("lyng.String"))
+        method(name = "toString", doc = StdlibInlineDocIndex.methodDoc("StackTraceEntry", "toString") ?: "Formatted representation: source:line:column: text.", returns = type("lyng.String"))
     }
 
     // Constants and namespaces
     mod.valDoc(
         name = "π",
-        doc = "The mathematical constant pi.",
+        doc = StdlibInlineDocIndex.topFunDoc("π") ?: "The mathematical constant pi.",
         type = type("lyng.Real"),
         mutable = false
     )
     mod.classDoc(name = "Math", doc = "Mathematical constants and helpers.") {
-        field(name = "PI", doc = "The mathematical constant pi.", type = type("lyng.Real"), isStatic = true)
+        field(name = "PI", doc = StdlibInlineDocIndex.methodDoc("Math", "PI") ?: "The mathematical constant pi.", type = type("lyng.Real"), isStatic = true)
     }
 
     decls += mod.build()

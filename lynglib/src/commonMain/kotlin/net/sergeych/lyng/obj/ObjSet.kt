@@ -18,6 +18,10 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.miniast.ParamDoc
+import net.sergeych.lyng.miniast.TypeGenericDoc
+import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.type
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
@@ -140,22 +144,55 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
             override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj =
                 ObjSet(decoder.decodeAnyList(scope).toMutableSet())
         }.apply {
-            addFn("size") {
+            addFnDoc(
+                name = "size",
+                doc = "Number of elements in this set.",
+                returns = type("lyng.Int"),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjSet>().set.size.toObj()
             }
-            addFn("intersect") {
+            addFnDoc(
+                name = "intersect",
+                doc = "Intersection with another set. Returns a new set.",
+                params = listOf(ParamDoc("other", type("lyng.Set"))),
+                returns = type("lyng.Set"),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjSet>().mul(this, args.firstAndOnly())
             }
-            addFn("iterator") {
+            addFnDoc(
+                name = "iterator",
+                doc = "Iterator over elements of this set.",
+                returns = TypeGenericDoc(type("lyng.Iterator"), listOf(type("lyng.Any"))),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjSet>().set.iterator().toObj()
             }
-            addFn("union") {
+            addFnDoc(
+                name = "union",
+                doc = "Union with another set or iterable. Returns a new set.",
+                params = listOf(ParamDoc("other")),
+                returns = type("lyng.Set"),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjSet>().plus(this, args.firstAndOnly())
             }
-            addFn("subtract") {
+            addFnDoc(
+                name = "subtract",
+                doc = "Subtract another set or iterable from this set. Returns a new set.",
+                params = listOf(ParamDoc("other")),
+                returns = type("lyng.Set"),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjSet>().minus(this, args.firstAndOnly())
             }
-            addFn("remove") {
+            addFnDoc(
+                name = "remove",
+                doc = "Remove one or more elements. Returns true if the set changed.",
+                returns = type("lyng.Bool"),
+                moduleName = "lyng.stdlib"
+            ) {
                 val set = thisAs<ObjSet>().set
                 val n = set.size
                 for( x in args.list ) set -= x

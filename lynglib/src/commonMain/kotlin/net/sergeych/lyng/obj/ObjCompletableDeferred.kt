@@ -19,6 +19,9 @@ package net.sergeych.lyng.obj
 
 import kotlinx.coroutines.CompletableDeferred
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.miniast.ParamDoc
+import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.type
 
 class ObjCompletableDeferred(val completableDeferred: CompletableDeferred<Obj>): ObjDeferred(completableDeferred) {
 
@@ -30,7 +33,13 @@ class ObjCompletableDeferred(val completableDeferred: CompletableDeferred<Obj>):
                 return ObjCompletableDeferred(CompletableDeferred())
             }
         }.apply {
-            addFn("complete") {
+            addFnDoc(
+                name = "complete",
+                doc = "Complete this deferred with the given value. Subsequent calls have no effect.",
+                params = listOf(ParamDoc("value")),
+                returns = type("lyng.Void"),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjCompletableDeferred>().completableDeferred.complete(args.firstAndOnly())
                 ObjVoid
             }

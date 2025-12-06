@@ -17,6 +17,10 @@
 
 package net.sergeych.lyng.obj
 
+import net.sergeych.lyng.miniast.TypeGenericDoc
+import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.type
+
 /**
  * Iterator should provide lyng-level iterator functions:
  *
@@ -28,14 +32,49 @@ package net.sergeych.lyng.obj
  */
 val ObjIterator by lazy {
     ObjClass("Iterator").apply {
-        addFn("cancelIteration", true) {
+        // Base protocol methods; actual iterators override these.
+        addFnDoc(
+            name = "cancelIteration",
+            doc = "Optional hint to stop iteration early and free resources.",
+            returns = type("lyng.Void"),
+            isOpen = true,
+            moduleName = "lyng.stdlib"
+        ) {
             ObjVoid
         }
-        addFn("hasNext", true) {
+        addFnDoc(
+            name = "hasNext",
+            doc = "Whether another element is available.",
+            returns = type("lyng.Bool"),
+            isOpen = true,
+            moduleName = "lyng.stdlib"
+        ) {
             raiseNotImplemented("hasNext() is not implemented")
         }
-        addFn("next", true) {
+        addFnDoc(
+            name = "next",
+            doc = "Return the next element.",
+            returns = type("lyng.Any"),
+            isOpen = true,
+            moduleName = "lyng.stdlib"
+        ) {
             raiseNotImplemented("next() is not implemented")
+        }
+        // Helper to consume iterator into a list
+        addFnDoc(
+            name = "toList",
+            doc = "Consume this iterator and collect elements into a list.",
+            returns = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.Any"))),
+            moduleName = "lyng.stdlib"
+        ) {
+            val out = mutableListOf<Obj>()
+            while (true) {
+                val has = thisObj.invokeInstanceMethod(this, "hasNext").toBool()
+                if (!has) break
+                val v = thisObj.invokeInstanceMethod(this, "next")
+                out += v
+            }
+            ObjList(out.toMutableList())
         }
     }
 }

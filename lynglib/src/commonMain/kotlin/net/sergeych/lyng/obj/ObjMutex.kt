@@ -21,6 +21,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Statement
+import net.sergeych.lyng.miniast.ParamDoc
+import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.type
 
 class ObjMutex(val mutex: Mutex): Obj() {
     override val objClass = type
@@ -31,7 +34,13 @@ class ObjMutex(val mutex: Mutex): Obj() {
                 return ObjMutex(Mutex())
             }
         }.apply {
-            addFn("withLock") {
+            addFnDoc(
+                name = "withLock",
+                doc = "Run the given lambda while holding the mutex and return its result.",
+                params = listOf(ParamDoc("action")),
+                returns = type("lyng.Any"),
+                moduleName = "lyng.stdlib"
+            ) {
                 val f = requiredArg<Statement>(0)
                 // Execute user lambda directly in the current scope to preserve the active scope
                 // ancestry across suspension points. The lambda still constructs a ClosureScope

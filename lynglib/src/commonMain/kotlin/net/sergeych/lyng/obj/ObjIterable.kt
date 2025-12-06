@@ -19,6 +19,9 @@ package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Arguments
 import net.sergeych.lyng.Statement
+import net.sergeych.lyng.miniast.ParamDoc
+import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.type
 
 /**
  * Abstract class that must provide `iterator` method that returns [ObjIterator] instance.
@@ -26,7 +29,12 @@ import net.sergeych.lyng.Statement
 val ObjIterable by lazy {
     ObjClass("Iterable").apply {
 
-        addFn("toList") {
+        addFnDoc(
+            name = "toList",
+            doc = "Collect elements of this iterable into a new list.",
+            returns = type("lyng.List"),
+            moduleName = "lyng.stdlib"
+        ) {
             val result = mutableListOf<Obj>()
             val iterator = thisObj.invokeInstanceMethod(this, "iterator")
 
@@ -36,29 +44,48 @@ val ObjIterable by lazy {
         }
 
         // it is not effective, but it is open:
-        addFn("contains", isOpen = true) {
+        addFnDoc(
+            name = "contains",
+            doc = "Whether the iterable contains the given element (by equality).",
+            params = listOf(ParamDoc("element")),
+            returns = type("lyng.Bool"),
+            isOpen = true,
+            moduleName = "lyng.stdlib"
+        ) {
             val obj = args.firstAndOnly()
             val it = thisObj.invokeInstanceMethod(this, "iterator")
             while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
                 if (obj.compareTo(this, it.invokeInstanceMethod(this, "next")) == 0)
-                    return@addFn ObjTrue
+                    return@addFnDoc ObjTrue
             }
             ObjFalse
         }
 
-        addFn("indexOf", isOpen = true) {
+        addFnDoc(
+            name = "indexOf",
+            doc = "Index of the first occurrence of the given element, or -1 if not found.",
+            params = listOf(ParamDoc("element")),
+            returns = type("lyng.Int"),
+            isOpen = true,
+            moduleName = "lyng.stdlib"
+        ) {
             val obj = args.firstAndOnly()
             var index = 0
             val it = thisObj.invokeInstanceMethod(this, "iterator")
             while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
                 if (obj.compareTo(this, it.invokeInstanceMethod(this, "next")) == 0)
-                    return@addFn ObjInt(index.toLong())
+                    return@addFnDoc ObjInt(index.toLong())
                 index++
             }
             ObjInt(-1L)
         }
 
-        addFn("toSet") {
+        addFnDoc(
+            name = "toSet",
+            doc = "Collect elements of this iterable into a new set.",
+            returns = type("lyng.Set"),
+            moduleName = "lyng.stdlib"
+        ) {
             if( thisObj.isInstanceOf(ObjSet.type) )
                 thisObj
             else {
@@ -71,7 +98,12 @@ val ObjIterable by lazy {
             }
         }
 
-        addFn("toMap") {
+        addFnDoc(
+            name = "toMap",
+            doc = "Collect pairs into a map using [0] as key and [1] as value for each element.",
+            returns = type("lyng.Map"),
+            moduleName = "lyng.stdlib"
+        ) {
             val result = ObjMap()
             thisObj.toFlow(this).collect { pair ->
                 result.map[pair.getAt(this, 0)] = pair.getAt(this, 1)
@@ -79,7 +111,13 @@ val ObjIterable by lazy {
             result
         }
 
-        addFn("associateBy") {
+        addFnDoc(
+            name = "associateBy",
+            doc = "Build a map from elements using the lambda result as key.",
+            params = listOf(ParamDoc("keySelector")),
+            returns = type("lyng.Map"),
+            moduleName = "lyng.stdlib"
+        ) {
             val association = requireOnlyArg<Statement>()
             val result = ObjMap()
             thisObj.toFlow(this).collect {
@@ -88,7 +126,13 @@ val ObjIterable by lazy {
             result
         }
 
-        addFn("forEach", isOpen = true) {
+        addFnDoc(
+            name = "forEach",
+            doc = "Apply the lambda to each element in iteration order.",
+            params = listOf(ParamDoc("action")),
+            isOpen = true,
+            moduleName = "lyng.stdlib"
+        ) {
             val it = thisObj.invokeInstanceMethod(this, "iterator")
             val fn = requiredArg<Statement>(0)
             while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
@@ -98,7 +142,14 @@ val ObjIterable by lazy {
             ObjVoid
         }
 
-        addFn("map", isOpen = true) {
+        addFnDoc(
+            name = "map",
+            doc = "Transform elements by applying the given lambda.",
+            params = listOf(ParamDoc("transform")),
+            returns = type("lyng.List"),
+            isOpen = true,
+            moduleName = "lyng.stdlib"
+        ) {
             val fn = requiredArg<Statement>(0)
             val result = mutableListOf<Obj>()
             thisObj.toFlow(this).collect {
@@ -107,7 +158,13 @@ val ObjIterable by lazy {
             ObjList(result)
         }
 
-        addFn("take") {
+        addFnDoc(
+            name = "take",
+            doc = "Take the first N elements and return them as a list.",
+            params = listOf(ParamDoc("n", type("lyng.Int"))),
+            returns = type("lyng.List"),
+            moduleName = "lyng.stdlib"
+        ) {
             var n = requireOnlyArg<ObjInt>().value.toInt()
             val result = mutableListOf<Obj>()
             if (n > 0) {
@@ -119,7 +176,12 @@ val ObjIterable by lazy {
             ObjList(result)
         }
 
-        addFn("isEmpty") {
+        addFnDoc(
+            name = "isEmpty",
+            doc = "Whether the iterable has no elements.",
+            returns = type("lyng.Bool"),
+            moduleName = "lyng.stdlib"
+        ) {
             ObjBool(
                 thisObj.invokeInstanceMethod(this, "iterator")
                     .invokeInstanceMethod(this, "hasNext").toBool()
@@ -127,7 +189,13 @@ val ObjIterable by lazy {
             )
         }
 
-        addFn("sortedWith") {
+        addFnDoc(
+            name = "sortedWith",
+            doc = "Return a new list sorted using the provided comparator `(a, b) -> Int`.",
+            params = listOf(ParamDoc("comparator")),
+            returns = type("lyng.List"),
+            moduleName = "lyng.stdlib"
+        ) {
             val list = thisObj.callMethod<ObjList>(this, "toList")
             val comparator = requireOnlyArg<Statement>()
             list.quicksort { a, b ->
@@ -136,7 +204,12 @@ val ObjIterable by lazy {
             list
         }
 
-        addFn("reversed") {
+        addFnDoc(
+            name = "reversed",
+            doc = "Return a new list with elements in reverse order.",
+            returns = type("lyng.List"),
+            moduleName = "lyng.stdlib"
+        ) {
             val list = thisObj.callMethod<ObjList>(this, "toList")
             list.list.reverse()
             list

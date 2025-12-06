@@ -1,5 +1,9 @@
 package lyng.stdlib
     
+/*
+   Wrap a builder into a zero-argument thunk that computes once and caches the result.
+   The first call invokes builder() and stores the value; subsequent calls return the cached value.
+*/
 fun cached(builder) {
     var calculated = false
     var value = null
@@ -11,7 +15,7 @@ fun cached(builder) {
         value
     }
 }
-    
+/* Filter elements of this iterable using the provided predicate. */
 fun Iterable.filter(predicate) {
     val list = this
     flow {
@@ -23,17 +27,20 @@ fun Iterable.filter(predicate) {
     }
 }
 
+/* Skip the first N elements of this iterable. */
 fun Iterable.drop(n) {
     var cnt = 0
     filter { cnt++ >= n }
 }
 
+/* Return the first element or throw if the iterable is empty. */
 fun Iterable.first() {
     val i = iterator()
     if( !i.hasNext() ) throw NoSuchElementException()
     i.next().also { i.cancelIteration() }
 }
 
+/* Return the last element or throw if the iterable is empty. */
 fun Iterable.last() {
     var found = false
     var element = null
@@ -45,6 +52,7 @@ fun Iterable.last() {
     element
 }
 
+/* Emit all but the last N elements of this iterable. */
 fun Iterable.dropLast(n) {
     val list = this
     val buffer = RingBuffer(n)
@@ -57,12 +65,14 @@ fun Iterable.dropLast(n) {
     }
 }
 
+/* Return the last N elements of this iterable as a buffer/list. */
 fun Iterable.takeLast(n) {
     val buffer = RingBuffer(n)
     for( item in this ) buffer += item
     buffer
 }
 
+/* Join elements into a string with a separator (prefix parameter) and optional transformer. */
 fun Iterable.joinToString(prefix=" ", transformer=null) {
     var result = null
     for( part in this ) {
@@ -73,6 +83,7 @@ fun Iterable.joinToString(prefix=" ", transformer=null) {
     result ?: ""
 }
 
+/* Return true if any element matches the predicate. */
 fun Iterable.any(predicate): Bool {
     for( i in this ) {
         if( predicate(i) )
@@ -80,10 +91,12 @@ fun Iterable.any(predicate): Bool {
     } else false
 }
 
+/* Return true if all elements match the predicate. */
 fun Iterable.all(predicate): Bool {
     !any { !predicate(it) }
 }
 
+/* Sum all elements; returns null for empty collections. */
 fun Iterable.sum() {
     val i = iterator()
     if( i.hasNext() ) {
@@ -94,6 +107,7 @@ fun Iterable.sum() {
     else null
 }
 
+/* Sum mapped values of elements; returns null for empty collections. */
 fun Iterable.sumOf(f) {
     val i = iterator()
     if( i.hasNext() ) {
@@ -104,6 +118,7 @@ fun Iterable.sumOf(f) {
     else null
 }
 
+/* Minimum value of the given function applied to elements of the collection. */
 fun Iterable.minOf( lambda ) {
     val i = iterator()
     var minimum = lambda( i.next() )
@@ -114,9 +129,7 @@ fun Iterable.minOf( lambda ) {
     minimum
 }
 
-/*
-    Return maximum value of the given function applied to elements of the collection.
-*/    
+/* Maximum value of the given function applied to elements of the collection. */    
 fun Iterable.maxOf( lambda ) {
     val i = iterator()
     var maximum = lambda( i.next() )
@@ -127,41 +140,50 @@ fun Iterable.maxOf( lambda ) {
     maximum
 }
 
+/* Return elements sorted by natural order. */
 fun Iterable.sorted() {
     sortedWith { a, b -> a <=> b }
 }
 
+/* Return elements sorted by the key selector. */
 fun Iterable.sortedBy(predicate) {
     sortedWith { a, b -> predicate(a) <=> predicate(b) }
 }
 
+/* Return a shuffled copy of the iterable as a list. */
 fun Iterable.shuffled() {
     toList().apply { shuffle() }
 }
 
+/* Return string representation like [a,b,c]. */
 fun List.toString() {
     "[" + joinToString(",") + "]"
 }
 
+/* Sort list in-place by key selector. */
 fun List.sortBy(predicate) {
     sortWith { a, b -> predicate(a) <=> predicate(b) }
 }
 
+/* Sort list in-place by natural order. */
 fun List.sort() {
     sortWith { a, b -> a <=> b }
 }
 
+/* Represents a single stack trace element. */
 class StackTraceEntry(
     val sourceName: String,
     val line: Int,
     val column: Int,
     val sourceString: String
 ) {
+    /* Formatted representation: source:line:column: text. */
     fun toString() {
         "%s:%d:%d: %s"(sourceName, line, column, sourceString.trim())
     }
 }
 
+/* Print this exception and its stack trace to standard output. */
 fun Exception.printStackTrace() {
     println(this)
     for( entry in stackTrace() ) {
@@ -169,6 +191,7 @@ fun Exception.printStackTrace() {
     }
 }
 
+/* Compile this string into a regular expression. */
 fun String.re() { Regex(this) }
 
     

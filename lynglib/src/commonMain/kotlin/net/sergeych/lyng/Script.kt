@@ -20,6 +20,9 @@ package net.sergeych.lyng
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
 import net.sergeych.lyng.Script.Companion.defaultImportManager
+import net.sergeych.lyng.miniast.addConstDoc
+import net.sergeych.lyng.miniast.addVoidFnDoc
+import net.sergeych.lyng.miniast.type
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.stdlib_included.rootLyng
@@ -276,9 +279,19 @@ class Script(
             }
 
             val pi = ObjReal(PI)
-            addConst("π", pi)
+            addConstDoc(
+                name = "π",
+                value = pi,
+                doc = "The mathematical constant pi (π).",
+                type = type("lyng.Real")
+            )
             getOrCreateNamespace("Math").apply {
-                addConst("PI", pi)
+                addConstDoc(
+                    name = "PI",
+                    value = pi,
+                    doc = "The mathematical constant pi (π) in the Math namespace.",
+                    type = type("lyng.Real")
+                )
             }
         }
 
@@ -288,16 +301,44 @@ class Script(
                     rootLyng
                 )
                 addPackage("lyng.buffer") {
-                    it.addConst("Buffer", ObjBuffer.type)
-                    it.addConst("MutableBuffer", ObjMutableBuffer.type)
+                    it.addConstDoc(
+                        name = "Buffer",
+                        value = ObjBuffer.type,
+                        doc = "Immutable sequence of bytes. Use for binary data and IO.",
+                        type = type("lyng.Class")
+                    )
+                    it.addConstDoc(
+                        name = "MutableBuffer",
+                        value = ObjMutableBuffer.type,
+                        doc = "Mutable byte buffer. Supports in-place modifications.",
+                        type = type("lyng.Class")
+                    )
                 }
                 addPackage("lyng.serialization") {
-                    it.addConst("Lynon", ObjLynonClass)
+                    it.addConstDoc(
+                        name = "Lynon",
+                        value = ObjLynonClass,
+                        doc = "Lynon serialization utilities: encode/decode data structures to a portable binary/text form.",
+                        type = type("lyng.Class")
+                    )
                 }
                 addPackage("lyng.time") {
-                    it.addConst("Instant", ObjInstant.type)
-                    it.addConst("Duration", ObjDuration.type)
-                    it.addFn("delay") {
+                    it.addConstDoc(
+                        name = "Instant",
+                        value = ObjInstant.type,
+                        doc = "Point in time (epoch-based).",
+                        type = type("lyng.Class")
+                    )
+                    it.addConstDoc(
+                        name = "Duration",
+                        value = ObjDuration.type,
+                        doc = "Time duration with millisecond precision.",
+                        type = type("lyng.Class")
+                    )
+                    it.addVoidFnDoc(
+                        "delay",
+                        doc = "Suspend for the given time. Accepts Duration, Int seconds, or Real seconds."
+                    ) {
                         val a = args.firstAndOnly()
                         when(a) {
                             is ObjInt -> delay(a.value * 1000)
@@ -305,7 +346,6 @@ class Script(
                             is ObjDuration -> delay(a.duration)
                             else -> raiseIllegalArgument("Expected Duration, Int or Real, got ${a.inspect(this)}")
                         }
-                        ObjVoid
                     }
                 }
             }

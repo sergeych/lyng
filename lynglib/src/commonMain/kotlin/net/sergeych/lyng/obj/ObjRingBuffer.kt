@@ -18,6 +18,10 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.miniast.ParamDoc
+import net.sergeych.lyng.miniast.TypeGenericDoc
+import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.type
 
 class RingBuffer<T>(val maxSize: Int) : Iterable<T> {
     private val data = arrayOfNulls<Any>(maxSize)
@@ -90,19 +94,34 @@ class ObjRingBuffer(val capacity: Int) : Obj() {
                 return ObjRingBuffer(scope.requireOnlyArg<ObjInt>().toInt())
             }
         }.apply {
-            addFn("capacity") {
-                thisAs<ObjRingBuffer>().capacity.toObj()
-            }
-            addFn("size") {
-                thisAs<ObjRingBuffer>().buffer.size.toObj()
-            }
-            addFn("iterator") {
+            addFnDoc(
+                name = "capacity",
+                doc = "Maximum number of elements the buffer can hold.",
+                returns = type("lyng.Int"),
+                moduleName = "lyng.stdlib"
+            ) { thisAs<ObjRingBuffer>().capacity.toObj() }
+            addFnDoc(
+                name = "size",
+                doc = "Current number of elements in the buffer.",
+                returns = type("lyng.Int"),
+                moduleName = "lyng.stdlib"
+            ) { thisAs<ObjRingBuffer>().buffer.size.toObj() }
+            addFnDoc(
+                name = "iterator",
+                doc = "Iterator over elements in insertion order (oldest to newest).",
+                returns = TypeGenericDoc(type("lyng.Iterator"), listOf(type("lyng.Any"))),
+                moduleName = "lyng.stdlib"
+            ) {
                 val buffer = thisAs<ObjRingBuffer>().buffer
                 ObjKotlinObjIterator(buffer.iterator())
             }
-            addFn("add") {
-                thisAs<ObjRingBuffer>().apply { buffer.add(requireOnlyArg<Obj>()) }
-            }
+            addFnDoc(
+                name = "add",
+                doc = "Append an element; if full, the oldest element is dropped.",
+                params = listOf(ParamDoc("value", type("lyng.Any"))),
+                returns = type("lyng.Void"),
+                moduleName = "lyng.stdlib"
+            ) { thisAs<ObjRingBuffer>().apply { buffer.add(requireOnlyArg<Obj>()) } }
         }
     }
 }

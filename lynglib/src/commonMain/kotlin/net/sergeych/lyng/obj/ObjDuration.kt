@@ -18,6 +18,8 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.type
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -72,91 +74,169 @@ class ObjDuration(val duration: Duration) : Obj() {
                 )
             }
         }.apply {
-            addFn("days") {
-                thisAs<ObjDuration>().duration.toDouble(DurationUnit.DAYS).toObj()
-            }
-            addFn("hours") {
-                thisAs<ObjDuration>().duration.toDouble(DurationUnit.HOURS).toObj()
-            }
-            addFn("minutes") {
-                thisAs<ObjDuration>().duration.toDouble(DurationUnit.MINUTES).toObj()
-            }
-            addFn("seconds") {
-                thisAs<ObjDuration>().duration.toDouble(DurationUnit.SECONDS).toObj()
-            }
-            addFn("milliseconds") {
-                thisAs<ObjDuration>().duration.toDouble(DurationUnit.MILLISECONDS).toObj()
-            }
-            addFn("microseconds") {
-                thisAs<ObjDuration>().duration.toDouble(DurationUnit.MICROSECONDS).toObj()
-            }
+            addFnDoc(
+                name = "days",
+                doc = "Return this duration as a real number of days.",
+                returns = type("lyng.Real"),
+                moduleName = "lyng.time"
+            ) { thisAs<ObjDuration>().duration.toDouble(DurationUnit.DAYS).toObj() }
+            addFnDoc(
+                name = "hours",
+                doc = "Return this duration as a real number of hours.",
+                returns = type("lyng.Real"),
+                moduleName = "lyng.time"
+            ) { thisAs<ObjDuration>().duration.toDouble(DurationUnit.HOURS).toObj() }
+            addFnDoc(
+                name = "minutes",
+                doc = "Return this duration as a real number of minutes.",
+                returns = type("lyng.Real"),
+                moduleName = "lyng.time"
+            ) { thisAs<ObjDuration>().duration.toDouble(DurationUnit.MINUTES).toObj() }
+            addFnDoc(
+                name = "seconds",
+                doc = "Return this duration as a real number of seconds.",
+                returns = type("lyng.Real"),
+                moduleName = "lyng.time"
+            ) { thisAs<ObjDuration>().duration.toDouble(DurationUnit.SECONDS).toObj() }
+            addFnDoc(
+                name = "milliseconds",
+                doc = "Return this duration as a real number of milliseconds.",
+                returns = type("lyng.Real"),
+                moduleName = "lyng.time"
+            ) { thisAs<ObjDuration>().duration.toDouble(DurationUnit.MILLISECONDS).toObj() }
+            addFnDoc(
+                name = "microseconds",
+                doc = "Return this duration as a real number of microseconds.",
+                returns = type("lyng.Real"),
+                moduleName = "lyng.time"
+            ) { thisAs<ObjDuration>().duration.toDouble(DurationUnit.MICROSECONDS).toObj() }
             // extensions
 
-            ObjInt.type.addFn("seconds") {
-                ObjDuration(thisAs<ObjInt>().value.seconds)
-            }
+            ObjInt.type.addFnDoc(
+                name = "seconds",
+                doc = "Construct a `Duration` equal to this integer number of seconds.",
+                returns = type("lyng.Duration"),
+                moduleName = "lyng.time"
+            ) { ObjDuration(thisAs<ObjInt>().value.seconds) }
 
-            ObjInt.type.addFn("second") {
-                ObjDuration(thisAs<ObjInt>().value.seconds)
-            }
-            ObjInt.type.addFn("milliseconds") {
-                ObjDuration(thisAs<ObjInt>().value.milliseconds)
-            }
+            ObjInt.type.addFnDoc(
+                name = "second",
+                doc = "Construct a `Duration` equal to this integer number of seconds.",
+                returns = type("lyng.Duration"),
+                moduleName = "lyng.time"
+            ) { ObjDuration(thisAs<ObjInt>().value.seconds) }
+            ObjInt.type.addFnDoc(
+                name = "milliseconds",
+                doc = "Construct a `Duration` equal to this integer number of milliseconds.",
+                returns = type("lyng.Duration"),
+                moduleName = "lyng.time"
+            ) { ObjDuration(thisAs<ObjInt>().value.milliseconds) }
 
-            ObjInt.type.addFn("millisecond") {
-                ObjDuration(thisAs<ObjInt>().value.milliseconds)
-            }
-            ObjReal.type.addFn("seconds") {
-                ObjDuration(thisAs<ObjReal>().value.seconds)
-            }
+            ObjInt.type.addFnDoc(
+                name = "millisecond",
+                doc = "Construct a `Duration` equal to this integer number of milliseconds.",
+                returns = type("lyng.Duration"),
+                moduleName = "lyng.time"
+            ) { ObjDuration(thisAs<ObjInt>().value.milliseconds) }
+            ObjReal.type.addFnDoc(
+                name = "seconds",
+                doc = "Construct a `Duration` equal to this real number of seconds.",
+                returns = type("lyng.Duration"),
+                moduleName = "lyng.time"
+            ) { ObjDuration(thisAs<ObjReal>().value.seconds) }
 
-            ObjReal.type.addFn("second") {
-                ObjDuration(thisAs<ObjReal>().value.seconds)
-            }
+            ObjReal.type.addFnDoc(
+                name = "second",
+                doc = "Construct a `Duration` equal to this real number of seconds.",
+                returns = type("lyng.Duration"),
+                moduleName = "lyng.time"
+            ) { ObjDuration(thisAs<ObjReal>().value.seconds) }
 
-            ObjReal.type.addFn("milliseconds") {
-                ObjDuration(thisAs<ObjReal>().value.milliseconds)
-            }
-            ObjReal.type.addFn("millisecond") {
-                ObjDuration(thisAs<ObjReal>().value.milliseconds)
-            }
+            ObjReal.type.addFnDoc(
+                name = "milliseconds",
+                doc = "Construct a `Duration` equal to this real number of milliseconds.",
+                returns = type("lyng.Duration"),
+                moduleName = "lyng.time"
+            ) { ObjDuration(thisAs<ObjReal>().value.milliseconds) }
+            ObjReal.type.addFnDoc(
+                name = "millisecond",
+                doc = "Construct a `Duration` equal to this real number of milliseconds.",
+                returns = type("lyng.Duration"),
+                moduleName = "lyng.time"
+            ) { ObjDuration(thisAs<ObjReal>().value.milliseconds) }
 
-            ObjInt.type.addFn("minutes") {
-                ObjDuration(thisAs<ObjInt>().value.minutes)
-            }
-            ObjReal.type.addFn("minutes") {
-                ObjDuration(thisAs<ObjReal>().value.minutes)
-            }
-            ObjInt.type.addFn("minute") {
-                ObjDuration(thisAs<ObjInt>().value.minutes)
-            }
-            ObjReal.type.addFn("minute") {
-                ObjDuration(thisAs<ObjReal>().value.minutes)
-            }
-            ObjInt.type.addFn("hours") {
-                ObjDuration(thisAs<ObjInt>().value.hours)
-            }
-            ObjReal.type.addFn("hours") {
-                ObjDuration(thisAs<ObjReal>().value.hours)
-            }
-            ObjInt.type.addFn("hour") {
-                ObjDuration(thisAs<ObjInt>().value.hours)
-            }
-            ObjReal.type.addFn("hour") {
-                ObjDuration(thisAs<ObjReal>().value.hours)
-            }
-            ObjInt.type.addFn("days") {
-                ObjDuration(thisAs<ObjInt>().value.days)
-            }
-            ObjReal.type.addFn("days") {
-                ObjDuration(thisAs<ObjReal>().value.days)
-            }
-            ObjInt.type.addFn("day") {
-                ObjDuration(thisAs<ObjInt>().value.days)
-            }
-            ObjReal.type.addFn("day") {
-                ObjDuration(thisAs<ObjReal>().value.days)
-            }
+            ObjInt.type.addFnDoc(
+                name = "minutes",
+                doc = "Construct a `Duration` equal to this integer number of minutes.",
+                returns = type("lyng.Duration"),
+                moduleName = "lyng.time"
+            ) { ObjDuration(thisAs<ObjInt>().value.minutes) }
+            ObjReal.type.addFnDoc(
+                name = "minutes",
+                doc = "Construct a `Duration` equal to this real number of minutes.",
+                returns = type("lyng.Duration"),
+                moduleName = "lyng.time"
+            ) { ObjDuration(thisAs<ObjReal>().value.minutes) }
+            ObjInt.type.addFnDoc(
+                name = "minute",
+                doc = "Construct a `Duration` equal to this integer number of minutes.",
+                returns = type("lyng.Duration"),
+                moduleName = "lyng.time"
+            ) { ObjDuration(thisAs<ObjInt>().value.minutes) }
+            ObjReal.type.addFnDoc(
+                name = "minute",
+                doc = "Construct a `Duration` equal to this real number of minutes.",
+                returns = type("lyng.Duration"),
+                moduleName = "lyng.time"
+            ) { ObjDuration(thisAs<ObjReal>().value.minutes) }
+            ObjInt.type.addFnDoc(
+                name = "hours",
+                doc = "Construct a `Duration` equal to this integer number of hours.",
+                returns = type("lyng.Duration"),
+                moduleName = "lyng.time"
+            ) { ObjDuration(thisAs<ObjInt>().value.hours) }
+            ObjReal.type.addFnDoc(
+                name = "hours",
+                doc = "Construct a `Duration` equal to this real number of hours.",
+                returns = type("lyng.Duration"),
+                moduleName = "lyng.time"
+            ) { ObjDuration(thisAs<ObjReal>().value.hours) }
+            ObjInt.type.addFnDoc(
+                name = "hour",
+                doc = "Construct a `Duration` equal to this integer number of hours.",
+                returns = type("lyng.Duration"),
+                moduleName = "lyng.time"
+            ) { ObjDuration(thisAs<ObjInt>().value.hours) }
+            ObjReal.type.addFnDoc(
+                name = "hour",
+                doc = "Construct a `Duration` equal to this real number of hours.",
+                returns = type("lyng.Duration"),
+                moduleName = "lyng.time"
+            ) { ObjDuration(thisAs<ObjReal>().value.hours) }
+            ObjInt.type.addFnDoc(
+                name = "days",
+                doc = "Construct a `Duration` equal to this integer number of days.",
+                returns = type("lyng.Duration"),
+                moduleName = "lyng.time"
+            ) { ObjDuration(thisAs<ObjInt>().value.days) }
+            ObjReal.type.addFnDoc(
+                name = "days",
+                doc = "Construct a `Duration` equal to this real number of days.",
+                returns = type("lyng.Duration"),
+                moduleName = "lyng.time"
+            ) { ObjDuration(thisAs<ObjReal>().value.days) }
+            ObjInt.type.addFnDoc(
+                name = "day",
+                doc = "Construct a `Duration` equal to this integer number of days.",
+                returns = type("lyng.Duration"),
+                moduleName = "lyng.time"
+            ) { ObjDuration(thisAs<ObjInt>().value.days) }
+            ObjReal.type.addFnDoc(
+                name = "day",
+                doc = "Construct a `Duration` equal to this real number of days.",
+                returns = type("lyng.Duration"),
+                moduleName = "lyng.time"
+            ) { ObjDuration(thisAs<ObjReal>().value.days) }
 
 
 //            addFn("epochSeconds") {

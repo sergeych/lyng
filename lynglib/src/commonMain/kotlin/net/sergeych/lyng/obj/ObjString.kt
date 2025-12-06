@@ -24,6 +24,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.RegexCache
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.statement
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
@@ -127,64 +128,155 @@ data class ObjString(val value: String) : Obj() {
             override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj =
                 ObjString(decoder.unpackBinaryData().decodeToString())
         }.apply {
-            addFn("toInt") {
+            addFnDoc(
+                name = "toInt",
+                doc = "Parse this string as an integer or throw if it is not a valid integer.",
+                returns = type("lyng.Int"),
+                moduleName = "lyng.stdlib"
+            ) {
                 ObjInt(
                     thisAs<ObjString>().value.toLongOrNull()
                         ?: raiseIllegalArgument("can't convert to int: $thisObj")
                 )
             }
-            addFn("startsWith") {
+            addFnDoc(
+                name = "startsWith",
+                doc = "Whether this string starts with the given prefix.",
+                params = listOf(ParamDoc("prefix", type("lyng.String"))),
+                returns = type("lyng.Bool"),
+                moduleName = "lyng.stdlib"
+            ) {
                 ObjBool(thisAs<ObjString>().value.startsWith(requiredArg<ObjString>(0).value))
             }
-            addFn("endsWith") {
+            addFnDoc(
+                name = "endsWith",
+                doc = "Whether this string ends with the given suffix.",
+                params = listOf(ParamDoc("suffix", type("lyng.String"))),
+                returns = type("lyng.Bool"),
+                moduleName = "lyng.stdlib"
+            ) {
                 ObjBool(thisAs<ObjString>().value.endsWith(requiredArg<ObjString>(0).value))
             }
-            addConst("length",
-                statement { ObjInt(thisAs<ObjString>().value.length.toLong()) }
+            addConstDoc(
+                name = "length",
+                value = statement { ObjInt(thisAs<ObjString>().value.length.toLong()) },
+                doc = "Number of UTF-16 code units in this string.",
+                type = type("lyng.Int"),
+                moduleName = "lyng.stdlib"
             )
-            addFn("takeLast") {
+            addFnDoc(
+                name = "takeLast",
+                doc = "Return a string with the last N characters.",
+                params = listOf(ParamDoc("n", type("lyng.Int"))),
+                returns = type("lyng.String"),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjString>().value.takeLast(
                     requiredArg<ObjInt>(0).toInt()
                 ).let(::ObjString)
             }
-            addFn("take") {
+            addFnDoc(
+                name = "take",
+                doc = "Return a string with the first N characters.",
+                params = listOf(ParamDoc("n", type("lyng.Int"))),
+                returns = type("lyng.String"),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjString>().value.take(
                     requiredArg<ObjInt>(0).toInt()
                 ).let(::ObjString)
             }
-            addFn("drop") {
+            addFnDoc(
+                name = "drop",
+                doc = "Drop the first N characters and return the remainder.",
+                params = listOf(ParamDoc("n", type("lyng.Int"))),
+                returns = type("lyng.String"),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjString>().value.drop(
                     requiredArg<ObjInt>(0).toInt()
                 ).let(::ObjString)
             }
-            addFn("dropLast") {
+            addFnDoc(
+                name = "dropLast",
+                doc = "Drop the last N characters and return the remainder.",
+                params = listOf(ParamDoc("n", type("lyng.Int"))),
+                returns = type("lyng.String"),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjString>().value.dropLast(
                     requiredArg<ObjInt>(0).toInt()
                 ).let(::ObjString)
             }
-            addFn("lower") {
+            addFnDoc(
+                name = "lower",
+                doc = "Lowercase version of this string (default locale).",
+                returns = type("lyng.String"),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjString>().value.lowercase().let(::ObjString)
             }
-            addFn("upper") {
+            addFnDoc(
+                name = "upper",
+                doc = "Uppercase version of this string (default locale).",
+                returns = type("lyng.String"),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjString>().value.uppercase().let(::ObjString)
             }
-            addFn("characters") {
+            addFnDoc(
+                name = "characters",
+                doc = "List of characters of this string.",
+                returns = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.Char"))),
+                moduleName = "lyng.stdlib"
+            ) {
                 ObjList(
                     thisAs<ObjString>().value.map { ObjChar(it) }.toMutableList()
                 )
             }
-            addFn("last") {
+            addFnDoc(
+                name = "last",
+                doc = "The last character of this string or throw if the string is empty.",
+                returns = type("lyng.Char"),
+                moduleName = "lyng.stdlib"
+            ) {
                 ObjChar(thisAs<ObjString>().value.lastOrNull() ?: raiseNoSuchElement("empty string"))
             }
-            addFn("encodeUtf8") { ObjBuffer(thisAs<ObjString>().value.encodeToByteArray().asUByteArray()) }
-            addFn("size") { ObjInt(thisAs<ObjString>().value.length.toLong()) }
-            addFn("toReal") {
+            addFnDoc(
+                name = "encodeUtf8",
+                doc = "Encode this string as UTF-8 bytes.",
+                returns = type("lyng.Buffer"),
+                moduleName = "lyng.stdlib"
+            ) { ObjBuffer(thisAs<ObjString>().value.encodeToByteArray().asUByteArray()) }
+            addFnDoc(
+                name = "size",
+                doc = "Alias for length: the number of characters (code units) in this string.",
+                returns = type("lyng.Int"),
+                moduleName = "lyng.stdlib"
+            ) { ObjInt(thisAs<ObjString>().value.length.toLong()) }
+            addFnDoc(
+                name = "toReal",
+                doc = "Parse this string as a real number (floating point).",
+                returns = type("lyng.Real"),
+                moduleName = "lyng.stdlib"
+            ) {
                 ObjReal(thisAs<ObjString>().value.toDouble())
             }
-            addFn("trim") {
+            addFnDoc(
+                name = "trim",
+                doc = "Return a copy of this string with leading and trailing whitespace removed.",
+                returns = type("lyng.String"),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisAs<ObjString>().value.trim().let(::ObjString)
             }
-            addFn("matches") {
+            addFnDoc(
+                name = "matches",
+                doc = "Whether this string matches the given regular expression or pattern string.",
+                params = listOf(ParamDoc("pattern")),
+                returns = type("lyng.Bool"),
+                moduleName = "lyng.stdlib"
+            ) {
                 val s = requireOnlyArg<Obj>()
                 val self = thisAs<ObjString>().value
                 ObjBool(

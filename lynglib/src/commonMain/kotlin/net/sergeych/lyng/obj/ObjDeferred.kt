@@ -19,6 +19,8 @@ package net.sergeych.lyng.obj
 
 import kotlinx.coroutines.Deferred
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.type
 
 open class ObjDeferred(val deferred: Deferred<Obj>): Obj() {
 
@@ -30,20 +32,33 @@ open class ObjDeferred(val deferred: Deferred<Obj>): Obj() {
                 scope.raiseError("Deferred constructor is not directly callable")
             }
         }.apply {
-            addFn("await") {
-                thisAs<ObjDeferred>().deferred.await()
-            }
-            addFn("isCompleted") {
-                thisAs<ObjDeferred>().deferred.isCompleted.toObj()
-            }
-            addFn("isActive") {
+            addFnDoc(
+                name = "await",
+                doc = "Suspend until completion and return the result value (or throw if failed).",
+                returns = type("lyng.Any"),
+                moduleName = "lyng.stdlib"
+            ) { thisAs<ObjDeferred>().deferred.await() }
+            addFnDoc(
+                name = "isCompleted",
+                doc = "Whether this deferred has completed (successfully or with an error).",
+                returns = type("lyng.Bool"),
+                moduleName = "lyng.stdlib"
+            ) { thisAs<ObjDeferred>().deferred.isCompleted.toObj() }
+            addFnDoc(
+                name = "isActive",
+                doc = "Whether this deferred is currently active (not completed and not cancelled).",
+                returns = type("lyng.Bool"),
+                moduleName = "lyng.stdlib"
+            ) {
                 val d = thisAs<ObjDeferred>().deferred
-                // Cross-engine tolerant: prefer Deferred.isActive; otherwise treat any not-yet-completed and not-cancelled as active
                 (d.isActive || (!d.isCompleted && !d.isCancelled)).toObj()
             }
-            addFn("isCancelled") {
-                thisAs<ObjDeferred>().deferred.isCancelled.toObj()
-            }
+            addFnDoc(
+                name = "isCancelled",
+                doc = "Whether this deferred was cancelled.",
+                returns = type("lyng.Bool"),
+                moduleName = "lyng.stdlib"
+            ) { thisAs<ObjDeferred>().deferred.isCancelled.toObj() }
 
         }
     }

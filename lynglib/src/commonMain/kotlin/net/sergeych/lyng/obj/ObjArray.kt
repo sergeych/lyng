@@ -17,6 +17,11 @@
 
 package net.sergeych.lyng.obj
 
+import net.sergeych.lyng.miniast.ParamDoc
+import net.sergeych.lyng.miniast.TypeGenericDoc
+import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.type
+
 val ObjArray by lazy {
 
     /**
@@ -25,19 +30,34 @@ val ObjArray by lazy {
     ObjClass("Array", ObjCollection).apply {
         // we can create iterators using size/getat:
 
-        addFn("iterator") {
-            ObjArrayIterator(thisObj).also { it.init(this) }
-        }
+        addFnDoc(
+            name = "iterator",
+            doc = "Iterator over elements of this array using its indexer.",
+            returns = TypeGenericDoc(type("lyng.Iterator"), listOf(type("lyng.Any"))),
+            moduleName = "lyng.stdlib"
+        ) { ObjArrayIterator(thisObj).also { it.init(this) } }
 
-        addFn("contains", isOpen = true) {
+        addFnDoc(
+            name = "contains",
+            doc = "Whether the array contains the given element (by equality).",
+            params = listOf(ParamDoc("element")),
+            returns = type("lyng.Bool"),
+            isOpen = true,
+            moduleName = "lyng.stdlib"
+        ) {
             val obj = args.firstAndOnly()
             for (i in 0..<thisObj.invokeInstanceMethod(this, "size").toInt()) {
-                if (thisObj.getAt(this, ObjInt(i.toLong())).compareTo(this, obj) == 0) return@addFn ObjTrue
+                if (thisObj.getAt(this, ObjInt(i.toLong())).compareTo(this, obj) == 0) return@addFnDoc ObjTrue
             }
             ObjFalse
         }
 
-        addFn("last") {
+        addFnDoc(
+            name = "last",
+            doc = "The last element of this array.",
+            returns = type("lyng.Any"),
+            moduleName = "lyng.stdlib"
+        ) {
             thisObj.invokeInstanceMethod(
                 this,
                 "getAt",
@@ -45,13 +65,27 @@ val ObjArray by lazy {
             )
         }
 
-        addFn("lastIndex") { (thisObj.invokeInstanceMethod(this, "size").toInt() - 1).toObj() }
+        addFnDoc(
+            name = "lastIndex",
+            doc = "Index of the last element (size - 1).",
+            returns = type("lyng.Int"),
+            moduleName = "lyng.stdlib"
+        ) { (thisObj.invokeInstanceMethod(this, "size").toInt() - 1).toObj() }
 
-        addFn("indices") {
-            ObjRange(0.toObj(), thisObj.invokeInstanceMethod(this, "size"), false)
-        }
+        addFnDoc(
+            name = "indices",
+            doc = "Range of valid indices for this array.",
+            returns = type("lyng.Range"),
+            moduleName = "lyng.stdlib"
+        ) { ObjRange(0.toObj(), thisObj.invokeInstanceMethod(this, "size"), false) }
 
-        addFn("binarySearch") {
+        addFnDoc(
+            name = "binarySearch",
+            doc = "Binary search for a target in a sorted array. Returns index or negative insertion point - 1.",
+            params = listOf(ParamDoc("target")),
+            returns = type("lyng.Int"),
+            moduleName = "lyng.stdlib"
+        ) {
             val target = args.firstAndOnly()
             var low = 0
             var high = thisObj.invokeInstanceMethod(this, "size").toInt() - 1
@@ -62,13 +96,12 @@ val ObjArray by lazy {
 
                 val cmp = midVal.compareTo(this, target)
                 when {
-                    cmp == 0 -> return@addFn (mid).toObj()
+                    cmp == 0 -> return@addFnDoc (mid).toObj()
                     cmp > 0 -> high = mid - 1
                     else -> low = mid + 1
                 }
             }
 
-            // Элемент не найден, возвращаем -(точка вставки) - 1
             (-low - 1).toObj()
         }
     }
