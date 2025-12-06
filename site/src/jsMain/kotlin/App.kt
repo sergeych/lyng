@@ -106,6 +106,7 @@ fun App() {
                 when {
                     route.isBlank() -> HomePage()
                     route == "tryling" -> TryLyngPage()
+                    route.startsWith("search") -> SearchPage(route)
                     !isDocsRoute -> ReferencePage()
                     else -> DocsPage(
                         route = route,

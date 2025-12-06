@@ -449,13 +449,42 @@ private fun closeNavbarCollapse() {
 
 // ---------------- Site-wide search (client-side) ----------------
 
-private data class DocRecord(val path: String, val title: String, val text: String)
+internal data class DocRecord(val path: String, val title: String, val text: String)
 
 private var searchIndex: List<DocRecord>? = null
 private var searchBuilding = false
 private var searchInitDone = false
 
-private fun norm(s: String): String = s.lowercase()
+// ---- Search history (last 7 entries) ----
+private const val SEARCH_HISTORY_KEY = "lyng.search.history"
+
+private fun loadSearchHistory(): MutableList<String> {
+    return try {
+        val raw = window.localStorage.getItem(SEARCH_HISTORY_KEY) ?: return mutableListOf()
+        // Stored as newline-separated values to avoid JSON pitfalls across browsers
+        raw.split('\n').mapNotNull { it.trim() }.filter { it.isNotEmpty() }.toMutableList()
+    } catch (_: Throwable) {
+        mutableListOf()
+    }
+}
+
+private fun saveSearchHistory(list: List<String>) {
+    try {
+        window.localStorage.setItem(SEARCH_HISTORY_KEY, list.joinToString("\n"))
+    } catch (_: Throwable) { }
+}
+
+internal fun rememberSearchQuery(q: String) {
+    val query = q.trim()
+    if (query.isBlank()) return
+    val list = loadSearchHistory()
+    list.removeAll { it.equals(query, ignoreCase = true) }
+    list.add(0, query)
+    while (list.size > 7) list.removeAt(list.lastIndex)
+    saveSearchHistory(list)
+}
+
+internal fun norm(s: String): String = s.lowercase()
     .replace("`", " ")
     .replace("*", " ")
     .replace("#", " ")
@@ -466,7 +495,7 @@ private fun norm(s: String): String = s.lowercase()
     .replace(Regex("\\n+"), " ")
     .replace(Regex("\\s+"), " ").trim()
 
-private fun plainFromMarkdown(md: String): String {
+internal fun plainFromMarkdown(md: String): String {
     // Construct Regex instances at call time inside try/catch to avoid module init crashes
     // in browsers that are strict about Unicode RegExp parsing (Safari/Chrome).
     // Use non-greedy dot-all equivalents ("[\n\r\s\S]") instead of character classes with ']' where possible.
@@ -597,60 +626,24 @@ private fun scoreQuery(q: String, rec: DocRecord): Int {
     return score
 }
 
-private fun renderSearchResults(input: HTMLInputElement, menu: HTMLDivElement, q: String, results: List<DocRecord>) {
-    dlog("search-ui", "renderSearchResults q='$q' results=${results.size} building=$searchBuilding")
-    if (q.isBlank()) {
-        dlog("search-ui", "blank query -> hide menu")
-        menu.classList.remove("show")
-        menu.innerHTML = ""
-        return
-    }
-    if (results.isEmpty()) {
-        // If index is building, show a transient indexing indicator instead of hiding everything
-        if (searchBuilding) {
-            dlog("search-ui", "indexing in progress -> show placeholder")
-            menu.innerHTML = "<div class=\"dropdown-item disabled\">Indexing documentation…</div>"
-            menu.classList.add("show")
-        } else {
-            dlog("search-ui", "no results -> show 'No results' item")
-            val safeQ = q.replace("<", "&lt;").replace(">", "&gt;")
-            menu.innerHTML = "<div class=\"dropdown-item disabled\">No results for ‘$safeQ’</div>"
-            menu.classList.add("show")
-        }
-        return
-    }
-    val top = results.sortedByDescending { scoreQuery(q, it) }.take(8)
-    val items = buildString {
-        top.forEach { rec ->
-            append("<a href=\"#/${rec.path}\" class=\"dropdown-item\" data-path=\"${rec.path}\">")
-            append("<strong>")
-            append(rec.title)
-            append("</strong><br><small class=\"text-muted\">")
-            append(rec.path.substringAfter("docs/"))
-            append("</small></a>")
-        }
-    }
-    menu.innerHTML = items
-    // Position and show
-    menu.classList.add("show")
-    // Attach click handlers to enforce SPA navigation
-    val children = menu.getElementsByClassName("dropdown-item")
-    for (i in 0 until children.length) {
-        val a = children.item(i) as? HTMLAnchorElement ?: continue
-        a.onclick = { ev ->
-            ev.preventDefault()
-            val path = a.getAttribute("data-path")
-            if (path != null) {
-                val inputEl = input
-                val q = inputEl.value
-                val suffix = if (q.isNotBlank()) "?q=" + encodeURIComponent(q) else ""
-                dlog("nav", "search click -> navigate #/$path$suffix")
-                window.location.hash = "#/$path$suffix"
-                menu.classList.remove("show")
-                closeNavbarCollapse()
+private fun renderSearchHistoryDropdown(menu: HTMLDivElement) {
+    val hist = loadSearchHistory()
+    if (hist.isEmpty()) {
+        menu.innerHTML = "<div class=\"dropdown-item disabled\">No recent searches</div>"
+    } else {
+        val items = buildString {
+            hist.take(7).forEach { hq ->
+                val safe = hq.replace("<", "&lt;").replace(">", "&gt;")
+                append("<a href=\"#/search?q=" + encodeURIComponent(hq) + "\" class=\"dropdown-item\" data-q=\"")
+                append(safe)
+                append("\">")
+                append(safe)
+                append("</a>")
             }
         }
+        menu.innerHTML = items
     }
+    menu.classList.add("show")
 }
 
 private fun hideSearchResults(menu: HTMLDivElement) {
@@ -709,24 +702,9 @@ fun initTopSearch(attempt: Int = 0) {
     dlog("init", "initTopSearch: wiring handlers")
     val scope = MainScopeProvider.scope
 
-    // Debounced search runner
+    // Debounced dropdown history refresher
     val runSearch = debounce(scope, 120L) {
-        val q = input.value
-        dlog("search", "debounced runSearch execute q='$q'")
-        val results = performSearch(q)
-        renderSearchResults(input, menu, q, results)
-        // Also update highlights on the currently visible page content
-        try {
-            val root = document.querySelector(".markdown-body") as? HTMLElement
-            if (root != null) {
-                val terms = q.trim()
-                    .split(Regex("\\s+"))
-                    .map { it.lowercase() }
-                    .filter { it.isNotEmpty() }
-                val hits = highlightSearchHits(root, terms)
-                dlog("search", "live highlight updated, hits=$hits, terms=$terms")
-            }
-        } catch (_: Throwable) { }
+        renderSearchHistoryDropdown(menu)
     }
 
     // Keep the input focused when interacting with the dropdown so it doesn't blur/close
@@ -740,15 +718,8 @@ fun initTopSearch(attempt: Int = 0) {
         runSearch()
     }
     input.onfocus = {
-        // Proactively build the index on first focus for faster first results
-        dlog("event", "search onfocus")
-        scope.launch {
-            if (searchIndex == null && !searchBuilding) {
-                dlog("search", "onfocus -> buildSearchIndexOnce")
-                buildSearchIndexOnce()
-            }
-        }
-        runSearch()
+        dlog("event", "search onfocus: show history")
+        renderSearchHistoryDropdown(menu)
     }
     input.onkeydown = { ev ->
         val key = ev.asDynamic().key as String
@@ -758,28 +729,17 @@ fun initTopSearch(attempt: Int = 0) {
                 hideSearchResults(menu)
             }
             "Enter" -> {
-                // Navigate to the best match
-                scope.launch {
-                    val q = input.value
-                    // If index is building and results would be empty, wait for it once
-                    if (searchIndex == null || searchBuilding) {
-                        dlog("search", "Enter -> ensure index")
-                        buildSearchIndexOnce()
-                    }
-                    val results = performSearch(q)
-                    val best = results.maxByOrNull { scoreQuery(q, it) }
-                    if (best != null) {
-                        val suffix = if (q.isNotBlank()) "?q=" + encodeURIComponent(q) else ""
-                        dlog("nav", "Enter -> navigate #/${best.path}$suffix")
-                        window.location.hash = "#/${best.path}$suffix"
-                        hideSearchResults(menu)
-                        closeNavbarCollapse()
-                    } else {
-                        dlog("search", "Enter -> no results for q='$q'")
-                    }
+                val q = input.value.trim()
+                if (q.isNotBlank()) {
+                    rememberSearchQuery(q)
+                    val url = "#/search?q=" + encodeURIComponent(q)
+                    dlog("nav", "Enter -> navigate $url")
+                    window.location.hash = url
+                    hideSearchResults(menu)
+                    closeNavbarCollapse()
                 }
             }
-        }
+    }
     }
     // Hide on blur after a short delay to allow click
     input.onblur = {
