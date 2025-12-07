@@ -778,6 +778,19 @@ class Wallet( id, ownerKey, balance=0, createdAt=Instant.now().truncateToSecond(
             assert( Lynon.encode(Poin3(1,2)).size <= 110)
         """.trimIndent())
     }
+
+    @Test
+    fun testLyngDecodeResult() = runTest {
+        val  a = eval("""
+            [Map(),Map(),Map()]
+        """.trimIndent())
+        val b = lynonDecodeAny(Scope(), lynonEncodeAny(Scope(), a))
+        assertEquals(a, b )
+    //        val c = b.decodeSerializable<JsonElement>()
+//        println(c)
+    }
+
+
 }
 
 

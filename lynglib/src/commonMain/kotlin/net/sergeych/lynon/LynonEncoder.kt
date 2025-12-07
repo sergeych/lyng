@@ -127,9 +127,11 @@ open class LynonEncoder(val bout: BitOutput, val settings: LynonSettings = Lynon
      */
     suspend fun encodeAnyList(scope: Scope, list: List<Obj>,fixedSize: Boolean = false) {
         if( list.isEmpty()) {
-            // any-typed, empty, save space
-            putBit(0)
-            encodeUnsigned(0u)
+            // Empty list: we still need to write the heterogenous/homogenous flag bit
+            // but must NOT write the size when fixedSize is provided, as decoder will
+            // use the provided size and won't read it from the stream.
+            putBit(0) // treat empty lists as heterogeneous
+            if (!fixedSize) encodeUnsigned(0u)
         }
         else {
             val objClass = list[0].objClass

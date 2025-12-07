@@ -4014,6 +4014,13 @@ class ScriptTest {
     }
 
     @Test
+    fun testStringLast() = runTest {
+        eval("""
+            assertEquals('t', "assert".last())  
+        """.trimIndent())
+    }
+
+    @Test
     fun testLogicalNot() = runTest {
         eval("""
             val vf = false 
