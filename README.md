@@ -117,6 +117,28 @@ scope.eval("sumOf(1,2,3)") // <- 6
 ```
 Note that the scope stores all changes in it so you can make calls on a single scope to preserve state between calls.
 
+## IntelliJ IDEA plugin: Lightweight autocompletion (experimental)
+
+The IDEA plugin provides a fast, lightweight BASIC completion for Lyng code (IntelliJ IDEA 2024.3+).
+
+What it does:
+- Global suggestions: in-scope parameters, same-file declarations (functions/classes/vals), imported modules, and stdlib symbols.
+- Member completion after dot: offers only members of the inferred receiver type. It works for chained calls like `Path(".." ).lines().` (suggests `Iterator` methods), and for literals like `"abc".` (String methods) or `[1,2,3].` (List/Iterable methods).
+- Inheritance-aware: shows direct class members first, then inherited. For example, `List` also exposes common `Collection`/`Iterable` methods.
+- Static/namespace members: `Name.` lists only static members when `Name` is a known class or container (e.g., `Math`).
+- Performance: suggestions are capped; prefix filtering is early; parsing is cached; computation is cancellation-friendly.
+
+What it does NOT do (yet):
+- No heavy resolve or project-wide indexing. It’s best-effort, driven by a tiny MiniAst + built-in docs registry.
+- No control/data-flow type inference.
+
+Enable/disable:
+- Settings | Lyng Formatter → "Enable Lyng autocompletion (experimental)" (default: ON).
+
+Tips:
+- After a dot, globals are intentionally suppressed (e.g., `lines().Path` is not valid), only the receiver’s members are suggested.
+- If completion seems sparse, make sure related modules are imported (e.g., `import lyng.io.fs` so that `Path` and its methods are known).
+
 ## Why? 
 
 Designed to add scripting to kotlin multiplatform application in easy and efficient way. This is attempt to achieve what Lua is for C/++.

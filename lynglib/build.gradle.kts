@@ -107,6 +107,12 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.test)
             }
         }
+        val jvmTest by getting {
+            dependencies {
+                // Allow tests to load external docs like lyng.io.fs via registrar
+                implementation(project(":lyngio"))
+            }
+        }
     }
 }
 

@@ -38,6 +38,7 @@ class LyngFormatterSettingsConfigurable(private val project: Project) : Configur
     private var debugShowSpellFeedCb: JCheckBox? = null
     private var showTyposGreenCb: JCheckBox? = null
     private var offerQuickFixesCb: JCheckBox? = null
+    private var enableCompletionCb: JCheckBox? = null
 
     override fun getDisplayName(): String = "Lyng Formatter"
 
@@ -57,6 +58,7 @@ class LyngFormatterSettingsConfigurable(private val project: Project) : Configur
         debugShowSpellFeedCb = JCheckBox("Debug: show spell-feed ranges (weak warnings)")
         showTyposGreenCb = JCheckBox("Show Lyng typos with green underline (TYPO styling)")
         offerQuickFixesCb = JCheckBox("Offer Lyng typo quick fixes (Replace…, Add to dictionary) without Spell Checker")
+        enableCompletionCb = JCheckBox("Enable Lyng autocompletion (experimental)")
 
         // Tooltips / short help
         spacingCb?.toolTipText = "Applies minimal, safe spacing (e.g., around commas/operators, control-flow parens)."
@@ -71,6 +73,7 @@ class LyngFormatterSettingsConfigurable(private val project: Project) : Configur
         debugShowSpellFeedCb?.toolTipText = "Show the exact ranges we feed to spellcheckers (ids/comments/strings) as weak warnings."
         showTyposGreenCb?.toolTipText = "Render Lyng typos using the platform's green TYPO underline instead of generic warnings."
         offerQuickFixesCb?.toolTipText = "Provide lightweight Replace… and Add to dictionary quick-fixes without requiring the legacy Spell Checker."
+        enableCompletionCb?.toolTipText = "Turn on/off the lightweight Lyng code completion (BASIC)."
         p.add(spacingCb)
         p.add(wrappingCb)
         p.add(reindentClosedBlockCb)
@@ -84,6 +87,7 @@ class LyngFormatterSettingsConfigurable(private val project: Project) : Configur
         p.add(debugShowSpellFeedCb)
         p.add(showTyposGreenCb)
         p.add(offerQuickFixesCb)
+        p.add(enableCompletionCb)
         panel = p
         reset()
         return p
@@ -103,7 +107,8 @@ class LyngFormatterSettingsConfigurable(private val project: Project) : Configur
                 grazieLiteralsAsCommentsCb?.isSelected != s.grazieTreatLiteralsAsComments ||
                 debugShowSpellFeedCb?.isSelected != s.debugShowSpellFeed ||
                 showTyposGreenCb?.isSelected != s.showTyposWithGreenUnderline ||
-                offerQuickFixesCb?.isSelected != s.offerLyngTypoQuickFixes
+                offerQuickFixesCb?.isSelected != s.offerLyngTypoQuickFixes ||
+                enableCompletionCb?.isSelected != s.enableLyngCompletionExperimental
     }
 
     override fun apply() {
@@ -121,6 +126,7 @@ class LyngFormatterSettingsConfigurable(private val project: Project) : Configur
         s.debugShowSpellFeed = debugShowSpellFeedCb?.isSelected == true
         s.showTyposWithGreenUnderline = showTyposGreenCb?.isSelected == true
         s.offerLyngTypoQuickFixes = offerQuickFixesCb?.isSelected == true
+        s.enableLyngCompletionExperimental = enableCompletionCb?.isSelected == true
     }
 
     override fun reset() {
@@ -138,5 +144,6 @@ class LyngFormatterSettingsConfigurable(private val project: Project) : Configur
         debugShowSpellFeedCb?.isSelected = s.debugShowSpellFeed
         showTyposGreenCb?.isSelected = s.showTyposWithGreenUnderline
         offerQuickFixesCb?.isSelected = s.offerLyngTypoQuickFixes
+        enableCompletionCb?.isSelected = s.enableLyngCompletionExperimental
     }
 }

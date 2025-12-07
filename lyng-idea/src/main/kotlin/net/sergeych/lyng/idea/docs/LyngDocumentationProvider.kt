@@ -31,6 +31,7 @@ import net.sergeych.lyng.Source
 import net.sergeych.lyng.highlight.offsetOf
 import net.sergeych.lyng.idea.LyngLanguage
 import net.sergeych.lyng.idea.util.IdeLenientImportProvider
+import net.sergeych.lyng.idea.util.TextCtx
 import net.sergeych.lyng.miniast.*
 
 /**
@@ -52,7 +53,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
 
         // Determine caret/lookup offset from the element range
         val offset = originalElement?.textRange?.startOffset ?: element.textRange.startOffset
-        val idRange = wordRangeAt(text, offset) ?: run {
+        val idRange = TextCtx.wordRangeAt(text, offset) ?: run {
             log.info("[LYNG_DEBUG] QuickDoc: no word at offset=$offset in ${file.name}")
             return null
         }

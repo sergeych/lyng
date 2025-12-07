@@ -97,6 +97,22 @@ object BuiltinDocRegistry : BuiltinDocSource {
     init {
         registerLazy("lyng.stdlib") { buildStdlibDocs() }
     }
+
+    /**
+     * List names of extension-like methods defined for [className] in the stdlib text (`root.lyng`).
+     * We do a lightweight regex scan like: `fun ClassName.methodName(` and collect distinct names.
+     */
+    fun extensionMethodNamesFor(className: String): List<String> {
+        val src = try { rootLyng } catch (_: Throwable) { null } ?: return emptyList()
+        val out = LinkedHashSet<String>()
+        // Match lines like: fun String.trim(...)
+        val re = Regex("(?m)^\\s*fun\\s+${className}\\.([A-Za-z_][A-Za-z0-9_]*)\\s*\\(")
+        re.findAll(src).forEach { m ->
+            val name = m.groupValues.getOrNull(1)?.trim()
+            if (!name.isNullOrEmpty()) out.add(name)
+        }
+        return out.toList()
+    }
 }
 
 // ---------------- Builders ----------------

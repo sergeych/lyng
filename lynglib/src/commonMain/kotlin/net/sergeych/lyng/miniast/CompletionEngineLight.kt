@@ -1,0 +1,381 @@
+/*
+ * Pure-Kotlin, PSI-free completion engine used for isolated tests and non-IDE harnesses.
+ * Mirrors the IntelliJ MVP logic: MiniAst + BuiltinDocRegistry + lenient imports.
+ */
+package net.sergeych.lyng.miniast
+import net.sergeych.lyng.Compiler
+import net.sergeych.lyng.Script
+import net.sergeych.lyng.Source
+import net.sergeych.lyng.pacman.ImportProvider
+
+/** Minimal completion item description (IDE-agnostic). */
+data class CompletionItem(
+    val name: String,
+    val kind: Kind,
+    val tailText: String? = null,
+    val typeText: String? = null,
+)
+
+enum class Kind { Function, Class_, Value, Method, Field }
+
+/**
+ * Platform-free, lenient import provider that never fails on unknown packages.
+ * Used to allow MiniAst parsing even when external modules are not present at runtime.
+ */
+class LenientImportProvider private constructor(root: net.sergeych.lyng.Scope) : ImportProvider(root) {
+    override suspend fun createModuleScope(pos: net.sergeych.lyng.Pos, packageName: String): net.sergeych.lyng.ModuleScope =
+        net.sergeych.lyng.ModuleScope(this, pos, packageName)
+
+    companion object {
+        fun create(): LenientImportProvider = LenientImportProvider(Script.defaultImportManager.rootScope)
+    }
+}
+
+object CompletionEngineLight {
+
+    suspend fun completeAtMarkerSuspend(textWithCaret: String, marker: String = "<caret>"): List<CompletionItem> {
+        val idx = textWithCaret.indexOf(marker)
+        require(idx >= 0) { "Caret marker '$marker' not found" }
+        val text = textWithCaret.replace(marker, "")
+        return completeSuspend(text, idx)
+    }
+
+    suspend fun completeSuspend(text: String, caret: Int): List<CompletionItem> {
+        val prefix = prefixAt(text, caret)
+        val mini = buildMiniAst(text)
+        // Build imported modules as a UNION of MiniAst-derived and textual extraction, always including stdlib
+        run {
+            // no-op block to keep local scope tidy
+        }
+        val fromMini: List<String> = mini?.let { DocLookupUtils.canonicalImportedModules(it) } ?: emptyList()
+        val fromText: List<String> = extractImportsFromText(text)
+        val imported: List<String> = LinkedHashSet<String>().apply {
+            fromMini.forEach { add(it) }
+            fromText.forEach { add(it) }
+            add("lyng.stdlib")
+        }.toList()
+
+        val cap = 200
+        val out = ArrayList<CompletionItem>(64)
+
+        // Member context detection: dot immediately before caret or before current word start
+        val word = wordRangeAt(text, caret)
+        val memberDot = findDotLeft(text, word?.first ?: caret)
+        if (memberDot != null) {
+            // 0) Try chained member call return type inference
+            guessReturnClassFromMemberCallBefore(text, memberDot, imported)?.let { cls ->
+                offerMembersAdd(out, prefix, imported, cls)
+                return out
+            }
+            // 0a) Top-level call before dot
+            guessReturnClassFromTopLevelCallBefore(text, memberDot, imported)?.let { cls ->
+                offerMembersAdd(out, prefix, imported, cls)
+                return out
+            }
+            // 0b) Across-known-callees (Iterable/Iterator/List preference)
+            guessReturnClassAcrossKnownCallees(text, memberDot, imported)?.let { cls ->
+                offerMembersAdd(out, prefix, imported, cls)
+                return out
+            }
+            // 1) Receiver inference fallback
+            guessReceiverClass(text, memberDot, imported)?.let { cls ->
+                offerMembersAdd(out, prefix, imported, cls)
+                return out
+            }
+            // In member context and unknown receiver/return type: show nothing (no globals after dot)
+            return out
+        }
+
+        // Global identifiers: params > local decls > imported > stdlib; Functions > Classes > Values; alphabetical
+        mini?.let { m ->
+            val decls = m.declarations
+            val funs = decls.filterIsInstance<MiniFunDecl>().sortedBy { it.name.lowercase() }
+            val classes = decls.filterIsInstance<MiniClassDecl>().sortedBy { it.name.lowercase() }
+            val vals = decls.filterIsInstance<MiniValDecl>().sortedBy { it.name.lowercase() }
+            funs.forEach { offerDeclAdd(out, prefix, it) }
+            classes.forEach { offerDeclAdd(out, prefix, it) }
+            vals.forEach { offerDeclAdd(out, prefix, it) }
+        }
+
+        // Imported and builtin
+        val (nonStd, std) = imported.partition { it != "lyng.stdlib" }
+        val order = nonStd + std
+        val emptyPrefixThrottle = prefix.isBlank()
+        var externalAdded = 0
+        val budget = if (emptyPrefixThrottle) 100 else Int.MAX_VALUE
+        for (mod in order) {
+            val decls = BuiltinDocRegistry.docsForModule(mod)
+            val funs = decls.filterIsInstance<MiniFunDecl>().sortedBy { it.name.lowercase() }
+            val classes = decls.filterIsInstance<MiniClassDecl>().sortedBy { it.name.lowercase() }
+            val vals = decls.filterIsInstance<MiniValDecl>().sortedBy { it.name.lowercase() }
+            funs.forEach { if (externalAdded < budget) { offerDeclAdd(out, prefix, it); externalAdded++ } }
+            classes.forEach { if (externalAdded < budget) { offerDeclAdd(out, prefix, it); externalAdded++ } }
+            vals.forEach { if (externalAdded < budget) { offerDeclAdd(out, prefix, it); externalAdded++ } }
+            if (out.size >= cap || externalAdded >= budget) break
+        }
+
+        return out
+    }
+
+    // --- Emission helpers ---
+
+    private fun offerDeclAdd(out: MutableList<CompletionItem>, prefix: String, d: MiniDecl) {
+        fun add(ci: CompletionItem) { if (ci.name.startsWith(prefix, true)) out += ci }
+        when (d) {
+            is MiniFunDecl -> {
+                val params = d.params.joinToString(", ") { it.name }
+                val tail = "(${params})"
+                add(CompletionItem(d.name, Kind.Function, tailText = tail, typeText = typeOf(d.returnType)))
+            }
+            is MiniClassDecl -> add(CompletionItem(d.name, Kind.Class_))
+            is MiniValDecl -> add(CompletionItem(d.name, Kind.Value, typeText = typeOf(d.type)))
+            else -> add(CompletionItem(d.name, Kind.Value))
+        }
+    }
+
+    private fun offerMembersAdd(out: MutableList<CompletionItem>, prefix: String, imported: List<String>, className: String) {
+        val classes = DocLookupUtils.aggregateClasses(imported)
+        val visited = mutableSetOf<String>()
+        val directMap = LinkedHashMap<String, MutableList<MiniMemberDecl>>()
+        val inheritedMap = LinkedHashMap<String, MutableList<MiniMemberDecl>>()
+
+        fun addMembersOf(name: String, direct: Boolean) {
+            val cls = classes[name] ?: return
+            val target = if (direct) directMap else inheritedMap
+            for (m in cls.members) target.getOrPut(m.name) { mutableListOf() }.add(m)
+            for (b in cls.bases) if (visited.add(b)) addMembersOf(b, false)
+        }
+
+        visited.add(className)
+        addMembersOf(className, true)
+
+        // Conservative supplements for containers
+        when (className) {
+            "List" -> listOf("Collection", "Iterable").forEach { if (visited.add(it)) addMembersOf(it, false) }
+            "Array" -> listOf("Collection", "Iterable").forEach { if (visited.add(it)) addMembersOf(it, false) }
+        }
+
+        fun emitGroup(map: LinkedHashMap<String, MutableList<MiniMemberDecl>>) {
+            for (name in map.keys.sortedBy { it.lowercase() }) {
+                val variants = map[name] ?: continue
+                val rep = variants.firstOrNull { it is MiniMemberFunDecl } ?: variants.first()
+                when (rep) {
+                    is MiniMemberFunDecl -> {
+                        val params = rep.params.joinToString(", ") { it.name }
+                        val extra = variants.count { it is MiniMemberFunDecl } - 1
+                        val ov = if (extra > 0) " (+$extra overloads)" else ""
+                        val ci = CompletionItem(name, Kind.Method, tailText = "(${params})$ov", typeText = typeOf(rep.returnType))
+                        if (ci.name.startsWith(prefix, true)) out += ci
+                    }
+                    is MiniMemberValDecl -> {
+                        val ci = CompletionItem(name, Kind.Field, typeText = typeOf(rep.type))
+                        if (ci.name.startsWith(prefix, true)) out += ci
+                    }
+                }
+            }
+        }
+
+        emitGroup(directMap)
+        emitGroup(inheritedMap)
+    }
+
+    // --- Inference helpers (text-only, PSI-free) ---
+
+    private fun guessReceiverClass(text: String, dotPos: Int, imported: List<String>): String? {
+        DocLookupUtils.guessClassFromCallBefore(text, dotPos, imported)?.let { return it }
+        val i = prevNonWs(text, dotPos - 1)
+        if (i >= 0) {
+            when (text[i]) {
+                '"' -> return "String"
+                ']' -> return "List"
+                '}' -> return "Dict"
+            }
+            // Numeric literal: decimal/int/hex/scientific
+            var j = i
+            var hasDigits = false
+            var hasDot = false
+            var hasExp = false
+            while (j >= 0) {
+                val ch = text[j]
+                if (ch.isDigit()) { hasDigits = true; j--; continue }
+                if (ch == '.') { hasDot = true; j--; continue }
+                if (ch == 'e' || ch == 'E') { hasExp = true; j--; if (j >= 0 && (text[j] == '+' || text[j] == '-')) j--; continue }
+                if (ch in listOf('x','X','a','b','c','d','f','A','B','C','D','F')) { j--; continue }
+                break
+            }
+            if (hasDigits) return if (hasDot || hasExp) "Real" else "Int"
+        }
+        return null
+    }
+
+    private fun guessReturnClassFromMemberCallBefore(text: String, dotPos: Int, imported: List<String>): String? {
+        var i = prevNonWs(text, dotPos - 1)
+        if (i < 0 || text[i] != ')') return null
+        i--
+        var depth = 0
+        while (i >= 0) {
+            when (text[i]) {
+                ')' -> depth++
+                '(' -> if (depth == 0) break else depth--
+            }
+            i--
+        }
+        if (i < 0 || text[i] != '(') return null
+        var j = i - 1
+        while (j >= 0 && text[j].isWhitespace()) j--
+        val end = j + 1
+        while (j >= 0 && isIdentChar(text[j])) j--
+        val start = j + 1
+        if (start >= end) return null
+        val callee = text.substring(start, end)
+        var k = start - 1
+        while (k >= 0 && text[k].isWhitespace()) k--
+        if (k < 0 || text[k] != '.') return null
+        val prevDot = k
+        val receiverClass = guessReceiverClass(text, prevDot, imported) ?: return null
+        val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, receiverClass, callee) ?: return null
+        val member = resolved.second
+        val ret = when (member) {
+            is MiniMemberFunDecl -> member.returnType
+            is MiniMemberValDecl -> member.type
+        }
+        return simpleClassNameOf(ret)
+    }
+
+    private fun guessReturnClassFromTopLevelCallBefore(text: String, dotPos: Int, imported: List<String>): String? {
+        var i = prevNonWs(text, dotPos - 1)
+        if (i < 0 || text[i] != ')') return null
+        i--
+        var depth = 0
+        while (i >= 0) {
+            when (text[i]) {
+                ')' -> depth++
+                '(' -> if (depth == 0) break else depth--
+            }
+            i--
+        }
+        if (i < 0 || text[i] != '(') return null
+        var j = i - 1
+        while (j >= 0 && text[j].isWhitespace()) j--
+        val end = j + 1
+        while (j >= 0 && isIdentChar(text[j])) j--
+        val start = j + 1
+        if (start >= end) return null
+        val callee = text.substring(start, end)
+        var k = start - 1
+        while (k >= 0 && text[k].isWhitespace()) k--
+        if (k >= 0 && text[k] == '.') return null // was a member call
+        for (mod in imported) {
+            val decls = BuiltinDocRegistry.docsForModule(mod)
+            val fn = decls.asSequence().filterIsInstance<MiniFunDecl>().firstOrNull { it.name == callee }
+            if (fn != null) return simpleClassNameOf(fn.returnType)
+        }
+        return null
+    }
+
+    private fun guessReturnClassAcrossKnownCallees(text: String, dotPos: Int, imported: List<String>): String? {
+        var i = prevNonWs(text, dotPos - 1)
+        if (i < 0 || text[i] != ')') return null
+        i--
+        var depth = 0
+        while (i >= 0) {
+            when (text[i]) {
+                ')' -> depth++
+                '(' -> if (depth == 0) break else depth--
+            }
+            i--
+        }
+        if (i < 0 || text[i] != '(') return null
+        var j = i - 1
+        while (j >= 0 && text[j].isWhitespace()) j--
+        val end = j + 1
+        while (j >= 0 && isIdentChar(text[j])) j--
+        val start = j + 1
+        if (start >= end) return null
+        val callee = text.substring(start, end)
+        val resolved = DocLookupUtils.findMemberAcrossClasses(imported, callee) ?: return null
+        val member = resolved.second
+        val ret = when (member) {
+            is MiniMemberFunDecl -> member.returnType
+            is MiniMemberValDecl -> member.type
+        }
+        return simpleClassNameOf(ret)
+    }
+
+    private fun simpleClassNameOf(t: MiniTypeRef?): String? = when (t) {
+        null -> null
+        is MiniTypeName -> t.segments.lastOrNull()?.name
+        is MiniGenericType -> simpleClassNameOf(t.base)
+        is MiniFunctionType -> null
+        is MiniTypeVar -> null
+    }
+
+    // --- MiniAst and small utils ---
+
+    private suspend fun buildMiniAst(text: String): MiniScript? = try {
+        val sink = MiniAstBuilder()
+        val src = Source("<engine>", text)
+        val provider = LenientImportProvider.create()
+        Compiler.compileWithMini(src, provider, sink)
+        sink.build()
+    } catch (_: Throwable) {
+        null
+    }
+
+    private fun typeOf(t: MiniTypeRef?): String = when (t) {
+        null -> ""
+        is MiniTypeName -> t.segments.lastOrNull()?.name?.let { ": $it" } ?: ""
+        is MiniGenericType -> {
+            val base = typeOf(t.base).removePrefix(": ")
+            val args = t.args.joinToString(",") { typeOf(it).removePrefix(": ") }
+            ": ${base}<${args}>"
+        }
+        is MiniFunctionType -> ": (fn)"
+        is MiniTypeVar -> ": ${t.name}"
+    }
+
+    // Note: we intentionally skip "params in scope" in the isolated engine to avoid PSI/offset mapping.
+
+    // Text helpers
+    private fun prefixAt(text: String, offset: Int): String {
+        val off = offset.coerceIn(0, text.length)
+        var i = (off - 1).coerceAtLeast(0)
+        while (i >= 0 && isIdentChar(text[i])) i--
+        val start = i + 1
+        return if (start in 0..text.length && start <= off) text.substring(start, off) else ""
+    }
+
+    private fun wordRangeAt(text: String, offset: Int): Pair<Int, Int>? {
+        if (text.isEmpty()) return null
+        val off = offset.coerceIn(0, text.length)
+        var s = off
+        var e = off
+        while (s > 0 && isIdentChar(text[s - 1])) s--
+        while (e < text.length && isIdentChar(text[e])) e++
+        return if (s < e) s to e else null
+    }
+
+    private fun findDotLeft(text: String, offset: Int): Int? {
+        var i = (offset - 1).coerceAtLeast(0)
+        while (i >= 0 && text[i].isWhitespace()) i--
+        return if (i >= 0 && text[i] == '.') i else null
+    }
+
+    private fun prevNonWs(text: String, start: Int): Int {
+        var i = start.coerceAtMost(text.length - 1)
+        while (i >= 0 && text[i].isWhitespace()) i--
+        return i
+    }
+
+    private fun isIdentChar(c: Char): Boolean = c == '_' || c.isLetterOrDigit()
+
+    private fun extractImportsFromText(text: String): List<String> {
+        val result = LinkedHashSet<String>()
+        val re = Regex("(?m)^\\s*import\\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)*)")
+        re.findAll(text).forEach { m ->
+            val raw = m.groupValues.getOrNull(1)?.trim().orEmpty()
+            if (raw.isNotEmpty()) result.add(if (raw.startsWith("lyng.")) raw else "lyng.$raw")
+        }
+        return result.toList()
+    }
+}

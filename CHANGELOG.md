@@ -2,6 +2,14 @@
 
 ### Unreleased
 
+- IDEA plugin: Lightweight autocompletion (experimental)
+  - Global completion: local declarations, in‑scope parameters, imported modules, and stdlib symbols.
+  - Member completion: after a dot, suggests only members of the inferred receiver type (incl. chained calls like `Path(".." ).lines().` → `Iterator` methods). No global identifiers appear after a dot.
+  - Inheritance-aware: direct class members first, then inherited (e.g., `List` includes `Collection`/`Iterable` methods).
+  - Heuristics: handles literals (`"…"` → `String`, numbers → `Int/Real`, `[...]` → `List`, `{...}` → `Dict`) and static `Namespace.` members.
+  - Performance: capped results, early prefix filtering, per‑document MiniAst cache, cancellation checks.
+  - Toggle: Settings | Lyng Formatter → "Enable Lyng autocompletion (experimental)" (default ON).
+
 - Language: Named arguments and named splats
   - New call-site syntax for named arguments using colon: `name: value`.
     - Positional arguments must come before named; positionals after a named argument inside parentheses are rejected.

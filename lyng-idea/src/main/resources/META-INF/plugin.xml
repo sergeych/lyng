@@ -62,6 +62,9 @@
         <!-- Quick documentation provider bound to Lyng language -->
         <lang.documentationProvider language="Lyng" implementationClass="net.sergeych.lyng.idea.docs.LyngDocumentationProvider"/>
 
+        <!-- Basic code completion (MVP) -->
+        <completion.contributor language="Lyng" implementationClass="net.sergeych.lyng.idea.completion.LyngCompletionContributor"/>
+
         <!-- Comment toggling support -->
         <lang.commenter language="Lyng" implementationClass="net.sergeych.lyng.idea.comment.LyngCommenter"/>
 

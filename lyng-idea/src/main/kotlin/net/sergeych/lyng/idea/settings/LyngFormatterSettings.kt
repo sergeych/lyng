@@ -50,6 +50,8 @@ class LyngFormatterSettings(private val project: Project) : PersistentStateCompo
         var offerLyngTypoQuickFixes: Boolean = true,
         // Per-project learned words (do not flag again)
         var learnedWords: MutableSet<String> = mutableSetOf(),
+        // Experimental: enable Lyng autocompletion (can be disabled if needed)
+        var enableLyngCompletionExperimental: Boolean = true,
     )
 
     private var myState: State = State()
@@ -115,6 +117,10 @@ class LyngFormatterSettings(private val project: Project) : PersistentStateCompo
     var learnedWords: MutableSet<String>
         get() = myState.learnedWords
         set(value) { myState.learnedWords = value }
+
+    var enableLyngCompletionExperimental: Boolean
+        get() = myState.enableLyngCompletionExperimental
+        set(value) { myState.enableLyngCompletionExperimental = value }
 
     companion object {
         @JvmStatic
