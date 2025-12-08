@@ -41,6 +41,10 @@ dependencies {
     implementation(project(":lyngio"))
     // Rich Markdown renderer for Quick Docs
     implementation("com.vladsch.flexmark:flexmark-all:0.64.8")
+
+    // Tests for IntelliJ Platform fixtures rely on JUnit 3/4 API (junit.framework.TestCase)
+    // Add JUnit 4 which contains the JUnit 3 compatibility classes used by BasePlatformTestCase/UsefulTestCase
+    testImplementation("junit:junit:4.13.2")
 }
 
 intellij {
