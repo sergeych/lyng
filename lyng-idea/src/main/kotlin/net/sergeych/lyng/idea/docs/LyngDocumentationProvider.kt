@@ -43,9 +43,17 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
     private val log = Logger.getInstance(LyngDocumentationProvider::class.java)
     // Toggle to trace inheritance-based resolutions in Quick Docs. Keep false for normal use.
     private val DEBUG_INHERITANCE = false
+    // Global Quick Doc debug toggle (OFF by default). When false, [LYNG_DEBUG] logs are suppressed.
+    private val DEBUG_LOG = false
     override fun generateDoc(element: PsiElement?, originalElement: PsiElement?): String? {
         // Try load external docs registrars (e.g., lyngio) if present on classpath
         ensureExternalDocsRegistered()
+        // Ensure stdlib Obj*-defined docs (e.g., String methods via ObjString.addFnDoc) are initialized
+        try {
+            net.sergeych.lyng.miniast.StdlibDocsBootstrap.ensure()
+        } catch (_: Throwable) {
+            // best-effort; absence must not break Quick Doc
+        }
         if (element == null) return null
         val file: PsiFile = element.containingFile ?: return null
         val document: Document = file.viewProvider.document ?: return null
@@ -54,12 +62,12 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         // Determine caret/lookup offset from the element range
         val offset = originalElement?.textRange?.startOffset ?: element.textRange.startOffset
         val idRange = TextCtx.wordRangeAt(text, offset) ?: run {
-            log.info("[LYNG_DEBUG] QuickDoc: no word at offset=$offset in ${file.name}")
+            if (DEBUG_LOG) log.info("[LYNG_DEBUG] QuickDoc: no word at offset=$offset in ${file.name}")
             return null
         }
         if (idRange.isEmpty) return null
         val ident = text.substring(idRange.startOffset, idRange.endOffset)
-        log.info("[LYNG_DEBUG] QuickDoc: ident='$ident' at ${idRange.startOffset}..${idRange.endOffset} in ${file.name}")
+        if (DEBUG_LOG) log.info("[LYNG_DEBUG] QuickDoc: ident='$ident' at ${idRange.startOffset}..${idRange.endOffset} in ${file.name}")
 
         // Build MiniAst for this file (fast and resilient). Best-effort; on failure continue with registry lookup only.
         val sink = MiniAstBuilder()
@@ -71,7 +79,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
             sink.build()
         } catch (t: Throwable) {
             // Do not bail out completely: we still can resolve built-in and imported docs (e.g., println)
-            log.warn("[LYNG_DEBUG] QuickDoc: compileWithMini failed: ${t.message}")
+            if (DEBUG_LOG) log.warn("[LYNG_DEBUG] QuickDoc: compileWithMini failed: ${t.message}")
             null
         }
         val haveMini = mini != null
@@ -87,7 +95,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
             val s = source.offsetOf(d.nameStart)
             val e = (s + d.name.length).coerceAtMost(text.length)
             if (offset in s until e) {
-                log.info("[LYNG_DEBUG] QuickDoc: matched decl '${d.name}' kind=${d::class.simpleName}")
+                if (DEBUG_LOG) log.info("[LYNG_DEBUG] QuickDoc: matched decl '${d.name}' kind=${d::class.simpleName}")
                 return renderDeclDoc(d)
             }
         }
@@ -97,12 +105,72 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                 val s = source.offsetOf(p.nameStart)
                 val e = (s + p.name.length).coerceAtMost(text.length)
                 if (offset in s until e) {
-                    log.info("[LYNG_DEBUG] QuickDoc: matched param '${p.name}' in fun '${fn.name}'")
+                    if (DEBUG_LOG) log.info("[LYNG_DEBUG] QuickDoc: matched param '${p.name}' in fun '${fn.name}'")
                     return renderParamDoc(fn, p)
                 }
             }
         }
-        // 3) As a fallback, if the caret is on an identifier text that matches any declaration name, show that
+        // 3) Member-context resolution first (dot immediately before identifier): handle literals and calls
+        run {
+            val dotPos = TextCtx.findDotLeft(text, idRange.startOffset)
+                ?: TextCtx.findDotLeft(text, offset)
+            if (dotPos != null) {
+                // Build imported modules (MiniAst-derived if available, else lenient from text) and ensure stdlib is present
+                var importedModules = if (haveMini) DocLookupUtils.canonicalImportedModules(mini) else emptyList()
+                if (importedModules.isEmpty()) {
+                    val fromText = extractImportsFromText(text)
+                    importedModules = if (fromText.isEmpty()) listOf("lyng.stdlib") else fromText
+                }
+                if (!importedModules.contains("lyng.stdlib")) importedModules = importedModules + "lyng.stdlib"
+
+                // Try literal and call-based receiver inference around the dot
+                val i = TextCtx.prevNonWs(text, dotPos - 1)
+                val className: String? = when {
+                    i >= 0 && text[i] == '"' -> "String"
+                    i >= 0 && text[i] == ']' -> "List"
+                    i >= 0 && text[i] == '}' -> "Dict"
+                    i >= 0 && text[i] == ')' -> {
+                        // Parenthesized expression: walk back to matching '(' and inspect the inner expression
+                        var j = i - 1
+                        var depth = 0
+                        while (j >= 0) {
+                            when (text[j]) {
+                                ')' -> depth++
+                                '(' -> if (depth == 0) break else depth--
+                            }
+                            j--
+                        }
+                        if (j >= 0 && text[j] == '(') {
+                            val innerS = (j + 1).coerceAtLeast(0)
+                            val innerE = i.coerceAtMost(text.length)
+                            if (innerS < innerE) {
+                                val inner = text.substring(innerS, innerE).trim()
+                                when {
+                                    inner.startsWith('"') && inner.endsWith('"') -> "String"
+                                    inner.startsWith('[') && inner.endsWith(']') -> "List"
+                                    inner.startsWith('{') && inner.endsWith('}') -> "Dict"
+                                    else -> null
+                                }
+                            } else null
+                        } else null
+                    }
+                    else -> DocLookupUtils.guessClassFromCallBefore(text, dotPos, importedModules)
+                }
+                if (DEBUG_LOG) log.info("[LYNG_DEBUG] QuickDoc: memberCtx dotPos=${dotPos} chBeforeDot='${if (dotPos>0) text[dotPos-1] else ' '}' classGuess=${className} imports=${importedModules}")
+                if (className != null) {
+                    DocLookupUtils.resolveMemberWithInheritance(importedModules, className, ident)?.let { (owner, member) ->
+                        if (DEBUG_INHERITANCE) log.info("[LYNG_DEBUG] QuickDoc: literal/call '$ident' resolved to $owner.${member.name}")
+                        return when (member) {
+                            is MiniMemberFunDecl -> renderMemberFunDoc(owner, member)
+                            is MiniMemberValDecl -> renderMemberValDoc(owner, member)
+                        }
+                    }
+                    log.info("[LYNG_DEBUG] QuickDoc: resolve failed for ${className}.${ident}")
+                }
+            }
+        }
+
+        // 4) As a fallback, if the caret is on an identifier text that matches any declaration name, show that
         if (haveMini) mini.declarations.firstOrNull { it.name == ident }?.let {
             log.info("[LYNG_DEBUG] QuickDoc: fallback by name '${it.name}' kind=${it::class.simpleName}")
             return renderDeclDoc(it)
@@ -177,6 +245,32 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                         }
                     }
                 } else {
+                    // Extra fallback: try a small set of known receiver classes (covers literals when guess failed)
+                    run {
+                        val candidates = listOf("String", "Iterable", "Iterator", "List", "Collection", "Array", "Dict", "Regex")
+                        for (c in candidates) {
+                            DocLookupUtils.resolveMemberWithInheritance(importedModules, c, ident)?.let { (owner, member) ->
+                                if (DEBUG_INHERITANCE) log.info("[LYNG_DEBUG] Candidate '$c.$ident' resolved via inheritance to $owner.${member.name}")
+                                return when (member) {
+                                    is MiniMemberFunDecl -> renderMemberFunDoc(owner, member)
+                                    is MiniMemberValDecl -> renderMemberValDoc(owner, member)
+                                }
+                            }
+                        }
+                    }
+                    // As a last resort try aggregated String members (extensions from stdlib text)
+                    run {
+                        val classes = DocLookupUtils.aggregateClasses(importedModules)
+                        val stringCls = classes["String"]
+                        val m = stringCls?.members?.firstOrNull { it.name == ident }
+                        if (m != null) {
+                            if (DEBUG_INHERITANCE) log.info("[LYNG_DEBUG] Aggregated fallback resolved String.$ident")
+                            return when (m) {
+                                is MiniMemberFunDecl -> renderMemberFunDoc("String", m)
+                                is MiniMemberValDecl -> renderMemberValDoc("String", m)
+                            }
+                        }
+                    }
                     // Search across classes; prefer Iterable, then Iterator, then List for common ops
                     DocLookupUtils.findMemberAcrossClasses(importedModules, ident)?.let { (owner, member) ->
                         if (DEBUG_INHERITANCE) log.info("[LYNG_DEBUG] Cross-class '$ident' resolved to $owner.${member.name}")
@@ -189,7 +283,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
             }
         }
 
-        log.info("[LYNG_DEBUG] QuickDoc: nothing found for ident='$ident'")
+        if (DEBUG_LOG) log.info("[LYNG_DEBUG] QuickDoc: nothing found for ident='$ident'")
         return null
     }
 

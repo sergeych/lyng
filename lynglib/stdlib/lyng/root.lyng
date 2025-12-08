@@ -192,6 +192,6 @@ fun Exception.printStackTrace() {
 }
 
 /* Compile this string into a regular expression. */
-fun String.re() { Regex(this) }
+fun String.re(): Regex { Regex(this) }
 
     

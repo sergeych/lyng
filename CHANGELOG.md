@@ -9,6 +9,7 @@
   - Heuristics: handles literals (`"…"` → `String`, numbers → `Int/Real`, `[...]` → `List`, `{...}` → `Dict`) and static `Namespace.` members.
   - Performance: capped results, early prefix filtering, per‑document MiniAst cache, cancellation checks.
   - Toggle: Settings | Lyng Formatter → "Enable Lyng autocompletion (experimental)" (default ON).
+  - Stabilization: DEBUG completion/Quick Doc logs are OFF by default; behavior aligned between IDE and isolated engine tests.
 
 - Language: Named arguments and named splats
   - New call-site syntax for named arguments using colon: `name: value`.

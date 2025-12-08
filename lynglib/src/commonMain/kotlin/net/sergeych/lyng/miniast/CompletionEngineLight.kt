@@ -41,6 +41,8 @@ object CompletionEngineLight {
     }
 
     suspend fun completeSuspend(text: String, caret: Int): List<CompletionItem> {
+        // Ensure stdlib Obj*-defined docs (e.g., String methods) are initialized before registry lookup
+        StdlibDocsBootstrap.ensure()
         val prefix = prefixAt(text, caret)
         val mini = buildMiniAst(text)
         // Build imported modules as a UNION of MiniAst-derived and textual extraction, always including stdlib
@@ -158,7 +160,13 @@ object CompletionEngineLight {
         fun emitGroup(map: LinkedHashMap<String, MutableList<MiniMemberDecl>>) {
             for (name in map.keys.sortedBy { it.lowercase() }) {
                 val variants = map[name] ?: continue
-                val rep = variants.firstOrNull { it is MiniMemberFunDecl } ?: variants.first()
+                // Prefer a method with a known return type; else any method; else first variant
+                val rep =
+                    variants.asSequence()
+                        .filterIsInstance<MiniMemberFunDecl>()
+                        .firstOrNull { it.returnType != null }
+                        ?: variants.firstOrNull { it is MiniMemberFunDecl }
+                        ?: variants.first()
                 when (rep) {
                     is MiniMemberFunDecl -> {
                         val params = rep.params.joinToString(", ") { it.name }
@@ -168,7 +176,11 @@ object CompletionEngineLight {
                         if (ci.name.startsWith(prefix, true)) out += ci
                     }
                     is MiniMemberValDecl -> {
-                        val ci = CompletionItem(name, Kind.Field, typeText = typeOf(rep.type))
+                        // Prefer a field variant with known type if available
+                        val chosen = variants.asSequence()
+                            .filterIsInstance<MiniMemberValDecl>()
+                            .firstOrNull { it.type != null } ?: rep
+                        val ci = CompletionItem(name, Kind.Field, typeText = typeOf((chosen as MiniMemberValDecl).type))
                         if (ci.name.startsWith(prefix, true)) out += ci
                     }
                 }
@@ -177,18 +189,70 @@ object CompletionEngineLight {
 
         emitGroup(directMap)
         emitGroup(inheritedMap)
+
+        // Supplement with stdlib extension-like methods defined in root.lyng (e.g., fun String.re(...))
+        run {
+            val already = (directMap.keys + inheritedMap.keys).toMutableSet()
+            val ext = BuiltinDocRegistry.extensionMethodNamesFor(className)
+            for (name in ext) {
+                if (already.contains(name)) continue
+                val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, className, name)
+                if (resolved != null) {
+                    when (val member = resolved.second) {
+                        is MiniMemberFunDecl -> {
+                            val params = member.params.joinToString(", ") { it.name }
+                            val ci = CompletionItem(name, Kind.Method, tailText = "(${params})", typeText = typeOf(member.returnType))
+                            if (ci.name.startsWith(prefix, true)) out += ci
+                            already.add(name)
+                        }
+                        is MiniMemberValDecl -> {
+                            val ci = CompletionItem(name, Kind.Field, typeText = typeOf(member.type))
+                            if (ci.name.startsWith(prefix, true)) out += ci
+                            already.add(name)
+                        }
+                    }
+                } else {
+                    // Fallback: emit simple method name without detailed types
+                    val ci = CompletionItem(name, Kind.Method, tailText = "()", typeText = null)
+                    if (ci.name.startsWith(prefix, true)) out += ci
+                    already.add(name)
+                }
+            }
+        }
     }
 
     // --- Inference helpers (text-only, PSI-free) ---
 
     private fun guessReceiverClass(text: String, dotPos: Int, imported: List<String>): String? {
         DocLookupUtils.guessClassFromCallBefore(text, dotPos, imported)?.let { return it }
-        val i = prevNonWs(text, dotPos - 1)
+        var i = prevNonWs(text, dotPos - 1)
         if (i >= 0) {
             when (text[i]) {
                 '"' -> return "String"
                 ']' -> return "List"
                 '}' -> return "Dict"
+                ')' -> {
+                    // Parenthesized expression: walk back to matching '(' and inspect the inner expression
+                    var j = i - 1
+                    var depth = 0
+                    while (j >= 0) {
+                        when (text[j]) {
+                            ')' -> depth++
+                            '(' -> if (depth == 0) break else depth--
+                        }
+                        j--
+                    }
+                    if (j >= 0 && text[j] == '(') {
+                        val innerS = (j + 1).coerceAtLeast(0)
+                        val innerE = i.coerceAtMost(text.length)
+                        if (innerS < innerE) {
+                            val inner = text.substring(innerS, innerE).trim()
+                            if (inner.startsWith('"') && inner.endsWith('"')) return "String"
+                            if (inner.startsWith('[') && inner.endsWith(']')) return "List"
+                            if (inner.startsWith('{') && inner.endsWith('}')) return "Dict"
+                        }
+                    }
+                }
             }
             // Numeric literal: decimal/int/hex/scientific
             var j = i

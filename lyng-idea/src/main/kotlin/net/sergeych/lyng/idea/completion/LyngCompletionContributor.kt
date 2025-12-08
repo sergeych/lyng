@@ -9,7 +9,6 @@ import com.intellij.codeInsight.lookup.LookupElementBuilder
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Document
-import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.util.Key
 import com.intellij.patterns.PlatformPatterns
 import com.intellij.psi.PsiFile
@@ -36,7 +35,7 @@ class LyngCompletionContributor : CompletionContributor() {
 
     private object Provider : CompletionProvider<CompletionParameters>() {
         private val log = Logger.getInstance(LyngCompletionContributor::class.java)
-        private const val DEBUG_COMPLETION = true
+        private const val DEBUG_COMPLETION = false
 
         override fun addCompletions(
             parameters: CompletionParameters,
@@ -45,6 +44,8 @@ class LyngCompletionContributor : CompletionContributor() {
         ) {
             // Ensure external/bundled docs are registered (e.g., lyng.io.fs with Path)
             DocsBootstrap.ensure()
+            // Ensure stdlib Obj*-defined docs (e.g., String methods via ObjString.addFnDoc) are initialized
+            StdlibDocsBootstrap.ensure()
             val file: PsiFile = parameters.originalFile
             if (file.language != LyngLanguage) return
             // Feature toggle: allow turning completion off from settings
@@ -149,6 +150,60 @@ class LyngCompletionContributor : CompletionContributor() {
                         .let { b -> if (!ci.typeText.isNullOrBlank()) b.withTypeText(ci.typeText, true) else b }
                 }
                 emit(builder)
+            }
+            // In member context, ensure stdlib extension-like methods (e.g., String.re) are present
+            if (memberDotPos != null) {
+                val existing = engineItems.map { it.name }.toMutableSet()
+                val fromText = extractImportsFromText(text)
+                val imported = LinkedHashSet<String>().apply {
+                    fromText.forEach { add(it) }
+                    add("lyng.stdlib")
+                }.toList()
+                val inferredClass =
+                    guessReturnClassFromMemberCallBeforeMini(mini, text, memberDotPos, imported)
+                        ?: guessReceiverClassViaMini(mini, text, memberDotPos, imported)
+                        ?: guessReturnClassFromMemberCallBefore(text, memberDotPos, imported)
+                        ?: guessReturnClassFromTopLevelCallBefore(text, memberDotPos, imported)
+                        ?: guessReturnClassAcrossKnownCallees(text, memberDotPos, imported)
+                        ?: guessReceiverClass(text, memberDotPos, imported)
+                if (!inferredClass.isNullOrBlank()) {
+                    val ext = BuiltinDocRegistry.extensionMethodNamesFor(inferredClass)
+                    if (DEBUG_COMPLETION) log.info("[LYNG_DEBUG] Post-engine extension check for $inferredClass: ${'$'}{ext}")
+                    for (name in ext) {
+                        if (existing.contains(name)) continue
+                        val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, inferredClass, name)
+                        if (resolved != null) {
+                            when (val member = resolved.second) {
+                                is MiniMemberFunDecl -> {
+                                    val params = member.params.joinToString(", ") { it.name }
+                                    val ret = typeOf(member.returnType)
+                                    val builder = LookupElementBuilder.create(name)
+                                        .withIcon(AllIcons.Nodes.Method)
+                                        .withTailText("(${ '$' }params)", true)
+                                        .withTypeText(ret, true)
+                                        .withInsertHandler(ParenInsertHandler)
+                                    emit(builder)
+                                    existing.add(name)
+                                }
+                                is MiniMemberValDecl -> {
+                                    val builder = LookupElementBuilder.create(name)
+                                        .withIcon(if (member.mutable) AllIcons.Nodes.Variable else AllIcons.Nodes.Field)
+                                        .withTypeText(typeOf(member.type), true)
+                                    emit(builder)
+                                    existing.add(name)
+                                }
+                            }
+                        } else {
+                            // Fallback: emit simple method name without detailed types
+                            val builder = LookupElementBuilder.create(name)
+                                .withIcon(AllIcons.Nodes.Method)
+                                .withTailText("()", true)
+                                .withInsertHandler(ParenInsertHandler)
+                            emit(builder)
+                            existing.add(name)
+                        }
+                    }
+                }
             }
             // If in member context and engine items are suspiciously sparse, try to enrich via local inference + offerMembers
             if (memberDotPos != null && engineItems.size < 3) {
@@ -312,10 +367,17 @@ class LyngCompletionContributor : CompletionContributor() {
             fun emitGroup(map: LinkedHashMap<String, MutableList<MiniMemberDecl>>) {
                 val keys = map.keys.sortedBy { it.lowercase() }
                 for (name in keys) {
-                    ProgressManager.checkCanceled()
                     val list = map[name] ?: continue
-                    // Choose a representative (prefer method over value for typical UX)
-                    val rep = list.firstOrNull { it is MiniMemberFunDecl } ?: list.first()
+                    // Choose a representative for display:
+                    // 1) Prefer a method with a known return type
+                    // 2) Else any method
+                    // 3) Else the first variant
+                    val rep =
+                        list.asSequence()
+                            .filterIsInstance<MiniMemberFunDecl>()
+                            .firstOrNull { it.returnType != null }
+                            ?: list.firstOrNull { it is MiniMemberFunDecl }
+                            ?: list.first()
                     when (rep) {
                         is MiniMemberFunDecl -> {
                             val params = rep.params.joinToString(", ") { it.name }
@@ -333,9 +395,13 @@ class LyngCompletionContributor : CompletionContributor() {
                         }
                         is MiniMemberValDecl -> {
                             val icon = if (rep.mutable) AllIcons.Nodes.Variable else AllIcons.Nodes.Field
+                            // Prefer a field variant with known type if available
+                            val chosen = list.asSequence()
+                                .filterIsInstance<MiniMemberValDecl>()
+                                .firstOrNull { it.type != null } ?: rep
                             val builder = LookupElementBuilder.create(name)
                                 .withIcon(icon)
-                                .withTypeText(typeOf(rep.type), true)
+                                .withTypeText(typeOf((chosen as MiniMemberValDecl).type), true)
                             emit(builder)
                         }
                     }
@@ -407,13 +473,40 @@ class LyngCompletionContributor : CompletionContributor() {
                 }
             }
 
-            // Supplement with stdlib extension methods defined in root.lyng (e.g., fun String.trim(...))
+            // Supplement with stdlib extension-like methods defined in root.lyng (e.g., fun String.trim(...))
             run {
                 val already = (directMap.keys + inheritedMap.keys).toMutableSet()
                 val ext = BuiltinDocRegistry.extensionMethodNamesFor(className)
                 if (DEBUG_COMPLETION) log.info("[LYNG_DEBUG] Extensions for $className: count=${ext.size} -> ${ext}")
                 for (name in ext) {
                     if (already.contains(name)) continue
+                    // Try to resolve full signature via registry first to get params and return type
+                    val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, className, name)
+                    if (resolved != null) {
+                        when (val member = resolved.second) {
+                            is MiniMemberFunDecl -> {
+                                val params = member.params.joinToString(", ") { it.name }
+                                val ret = typeOf(member.returnType)
+                                val builder = LookupElementBuilder.create(name)
+                                    .withIcon(AllIcons.Nodes.Method)
+                                    .withTailText("(${params})", true)
+                                    .withTypeText(ret, true)
+                                    .withInsertHandler(ParenInsertHandler)
+                                emit(builder)
+                                already.add(name)
+                                continue
+                            }
+                            is MiniMemberValDecl -> {
+                                val builder = LookupElementBuilder.create(name)
+                                    .withIcon(if (member.mutable) AllIcons.Nodes.Variable else AllIcons.Nodes.Field)
+                                    .withTypeText(typeOf(member.type), true)
+                                emit(builder)
+                                already.add(name)
+                                continue
+                            }
+                        }
+                    }
+                    // Fallback: emit without detailed types if we couldn't resolve
                     val builder = LookupElementBuilder.create(name)
                         .withIcon(AllIcons.Nodes.Method)
                         .withTailText("()", true)
@@ -558,7 +651,7 @@ class LyngCompletionContributor : CompletionContributor() {
             DocLookupUtils.guessClassFromCallBefore(text, dotPos, imported)?.let { return it }
 
             // 2) Literal heuristics based on the immediate char before '.'
-            val i = TextCtx.prevNonWs(text, dotPos - 1)
+            var i = TextCtx.prevNonWs(text, dotPos - 1)
             if (i >= 0) {
                 when (text[i]) {
                     '"' -> {
@@ -567,6 +660,28 @@ class LyngCompletionContributor : CompletionContributor() {
                     }
                     ']' -> return "List" // very rough heuristic
                     '}' -> return "Dict" // map/dictionary literal heuristic
+                    ')' -> {
+                        // Parenthesized expression: walk back to matching '(' and inspect inner expression
+                        var j = i - 1
+                        var depth = 0
+                        while (j >= 0) {
+                            when (text[j]) {
+                                ')' -> depth++
+                                '(' -> if (depth == 0) break else depth--
+                            }
+                            j--
+                        }
+                        if (j >= 0 && text[j] == '(') {
+                            val innerS = (j + 1).coerceAtLeast(0)
+                            val innerE = i.coerceAtMost(text.length)
+                            if (innerS < innerE) {
+                                val inner = text.substring(innerS, innerE).trim()
+                                if (inner.startsWith('"') && inner.endsWith('"')) return "String"
+                                if (inner.startsWith('[') && inner.endsWith(']')) return "List"
+                                if (inner.startsWith('{') && inner.endsWith('}')) return "Dict"
+                            }
+                        }
+                    }
                 }
                 // Numeric literal: support decimal, hex (0x..), and scientific notation (1e-3)
                 var j = i

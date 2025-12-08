@@ -68,8 +68,14 @@ object BuiltinDocRegistry : BuiltinDocSource {
     }
 
     override fun docsForModule(moduleName: String): List<MiniDecl> {
-        modules[moduleName]?.let { return it }
-        // Try lazy supplier once
+        // If module already present but we also have a lazy supplier for it, merge supplier once
+        modules[moduleName]?.let { existing ->
+            lazySuppliers.remove(moduleName)?.invoke()?.let { built ->
+                existing += built
+            }
+            return existing
+        }
+        // Try lazy supplier once when module is not present
         val built = lazySuppliers.remove(moduleName)?.invoke()
         if (built != null) {
             val list = modules.getOrPut(moduleName) { mutableListOf() }

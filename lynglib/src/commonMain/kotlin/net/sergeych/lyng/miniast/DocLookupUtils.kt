@@ -13,26 +13,63 @@ object DocLookupUtils {
      */
     fun canonicalImportedModules(mini: MiniScript): List<String> {
         val raw = mini.imports.map { it.segments.joinToString(".") { s -> s.name } }
-        if (raw.isEmpty()) return emptyList()
         val result = LinkedHashSet<String>()
         for (name in raw) {
             val canon = if (name.startsWith("lyng.")) name else "lyng.$name"
             result.add(canon)
         }
-        // Always make stdlib available as a fallback context for common types
+        // Always make stdlib available as a fallback context for common types,
+        // even when there are no explicit imports in the file
         result.add("lyng.stdlib")
         return result.toList()
     }
 
     fun aggregateClasses(importedModules: List<String>): Map<String, MiniClassDecl> {
-        val map = LinkedHashMap<String, MiniClassDecl>()
+        // Collect all class decls by name across modules, then merge duplicates by unioning members and bases.
+        val buckets = LinkedHashMap<String, MutableList<MiniClassDecl>>()
         for (mod in importedModules) {
             val docs = BuiltinDocRegistry.docsForModule(mod)
-            docs.filterIsInstance<MiniClassDecl>().forEach { cls ->
-                if (!map.containsKey(cls.name)) map[cls.name] = cls
+            for (cls in docs.filterIsInstance<MiniClassDecl>()) {
+                buckets.getOrPut(cls.name) { mutableListOf() }.add(cls)
             }
         }
-        return map
+
+        fun mergeClassDecls(name: String, list: List<MiniClassDecl>): MiniClassDecl {
+            if (list.isEmpty()) throw IllegalArgumentException("empty class list for $name")
+            if (list.size == 1) return list.first()
+            // Choose a representative for non-merge fields (range/nameStart/bodyRange): take the first
+            val rep = list.first()
+            val bases = LinkedHashSet<String>()
+            val members = LinkedHashMap<String, MutableList<MiniMemberDecl>>()
+            var doc: MiniDoc? = null
+            for (c in list) {
+                bases.addAll(c.bases)
+                if (doc == null && c.doc != null && c.doc.raw.isNotBlank()) doc = c.doc
+                for (m in c.members) {
+                    // Group by name to keep overloads together
+                    members.getOrPut(m.name) { mutableListOf() }.add(m)
+                }
+            }
+            // Flatten grouped members back to a list; keep stable name order
+            val mergedMembers = members.keys.sortedBy { it.lowercase() }.flatMap { members[it] ?: emptyList() }
+            return MiniClassDecl(
+                range = rep.range,
+                name = rep.name,
+                bases = bases.toList(),
+                bodyRange = rep.bodyRange,
+                ctorFields = rep.ctorFields,
+                classFields = rep.classFields,
+                doc = doc,
+                nameStart = rep.nameStart,
+                members = mergedMembers
+            )
+        }
+
+        val result = LinkedHashMap<String, MiniClassDecl>()
+        for ((name, list) in buckets) {
+            result[name] = mergeClassDecls(name, list)
+        }
+        return result
     }
 
     fun resolveMemberWithInheritance(importedModules: List<String>, className: String, member: String): Pair<String, MiniMemberDecl>? {
