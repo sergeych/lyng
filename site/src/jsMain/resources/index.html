@@ -502,7 +502,6 @@
                 if (node.nodeType === Node.ELEMENT_NODE) {
                     const kotlinBlocks = node.querySelectorAll('code.language-kotlin');
                     kotlinBlocks.forEach((block) => {
-                        console.log('Found Kotlin code block:', block.textContent);
                         hljs.highlightElement(block);
                     });
                 }
