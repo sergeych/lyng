@@ -17,323 +17,504 @@
 
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <title>Lyng language</title>
     <!-- Site favicon (SVG, adapts to light/dark) -->
-    <link rel="icon" type="image/svg+xml" href="icons/lyng-favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="icons/lyng-favicon.svg"/>
     <!-- GitHub Markdown CSS (light and dark). We toggle these from the app. -->
     <link
-      id="md-light"
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/github-markdown-css@5.4.0/github-markdown.css"
+            id="md-light"
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/github-markdown-css@5.4.0/github-markdown.css"
     />
     <link
-      id="md-dark"
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/github-markdown-css@5.4.0/github-markdown-dark.css"
-      disabled
+            id="md-dark"
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/github-markdown-css@5.4.0/github-markdown-dark.css"
+            disabled
     />
     <!-- Bootstrap 5.3 CSS -->
     <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-      rel="stylesheet"
-      integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
-      crossorigin="anonymous"
+            href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+            rel="stylesheet"
+            integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+            crossorigin="anonymous"
     />
     <!-- Bootstrap Icons -->
     <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
     />
     <!-- MathJax v3 configuration (the loader is bundled via npm/webpack) -->
     <script>
-      window.MathJax = {
-        tex: {
-          inlineMath: [['$', '$'], ['\\(', '\\)']],
-          displayMath: [['$$', '$$'], ['\\[', '\\]']],
-          processEscapes: true
-        },
-        options: {
-          skipHtmlTags: ['script','noscript','style','textarea','pre','code']
-        },
-        startup: {
-          // We'll trigger typesetting manually from the app after markdown is mounted
-          typeset: false
-        }
-      };
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true
+            },
+            options: {
+                skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+            },
+            startup: {
+                // We'll trigger typesetting manually from the app after markdown is mounted
+                typeset: false
+            }
+        };
     </script>
     <!-- Loader is imported in the app bundle; no external script tag required -->
     <style>
-      /* Reserve space for fixed navbar and ensure in-page anchors don't end up hidden under it */
-      :root { --navbar-offset: 56px; }
-      body {
-        /* Fallback padding; JS will keep this equal to the real navbar height */
-        /*padding-top: var(--navbar-offset);*/
-        /* Make native hash jumps account for the fixed header */
-        /*scroll-padding-top: calc(var(--navbar-offset) + 8px);*/
-      }
-      /* Also offset scroll for headings and any element targeted by an id */
-      .markdown-body h1,
-      .markdown-body h2,
-      .markdown-body h3,
-      .markdown-body h4,
-      .markdown-body h5,
-      .markdown-body h6,
-      [id] {
-        /*scroll-margin-top: calc(var(--navbar-offset) + 8px);*/
-      }
-      /* Unify markdown and page backgrounds with Bootstrap theme variables */
-      .markdown-body {
-        box-sizing: border-box;
-        min-width: 200px;
-        line-height: 1.6;
-        background: var(--bs-body-bg) !important;
-        color: var(--bs-body-color) !important;
-      }
-      .markdown-body > :first-child { margin-top: 0 !important; }
-      .markdown-body table { margin: 1rem 0; }
-      .markdown-body pre {
-        padding: .75rem;
-        border-radius: .375rem;
-        background: var(--bs-tertiary-bg);
-        border: 1px solid var(--bs-border-color);
-      }
-      /* Style only inline code, avoid affecting code blocks inside <pre> to prevent first-line extra indent */
-      .markdown-body :not(pre) > code:not([class]) {
-        background: var(--bs-tertiary-bg);
-        padding: .15rem .3rem;
-        border-radius: .25rem;
-      }
-
-      /* Lyng syntax highlighting palette (inspired by default GitHub/VS Code) */
-      /* Light theme */
-      .hl-kw  { color: #d73a49; font-weight: 600; }
-      .hl-ty  { color: #6f42c1; }
-      .hl-id  { color: #24292e; }
-      /* Declarations (semantic roles) */
-      .hl-fn  { color: #005cc5; font-weight: 600; }
-      .hl-class { color: #5a32a3; font-weight: 600; }
-      .hl-val { color: #1b7f5a; }
-      .hl-var { color: #1b7f5a; text-decoration: underline dotted currentColor; }
-      .hl-enumc { color: #b08800; font-weight: 600; }
-      .hl-param { color: #0969da; font-style: italic; }
-      .hl-num { color: #005cc5; }
-      .hl-str { color: #032f62; }
-      .hl-ch  { color: #032f62; }
-      .hl-rx  { color: #116329; }
-      .hl-cmt { color: #6a737d; font-style: italic; }
-      .hl-op  { color: #8250df; }
-      .hl-punc{ color: #57606a; }
-      .hl-lbl { color: #e36209; }
-      .hl-dir { color: #6f42c1; }
-      .hl-err { color: #b31d28; text-decoration: underline wavy #b31d28; }
-
-      /* Dark theme overrides (GitHub Dark-like) */
-      [data-bs-theme="dark"] .hl-id   { color: #c9d1d9; }
-      [data-bs-theme="dark"] .hl-op   { color: #d2a8ff; }
-      [data-bs-theme="dark"] .hl-punc { color: #8b949e; }
-      [data-bs-theme="dark"] .hl-kw   { color: #ff7b72; }
-      [data-bs-theme="dark"] .hl-ty   { color: #d2a8ff; }
-      [data-bs-theme="dark"] .hl-fn   { color: #79c0ff; font-weight: 700; }
-      [data-bs-theme="dark"] .hl-class{ color: #d2a8ff; font-weight: 700; }
-      [data-bs-theme="dark"] .hl-val  { color: #7ee787; }
-      [data-bs-theme="dark"] .hl-var  { color: #7ee787; text-decoration: underline dotted currentColor; }
-      [data-bs-theme="dark"] .hl-enumc{ color: #f2cc60; font-weight: 700; }
-      [data-bs-theme="dark"] .hl-param{ color: #a5d6ff; font-style: italic; }
-      [data-bs-theme="dark"] .hl-num  { color: #79c0ff; }
-      [data-bs-theme="dark"] .hl-str,
-      [data-bs-theme="dark"] .hl-ch   { color: #a5d6ff; }
-      [data-bs-theme="dark"] .hl-rx   { color: #7ee787; }
-      [data-bs-theme="dark"] .hl-cmt  { color: #8b949e; }
-      [data-bs-theme="dark"] .hl-lbl  { color: #ffa657; }
-      [data-bs-theme="dark"] .hl-dir  { color: #d2a8ff; }
-      [data-bs-theme="dark"] .hl-err  { color: #ffa198; text-decoration-color: #ffa198; }
-
-      /* Top-left corner ribbon for version label */
-      .corner-ribbon {
-        position: fixed;
-        /* Place below the fixed navbar (Bootstrap fixed-top ~ z-index: 1030) */
-        z-index: 1020; /* above content, below navbar */
-        top: var(--navbar-offset, 56px);
-        left: 0;
-        width: 242px; /* 10% narrower than 180px */
-        text-align: center;
-        /* Slightly asymmetric padding to visually center text within rotated band (desktop) */
-        /* Nudge text a bit lower on large screens */
-        padding: .42rem 0 .28rem;
-        font-weight: 600;
-        font-size: .75rem; /* make text smaller by default */
-        line-height: 1.1; /* stabilize vertical centering */
-        transform: translate(-52px, 10px) rotate(-45deg);
-        box-shadow: 0 0.25rem 0.5rem rgba(0,0,0,.2);
-        border: 1px solid rgba(0,0,0,.15);
-        pointer-events: none; /* decorative; don't block clicks underneath */
-      }
-      @media (max-width: 576px) {
-        .corner-ribbon {
-          width: 195px; /* 10% narrower than 150px */
-          transform: translate(-50px, 8px) rotate(-45deg);
-          font-size: .6rem; /* even smaller on phones */
-          padding: .32rem 0 .28rem; /* keep mobile text centered too */
+        /* Reserve space for fixed navbar and ensure in-page anchors don't end up hidden under it */
+        :root {
+            --navbar-offset: 56px;
         }
-      }
+
+        body {
+            /* Fallback padding; JS will keep this equal to the real navbar height */
+            /*padding-top: var(--navbar-offset);*/
+            /* Make native hash jumps account for the fixed header */
+            /*scroll-padding-top: calc(var(--navbar-offset) + 8px);*/
+        }
+
+        /* Also offset scroll for headings and any element targeted by an id */
+        .markdown-body h1,
+        .markdown-body h2,
+        .markdown-body h3,
+        .markdown-body h4,
+        .markdown-body h5,
+        .markdown-body h6,
+        [id] {
+            /*scroll-margin-top: calc(var(--navbar-offset) + 8px);*/
+        }
+
+        /* Unify markdown and page backgrounds with Bootstrap theme variables */
+        .markdown-body {
+            box-sizing: border-box;
+            min-width: 200px;
+            line-height: 1.6;
+            background: var(--bs-body-bg) !important;
+            color: var(--bs-body-color) !important;
+        }
+
+        .markdown-body > :first-child {
+            margin-top: 0 !important;
+        }
+
+        .markdown-body table {
+            margin: 1rem 0;
+        }
+
+        .markdown-body pre {
+            padding: .75rem;
+            border-radius: .375rem;
+            background: var(--bs-tertiary-bg);
+            border: 1px solid var(--bs-border-color);
+        }
+
+        /* Style only inline code, avoid affecting code blocks inside <pre> to prevent first-line extra indent */
+        .markdown-body :not(pre) > code:not([class]) {
+            background: var(--bs-tertiary-bg);
+            padding: .15rem .3rem;
+            border-radius: .25rem;
+        }
+
+        /* Lyng syntax highlighting palette (inspired by default GitHub/VS Code) */
+        /* Light theme */
+        .hl-kw {
+            color: #d73a49;
+            font-weight: 600;
+        }
+
+        .hl-ty {
+            color: #6f42c1;
+        }
+
+        .hl-id {
+            color: #24292e;
+        }
+
+        /* Declarations (semantic roles) */
+        .hl-fn {
+            color: #005cc5;
+            font-weight: 600;
+        }
+
+        .hl-class {
+            color: #5a32a3;
+            font-weight: 600;
+        }
+
+        .hl-val {
+            color: #1b7f5a;
+        }
+
+        .hl-var {
+            color: #1b7f5a;
+            text-decoration: underline dotted currentColor;
+        }
+
+        .hl-enumc {
+            color: #b08800;
+            font-weight: 600;
+        }
+
+        .hl-param {
+            color: #0969da;
+            font-style: italic;
+        }
+
+        .hl-num {
+            color: #005cc5;
+        }
+
+        .hl-str {
+            color: #032f62;
+        }
+
+        .hl-ch {
+            color: #032f62;
+        }
+
+        .hl-rx {
+            color: #116329;
+        }
+
+        .hl-cmt {
+            color: #6a737d;
+            font-style: italic;
+        }
+
+        .hl-op {
+            color: #8250df;
+        }
+
+        .hl-punc {
+            color: #57606a;
+        }
+
+        .hl-lbl {
+            color: #e36209;
+        }
+
+        .hl-dir {
+            color: #6f42c1;
+        }
+
+        .hl-err {
+            color: #b31d28;
+            text-decoration: underline wavy #b31d28;
+        }
+
+        /* Dark theme overrides (GitHub Dark-like) */
+        [data-bs-theme="dark"] .hl-id {
+            color: #c9d1d9;
+        }
+
+        [data-bs-theme="dark"] .hl-op {
+            color: #d2a8ff;
+        }
+
+        [data-bs-theme="dark"] .hl-punc {
+            color: #8b949e;
+        }
+
+        [data-bs-theme="dark"] .hl-kw {
+            color: #ff7b72;
+        }
+
+        [data-bs-theme="dark"] .hl-ty {
+            color: #d2a8ff;
+        }
+
+        [data-bs-theme="dark"] .hl-fn {
+            color: #79c0ff;
+            font-weight: 700;
+        }
+
+        [data-bs-theme="dark"] .hl-class {
+            color: #d2a8ff;
+            font-weight: 700;
+        }
+
+        [data-bs-theme="dark"] .hl-val {
+            color: #7ee787;
+        }
+
+        [data-bs-theme="dark"] .hl-var {
+            color: #7ee787;
+            text-decoration: underline dotted currentColor;
+        }
+
+        [data-bs-theme="dark"] .hl-enumc {
+            color: #f2cc60;
+            font-weight: 700;
+        }
+
+        [data-bs-theme="dark"] .hl-param {
+            color: #a5d6ff;
+            font-style: italic;
+        }
+
+        [data-bs-theme="dark"] .hl-num {
+            color: #79c0ff;
+        }
+
+        [data-bs-theme="dark"] .hl-str,
+        [data-bs-theme="dark"] .hl-ch {
+            color: #a5d6ff;
+        }
+
+        [data-bs-theme="dark"] .hl-rx {
+            color: #7ee787;
+        }
+
+        [data-bs-theme="dark"] .hl-cmt {
+            color: #8b949e;
+        }
+
+        [data-bs-theme="dark"] .hl-lbl {
+            color: #ffa657;
+        }
+
+        [data-bs-theme="dark"] .hl-dir {
+            color: #d2a8ff;
+        }
+
+        [data-bs-theme="dark"] .hl-err {
+            color: #ffa198;
+            text-decoration-color: #ffa198;
+        }
+
+        /* Top-left corner ribbon for version label */
+        .corner-ribbon {
+            position: fixed;
+            /* Place below the fixed navbar (Bootstrap fixed-top ~ z-index: 1030) */
+            z-index: 1020; /* above content, below navbar */
+            top: var(--navbar-offset, 56px);
+            left: 0;
+            width: 242px; /* 10% narrower than 180px */
+            text-align: center;
+            /* Slightly asymmetric padding to visually center text within rotated band (desktop) */
+            /* Nudge text a bit lower on large screens */
+            padding: .42rem 0 .28rem;
+            font-weight: 600;
+            font-size: .75rem; /* make text smaller by default */
+            line-height: 1.1; /* stabilize vertical centering */
+            transform: translate(-52px, 10px) rotate(-45deg);
+            box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, .2);
+            border: 1px solid rgba(0, 0, 0, .15);
+            pointer-events: none; /* decorative; don't block clicks underneath */
+        }
+
+        @media (max-width: 576px) {
+            .corner-ribbon {
+                width: 195px; /* 10% narrower than 150px */
+                transform: translate(-50px, 8px) rotate(-45deg);
+                font-size: .6rem; /* even smaller on phones */
+                padding: .32rem 0 .28rem; /* keep mobile text centered too */
+            }
+        }
     </style>
-  </head>
-  <body>
-    <!-- Top-left version ribbon -->
-    <div class="corner-ribbon bg-danger text-white">
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+    <!-- and it's easy to individually load additional languages -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/languages/go.min.js"></script>
+
+
+</head>
+<body>
+<!-- Top-left version ribbon -->
+<div class="corner-ribbon bg-danger text-white">
         <span style="margin-left: -5em">
             v1.0.6-SNAPSHOT
         </span>
-    </div>
-    <!-- Fixed top navbar for the whole site -->
-    <a href="#root" class="visually-hidden-focusable position-absolute top-0 start-0 m-2 px-2 py-1 bg-body border rounded">Skip to content</a>
-    <nav class="navbar navbar-expand-lg bg-body-tertiary fixed-top border-bottom" role="navigation" aria-label="Primary">
-      <div class="container-fluid">
+</div>
+<!-- Fixed top navbar for the whole site -->
+<a href="#root" class="visually-hidden-focusable position-absolute top-0 start-0 m-2 px-2 py-1 bg-body border rounded">Skip
+    to content</a>
+<nav class="navbar navbar-expand-lg bg-body-tertiary fixed-top border-bottom" role="navigation" aria-label="Primary">
+    <div class="container-fluid">
         <a class="navbar-brand d-flex align-items-center gap-2" href="#">
-          <!-- Inline SVG brand icon: λ with superscript y and subscript ng. Uses currentColor to match theme. -->
-          <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" role="img" aria-hidden="true">
-            <g fill="currentColor" color="inherit" font-family="'STIX Two Math', 'Cambria Math', 'Times New Roman', serif">
-              <!-- Main lambda -->
-              <text x="3" y="17" font-size="16" font-weight="700">λ</text>
-              <!-- Superscript y -->
-              <text x="11.2" y="8" font-size="10">y</text>
-            </g>
-          </svg>
-          Lyng
+            <!-- Inline SVG brand icon: λ with superscript y and subscript ng. Uses currentColor to match theme. -->
+            <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" role="img"
+                 aria-hidden="true">
+                <g fill="currentColor" color="inherit"
+                   font-family="'STIX Two Math', 'Cambria Math', 'Times New Roman', serif">
+                    <!-- Main lambda -->
+                    <text x="3" y="17" font-size="16" font-weight="700">λ</text>
+                    <!-- Superscript y -->
+                    <text x="11.2" y="8" font-size="10">y</text>
+                </g>
+            </svg>
+            Lyng
         </a>
         <button
-          class="navbar-toggler"
-          type="button"
-          data-bs-toggle="collapse"
-          data-bs-target="#topbarNav"
-          aria-controls="topbarNav"
-          aria-expanded="false"
-          aria-label="Toggle navigation"
+                class="navbar-toggler"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#topbarNav"
+                aria-controls="topbarNav"
+                aria-expanded="false"
+                aria-label="Toggle navigation"
         >
-          <span class="navbar-toggler-icon"></span>
+            <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="topbarNav">
-          <!-- Left-aligned main menu -->
-          <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-            <li class="nav-item dropdown">
-              <a class="nav-link dropdown-toggle" href="#/docs/Iterator.md" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                Documentation
-              </a>
-              <ul id="docsDropdownMenu" class="dropdown-menu">
-                <!-- Will be populated at runtime -->
-                <li><a class="dropdown-item" href="#/docs/tutorial.md" data-route="docs">Tutorial</a></li>
-                  <li><a class="dropdown-item" href="#/reference" data-route="reference">Reference</a></li>
-                  <li><hr class="dropdown-divider"></li>
+            <!-- Left-aligned main menu -->
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#/docs/Iterator.md" role="button"
+                       data-bs-toggle="dropdown" aria-expanded="false">
+                        Documentation
+                    </a>
+                    <ul id="docsDropdownMenu" class="dropdown-menu">
+                        <!-- Will be populated at runtime -->
+                        <li><a class="dropdown-item" href="#/docs/tutorial.md" data-route="docs">Tutorial</a></li>
+                        <li><a class="dropdown-item" href="#/reference" data-route="reference">Reference</a></li>
+                        <li>
+                            <hr class="dropdown-divider">
+                        </li>
 
-              </ul>
-            </li>
-            <!-- IDE support dropdown -->
-            <li class="nav-item dropdown">
-              <a class="nav-link dropdown-toggle" href="#/docs/idea_plugin.md" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                IDE support
-              </a>
-              <ul class="dropdown-menu">
-                <li>
-                  <a class="dropdown-item" href="#/docs/textmate_bundle.md" data-route="docs">Textmate bundle</a>
+                    </ul>
                 </li>
-                <li>
-                  <a class="dropdown-item" href="#/docs/idea_plugin.md" data-route="docs">IDEA plugin</a>
+                <!-- IDE support dropdown -->
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#/docs/idea_plugin.md" role="button"
+                       data-bs-toggle="dropdown" aria-expanded="false">
+                        IDE support
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li>
+                            <a class="dropdown-item" href="#/docs/textmate_bundle.md" data-route="docs">Textmate
+                                bundle</a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="#/docs/idea_plugin.md" data-route="docs">IDEA plugin</a>
+                        </li>
+                    </ul>
                 </li>
-              </ul>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="#/tryling" data-route="tryling">Try in browser</a>
-            </li>
-          </ul>
+                <li class="nav-item">
+                    <a class="nav-link" href="#/tryling" data-route="tryling">Try in browser</a>
+                </li>
+            </ul>
 
-          <!-- Right utilities: search, GitHub link -->
-          <div class="ms-auto d-flex align-items-center gap-2" style="min-width: 240px;">
-            <!-- Search widget with Bootstrap Icons magnifying glass -->
-            <form class="d-flex" role="search" onsubmit="return false;">
-              <div class="input-group position-relative" style="min-width: 280px;">
+            <!-- Right utilities: search, GitHub link -->
+            <div class="ms-auto d-flex align-items-center gap-2" style="min-width: 240px;">
+                <!-- Search widget with Bootstrap Icons magnifying glass -->
+                <form class="d-flex" role="search" onsubmit="return false;">
+                    <div class="input-group position-relative" style="min-width: 280px;">
                 <span class="input-group-text bg-transparent border-end-0">
                   <i class="bi bi-search"></i>
                 </span>
-                <input
-                  id="topSearch"
-                  class="form-control border-start-0"
-                  type="search"
-                  placeholder="Search"
-                  aria-label="Search"
-                />
-                <!-- Results dropdown (controlled by app code) -->
-                <div id="topSearchMenu" class="dropdown-menu w-100 shadow" style="max-height:60vh; overflow:auto; top: calc(100% + .25rem); left: 0;">
-                </div>
-              </div>
-            </form>
-            <a class="btn btn-sm btn-outline-secondary" href="https://gitea.sergeych.net/SergeychWorks/lyng" target="_blank" rel="noopener" aria-label="GitHub">
-              <i class="bi bi-git"></i>
-            </a>
-          </div>
+                        <input
+                                id="topSearch"
+                                class="form-control border-start-0"
+                                type="search"
+                                placeholder="Search"
+                                aria-label="Search"
+                        />
+                        <!-- Results dropdown (controlled by app code) -->
+                        <div id="topSearchMenu" class="dropdown-menu w-100 shadow"
+                             style="max-height:60vh; overflow:auto; top: calc(100% + .25rem); left: 0;">
+                        </div>
+                    </div>
+                </form>
+                <a class="btn btn-sm btn-outline-secondary" href="https://gitea.sergeych.net/SergeychWorks/lyng"
+                   target="_blank" rel="noopener" aria-label="GitHub">
+                    <i class="bi bi-git"></i>
+                </a>
+            </div>
         </div>
-      </div>
-    </nav>
+    </div>
+</nav>
 
-    <!-- App root; extra top padding so content is not hidden behind fixed navbar -->
-    <div id="root" class="pt-4" tabindex="-1" aria-live="polite" aria-atomic="false"></div>
+<!-- App root; extra top padding so content is not hidden behind fixed navbar -->
+<div id="root" class="pt-4" tabindex="-1" aria-live="polite" aria-atomic="false"></div>
 
-    <!-- App bundle (produced by Kotlin/JS). The Gradle config forces this name. -->
-    <script src="site.js"></script>
+<!-- App bundle (produced by Kotlin/JS). The Gradle config forces this name. -->
+<script src="site.js"></script>
 
-    <!-- Bootstrap 5.3 JS bundle (includes Popper) -->
-    <script
-      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
-      integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
-      crossorigin="anonymous"
-    ></script>
-    <script>
-      // Adjust body padding to account for fixed-top navbar height (handles dynamic font sizes)
-      (function () {
+<!-- Bootstrap 5.3 JS bundle (includes Popper) -->
+<script
+        src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+        crossorigin="anonymous"
+></script>
+<script>
+    // Adjust body padding to account for fixed-top navbar height (handles dynamic font sizes)
+    (function () {
         function adjustPadding() {
-          var nav = document.querySelector('.navbar.fixed-top');
-          if (!nav) return;
-          var h = nav.getBoundingClientRect().height;
-          var px = Math.ceil(h) + 'px';
-          // Keep legacy inline padding for older browsers
-          document.body.style.paddingTop = px;
-          // And expose as a CSS variable used by scroll-padding/scroll-margin rules
-          // document.documentElement.style.setProperty('--navbar-offset', px);
+            var nav = document.querySelector('.navbar.fixed-top');
+            if (!nav) return;
+            var h = nav.getBoundingClientRect().height;
+            var px = Math.ceil(h) + 'px';
+            // Keep legacy inline padding for older browsers
+            document.body.style.paddingTop = px;
+            // And expose as a CSS variable used by scroll-padding/scroll-margin rules
+            // document.documentElement.style.setProperty('--navbar-offset', px);
         }
+
         window.addEventListener('load', adjustPadding);
         window.addEventListener('resize', adjustPadding);
         // Also listen to Bootstrap collapse events which may change navbar height on small screens
         document.addEventListener('shown.bs.collapse', adjustPadding);
         document.addEventListener('hidden.bs.collapse', adjustPadding);
-        
+
         // Basic active state management for topbar links
         function updateActive() {
-          var hash = location.hash;
-          // Clear previous actives
-          document.querySelectorAll('#topbarNav .nav-link').forEach(function(a){
-            a.classList.remove('active');
-            a.removeAttribute('aria-current');
-          });
-          // Mark active for simple routes
-          var activeLink = null;
-          if (!hash || hash === '#' || hash === '#/') {
-            activeLink = document.querySelector('#topbarNav .nav-link[data-route="home"]');
-          } else if (hash.startsWith('#/docs/')) {
-            // Mark Docs menu root as active
-            activeLink = document.querySelector('#topbarNav .nav-link.dropdown-toggle');
-          } else if (hash.startsWith('#/reference')) {
-            activeLink = document.querySelector('#topbarNav .nav-link[data-route="reference"]');
-          }
-          if (activeLink) {
-            activeLink.classList.add('active');
-            activeLink.setAttribute('aria-current', 'page');
-          }
+            var hash = location.hash;
+            // Clear previous actives
+            document.querySelectorAll('#topbarNav .nav-link').forEach(function (a) {
+                a.classList.remove('active');
+                a.removeAttribute('aria-current');
+            });
+            // Mark active for simple routes
+            var activeLink = null;
+            if (!hash || hash === '#' || hash === '#/') {
+                activeLink = document.querySelector('#topbarNav .nav-link[data-route="home"]');
+            } else if (hash.startsWith('#/docs/')) {
+                // Mark Docs menu root as active
+                activeLink = document.querySelector('#topbarNav .nav-link.dropdown-toggle');
+            } else if (hash.startsWith('#/reference')) {
+                activeLink = document.querySelector('#topbarNav .nav-link[data-route="reference"]');
+            }
+            if (activeLink) {
+                activeLink.classList.add('active');
+                activeLink.setAttribute('aria-current', 'page');
+            }
         }
+
         window.addEventListener('hashchange', updateActive);
         window.addEventListener('load', updateActive);
-      })();
-    </script>
-  </body>
-  </html>
+    }
+
+
+
+    )();
+
+    // Set up mutation observer for Kotlin code blocks
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            mutation.addedNodes.forEach((node) => {
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                    const kotlinBlocks = node.querySelectorAll('code.language-kotlin');
+                    kotlinBlocks.forEach((block) => {
+                        console.log('Found Kotlin code block:', block.textContent);
+                        hljs.highlightElement(block);
+                    });
+                }
+            });
+        });
+    });
+
+    // Start observing document body for changes
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+</script>
+</body>
+</html>
