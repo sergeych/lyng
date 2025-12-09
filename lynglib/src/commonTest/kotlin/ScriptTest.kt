@@ -4056,4 +4056,18 @@ class ScriptTest {
         """.trimIndent()
         )
     }
+
+    @Test
+    fun testHangOnPrintlnInMethods() = runTest {
+        eval("""
+            class T(someList) {
+                fun f() {
+                    val x = [...someList]
+                    println(x)
+                }
+            }
+            T([1,2]).f()
+        """)
+    }
+
 }

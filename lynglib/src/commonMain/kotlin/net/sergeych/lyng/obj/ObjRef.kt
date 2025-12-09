@@ -1351,15 +1351,21 @@ class FastLocalVarRef(
         if (owner.frameId != cachedOwnerFrameId) return false
         // Ensure owner is an ancestor (or same) of current
         var s: Scope? = current
+        var guard = 0
         while (s != null) {
             if (s === owner) return true
-            s = s.parent
+            val next = s.parent
+            // Defensive: break on self-parent or pathological cycles
+            if (next === s) return false
+            s = next
+            if (++guard > 4096) return false
         }
         return false
     }
 
     private fun resolveSlotInAncestry(scope: Scope): Int {
         var s: Scope? = scope
+        var guard = 0
         while (s != null) {
             val idx = s.getSlotIndexOf(name)
             if (idx != null) {
@@ -1368,7 +1374,10 @@ class FastLocalVarRef(
                 cachedSlot = idx
                 return idx
             }
-            s = s.parent
+            val next = s.parent
+            if (next === s) return -1
+            s = next
+            if (++guard > 4096) return -1
         }
         return -1
     }
@@ -1387,16 +1396,26 @@ class FastLocalVarRef(
         // Try per-frame local binding maps in the ancestry first (locals declared in frames)
         run {
             var s: Scope? = scope
+            var guard = 0
             while (s != null) {
                 s.localBindings[name]?.let { return it }
-                s = s.parent
+                val next = s.parent
+                if (next === s) break
+                s = next
+                if (++guard > 4096) break
             }
         }
         // Try to find a direct local binding in the current ancestry (without invoking name resolution that may prefer fields)
-        var s: Scope? = scope
-        while (s != null) {
-            s.objects[name]?.let { return it }
-            s = s.parent
+        run {
+            var s: Scope? = scope
+            var guard = 0
+            while (s != null) {
+                s.objects[name]?.let { return it }
+                val next = s.parent
+                if (next === s) break
+                s = next
+                if (++guard > 4096) break
+            }
         }
         // Fallback to standard name lookup (locals or closure chain) if the slot owner changed across suspension
         scope[name]?.let { return it }
@@ -1413,16 +1432,26 @@ class FastLocalVarRef(
         // Try per-frame local binding maps in the ancestry first
         run {
             var s: Scope? = scope
+            var guard = 0
             while (s != null) {
                 s.localBindings[name]?.let { return it.value }
-                s = s.parent
+                val next = s.parent
+                if (next === s) break
+                s = next
+                if (++guard > 4096) break
             }
         }
         // Try to find a direct local binding in the current ancestry first
-        var s: Scope? = scope
-        while (s != null) {
-            s.objects[name]?.let { return it.value }
-            s = s.parent
+        run {
+            var s: Scope? = scope
+            var guard = 0
+            while (s != null) {
+                s.objects[name]?.let { return it.value }
+                val next = s.parent
+                if (next === s) break
+                s = next
+                if (++guard > 4096) break
+            }
         }
         // Fallback to standard name lookup (locals or closure chain)
         scope[name]?.let { return it.value }
@@ -1443,6 +1472,7 @@ class FastLocalVarRef(
         // Try per-frame local binding maps in the ancestry first
         run {
             var s: Scope? = scope
+            var guard = 0
             while (s != null) {
                 val rec = s.localBindings[name]
                 if (rec != null) {
@@ -1450,7 +1480,10 @@ class FastLocalVarRef(
                     rec.value = newValue
                     return
                 }
-                s = s.parent
+                val next = s.parent
+                if (next === s) break
+                s = next
+                if (++guard > 4096) break
             }
         }
         // Fallback to standard name lookup
