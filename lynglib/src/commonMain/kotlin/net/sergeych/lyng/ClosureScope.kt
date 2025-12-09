@@ -38,35 +38,80 @@ class ClosureScope(val callScope: Scope, val closureScope: Scope) :
     }
 
     override fun get(name: String): ObjRecord? {
+        // Fast-path built-ins
+        if (name == "this") return thisObj.asReadonly
+
         // Priority:
         // 1) Locals and arguments declared in this lambda frame (including values defined before suspension)
-        // 2) Instance/class members of the captured receiver (`closureScope.thisObj`), e.g., fields like `coll`, `factor`
-        // 3) Symbols from the captured closure scope (its locals and parents)
+        // 2) Instance/class members of the captured receiver (`closureScope.thisObj`)
+        // 3) Symbols from the captured closure scope chain (locals/parents), ignoring nested ClosureScope overrides
         // 4) Instance members of the caller's `this` (e.g., FlowBuilder.emit)
-        // 5) Fallback to the standard chain (this frame -> parent (callScope) -> class members)
+        // 5) Symbols from the caller chain (locals/parents), ignoring nested ClosureScope overrides
+        // 6) Special fallback for module pseudo-symbols (e.g., __PACKAGE__)
 
-        // First, prefer locals/arguments bound in this frame
+        // 1) Locals/arguments in this closure frame
         super.objects[name]?.let { return it }
+        super.localBindings[name]?.let { return it }
 
-        // Prefer instance fields/methods declared on the captured receiver:
-        // First, resolve real instance fields stored in the instance scope (constructor vars like `coll`, `factor`)
+        // 2) Members on the captured receiver instance
         (closureScope.thisObj as? net.sergeych.lyng.obj.ObjInstance)
             ?.instanceScope
             ?.objects
             ?.get(name)
             ?.let { return it }
-
-        // Then, try class-declared members (methods/properties declared in the class body)
         closureScope.thisObj.objClass.getInstanceMemberOrNull(name)?.let { return it }
 
-        // Then delegate to the full closure scope chain (locals, parents, etc.)
-        closureScope.get(name)?.let { return it }
+        // 3) Closure scope chain (locals/parents + members), ignore ClosureScope overrides to prevent recursion
+        closureScope.chainLookupWithMembers(name)?.let { return it }
 
-        // Allow resolving instance members of the caller's `this` (e.g., FlowBuilder.emit)
+        // 4) Caller `this` members
         callScope.thisObj.objClass.getInstanceMemberOrNull(name)?.let { return it }
 
-        // Fallback to the standard lookup chain: this frame -> parent (callScope) -> class members
-        return super.get(name)
+        // 5) Caller chain (locals/parents + members)
+        callScope.chainLookupWithMembers(name)?.let { return it }
+
+        // 6) Module pseudo-symbols (e.g., __PACKAGE__) — walk caller ancestry and query ModuleScope directly
+        if (name.startsWith("__")) {
+            var s: Scope? = callScope
+            val visited = HashSet<Long>(4)
+            while (s != null) {
+                if (!visited.add(s.frameId)) break
+                if (s is ModuleScope) return s.get(name)
+                s = s.parent
+            }
+        }
+
+        // 7) Direct module/global fallback: try to locate nearest ModuleScope and check its own locals
+        fun lookupInModuleAncestry(from: Scope): ObjRecord? {
+            var s: Scope? = from
+            val visited = HashSet<Long>(4)
+            while (s != null) {
+                if (!visited.add(s.frameId)) break
+                if (s is ModuleScope) {
+                    s.objects[name]?.let { return it }
+                    s.localBindings[name]?.let { return it }
+                    // check immediate parent (root scope) locals/constants for globals like `delay`
+                    val p = s.parent
+                    if (p != null) {
+                        p.objects[name]?.let { return it }
+                        p.localBindings[name]?.let { return it }
+                        p.thisObj.objClass.getInstanceMemberOrNull(name)?.let { return it }
+                    }
+                    return null
+                }
+                s = s.parent
+            }
+            return null
+        }
+
+        lookupInModuleAncestry(closureScope)?.let { return it }
+        lookupInModuleAncestry(callScope)?.let { return it }
+
+        // 8) Global root scope constants/functions (e.g., delay, yield) via current import provider
+        runCatching { this.currentImportProvider.rootScope.objects[name] }.getOrNull()?.let { return it }
+
+        // Final safe fallback: base scope lookup from this frame walking raw parents
+        return baseGetIgnoreClosure(name)
     }
 }
 

@@ -117,25 +117,30 @@ kotlin {
 }
 
 // ---- Build-time generation of stdlib text from .lyng files into a Kotlin constant ----
-// The .lyng source of the stdlib lives here (module-relative path):
-val lyngStdlibDir = layout.projectDirectory.dir("stdlib/lyng")
-// The generated Kotlin source will be placed here and added to commonMain sources:
-val generatedLyngStdlibDir = layout.buildDirectory.dir("generated/source/lyngStdlib/commonMain/kotlin")
+// Implemented as a proper task type compatible with Gradle Configuration Cache
 
-val generateLyngStdlib by tasks.registering {
-    group = "build"
-    description = "Generate Kotlin source with embedded lyng stdlib text"
-    inputs.dir(lyngStdlibDir)
-    outputs.dir(generatedLyngStdlibDir)
-    // Simpler: opt out of configuration cache for this ad-hoc generator task
-    notCompatibleWithConfigurationCache("Uses dynamic file IO in doLast; trivial generator")
+abstract class GenerateLyngStdlib : DefaultTask() {
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val sourceDir: DirectoryProperty
 
-    doLast {
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun generate() {
         val targetPkg = "net.sergeych.lyng.stdlib_included"
-        val targetDir = generatedLyngStdlibDir.get().asFile.resolve(targetPkg.replace('.', '/'))
+        val pkgPath = targetPkg.replace('.', '/')
+        val outBase = outputDir.get().asFile
+        val targetDir = outBase.resolve(pkgPath)
         targetDir.mkdirs()
 
-        val files = lyngStdlibDir.asFileTree.matching { include("**/*.lyng") }.files.sortedBy { it.name }
+        val srcDir = sourceDir.get().asFile
+        val files = srcDir.walkTopDown()
+            .filter { it.isFile && it.extension == "lyng" }
+            .sortedBy { it.name }
+            .toList()
+
         val content = if (files.isEmpty()) "" else buildString {
             files.forEachIndexed { idx, f ->
                 val text = f.readText()
@@ -144,13 +149,12 @@ val generateLyngStdlib by tasks.registering {
             }
         }
 
-        // Emit as a regular quoted Kotlin string to avoid triple-quote edge cases
         fun escapeForQuoted(s: String): String = buildString {
             for (ch in s) when (ch) {
                 '\\' -> append("\\\\")
                 '"' -> append("\\\"")
                 '\n' -> append("\\n")
-                '\r' -> {} // drop CR
+                '\r' -> {}
                 '\t' -> append("\\t")
                 else -> append(ch)
             }
@@ -166,6 +170,18 @@ val generateLyngStdlib by tasks.registering {
 
         targetDir.resolve("root_lyng.generated.kt").writeText(sb.toString())
     }
+}
+
+// The .lyng source of the stdlib lives here (module-relative path):
+val lyngStdlibDir = layout.projectDirectory.dir("stdlib/lyng")
+// The generated Kotlin source will be placed here and added to commonMain sources:
+val generatedLyngStdlibDir = layout.buildDirectory.dir("generated/source/lyngStdlib/commonMain/kotlin")
+
+val generateLyngStdlib by tasks.registering(GenerateLyngStdlib::class) {
+    group = "build"
+    description = "Generate Kotlin source with embedded lyng stdlib text"
+    sourceDir.set(lyngStdlibDir)
+    outputDir.set(generatedLyngStdlibDir)
 }
 
 // Add the generated directory to commonMain sources

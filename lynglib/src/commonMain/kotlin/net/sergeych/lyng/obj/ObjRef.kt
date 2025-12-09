@@ -1240,7 +1240,28 @@ class LocalVarRef(private val name: String, private val atPos: Pos) : ObjRef {
             if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.localVarPicMiss++
             // 2) Fallback to current-scope object or field on `this`
             scope[name]?.let { return it }
-            return scope.thisObj.readField(scope, name)
+            // 2a) Try nearest ClosureScope's closure ancestry explicitly
+            run {
+                var s: Scope? = scope
+                val visited = HashSet<Long>(4)
+                while (s != null) {
+                    if (!visited.add(s.frameId)) break
+                    if (s is ClosureScope) {
+                        s.closureScope.chainLookupWithMembers(name)?.let { return it }
+                    }
+                    s = s.parent
+                }
+            }
+            // 2b) Try raw ancestry local/binding lookup (cycle-safe), including slots in parents
+            scope.chainLookupIgnoreClosure(name)?.let { return it }
+            try {
+                return scope.thisObj.readField(scope, name)
+            } catch (e: ExecutionError) {
+                // Map missing symbol during unqualified lookup to SymbolNotFound (SymbolNotDefinedException)
+                // to preserve legacy behavior expected by tests.
+                if ((e.message ?: "").contains("no such field: $name")) scope.raiseSymbolNotFound(name)
+                throw e
+            }
         }
         val hit = (cachedFrameId == scope.frameId && cachedSlot >= 0 && cachedSlot < scope.slotCount())
         val slot = if (hit) cachedSlot else resolveSlot(scope)
@@ -1253,7 +1274,24 @@ class LocalVarRef(private val name: String, private val atPos: Pos) : ObjRef {
         if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.localVarPicMiss++
         // 2) Fallback name in scope or field on `this`
         scope[name]?.let { return it }
-        return scope.thisObj.readField(scope, name)
+        run {
+            var s: Scope? = scope
+            val visited = HashSet<Long>(4)
+            while (s != null) {
+                if (!visited.add(s.frameId)) break
+                if (s is ClosureScope) {
+                    s.closureScope.chainLookupWithMembers(name)?.let { return it }
+                }
+                s = s.parent
+            }
+        }
+        scope.chainLookupIgnoreClosure(name)?.let { return it }
+        try {
+            return scope.thisObj.readField(scope, name)
+        } catch (e: ExecutionError) {
+            if ((e.message ?: "").contains("no such field: $name")) scope.raiseSymbolNotFound(name)
+            throw e
+        }
     }
 
     override suspend fun evalValue(scope: Scope): Obj {
@@ -1262,14 +1300,48 @@ class LocalVarRef(private val name: String, private val atPos: Pos) : ObjRef {
             scope.getSlotIndexOf(name)?.let { return scope.getSlotRecord(it).value }
             // fallback to current-scope object or field on `this`
             scope[name]?.let { return it.value }
-            return scope.thisObj.readField(scope, name).value
+            run {
+                var s: Scope? = scope
+                val visited = HashSet<Long>(4)
+                while (s != null) {
+                    if (!visited.add(s.frameId)) break
+                    if (s is ClosureScope) {
+                        s.closureScope.chainLookupWithMembers(name)?.let { return it.value }
+                    }
+                    s = s.parent
+                }
+            }
+            scope.chainLookupIgnoreClosure(name)?.let { return it.value }
+            return try {
+                scope.thisObj.readField(scope, name).value
+            } catch (e: ExecutionError) {
+                if ((e.message ?: "").contains("no such field: $name")) scope.raiseSymbolNotFound(name)
+                throw e
+            }
         }
         val hit = (cachedFrameId == scope.frameId && cachedSlot >= 0 && cachedSlot < scope.slotCount())
         val slot = if (hit) cachedSlot else resolveSlot(scope)
         if (slot >= 0) return scope.getSlotRecord(slot).value
         // Fallback name in scope or field on `this`
         scope[name]?.let { return it.value }
-        return scope.thisObj.readField(scope, name).value
+        run {
+            var s: Scope? = scope
+            val visited = HashSet<Long>(4)
+            while (s != null) {
+                if (!visited.add(s.frameId)) break
+                if (s is ClosureScope) {
+                    s.closureScope.chainLookupWithMembers(name)?.let { return it.value }
+                }
+                s = s.parent
+            }
+        }
+        scope.chainLookupIgnoreClosure(name)?.let { return it.value }
+        return try {
+            scope.thisObj.readField(scope, name).value
+        } catch (e: ExecutionError) {
+            if ((e.message ?: "").contains("no such field: $name")) scope.raiseSymbolNotFound(name)
+            throw e
+        }
     }
 
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
@@ -1286,6 +1358,26 @@ class LocalVarRef(private val name: String, private val atPos: Pos) : ObjRef {
                 else scope.raiseError("Cannot assign to immutable value")
                 return
             }
+            run {
+                var s: Scope? = scope
+                val visited = HashSet<Long>(4)
+                while (s != null) {
+                    if (!visited.add(s.frameId)) break
+                    if (s is ClosureScope) {
+                        s.closureScope.chainLookupWithMembers(name)?.let { stored ->
+                            if (stored.isMutable) stored.value = newValue
+                            else scope.raiseError("Cannot assign to immutable value")
+                            return
+                        }
+                    }
+                    s = s.parent
+                }
+            }
+            scope.chainLookupIgnoreClosure(name)?.let { stored ->
+                if (stored.isMutable) stored.value = newValue
+                else scope.raiseError("Cannot assign to immutable value")
+                return
+            }
             // Fallback: write to field on `this`
             scope.thisObj.writeField(scope, name, newValue)
             return
@@ -1298,6 +1390,26 @@ class LocalVarRef(private val name: String, private val atPos: Pos) : ObjRef {
             return
         }
         scope[name]?.let { stored ->
+            if (stored.isMutable) stored.value = newValue
+            else scope.raiseError("Cannot assign to immutable value")
+            return
+        }
+        run {
+            var s: Scope? = scope
+            val visited = HashSet<Long>(4)
+            while (s != null) {
+                if (!visited.add(s.frameId)) break
+                if (s is ClosureScope) {
+                    s.closureScope.chainLookupWithMembers(name)?.let { stored ->
+                        if (stored.isMutable) stored.value = newValue
+                        else scope.raiseError("Cannot assign to immutable value")
+                        return
+                    }
+                }
+                s = s.parent
+            }
+        }
+        scope.chainLookupIgnoreClosure(name)?.let { stored ->
             if (stored.isMutable) stored.value = newValue
             else scope.raiseError("Cannot assign to immutable value")
             return

@@ -62,6 +62,108 @@ open class Scope(
      */
     internal val localBindings: MutableMap<String, ObjRecord> = mutableMapOf()
 
+    /** Debug helper: ensure assigning [candidateParent] does not create a structural cycle. */
+    private fun ensureNoCycle(candidateParent: Scope?) {
+        if (candidateParent == null) return
+        var s: Scope? = candidateParent
+        var hops = 0
+        while (s != null && hops++ < 1024) {
+            if (s === this) {
+                // In production we silently ignore; for debugging throw an error to signal misuse
+                throw IllegalStateException("cycle detected in scope parent chain assignment")
+            }
+            s = s.parent
+        }
+    }
+
+    /**
+     * Internal lookup helpers that deliberately avoid invoking overridden `get` implementations
+     * (notably in ClosureScope) to prevent accidental ping-pong and infinite recursion across
+     * intertwined closure frames. They traverse the plain parent chain and consult only locals
+     * and bindings of each frame. Instance/class member fallback must be decided by the caller.
+     */
+    private fun tryGetLocalRecord(s: Scope, name: String): ObjRecord? {
+        s.objects[name]?.let { return it }
+        s.localBindings[name]?.let { return it }
+        s.getSlotIndexOf(name)?.let { return s.getSlotRecord(it) }
+        return null
+    }
+
+    internal fun chainLookupIgnoreClosure(name: String): ObjRecord? {
+        var s: Scope? = this
+        // use frameId to detect unexpected structural cycles in the parent chain
+        val visited = HashSet<Long>(4)
+        while (s != null) {
+            if (!visited.add(s.frameId)) return null
+            tryGetLocalRecord(s, name)?.let { return it }
+            s = s.parent
+        }
+        return null
+    }
+
+    /**
+     * Perform base Scope.get semantics for this frame without delegating into parent.get
+     * virtual dispatch. This checks:
+     *  - locals/bindings in this frame
+     *  - walks raw parent chain for locals/bindings (ignoring ClosureScope-specific overrides)
+     *  - finally falls back to this frame's `thisObj` instance/class members
+     */
+    internal fun baseGetIgnoreClosure(name: String): ObjRecord? {
+        // 1) locals/bindings in this frame
+        tryGetLocalRecord(this, name)?.let { return it }
+        // 2) walk parents for plain locals/bindings only
+        var s = parent
+        val visited = HashSet<Long>(4)
+        while (s != null) {
+            if (!visited.add(s.frameId)) return null
+            tryGetLocalRecord(s, name)?.let { return it }
+            s = s.parent
+        }
+        // 3) fallback to instance/class members of this frame's thisObj
+        return thisObj.objClass.getInstanceMemberOrNull(name)
+    }
+
+    /**
+     * Walk the ancestry starting from this scope and try to resolve [name] against:
+     *  - locals/bindings of each frame
+     *  - then instance/class members of each frame's `thisObj`.
+     * This completely avoids invoking overridden `get` implementations, preventing
+     * ping-pong recursion between `ClosureScope` frames.
+     */
+    internal fun chainLookupWithMembers(name: String): ObjRecord? {
+        var s: Scope? = this
+        val visited = HashSet<Long>(4)
+        while (s != null) {
+            if (!visited.add(s.frameId)) return null
+            tryGetLocalRecord(s, name)?.let { return it }
+            s.thisObj.objClass.getInstanceMemberOrNull(name)?.let { return it }
+            s = s.parent
+        }
+        return null
+    }
+
+    /**
+     * Create a non-pooled snapshot of this scope suitable for capturing as a closure environment.
+     * Copies locals, slots, and localBindings; preserves parent chain and class context.
+     */
+    fun snapshotForClosure(): Scope {
+        val snap = Scope(parent, args, pos, thisObj)
+        snap.currentClassCtx = this.currentClassCtx
+        // copy locals and bindings
+        snap.objects.putAll(this.objects)
+        snap.localBindings.putAll(this.localBindings)
+        // copy slots map preserving indices
+        if (this.slotCount() > 0) {
+            var i = 0
+            while (i < this.slotCount()) {
+                val rec = this.getSlotRecord(i)
+                snap.allocateSlotFor(this.nameToSlot.entries.firstOrNull { it.value == i }?.key ?: "slot${'$'}i", rec)
+                i++
+            }
+        }
+        return snap
+    }
+
     /**
      * Hint internal collections to reduce reallocations for upcoming parameter/local assignments.
      * Only effective for ArrayList-backed slots; maps are left as-is (rehashed lazily by JVM).
@@ -200,6 +302,7 @@ open class Scope(
      * Clears locals and slots, assigns new frameId, and sets parent/args/pos/thisObj.
      */
     fun resetForReuse(parent: Scope?, args: Arguments, pos: Pos, thisObj: Obj) {
+        ensureNoCycle(parent)
         this.parent = parent
         this.args = args
         this.pos = pos
@@ -220,7 +323,10 @@ open class Scope(
      * Creates a new child scope using the provided arguments and optional `thisObj`.
      */
     fun createChildScope(pos: Pos, args: Arguments = Arguments.EMPTY, newThisObj: Obj? = null): Scope =
-        Scope(this, args, pos, newThisObj ?: thisObj).also { it.reserveLocalCapacity(args.list.size + 4) }
+        Scope(this, args, pos, newThisObj ?: thisObj).also {
+            it.ensureNoCycle(it.parent)
+            it.reserveLocalCapacity(args.list.size + 4)
+        }
 
     /**
      * Execute a block inside a child frame. Guarded for future pooling via [PerfFlags.SCOPE_POOL].
@@ -249,7 +355,7 @@ open class Scope(
      * @return A new instance of [Scope] initialized with the specified arguments and `thisObj`.
      */
     fun createChildScope(args: Arguments = Arguments.EMPTY, newThisObj: Obj? = null): Scope =
-        Scope(this, args, pos, newThisObj ?: thisObj)
+        Scope(this, args, pos, newThisObj ?: thisObj).also { it.ensureNoCycle(it.parent) }
 
     /**
      * @return A child scope with the same arguments, position and [thisObj]

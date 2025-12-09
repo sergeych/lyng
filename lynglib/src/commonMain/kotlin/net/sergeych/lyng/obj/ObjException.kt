@@ -198,6 +198,10 @@ open class ObjException(
             )) {
                 scope.addConst(name, getOrCreateExceptionClass(name))
             }
+            // Backward compatibility alias used in older tests/docs
+            val snd = getOrCreateExceptionClass("SymbolNotDefinedException")
+            scope.addConst("SymbolNotFound", snd)
+            existingErrorClasses["SymbolNotFound"] = snd
         }
     }
 }

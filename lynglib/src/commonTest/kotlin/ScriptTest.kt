@@ -61,6 +61,74 @@ class ScriptTest {
         println("version = ${LyngVersion}")
     }
 
+    @Test
+    fun testClosureSeesCallerLocalsInLaunch() = runTest {
+        val scope = Script.newScope()
+        val res = scope.eval(
+            """
+            var counter = 0
+            val d = launch {
+                val c = counter
+                delay(1)
+                counter = c + 1
+            }
+            d.await()
+            counter
+            """.trimIndent()
+        )
+        assertEquals(1L, (res as ObjInt).value)
+    }
+
+    @Test
+    fun testClosureResolvesGlobalsInLaunch() = runTest {
+        val scope = Script.newScope()
+        val res = scope.eval(
+            """
+            val d = launch {
+                delay(1)
+                yield()
+            }
+            d.await()
+            42
+            """.trimIndent()
+        )
+        assertEquals(42L, (res as ObjInt).value)
+    }
+
+    @Test
+    fun testClosureSeesModulePseudoSymbol() = runTest {
+        val scope = Script.newScope()
+        val res = scope.eval(
+            """
+            val s = { __PACKAGE__ }
+            s()
+            """.trimIndent()
+        )
+        // __PACKAGE__ is a string; just ensure it's a string and non-empty
+        assertTrue(res is ObjString && res.value.isNotEmpty())
+    }
+
+    @Test
+    fun testNoInfiniteRecursionOnUnknownInNestedClosure() = runTest {
+        val scope = Script.newScope()
+        withTimeout(1.seconds) {
+            // Access an unknown symbol inside nested closures; should throw quickly, not hang
+            try {
+                scope.eval(
+                    """
+                    val f = { { unknown_symbol_just_for_test } }
+                    f()()
+                    """.trimIndent()
+                )
+                fail("Expected exception not thrown")
+            } catch (_: ExecutionError) {
+                // ok
+            } catch (_: ScriptError) {
+                // ok
+            }
+        }
+    }
+
     // --- Helpers to test iterator cancellation semantics ---
     class ObjTestIterable : Obj() {
 
@@ -4067,6 +4135,27 @@ class ScriptTest {
                 }
             }
             T([1,2]).f()
+        """)
+    }
+
+    @Test
+    fun testHangOnNonexistingMethod() = runTest {
+        eval("""
+            class T(someList) {
+                fun f() {
+                    nonExistingMethod()
+                }
+            }
+            val t = T([1,2])
+            try {
+            for( i in 1..10 ) {
+                    t.f()
+                }
+            }
+            catch(t: SymbolNotFound) {
+                println(t::class)
+                // ok
+            }
         """)
     }
 
