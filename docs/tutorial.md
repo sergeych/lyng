@@ -6,7 +6,7 @@ In other word, the code usually works as expected when you see it. So, nothing u
 
 __Other documents to read__ maybe after this one:
 
-- [Advanced topics](advanced_topics.md), [declaring arguments](declaring_arguments.md)
+- [Advanced topics](advanced_topics.md), [declaring arguments](declaring_arguments.md), [Scopes and Closures](scopes_and_closures.md)
 - [OOP notes](OOP.md), [exception handling](exceptions_handling.md)
 - [math in Lyng](math.md), [the `when` statement](when.md)
 - [time](time.md) and [parallelism](parallelism.md)

@@ -2,6 +2,11 @@
 
 ### Unreleased
 
+- Docs: Scopes and Closures guidance
+  - New page: `docs/scopes_and_closures.md` detailing `ClosureScope` resolution order, recursion‑safe helpers (`chainLookupIgnoreClosure`, `chainLookupWithMembers`, `baseGetIgnoreClosure`), cycle prevention, and capturing lexical environments for callbacks (`snapshotForClosure`).
+  - Updated: `docs/advanced_topics.md` (link to the new page), `docs/parallelism.md` (closures in `launch`/`flow`), `docs/OOP.md` (visibility from closures with preserved `currentClassCtx`), `docs/exceptions_handling.md` (compatibility alias `SymbolNotFound`).
+  - Tutorial: added quick link to Scopes and Closures.
+
 - IDEA plugin: Lightweight autocompletion (experimental)
   - Global completion: local declarations, in‑scope parameters, imported modules, and stdlib symbols.
   - Member completion: after a dot, suggests only members of the inferred receiver type (incl. chained calls like `Path(".." ).lines().` → `Iterator` methods). No global identifiers appear after a dot.

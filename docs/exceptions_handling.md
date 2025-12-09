@@ -169,3 +169,18 @@ _this functionality is not yet released_
 | UnknownException           | unexpected kotlin exception caught                    |
 |                            |                                                       |
 
+
+### Symbol resolution errors
+
+For compatibility, `SymbolNotFound` is an alias of `SymbolNotDefinedException`. You can catch either name in examples and tests.
+
+Example:
+
+```lyng
+try {
+    nonExistingMethod()
+}
+catch(e: SymbolNotFound) {
+    // handle
+}
+```

@@ -221,3 +221,22 @@ Lyng includes an optional optimization for function/method calls on JVM: scope f
 - Expected effect (from our JVM micro‑benchmarks): in deep call loops, enabling pooling reduced total time by about 1.38× in a dedicated pooling benchmark; mileage may vary depending on workload.
 
 Future work: introduce thread‑safe pooling (e.g., per‑thread pools or confinement strategies) before considering enabling it by default in multi‑threaded environments.
+
+### Closures inside coroutine helpers (launch/flow)
+
+Closures executed by `launch { ... }` and `flow { ... }` resolve names using the `ClosureScope` rules:
+
+1. Closure frame locals/arguments
+2. Captured receiver instance/class members
+3. Closure ancestry locals + each frame’s `this` members (cycle‑safe)
+4. Caller `this` members
+5. Caller ancestry locals + each frame’s `this` members (cycle‑safe)
+6. Module pseudo‑symbols (e.g., `__PACKAGE__`)
+7. Direct module/global fallback (nearest `ModuleScope` and its parent/root)
+
+Implications:
+- Outer locals (e.g., `counter`) stay visible across suspension points.
+- Global helpers like `delay(ms)` and `yield()` are available from inside closures.
+- If you write your own async helpers, execute user lambdas under `ClosureScope(callScope, capturedCreatorScope)` and avoid manual ancestry walking.
+
+See also: [Scopes and Closures: resolution and safety](scopes_and_closures.md)

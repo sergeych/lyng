@@ -158,3 +158,9 @@ Function annotation can have more args specified at call time. There arguments m
     >>> void
 
 [parallelism]: parallelism.md
+
+## Scopes and Closures: resolution and safety
+
+Closures and dynamic scope graphs require care to avoid accidental recursion and to keep name resolution predictable. See the dedicated page for detailed rules, helper APIs, and best practices:
+
+- Scopes and Closures: resolution and safety → [scopes_and_closures.md](scopes_and_closures.md)

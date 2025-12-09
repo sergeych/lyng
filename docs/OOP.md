@@ -604,3 +604,8 @@ Regular methods are called on instances as usual `instance.method()`. The method
 TBD
 
 [argument list](declaring_arguments.md)
+### Visibility from within closures and instance scopes
+
+When a closure executes within a method, the closure retains the lexical class context of its creation site. This means private/protected members of that class remain accessible where expected (subject to usual visibility rules). Field resolution checks the declaring class and validates access using the preserved `currentClassCtx`.
+
+See also: [Scopes and Closures: resolution and safety](scopes_and_closures.md)
