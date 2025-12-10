@@ -14,7 +14,7 @@ class ScopeCycleRegressionTest {
                 """
                 class Whatever {
                     fun something() {
-                        trace("something")
+                        println
                     }
                 }
 
