@@ -39,12 +39,18 @@ actual object ScopePool {
     actual fun borrow(parent: Scope, args: Arguments, pos: Pos, thisObj: Obj): Scope {
         val pool = pool()
         val s = if (pool.isNotEmpty()) pool.removeLast() else Scope(parent, args, pos, thisObj)
-        if (s.parent !== parent || s.args !== args || s.pos !== pos || s.thisObj !== thisObj) {
-            s.resetForReuse(parent, args, pos, thisObj)
-        } else {
-            s.frameId = nextFrameId()
+        return try {
+            if (s.parent !== parent || s.args !== args || s.pos !== pos || s.thisObj !== thisObj) {
+                s.resetForReuse(parent, args, pos, thisObj)
+            } else {
+                s.frameId = nextFrameId()
+            }
+            s
+        } catch (e: IllegalStateException) {
+            if (e.message?.contains("cycle") == true && e.message?.contains("scope parent chain") == true) {
+                Scope(parent, args, pos, thisObj)
+            } else throw e
         }
-        return s
     }
 
     actual fun release(scope: Scope) {
