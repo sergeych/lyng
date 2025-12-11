@@ -4159,4 +4159,86 @@ class ScriptTest {
         """)
     }
 
+    @Test
+    fun testUsingClassConstructorVars() = runTest {
+        val r = eval("""
+            import lyng.time
+            
+            class Request {
+                static val id = "rqid"
+            }
+            enum Action { 
+                Test
+            }
+            class LogEntry(vaultId, action, data=null, createdAt=Instant.now().truncateToSecond()) {
+
+                /*
+                Convert to a map object that can be easily decoded outsude the
+                contract execution scope.
+                */
+                fun toApi() {
+                    { createdAt:, requestId: Request.id, vaultId:, action: action.name, data: Map() }
+                }
+            }
+            fun test() {
+                LogEntry("v1", Action.Test).toApi()
+            }
+            
+            test()
+        """.trimIndent()).toJson()
+        println(r)
+    }
+
+    @Test
+    fun testScopeShortCircuit() = runTest() {
+        val baseScope = Script.newScope()
+
+        baseScope.eval("""
+                val exports = Map()
+                fun Export(name,f) {
+                    exports[name] = f
+                    f
+                }
+        """.trimIndent()
+        )
+
+        val exports: MutableMap<Obj, Obj> = (baseScope.eval("exports") as ObjMap).map
+
+        baseScope.eval("""
+            class A(val a) {
+                fun methodA() {
+                    a + 1
+                }
+            }
+            val a0 = 100
+            
+            fun someFunction(x) {
+                val ia = A(x)
+                ia.methodA()
+            }            
+            
+            @Export
+            fun exportedFunction(x) {
+                someFunction(x)
+            }
+        """.trimIndent())
+        // Calling from the script is ok:
+        val instanceScope = baseScope.createChildScope()
+        instanceScope.eval("""
+            val a1 = a0 + 1
+        """.trimIndent())
+        assertEquals( ObjInt(2), instanceScope.eval("""
+            exportedFunction(1)
+        """))
+        assertEquals( ObjInt(103), instanceScope.eval("""
+            exportedFunction(a1 + 1)
+        """))
+        val dummyThis = Obj()
+        // but we should be able to call it directly
+        val otherScope = baseScope.createChildScope()
+        val r = (exports["exportedFunction".toObj()] as Statement).invoke(otherScope, dummyThis,ObjInt(50))
+        println(r)
+        assertEquals(51, r.toInt())
+    }
+
 }

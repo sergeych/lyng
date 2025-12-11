@@ -302,11 +302,9 @@ open class Scope(
      * Clears locals and slots, assigns new frameId, and sets parent/args/pos/thisObj.
      */
     fun resetForReuse(parent: Scope?, args: Arguments, pos: Pos, thisObj: Obj) {
-        ensureNoCycle(parent)
-        this.parent = parent
-        this.args = args
-        this.pos = pos
-        this.thisObj = thisObj
+        // Fully detach from any previous chain/state first to avoid residual ancestry
+        // that could interact badly with the new parent and produce a cycle.
+        this.parent = null
         this.skipScopeCreation = false
         // fresh identity for PIC caches
         this.frameId = nextFrameId()
@@ -315,6 +313,12 @@ open class Scope(
         slots.clear()
         nameToSlot.clear()
         localBindings.clear()
+        // Now safe to validate and re-parent
+        ensureNoCycle(parent)
+        this.parent = parent
+        this.args = args
+        this.pos = pos
+        this.thisObj = thisObj
         // Pre-size local slots for upcoming parameter assignment where possible
         reserveLocalCapacity(args.list.size + 4)
     }

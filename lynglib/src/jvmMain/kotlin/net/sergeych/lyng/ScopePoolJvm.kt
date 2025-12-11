@@ -33,9 +33,19 @@ actual object ScopePool {
     actual fun borrow(parent: Scope, args: Arguments, pos: Pos, thisObj: Obj): Scope {
         val pool = threadLocalPool.get()
         val s = if (pool.isNotEmpty()) pool.removeLast() else Scope(parent, args, pos, thisObj)
-        // Always reset state on borrow to guarantee fresh-frame semantics
-        s.resetForReuse(parent, args, pos, thisObj)
-        return s
+        return try {
+            // Always reset state on borrow to guarantee fresh-frame semantics
+            s.resetForReuse(parent, args, pos, thisObj)
+            s
+        } catch (e: IllegalStateException) {
+            // Defensive fallback: if a cycle in scope parent chain is detected during reuse,
+            // discard pooled instance for this call frame and allocate a fresh scope instead.
+            if (e.message?.contains("cycle") == true && e.message?.contains("scope parent chain") == true) {
+                Scope(parent, args, pos, thisObj)
+            } else {
+                throw e
+            }
+        }
     }
 
     actual fun release(scope: Scope) {
