@@ -68,6 +68,20 @@ These, again, does the thing:
 
     >>> void
 
+## map and mapNotNull
+
+Used to transform either the whole iterable stream or also skipping som elements from it:
+
+    val source = [1,2,3,4]
+    // transform every element to string or null:
+    assertEquals(["n1", "n2", null, "n4"], source.map { if( it == 3 ) null else "n"+it } )
+    
+    // transform every element to stirng, skipping 3:
+    assertEquals(["n1", "n2", "n4"], source.mapNotNull { if( it == 3 ) null else "n"+it } )
+    
+    >>> void
+
+
 ## Instance methods:
 
 | fun/method             | description                                                                     |

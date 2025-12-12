@@ -159,6 +159,23 @@ val ObjIterable by lazy {
         }
 
         addFnDoc(
+            name = "mapNotNull",
+            doc = "Transform elements by applying the given lambda unless it returns null.",
+            params = listOf(ParamDoc("transform")),
+            returns = type("lyng.List"),
+            isOpen = true,
+            moduleName = "lyng.stdlib"
+        ) {
+            val fn = requiredArg<Statement>(0)
+            val result = mutableListOf<Obj>()
+            thisObj.toFlow(this).collect {
+                val transformed = fn.call(this, it)
+                if( transformed != ObjNull) result += transformed
+            }
+            ObjList(result)
+        }
+
+        addFnDoc(
             name = "take",
             doc = "Take the first N elements and return them as a list.",
             params = listOf(ParamDoc("n", type("lyng.Int"))),
