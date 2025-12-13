@@ -78,15 +78,72 @@ open class LynonDecoder(val bin: BitInput, val settings: LynonSettings = LynonSe
 
     private suspend fun decodeClassObj(scope: Scope): ObjClass {
         val className = decodeObject(scope, ObjString.type, null) as ObjString
-        return scope.get(className.value)?.value?.let {
+        val name = className.value
+        // 1) Try direct lookup in this scope (locals/parents/this members)
+        scope.get(name)?.value?.let {
             if (it !is ObjClass)
                 scope.raiseClassCastError("Expected obj class but got ${it::class.simpleName}")
-            it
-        } ?: scope.also {
-            println("Class not found: $className")
-            println("::: ${runCatching { scope.eval("Vault")}.getOrNull() }")
-            println("::2 [${className}]: ${scope.get(className.value)}")
-        }.raiseSymbolNotFound("can't deserialize: not found type $className")
+            return it
+        }
+        // 2) Try ancestry lookup including instance/class members, but without invoking overridden get
+        scope.chainLookupWithMembers(name)?.value?.let {
+            if (it !is ObjClass)
+                scope.raiseClassCastError("Expected obj class but got ${it::class.simpleName}")
+            return it
+        }
+        // 3) Try to find nearest ModuleScope and check its locals and its parent (root) locals
+        run {
+            var s: Scope? = scope
+            val visited = HashSet<Long>(4)
+            while (s != null) {
+                if (!visited.add(s.frameId)) break
+                if (s is net.sergeych.lyng.ModuleScope) {
+                    s.objects[name]?.value?.let {
+                        if (it !is ObjClass)
+                            scope.raiseClassCastError("Expected obj class but got ${it::class.simpleName}")
+                        return it
+                    }
+                    s.localBindings[name]?.value?.let {
+                        if (it !is ObjClass)
+                            scope.raiseClassCastError("Expected obj class but got ${it::class.simpleName}")
+                        return it
+                    }
+                    s.parent?.let { p ->
+                        p.objects[name]?.value?.let {
+                            if (it !is ObjClass)
+                                scope.raiseClassCastError("Expected obj class but got ${it::class.simpleName}")
+                            return it
+                        }
+                        p.localBindings[name]?.value?.let {
+                            if (it !is ObjClass)
+                                scope.raiseClassCastError("Expected obj class but got ${it::class.simpleName}")
+                            return it
+                        }
+                        p.thisObj.objClass.getInstanceMemberOrNull(name)?.value?.let {
+                            if (it !is ObjClass)
+                                scope.raiseClassCastError("Expected obj class but got ${it::class.simpleName}")
+                            return it
+                        }
+                    }
+                    break
+                }
+                s = s.parent
+            }
+        }
+        // 4) Try ImportProvider root scope globals (e.g., stdlib)
+        runCatching { scope.currentImportProvider.rootScope.objects[name]?.value }.getOrNull()?.let {
+            if (it !is ObjClass)
+                scope.raiseClassCastError("Expected obj class but got ${it::class.simpleName}")
+            return it
+        }
+//        // 5) As a final fallback, try to evaluate the name in this scope using the compiler
+//        runCatching { scope.eval(name) }.getOrNull()?.let {
+//            if (it !is ObjClass)
+//                scope.raiseClassCastError("Expected obj class but got ${it::class.simpleName}")
+//            return it
+//        }
+        // If everything failed, raise an informative error
+        scope.raiseSymbolNotFound("can't deserialize: not found type ${className}")
     }
 
     suspend fun decodeAnyList(scope: Scope, fixedSize: Int? = null): MutableList<Obj> {
