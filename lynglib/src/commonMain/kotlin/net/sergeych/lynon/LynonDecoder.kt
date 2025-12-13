@@ -82,11 +82,14 @@ open class LynonDecoder(val bin: BitInput, val settings: LynonSettings = LynonSe
             if (it !is ObjClass)
                 scope.raiseClassCastError("Expected obj class but got ${it::class.simpleName}")
             it
-        } ?: scope.also {
-            println("Class not found: $className")
-            println("::: ${runCatching { scope.eval("Vault")}.getOrNull() }")
-            println("::2 [${className}]: ${scope.get(className.value)}")
-        }.raiseSymbolNotFound("can't deserialize: not found type $className")
+        } ?: run {
+            val fallback = runCatching { scope.eval(className.value) }.getOrNull()
+            if (fallback != null) {
+                println("Fallback to eval successful")
+                fallback as ObjClass
+            }
+            else scope.raiseSymbolNotFound("can't deserialize: not found type $className")
+        }
     }
 
     suspend fun decodeAnyList(scope: Scope, fixedSize: Int? = null): MutableList<Obj> {
