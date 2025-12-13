@@ -516,6 +516,23 @@ open class Scope(
 
     open fun applyClosure(closure: Scope): Scope = ClosureScope(this, closure)
 
+    /**
+     * Resolve and evaluate a qualified identifier exactly as compiled code would.
+     * For input like `A.B.C`, it builds the same ObjRef chain the compiler emits:
+     * `LocalVarRef("A", Pos.builtIn)` followed by `FieldRef` for each segment, then evaluates it.
+     * This mirrors `eval("A.B.C")` resolution semantics without invoking the compiler.
+     */
+    suspend fun resolveQualifiedIdentifier(qualifiedName: String): Obj {
+        val trimmed = qualifiedName.trim()
+        if (trimmed.isEmpty()) raiseSymbolNotFound("empty identifier")
+        val parts = trimmed.split('.')
+        var ref: ObjRef = LocalVarRef(parts[0], Pos.builtIn)
+        for (i in 1 until parts.size) {
+            ref = FieldRef(ref, parts[i], false)
+        }
+        return ref.evalValue(this)
+    }
+
     companion object {
 
         fun new(): Scope =
