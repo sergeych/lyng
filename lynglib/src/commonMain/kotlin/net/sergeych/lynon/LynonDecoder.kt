@@ -17,10 +17,9 @@
 
 package net.sergeych.lynon
 
+import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Scope
-import net.sergeych.lyng.obj.Obj
-import net.sergeych.lyng.obj.ObjClass
-import net.sergeych.lyng.obj.ObjString
+import net.sergeych.lyng.obj.*
 
 open class LynonDecoder(val bin: BitInput, val settings: LynonSettings = LynonSettings.default) {
 
@@ -83,15 +82,27 @@ open class LynonDecoder(val bin: BitInput, val settings: LynonSettings = LynonSe
                 scope.raiseClassCastError("Expected obj class but got ${it::class.simpleName}")
             it
         } ?: run {
-            println("NotFound: $className, trying eval")
-            val fallback = runCatching { scope.eval(className.value) }.getOrNull()
-            println("Fallback result: $fallback")
-            if (fallback != null) {
-                println("Fallback to eval successful")
-                fallback as ObjClass
-            }
-            else scope.raiseSymbolNotFound("can't deserialize: not found type $className")
+            // Precisely mimic what `scope.eval(className.value)` would compile and execute for
+            // a simple qualified name: LocalVarRef(head) followed by chained FieldRef segments.
+            val evaluated = evaluateQualifiedNameAsCompiled(scope, className.value)
+            if (evaluated !is ObjClass)
+                scope.raiseClassCastError("Expected obj class but got ${evaluated::class.simpleName}")
+            evaluated
         }
+    }
+
+    // Build and execute the exact ObjRef chain that the compiler would emit for an identifier
+    // with optional dotted selectors, e.g., "A.B.C" -> LocalVarRef("A") -> FieldRef(..., "B") -> FieldRef(..., "C")
+    private suspend fun evaluateQualifiedNameAsCompiled(scope: Scope, name: String): Obj {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) scope.raiseSymbolNotFound("empty identifier")
+        val parts = trimmed.split('.')
+        // Use built-in position; eval() would carry a Source position, which does not affect resolution semantics here
+        var ref: ObjRef = LocalVarRef(parts[0], Pos.builtIn)
+        for (i in 1 until parts.size) {
+            ref = FieldRef(ref, parts[i], false)
+        }
+        return ref.evalValue(scope)
     }
 
     suspend fun decodeAnyList(scope: Scope, fixedSize: Int? = null): MutableList<Obj> {
