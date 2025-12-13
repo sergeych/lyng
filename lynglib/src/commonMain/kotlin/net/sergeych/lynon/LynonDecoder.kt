@@ -83,7 +83,9 @@ open class LynonDecoder(val bin: BitInput, val settings: LynonSettings = LynonSe
                 scope.raiseClassCastError("Expected obj class but got ${it::class.simpleName}")
             it
         } ?: run {
+            println("NotFound: $className, trying eval")
             val fallback = runCatching { scope.eval(className.value) }.getOrNull()
+            println("Fallback result: $fallback")
             if (fallback != null) {
                 println("Fallback to eval successful")
                 fallback as ObjClass
