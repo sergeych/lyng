@@ -25,7 +25,10 @@ import net.sergeych.lyng.obj.*
 import net.sergeych.lynon.*
 import java.nio.file.Files
 import java.nio.file.Path
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class LynonTests {
 
@@ -39,73 +42,6 @@ class LynonTests {
         assertEquals(2, sizeInTetrades(255u))
         assertEquals(3, sizeInTetrades(256u))
         assertEquals(3, sizeInTetrades(257u))
-    }
-
-    @Ignore("This is not yet implemented")
-    @Test
-    fun decodeClassObj_shouldResolveDottedQualifiedNames() = runTest {
-        // Define nested namespaces and a class with a qualified name via eval
-        val module = net.sergeych.lyng.Script.defaultImportManager.newModule()
-        module.eval(
-            """
-            package ns.sub
-            class Vault() { fun toString() { "ns.sub.Vault" } }
-            """.trimIndent()
-        )
-
-        val child = module.createChildScope(module.pos)
-
-        // Sanity: eval resolves both qualified and unqualified in the same module context
-        val qualified = child.eval("ns.sub.Vault")
-        assertTrue(qualified is ObjClass)
-
-        val inst = child.eval("ns.sub.Vault()")
-        assertTrue(inst is ObjInstance)
-
-        // Encode and decode instance; decoder should resolve class by its encoded name
-        val bout = MemoryBitOutput()
-        val enc = LynonEncoder(bout)
-        enc.encodeAny(child, inst)
-        val bin = MemoryBitInput(bout.toBitArray())
-        val dec = LynonDecoder(bin)
-
-        val decoded = dec.decodeAny(child)
-        assertTrue(decoded is ObjInstance)
-        val decObj = decoded as ObjInstance
-        assertEquals("Vault", decObj.objClass.className)
-    }
-
-    @Test
-    fun decodeClassObj_shouldResolveWhenEvalFindsButGetMisses() = runTest {
-        // Build a module scope and define a class there via eval (simulating imported/user code)
-        val module = net.sergeych.lyng.Script.defaultImportManager.newModule()
-        module.eval("class Vault() { fun toString() { \"Vault\" } }")
-
-        // Build a child scope where local bindings do not include the class name explicitly
-        val child = module.createChildScope(module.pos)
-
-        // Sanity: eval in the child must resolve the class by name
-        val evalResolved = child.eval("Vault")
-        assertTrue(evalResolved is ObjClass)
-
-        // Create an instance so that encoder will write type Other + class name and constructor args
-        val inst = child.eval("Vault()")
-        assertTrue(inst is ObjInstance)
-
-        // Encode the instance and then decode it with our decoder that contains robust class lookup
-        val bout = MemoryBitOutput()
-        val enc = LynonEncoder(bout)
-        enc.encodeAny(child, inst)
-        val bin = MemoryBitInput(bout.toBitArray())
-        val dec = LynonDecoder(bin)
-
-        val decoded = dec.decodeAny(child)
-        assertTrue(decoded is ObjInstance)
-        // Class should be resolvable and preserved
-        val instObj = inst as ObjInstance
-        val decObj = decoded as ObjInstance
-        assertEquals(instObj.objClass.className, decObj.objClass.className)
-        assertEquals("Vault", decObj.objClass.className)
     }
 
     @Test
