@@ -198,6 +198,18 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
         return JsonArray(list.map { it.toJson(scope) })
     }
 
+    override suspend fun toString(scope: Scope, calledFromLyng: Boolean): ObjString {
+        return ObjString(buildString {
+            append("[")
+            var first = true
+            for (v in list) {
+                if (first) first = false else append(",")
+                append(v.toString(scope).value)
+            }
+            append("]")
+        })
+    }
+
     companion object {
         val type = object : ObjClass("List", ObjArray) {
             override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj {

@@ -155,52 +155,65 @@ class Script(
                     sqrt(args.firstAndOnly().toDouble())
                 )
             }
-            addFn( "abs" ) {
+            addFn("abs") {
                 val x = args.firstAndOnly()
-                if( x is ObjInt) ObjInt( x.value.absoluteValue ) else ObjReal( x.toDouble().absoluteValue )
+                if (x is ObjInt) ObjInt(x.value.absoluteValue) else ObjReal(x.toDouble().absoluteValue)
             }
 
             addVoidFn("assert") {
                 val cond = requiredArg<ObjBool>(0)
-                val message = if( args.size > 1 )
+                val message = if (args.size > 1)
                     ": " + (args[1] as Statement).execute(this).toString(this).value
                 else ""
-                if( !cond.value == true )
+                if (!cond.value == true)
                     raiseError(ObjAssertionFailedException(this, "Assertion failed$message"))
             }
 
             addVoidFn("assertEquals") {
                 val a = requiredArg<Obj>(0)
                 val b = requiredArg<Obj>(1)
-                if( a.compareTo(this, b) != 0 )
-                    raiseError(ObjAssertionFailedException(this,"Assertion failed: ${a.inspect(this)} == ${b.inspect(this)}"))
+                if (a.compareTo(this, b) != 0)
+                    raiseError(
+                        ObjAssertionFailedException(
+                            this,
+                            "Assertion failed: ${a.inspect(this)} == ${b.inspect(this)}"
+                        )
+                    )
             }
             // alias used in tests
             addVoidFn("assertEqual") {
                 val a = requiredArg<Obj>(0)
                 val b = requiredArg<Obj>(1)
-                if( a.compareTo(this, b) != 0 )
-                    raiseError(ObjAssertionFailedException(this,"Assertion failed: ${a.inspect(this)} == ${b.inspect(this)}"))
+                if (a.compareTo(this, b) != 0)
+                    raiseError(
+                        ObjAssertionFailedException(
+                            this,
+                            "Assertion failed: ${a.inspect(this)} == ${b.inspect(this)}"
+                        )
+                    )
             }
             addVoidFn("assertNotEquals") {
                 val a = requiredArg<Obj>(0)
                 val b = requiredArg<Obj>(1)
-                if( a.compareTo(this, b) == 0 )
-                    raiseError(ObjAssertionFailedException(this,"Assertion failed: ${a.inspect(this)} != ${b.inspect(this)}"))
+                if (a.compareTo(this, b) == 0)
+                    raiseError(
+                        ObjAssertionFailedException(
+                            this,
+                            "Assertion failed: ${a.inspect(this)} != ${b.inspect(this)}"
+                        )
+                    )
             }
             addFn("assertThrows") {
                 val code = requireOnlyArg<Statement>()
-                val result =try {
+                val result = try {
                     code.execute(this)
                     null
-                }
-                catch( e: ExecutionError ) {
+                } catch (e: ExecutionError) {
                     e.errorObject
-                }
-                catch (_: ScriptError) {
+                } catch (_: ScriptError) {
                     ObjNull
                 }
-                result ?: raiseError(ObjAssertionFailedException(this,"Expected exception but nothing was thrown"))
+                result ?: raiseError(ObjAssertionFailedException(this, "Expected exception but nothing was thrown"))
             }
 
             addFn("dynamic") {
@@ -209,7 +222,7 @@ class Script(
 
             addFn("require") {
                 val condition = requiredArg<ObjBool>(0)
-                if( !condition.value ) {
+                if (!condition.value) {
                     val message = args.list.getOrNull(1)?.toString() ?: "requirement not met"
                     raiseIllegalArgument(message)
                 }
@@ -217,7 +230,7 @@ class Script(
             }
             addFn("check") {
                 val condition = requiredArg<ObjBool>(0)
-                if( !condition.value ) {
+                if (!condition.value) {
                     val message = args.list.getOrNull(1)?.toString() ?: "check failed"
                     raiseIllegalState(message)
                 }
@@ -340,7 +353,7 @@ class Script(
                         doc = "Suspend for the given time. Accepts Duration, Int seconds, or Real seconds."
                     ) {
                         val a = args.firstAndOnly()
-                        when(a) {
+                        when (a) {
                             is ObjInt -> delay(a.value * 1000)
                             is ObjReal -> delay((a.value * 1000).roundToLong())
                             is ObjDuration -> delay(a.duration)

@@ -197,9 +197,20 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             !it.key.contains("::") && it.value.visibility.isPublic && it.value.type.serializable
         }
 
-    override fun toString(): String {
-        val fields = publicFields.map { "${it.key}=${it.value.value}" }.joinToString(",")
-        return "${objClass.className}($fields)"
+    override suspend fun toString(scope: Scope, calledFromLyng: Boolean): ObjString {
+        return ObjString(buildString {
+            append("${objClass.className}(")
+            var first = true
+            for ((name, value) in publicFields) {
+                if (first) first = false else append(",")
+                append("$name=${value.value.toString(scope)}")
+            }
+            append(")")
+        })
+    }
+
+    override suspend fun inspect(scope: Scope): String {
+        return toString(scope).value
     }
 
     override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {

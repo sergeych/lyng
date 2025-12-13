@@ -52,8 +52,8 @@ class ObjMapEntry(val key: Obj, val value: Obj) : Obj() {
         else -> scope.raiseIndexOutOfBounds()
     }
 
-    override fun toString(): String {
-        return "$key=>$value"
+    override suspend fun toString(scope: Scope, calledFromLyng: Boolean): ObjString {
+        return ObjString("(${key.toString(scope).value} => ${value.toString(scope).value})")
     }
 
     override val objClass = type

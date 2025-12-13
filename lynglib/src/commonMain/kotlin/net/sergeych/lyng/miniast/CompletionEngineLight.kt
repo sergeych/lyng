@@ -131,7 +131,7 @@ object CompletionEngineLight {
             }
             is MiniClassDecl -> add(CompletionItem(d.name, Kind.Class_))
             is MiniValDecl -> add(CompletionItem(d.name, Kind.Value, typeText = typeOf(d.type)))
-            else -> add(CompletionItem(d.name, Kind.Value))
+//            else -> add(CompletionItem(d.name, Kind.Value))
         }
     }
 

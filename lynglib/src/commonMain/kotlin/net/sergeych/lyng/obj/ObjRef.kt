@@ -1625,7 +1625,7 @@ class ListLiteralRef(private val entries: List<ListEntry>) : ObjRef {
                     when (elements) {
                         is ObjList -> {
                             // Grow underlying array once when possible
-                            if (list is ArrayList) list.ensureCapacity(list.size + elements.list.size)
+                            list.ensureCapacity(list.size + elements.list.size)
                             list.addAll(elements.list)
                         }
                         else -> scope.raiseError("Spread element must be list")
