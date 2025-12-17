@@ -217,7 +217,23 @@ data class ObjString(val value: String) : Obj() {
                 thisAs<ObjString>().value.lowercase().let(::ObjString)
             }
             addFnDoc(
+                name = "lowercase",
+                doc = "Lowercase version of this string (default locale).",
+                returns = type("lyng.String"),
+                moduleName = "lyng.stdlib"
+            ) {
+                thisAs<ObjString>().value.lowercase().let(::ObjString)
+            }
+            addFnDoc(
                 name = "upper",
+                doc = "Uppercase version of this string (default locale).",
+                returns = type("lyng.String"),
+                moduleName = "lyng.stdlib"
+            ) {
+                thisAs<ObjString>().value.uppercase().let(::ObjString)
+            }
+            addFnDoc(
+                name = "uppercase",
                 doc = "Uppercase version of this string (default locale).",
                 returns = type("lyng.String"),
                 moduleName = "lyng.stdlib"

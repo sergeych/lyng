@@ -1378,31 +1378,31 @@ Part match:
 
 Typical set of String functions includes:
 
-| fun/prop           | description / notes                                        |
-|--------------------|------------------------------------------------------------|
-| lower()            | change case to unicode upper                               |
-| upper()            | change case to unicode lower                               |
-| trim()             | trim space chars from both ends                            |
-| startsWith(prefix) | true if starts with a prefix                               |
-| endsWith(prefix)   | true if ends with a prefix                                 |
-| last()             | get last character of a string or throw                    |
-| take(n)            | get a new string from up to n first characters             |
-| takeLast(n)        | get a new string from up to n last characters              |
-| drop(n)            | get a new string dropping n first chars, or empty string   |
-| dropLast(n)        | get a new string dropping n last chars, or empty string    |
-| size               | size in characters like `length` because String is [Array] |
-| (args...)          | sprintf-like formatting, see [string formatting]           |
-| [index]            | character at index                                         | 
-| [Range]            | substring at range (2)                                     |
-| [Regex]            | find first match of regex, like [Regex.find] (2)           |
-| s1 + s2            | concatenation                                              |
-| s1 += s2           | self-modifying concatenation                               |
-| toReal()           | attempts to parse string as a Real value                   |
-| toInt()            | parse string to Int value                                  |
-| characters()       | create [List] of characters (1)                            |
-| encodeUtf8()       | returns [Buffer] with characters encoded to utf8           |
-| matches(re)        | matches the regular expression (2)                         |
-|                    |                                                            |
+| fun/prop             | description / notes                                        |
+|----------------------|------------------------------------------------------------|
+| lower(), lowercase() | change case to unicode upper                               |
+| upper(), uppercase() | change case to unicode lower                               |
+| trim()               | trim space chars from both ends                            |
+| startsWith(prefix)   | true if starts with a prefix                               |
+| endsWith(prefix)     | true if ends with a prefix                                 |
+| last()               | get last character of a string or throw                    |
+| take(n)              | get a new string from up to n first characters             |
+| takeLast(n)          | get a new string from up to n last characters              |
+| drop(n)              | get a new string dropping n first chars, or empty string   |
+| dropLast(n)          | get a new string dropping n last chars, or empty string    |
+| size                 | size in characters like `length` because String is [Array] |
+| (args...)            | sprintf-like formatting, see [string formatting]           |
+| [index]              | character at index                                         | 
+| [Range]              | substring at range (2)                                     |
+| [Regex]              | find first match of regex, like [Regex.find] (2)           |
+| s1 + s2              | concatenation                                              |
+| s1 += s2             | self-modifying concatenation                               |
+| toReal()             | attempts to parse string as a Real value                   |
+| toInt()              | parse string to Int value                                  |
+| characters()         | create [List] of characters (1)                            |
+| encodeUtf8()         | returns [Buffer] with characters encoded to utf8           |
+| matches(re)          | matches the regular expression (2)                         |
+|                      |                                                            |
 
 (1)
 : List is mutable therefore a new copy is created on each call.
