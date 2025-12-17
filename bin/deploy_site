@@ -101,7 +101,7 @@ die() { echo "ERROR: $*" 1>&2 ; exit 1; }
 # Update the IDEA plugin download link in docs (temporarily), then build, then restore the doc
 updateIdeaPluginDownloadLink || echo "WARN: proceeding without updating IDEA plugin download link"
 
-./gradlew site:clean site:jsBrowserDistribution
+./gradlew site:jsBrowserDistribution
 BUILD_RC=$?
 
 # Always restore original doc if backup exists

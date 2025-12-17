@@ -36,7 +36,7 @@ fun HomePage() {
                 // Benefits pills
                 listOf(
                     "Clean, familiar syntax",
-                    "Immutable-first collections",
+                    "both FP and OOP",
                     "Batteries-included standard library",
                     "Embeddable and testable"
                 ).forEach { b ->
