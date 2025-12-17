@@ -17,7 +17,7 @@
 
 package net.sergeych.tools
 
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 
 inline fun bm(text: String="", f: ()->Unit) {
     val start = Clock.System.now()

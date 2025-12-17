@@ -23,8 +23,6 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -36,7 +34,9 @@ import net.sergeych.lyng.pacman.InlineSourcesImportProvider
 import net.sergeych.mp_tools.globalDefer
 import net.sergeych.tools.bm
 import kotlin.test.*
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 /*
  * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com

@@ -17,10 +17,6 @@
 
 package net.sergeych.lyng.obj
 
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
-import kotlinx.datetime.isDistantFuture
-import kotlinx.datetime.isDistantPast
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.Scope
@@ -28,6 +24,10 @@ import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonSettings
 import net.sergeych.lynon.LynonType
+import kotlin.time.Clock
+import kotlin.time.Instant
+import kotlin.time.isDistantFuture
+import kotlin.time.isDistantPast
 
 class ObjInstant(val instant: Instant,val truncateMode: LynonSettings.InstantTruncateMode=LynonSettings.InstantTruncateMode.Microsecond) : Obj() {
     override val objClass: ObjClass get() = type

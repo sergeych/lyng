@@ -21,7 +21,7 @@ import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 group = "net.sergeych"
-version = "1.0.7-SNAPSHOT"
+version = "1.0.8-SNAPSHOT"
 
 // Removed legacy buildscript classpath declarations; plugins are applied via the plugins DSL below
 
@@ -51,7 +51,7 @@ kotlin {
         publishLibraryVariants("release")
         @OptIn(ExperimentalKotlinGradlePluginApi::class)
         compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_11)
+            jvmTarget.set(JvmTarget.JVM_17)
         }
     }
     iosX64()
@@ -89,16 +89,16 @@ kotlin {
             languageSettings.optIn("kotlinx.coroutines.DelicateCoroutinesApi")
             languageSettings.optIn("kotlin.contracts.ExperimentalContracts")
             languageSettings.optIn("kotlinx.coroutines.FlowPreview")
+            languageSettings.optIn("kotlin.time.ExperimentalTime")
         }
 
         val commonMain by getting {
             kotlin.srcDir("$buildDir/generated/buildConfig/commonMain/kotlin")
             dependencies {
-                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
                 //put your multiplatform dependencies here
                 api(libs.kotlinx.coroutines.core)
                 api(libs.mp.bintools)
-                api("net.sergeych:mp_stools:1.5.2")
             }
         }
         val commonTest by getting {
@@ -113,6 +113,18 @@ kotlin {
                 implementation(project(":lyngio"))
             }
         }
+    }
+}
+
+android {
+    namespace = "net.sergeych.lynglib"
+    compileSdk = libs.versions.android.compileSdk.get().toInt()
+    defaultConfig {
+        minSdk = libs.versions.android.minSdk.get().toInt()
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 }
 

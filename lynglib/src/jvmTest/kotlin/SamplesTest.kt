@@ -18,12 +18,12 @@
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import kotlinx.datetime.Clock
 import net.sergeych.lyng.Scope
 import java.nio.file.Files
 import java.nio.file.Paths
 import kotlin.io.path.extension
 import kotlin.test.Test
+import kotlin.time.Clock
 
 suspend fun executeSampleTests(fileName: String) {
     val sample = withContext(Dispatchers.IO) {

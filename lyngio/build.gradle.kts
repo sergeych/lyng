@@ -38,7 +38,7 @@ kotlin {
         publishLibraryVariants("release")
         @OptIn(ExperimentalKotlinGradlePluginApi::class)
         compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_11)
+            jvmTarget.set(JvmTarget.JVM_17)
         }
     }
     iosX64()
@@ -71,11 +71,7 @@ kotlin {
     sourceSets {
         all {
             languageSettings.optIn("kotlin.ExperimentalUnsignedTypes")
-//            languageSettings.optIn("kotlinx.coroutines.ExperimentalCoroutinesApi")
-            // Correct opt-in markers for coroutines
-//            languageSettings.optIn("kotlinx.coroutines.DelicateCoroutinesApi")
-//            languageSettings.optIn("kotlin.contracts.ExperimentalContracts")
-//            languageSettings.optIn("kotlinx.coroutines.FlowPreview")
+            languageSettings.optIn("kotlin.time.ExperimentalTime")
         }
         val commonMain by getting {
             dependencies {
@@ -115,8 +111,8 @@ android {
         minSdk = libs.versions.android.minSdk.get().toInt()
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     lint {
         // Prevent Android Lint from failing the build due to Kotlin toolchain
