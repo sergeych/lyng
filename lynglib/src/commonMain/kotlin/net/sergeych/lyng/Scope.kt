@@ -428,13 +428,13 @@ open class Scope(
     }
 
     inline fun addVoidFn(vararg names: String, crossinline fn: suspend Scope.() -> Unit) {
-        addFn<ObjVoid>(*names) {
+        addFn(*names) {
             fn(this)
             ObjVoid
         }
     }
 
-    inline fun <reified T : Obj> addFn(vararg names: String, crossinline fn: suspend Scope.() -> T) {
+    fun addFn(vararg names: String, fn: suspend Scope.() -> Obj) {
         val newFn = object : Statement() {
             override val pos: Pos = Pos.builtIn
 
