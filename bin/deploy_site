@@ -82,7 +82,7 @@ function updateIdeaPluginDownloadLink() {
 # default target settings
 case "com" in
   com)
-    SSH_HOST=sergeych@lynglang.com # host to deploy to
+    SSH_HOST=sergeych@d.lynglang.com # host to deploy to
     SSH_PORT=22                             # ssh port on it
     ROOT=/bigstore/sergeych_pub/lyng                 # directory to rsync to
     ;;
