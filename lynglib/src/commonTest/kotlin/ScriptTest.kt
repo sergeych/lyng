@@ -3021,6 +3021,35 @@ class ScriptTest {
     }
 
     @Test
+    fun testMapWithNonStringKeys() = runTest {
+        eval("""
+            val map = Map( 1 => "one", 2 => "two" )
+            assertEquals( "one", map[1] )
+            assertEquals( "two", map[2] )
+            assertEquals( null, map[3] )
+            map[3] = "three"
+            assertEquals( "three", map[3] )
+            map += (4 => "four")
+            assertEquals( "four", map[4] )
+            
+            // Test toMap()
+            val map2 = [1 => "a", 2 => "b"].toMap()
+            assertEquals("a", map2[1])
+            assertEquals("b", map2[2])
+            
+            // Test Map constructor with mixed entries and arrays
+            val map3 = Map( 1 => "a", [2, "b"] )
+            assertEquals("a", map3[1])
+            assertEquals("b", map3[2])
+            
+            // Test plus
+            val map4 = map3 + (3 => "c")
+            assertEquals("c", map4[3])
+            assertEquals("a", map4[1])
+        """.trimIndent())
+    }
+
+    @Test
     fun testBuffer() = runTest {
         eval(
             """

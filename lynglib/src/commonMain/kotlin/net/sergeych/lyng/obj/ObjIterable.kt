@@ -104,11 +104,14 @@ val ObjIterable by lazy {
             returns = type("lyng.Map"),
             moduleName = "lyng.stdlib"
         ) {
-            val result = ObjMap()
+            val result = mutableMapOf<Obj, Obj>()
             thisObj.toFlow(this).collect { pair ->
-                result.map[pair.getAt(this, 0)] = pair.getAt(this, 1)
+                when (pair) {
+                    is ObjMapEntry -> result[pair.key] = pair.value
+                    else -> result[pair.getAt(this, 0)] = pair.getAt(this, 1)
+                }
             }
-            result
+            ObjMap(result)
         }
 
         addFnDoc(

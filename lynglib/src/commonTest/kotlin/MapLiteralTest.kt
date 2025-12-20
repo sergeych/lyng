@@ -24,7 +24,6 @@ import net.sergeych.lyng.ExecutionError
 import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.eval
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class MapLiteralTest {
@@ -119,20 +118,21 @@ class MapLiteralTest {
     }
 
     @Test
-    fun spreadNonStringKeysIsRuntimeError() = runTest {
-        assertFailsWith<ExecutionError> {
-            eval("""{ ...Map(1 => "x") }""")
-        }
+    fun spreadNonStringKeysIsAllowed() = runTest {
+        eval("""
+            val m = { ...Map(1 => "x") }
+            assertEquals("x", m[1])
+        """)
     }
 
     @Test
-    fun mergeNonStringKeyIsRuntimeError() = runTest {
-        assertFailsWith<ExecutionError> {
-            eval("""
-                val e = (1 => "x")
-                { "a": 1 } + e
-            """)
-        }
+    fun mergeNonStringKeyIsAllowed() = runTest {
+        eval("""
+            val e = (1 => "x")
+            val m = { "a": 1 } + e
+            assertEquals(1, m["a"])
+            assertEquals("x", m[1])
+        """)
     }
 
     @Test

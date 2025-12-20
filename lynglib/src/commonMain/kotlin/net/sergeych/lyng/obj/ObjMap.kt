@@ -174,18 +174,21 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
             val map = mutableMapOf<Obj, Obj>()
             if (list.isEmpty()) return map
 
-            val first = list.first()
-            if (first.isInstanceOf(ObjArray)) {
-                if (first.invokeInstanceMethod(scope, "size").toInt() != 2)
-                    scope.raiseIllegalArgument(
-                        "list to construct map entry should exactly be 2 element Array like [key,value], got $list"
-                    )
-            } else scope.raiseIllegalArgument("first element of map list be a Collection of 2 elements; got $first")
-
-
-
             list.forEach {
-                map[it.getAt(scope, ObjInt.Zero)] = it.getAt(scope, ObjInt.One)
+                when (it) {
+                    is ObjMapEntry -> map[it.key] = it.value
+                    else -> {
+                        if (it.isInstanceOf(ObjArray)) {
+                            if (it.invokeInstanceMethod(scope, "size").toInt() != 2)
+                                scope.raiseIllegalArgument(
+                                    "Array to construct map entry should exactly be 2 elements [key,value], got $it"
+                                )
+                            map[it.getAt(scope, ObjInt.Zero)] = it.getAt(scope, ObjInt.One)
+                        } else {
+                            scope.raiseIllegalArgument("elements to construct map must be MapEntry or Array of 2 elements; got $it")
+                        }
+                    }
+                }
             }
             return map
         }
@@ -296,13 +299,11 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
             is ObjMap -> {
                 // Rightmost wins: copy all entries from `other` over existing ones
                 for ((k, v) in other.map) {
-                    val key = k as? ObjString ?: scope.raiseIllegalArgument("map merge expects string keys; got $k")
-                    map[key] = v
+                    map[k] = v
                 }
             }
             is ObjMapEntry -> {
-                val key = other.key as? ObjString ?: scope.raiseIllegalArgument("map merge expects string keys; got ${other.key}")
-                map[key] = other.value
+                map[other.key] = other.value
             }
             is ObjList -> {
                 // Treat as list of map entries
@@ -311,8 +312,7 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
                         is ObjMapEntry -> e
                         else -> scope.raiseIllegalArgument("map can only be merged with MapEntry elements; got $e")
                     }
-                    val key = entry.key as? ObjString ?: scope.raiseIllegalArgument("map merge expects string keys; got ${entry.key}")
-                    map[key] = entry.value
+                    map[entry.key] = entry.value
                 }
             }
             else -> scope.raiseIllegalArgument("map can only be merged with Map, MapEntry, or List<MapEntry>")

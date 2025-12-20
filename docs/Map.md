@@ -172,7 +172,7 @@ Maps and entries can also be merged with `+` and `+=`:
 
 Notes:
 - Map literals always use string keys (identifier keys are converted to strings).
-- Spreads inside map literals and `+`/`+=` merges require string keys on the right-hand side; this aligns with named-argument splats.
-- When you need computed or non-string keys, use the constructor form `Map(...)` or build entries with `=>` and then merge.
+- Spreads inside map literals and `+`/`+=` merges allow any objects as keys.
+- When you need computed or non-string keys, use the constructor form `Map(...)`, map literals with computed keys (if supported), or build entries with `=>` and then merge.
 
 [Collection](Collection.md)

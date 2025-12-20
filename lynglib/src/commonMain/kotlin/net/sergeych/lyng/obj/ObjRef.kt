@@ -1656,10 +1656,8 @@ class MapLiteralRef(private val entries: List<MapLiteralEntry>) : ObjRef {
                 is MapLiteralEntry.Spread -> {
                     val m = if (PerfFlags.RVAL_FASTPATH) e.ref.evalValue(scope) else e.ref.get(scope).value
                     if (m !is ObjMap) scope.raiseIllegalArgument("spread element in map literal must be a Map")
-                    // Enforce string keys for map literals
                     for ((k, v) in m.map) {
-                        val sKey = k as? ObjString ?: scope.raiseIllegalArgument("spread map must have string keys; got $k")
-                        result.map[sKey] = v
+                        result.map[k] = v
                     }
                 }
             }
