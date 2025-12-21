@@ -1044,7 +1044,7 @@ class Compiler(
                 }
 
                 Token.Type.ELLIPSIS -> {
-                    parseStatement()?.let { args += ParsedArgument(it, t.pos, isSplat = true) }
+                    parseExpression()?.let { args += ParsedArgument(it, t.pos, isSplat = true) }
                         ?: throw ScriptError(t.pos, "Expecting arguments list")
                 }
 
@@ -1110,7 +1110,7 @@ class Compiler(
                 }
 
                 Token.Type.ELLIPSIS -> {
-                    parseStatement()?.let { args += ParsedArgument(it, t.pos, isSplat = true) }
+                    parseExpression()?.let { args += ParsedArgument(it, t.pos, isSplat = true) }
                         ?: throw ScriptError(t.pos, "Expecting arguments list")
                 }
 

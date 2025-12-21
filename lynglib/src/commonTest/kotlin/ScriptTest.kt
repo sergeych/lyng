@@ -4284,4 +4284,17 @@ class ScriptTest {
             
         """.trimIndent())
     }
+
+    @Test
+    fun testAutoSplatArgs() = runTest {
+        eval("""
+            fun tf(x, y, z) {
+                "x=%s, y=%s, z=%s"(x,y,z)
+            }
+            assertEquals(tf(1, 2, 3), "x=1, y=2, z=3")
+            val a = { x: 3, y: 4, z: 5 }
+            assertEquals(tf(...a), "x=3, y=4, z=5")
+            assertEquals(tf(...{ x: 3, y: 4, z: 50 }), "x=3, y=4, z=50")
+        """.trimIndent())
+    }
 }
