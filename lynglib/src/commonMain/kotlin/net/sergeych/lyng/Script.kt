@@ -253,16 +253,18 @@ class Script(
             addFn("require") {
                 val condition = requiredArg<ObjBool>(0)
                 if (!condition.value) {
-                    val message = args.list.getOrNull(1)?.toString() ?: "requirement not met"
-                    raiseIllegalArgument(message)
+                    var message = args.list.getOrNull(1)
+                    if( message is Statement ) message = message.execute(this)
+                    raiseIllegalArgument(message?.toString() ?: "requirement not met")
                 }
                 ObjVoid
             }
             addFn("check") {
                 val condition = requiredArg<ObjBool>(0)
                 if (!condition.value) {
-                    val message = args.list.getOrNull(1)?.toString() ?: "check failed"
-                    raiseIllegalState(message)
+                    var message = args.list.getOrNull(1)
+                    if( message is Statement ) message = message.execute(this)
+                    raiseIllegalState(message?.toString() ?: "check failed")
                 }
                 ObjVoid
             }

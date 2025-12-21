@@ -4297,4 +4297,14 @@ class ScriptTest {
             assertEquals(tf(...{ x: 3, y: 4, z: 50 }), "x=3, y=4, z=50")
         """.trimIndent())
     }
+
+
+//    @Test
+//    fun testSplatAssignemnt() = runTest {
+//        eval("""
+//            val abc = [1, 2, 3]
+//            val [a, b, c] = ...abc
+//            println(a, b, c)
+//        """.trimIndent())
+//    }
 }

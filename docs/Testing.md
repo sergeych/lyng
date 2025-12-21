@@ -87,8 +87,23 @@ While not strictly for testing, these functions help in defensive programming:
 
 Throws an `IllegalArgumentException` if the condition is false. Use this for validating function arguments.
 
+If we want to evaluate the message lazily:
+
+    require(condition) { "requirement not met: %s"(someData) }
+
+In this case, formatting will only occur if the condition is not met.
+
+
+
 ### `check`
 
     check(condition, message="check failed")
 
 Throws an `IllegalStateException` if the condition is false. Use this for validating internal state.
+
+With lazy message evaluation:
+
+    check(condition) { "check failed: %s"(someData) }
+
+In this case, formatting will only occur if the condition is not met.
+
