@@ -122,7 +122,7 @@ internal fun scoreQueryAdvanced(termsIn: List<String>, rec: DocRecord): Int {
             if (token.startsWith(t) && t.length > best) { best = t.length; matched = t }
         }
         if (matched != null) {
-            posMap.getOrPut(matched!!) { mutableListOf() }.add(pos)
+            posMap.getOrPut(matched) { mutableListOf() }.add(pos)
         }
         pos++
         if (pos > 100000) break // safety for extremely large docs

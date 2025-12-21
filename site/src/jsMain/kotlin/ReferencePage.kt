@@ -127,7 +127,7 @@ fun ReferencePage() {
                                     Ul({ classes("mt-2") }) {
                                         d.members.forEach { m ->
                                             when (m) {
-                                                is MiniMemberFunDecl -> {
+                                                is MiniMemberFunDecl, -> {
                                                     val params = m.params.joinToString(", ") { p ->
                                                         val ts = typeOf(p.type)
                                                         if (ts.isNotBlank()) "${p.name}${ts}" else p.name
@@ -135,6 +135,9 @@ fun ReferencePage() {
                                                     val ret = typeOf(m.returnType)
                                                     val staticStr = if (m.isStatic) "static " else ""
                                                     Li { Text("${staticStr}method ${d.name}.${m.name}(${params})${ret}") }
+                                                }
+                                                is MiniInitDecl -> {
+                                                    // we don't doc init {} blocks at all
                                                 }
                                                 is MiniMemberValDecl -> {
                                                     val ts = typeOf(m.type)
