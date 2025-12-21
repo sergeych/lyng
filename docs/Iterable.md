@@ -81,6 +81,21 @@ Used to transform either the whole iterable stream or also skipping som elements
     
     >>> void
 
+## findFirst and findFirstOrNull
+
+Search for the first element that satisfies the given predicate:
+
+    val source = [1, 2, 3, 4]
+    assertEquals( 2, source.findFirst { it % 2 == 0 } )
+    assertEquals( 2, source.findFirstOrNull { it % 2 == 0 } )
+    
+    // findFirst throws if not found:
+    assertThrows( NoSuchElementException ) { source.findFirst { it > 10 } }
+    
+    // findFirstOrNull returns null if not found:
+    assertEquals( null, source.findFirstOrNull { it > 10 } )
+    
+    >>> void
 
 ## Instance methods:
 
@@ -96,6 +111,8 @@ Used to transform either the whole iterable stream or also skipping som elements
 | map(f)                 | create a list of values returned by `f` called for each element of the iterable |
 | indexOf(i)             | return index if the first encounter of i or a negative value if not found       |
 | associateBy(kf)        | create a map where keys are returned by kf that will be called for each element |
+| findFirst(p)           | return first element matching predicate `p` or throw (1)                         |
+| findFirstOrNull(p)     | return first element matching predicate `p` or `null`                            |
 | first                  | first element (1)                                                               |
 | last                   | last element (1)                                                                |
 | take(n)                | return [Iterable] of up to n first elements                                     |
@@ -129,6 +146,8 @@ optional function applied to each item that must return result string for an ite
     fun Iterable.forEach(block: (Any?)->Void ): Void
     fun Iterable.map(block: (Any?)->Void ): List
     fun Iterable.associateBy( keyMaker: (Any?)->Any): Map
+    fun Iterable.findFirst( predicate: (Any?)->Bool): Any
+    fun Iterable.findFirstOrNull( predicate: (Any?)->Bool): Any?
 
 ## Abstract methods:
 

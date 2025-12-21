@@ -9,6 +9,7 @@ __Other documents to read__ maybe after this one:
 - [Advanced topics](advanced_topics.md), [declaring arguments](declaring_arguments.md), [Scopes and Closures](scopes_and_closures.md)
 - [OOP notes](OOP.md), [exception handling](exceptions_handling.md)
 - [math in Lyng](math.md), [the `when` statement](when.md)
+- [Testing and Assertions](Testing.md)
 - [time](time.md) and [parallelism](parallelism.md)
 - [parallelism] - multithreaded code, coroutines, etc.
 - Some class
@@ -329,7 +330,7 @@ will be thrown:
     // WRONG! Exception will be thrown at next line:
     foo + "bar"
 
-Correct pattern is:
+The correct pattern is:
 
     foo = "foo"
     // now is OK:
@@ -477,6 +478,8 @@ one could be with ellipsis that means "the rest pf arguments as List":
     void
 
 ### Using lambda as the parameter
+
+See also: [Testing and Assertions](Testing.md)
 
     // note that fun returns its last calculated value,
     // in our case, result after in-place addition:
@@ -1465,6 +1468,8 @@ Lambda avoid unnecessary execution if assertion is not failed. for example:
 | π                                   | See [math](math.md)          |
 
 [List]: List.md
+
+[Testing]: Testing.md
 
 [Iterable]: Iterable.md
 

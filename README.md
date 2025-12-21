@@ -39,6 +39,7 @@ and it is multithreaded on platforms supporting it (automatically, no code chang
 
 - [Language home](https://lynglang.com)
 - [introduction and tutorial](docs/tutorial.md) - start here please
+- [Testing and Assertions](docs/Testing.md)
 - [Samples directory](docs/samples)
 - [Formatter (core + CLI + IDE)](docs/formatter.md)
 - [Books directory](docs)

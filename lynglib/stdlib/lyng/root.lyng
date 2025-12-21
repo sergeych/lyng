@@ -1,8 +1,8 @@
 package lyng.stdlib
-    
+
 /*
-   Wrap a builder into a zero-argument thunk that computes once and caches the result.
-   The first call invokes builder() and stores the value; subsequent calls return the cached value.
+Wrap a builder into a zero-argument thunk that computes once and caches the result.
+The first call invokes builder() and stores the value; subsequent calls return the cached value.
 */
 fun cached(builder) {
     var calculated = false
@@ -37,8 +37,32 @@ fun Iterable.drop(n) {
 fun Iterable.first() {
     val i = iterator()
     if( !i.hasNext() ) throw NoSuchElementException()
-    i.next().also { i.cancelIteration() }
+        i.next().also { i.cancelIteration() }
 }
+
+/*
+Return the first element that matches the predicate or throws
+NuSuchElementException
+*/
+fun Iterable.findFirst(predicate) {
+    for( x in this ) {
+        if( predicate(x) )
+            break x
+    }
+    else throw NoSuchElementException()
+}
+
+/*
+return the first element matching the predicate or null
+*/
+fun Iterable.findFirstOrNull(predicate) {
+    for( x in this ) {
+        if( predicate(x) )
+            break x
+    }
+    else null
+}
+
 
 /* Return the last element or throw if the iterable is empty. */
 fun Iterable.last() {
@@ -49,7 +73,7 @@ fun Iterable.last() {
         found = true
     }
     if( !found ) throw NoSuchElementException()
-    element
+        element
 }
 
 /* Emit all but the last N elements of this iterable. */
@@ -58,7 +82,7 @@ fun Iterable.dropLast(n) {
     val buffer = RingBuffer(n)
     flow {
         for( item in list ) {
-            if( buffer.size == n ) 
+            if( buffer.size == n )
                 emit( buffer.first() )
             buffer += item
         }
@@ -129,7 +153,7 @@ fun Iterable.minOf( lambda ) {
     minimum
 }
 
-/* Maximum value of the given function applied to elements of the collection. */    
+/* Maximum value of the given function applied to elements of the collection. */
 fun Iterable.maxOf( lambda ) {
     val i = iterator()
     var maximum = lambda( i.next() )
@@ -172,10 +196,10 @@ fun List.sort() {
 
 /* Represents a single stack trace element. */
 class StackTraceEntry(
-    val sourceName: String,
-    val line: Int,
-    val column: Int,
-    val sourceString: String
+        val sourceName: String,
+        val line: Int,
+        val column: Int,
+        val sourceString: String
 ) {
     /* Formatted representation: source:line:column: text. */
     fun toString() {
@@ -194,4 +218,3 @@ fun Exception.printStackTrace() {
 /* Compile this string into a regular expression. */
 fun String.re(): Regex { Regex(this) }
 
-    

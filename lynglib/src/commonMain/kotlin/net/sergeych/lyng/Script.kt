@@ -204,7 +204,19 @@ class Script(
                     )
             }
             addFn("assertThrows") {
-                val code = requireOnlyArg<Statement>()
+                val code: Statement
+                val expectedClass: ObjClass?
+                when(args.size) {
+                    1 -> {
+                        code = requiredArg<Statement>(0)
+                        expectedClass = null
+                    }
+                    2 -> {
+                        code = requiredArg<Statement>(1)
+                        expectedClass = requiredArg<ObjClass>(0)
+                    }
+                    else -> raiseIllegalArgument("Expected 1 or 2 arguments, got ${args.size}")
+                }
                 val result = try {
                     code.execute(this)
                     null
@@ -213,7 +225,15 @@ class Script(
                 } catch (_: ScriptError) {
                     ObjNull
                 }
-                result ?: raiseError(ObjAssertionFailedException(this, "Expected exception but nothing was thrown"))
+                if( result == null ) raiseError(ObjAssertionFailedException(this, "Expected exception but nothing was thrown"))
+                expectedClass?.let {
+                    if( result !is ObjException)
+                        raiseError("Expected $expectedClass, got $result")
+                    if (result.exceptionClass != expectedClass) {
+                        raiseError("Expected $expectedClass, got ${result.exceptionClass}")
+                    }
+                }
+                result
             }
 
             addFn("dynamic") {

@@ -4270,4 +4270,18 @@ class ScriptTest {
         assertEquals(51, r.toInt())
     }
 
+    @Test
+    fun testFirstInEnum() = runTest {
+        eval("""
+            enum E {
+                one, two, three 
+            }
+            println(E.entries)
+            assertEquals( E.two, E.entries.findFirst { 
+                println(it.name)
+                it.name in ["aaa", "two"] 
+            } ) 
+            
+        """.trimIndent())
+    }
 }
