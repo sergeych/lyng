@@ -1353,6 +1353,23 @@ class Compiler(
             parseClassDeclaration()
         }
 
+        "init" -> {
+            if (codeContexts.lastOrNull() is CodeContext.ClassBody) {
+                val block = parseBlock()
+                lastParsedBlockRange?.let { range ->
+                    miniSink?.onInitDecl(MiniInitDecl(MiniRange(id.pos, range.end), id.pos))
+                }
+                val initStmt = statement(id.pos) { scp ->
+                    block.execute(scp)
+                    ObjVoid
+                }
+                statement {
+                    currentClassCtx?.instanceInitializers?.add(initStmt)
+                    ObjVoid
+                }
+            } else null
+        }
+
         "enum" -> {
             pendingDeclStart = id.pos
             pendingDeclDoc = consumePendingDoc()
@@ -1754,7 +1771,7 @@ class Compiler(
             val constructorArgsDeclaration =
                 if (cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true))
                     parseArgsDeclaration(isClassDeclaration = true)
-                else null
+                else ArgsDeclaration(emptyList(), Token.Type.RPAREN)
 
             if (constructorArgsDeclaration != null && constructorArgsDeclaration.endTokenType != Token.Type.RPAREN)
                 throw ScriptError(
@@ -1791,7 +1808,9 @@ class Compiler(
                 if (next.type == Token.Type.LBRACE) {
                     // parse body
                     val bodyStart = next.pos
-                    val st = parseScript()
+                    val st = withLocalNames(constructorArgsDeclaration?.params?.map { it.name }?.toSet() ?: emptySet()) {
+                        parseScript()
+                    }
                     val rbTok = cc.next()
                     if (rbTok.type != Token.Type.RBRACE) throw ScriptError(rbTok.pos, "unbalanced braces in class body")
                     classBodyRange = MiniRange(bodyStart, rbTok.pos)

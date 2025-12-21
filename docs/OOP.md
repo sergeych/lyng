@@ -42,6 +42,34 @@ a _constructor_ that requires two parameters for fields. So when creating it wit
 Form now on `Point` is a class, it's type is `Class`, and we can create instances with it as in the
 example above.
 
+## Instance initialization: init block
+
+In addition to the primary constructor arguments, you can provide an `init` block that runs on each instance creation. This is useful for more complex initializations, side effects, or setting up fields that depend on multiple constructor parameters.
+
+    class Point(val x, val y) {
+       var magnitude
+       
+       init {
+          magnitude = Math.sqrt(x*x + y*y)
+       }
+    }
+
+Key features of `init` blocks:
+- **Scope**: They have full access to `this` members and all primary constructor parameters.
+- **Order**: In a single-inheritance scenario, `init` blocks run immediately after the instance fields are prepared but before the primary constructor body logic.
+- **Multiple blocks**: You can have multiple `init` blocks; they will be executed in the order they appear in the class body.
+
+### Initialization in Multiple Inheritance
+
+In cases of multiple inheritance, `init` blocks are executed following the constructor chaining rule:
+1. All ancestors are initialized first, following the inheritance hierarchy (diamond-safe: each ancestor is initialized exactly once).
+2. The `init` blocks of each class are executed after its parents have been fully initialized.
+3. For a hierarchy `class D : B, C`, the initialization order is: `B`'s chain, then `C`'s chain (skipping common ancestors with `B`), and finally `D`'s own `init` blocks.
+
+### Initialization during Deserialization
+
+When an object is restored from a serialized form (e.g., using `Lynon`), `init` blocks are **re-executed**. This ensures that transient state or derived fields are correctly recalculated upon restoration. However, primary constructors are **not** re-called during deserialization; only the `init` blocks and field initializers are executed to restore the instance state.
+
 Class point has a _method_, or a _member function_ `length()` that uses its _fields_ `x` and `y` to
 calculate the magnitude. Length is called
 

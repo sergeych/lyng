@@ -220,6 +220,16 @@ class Script(
                 ObjDynamic.create(this, requireOnlyArg())
             }
 
+            val root = this
+            val mathClass = ObjClass("Math").apply {
+                addFn("sqrt") {
+                    ObjReal(sqrt(args.firstAndOnly().toDouble()))
+                }
+            }
+            addItem("Math", false, ObjInstance(mathClass).apply {
+                instanceScope = Scope(root, thisObj = this)
+            })
+
             addFn("require") {
                 val condition = requiredArg<ObjBool>(0)
                 if (!condition.value) {

@@ -183,6 +183,15 @@ data class MiniMemberValDecl(
     override val isStatic: Boolean = false,
 ) : MiniMemberDecl
 
+data class MiniInitDecl(
+    override val range: MiniRange,
+    override val nameStart: Pos,
+) : MiniMemberDecl {
+    override val name: String get() = "init"
+    override val doc: MiniDoc? get() = null
+    override val isStatic: Boolean get() = false
+}
+
 // Streaming sink to collect mini-AST during parsing. Implementations may assemble a tree or process events.
 interface MiniAstSink {
     fun onScriptStart(start: Pos) {}
@@ -193,6 +202,7 @@ interface MiniAstSink {
     fun onImport(node: MiniImport) {}
     fun onFunDecl(node: MiniFunDecl) {}
     fun onValDecl(node: MiniValDecl) {}
+    fun onInitDecl(node: MiniInitDecl) {}
     fun onClassDecl(node: MiniClassDecl) {}
 
     fun onBlock(node: MiniBlock) {}

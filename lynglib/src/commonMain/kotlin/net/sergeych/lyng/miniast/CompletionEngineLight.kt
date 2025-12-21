@@ -183,6 +183,7 @@ object CompletionEngineLight {
                         val ci = CompletionItem(name, Kind.Field, typeText = typeOf((chosen as MiniMemberValDecl).type))
                         if (ci.name.startsWith(prefix, true)) out += ci
                     }
+                    is MiniInitDecl -> {}
                 }
             }
         }
@@ -210,6 +211,7 @@ object CompletionEngineLight {
                             if (ci.name.startsWith(prefix, true)) out += ci
                             already.add(name)
                         }
+                        is MiniInitDecl -> {}
                     }
                 } else {
                     // Fallback: emit simple method name without detailed types
@@ -302,6 +304,7 @@ object CompletionEngineLight {
         val ret = when (member) {
             is MiniMemberFunDecl -> member.returnType
             is MiniMemberValDecl -> member.type
+            is MiniInitDecl -> null
         }
         return simpleClassNameOf(ret)
     }
@@ -362,6 +365,7 @@ object CompletionEngineLight {
         val ret = when (member) {
             is MiniMemberFunDecl -> member.returnType
             is MiniMemberValDecl -> member.type
+            is MiniInitDecl -> null
         }
         return simpleClassNameOf(ret)
     }

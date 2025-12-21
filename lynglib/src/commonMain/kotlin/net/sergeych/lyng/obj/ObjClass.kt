@@ -200,6 +200,16 @@ open class ObjClass(
     override suspend fun compareTo(scope: Scope, other: Obj): Int = if (other === this) 0 else -1
 
     override suspend fun callOn(scope: Scope): Obj {
+        val instance = createInstance(scope)
+        initializeInstance(instance, scope.args, runConstructors = true)
+        return instance
+    }
+
+    /**
+     * Create an instance of this class and initialize its [ObjInstance.instanceScope] with
+     * methods. Does NOT run initializers or constructors.
+     */
+    internal fun createInstance(scope: Scope): ObjInstance {
         val instance = ObjInstance(this)
         // Avoid capturing a transient (pooled) call frame as the parent of the instance scope.
         // Bind instance scope to the caller's parent chain directly so name resolution (e.g., stdlib like sqrt)
@@ -223,75 +233,101 @@ open class ObjClass(
                 }
             }
         }
-        // Constructor chaining MVP: initialize base classes left-to-right, then this class.
-        // Ensure each ancestor is initialized at most once (diamond-safe).
-        val visited = hashSetOf<ObjClass>()
+        return instance
+    }
 
-        suspend fun initClass(c: ObjClass, argsForThis: Arguments?, isRoot: Boolean = false) {
-            if (!visited.add(c)) return
-            // For the most-derived class, bind its constructor params BEFORE parents so base arg thunks can see them
-            if (isRoot) {
-                c.constructorMeta?.let { meta ->
-                    val argsHere = argsForThis ?: Arguments.EMPTY
-                    // Assign constructor params into instance scope (unmangled)
-                    meta.assignToContext(instance.instanceScope, argsHere)
-                    // Also expose them under MI-mangled storage keys `${Class}::name` so qualified views can access them
-                    // and so that base-class casts like `(obj as Base).field` work.
-                    for (p in meta.params) {
-                        val rec = instance.instanceScope.objects[p.name]
-                        if (rec != null) {
-                            val mangled = "${c.className}::${p.name}"
-                            // Always point the mangled name to the current record to keep writes consistent
-                            // across re-bindings (e.g., second pass before ctor)
-                            instance.instanceScope.objects[mangled] = rec
-                        }
-                    }
+    /**
+     * Run initializers and optionally constructors for the given [instance].
+     * Handles Multiple Inheritance correctly (diamond-safe).
+     */
+    internal suspend fun initializeInstance(
+        instance: ObjInstance,
+        args: Arguments?,
+        runConstructors: Boolean
+    ) {
+        val visited = hashSetOf<ObjClass>()
+        initClassInternal(instance, visited, this, args, isRoot = true, runConstructors = runConstructors)
+    }
+
+    private suspend fun initClassInternal(
+        instance: ObjInstance,
+        visited: MutableSet<ObjClass>,
+        c: ObjClass,
+        argsForThis: Arguments?,
+        @Suppress("UNUSED_PARAMETER") isRoot: Boolean = false,
+        runConstructors: Boolean = true
+    ) {
+        if (!visited.add(c)) return
+
+        // Bind constructor parameters (both mangled and unmangled)
+        // These are needed for:
+        // 1) base constructor argument evaluation (if called from a derived class)
+        // 2) this class's field initializers and `init` blocks
+        // 3) this class's constructor body
+        // 4) `compareTo` and other structural operations
+        c.constructorMeta?.let { meta ->
+            val argsHere = argsForThis ?: Arguments.EMPTY
+            // Assign constructor params into instance scope (unmangled)
+            meta.assignToContext(instance.instanceScope, argsHere)
+            // Also expose them under MI-mangled storage keys `${Class}::name` so qualified views can access them
+            // and so that base-class casts like `(obj as Base).field` work.
+            for (p in meta.params) {
+                val rec = instance.instanceScope.objects[p.name]
+                if (rec != null) {
+                    val mangled = "${c.className}::${p.name}"
+                    // Always point the mangled name to the current record to keep writes consistent
+                    // across re-bindings
+                    instance.instanceScope.objects[mangled] = rec
                 }
-            }
-            // Initialize direct parents first, in order
-            for (p in c.directParents) {
-                val raw = c.directParentArgs[p]?.toArguments(instance.instanceScope, false)
-                val limited = if (raw != null) {
-                    val need = p.constructorMeta?.params?.size ?: 0
-                    if (need == 0) Arguments.EMPTY else Arguments(raw.list.take(need), tailBlockMode = false)
-                } else Arguments.EMPTY
-                initClass(p, limited)
-            }
-            // Execute per-instance initializers collected from class body for this class
-            if (c.instanceInitializers.isNotEmpty()) {
-                val savedCtx = instance.instanceScope.currentClassCtx
-                instance.instanceScope.currentClassCtx = c
-                try {
-                    for (initStmt in c.instanceInitializers) {
-                        initStmt.execute(instance.instanceScope)
-                    }
-                } finally {
-                    instance.instanceScope.currentClassCtx = savedCtx
-                }
-            }
-            // Then run this class' constructor, if any
-            c.instanceConstructor?.let { ctor ->
-                // Bind this class's constructor parameters into the instance scope now, right before ctor
-                c.constructorMeta?.let { meta ->
-                    val argsHere = argsForThis ?: Arguments.EMPTY
-                    meta.assignToContext(instance.instanceScope, argsHere)
-                    // Ensure mangled aliases exist for qualified access starting from this class
-                    for (p in meta.params) {
-                        val rec = instance.instanceScope.objects[p.name]
-                        if (rec != null) {
-                            val mangled = "${c.className}::${p.name}"
-                            // Overwrite to ensure alias refers to the latest ObjRecord after re-binding
-                            instance.instanceScope.objects[mangled] = rec
-                        }
-                    }
-                }
-                val execScope = instance.instanceScope.createChildScope(args = argsForThis ?: Arguments.EMPTY, newThisObj = instance)
-                ctor.execute(execScope)
             }
         }
 
-        initClass(this, instance.instanceScope.args, isRoot = true)
-        return instance
+        // Initialize direct parents first, in order
+        for (p in c.directParents) {
+            val raw = c.directParentArgs[p]?.toArguments(instance.instanceScope, false)
+            val limited = if (raw != null) {
+                val need = p.constructorMeta?.params?.size ?: 0
+                if (need == 0) Arguments.EMPTY else Arguments(raw.list.take(need), tailBlockMode = false)
+            } else Arguments.EMPTY
+            initClassInternal(instance, visited, p, limited, false, runConstructors)
+        }
+
+        // Re-bind this class's parameters right before running its initializers and constructor.
+        // This ensures that unmangled names in the instance scope correctly refer to THIS class's
+        // parameters even if they were shadowed/overwritten by parent class initialization.
+        c.constructorMeta?.let { meta ->
+            val argsHere = argsForThis ?: Arguments.EMPTY
+            meta.assignToContext(instance.instanceScope, argsHere)
+            // Re-sync mangled names to point to the fresh records to keep them consistent
+            for (p in meta.params) {
+                val rec = instance.instanceScope.objects[p.name]
+                if (rec != null) {
+                    val mangled = "${c.className}::${p.name}"
+                    instance.instanceScope.objects[mangled] = rec
+                }
+            }
+        }
+
+        // Execute per-instance initializers collected from class body for this class
+        if (c.instanceInitializers.isNotEmpty()) {
+            val savedCtx = instance.instanceScope.currentClassCtx
+            instance.instanceScope.currentClassCtx = c
+            try {
+                for (initStmt in c.instanceInitializers) {
+                    initStmt.execute(instance.instanceScope)
+                }
+            } finally {
+                instance.instanceScope.currentClassCtx = savedCtx
+            }
+        }
+        // Then run this class' constructor, if any
+        if (runConstructors) {
+            c.instanceConstructor?.let { ctor ->
+                val execScope =
+                    instance.instanceScope.createChildScope(args = argsForThis ?: Arguments.EMPTY, newThisObj = instance)
+                ctor.execute(execScope)
+            }
+        }
     }
 
     suspend fun callWithArgs(scope: Scope, vararg plainArgs: Obj): Obj {

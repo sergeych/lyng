@@ -33,7 +33,9 @@ class ObjInstanceClass(val name: String, vararg parents: ObjClass) : ObjClass(na
         if (args.size > actualSize)
             scope.raiseIllegalArgument("constructor $name has only $actualSize but serialized version has ${args.size}")
         val newScope = scope.createChildScope(args = Arguments(args))
-        return (callOn(newScope) as ObjInstance).apply {
+        val instance = createInstance(newScope)
+        initializeInstance(instance, newScope.args, runConstructors = false)
+        return instance.apply {
             deserializeStateVars(scope, decoder)
             invokeInstanceMethod(scope, "onDeserialized") { ObjVoid }
         }

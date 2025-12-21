@@ -186,4 +186,87 @@ class OOTest {
             assertEquals(15, cc.foo.bar(10,2,3))
        """)
     }
+
+    @Test
+    fun testClassInitialization() = runTest {
+        eval("""
+            var countInstances = 0
+            class Point(val x: Int, val y: Int) {
+               println("Class initializer is called 1")
+               var magnitude
+               
+               /*
+                    init {} section optionally provide initialization code that is called on each instance creation.
+                    it should have the same access to this.* and constructor parameters as any other member
+                    function.
+               */
+               init {
+                  countInstances++
+                  magnitude = Math.sqrt(x*x + y*y)
+               }
+            }
+            
+            val p = Point(1, 2)
+            assertEquals(1, countInstances)
+            assertEquals(p, Point(1,2) )
+            assertEquals(2, countInstances)
+            """.trimIndent())
+    }
+
+    @Test
+    fun testMIInitialization() = runTest {
+        eval("""
+            var order = []
+            class A {
+                init { order.add("A") }
+            }
+            class B : A {
+                init { order.add("B") }
+            }
+            class C {
+                init { order.add("C") }
+            }
+            class D : B, C {
+                init { order.add("D") }
+            }
+            D()
+            assertEquals(["A", "B", "C", "D"], order)
+        """)
+    }
+
+    @Test
+    fun testMIDiamondInitialization() = runTest {
+        eval("""
+            var order = []
+            class A {
+                init { order.add("A") }
+            }
+            class B : A {
+                init { order.add("B") }
+            }
+            class C : A {
+                init { order.add("C") }
+            }
+            class D : B, C {
+                init { order.add("D") }
+            }
+            D()
+            assertEquals(["A", "B", "C", "D"], order)
+        """)
+    }
+
+    @Test
+    fun testInitBlockInDeserialization() = runTest {
+        eval("""
+            import lyng.serialization
+            var count = 0
+            class A {
+                init { count++ }
+            }
+            val a1 = A()
+            val coded = Lynon.encode(a1)
+            val a2 = Lynon.decode(coded)
+            assertEquals(2, count)
+        """)
+    }
 }
