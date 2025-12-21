@@ -411,6 +411,7 @@ suspend fun applyLyngHighlightToTextAst(text: String): String {
         try {
             if (mini != null) {
                 val binding = Binder.bind(text, mini)
+                val symbolsById = binding.symbols.associateBy { it.id }
                 // Map decl ranges to avoid overriding declarations
                 val declKeys = HashSet<Pair<Int, Int>>()
                 for (sym in binding.symbols) {
@@ -427,7 +428,7 @@ suspend fun applyLyngHighlightToTextAst(text: String): String {
                     val key = ref.start to ref.end
                     if (declKeys.contains(key)) continue
                     if (!overrides.containsKey(key)) {
-                        val sym = binding.symbols.firstOrNull { it.id == ref.symbolId }
+                        val sym = symbolsById[ref.symbolId]
                         val cls = sym?.let { classForKind(it.kind) }
                         if (cls != null) overrides[key] = cls
                     }

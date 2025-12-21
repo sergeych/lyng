@@ -20,7 +20,7 @@ fun Iterable.filter(predicate) {
     val list = this
     flow {
         for( item in list ) {
-            if( predicate(item) ) {ln
+            if( predicate(item) ) {
                 emit(item)
             }
         }
@@ -96,13 +96,13 @@ fun Iterable.takeLast(n) {
     buffer
 }
 
-/* Join elements into a string with a separator (prefix parameter) and optional transformer. */
-fun Iterable.joinToString(prefix=" ", transformer=null) {
+/* Join elements into a string with a separator (separator parameter) and optional transformer. */
+fun Iterable.joinToString(separator=" ", transformer=null) {
     var result = null
     for( part in this ) {
         val transformed = transformer?(part)?.toString() ?: part.toString()
         if( result == null ) result = transformed
-        else result += prefix + transformed
+        else result += separator + transformed
     }
     result ?: ""
 }

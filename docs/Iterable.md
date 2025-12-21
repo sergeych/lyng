@@ -40,13 +40,13 @@ available, for example
 ## joinToString
 
 This methods convert any iterable to a string joining string representation of each element, optionally transforming it
-and joining using specified suffix.
+and joining using specified separator.
 
-    Iterable.joinToString(suffux=' ', transform=null)
+    Iterable.joinToString(separator=' ', transformer=null)
 
 - if `Iterable` `isEmpty`, the empty string `""` is returned.
-- `suffix` is inserted between items when there are more than one.
-- `transform` of specified is applied to each element, otherwise its `toString()` method is used.
+- `separator` is inserted between items when there are more than one.
+- `transformer` of specified is applied to each element, otherwise its `toString()` method is used.
 
 Here is the sample:
 
@@ -104,7 +104,7 @@ Search for the first element that satisfies the given predicate:
 | toList()               | create a list from iterable                                                     |
 | toSet()                | create a set from iterable                                                      |
 | contains(i)            | check that iterable contains `i`                                                |
-| `i in iterator`        | same as `contains(i)`                                                           |
+| `i in iterable`        | same as `contains(i)`                                                           |
 | isEmpty()              | check iterable is empty                                                         |
 | forEach(f)             | call f for each element                                                         |
 | toMap()                | create a map from list of key-value pairs (arrays of 2 items or like)           |
@@ -116,7 +116,7 @@ Search for the first element that satisfies the given predicate:
 | first                  | first element (1)                                                               |
 | last                   | last element (1)                                                                |
 | take(n)                | return [Iterable] of up to n first elements                                     |
-| taleLast(n)            | return [Iterable] of up to n last elements                                      |
+| takeLast(n)            | return [Iterable] of up to n last elements                                      |
 | drop(n)                | return new [Iterable] without first n elements                                  |
 | dropLast(n)            | return new [Iterable] without last n elements                                   |
 | sum()                  | return sum of the collection applying `+` to its elements (3)                   |
@@ -129,31 +129,18 @@ Search for the first element that satisfies the given predicate:
 | shuffled()             | create a listof shiffled elements                                               |
 
 (1)
-: throws `NoSuchElementException` if there is no such element
+:: throws `NoSuchElementException` if there is no such element
 
 (2)
-: `joinToString(suffix=" ",transform=null)`: suffix is inserted between items if there are more than one, trasnfom is
+:: `joinToString(separator=" ", transformer=null)`: separator is inserted between items if there are more than one, transformer is
 optional function applied to each item that must return result string for an item, otherwise `item.toString()` is used.
 
 (3)
-: sum of empty collection is `null`
-
-    fun Iterable.toList(): List
-    fun Iterable.toSet(): Set
-    fun Iterable.indexOf(element): Int
-    fun Iterable.contains(element): Bool
-    fun Iterable.isEmpty(element): Bool
-    fun Iterable.forEach(block: (Any?)->Void ): Void
-    fun Iterable.map(block: (Any?)->Void ): List
-    fun Iterable.associateBy( keyMaker: (Any?)->Any): Map
-    fun Iterable.findFirst( predicate: (Any?)->Bool): Any
-    fun Iterable.findFirstOrNull( predicate: (Any?)->Bool): Any?
+:: sum of empty collection is `null`
 
 ## Abstract methods:
 
     fun iterator(): Iterator
-
-Creates a list by iterating to the end. So, the Iterator should be finite to be used with it.
 
 ## Included in interfaces:
 
