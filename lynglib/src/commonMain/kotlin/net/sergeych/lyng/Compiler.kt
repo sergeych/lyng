@@ -674,12 +674,19 @@ class Compiler(
                 Token.Type.RBRACKET -> return entries
                 Token.Type.ELLIPSIS -> {
                     parseExpressionLevel()?.let { entries += ListEntry.Spread(it) }
+                        ?: throw ScriptError(t.pos, "spread element must have an expression")
                 }
 
                 else -> {
                     cc.previous()
-                    parseExpressionLevel()?.let { entries += ListEntry.Element(it) }
-                        ?: throw ScriptError(t.pos, "invalid list literal: expecting expression")
+                    parseExpressionLevel()?.let { expr ->
+                        if (cc.current().type == Token.Type.ELLIPSIS) {
+                            cc.next()
+                            entries += ListEntry.Spread(expr)
+                        } else {
+                            entries += ListEntry.Element(expr)
+                        }
+                    } ?: throw ScriptError(t.pos, "invalid list literal: expecting expression")
                 }
             }
         }
@@ -2551,11 +2558,51 @@ class Compiler(
         @Suppress("UNUSED_PARAMETER") isOpen: Boolean = false,
         isStatic: Boolean = false
     ): Statement {
-        val nameToken = cc.next()
-        val start = nameToken.pos
-        if (nameToken.type != Token.Type.ID)
-            throw ScriptError(nameToken.pos, "Expected identifier here")
-        val name = nameToken.value
+        val nextToken = cc.next()
+        val start = nextToken.pos
+
+        if (nextToken.type == Token.Type.LBRACKET) {
+            // Destructuring
+            if (isStatic) throw ScriptError(start, "static destructuring is not supported")
+
+            val entries = parseArrayLiteral()
+            val pattern = ListLiteralRef(entries)
+
+            // Register all names in the pattern
+            pattern.forEachVariable { name -> declareLocalName(name) }
+
+            val eqToken = cc.next()
+            if (eqToken.type != Token.Type.ASSIGN)
+                throw ScriptError(eqToken.pos, "destructuring declaration must be initialized")
+
+            val initialExpression = parseStatement(true)
+                ?: throw ScriptError(eqToken.pos, "Expected initializer expression")
+
+            val names = mutableListOf<String>()
+            pattern.forEachVariable { names.add(it) }
+
+            return statement(start) { context ->
+                val value = initialExpression.execute(context)
+                for (name in names) {
+                    context.addItem(name, true, ObjVoid, visibility)
+                }
+                pattern.setAt(start, context, value)
+                if (!isMutable) {
+                    for (name in names) {
+                        val rec = context.objects[name]!!
+                        val immutableRec = rec.copy(isMutable = false)
+                        context.objects[name] = immutableRec
+                        context.localBindings[name] = immutableRec
+                        context.updateSlotFor(name, immutableRec)
+                    }
+                }
+                ObjVoid
+            }
+        }
+
+        if (nextToken.type != Token.Type.ID)
+            throw ScriptError(nextToken.pos, "Expected identifier or [ here")
+        val name = nextToken.value
 
         // Optional explicit type annotation
         val varTypeMini: MiniTypeRef? = if (cc.current().type == Token.Type.COLON) {
@@ -2597,7 +2644,7 @@ class Compiler(
                 type = varTypeMini,
                 initRange = initR,
                 doc = pendingDeclDoc,
-                nameStart = nameToken.pos
+                nameStart = start
             )
             miniSink?.onValDecl(node)
             pendingDeclDoc = null
@@ -2621,14 +2668,14 @@ class Compiler(
         // Determine declaring class (if inside class body) at compile time, capture it in the closure
         val declaringClassNameCaptured = (codeContexts.lastOrNull() as? CodeContext.ClassBody)?.name
 
-        return statement(nameToken.pos) { context ->
+        return statement(start) { context ->
             // In true class bodies (not inside a function), store fields under a class-qualified key to support MI collisions
             // Do NOT infer declaring class from runtime thisObj here; only the compile-time captured
             // ClassBody qualifies for class-field storage. Otherwise, this is a plain local.
             val declaringClassName = declaringClassNameCaptured
             if (declaringClassName == null) {
                 if (context.containsLocal(name))
-                    throw ScriptError(nameToken.pos, "Variable $name is already defined")
+                    throw ScriptError(start, "Variable $name is already defined")
             }
 
             // Register the local name so subsequent identifiers can be emitted as fast locals
@@ -2661,7 +2708,7 @@ class Compiler(
                     if (isClassScope) {
                         val cls = context.thisObj as ObjClass
                         // Defer: at instance construction, evaluate initializer in instance scope and store under mangled name
-                        val initStmt = statement(nameToken.pos) { scp ->
+                        val initStmt = statement(start) { scp ->
                             val initValue = initialExpression?.execute(scp)?.byValueCopy() ?: ObjNull
                             // Preserve mutability of declaration: do NOT use addOrUpdateItem here, as it creates mutable records
                             scp.addItem(storageName, isMutable, initValue, visibility, recordType = ObjRecord.Type.Field)

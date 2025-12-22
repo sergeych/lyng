@@ -297,6 +297,10 @@ open class Scope(
         return idx
     }
 
+    fun updateSlotFor(name: String, record: ObjRecord) {
+        nameToSlot[name]?.let { slots[it] = record }
+    }
+
     /**
      * Reset this scope instance so it can be safely reused as a fresh child frame.
      * Clears locals and slots, assigns new frameId, and sets parent/args/pos/thisObj.

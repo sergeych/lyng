@@ -107,6 +107,41 @@ Assignemnt is an expression that changes its lvalue and return assigned value:
     >>> 11
     >>> 6
 
+### Destructuring assignments
+
+Lyng supports destructuring assignments for lists. This allows you to unpack list elements into multiple variables at once:
+
+    val [a, b, c] = [1, 2, 3]
+    assertEquals(1, a)
+    assertEquals(2, b)
+    assertEquals(3, c)
+
+It also supports *splats* (ellipsis) to capture multiple elements into a list:
+
+    val [head, rest...] = [1, 2, 3]
+    assertEquals(1, head)
+    assertEquals([2, 3], rest)
+
+    val [first, middle..., last] = [1, 2, 3, 4, 5]
+    assertEquals(1, first)
+    assertEquals([2, 3, 4], middle)
+    assertEquals(5, last)
+
+Destructuring can be nested:
+
+    val [x, [y, z...]] = [1, [2, 3, 4]]
+    assertEquals(1, x)
+    assertEquals(2, y)
+    assertEquals([3, 4], z)
+
+And it can be used for reassigning existing variables, for example, to swap values:
+
+    var x = 5
+    var y = 10
+    [x, y] = [y, x]
+    assertEquals(10, x)
+    assertEquals(5, y)
+
 As the assignment itself is an expression, you can use it in strange ways. Just remember
 to use parentheses as assignment operation insofar is left-associated and will not
 allow chained assignments (we might fix it later). Use parentheses insofar:

@@ -92,6 +92,34 @@ Open end ranges remove head and tail elements:
     assert( [1, 2, 3] !== [1, 2, 3])
     >>> void
 
+## Destructuring
+
+Lists can be used as L-values for destructuring assignments. This allows you to unpack list elements into multiple variables.
+
+### Basic Destructuring
+```lyng
+val [a, b, c] = [1, 2, 3]
+```
+
+### With Splats (Variadic)
+A single ellipsis `...` can be used to capture remaining elements into a list. It can be placed at the beginning, middle, or end of the pattern.
+```lyng
+val [head, rest...] = [1, 2, 3] // head=1, rest=[2, 3]
+val [first, middle..., last] = [1, 2, 3, 4, 5] // first=1, middle=[2, 3, 4], last=5
+```
+
+### Nested Patterns
+Destructuring patterns can be nested to unpack multi-dimensional lists.
+```lyng
+val [a, [b, c...], d] = [1, [2, 3, 4], 5]
+```
+
+### Reassignment
+Destructuring can also be used to reassign existing variables:
+```lyng
+[x, y] = [y, x] // Swap values
+```
+
 ## In-place sort
 
 List could be sorted in place, just like [Collection] provide sorted copies, in a very like way:

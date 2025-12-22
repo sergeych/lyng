@@ -27,6 +27,7 @@ import net.sergeych.lyng.*
  */
 sealed interface ObjRef {
     suspend fun get(scope: Scope): ObjRecord
+
     /**
      * Fast path for evaluating an expression to a raw Obj value without wrapping it into ObjRecord.
      * Default implementation calls [get] and returns its value. Nodes can override to avoid record traffic.
@@ -35,6 +36,12 @@ sealed interface ObjRef {
     suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
         throw ScriptError(pos, "can't assign value")
     }
+
+    /**
+     * Calls [block] for each variable name that this reference targets for writing.
+     * Used for declaring local variables in destructuring.
+     */
+    fun forEachVariable(block: (String) -> Unit) {}
 }
 
 /** Runtime-computed read-only reference backed by a lambda. */
@@ -1215,6 +1222,9 @@ class MethodCallRef(
  * Reference to a local/visible variable by name (Phase A: scope lookup).
  */
 class LocalVarRef(private val name: String, private val atPos: Pos) : ObjRef {
+    override fun forEachVariable(block: (String) -> Unit) {
+        block(name)
+    }
     // Per-frame slot cache to avoid repeated name lookups
     private var cachedFrameId: Long = 0L
     private var cachedSlot: Int = -1
@@ -1453,6 +1463,9 @@ class FastLocalVarRef(
     private val name: String,
     private val atPos: Pos,
 ) : ObjRef {
+    override fun forEachVariable(block: (String) -> Unit) {
+        block(name)
+    }
     // Cache the exact scope frame that owns the slot, not just the current frame
     private var cachedOwnerScope: Scope? = null
     private var cachedOwnerFrameId: Long = 0L
@@ -1610,6 +1623,15 @@ class FastLocalVarRef(
 }
 
 class ListLiteralRef(private val entries: List<ListEntry>) : ObjRef {
+    override fun forEachVariable(block: (String) -> Unit) {
+        for (e in entries) {
+            when (e) {
+                is ListEntry.Element -> e.ref.forEachVariable(block)
+                is ListEntry.Spread -> e.ref.forEachVariable(block)
+            }
+        }
+    }
+
     override suspend fun get(scope: Scope): ObjRecord {
         // Heuristic capacity hint: count element entries; spreads handled opportunistically
         val elemCount = entries.count { it is ListEntry.Element }
@@ -1633,7 +1655,54 @@ class ListLiteralRef(private val entries: List<ListEntry>) : ObjRef {
                 }
             }
         }
-        return ObjList(list).asReadonly
+        return ObjList(list).asMutable
+    }
+
+    override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
+        val sourceList = (newValue as? ObjList)?.list
+            ?: throw ScriptError(pos, "destructuring assignment requires a list on the right side")
+
+        val ellipsisIdx = entries.indexOfFirst { it is ListEntry.Spread }
+        if (entries.count { it is ListEntry.Spread } > 1) {
+            throw ScriptError(pos, "destructuring pattern can have only one splat")
+        }
+
+        if (ellipsisIdx < 0) {
+            if (sourceList.size < entries.size)
+                throw ScriptError(pos, "too few elements for destructuring")
+            for (i in entries.indices) {
+                val entry = entries[i]
+                if (entry is ListEntry.Element) {
+                    entry.ref.setAt(pos, scope, sourceList[i])
+                }
+            }
+        } else {
+            val headCount = ellipsisIdx
+            val tailCount = entries.size - ellipsisIdx - 1
+            if (sourceList.size < headCount + tailCount)
+                throw ScriptError(pos, "too few elements for destructuring")
+
+            // head
+            for (i in 0 until headCount) {
+                val entry = entries[i]
+                if (entry is ListEntry.Element) {
+                    entry.ref.setAt(pos, scope, sourceList[i])
+                }
+            }
+
+            // tail
+            for (i in 0 until tailCount) {
+                val entry = entries[entries.size - 1 - i]
+                if (entry is ListEntry.Element) {
+                    entry.ref.setAt(pos, scope, sourceList[sourceList.size - 1 - i])
+                }
+            }
+
+            // ellipsis
+            val spreadEntry = entries[ellipsisIdx] as ListEntry.Spread
+            val spreadList = sourceList.subList(headCount, sourceList.size - tailCount)
+            spreadEntry.ref.setAt(pos, scope, ObjList(spreadList.toMutableList()))
+        }
     }
 }
 

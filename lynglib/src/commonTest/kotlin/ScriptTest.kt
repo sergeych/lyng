@@ -4334,12 +4334,45 @@ class ScriptTest {
     }
 
 
-//    @Test
-//    fun testSplatAssignemnt() = runTest {
-//        eval("""
-//            val abc = [1, 2, 3]
-//            val [a, b, c] = ...abc
-//            println(a, b, c)
-//        """.trimIndent())
-//    }
+    @Test
+    fun testDestructuringAssignment() = runTest {
+        eval("""
+            val abc = [1, 2, 3]
+            // plain:
+            val [a, b, c] = abc
+            assertEquals( 1, a )
+            assertEquals( 2, b )
+            assertEquals( 3, c )
+            // with splats, receiving into list:
+            val [ab..., c1] = abc
+            assertEquals( [1, 2], ab )
+            assertEquals( 3, c1 )
+            // also in the end
+            val [a1, rest...] = abc
+            assertEquals( 1, a1 )
+            assertEquals( [2, 3], rest )
+            // and in the middle
+            val [a_mid, middle..., e0, e1] = [ 1, 2, 3, 4, 5, 6]
+            assertEquals( [2, 3, 4], middle )
+            assertEquals( 5, e0 )
+            assertEquals( 6, e1 )
+            assertEquals( 1, a_mid )
+            
+            // nested destructuring:
+            val [n1, [n2, n3...], n4] = [1, [2, 3, 4], 5]
+            assertEquals(1, n1)
+            assertEquals(2, n2)
+            assertEquals([3, 4], n3)
+            assertEquals(5, n4)
+
+            // also it could be used to reassign vars:
+            var x = 5
+            var y = 10
+            
+            [x, y] = [y, x]
+            assertEquals( 10, x )
+            assertEquals( 5, y )
+            
+        """.trimIndent())
+    }
 }

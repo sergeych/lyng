@@ -75,6 +75,13 @@ destructuring arrays when calling functions and lambdas:
     getFirstAndLast( ...(1..10) ) // see "splats" section below
     >>> [1,10]
 
+Note that array destructuring can also be used in assignments:
+
+    val [first, middle..., last] = [1, 2, 3, 4, 5]
+    [x, y] = [y, x] // Swap
+
+See [tutorial] and [List] documentation for more details on destructuring assignments.
+
 # Splats
 
 Ellipsis allows to convert argument lists to lists. The inversa algorithm that converts [List],
@@ -155,3 +162,4 @@ If a call is immediately followed by a block `{ ... }`, it is treated as an extr
     
 
 [tutorial]: tutorial.md
+[List]: List.md
