@@ -198,7 +198,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
         return JsonArray(list.map { it.toJson(scope) })
     }
 
-    override suspend fun toString(scope: Scope, calledFromLyng: Boolean): ObjString {
+    override suspend fun defaultToString(scope: Scope): ObjString {
         return ObjString(buildString {
             append("[")
             var first = true

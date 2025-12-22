@@ -103,7 +103,7 @@ class ObjRegexMatch(val match: MatchResult) : Obj() {
         )
     }
 
-    override suspend fun toString(scope: Scope,calledFromLyng: Boolean): ObjString {
+    override suspend fun defaultToString(scope: Scope): ObjString {
         return ObjString("RegexMath(${objRange.toString(scope)},${objGroups.toString(scope)})")
     }
 

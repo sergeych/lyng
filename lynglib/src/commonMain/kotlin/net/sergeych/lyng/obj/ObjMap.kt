@@ -52,7 +52,7 @@ class ObjMapEntry(val key: Obj, val value: Obj) : Obj() {
         else -> scope.raiseIndexOutOfBounds()
     }
 
-    override suspend fun toString(scope: Scope, calledFromLyng: Boolean): ObjString {
+    override suspend fun defaultToString(scope: Scope): ObjString {
         return ObjString("(${key.toString(scope).value} => ${value.toString(scope).value})")
     }
 
@@ -124,7 +124,7 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
         return -1
     }
 
-    override suspend fun toString(scope: Scope, calledFromLyng: Boolean): ObjString {
+    override suspend fun defaultToString(scope: Scope): ObjString {
         val reusult = buildString {
             append("Map(")
             var first = true

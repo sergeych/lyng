@@ -142,14 +142,18 @@ open class Obj {
      * @param calledFromLyng true if called from Lyng's `toString`. Normally this parameter should be ignored,
      *      but it is used to avoid endless recursion in [Obj.toString] base implementation
      */
-    open suspend fun toString(scope: Scope,calledFromLyng: Boolean=false): ObjString {
-        return if (this is ObjString) this
-        else if( !calledFromLyng ) {
-            invokeInstanceMethod(scope, "toString") {
-                ObjString(this.toString())
+    open suspend fun toString(scope: Scope, calledFromLyng: Boolean = false): ObjString {
+        if (this is ObjString) return this
+        return if (!calledFromLyng) {
+            invokeInstanceMethod(scope, "toString", Arguments.EMPTY) {
+                defaultToString(scope)
             } as ObjString
-        } else { ObjString(this.toString()) }
+        } else {
+            defaultToString(scope)
+        }
     }
+
+    open suspend fun defaultToString(scope: Scope): ObjString = ObjString(this.toString())
 
     /**
      * Class of the object: definition of member functions (top-level), etc.

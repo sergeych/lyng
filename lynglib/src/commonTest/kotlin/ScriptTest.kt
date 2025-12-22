@@ -4311,6 +4311,28 @@ class ScriptTest {
         """.trimIndent())
     }
 
+    @Test
+    fun testCustomToStringBug() = runTest {
+        eval("""
+            class A(x,y)
+            class B(x,y) {
+                fun toString() {
+                    "B(%d,%d)"(x,y)
+                }
+            }
+            
+            assertEquals("B(1,2)", B(1,2).toString())
+            assertEquals("A(x=1,y=2)", A(1,2).toString())
+            
+            // now tricky part: this _should_ cakk custom toString()
+            assertEquals(":B(1,2)", ":" + B(1,2).toString())
+            // and this must be exactly same:
+            assertEquals(":B(1,2)", ":" + B(1,2))
+            
+        """.trimIndent())
+
+    }
+
 
 //    @Test
 //    fun testSplatAssignemnt() = runTest {

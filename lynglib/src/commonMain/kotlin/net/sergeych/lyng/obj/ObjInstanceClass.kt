@@ -43,7 +43,7 @@ class ObjInstanceClass(val name: String, vararg parents: ObjClass) : ObjClass(na
 
     init {
         addFn("toString", true) {
-            ObjString(thisObj.toString())
+            thisObj.toString(this, true)
         }
     }
 

@@ -187,16 +187,16 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             !it.key.contains("::") && it.value.visibility.isPublic && it.value.type.serializable
         }
 
-    override suspend fun toString(scope: Scope, calledFromLyng: Boolean): ObjString {
+    override suspend fun defaultToString(scope: Scope): ObjString {
         return ObjString(buildString {
-                append("${objClass.className}(")
-                var first = true
-                for ((name, value) in publicFields) {
-                    if (first) first = false else append(",")
-                    append("$name=${value.value.toString(scope)}")
-                }
-                append(")")
-            })
+            append("${objClass.className}(")
+            var first = true
+            for ((name, value) in publicFields) {
+                if (first) first = false else append(",")
+                append("$name=${value.value.toString(scope)}")
+            }
+            append(")")
+        })
     }
 
     override suspend fun inspect(scope: Scope): String {

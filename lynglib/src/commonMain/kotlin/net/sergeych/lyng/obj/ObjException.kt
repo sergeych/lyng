@@ -89,7 +89,7 @@ open class ObjException(
 
     override val objClass: ObjClass = exceptionClass
 
-    override suspend fun toString(scope: Scope, calledFromLyng: Boolean): ObjString {
+    override suspend fun defaultToString(scope: Scope): ObjString {
         val at = getStackTrace().list.firstOrNull()?.toString(scope)
             ?: ObjString("(unknown)")
         return ObjString("${objClass.className}: $message at $at")
