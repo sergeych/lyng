@@ -3022,7 +3022,8 @@ class ScriptTest {
 
     @Test
     fun testMapWithNonStringKeys() = runTest {
-        eval("""
+        eval(
+            """
             val map = Map( 1 => "one", 2 => "two" )
             assertEquals( "one", map[1] )
             assertEquals( "two", map[2] )
@@ -3046,7 +3047,8 @@ class ScriptTest {
             val map4 = map3 + (3 => "c")
             assertEquals("c", map4[3])
             assertEquals("a", map4[1])
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
@@ -3948,13 +3950,15 @@ class ScriptTest {
     @Test
     fun testJsonTime() = runTest {
         val now = Clock.System.now()
-        val x = eval("""
+        val x = eval(
+            """
             import lyng.time
             Instant.now().truncateToSecond()
-            """.trimIndent()).decodeSerializable<Instant>()
+            """.trimIndent()
+        ).decodeSerializable<Instant>()
         println(x)
         assertIs<Instant>(x)
-        assertTrue( (now - x).absoluteValue < 2.seconds)
+        assertTrue((now - x).absoluteValue < 2.seconds)
     }
 
     @Test
@@ -4067,15 +4071,17 @@ class ScriptTest {
     @Serializable
     data class TestJson2(
         val value: Int,
-        val inner: Map<String,Int>
+        val inner: Map<String, Int>
     )
 
     @Test
     fun deserializeMapWithJsonTest() = runTest {
-        val x = eval("""
+        val x = eval(
+            """
             import lyng.serialization
             { value: 1, inner: { "foo": 1, "bar": 2 }}
-        """.trimIndent()).decodeSerializable<TestJson2>()
+        """.trimIndent()
+        ).decodeSerializable<TestJson2>()
         assertEquals(TestJson2(1, mapOf("foo" to 1, "bar" to 2)), x)
     }
 
@@ -4084,42 +4090,56 @@ class ScriptTest {
         val value: Int,
         val inner: JsonObject
     )
+
     @Test
     fun deserializeAnyMapWithJsonTest() = runTest {
-        val x = eval("""
+        val x = eval(
+            """
             import lyng.serialization
             { value: 12, inner: { "foo": 1, "bar": "two" }}
-        """.trimIndent()).decodeSerializable<TestJson3>()
-        assertEquals(TestJson3(12, JsonObject(mapOf("foo" to JsonPrimitive(1), "bar" to Json.encodeToJsonElement("two")))), x)
+        """.trimIndent()
+        ).decodeSerializable<TestJson3>()
+        assertEquals(
+            TestJson3(
+                12,
+                JsonObject(mapOf("foo" to JsonPrimitive(1), "bar" to Json.encodeToJsonElement("two")))
+            ), x
+        )
     }
 
     @Serializable
     enum class TestEnum {
         One, Two
     }
+
     @Serializable
     data class TestJson4(val value: TestEnum)
 
     @Test
     fun deserializeEnumJsonTest() = runTest {
-        val x = eval("""
+        val x = eval(
+            """
             import lyng.serialization
             enum TestEnum { One, Two }
             { value: TestEnum.One }
-        """.trimIndent()).decodeSerializable<TestJson4>()
-        assertEquals( TestJson4(TestEnum.One), x)
+        """.trimIndent()
+        ).decodeSerializable<TestJson4>()
+        assertEquals(TestJson4(TestEnum.One), x)
     }
 
     @Test
     fun testStringLast() = runTest {
-        eval("""
+        eval(
+            """
             assertEquals('t', "assert".last())  
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testLogicalNot() = runTest {
-        eval("""
+        eval(
+            """
             val vf = false 
             fun f() { false }
             assert( !false )
@@ -4156,7 +4176,8 @@ class ScriptTest {
 
     @Test
     fun testHangOnPrintlnInMethods() = runTest {
-        eval("""
+        eval(
+            """
             class T(someList) {
                 fun f() {
                     val x = [...someList]
@@ -4164,12 +4185,14 @@ class ScriptTest {
                 }
             }
             T([1,2]).f()
-        """)
+        """
+        )
     }
 
     @Test
     fun testHangOnNonexistingMethod() = runTest {
-        eval("""
+        eval(
+            """
             class T(someList) {
                 fun f() {
                     nonExistingMethod()
@@ -4185,12 +4208,14 @@ class ScriptTest {
                 println(t::class)
                 // ok
             }
-        """)
+        """
+        )
     }
 
     @Test
     fun testUsingClassConstructorVars() = runTest {
-        val r = eval("""
+        val r = eval(
+            """
             import lyng.time
             
             class Request {
@@ -4214,7 +4239,8 @@ class ScriptTest {
             }
             
             test()
-        """.trimIndent()).toJson()
+        """.trimIndent()
+        ).toJson()
         println(r)
     }
 
@@ -4222,7 +4248,8 @@ class ScriptTest {
     fun testScopeShortCircuit() = runTest() {
         val baseScope = Script.newScope()
 
-        baseScope.eval("""
+        baseScope.eval(
+            """
                 val exports = Map()
                 fun Export(name,f) {
                     exports[name] = f
@@ -4233,7 +4260,8 @@ class ScriptTest {
 
         val exports: MutableMap<Obj, Obj> = (baseScope.eval("exports") as ObjMap).map
 
-        baseScope.eval("""
+        baseScope.eval(
+            """
             class A(val a) {
                 fun methodA() {
                     a + 1
@@ -4250,29 +4278,41 @@ class ScriptTest {
             fun exportedFunction(x) {
                 someFunction(x)
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         // Calling from the script is ok:
         val instanceScope = baseScope.createChildScope()
-        instanceScope.eval("""
+        instanceScope.eval(
+            """
             val a1 = a0 + 1
-        """.trimIndent())
-        assertEquals( ObjInt(2), instanceScope.eval("""
+        """.trimIndent()
+        )
+        assertEquals(
+            ObjInt(2), instanceScope.eval(
+                """
             exportedFunction(1)
-        """))
-        assertEquals( ObjInt(103), instanceScope.eval("""
+        """
+            )
+        )
+        assertEquals(
+            ObjInt(103), instanceScope.eval(
+                """
             exportedFunction(a1 + 1)
-        """))
+        """
+            )
+        )
         val dummyThis = Obj()
         // but we should be able to call it directly
         val otherScope = baseScope.createChildScope()
-        val r = (exports["exportedFunction".toObj()] as Statement).invoke(otherScope, dummyThis,ObjInt(50))
+        val r = (exports["exportedFunction".toObj()] as Statement).invoke(otherScope, dummyThis, ObjInt(50))
         println(r)
         assertEquals(51, r.toInt())
     }
 
     @Test
     fun testFirstInEnum() = runTest {
-        eval("""
+        eval(
+            """
             enum E {
                 one, two, three 
             }
@@ -4282,12 +4322,14 @@ class ScriptTest {
                 it.name in ["aaa", "two"] 
             } ) 
             
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testAutoSplatArgs() = runTest {
-        eval("""
+        eval(
+            """
             fun tf(x, y, z) {
                 "x=%s, y=%s, z=%s"(x,y,z)
             }
@@ -4295,12 +4337,14 @@ class ScriptTest {
             val a = { x: 3, y: 4, z: 5 }
             assertEquals(tf(...a), "x=3, y=4, z=5")
             assertEquals(tf(...{ x: 3, y: 4, z: 50 }), "x=3, y=4, z=50")
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testCached() = runTest {
-        eval("""
+        eval(
+            """
             var counter = 0
             val f = cached { ++counter }
              
@@ -4308,12 +4352,14 @@ class ScriptTest {
             assertEquals(1, counter)
             assertEquals(1,f())
             assertEquals(1, counter)
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testCustomToStringBug() = runTest {
-        eval("""
+        eval(
+            """
             class A(x,y)
             class B(x,y) {
                 fun toString() {
@@ -4329,14 +4375,16 @@ class ScriptTest {
             // and this must be exactly same:
             assertEquals(":B(1,2)", ":" + B(1,2))
             
-        """.trimIndent())
+        """.trimIndent()
+        )
 
     }
 
 
     @Test
     fun testDestructuringAssignment() = runTest {
-        eval("""
+        eval(
+            """
             val abc = [1, 2, 3]
             // plain:
             val [a, b, c] = abc
@@ -4373,7 +4421,8 @@ class ScriptTest {
             assertEquals( 10, x )
             assertEquals( 5, y )
             
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
@@ -4411,6 +4460,58 @@ class ScriptTest {
         println(x)
         assertEquals(5, x.pos.line)
         assertContains(x.message!!, "throw \"success\"")
+    }
 
+    @Test
+    fun testClassAndFunAutoNamedArgs() = runTest {
+        // Shorthand for named arguments: name: is equivalent to name: name.
+        // This is consistent with map literal shorthand in Lyng.
+        eval(
+            """
+            fun test(a, b, c) {
+                "%s-%s-%s"(a,b,c)
+            }
+            
+            val a = 1
+            val b = 2
+            val c = 3
+            
+            // Basic usage:
+            assertEquals( "1-2-3", test(a:, b:, c:) )
+            assertEquals( "1-2-3", test(c:, b:, a:) )
+
+            // Class constructors also support it:
+            class Point(x, y) {
+                val r = "x:%s, y:%s"(x, y)
+            }
+            val x = 10
+            val y = 20
+            assertEquals( "x:10, y:20", Point(x:, y:).r )
+            assertEquals( "x:10, y:20", Point(y:, x:).r )
+            
+            // Mixed with positional arguments:
+            assertEquals( "0-2-3", test(0, b:, c:) )
+            
+            // Mixed with regular named arguments:
+            assertEquals( "1-99-3", test(a:, b: 99, c:) )
+            
+            // Integration with splats (spread arguments):
+            val args = { b:, c: } // map literal shorthand
+            assertEquals( "1-2-3", test(a:, ...args) )
+            
+            // Default values:
+            fun sum(a, b=10, c=100) { a + b + c }
+            assertEquals( 111, sum(a:) )
+            assertEquals( 103, sum(a:, b:) )
+            
+            // Complex scenario with multiple splats and shorthands:
+            val p1 = 1
+            val p2 = 2
+            val more = { c: 3, d: 4 }
+            fun quad(a, b, c, d) { a + b + c + d }
+            assertEquals( 10, quad(a: p1, b: p2, ...more) )
+            
+            """.trimIndent()
+        )
     }
 }

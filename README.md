@@ -4,11 +4,15 @@ Please visit the project homepage: [https://lynglang.com](https://lynglang.com) 
 
 - simple, compact, intuitive and elegant modern code:
 
-```
-class Point(x,y) {
+```lyng
+class Point(x, y) {
    fun dist() { sqrt(x*x + y*y) } 
 }
-Point(3,4).dist() //< 5
+
+// Auto-named arguments shorthand (x: is x: x):
+val x = 3
+val y = 4
+Point(x:, y:).dist() //< 5
 
 fun swapEnds(first, args..., last, f) {
     f( last, ...args, first)

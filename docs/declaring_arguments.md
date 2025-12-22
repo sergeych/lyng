@@ -107,16 +107,29 @@ There could be any number of splats at any positions. You can splat any other [I
 
 ## Named arguments in calls
 
-Lyng supports named arguments at call sites using colon syntax `name: value`:
+Lyng supports named arguments at call sites using colon syntax `name: value`. 
+
+### Shorthand for Named Arguments
+
+If you want to pass a variable as a named argument and the variable has the same name as the parameter, you can omit the value and use the shorthand `name:`. This is highly readable and matches the shorthand for map literals.
 
 ```lyng
-    fun test(a="foo", b="bar", c="bazz") { [a, b, c] }
-
-    assertEquals(["foo", "b", "bazz"], test(b: "b"))
-    assertEquals(["a", "bar", "c"], test("a", c: "c"))
+    fun test(a, b, c) { [a, b, c] }
+    
+    val a = 1
+    val b = 2
+    val c = 3
+    
+    // Explicit:
+    assertEquals([1, 2, 3], test(a: a, b: b, c: c))
+    
+    // Shorthand (preferred):
+    assertEquals([1, 2, 3], test(a:, b:, c:))
 ```
 
-Rules:
+This shorthand is elegant, reduces boilerplate, and is consistent with Lyng's map literal syntax. It works for both function calls and class constructors.
+
+Rules for named arguments:
 
 - Named arguments must follow positional arguments. After the first named argument, no positional arguments may appear inside the parentheses.
 - The only exception is the syntactic trailing block after the call: `f(args) { ... }`. This block is outside the parentheses and is handled specially (see below).
@@ -127,21 +140,20 @@ Why `:` and not `=` at call sites? In Lyng, `=` is an expression (assignment), s
 
 ## Named splats (map splats)
 
-Splat (`...`) of a Map provides named arguments to the call. Only string keys are allowed:
+Splat (`...`) of a Map provides named arguments to the call. Only string keys are allowed. You can use the same auto-substitution shorthand inside map literals used for splats:
 
 ```lyng
     fun test(a="a", b="b", c="c", d="d") { [a, b, c, d] }
-    val r = test("A?", ...Map("d" => "D!", "b" => "B!"))
-    assertEquals(["A?","B!","c","D!"], r)
-```
-
-The same with a map literal is often more concise. Define the literal, then splat the variable:
-
-    fun test(a="a", b="b", c="c", d="d") { [a, b, c, d] }
-    val patch = { d: "D!", b: "B!" }
+    
+    val b = "B!"
+    val d = "D!"
+    
+    // Auto-substitution in map literal:
+    val patch = { d:, b: }
+    
     val r = test("A?", ...patch)
     assertEquals(["A?","B!","c","D!"], r)
-    >>> void
+```
 
 Constraints:
 

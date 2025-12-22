@@ -1036,6 +1036,12 @@ class Compiler(
                 if (t2.type == Token.Type.COLON) {
                     // name: expr
                     val name = t1.value
+                    // Check for shorthand: name: (comma or rparen)
+                    val next = cc.peekNextNonWhitespace()
+                    if (next.type == Token.Type.COMMA || next.type == Token.Type.RPAREN) {
+                        val localVar = LocalVarRef(name, t1.pos)
+                        return ParsedArgument(statement(t1.pos) { localVar.get(it).value }, t1.pos, isSplat = false, name = name)
+                    }
                     val rhs = parseExpression() ?: t2.raiseSyntax("expected expression after named argument '${name}:'")
                     return ParsedArgument(rhs, t1.pos, isSplat = false, name = name)
                 }
@@ -1102,6 +1108,12 @@ class Compiler(
                 val t2 = cc.next()
                 if (t2.type == Token.Type.COLON) {
                     val name = t1.value
+                    // Check for shorthand: name: (comma or rparen)
+                    val next = cc.peekNextNonWhitespace()
+                    if (next.type == Token.Type.COMMA || next.type == Token.Type.RPAREN) {
+                        val localVar = LocalVarRef(name, t1.pos)
+                        return ParsedArgument(statement(t1.pos) { localVar.get(it).value }, t1.pos, isSplat = false, name = name)
+                    }
                     val rhs = parseExpression() ?: t2.raiseSyntax("expected expression after named argument '${name}:'")
                     return ParsedArgument(rhs, t1.pos, isSplat = false, name = name)
                 }

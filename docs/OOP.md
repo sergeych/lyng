@@ -85,6 +85,12 @@ statements discussed later, there could be default values, ellipsis, etc.
     // Named arguments in constructor calls use colon syntax:
     val p2 = Point(y: 10, x: 5)
     assert( p2.x == 5 && p2.y == 10 )
+    
+    // Auto-substitution shorthand for named arguments:
+    val x = 1
+    val y = 2
+    val p3 = Point(x:, y:)
+    assert( p3.x == 1 && p3.y == 2 )
     >>> void
 
 Note that unlike **Kotlin**, which uses `=` for named arguments, Lyng uses `:` to avoid ambiguity with assignment expressions.
