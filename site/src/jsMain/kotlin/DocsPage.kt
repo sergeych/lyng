@@ -181,7 +181,7 @@ fun DocsPage(
             scheduled = false
             try {
                 val heads = toc.mapNotNull { id -> el.querySelector("#${id.id}") as? HTMLHeadingElement }
-                val tops = heads.map { it.getBoundingClientRect().top + window.scrollY }
+                val tops = heads.map { it.getBoundingClientRect().top }
                 val offset = (updateNavbarOffsetVar() + 16).toDouble()
                 val idx = activeIndexForTops(tops, offset)
                 setActiveTocId(if (idx in toc.indices) toc[idx].id else null)

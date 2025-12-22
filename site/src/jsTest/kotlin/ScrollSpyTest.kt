@@ -28,20 +28,20 @@ class ScrollSpyTest {
     fun selectsFirstWhenOnlyFirstIsAboveOffset() {
         val tops = listOf(20.0, 200.0, 800.0) // px from viewport top
         val idx = activeIndexForTops(tops, offsetPx = 80.0)
-        assertEquals(1, idx) // 20 <= 80, 200 > 80 -> index 1 (second heading is first below offset)
+        assertEquals(0, idx) // 20 <= 80 (active), 200 > 80 (stops) -> index 0
     }
 
     @Test
     fun selectsLastHeadingAboveOffset() {
         val tops = listOf(-100.0, 50.0, 70.0)
         val idx = activeIndexForTops(tops, offsetPx = 80.0)
-        assertEquals(2, idx) // all three are <= 80 -> last index
+        assertEquals(2, idx) // all three are <= 80 -> last index 2
     }
 
     @Test
     fun stopsBeforeFirstBelowOffset() {
         val tops = listOf(-200.0, -50.0, 30.0, 150.0, 400.0)
         val idx = activeIndexForTops(tops, offsetPx = 80.0)
-        assertEquals(3, idx) // 30 <= 80 qualifies; 150 > 80 stops, so index 3rd (0-based -> 3?)
+        assertEquals(2, idx) // 30 <= 80 is the last one; 150 > 80 -> index 2
     }
 }

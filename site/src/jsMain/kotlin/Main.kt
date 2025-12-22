@@ -1024,11 +1024,15 @@ internal fun normalizePath(path: String): String {
 // If none are above the offset, returns 0. If list is empty, returns 0.
 fun activeIndexForTops(tops: List<Double>, offsetPx: Double): Int {
     if (tops.isEmpty()) return 0
+    var lastAbove = 0
     for (i in tops.indices) {
-        if (tops[i] - offsetPx > 0.0) return i
+        if (tops[i] <= offsetPx) {
+            lastAbove = i
+        } else {
+            break
+        }
     }
-    // If all headings are above the offset, select the last one
-    return tops.size - 1
+    return lastAbove
 }
 
 fun main() {
