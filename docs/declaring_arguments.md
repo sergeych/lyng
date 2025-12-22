@@ -123,7 +123,7 @@ Rules:
 - A named argument cannot reassign a parameter already set positionally.
 - If the last parameter has already been assigned by a named argument (or named splat), a trailing block is not allowed and results in an error.
 
-Why `:` and not `=` at call sites? In Lyng, `=` is an expression (assignment), so we use `:` to avoid ambiguity. Declarations continue to use `:` for types, while call sites use `as` / `as?` for type operations.
+Why `:` and not `=` at call sites? In Lyng, `=` is an expression (assignment), so we use `:` to avoid ambiguity. This is a key difference from **Kotlin**, which uses `=` for named arguments. Declarations in Lyng continue to use `:` for types, while call sites use `as` / `as?` for type operations.
 
 ## Named splats (map splats)
 

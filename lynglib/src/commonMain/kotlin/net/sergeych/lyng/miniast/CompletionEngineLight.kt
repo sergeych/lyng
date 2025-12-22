@@ -1,4 +1,21 @@
 /*
+ * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+/*
  * Pure-Kotlin, PSI-free completion engine used for isolated tests and non-IDE harnesses.
  * Mirrors the IntelliJ MVP logic: MiniAst + BuiltinDocRegistry + lenient imports.
  */
@@ -270,6 +287,24 @@ object CompletionEngineLight {
                 break
             }
             if (hasDigits) return if (hasDot || hasExp) "Real" else "Int"
+
+            // 3) this@Type or as Type
+            val identRange = wordRangeAt(text, i + 1)
+            if (identRange != null) {
+                val ident = text.substring(identRange.first, identRange.second)
+                // if it's "as Type", we want Type
+                var k = prevNonWs(text, identRange.first - 1)
+                if (k >= 1 && text[k] == 's' && text[k - 1] == 'a' && (k - 1 == 0 || !text[k - 2].isLetterOrDigit())) {
+                    return ident
+                }
+                // if it's "this@Type", we want Type
+                if (k >= 0 && text[k] == '@') {
+                    val k2 = prevNonWs(text, k - 1)
+                    if (k2 >= 3 && text.substring(k2 - 3, k2 + 1) == "this") {
+                        return ident
+                    }
+                }
+            }
         }
         return null
     }

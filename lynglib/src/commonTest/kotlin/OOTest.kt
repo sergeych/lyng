@@ -16,13 +16,18 @@
  */
 
 import kotlinx.coroutines.test.runTest
+import net.sergeych.lyng.Script
 import net.sergeych.lyng.eval
+import net.sergeych.lyng.obj.ObjInstance
+import net.sergeych.lyng.obj.ObjList
 import kotlin.test.Test
+import kotlin.test.assertEquals
 
 class OOTest {
     @Test
     fun testClassProps() = runTest {
-        eval("""
+        eval(
+            """
             import lyng.time
             
             class Point(x,y) {
@@ -35,11 +40,14 @@ class OOTest {
             assertEquals(Point(0,0), Point.origin)
             assertEquals(Point(1,2), Point.center)
             
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
+
     @Test
     fun testClassMethods() = runTest {
-        eval("""
+        eval(
+            """
             import lyng.time
             
             class Point(x,y) {
@@ -58,12 +66,14 @@ class OOTest {
             assertEquals(null, Point.getData() )
             Point.setData("foo")
             assertEquals( "foo!", Point.getData() )
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testDynamicGet() = runTest {
-        eval("""
+        eval(
+            """
             val accessor = dynamic {
                 get { name ->
                     if( name == "foo" ) "bar" else null
@@ -74,12 +84,14 @@ class OOTest {
             assertEquals("bar", accessor.foo)
             assertEquals(null, accessor.bar)
             
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testDelegateSet() = runTest {
-        eval("""
+        eval(
+            """
             var setValueForBar = null
             val accessor = dynamic {
                 get { name ->
@@ -104,12 +116,14 @@ class OOTest {
             assertThrows {
                 accessor.bad = "!23"
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testDynamicIndexAccess() = runTest {
-        eval("""
+        eval(
+            """
             val store = Map()
             val accessor = dynamic {
                 get { name ->
@@ -124,23 +138,27 @@ class OOTest {
            accessor["foo"] = "bar"
            assertEquals("bar", accessor["foo"])
            assertEquals("bar", accessor.foo)
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testMultilineConstructor() = runTest {
-        eval("""
+        eval(
+            """
             class Point(
                 x,
                 y
             ) 
             assertEquals(Point(1,2), Point(1,2) )
-            """.trimIndent())
+            """.trimIndent()
+        )
     }
 
     @Test
     fun testDynamicClass() = runTest {
-        eval("""
+        eval(
+            """
             
             fun getContract(contractName) {
                 dynamic {
@@ -150,14 +168,16 @@ class OOTest {
                 }
             }
             getContract("foo").bar
-       """)
+       """
+        )
     }
 
     @Test
     fun testDynamicClassReturn2() = runTest {
         // todo: should work without extra parenthesis
         // see below
-        eval("""
+        eval(
+            """
             
             fun getContract(contractName) {
                 println("1")
@@ -184,12 +204,14 @@ class OOTest {
             assertEquals(6, x(1,2,3))
             //               v  HERE    v
             assertEquals(15, cc.foo.bar(10,2,3))
-       """)
+       """
+        )
     }
 
     @Test
     fun testClassInitialization() = runTest {
-        eval("""
+        eval(
+            """
             var countInstances = 0
             class Point(val x: Int, val y: Int) {
                println("Class initializer is called 1")
@@ -210,12 +232,14 @@ class OOTest {
             assertEquals(1, countInstances)
             assertEquals(p, Point(1,2) )
             assertEquals(2, countInstances)
-            """.trimIndent())
+            """.trimIndent()
+        )
     }
 
     @Test
     fun testMIInitialization() = runTest {
-        eval("""
+        eval(
+            """
             var order = []
             class A {
                 init { order.add("A") }
@@ -231,12 +255,14 @@ class OOTest {
             }
             D()
             assertEquals(["A", "B", "C", "D"], order)
-        """)
+        """
+        )
     }
 
     @Test
     fun testMIDiamondInitialization() = runTest {
-        eval("""
+        eval(
+            """
             var order = []
             class A {
                 init { order.add("A") }
@@ -252,12 +278,14 @@ class OOTest {
             }
             D()
             assertEquals(["A", "B", "C", "D"], order)
-        """)
+        """
+        )
     }
 
     @Test
     fun testInitBlockInDeserialization() = runTest {
-        eval("""
+        eval(
+            """
             import lyng.serialization
             var count = 0
             class A {
@@ -267,6 +295,52 @@ class OOTest {
             val coded = Lynon.encode(a1)
             val a2 = Lynon.decode(coded)
             assertEquals(2, count)
-        """)
+        """
+        )
+    }
+
+    @Test
+    fun testDefaultCompare() = runTest {
+        eval(
+            """
+            class Point(val x: Int, val y: Int) 
+            
+            assertEquals(Point(1,2), Point(1,2) )
+            assert( Point(1,2) != Point(2,1) )
+            assert( Point(1,2) == Point(1,2) )
+            
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testConstructorCallsWithNamedParams() = runTest {
+        val scope = Script.newScope()
+        val list = scope.eval(
+            """
+            import lyng.time
+            
+            class BarRequest(
+                    id,
+                    vaultId, userAddress, isDepositRequest, grossWeight, fineness, notes="",
+                    createdAt = Instant.now().truncateToSecond(),
+                    updatedAt = Instant.now().truncateToSecond()
+            ) {
+                // unrelated for comparison
+                static val stateNames = [1, 2, 3]   
+
+                val cell = cached { Cell[id] }
+            }
+            assertEquals( 5,5.toInt())
+            val b1 = BarRequest(1, "v1", "u1", true, 1000, 999)
+            val b2 = BarRequest(1, "v1", "u1", true, 1000, 999, createdAt: b1.createdAt, updatedAt: b1.updatedAt)
+            assertEquals(b1, b2)
+            assertEquals( 0, b1 <=> b2)
+            [b1, b2]  
+        """.trimIndent()
+        ) as ObjList
+        val b1 = list.list[0] as ObjInstance
+        val b2 = list.list[1] as ObjInstance
+        assertEquals(0, b1.compareTo(scope, b2))
     }
 }

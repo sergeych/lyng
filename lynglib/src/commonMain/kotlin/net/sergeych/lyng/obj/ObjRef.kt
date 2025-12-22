@@ -42,6 +42,14 @@ sealed interface ObjRef {
      * Used for declaring local variables in destructuring.
      */
     fun forEachVariable(block: (String) -> Unit) {}
+
+    /**
+     * Calls [block] for each variable name that this reference targets for writing,
+     * including its source position if available.
+     */
+    fun forEachVariableWithPos(block: (String, Pos) -> Unit) {
+        forEachVariable { block(it, Pos.UNKNOWN) }
+    }
 }
 
 /** Runtime-computed read-only reference backed by a lambda. */
@@ -1225,6 +1233,10 @@ class LocalVarRef(private val name: String, private val atPos: Pos) : ObjRef {
     override fun forEachVariable(block: (String) -> Unit) {
         block(name)
     }
+
+    override fun forEachVariableWithPos(block: (String, Pos) -> Unit) {
+        block(name, atPos)
+    }
     // Per-frame slot cache to avoid repeated name lookups
     private var cachedFrameId: Long = 0L
     private var cachedSlot: Int = -1
@@ -1628,6 +1640,15 @@ class ListLiteralRef(private val entries: List<ListEntry>) : ObjRef {
             when (e) {
                 is ListEntry.Element -> e.ref.forEachVariable(block)
                 is ListEntry.Spread -> e.ref.forEachVariable(block)
+            }
+        }
+    }
+
+    override fun forEachVariableWithPos(block: (String, Pos) -> Unit) {
+        for (e in entries) {
+            when (e) {
+                is ListEntry.Element -> e.ref.forEachVariableWithPos(block)
+                is ListEntry.Spread -> e.ref.forEachVariableWithPos(block)
             }
         }
     }

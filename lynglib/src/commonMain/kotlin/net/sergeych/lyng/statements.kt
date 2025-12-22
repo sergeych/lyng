@@ -47,7 +47,8 @@ abstract class Statement(
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
         if( other == ObjNull || other == ObjVoid ) return 1
-        throw UnsupportedOperationException("not comparable")
+        if( other === this ) return 0
+        return -1
     }
 
     override suspend fun callOn(scope: Scope): Obj {

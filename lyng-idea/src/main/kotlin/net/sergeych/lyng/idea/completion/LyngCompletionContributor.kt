@@ -1,4 +1,21 @@
 /*
+ * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+/*
  * Lightweight BASIC completion for Lyng, MVP version.
  * Uses MiniAst (best-effort) + BuiltinDocRegistry to suggest symbols.
  */
@@ -192,6 +209,7 @@ class LyngCompletionContributor : CompletionContributor() {
                                     emit(builder)
                                     existing.add(name)
                                 }
+                                is MiniInitDecl -> {}
                             }
                         } else {
                             // Fallback: emit simple method name without detailed types
@@ -329,6 +347,7 @@ class LyngCompletionContributor : CompletionContributor() {
                         when (m) {
                             is MiniMemberFunDecl -> if (!m.isStatic) continue
                             is MiniMemberValDecl -> if (!m.isStatic) continue
+                            is MiniInitDecl -> continue
                         }
                     }
                     val list = target.getOrPut(m.name) { mutableListOf() }
@@ -404,6 +423,7 @@ class LyngCompletionContributor : CompletionContributor() {
                                 .withTypeText(typeOf((chosen as MiniMemberValDecl).type), true)
                             emit(builder)
                         }
+                        is MiniInitDecl -> {}
                     }
                 }
             }
@@ -454,6 +474,7 @@ class LyngCompletionContributor : CompletionContributor() {
                                 emit(builder)
                                 already.add(name)
                             }
+                            is MiniInitDecl -> {}
                         }
                     } else {
                         // Synthetic fallback: method without detailed params/types to improve UX in absence of docs
@@ -504,6 +525,7 @@ class LyngCompletionContributor : CompletionContributor() {
                                 already.add(name)
                                 continue
                             }
+                            is MiniInitDecl -> {}
                         }
                     }
                     // Fallback: emit without detailed types if we couldn't resolve
@@ -613,6 +635,7 @@ class LyngCompletionContributor : CompletionContributor() {
                 val rt = when (m) {
                     is MiniMemberFunDecl -> m.returnType
                     is MiniMemberValDecl -> m.type
+                    is MiniInitDecl -> null
                 }
                 simpleClassNameOf(rt)
             }
@@ -715,6 +738,24 @@ class LyngCompletionContributor : CompletionContributor() {
                 if (hasDigits) {
                     return if (isHex) "Int" else if (hasDot || hasExp) "Real" else "Int"
                 }
+
+                // 3) this@Type or as Type
+                val identRange = TextCtx.wordRangeAt(text, i + 1)
+                if (identRange != null) {
+                    val ident = text.substring(identRange.startOffset, identRange.endOffset)
+                    // if it's "as Type", we want Type
+                    var k2 = TextCtx.prevNonWs(text, identRange.startOffset - 1)
+                    if (k2 >= 1 && text[k2] == 's' && text[k2 - 1] == 'a' && (k2 - 1 == 0 || !text[k2 - 2].isLetterOrDigit())) {
+                        return ident
+                    }
+                    // if it's "this@Type", we want Type
+                    if (k2 >= 0 && text[k2] == '@') {
+                        val k3 = TextCtx.prevNonWs(text, k2 - 1)
+                        if (k3 >= 3 && text.substring(k3 - 3, k3 + 1) == "this") {
+                            return ident
+                        }
+                    }
+                }
             }
             return null
         }
@@ -761,6 +802,7 @@ class LyngCompletionContributor : CompletionContributor() {
             val returnType = when (member) {
                 is MiniMemberFunDecl -> member.returnType
                 is MiniMemberValDecl -> member.type
+                is MiniInitDecl -> null
             }
             return simpleClassNameOf(returnType)
         }
@@ -840,6 +882,7 @@ class LyngCompletionContributor : CompletionContributor() {
             val returnType = when (member) {
                 is MiniMemberFunDecl -> member.returnType
                 is MiniMemberValDecl -> member.type
+                is MiniInitDecl -> null
             }
             return simpleClassNameOf(returnType)
         }

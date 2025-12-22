@@ -2569,7 +2569,21 @@ class Compiler(
             val pattern = ListLiteralRef(entries)
 
             // Register all names in the pattern
-            pattern.forEachVariable { name -> declareLocalName(name) }
+            pattern.forEachVariableWithPos { name, namePos ->
+                declareLocalName(name)
+                val declRange = MiniRange(namePos, namePos)
+                val node = MiniValDecl(
+                    range = declRange,
+                    name = name,
+                    mutable = isMutable,
+                    type = null,
+                    initRange = null,
+                    doc = pendingDeclDoc,
+                    nameStart = namePos
+                )
+                miniSink?.onValDecl(node)
+            }
+            pendingDeclDoc = null
 
             val eqToken = cc.next()
             if (eqToken.type != Token.Type.ASSIGN)

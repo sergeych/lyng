@@ -439,6 +439,19 @@ It is possible to define also vararg using ellipsis:
 
 See the [arguments reference](declaring_arguments.md) for more details.
 
+## Named arguments
+
+When calling functions, you can use named arguments with the colon syntax `name: value`. This is particularly useful when you have many parameters with default values.
+
+```lyng
+    fun test(a="foo", b="bar", c="bazz") { [a, b, c] }
+
+    assertEquals(["foo", "b", "bazz"], test(b: "b"))
+    assertEquals(["a", "bar", "c"], test("a", c: "c"))
+```
+
+**Note for Kotlin users:** Lyng uses `:` instead of `=` for named arguments at call sites. This is because in Lyng, `=` is an expression that returns the assigned value, and using it in an argument list would create ambiguity.
+
 ## Closures
 
 Each __block has an isolated context that can be accessed from closures__. For example:

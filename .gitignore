@@ -18,3 +18,4 @@ xcuserdata
 /kotlin-js-store/wasm/yarn.lock
 /distributables
 /.output.txt
+/build.log

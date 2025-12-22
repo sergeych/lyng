@@ -180,6 +180,10 @@ class ObjInt(var value: Long, override val isConst: Boolean = false) : Obj(), Nu
                     LynonType.IntSigned -> ObjInt(decoder.unpackSigned())
                     else -> scope.raiseIllegalState("illegal type code for Int: $lynonType")
                 }
+        }.apply {
+            addFn("toInt") {
+                thisObj
+            }
         }
     }
 }

@@ -154,7 +154,27 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                             } else null
                         } else null
                     }
-                    else -> DocLookupUtils.guessClassFromCallBefore(text, dotPos, importedModules)
+                    else -> {
+                        val guessed = DocLookupUtils.guessClassFromCallBefore(text, dotPos, importedModules)
+                        if (guessed != null) guessed
+                        else {
+                            // handle this@Type or as Type
+                            val i2 = TextCtx.prevNonWs(text, dotPos - 1)
+                            if (i2 >= 0) {
+                                val identRange = TextCtx.wordRangeAt(text, i2 + 1)
+                                if (identRange != null) {
+                                    val id = text.substring(identRange.startOffset, identRange.endOffset)
+                                    val k = TextCtx.prevNonWs(text, identRange.startOffset - 1)
+                                    if (k >= 1 && text[k] == 's' && text[k-1] == 'a' && (k-1 == 0 || !text[k-2].isLetterOrDigit())) {
+                                        id
+                                    } else if (k >= 0 && text[k] == '@') {
+                                        val k2 = TextCtx.prevNonWs(text, k - 1)
+                                        if (k2 >= 3 && text.substring(k2 - 3, k2 + 1) == "this") id else null
+                                    } else null
+                                } else null
+                            } else null
+                        }
+                    }
                 }
                 if (DEBUG_LOG) log.info("[LYNG_DEBUG] QuickDoc: memberCtx dotPos=${dotPos} chBeforeDot='${if (dotPos>0) text[dotPos-1] else ' '}' classGuess=${className} imports=${importedModules}")
                 if (className != null) {
@@ -163,6 +183,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                         return when (member) {
                             is MiniMemberFunDecl -> renderMemberFunDoc(owner, member)
                             is MiniMemberValDecl -> renderMemberValDoc(owner, member)
+                            is MiniInitDecl -> null
                         }
                     }
                     log.info("[LYNG_DEBUG] QuickDoc: resolve failed for ${className}.${ident}")
@@ -224,6 +245,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                 return when (member) {
                     is MiniMemberFunDecl -> renderMemberFunDoc(owner, member)
                     is MiniMemberValDecl -> renderMemberValDoc(owner, member)
+                    is MiniInitDecl -> null
                 }
             }
         } else {
@@ -242,6 +264,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                         return when (member) {
                             is MiniMemberFunDecl -> renderMemberFunDoc(owner, member)
                             is MiniMemberValDecl -> renderMemberValDoc(owner, member)
+                            is MiniInitDecl -> null
                         }
                     }
                 } else {
@@ -254,6 +277,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                                 return when (member) {
                                     is MiniMemberFunDecl -> renderMemberFunDoc(owner, member)
                                     is MiniMemberValDecl -> renderMemberValDoc(owner, member)
+                                    is MiniInitDecl -> null
                                 }
                             }
                         }
@@ -268,6 +292,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                             return when (m) {
                                 is MiniMemberFunDecl -> renderMemberFunDoc("String", m)
                                 is MiniMemberValDecl -> renderMemberValDoc("String", m)
+                                is MiniInitDecl -> null
                             }
                         }
                     }
@@ -277,6 +302,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                         return when (member) {
                             is MiniMemberFunDecl -> renderMemberFunDoc(owner, member)
                             is MiniMemberValDecl -> renderMemberValDoc(owner, member)
+                            is MiniInitDecl -> null
                         }
                     }
                 }
