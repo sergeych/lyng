@@ -4375,4 +4375,42 @@ class ScriptTest {
             
         """.trimIndent())
     }
+
+    @Test
+    fun testProperlyReportExceptionPos() = runTest {
+        var x = assertFailsWith<ExecutionError> {
+            eval(
+                """
+            val tmp = 11
+            
+            if( tmp < 100 ) {
+                throw "success"
+            }
+        """.trimIndent()
+            )
+        }
+        println(x)
+        assertEquals(3, x.pos.line)
+        assertContains(x.message!!, "throw \"success\"")
+
+        // comments shoudl not change reporting:
+        x = assertFailsWith<ExecutionError> {
+            eval(
+                """
+            val tmp = 11
+            /* 
+            This should not change position: 
+            */
+            fun test() {
+                throw "success"
+            }
+            test()
+            """.trimIndent()
+            )
+        }
+        println(x)
+        assertEquals(5, x.pos.line)
+        assertContains(x.message!!, "throw \"success\"")
+
+    }
 }
