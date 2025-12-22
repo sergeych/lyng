@@ -83,7 +83,7 @@ open class Obj {
         scope: Scope,
         name: String,
         args: Arguments = Arguments.EMPTY,
-        onNotFoundResult: (() -> Obj?)? = null
+        onNotFoundResult: (suspend () -> Obj?)? = null
     ): Obj {
         val rec = objClass.getInstanceMemberOrNull(name)
         if (rec != null) {

@@ -34,14 +34,9 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         // Direct (unmangled) lookup first
         instanceScope[name]?.let {
             val decl = it.declaringClass ?: objClass.findDeclaringClassOf(name)
-            // When execution passes through suspension points (e.g., withLock),
-            // currentClassCtx could be lost. Fall back to the instance scope class ctx
-            // to preserve correct visibility semantics for private/protected members
-            // accessed from within the class methods.
             // Allow unconditional access when accessing through `this` of the same instance
             if (scope.thisObj === this) return it
-            val caller0 = scope.currentClassCtx ?: instanceScope.currentClassCtx
-            val caller = caller0 // do not default to objClass for outsiders
+            val caller = scope.currentClassCtx
             if (!canAccessMember(it.visibility, decl, caller))
                 scope.raiseError(
                     ObjAccessException(
@@ -71,8 +66,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 else -> cls.mroParents.firstOrNull { instanceScope.objects.containsKey("${it.className}::$name") }
             }
             if (scope.thisObj === this) return rec
-            val caller0 = scope.currentClassCtx ?: instanceScope.currentClassCtx
-            val caller = caller0 // do not default to objClass for outsiders
+            val caller = scope.currentClassCtx
             if (!canAccessMember(rec.visibility, declaring, caller))
                 scope.raiseError(
                     ObjAccessException(
@@ -93,8 +87,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             if (scope.thisObj === this) {
                 // direct self-assignment allowed; enforce mutability below
             } else {
-                val caller0 = scope.currentClassCtx ?: instanceScope.currentClassCtx
-                val caller = caller0 // do not default to objClass for outsiders
+                val caller = scope.currentClassCtx
                 if (!canAccessMember(f.visibility, decl, caller))
                     ObjIllegalAssignmentException(
                         scope,
@@ -123,8 +116,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 else -> cls.mroParents.firstOrNull { instanceScope.objects.containsKey("${it.className}::$name") }
             }
             if (scope.thisObj !== this) {
-                val caller0 = scope.currentClassCtx ?: instanceScope.currentClassCtx
-                val caller = caller0 // do not default to objClass for outsiders
+                val caller = scope.currentClassCtx
                 if (!canAccessMember(rec.visibility, declaring, caller))
                     ObjIllegalAssignmentException(
                         scope,
@@ -141,12 +133,11 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
 
     override suspend fun invokeInstanceMethod(
         scope: Scope, name: String, args: Arguments,
-        onNotFoundResult: (() -> Obj?)?
+        onNotFoundResult: (suspend () -> Obj?)?
     ): Obj =
         instanceScope[name]?.let { rec ->
             val decl = rec.declaringClass ?: objClass.findDeclaringClassOf(name)
-            val caller0 = scope.currentClassCtx ?: instanceScope.currentClassCtx
-            val caller = caller0 ?: if (scope.thisObj === this) objClass else null
+            val caller = scope.currentClassCtx ?: if (scope.thisObj === this) objClass else null
             if (!canAccessMember(rec.visibility, decl, caller))
                 scope.raiseError(
                     ObjAccessException(
@@ -171,8 +162,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 // fallback: class-scope function (registered during class body execution)
                 objClass.classScope?.objects?.get(name)?.let { rec ->
                     val decl = rec.declaringClass ?: objClass.findDeclaringClassOf(name)
-                    val caller0 = scope.currentClassCtx ?: instanceScope.currentClassCtx
-                    val caller = caller0 ?: if (scope.thisObj === this) objClass else null
+                    val caller = scope.currentClassCtx ?: if (scope.thisObj === this) objClass else null
                     if (!canAccessMember(rec.visibility, decl, caller))
                         scope.raiseError(
                             ObjAccessException(
@@ -199,14 +189,14 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
 
     override suspend fun toString(scope: Scope, calledFromLyng: Boolean): ObjString {
         return ObjString(buildString {
-            append("${objClass.className}(")
-            var first = true
-            for ((name, value) in publicFields) {
-                if (first) first = false else append(",")
-                append("$name=${value.value.toString(scope)}")
-            }
-            append(")")
-        })
+                append("${objClass.className}(")
+                var first = true
+                for ((name, value) in publicFields) {
+                    if (first) first = false else append(",")
+                    append("$name=${value.value.toString(scope)}")
+                }
+                append(")")
+            })
     }
 
     override suspend fun inspect(scope: Scope): String {
@@ -246,7 +236,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         for (i in serializingVars) {
             // remove T:: prefix from the field name for JSON
             val parts = i.key.split("::")
-            result[if( parts.size == 1 ) parts[0] else parts.last()] = i.value.value.toJson(scope)
+            result[if (parts.size == 1) parts[0] else parts.last()] = i.value.value.toJson(scope)
         }
         return JsonObject(result)
     }
@@ -259,7 +249,8 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         instanceScope.objects.filter {
             it.value.type.serializable &&
                     it.value.type == ObjRecord.Type.Field &&
-                    it.value.isMutable  }
+                    it.value.isMutable
+        }
     }
 
     internal suspend fun deserializeStateVars(scope: Scope, decoder: LynonDecoder) {
@@ -392,7 +383,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
         scope: Scope,
         name: String,
         args: Arguments,
-        onNotFoundResult: (() -> Obj?)?
+        onNotFoundResult: (suspend () -> Obj?)?
     ): Obj {
         // Qualified method dispatch must start from the specified ancestor, not from the instance scope.
         memberFromAncestor(name)?.let { rec ->

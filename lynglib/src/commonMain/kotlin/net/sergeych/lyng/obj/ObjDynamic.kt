@@ -81,7 +81,7 @@ open class ObjDynamic(var readCallback: Statement? = null, var writeCallback: St
         scope: Scope,
         name: String,
         args: Arguments,
-        onNotFoundResult: (() -> Obj?)?
+        onNotFoundResult: (suspend () -> Obj?)?
     ): Obj {
         val execBase = builderScope?.let { ClosureScope(scope, it) } ?: scope
         val over = readCallback?.execute(execBase.createChildScope(Arguments(ObjString(name))))

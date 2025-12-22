@@ -210,8 +210,11 @@ class StackTraceEntry(
 /* Print this exception and its stack trace to standard output. */
 fun Exception.printStackTrace() {
     println(this)
+    var lastEntry = null
     for( entry in stackTrace() ) {
-        println("\tat "+entry)
+        if( lastEntry == null || lastEntry !is StackTraceEntry || lastEntry.line != entry.line )
+            println("\tat "+entry.toString())
+        lastEntry = entry
     }
 }
 

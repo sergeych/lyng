@@ -214,7 +214,7 @@ open class ObjClass(
         // Avoid capturing a transient (pooled) call frame as the parent of the instance scope.
         // Bind instance scope to the caller's parent chain directly so name resolution (e.g., stdlib like sqrt)
         // remains stable even when call frames are pooled and reused.
-        val stableParent = scope.parent
+        val stableParent = classScope ?: scope.parent
         instance.instanceScope = Scope(stableParent, scope.args, scope.pos, instance)
         // Expose instance methods (and other callable members) directly in the instance scope for fast lookup
         // This mirrors Obj.autoInstanceScope behavior for ad-hoc scopes and makes fb.method() resolution robust
@@ -451,7 +451,7 @@ open class ObjClass(
 
     override suspend fun invokeInstanceMethod(
         scope: Scope, name: String, args: Arguments,
-        onNotFoundResult: (() -> Obj?)?
+        onNotFoundResult: (suspend () -> Obj?)?
     ): Obj {
         return classScope?.objects?.get(name)?.value?.invoke(scope, this, args)
             ?: super.invokeInstanceMethod(scope, name, args, onNotFoundResult)

@@ -4298,6 +4298,19 @@ class ScriptTest {
         """.trimIndent())
     }
 
+    @Test
+    fun testCached() = runTest {
+        eval("""
+            var counter = 0
+            val f = cached { ++counter }
+             
+            assertEquals(1,f())
+            assertEquals(1, counter)
+            assertEquals(1,f())
+            assertEquals(1, counter)
+        """.trimIndent())
+    }
+
 
 //    @Test
 //    fun testSplatAssignemnt() = runTest {

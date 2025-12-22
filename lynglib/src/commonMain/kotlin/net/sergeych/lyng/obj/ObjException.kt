@@ -71,7 +71,7 @@ open class ObjException(
                         )
                     } else {
                         // Fallback textual entry if StackTraceEntry class is not available in this scope
-                        result.list += ObjString("${'$'}{pos.source.objSourceName}:${'$'}{pos.line}:${'$'}{pos.column}: ${'$'}{pos.currentLine}")
+                        result.list += ObjString("${pos.source.objSourceName}:${pos.line}:${pos.column}: ${pos.currentLine}")
                     }
                 }
                 s = s.parent
