@@ -3697,7 +3697,7 @@ class ScriptTest {
     }
 
 
-    //    @Test
+        @Test
     fun testMinimumOptimization() = runTest {
         for (i in 1..200) {
             bm {
@@ -4518,4 +4518,18 @@ class ScriptTest {
             """.trimIndent()
         )
     }
+
+    @Test
+    fun testFunMiniDeclaration() = runTest {
+        eval("""
+            class T(x) {
+                fun method() = x + 1
+            }
+            fun median(a,b) = (a+b)/2
+             
+            assertEquals(11, T(10).method())
+            assertEquals(2, median(1,3))
+        """.trimIndent())
+    }
+
 }

@@ -647,14 +647,14 @@ private fun detectDeclarationAndParamOverrides(text: String): Map<Pair<Int, Int>
             i = p
             continue
         }
-        // Generic function call site: ident followed by '(' (after optional spaces)
+        // Generic function call site: ident followed by '(' or '=' (after optional spaces)
         readIdent(i)?.let { (name, endIdx) ->
             val startIdx = i
             // Avoid keywords; allow member calls too (a.b()) by not checking preceding char
             if (name !in kw) {
                 var q = skipWs(endIdx)
-                if (q < n && text[q] == '(') {
-                    // Mark as function identifier at call site
+                if (q < n && (text[q] == '(' || text[q] == '=')) {
+                    // Mark as function identifier at call site or shorthand declaration
                     result[startIdx to endIdx] = "hl-fn"
                     i = endIdx
                     return@let

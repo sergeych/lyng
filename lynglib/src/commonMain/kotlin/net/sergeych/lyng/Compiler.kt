@@ -2433,7 +2433,20 @@ class Compiler(
             val fnStatements = if (isExtern)
                 statement { raiseError("extern function not provided: $name") }
             else
-                withLocalNames(paramNames) { parseBlock() }
+                withLocalNames(paramNames) {
+                    val next = cc.peekNextNonWhitespace()
+                    if (next.type == Token.Type.ASSIGN) {
+                        cc.skipWsTokens()
+                        cc.next() // consume '='
+                        val expr = parseExpression() ?: throw ScriptError(cc.current().pos, "Expected function body expression")
+                        // Shorthand function returns the expression value
+                        statement(expr.pos) { scope ->
+                            expr.execute(scope)
+                        }
+                    } else {
+                        parseBlock()
+                    }
+                }
             // Capture and pop the local declarations count for this function
             val fnLocalDecls = localDeclCountStack.removeLastOrNull() ?: 0
 
