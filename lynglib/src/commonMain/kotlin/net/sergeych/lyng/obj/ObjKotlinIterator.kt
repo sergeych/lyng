@@ -76,36 +76,3 @@ fun Obj.toFlow(scope: Scope): Flow<Obj> = flow {
     }
 }
 
-/**
- * Call [callback] for each element of this obj considering it provides [Iterator]
- * methods `hasNext` and `next`.
- *
- * IF callback returns false, iteration is stopped.
- */
-suspend fun Obj.enumerate(scope: Scope, callback: suspend (Obj) -> Boolean) {
-    val iterator = invokeInstanceMethod(scope, "iterator")
-    val hasNext = iterator.getInstanceMethod(scope, "hasNext")
-    val next = iterator.getInstanceMethod(scope, "next")
-    var closeIt = false
-    try {
-        while (hasNext.invoke(scope, iterator).toBool()) {
-            val nextValue = next.invoke(scope, iterator)
-            val shouldContinue = try {
-                callback(nextValue)
-            } catch (e: Exception) {
-                // iteration aborted due to exception in callback
-                closeIt = true
-                throw e
-            }
-            if (!shouldContinue) {
-                closeIt = true
-                break
-            }
-        }
-    } finally {
-        if (closeIt) {
-            // Best-effort cancel on premature termination
-            iterator.invokeInstanceMethod(scope, "cancelIteration") { ObjVoid }
-        }
-    }
-}

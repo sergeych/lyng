@@ -2040,7 +2040,7 @@ class Compiler(
                     var breakCaught = false
 
                     if (size > 0) {
-                        var current = runCatching { sourceObj.getAt(forContext, ObjInt(0)) }
+                        var current = runCatching { sourceObj.getAt(forContext, ObjInt.of(0)) }
                             .getOrElse {
                                 throw ScriptError(
                                     tOp.pos,
@@ -2065,7 +2065,7 @@ class Compiler(
                                     throw lbe
                             }
                             if (++index >= size) break
-                            current = sourceObj.getAt(forContext, ObjInt(index.toLong()))
+                            current = sourceObj.getAt(forContext, ObjInt.of(index.toLong()))
                         }
                     }
                     if (!breakCaught && elseStatement != null) {
@@ -2087,7 +2087,7 @@ class Compiler(
         var result: Obj = ObjVoid
         if (catchBreak) {
             for (i in start..<end) {
-                loopVar.value = ObjInt(i)
+                loopVar.value = ObjInt.of(i)
                 try {
                     result = body.execute(forScope)
                 } catch (lbe: LoopBreakContinueException) {
@@ -2100,7 +2100,7 @@ class Compiler(
             }
         } else {
             for (i in start..<end) {
-                loopVar.value = ObjInt(i)
+                loopVar.value = ObjInt.of(i)
                 result = body.execute(forScope)
             }
         }
@@ -2112,38 +2112,33 @@ class Compiler(
         body: Statement, elseStatement: Statement?, label: String?,
         catchBreak: Boolean
     ): Obj {
-        val iterObj = sourceObj.invokeInstanceMethod(forScope, "iterator")
         var result: Obj = ObjVoid
-        var completedNaturally = false
-        try {
-            while (iterObj.invokeInstanceMethod(forScope, "hasNext").toBool()) {
-                if (catchBreak)
-                    try {
-                        loopVar.value = iterObj.invokeInstanceMethod(forScope, "next")
-                        result = body.execute(forScope)
-                    } catch (lbe: LoopBreakContinueException) {
-                        if (lbe.label == label || lbe.label == null) {
-                            if (lbe.doContinue) continue
-                            // premature finish, will trigger cancel in finally
-                            return lbe.result
-                        }
-                        throw lbe
-                    }
-                else {
-                    loopVar.value = iterObj.invokeInstanceMethod(forScope, "next")
+        var breakCaught = false
+        sourceObj.enumerate(forScope) { item ->
+            loopVar.value = item
+            if (catchBreak) {
+                try {
                     result = body.execute(forScope)
+                    true
+                } catch (lbe: LoopBreakContinueException) {
+                    if (lbe.label == label || lbe.label == null) {
+                        if (lbe.doContinue) true
+                        else {
+                            result = lbe.result
+                            breakCaught = true
+                            false
+                        }
+                    } else
+                        throw lbe
                 }
-            }
-            completedNaturally = true
-            return elseStatement?.execute(forScope) ?: result
-        } finally {
-            if (!completedNaturally) {
-                // Best-effort cancellation on premature termination
-                runCatching {
-                    iterObj.invokeInstanceMethod(forScope, "cancelIteration") { ObjVoid }
-                }
+            } else {
+                result = body.execute(forScope)
+                true
             }
         }
+        return if (!breakCaught && elseStatement != null) {
+            elseStatement.execute(forScope)
+        } else result
     }
 
     @Suppress("UNUSED_VARIABLE")

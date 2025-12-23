@@ -140,6 +140,12 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
         return list.contains(other)
     }
 
+    override suspend fun enumerate(scope: Scope, callback: suspend (Obj) -> Boolean) {
+        for (item in list) {
+            if (!callback(item)) break
+        }
+    }
+
     override val objClass: ObjClass
         get() = type
 

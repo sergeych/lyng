@@ -23,6 +23,8 @@ must throw `ObjIterationFinishedError`.
 
 Iterators are returned when implementing [Iterable] interface.
 
+For high-performance Kotlin-side interop and custom iterable implementation details, see [Efficient Iterables in Kotlin Interop](EfficientIterables.md).
+
 ## Implemented for classes:
 
 - [List], [Range]

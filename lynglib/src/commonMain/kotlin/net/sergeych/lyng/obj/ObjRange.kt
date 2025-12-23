@@ -114,6 +114,36 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
         start is ObjChar && end is ObjChar
     }
 
+    override suspend fun enumerate(scope: Scope, callback: suspend (Obj) -> Boolean) {
+        if (isIntRange) {
+            val s = (start as ObjInt).value
+            val e = (end as ObjInt).value
+            if (isEndInclusive) {
+                for (i in s..e) {
+                    if (!callback(ObjInt.of(i))) break
+                }
+            } else {
+                for (i in s..<e) {
+                    if (!callback(ObjInt.of(i))) break
+                }
+            }
+        } else if (isCharRange) {
+            val s = (start as ObjChar).value
+            val e = (end as ObjChar).value
+            if (isEndInclusive) {
+                for (c in s..e) {
+                    if (!callback(ObjChar(c))) break
+                }
+            } else {
+                for (c in s..<e) {
+                    if (!callback(ObjChar(c))) break
+                }
+            }
+        } else {
+            super.enumerate(scope, callback)
+        }
+    }
+
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
         return (other as? ObjRange)?.let {
             if( start == other.start && end == other.end ) 0 else -1

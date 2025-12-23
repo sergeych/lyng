@@ -34,6 +34,12 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
         return set.contains(other)
     }
 
+    override suspend fun enumerate(scope: Scope, callback: suspend (Obj) -> Boolean) {
+        for (item in set) {
+            if (!callback(item)) break
+        }
+    }
+
     override suspend fun plus(scope: Scope, other: Obj): Obj {
         return ObjSet(
             if (other is ObjSet)

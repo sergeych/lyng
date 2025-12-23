@@ -128,6 +128,40 @@ open class Obj {
     }
 
     /**
+     * Call [callback] for each element of this obj considering it provides [Iterator]
+     * methods `hasNext` and `next`.
+     *
+     * IF callback returns false, iteration is stopped.
+     */
+    open suspend fun enumerate(scope: Scope, callback: suspend (Obj) -> Boolean) {
+        val iterator = invokeInstanceMethod(scope, "iterator")
+        val hasNext = iterator.getInstanceMethod(scope, "hasNext")
+        val next = iterator.getInstanceMethod(scope, "next")
+        var closeIt = false
+        try {
+            while (hasNext.invoke(scope, iterator).toBool()) {
+                val nextValue = next.invoke(scope, iterator)
+                val shouldContinue = try {
+                    callback(nextValue)
+                } catch (e: Exception) {
+                    // iteration aborted due to exception in callback
+                    closeIt = true
+                    throw e
+                }
+                if (!shouldContinue) {
+                    closeIt = true
+                    break
+                }
+            }
+        } finally {
+            if (closeIt) {
+                // Best-effort cancel on premature termination
+                iterator.invokeInstanceMethod(scope, "cancelIteration") { ObjVoid }
+            }
+        }
+    }
+
+    /**
      * Default toString implementation:
      *
      * - if the object is a string, returns it
@@ -444,8 +478,8 @@ open class Obj {
                 is Obj -> obj
                 is Double -> ObjReal(obj)
                 is Float -> ObjReal(obj.toDouble())
-                is Int -> ObjInt(obj.toLong())
-                is Long -> ObjInt(obj)
+                is Int -> ObjInt.of(obj.toLong())
+                is Long -> ObjInt.of(obj)
                 is String -> ObjString(obj)
                 is CharSequence -> ObjString(obj.toString())
                 is Boolean -> ObjBool(obj)

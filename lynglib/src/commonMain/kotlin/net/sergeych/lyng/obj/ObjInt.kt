@@ -45,11 +45,11 @@ class ObjInt(val value: Long, override val isConst: Boolean = false) : Obj(), Nu
     }
 
     override suspend fun incrementAndGet(scope: Scope): Obj {
-        return ObjInt(value + 1)
+        return of(value + 1)
     }
 
     override suspend fun decrementAndGet(scope: Scope): Obj {
-        return ObjInt(value - 1)
+        return of(value - 1)
     }
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
@@ -63,29 +63,29 @@ class ObjInt(val value: Long, override val isConst: Boolean = false) : Obj(), Nu
 
     override suspend fun plus(scope: Scope, other: Obj): Obj =
         if (other is ObjInt)
-            ObjInt(this.value + other.value)
+            of(this.value + other.value)
         else
             ObjReal(this.doubleValue + other.toDouble())
 
     override suspend fun minus(scope: Scope, other: Obj): Obj =
         if (other is ObjInt)
-            ObjInt(this.value - other.value)
+            of(this.value - other.value)
         else
             ObjReal(this.doubleValue - other.toDouble())
 
     override suspend fun mul(scope: Scope, other: Obj): Obj =
         if (other is ObjInt) {
-            ObjInt(this.value * other.value)
+            of(this.value * other.value)
         } else ObjReal(this.value * other.toDouble())
 
     override suspend fun div(scope: Scope, other: Obj): Obj =
         if (other is ObjInt)
-            ObjInt(this.value / other.value)
+            of(this.value / other.value)
         else ObjReal(this.value / other.toDouble())
 
     override suspend fun mod(scope: Scope, other: Obj): Obj =
         if (other is ObjInt)
-            ObjInt(this.value % other.value)
+            of(this.value % other.value)
         else ObjReal(this.value.toDouble() % other.toDouble())
 
     /**
@@ -158,8 +158,15 @@ class ObjInt(val value: Long, override val isConst: Boolean = false) : Obj(), Nu
     }
 
     companion object {
-        val Zero = ObjInt(0, true)
-        val One = ObjInt(1, true)
+        private val cache = Array(256) { ObjInt((it - 128).toLong(), true) }
+
+        fun of(value: Long): ObjInt {
+            return if (value in -128L..127L) cache[(value + 128).toInt()]
+            else ObjInt(value)
+        }
+
+        val Zero = of(0)
+        val One = of(1)
         val type = object : ObjClass("Int") {
             override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj =
                 when (lynonType) {
@@ -178,4 +185,5 @@ class ObjInt(val value: Long, override val isConst: Boolean = false) : Obj(), Nu
     }
 }
 
-fun Int.toObj() = ObjInt(this.toLong())
+fun Int.toObj() = ObjInt.of(this.toLong())
+fun Long.toObj() = ObjInt.of(this)

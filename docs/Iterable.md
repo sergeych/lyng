@@ -142,6 +142,8 @@ optional function applied to each item that must return result string for an ite
 
     fun iterator(): Iterator
 
+For high-performance Kotlin-side interop and custom iterable implementation details, see [Efficient Iterables in Kotlin Interop](EfficientIterables.md).
+
 ## Included in interfaces:
 
 - [Collection], Array, [List]
