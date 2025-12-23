@@ -91,4 +91,19 @@ class StdlibTest {
             assertEquals([1,2], (1..8).dropLast(6).toList() )
         """.trimIndent())
     }
+
+    @Test
+    fun testFlattenAndFilter() = runTest {
+        eval("""
+            assertEquals([1,2,3,4,5,6], [1,3,5].map { [it, it+1] }.flatten() )
+            assertEquals([1,3,5], [null,1,null, 3,5].filterNotNull().toList())
+        """)
+    }
+
+    @Test
+    fun testFlatMap() = runTest {
+        eval("""
+            assertEquals([1,2,3,4,5,6], [1,3,5].flatMap { [it,it+1] }.toList() )
+        """)
+    }
 }
