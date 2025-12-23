@@ -347,8 +347,6 @@ Reference quality and object equality example:
     assert( null == null)  // singletons
     assert( null === null)
     // but, for non-singletons:
-    assert( 5 == 5)
-    assert( 5 !== 5)
     assert( "foo" !== "foo" )
     >>> void
 
