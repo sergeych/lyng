@@ -42,6 +42,7 @@ data class ObjRecord(
         @Suppress("unused")
         Class,
         Enum,
+        Property,
         Other;
 
         val isArgument get() = this == Argument

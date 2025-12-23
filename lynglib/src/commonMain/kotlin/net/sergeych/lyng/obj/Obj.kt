@@ -232,7 +232,7 @@ open class Obj {
 
     open suspend fun assign(scope: Scope, other: Obj): Obj? = null
 
-    open fun getValue(scope: Scope) = this
+    open suspend fun getValue(scope: Scope) = this
 
     /**
      * a += b

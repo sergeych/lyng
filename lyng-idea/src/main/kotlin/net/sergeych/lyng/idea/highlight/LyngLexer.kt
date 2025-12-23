@@ -34,7 +34,8 @@ class LyngLexer : LexerBase() {
     private val keywords = setOf(
         "fun", "val", "var", "class", "type", "import", "as",
         "if", "else", "for", "while", "return", "true", "false", "null",
-        "when", "in", "is", "break", "continue", "try", "catch", "finally"
+        "when", "in", "is", "break", "continue", "try", "catch", "finally",
+        "get", "set"
     )
 
     override fun start(buffer: CharSequence, startOffset: Int, endOffset: Int, initialState: Int) {

@@ -419,9 +419,12 @@ open class Scope(
                 callScope.allocateSlotFor(name, rec)
             }
         }
-        // Map to a slot for fast local access (if not already mapped)
-        if (getSlotIndexOf(name) == null) {
+        // Map to a slot for fast local access (ensure consistency)
+        val idx = getSlotIndexOf(name)
+        if (idx == null) {
             allocateSlotFor(name, rec)
+        } else {
+            slots[idx] = rec
         }
         return rec
     }

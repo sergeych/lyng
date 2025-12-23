@@ -1956,7 +1956,7 @@ class Compiler(
         while (cc.hasPrevious() && cnt < maxDepth) {
             val t = cc.previous()
             cnt++
-            if (t.type == Token.Type.LABEL) {
+            if (t.type == Token.Type.LABEL || t.type == Token.Type.ATLABEL) {
                 found = t.value
                 break
             }
@@ -1987,7 +1987,8 @@ class Compiler(
             val namesForLoop = (currentLocalNames?.toSet() ?: emptySet()) + tVar.value
             val (canBreak, body, elseStatement) = withLocalNames(namesForLoop) {
                 val loopParsed = cc.parseLoop {
-                    parseStatement() ?: throw ScriptError(start, "Bad for statement: expected loop body")
+                    if (cc.current().type == Token.Type.LBRACE) parseBlock()
+                    else parseStatement() ?: throw ScriptError(start, "Bad for statement: expected loop body")
                 }
                 // possible else clause
                 cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
@@ -2050,21 +2051,19 @@ class Compiler(
                         var index = 0
                         while (true) {
                             loopSO.value = current
-                            if (canBreak) {
-                                try {
-                                    result = body.execute(forContext)
-                                } catch (lbe: LoopBreakContinueException) {
-                                    if (lbe.label == label || lbe.label == null) {
-                                        breakCaught = true
-                                        if (lbe.doContinue) continue
-                                        else {
-                                            result = lbe.result
-                                            break
-                                        }
-                                    } else
-                                        throw lbe
-                                }
-                            } else result = body.execute(forContext)
+                            try {
+                                result = body.execute(forContext)
+                            } catch (lbe: LoopBreakContinueException) {
+                                if (lbe.label == label || lbe.label == null) {
+                                    breakCaught = true
+                                    if (lbe.doContinue) continue
+                                    else {
+                                        result = lbe.result
+                                        break
+                                    }
+                                } else
+                                    throw lbe
+                            }
                             if (++index >= size) break
                             current = sourceObj.getAt(forContext, ObjInt(index.toLong()))
                         }
@@ -2086,11 +2085,9 @@ class Compiler(
         body: Statement, elseStatement: Statement?, label: String?, catchBreak: Boolean
     ): Obj {
         var result: Obj = ObjVoid
-        val iVar = ObjInt(0)
-        loopVar.value = iVar
         if (catchBreak) {
             for (i in start..<end) {
-                iVar.value = i//.toLong()
+                loopVar.value = ObjInt(i)
                 try {
                     result = body.execute(forScope)
                 } catch (lbe: LoopBreakContinueException) {
@@ -2103,7 +2100,7 @@ class Compiler(
             }
         } else {
             for (i in start..<end) {
-                iVar.value = i
+                loopVar.value = ObjInt(i)
                 result = body.execute(forScope)
             }
         }
@@ -2152,20 +2149,18 @@ class Compiler(
     @Suppress("UNUSED_VARIABLE")
     private suspend fun parseDoWhileStatement(): Statement {
         val label = getLabel()?.also { cc.labels += it }
-        val (breakFound, body) = cc.parseLoop {
-            parseStatement() ?: throw ScriptError(cc.currentPos(), "Bad while statement: expected statement")
+        val (canBreak, body) = cc.parseLoop {
+            parseStatement() ?: throw ScriptError(cc.currentPos(), "Bad do-while statement: expected body statement")
         }
         label?.also { cc.labels -= it }
 
-        cc.skipTokens(Token.Type.NEWLINE)
+        cc.skipWsTokens()
+        val tWhile = cc.next()
+        if (tWhile.type != Token.Type.ID || tWhile.value != "while")
+            throw ScriptError(tWhile.pos, "Expected 'while' after do body")
 
-        val t = cc.next()
-        if (t.type != Token.Type.ID && t.value != "while")
-            cc.skipTokenOfType(Token.Type.LPAREN, "expected '(' here")
-
-        val conditionStart = ensureLparen()
-        val condition =
-            parseExpression() ?: throw ScriptError(conditionStart, "Bad while statement: expected expression")
+        ensureLparen()
+        val condition = parseExpression() ?: throw ScriptError(cc.currentPos(), "Expected condition after 'while'")
         ensureRparen()
 
         cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
@@ -2176,13 +2171,11 @@ class Compiler(
             null
         }
 
-
         return statement(body.pos) {
             var wasBroken = false
             var result: Obj = ObjVoid
-            lateinit var doScope: Scope
             while (true) {
-                doScope = it.createChildScope().apply { skipScopeCreation = true }
+                val doScope = it.createChildScope().apply { skipScopeCreation = true }
                 try {
                     result = body.execute(doScope)
                 } catch (e: LoopBreakContinueException) {
@@ -2194,11 +2187,12 @@ class Compiler(
                         }
                         // for continue: just fall through to condition check below
                     } else {
-                        // Not our label, let outer loops handle it
                         throw e
                     }
                 }
-                if (!condition.execute(doScope).toBool()) break
+                if (!condition.execute(doScope).toBool()) {
+                    break
+                }
             }
             if (!wasBroken) elseStatement?.let { s -> result = s.execute(it) }
             result
@@ -2212,7 +2206,10 @@ class Compiler(
             parseExpression() ?: throw ScriptError(start, "Bad while statement: expected expression")
         ensureRparen()
 
-        val body = parseStatement() ?: throw ScriptError(start, "Bad while statement: expected statement")
+        val (canBreak, body) = cc.parseLoop {
+            if (cc.current().type == Token.Type.LBRACE) parseBlock()
+            else parseStatement() ?: throw ScriptError(start, "Bad while statement: expected statement")
+        }
         label?.also { cc.labels -= it }
 
         cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
@@ -2226,21 +2223,23 @@ class Compiler(
             var result: Obj = ObjVoid
             var wasBroken = false
             while (condition.execute(it).toBool()) {
-                try {
-                    // we don't need to create new context here: if body is a block,
-                    // parse block will do it, otherwise single statement doesn't need it:
-                    result = body.execute(it)
-                } catch (lbe: LoopBreakContinueException) {
-                    if (lbe.label == label || lbe.label == null) {
-                        if (lbe.doContinue) continue
-                        else {
-                            result = lbe.result
-                            wasBroken = true
-                            break
-                        }
-                    } else
-                        throw lbe
-                }
+                val loopScope = it.createChildScope()
+                if (canBreak) {
+                    try {
+                        result = body.execute(loopScope)
+                    } catch (lbe: LoopBreakContinueException) {
+                        if (lbe.label == label || lbe.label == null) {
+                            if (lbe.doContinue) continue
+                            else {
+                                result = lbe.result
+                                wasBroken = true
+                                break
+                            }
+                        } else
+                            throw lbe
+                    }
+                } else
+                    result = body.execute(loopScope)
             }
             if (!wasBroken) elseStatement?.let { s -> result = s.execute(it) }
             result
@@ -2265,7 +2264,12 @@ class Compiler(
         cc.previous()
         val resultExpr = if (t.pos.line == start.line && (!t.isComment &&
                     t.type != Token.Type.SEMICOLON &&
-                    t.type != Token.Type.NEWLINE)
+                    t.type != Token.Type.NEWLINE &&
+                    t.type != Token.Type.RBRACE &&
+                    t.type != Token.Type.RPAREN &&
+                    t.type != Token.Type.RBRACKET &&
+                    t.type != Token.Type.COMMA &&
+                    t.type != Token.Type.EOF)
         ) {
             // we have something on this line, could be expression
             parseStatement()
@@ -2635,34 +2639,50 @@ class Compiler(
             parseTypeDeclarationWithMini().second
         } else null
 
+        val markBeforeEq = cc.savePos()
         val eqToken = cc.next()
         var setNull = false
+        var isProperty = false
+
+        val declaringClassNameCaptured = (codeContexts.lastOrNull() as? CodeContext.ClassBody)?.name
+
+        if (declaringClassNameCaptured != null) {
+            val mark = cc.savePos()
+            cc.restorePos(markBeforeEq)
+            val next = cc.peekNextNonWhitespace()
+            if (next.isId("get") || next.isId("set")) {
+                isProperty = true
+                cc.restorePos(markBeforeEq)
+            } else {
+                cc.restorePos(mark)
+            }
+        }
 
         // Register the local name at compile time so that subsequent identifiers can be emitted as fast locals
         if (!isStatic) declareLocalName(name)
 
-        val isDelegate = if (eqToken.isId("by")) {
+        val isDelegate = if (!isProperty && eqToken.isId("by")) {
             true
         } else {
-            if (eqToken.type != Token.Type.ASSIGN) {
-                if (!isMutable)
+            if (!isProperty && eqToken.type != Token.Type.ASSIGN) {
+                if (!isMutable && (declaringClassNameCaptured == null))
                     throw ScriptError(start, "val must be initialized")
                 else {
-                    cc.previous()
+                    cc.restorePos(markBeforeEq)
                     setNull = true
                 }
             }
             false
         }
 
-        val initialExpression = if (setNull) null
+        val initialExpression = if (setNull || isProperty) null
         else parseStatement(true)
             ?: throw ScriptError(eqToken.pos, "Expected initializer expression")
 
         // Emit MiniValDecl for this declaration (before execution wiring), attach doc if any
         run {
             val declRange = MiniRange(pendingDeclStart ?: start, cc.currentPos())
-            val initR = if (setNull) null else MiniRange(eqToken.pos, cc.currentPos())
+            val initR = if (setNull || isProperty) null else MiniRange(eqToken.pos, cc.currentPos())
             val node = MiniValDecl(
                 range = declRange,
                 name = name,
@@ -2691,8 +2711,70 @@ class Compiler(
             return NopStatement
         }
 
-        // Determine declaring class (if inside class body) at compile time, capture it in the closure
-        val declaringClassNameCaptured = (codeContexts.lastOrNull() as? CodeContext.ClassBody)?.name
+        // Check for accessors if it is a class member
+        var getter: Statement? = null
+        var setter: Statement? = null
+        if (declaringClassNameCaptured != null) {
+            while (true) {
+                val t = cc.peekNextNonWhitespace()
+                if (t.isId("get")) {
+                    cc.skipWsTokens()
+                    cc.next() // consume 'get'
+                    cc.requireToken(Token.Type.LPAREN)
+                    cc.requireToken(Token.Type.RPAREN)
+                    getter = if (cc.peekNextNonWhitespace().type == Token.Type.LBRACE) {
+                        cc.skipWsTokens()
+                        parseBlock()
+                    } else if (cc.peekNextNonWhitespace().type == Token.Type.ASSIGN) {
+                        cc.skipWsTokens()
+                        cc.next() // consume '='
+                        val expr = parseExpression() ?: throw ScriptError(cc.current().pos, "Expected getter expression")
+                        (expr as? Statement) ?: statement(expr.pos) { s -> expr.execute(s) }
+                    } else {
+                        throw ScriptError(cc.current().pos, "Expected { or = after get()")
+                    }
+                } else if (t.isId("set")) {
+                    cc.skipWsTokens()
+                    cc.next() // consume 'set'
+                    cc.requireToken(Token.Type.LPAREN)
+                    val setArg = cc.requireToken(Token.Type.ID, "Expected setter argument name")
+                    cc.requireToken(Token.Type.RPAREN)
+                    setter = if (cc.peekNextNonWhitespace().type == Token.Type.LBRACE) {
+                        cc.skipWsTokens()
+                        val body = parseBlock()
+                        statement(body.pos) { scope ->
+                            val value = scope.args.list.firstOrNull() ?: ObjNull
+                            scope.addItem(setArg.value, true, value, recordType = ObjRecord.Type.Argument)
+                            body.execute(scope)
+                        }
+                    } else if (cc.peekNextNonWhitespace().type == Token.Type.ASSIGN) {
+                        cc.skipWsTokens()
+                        cc.next() // consume '='
+                        val expr = parseExpression() ?: throw ScriptError(cc.current().pos, "Expected setter expression")
+                        val st = (expr as? Statement) ?: statement(expr.pos) { s -> expr.execute(s) }
+                        statement(st.pos) { scope ->
+                            val value = scope.args.list.firstOrNull() ?: ObjNull
+                            scope.addItem(setArg.value, true, value, recordType = ObjRecord.Type.Argument)
+                            st.execute(scope)
+                        }
+                    } else {
+                        throw ScriptError(cc.current().pos, "Expected { or = after set(...)")
+                    }
+                } else break
+            }
+            if (getter != null || setter != null) {
+                if (isMutable) {
+                    if (getter == null || setter == null) {
+                        throw ScriptError(start, "var property must have both get() and set()")
+                    }
+                } else {
+                    if (setter != null)
+                        throw ScriptError(start, "val property cannot have a setter (name: $name)")
+                    if (getter == null)
+                        throw ScriptError(start, "val property with accessors must have a getter (name: $name)")
+                }
+            }
+        }
 
         return statement(start) { context ->
             // In true class bodies (not inside a function), store fields under a class-qualified key to support MI collisions
@@ -2709,23 +2791,32 @@ class Compiler(
 
             if (isDelegate) {
                 TODO()
-//                println("initial expr = $initialExpression")
-//                val initValue =
-//                    (initialExpression?.execute(context.copy(Arguments(ObjString(name)))) as? Statement)
-//                        ?.execute(context.copy(Arguments(ObjString(name))))
-//                    ?: context.raiseError("delegate initialization required")
-//                println("delegate init: $initValue")
-//                if (!initValue.isInstanceOf(ObjArray))
-//                    context.raiseIllegalArgument("delegate initialized must be an array")
-//                val s = initValue.getAt(context, 1)
-//                val setter = if (s == ObjNull) statement { raiseNotImplemented("setter is not provided") }
-//                else (s as? Statement) ?: context.raiseClassCastError("setter must be a callable")
-//                ObjDelegate(
-//                    (initValue.getAt(context, 0) as? Statement)
-//                        ?: context.raiseClassCastError("getter must be a callable"), setter
-//                ).also {
-//                    context.addItem(name, isMutable, it, visibility, recordType = ObjRecord.Type.Field)
-//                }
+            } else if (getter != null || setter != null) {
+                val declaringClassName = declaringClassNameCaptured!!
+                val storageName = "$declaringClassName::$name"
+                val prop = ObjProperty(name, getter, setter)
+
+                // If we are in class scope now (defining instance field), defer initialization to instance time
+                val isClassScope = context.thisObj is ObjClass && (context.thisObj !is ObjInstance)
+                if (isClassScope) {
+                    val cls = context.thisObj as ObjClass
+                    // Register the property
+                    cls.instanceInitializers += statement(start) { scp ->
+                        scp.addItem(
+                            storageName,
+                            isMutable,
+                            prop,
+                            visibility,
+                            recordType = ObjRecord.Type.Property
+                        )
+                        ObjVoid
+                    }
+                    ObjVoid
+                } else {
+                    // We are in instance scope already: perform initialization immediately
+                    context.addItem(storageName, isMutable, prop, visibility, recordType = ObjRecord.Type.Property)
+                    prop
+                }
             } else {
                 if (declaringClassName != null && !isStatic) {
                     val storageName = "$declaringClassName::$name"

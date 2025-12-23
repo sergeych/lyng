@@ -375,22 +375,12 @@ class IncDecRef(
         if (!rec.isMutable) scope.raiseError("Cannot ${if (isIncrement) "increment" else "decrement"} immutable value")
         val v = rec.value
         val one = ObjInt.One
-        return if (v.isConst) {
-            // Mirror existing semantics in Compiler for const values
-            val result = if (isIncrement) v.plus(scope, one) else v.minus(scope, one)
-            // write back
-            target.setAt(atPos, scope, result)
-            // For post-inc: previous code returned NEW value; for pre-inc: returned ORIGINAL value
-            if (isPost) result.asReadonly else v.asReadonly
-        } else {
-            val res = when {
-                isIncrement && isPost -> v.getAndIncrement(scope)
-                isIncrement && !isPost -> v.incrementAndGet(scope)
-                !isIncrement && isPost -> v.getAndDecrement(scope)
-                else -> v.decrementAndGet(scope)
-            }
-            res.asReadonly
-        }
+        // We now treat numbers as immutable and always perform write-back via setAt.
+        // This avoids issues where literals are shared and mutated in-place.
+        // For post-inc: return ORIGINAL value; for pre-inc: return NEW value.
+        val result = if (isIncrement) v.plus(scope, one) else v.minus(scope, one)
+        target.setAt(atPos, scope, result)
+        return (if (isPost) v else result).asReadonly
     }
 }
 
@@ -635,12 +625,16 @@ class FieldRef(
             val (k, v) = receiverKeyAndVersion(base)
             val rec = tRecord
             if (rec != null && tKey == k && tVer == v && tFrameId == scope.frameId) {
-                // visibility/mutability checks
-                if (!rec.isMutable) scope.raiseError(ObjIllegalAssignmentException(scope, "can't reassign val $name"))
-                if (!rec.visibility.isPublic)
-                    scope.raiseError(ObjAccessException(scope, "can't access non-public field $name"))
-                if (rec.value.assign(scope, newValue) == null) rec.value = newValue
-                return
+                // If it is a property, we must go through writeField (slow path for now)
+                // or handle it here.
+                if (rec.type != ObjRecord.Type.Property) {
+                    // visibility/mutability checks
+                    if (!rec.isMutable) scope.raiseError(ObjIllegalAssignmentException(scope, "can't reassign val $name"))
+                    if (!rec.visibility.isPublic)
+                        scope.raiseError(ObjAccessException(scope, "can't access non-public field $name"))
+                    if (rec.value.assign(scope, newValue) == null) rec.value = newValue
+                    return
+                }
             }
         }
         if (fieldPic) {
@@ -1229,7 +1223,7 @@ class MethodCallRef(
 /**
  * Reference to a local/visible variable by name (Phase A: scope lookup).
  */
-class LocalVarRef(private val name: String, private val atPos: Pos) : ObjRef {
+class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
     override fun forEachVariable(block: (String) -> Unit) {
         block(name)
     }
@@ -1253,7 +1247,6 @@ class LocalVarRef(private val name: String, private val atPos: Pos) : ObjRef {
 
     override suspend fun get(scope: Scope): ObjRecord {
         scope.pos = atPos
-        // 1) Try fast slot/local
         if (!PerfFlags.LOCAL_SLOT_PIC) {
             scope.getSlotIndexOf(name)?.let {
                 if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.localVarPicHit++
@@ -1472,7 +1465,7 @@ class BoundLocalVarRef(
  * It resolves the slot once per frame and never falls back to global/module lookup.
  */
 class FastLocalVarRef(
-    private val name: String,
+    val name: String,
     private val atPos: Pos,
 ) : ObjRef {
     override fun forEachVariable(block: (String) -> Unit) {
@@ -1779,10 +1772,16 @@ class AssignRef(
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
         val v = if (PerfFlags.RVAL_FASTPATH) value.evalValue(scope) else value.get(scope).value
-        val rec = target.get(scope)
-        if (!rec.isMutable) throw ScriptError(atPos, "cannot assign to immutable variable")
-        if (rec.value.assign(scope, v) == null) {
-            target.setAt(atPos, scope, v)
+        // For properties, we should not call get() on target because it invokes the getter.
+        // Instead, we call setAt directly.
+        if (target is FieldRef || target is IndexRef || target is LocalVarRef || target is FastLocalVarRef || target is BoundLocalVarRef) {
+             target.setAt(atPos, scope, v)
+        } else {
+            val rec = target.get(scope)
+            if (!rec.isMutable) throw ScriptError(atPos, "cannot assign to immutable variable")
+            if (rec.value.assign(scope, v) == null) {
+                target.setAt(atPos, scope, v)
+            }
         }
         return v.asReadonly
     }

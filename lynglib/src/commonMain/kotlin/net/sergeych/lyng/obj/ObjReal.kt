@@ -39,7 +39,7 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
 
     override val objClass: ObjClass = type
 
-    override fun byValueCopy(): Obj = ObjReal(value)
+    override fun byValueCopy(): Obj = this
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
         if (other !is Numeric) return -2

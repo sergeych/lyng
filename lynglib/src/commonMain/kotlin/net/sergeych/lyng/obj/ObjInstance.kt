@@ -32,19 +32,24 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
 
     override suspend fun readField(scope: Scope, name: String): ObjRecord {
         // Direct (unmangled) lookup first
-        instanceScope[name]?.let {
-            val decl = it.declaringClass ?: objClass.findDeclaringClassOf(name)
+        instanceScope[name]?.let { rec ->
+            val decl = rec.declaringClass ?: objClass.findDeclaringClassOf(name)
             // Allow unconditional access when accessing through `this` of the same instance
-            if (scope.thisObj === this) return it
-            val caller = scope.currentClassCtx
-            if (!canAccessMember(it.visibility, decl, caller))
-                scope.raiseError(
-                    ObjAccessException(
-                        scope,
-                        "can't access field $name (declared in ${decl?.className ?: "?"})"
+            if (scope.thisObj !== this) {
+                val caller = scope.currentClassCtx
+                if (!canAccessMember(rec.visibility, decl, caller))
+                    scope.raiseError(
+                        ObjAccessException(
+                            scope,
+                            "can't access field $name (declared in ${decl?.className ?: "?"})"
+                        )
                     )
-                )
-            return it
+            }
+            if (rec.type == ObjRecord.Type.Property) {
+                val prop = rec.value as ObjProperty
+                return rec.copy(value = prop.callGetter(scope, this))
+            }
+            return rec
         }
         // Try MI-mangled lookup along linearization (C3 MRO): ClassName::name
         val cls = objClass
@@ -65,15 +70,20 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 instanceScope.objects.containsKey("${cls.className}::$name") -> cls
                 else -> cls.mroParents.firstOrNull { instanceScope.objects.containsKey("${it.className}::$name") }
             }
-            if (scope.thisObj === this) return rec
-            val caller = scope.currentClassCtx
-            if (!canAccessMember(rec.visibility, declaring, caller))
-                scope.raiseError(
-                    ObjAccessException(
-                        scope,
-                        "can't access field $name (declared in ${declaring?.className ?: "?"})"
+            if (scope.thisObj !== this) {
+                val caller = scope.currentClassCtx
+                if (!canAccessMember(rec.visibility, declaring, caller))
+                    scope.raiseError(
+                        ObjAccessException(
+                            scope,
+                            "can't access field $name (declared in ${declaring?.className ?: "?"})"
+                        )
                     )
-                )
+            }
+            if (rec.type == ObjRecord.Type.Property) {
+                val prop = rec.value as ObjProperty
+                return rec.copy(value = prop.callGetter(scope, this))
+            }
             return rec
         }
         // Fall back to methods/properties on class
@@ -84,15 +94,18 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         // Direct (unmangled) first
         instanceScope[name]?.let { f ->
             val decl = f.declaringClass ?: objClass.findDeclaringClassOf(name)
-            if (scope.thisObj === this) {
-                // direct self-assignment allowed; enforce mutability below
-            } else {
+            if (scope.thisObj !== this) {
                 val caller = scope.currentClassCtx
                 if (!canAccessMember(f.visibility, decl, caller))
                     ObjIllegalAssignmentException(
                         scope,
                         "can't assign to field $name (declared in ${decl?.className ?: "?"})"
                     ).raise()
+            }
+            if (f.type == ObjRecord.Type.Property) {
+                val prop = f.value as ObjProperty
+                prop.callSetter(scope, this, newValue)
+                return
             }
             if (!f.isMutable) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
             if (f.value.assign(scope, newValue) == null)
@@ -122,6 +135,11 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                         scope,
                         "can't assign to field $name (declared in ${declaring?.className ?: "?"})"
                     ).raise()
+            }
+            if (rec.type == ObjRecord.Type.Property) {
+                val prop = rec.value as ObjProperty
+                prop.callSetter(scope, this, newValue)
+                return
             }
             if (!rec.isMutable) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
             if (rec.value.assign(scope, newValue) == null)
@@ -211,10 +229,8 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
 
         // using objlist allow for some optimizations:
         val params = meta.params.map { readField(scope, it.name).value }
-        println("serializing $objClass with params: $params")
         encoder.encodeAnyList(scope, params)
         val vars = serializingVars.values.map { it.value }
-        println("encoding vars: $vars")
         if (vars.isNotEmpty<Obj>()) {
             encoder.encodeAnyList(scope, vars)
         }

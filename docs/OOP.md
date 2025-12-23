@@ -42,6 +42,59 @@ a _constructor_ that requires two parameters for fields. So when creating it wit
 Form now on `Point` is a class, it's type is `Class`, and we can create instances with it as in the
 example above.
 
+## Properties
+
+Properties allow you to define member accessors that look like fields but execute code when read or written. Unlike regular fields, properties in Lyng do **not** have automatic backing fields; they are pure accessors.
+
+### Basic Syntax
+
+Properties are declared using `val` (read-only) or `var` (read-write) followed by a name and `get()`/`set()` blocks:
+
+```kotlin
+class Person(private var _age: Int) {
+    // Read-only property
+    val ageCategory 
+        get() {
+            if (_age < 18) "Minor" else "Adult"
+        }
+
+    // Read-write property
+    var age: Int
+        get() { _age }
+        set(value) {
+            if (value >= 0) _age = value
+        }
+}
+
+val p = Person(15)
+assertEquals("Minor", p.ageCategory)
+p.age = 20
+assertEquals("Adult", p.ageCategory)
+```
+
+### Laconic Expression Shorthand
+
+For simple accessors, you can use the `=` shorthand for a more elegant and laconic form:
+
+```kotlin
+class Circle(val radius: Real) {
+    val area get() = π * radius * radius
+    val circumference get() = 2 * π * radius
+}
+
+class Counter {
+    private var _count = 0
+    var count get() = _count set(v) = _count = v
+}
+```
+
+### Key Rules
+
+- **`val` properties** must have a `get()` accessor and cannot have a `set()`.
+- **`var` properties** must have both `get()` and `set()` accessors.
+- **No Backing Fields**: There is no magic `field` identifier. If you need to store state, you must declare a separate (usually `private`) field.
+- **Type Inference**: You can omit the type declaration if it can be inferred or if you don't need strict typing.
+
 ## Instance initialization: init block
 
 In addition to the primary constructor arguments, you can provide an `init` block that runs on each instance creation. This is useful for more complex initializations, side effects, or setting up fields that depend on multiple constructor parameters.

@@ -2318,29 +2318,33 @@ class ScriptTest {
     @Test
     fun doWhileValuesLabelTest() = runTest {
         withTimeout(5.seconds) {
-            eval(
-                """
-            var count = 0 
-            var count2 = 0
-               var count3 = 0
-            val result = outer@ do {
-                count2++
-                count = 0
-                do {
-                    count++
-                    if( count < 10 || count2 < 5 ) {
-                        continue
-                    }
-                    if( count % 2 == 1 )
-                        break@outer "found "+count + "/" + count2
-                } while(count < 14)
-                count3++
-            } while( count2 < 100 )
-            else "no"
-            assertEquals("found 11/5", result)
-            assertEquals( 4, count3)
-            """.trimIndent()
-            )
+            try {
+                eval(
+                    """
+                var count = 0 
+                var count2 = 0
+                var count3 = 0
+                val result = outer@ do {
+                    count2++
+                    count = 0
+                    do {
+                        count++
+                        if( count < 10 || count2 < 5 ) {
+                            continue
+                        }
+                        if( count % 2 == 1 )
+                            break@outer "found "+count + "/" + count2
+                    } while(count < 14)
+                    count3++
+                } while( count2 < 100 )
+                else "no"
+                assertEquals("found 11/5", result)
+                assertEquals( 4, count3)
+                """.trimIndent()
+                )
+            } catch (e: ExecutionError) {
+                throw e
+            }
         }
     }
 

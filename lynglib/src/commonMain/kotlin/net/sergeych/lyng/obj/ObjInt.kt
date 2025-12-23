@@ -24,36 +24,32 @@ import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
 
-class ObjInt(var value: Long, override val isConst: Boolean = false) : Obj(), Numeric {
+class ObjInt(val value: Long, override val isConst: Boolean = false) : Obj(), Numeric {
     override val longValue get() = value
     override val doubleValue get() = value.toDouble()
     override val toObjInt get() = this
     override val toObjReal = ObjReal(doubleValue)
 
-    override fun byValueCopy(): Obj = ObjInt(value)
+    override fun byValueCopy(): Obj = this
 
     override fun hashCode(): Int {
         return value.hashCode()
     }
 
     override suspend fun getAndIncrement(scope: Scope): Obj {
-        ensureNotConst(scope)
-        return ObjInt(value).also { value++ }
+        return this
     }
 
     override suspend fun getAndDecrement(scope: Scope): Obj {
-        ensureNotConst(scope)
-        return ObjInt(value).also { value-- }
+        return this
     }
 
     override suspend fun incrementAndGet(scope: Scope): Obj {
-        ensureNotConst(scope)
-        return ObjInt(++value)
+        return ObjInt(value + 1)
     }
 
     override suspend fun decrementAndGet(scope: Scope): Obj {
-        ensureNotConst(scope)
-        return ObjInt(--value)
+        return ObjInt(value - 1)
     }
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
@@ -93,15 +89,9 @@ class ObjInt(var value: Long, override val isConst: Boolean = false) : Obj(), Nu
         else ObjReal(this.value.toDouble() % other.toDouble())
 
     /**
-     * We are by-value type ([byValueCopy] is implemented) so we can do in-place
-     * assignment
+     * Numbers are now immutable, so we can't do in-place assignment.
      */
-    override suspend fun assign(scope: Scope, other: Obj): Obj? {
-        return if (!isConst && other is ObjInt) {
-            value = other.value
-            this
-        } else null
-    }
+    override suspend fun assign(scope: Scope, other: Obj): Obj? = null
 
     override suspend fun toKotlin(scope: Scope): Any {
         return value

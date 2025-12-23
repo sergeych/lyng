@@ -17,5 +17,6 @@ xcuserdata
 /sample_texts/1.txt.gz
 /kotlin-js-store/wasm/yarn.lock
 /distributables
-/.output.txt
+.output*.txt
+debug.log
 /build.log

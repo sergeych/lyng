@@ -189,6 +189,7 @@ Ready features:
 - [x] better stack reporting
 - [x] regular exceptions + extended `when`
 - [x] multiple inheritance for user classes
+- [x] class properties (accessors)
 
 ## plan: towards v1.5 Enhancing
 

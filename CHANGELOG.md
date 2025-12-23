@@ -2,6 +2,15 @@
 
 ### Unreleased
 
+- Language: Class properties with accessors
+  - Support for `val` (read-only) and `var` (read-write) properties in classes.
+  - Syntax: `val name [ : Type ] get() { body }` or `var name [ : Type ] get() { body } set(value) { body }`.
+  - Laconic Expression Shorthand: `val prop get() = expression` and `var prop get() = read set(v) = write`.
+  - Properties are pure accessors and do **not** have automatic backing fields.
+  - Validation: `var` properties must have both accessors; `val` must have only a getter.
+  - Integration: Updated TextMate grammar and IntelliJ plugin (highlighting + keywords).
+  - Documentation: New "Properties" section in `docs/OOP.md`.
+
 - Docs: Scopes and Closures guidance
   - New page: `docs/scopes_and_closures.md` detailing `ClosureScope` resolution order, recursion‑safe helpers (`chainLookupIgnoreClosure`, `chainLookupWithMembers`, `baseGetIgnoreClosure`), cycle prevention, and capturing lexical environments for callbacks (`snapshotForClosure`).
   - Updated: `docs/advanced_topics.md` (link to the new page), `docs/parallelism.md` (closures in `launch`/`flow`), `docs/OOP.md` (visibility from closures with preserved `currentClassCtx`), `docs/exceptions_handling.md` (compatibility alias `SymbolNotFound`).

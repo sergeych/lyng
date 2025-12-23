@@ -25,11 +25,12 @@ class CompilerContext(val tokens: List<Token>) {
     var loopLevel = 0
 
     inline fun <T> parseLoop(f: () -> T): Pair<Boolean, T> {
-        if (++loopLevel == 0) breakFound = false
+        val oldBreakFound = breakFound
+        breakFound = false
         val result = f()
-        return Pair(breakFound, result).also {
-            --loopLevel
-        }
+        val currentBreakFound = breakFound
+        breakFound = oldBreakFound || currentBreakFound
+        return Pair(currentBreakFound, result)
     }
 
     var currentIndex = 0
@@ -108,7 +109,6 @@ class CompilerContext(val tokens: List<Token>) {
         val t = next()
         return if (t.type != tokenType) {
             if (!isOptional) {
-                println("unexpected: $t (needed $tokenType)")
                 throw ScriptError(t.pos, errorMessage)
             } else {
                 previous()
