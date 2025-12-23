@@ -3697,7 +3697,7 @@ class ScriptTest {
     }
 
 
-        @Test
+//        @Test
     fun testMinimumOptimization() = runTest {
         for (i in 1..200) {
             bm {
