@@ -134,7 +134,7 @@ data class ObjString(val value: String) : Obj() {
                 returns = type("lyng.Int"),
                 moduleName = "lyng.stdlib"
             ) {
-                ObjInt(
+                ObjInt.of(
                     thisAs<ObjString>().value.toLongOrNull()
                         ?: raiseIllegalArgument("can't convert to int: $thisObj")
                 )
@@ -159,7 +159,7 @@ data class ObjString(val value: String) : Obj() {
             }
             addConstDoc(
                 name = "length",
-                value = statement { ObjInt(thisAs<ObjString>().value.length.toLong()) },
+                value = statement { ObjInt.of(thisAs<ObjString>().value.length.toLong()) },
                 doc = "Number of UTF-16 code units in this string.",
                 type = type("lyng.Int"),
                 moduleName = "lyng.stdlib"
@@ -269,14 +269,14 @@ data class ObjString(val value: String) : Obj() {
                 doc = "Alias for length: the number of characters (code units) in this string.",
                 returns = type("lyng.Int"),
                 moduleName = "lyng.stdlib"
-            ) { ObjInt(thisAs<ObjString>().value.length.toLong()) }
+            ) { ObjInt.of(thisAs<ObjString>().value.length.toLong()) }
             addFnDoc(
                 name = "toReal",
                 doc = "Parse this string as a real number (floating point).",
                 returns = type("lyng.Real"),
                 moduleName = "lyng.stdlib"
             ) {
-                ObjReal(thisAs<ObjString>().value.toDouble())
+                ObjReal.of(thisAs<ObjString>().value.toDouble())
             }
             addFnDoc(
                 name = "trim",

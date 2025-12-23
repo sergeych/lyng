@@ -32,10 +32,10 @@ import kotlin.math.floor
 import kotlin.math.roundToLong
 
 data class ObjReal(val value: Double) : Obj(), Numeric {
-    override val longValue: Long by lazy { floor(value).toLong() }
-    override val doubleValue: Double by lazy { value }
-    override val toObjInt: ObjInt by lazy { ObjInt(longValue) }
-    override val toObjReal: ObjReal by lazy { ObjReal(value) }
+    override val longValue: Long get() = floor(value).toLong()
+    override val doubleValue: Double get() = value
+    override val toObjInt: ObjInt get() = ObjInt.of(longValue)
+    override val toObjReal: ObjReal get() = this
 
     override val objClass: ObjClass = type
 
@@ -65,19 +65,19 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
     }
 
     override suspend fun plus(scope: Scope, other: Obj): Obj =
-        ObjReal(this.value + other.toDouble())
+        of(this.value + other.toDouble())
 
     override suspend fun minus(scope: Scope, other: Obj): Obj =
-        ObjReal(this.value - other.toDouble())
+        of(this.value - other.toDouble())
 
     override suspend fun mul(scope: Scope, other: Obj): Obj =
-        ObjReal(this.value * other.toDouble())
+        of(this.value * other.toDouble())
 
     override suspend fun div(scope: Scope, other: Obj): Obj =
-        ObjReal(this.value / other.toDouble())
+        of(this.value / other.toDouble())
 
     override suspend fun mod(scope: Scope, other: Obj): Obj =
-        ObjReal(this.value % other.toDouble())
+        of(this.value % other.toDouble())
 
     /**
      * Returns unboxed Double value
@@ -96,7 +96,7 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
     }
 
     override suspend fun negate(scope: Scope): Obj {
-        return ObjReal(-value)
+        return of(-value)
     }
 
     override suspend fun lynonType(): LynonType = LynonType.Real
@@ -110,9 +110,18 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
     }
 
     companion object {
+        val Zero = ObjReal(0.0)
+        val One = ObjReal(1.0)
+
+        fun of(value: Double): ObjReal = when (value) {
+            0.0 -> Zero
+            1.0 -> One
+            else -> ObjReal(value)
+        }
+
         val type: ObjClass = object : ObjClass("Real") {
             override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj =
-                ObjReal(decoder.unpackDouble())
+                of(decoder.unpackDouble())
         }.apply {
             // roundToInt: number rounded to the nearest integer
             addConstDoc(
@@ -130,7 +139,7 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
                 returns = type("lyng.Int"),
                 moduleName = "lyng.stdlib"
             ) {
-                ObjInt(thisAs<ObjReal>().value.toLong())
+                ObjInt.of(thisAs<ObjReal>().value.toLong())
             }
         }
     }

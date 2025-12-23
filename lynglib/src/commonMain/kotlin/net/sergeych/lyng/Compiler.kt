@@ -1235,12 +1235,12 @@ class Compiler(
         return when (t.type) {
             Token.Type.INT, Token.Type.HEX -> {
                 val n = t.value.replace("_", "").toLong(if (t.type == Token.Type.HEX) 16 else 10)
-                if (isPlus) ObjInt(n) else ObjInt(-n)
+                if (isPlus) ObjInt.of(n) else ObjInt.of(-n)
             }
 
             Token.Type.REAL -> {
                 val d = t.value.toDouble()
-                if (isPlus) ObjReal(d) else ObjReal(-d)
+                if (isPlus) ObjReal.of(d) else ObjReal.of(-d)
             }
 
             else -> {
@@ -2940,22 +2940,22 @@ class Compiler(
 
                 // Arithmetic for ints only (keep semantics simple at compile time)
                 BinOp.PLUS -> when {
-                    a is ObjInt && b is ObjInt -> ObjInt(a.value + b.value)
+                    a is ObjInt && b is ObjInt -> ObjInt.of(a.value + b.value)
                     a is ObjString && b is ObjString -> ObjString(a.value + b.value)
                     else -> null
                 }
 
-                BinOp.MINUS -> if (a is ObjInt && b is ObjInt) ObjInt(a.value - b.value) else null
-                BinOp.STAR -> if (a is ObjInt && b is ObjInt) ObjInt(a.value * b.value) else null
-                BinOp.SLASH -> if (a is ObjInt && b is ObjInt && b.value != 0L) ObjInt(a.value / b.value) else null
-                BinOp.PERCENT -> if (a is ObjInt && b is ObjInt && b.value != 0L) ObjInt(a.value % b.value) else null
+                BinOp.MINUS -> if (a is ObjInt && b is ObjInt) ObjInt.of(a.value - b.value) else null
+                BinOp.STAR -> if (a is ObjInt && b is ObjInt) ObjInt.of(a.value * b.value) else null
+                BinOp.SLASH -> if (a is ObjInt && b is ObjInt && b.value != 0L) ObjInt.of(a.value / b.value) else null
+                BinOp.PERCENT -> if (a is ObjInt && b is ObjInt && b.value != 0L) ObjInt.of(a.value % b.value) else null
 
                 // Bitwise for ints
-                BinOp.BAND -> if (a is ObjInt && b is ObjInt) ObjInt(a.value and b.value) else null
-                BinOp.BXOR -> if (a is ObjInt && b is ObjInt) ObjInt(a.value xor b.value) else null
-                BinOp.BOR -> if (a is ObjInt && b is ObjInt) ObjInt(a.value or b.value) else null
-                BinOp.SHL -> if (a is ObjInt && b is ObjInt) ObjInt(a.value shl (b.value.toInt() and 63)) else null
-                BinOp.SHR -> if (a is ObjInt && b is ObjInt) ObjInt(a.value shr (b.value.toInt() and 63)) else null
+                BinOp.BAND -> if (a is ObjInt && b is ObjInt) ObjInt.of(a.value and b.value) else null
+                BinOp.BXOR -> if (a is ObjInt && b is ObjInt) ObjInt.of(a.value xor b.value) else null
+                BinOp.BOR -> if (a is ObjInt && b is ObjInt) ObjInt.of(a.value or b.value) else null
+                BinOp.SHL -> if (a is ObjInt && b is ObjInt) ObjInt.of(a.value shl (b.value.toInt() and 63)) else null
+                BinOp.SHR -> if (a is ObjInt && b is ObjInt) ObjInt.of(a.value shr (b.value.toInt() and 63)) else null
 
                 // Non-folded / side-effecting or type-dependent ops
                 BinOp.EQARROW, BinOp.REF_EQ, BinOp.REF_NEQ, BinOp.MATCH, BinOp.NOTMATCH,
@@ -2968,12 +2968,12 @@ class Compiler(
             return when (op) {
                 UnaryOp.NOT -> if (a is ObjBool) if (!a.value) ObjTrue else ObjFalse else null
                 UnaryOp.NEGATE -> when (a) {
-                    is ObjInt -> ObjInt(-a.value)
-                    is ObjReal -> ObjReal(-a.value)
+                    is ObjInt -> ObjInt.of(-a.value)
+                    is ObjReal -> ObjReal.of(-a.value)
                     else -> null
                 }
 
-                UnaryOp.BITNOT -> if (a is ObjInt) ObjInt(a.value.inv()) else null
+                UnaryOp.BITNOT -> if (a is ObjInt) ObjInt.of(a.value.inv()) else null
             }
         }
 

@@ -28,7 +28,7 @@ class ObjInt(val value: Long, override val isConst: Boolean = false) : Obj(), Nu
     override val longValue get() = value
     override val doubleValue get() = value.toDouble()
     override val toObjInt get() = this
-    override val toObjReal = ObjReal(doubleValue)
+    override val toObjReal = ObjReal.of(doubleValue)
 
     override fun byValueCopy(): Obj = this
 
@@ -65,28 +65,28 @@ class ObjInt(val value: Long, override val isConst: Boolean = false) : Obj(), Nu
         if (other is ObjInt)
             of(this.value + other.value)
         else
-            ObjReal(this.doubleValue + other.toDouble())
+            ObjReal.of(this.doubleValue + other.toDouble())
 
     override suspend fun minus(scope: Scope, other: Obj): Obj =
         if (other is ObjInt)
             of(this.value - other.value)
         else
-            ObjReal(this.doubleValue - other.toDouble())
+            ObjReal.of(this.doubleValue - other.toDouble())
 
     override suspend fun mul(scope: Scope, other: Obj): Obj =
         if (other is ObjInt) {
             of(this.value * other.value)
-        } else ObjReal(this.value * other.toDouble())
+        } else ObjReal.of(this.value * other.toDouble())
 
     override suspend fun div(scope: Scope, other: Obj): Obj =
         if (other is ObjInt)
             of(this.value / other.value)
-        else ObjReal(this.value / other.toDouble())
+        else ObjReal.of(this.value / other.toDouble())
 
     override suspend fun mod(scope: Scope, other: Obj): Obj =
         if (other is ObjInt)
             of(this.value % other.value)
-        else ObjReal(this.value.toDouble() % other.toDouble())
+        else ObjReal.of(this.value.toDouble() % other.toDouble())
 
     /**
      * Numbers are now immutable, so we can't do in-place assignment.
@@ -107,31 +107,31 @@ class ObjInt(val value: Long, override val isConst: Boolean = false) : Obj(), Nu
     }
 
     override suspend fun negate(scope: Scope): Obj {
-        return ObjInt(-value)
+        return of(-value)
     }
 
     // Bitwise operations
     override suspend fun bitAnd(scope: Scope, other: Obj): Obj =
-        if (other is ObjInt) ObjInt(this.value and other.value)
+        if (other is ObjInt) of(this.value and other.value)
         else scope.raiseIllegalArgument("bitwise and '&' requires Int, got ${other.objClass.className}")
 
     override suspend fun bitOr(scope: Scope, other: Obj): Obj =
-        if (other is ObjInt) ObjInt(this.value or other.value)
+        if (other is ObjInt) of(this.value or other.value)
         else scope.raiseIllegalArgument("bitwise or '|' requires Int, got ${other.objClass.className}")
 
     override suspend fun bitXor(scope: Scope, other: Obj): Obj =
-        if (other is ObjInt) ObjInt(this.value xor other.value)
+        if (other is ObjInt) of(this.value xor other.value)
         else scope.raiseIllegalArgument("bitwise xor '^' requires Int, got ${other.objClass.className}")
 
     override suspend fun shl(scope: Scope, other: Obj): Obj =
-        if (other is ObjInt) ObjInt(this.value shl (other.value.toInt() and 63))
+        if (other is ObjInt) of(this.value shl (other.value.toInt() and 63))
         else scope.raiseIllegalArgument("shift left '<<' requires Int, got ${other.objClass.className}")
 
     override suspend fun shr(scope: Scope, other: Obj): Obj =
-        if (other is ObjInt) ObjInt(this.value shr (other.value.toInt() and 63))
+        if (other is ObjInt) of(this.value shr (other.value.toInt() and 63))
         else scope.raiseIllegalArgument("shift right '>>' requires Int, got ${other.objClass.className}")
 
-    override suspend fun bitNot(scope: Scope): Obj = ObjInt(this.value.inv())
+    override suspend fun bitNot(scope: Scope): Obj = of(this.value.inv())
 
     override suspend fun lynonType(): LynonType = when (value) {
         0L -> LynonType.Int0
@@ -170,11 +170,11 @@ class ObjInt(val value: Long, override val isConst: Boolean = false) : Obj(), Nu
         val type = object : ObjClass("Int") {
             override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj =
                 when (lynonType) {
-                    null -> ObjInt(decoder.unpackSigned())
+                    null -> of(decoder.unpackSigned())
                     LynonType.Int0 -> Zero
-                    LynonType.IntPositive -> ObjInt(decoder.unpackUnsigned().toLong())
-                    LynonType.IntNegative -> ObjInt(-decoder.unpackUnsigned().toLong())
-                    LynonType.IntSigned -> ObjInt(decoder.unpackSigned())
+                    LynonType.IntPositive -> of(decoder.unpackUnsigned().toLong())
+                    LynonType.IntNegative -> of(-decoder.unpackUnsigned().toLong())
+                    LynonType.IntSigned -> of(decoder.unpackSigned())
                     else -> scope.raiseIllegalState("illegal type code for Int: $lynonType")
                 }
         }.apply {

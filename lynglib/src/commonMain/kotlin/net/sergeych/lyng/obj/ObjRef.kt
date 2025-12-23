@@ -132,16 +132,16 @@ class BinaryOpRef(private val op: BinOp, private val left: ObjRef, private val r
                 val av = a.value
                 val bv = b.value
                 val r: Obj? = when (op) {
-                    BinOp.PLUS -> ObjInt(av + bv)
-                    BinOp.MINUS -> ObjInt(av - bv)
-                    BinOp.STAR -> ObjInt(av * bv)
-                    BinOp.SLASH -> if (bv != 0L) ObjInt(av / bv) else null
-                    BinOp.PERCENT -> if (bv != 0L) ObjInt(av % bv) else null
-                    BinOp.BAND -> ObjInt(av and bv)
-                    BinOp.BXOR -> ObjInt(av xor bv)
-                    BinOp.BOR -> ObjInt(av or bv)
-                    BinOp.SHL -> ObjInt(av shl (bv.toInt() and 63))
-                    BinOp.SHR -> ObjInt(av shr (bv.toInt() and 63))
+                    BinOp.PLUS -> ObjInt.of(av + bv)
+                    BinOp.MINUS -> ObjInt.of(av - bv)
+                    BinOp.STAR -> ObjInt.of(av * bv)
+                    BinOp.SLASH -> if (bv != 0L) ObjInt.of(av / bv) else null
+                    BinOp.PERCENT -> if (bv != 0L) ObjInt.of(av % bv) else null
+                    BinOp.BAND -> ObjInt.of(av and bv)
+                    BinOp.BXOR -> ObjInt.of(av xor bv)
+                    BinOp.BOR -> ObjInt.of(av or bv)
+                    BinOp.SHL -> ObjInt.of(av shl (bv.toInt() and 63))
+                    BinOp.SHR -> ObjInt.of(av shr (bv.toInt() and 63))
                     BinOp.EQ -> if (av == bv) ObjTrue else ObjFalse
                     BinOp.NEQ -> if (av != bv) ObjTrue else ObjFalse
                     BinOp.LT -> if (av < bv) ObjTrue else ObjFalse
@@ -216,11 +216,11 @@ class BinaryOpRef(private val op: BinOp, private val left: ObjRef, private val r
                 val ad: Double = if (a is ObjInt) a.doubleValue else (a as ObjReal).value
                 val bd: Double = if (b is ObjInt) b.doubleValue else (b as ObjReal).value
                 val rNum: Obj? = when (op) {
-                    BinOp.PLUS -> ObjReal(ad + bd)
-                    BinOp.MINUS -> ObjReal(ad - bd)
-                    BinOp.STAR -> ObjReal(ad * bd)
-                    BinOp.SLASH -> ObjReal(ad / bd)
-                    BinOp.PERCENT -> ObjReal(ad % bd)
+                    BinOp.PLUS -> ObjReal.of(ad + bd)
+                    BinOp.MINUS -> ObjReal.of(ad - bd)
+                    BinOp.STAR -> ObjReal.of(ad * bd)
+                    BinOp.SLASH -> ObjReal.of(ad / bd)
+                    BinOp.PERCENT -> ObjReal.of(ad % bd)
                     BinOp.LT -> if (ad < bd) ObjTrue else ObjFalse
                     BinOp.LTE -> if (ad <= bd) ObjTrue else ObjFalse
                     BinOp.GT -> if (ad > bd) ObjTrue else ObjFalse
