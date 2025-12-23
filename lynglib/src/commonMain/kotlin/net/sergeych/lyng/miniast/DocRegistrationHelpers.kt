@@ -100,7 +100,7 @@ fun ObjClass.addFnDoc(
     code: suspend Scope.() -> Obj
 ) {
     // Register runtime method
-    addFn(name, isOpen, visibility, code)
+    addFn(name, isOpen, visibility, code = code)
     // Register docs for the member under this class
     BuiltinDocRegistry.module(moduleName ?: ownerModuleNameFromClassOrUnknown()) {
         classDoc(this@addFnDoc.className, doc = "") {

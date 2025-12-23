@@ -175,7 +175,11 @@ open class ObjClass(
     }
 
     /** Full C3 MRO including this class at index 0. */
-    val mro: List<ObjClass> by lazy { c3Linearize(this, mutableMapOf()) }
+    val mro: List<ObjClass> by lazy {
+        val base = c3Linearize(this, mutableMapOf())
+        if (this.className == "Obj" || base.any { it.className == "Obj" }) base
+        else base + rootObjectType
+    }
 
     /** Parents in C3 order (no self). */
     val mroParents: List<ObjClass> by lazy { mro.drop(1) }
@@ -216,6 +220,7 @@ open class ObjClass(
         // remains stable even when call frames are pooled and reused.
         val stableParent = classScope ?: scope.parent
         instance.instanceScope = Scope(stableParent, scope.args, scope.pos, instance)
+        instance.instanceScope.currentClassCtx = null
         // Expose instance methods (and other callable members) directly in the instance scope for fast lookup
         // This mirrors Obj.autoInstanceScope behavior for ad-hoc scopes and makes fb.method() resolution robust
         // 1) members-defined methods
@@ -268,7 +273,7 @@ open class ObjClass(
         c.constructorMeta?.let { meta ->
             val argsHere = argsForThis ?: Arguments.EMPTY
             // Assign constructor params into instance scope (unmangled)
-            meta.assignToContext(instance.instanceScope, argsHere)
+            meta.assignToContext(instance.instanceScope, argsHere, declaringClass = c)
             // Also expose them under MI-mangled storage keys `${Class}::name` so qualified views can access them
             // and so that base-class casts like `(obj as Base).field` work.
             for (p in meta.params) {
@@ -297,7 +302,7 @@ open class ObjClass(
         // parameters even if they were shadowed/overwritten by parent class initialization.
         c.constructorMeta?.let { meta ->
             val argsHere = argsForThis ?: Arguments.EMPTY
-            meta.assignToContext(instance.instanceScope, argsHere)
+            meta.assignToContext(instance.instanceScope, argsHere, declaringClass = c)
             // Re-sync mangled names to point to the fresh records to keep them consistent
             for (p in meta.params) {
                 val rec = instance.instanceScope.objects[p.name]
@@ -340,14 +345,15 @@ open class ObjClass(
         initialValue: Obj,
         isMutable: Boolean = false,
         visibility: Visibility = Visibility.Public,
-        pos: Pos = Pos.builtIn
+        pos: Pos = Pos.builtIn,
+        declaringClass: ObjClass? = this
     ) {
         // Allow overriding ancestors: only prevent redefinition if THIS class already defines an immutable member
         val existingInSelf = members[name]
         if (existingInSelf != null && existingInSelf.isMutable == false)
             throw ScriptError(pos, "$name is already defined in $objClass")
         // Install/override in this class
-        members[name] = ObjRecord(initialValue, isMutable, visibility, declaringClass = this)
+        members[name] = ObjRecord(initialValue, isMutable, visibility, declaringClass = declaringClass)
         // Structural change: bump layout version for PIC invalidation
         layoutVersion += 1
     }
@@ -377,10 +383,11 @@ open class ObjClass(
         name: String,
         isOpen: Boolean = false,
         visibility: Visibility = Visibility.Public,
+        declaringClass: ObjClass? = this,
         code: suspend Scope.() -> Obj
     ) {
         val stmt = statement { code() }
-        createField(name, stmt, isOpen, visibility)
+        createField(name, stmt, isOpen, visibility, Pos.builtIn, declaringClass)
     }
 
     fun addConst(name: String, value: Obj) = createField(name, value, isMutable = false)

@@ -33,9 +33,10 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
     override suspend fun readField(scope: Scope, name: String): ObjRecord {
         // Direct (unmangled) lookup first
         instanceScope[name]?.let { rec ->
-            val decl = rec.declaringClass ?: objClass.findDeclaringClassOf(name)
+            val decl = rec.declaringClass
             // Allow unconditional access when accessing through `this` of the same instance
-            if (scope.thisObj !== this) {
+            // BUT only if we are in the class context (not extension)
+            if (scope.thisObj !== this || scope.currentClassCtx == null) {
                 val caller = scope.currentClassCtx
                 if (!canAccessMember(rec.visibility, decl, caller))
                     scope.raiseError(
@@ -47,7 +48,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             }
             if (rec.type == ObjRecord.Type.Property) {
                 val prop = rec.value as ObjProperty
-                return rec.copy(value = prop.callGetter(scope, this))
+                return rec.copy(value = prop.callGetter(scope, this, decl))
             }
             return rec
         }
@@ -70,7 +71,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 instanceScope.objects.containsKey("${cls.className}::$name") -> cls
                 else -> cls.mroParents.firstOrNull { instanceScope.objects.containsKey("${it.className}::$name") }
             }
-            if (scope.thisObj !== this) {
+            if (scope.thisObj !== this || scope.currentClassCtx == null) {
                 val caller = scope.currentClassCtx
                 if (!canAccessMember(rec.visibility, declaring, caller))
                     scope.raiseError(
@@ -82,7 +83,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             }
             if (rec.type == ObjRecord.Type.Property) {
                 val prop = rec.value as ObjProperty
-                return rec.copy(value = prop.callGetter(scope, this))
+                return rec.copy(value = prop.callGetter(scope, this, declaring))
             }
             return rec
         }
@@ -93,8 +94,8 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
     override suspend fun writeField(scope: Scope, name: String, newValue: Obj) {
         // Direct (unmangled) first
         instanceScope[name]?.let { f ->
-            val decl = f.declaringClass ?: objClass.findDeclaringClassOf(name)
-            if (scope.thisObj !== this) {
+            val decl = f.declaringClass
+            if (scope.thisObj !== this || scope.currentClassCtx == null) {
                 val caller = scope.currentClassCtx
                 if (!canAccessMember(f.visibility, decl, caller))
                     ObjIllegalAssignmentException(
@@ -104,7 +105,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             }
             if (f.type == ObjRecord.Type.Property) {
                 val prop = f.value as ObjProperty
-                prop.callSetter(scope, this, newValue)
+                prop.callSetter(scope, this, newValue, decl)
                 return
             }
             if (!f.isMutable) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
@@ -128,7 +129,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 instanceScope.objects.containsKey("${cls.className}::$name") -> cls
                 else -> cls.mroParents.firstOrNull { instanceScope.objects.containsKey("${it.className}::$name") }
             }
-            if (scope.thisObj !== this) {
+            if (scope.thisObj !== this || scope.currentClassCtx == null) {
                 val caller = scope.currentClassCtx
                 if (!canAccessMember(rec.visibility, declaring, caller))
                     ObjIllegalAssignmentException(
@@ -138,7 +139,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             }
             if (rec.type == ObjRecord.Type.Property) {
                 val prop = rec.value as ObjProperty
-                prop.callSetter(scope, this, newValue)
+                prop.callSetter(scope, this, newValue, declaring)
                 return
             }
             if (!rec.isMutable) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
@@ -154,7 +155,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         onNotFoundResult: (suspend () -> Obj?)?
     ): Obj =
         instanceScope[name]?.let { rec ->
-            val decl = rec.declaringClass ?: objClass.findDeclaringClassOf(name)
+            val decl = rec.declaringClass
             val caller = scope.currentClassCtx ?: if (scope.thisObj === this) objClass else null
             if (!canAccessMember(rec.visibility, decl, caller))
                 scope.raiseError(
@@ -163,23 +164,16 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                         "can't invoke method $name (declared in ${decl?.className ?: "?"})"
                     )
                 )
-            // execute with lexical class context propagated to declaring class
-            val saved = instanceScope.currentClassCtx
-            instanceScope.currentClassCtx = decl
-            try {
-                rec.value.invoke(
-                    instanceScope,
-                    this,
-                    args
-                )
-            } finally {
-                instanceScope.currentClassCtx = saved
-            }
+            rec.value.invoke(
+                instanceScope,
+                this,
+                args
+            )
         }
             ?: run {
                 // fallback: class-scope function (registered during class body execution)
                 objClass.classScope?.objects?.get(name)?.let { rec ->
-                    val decl = rec.declaringClass ?: objClass.findDeclaringClassOf(name)
+                    val decl = rec.declaringClass
                     val caller = scope.currentClassCtx ?: if (scope.thisObj === this) objClass else null
                     if (!canAccessMember(rec.visibility, decl, caller))
                         scope.raiseError(
@@ -188,13 +182,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                                 "can't invoke method $name (declared in ${decl?.className ?: "?"})"
                             )
                         )
-                    val saved = instanceScope.currentClassCtx
-                    instanceScope.currentClassCtx = decl
-                    try {
-                        rec.value.invoke(instanceScope, this, args)
-                    } finally {
-                        instanceScope.currentClassCtx = saved
-                    }
+                    rec.value.invoke(instanceScope, this, args)
                 }
             }
             ?: super.invokeInstanceMethod(scope, name, args, onNotFoundResult)

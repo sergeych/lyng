@@ -26,7 +26,7 @@ enum class Visibility {
 
 /** MI-aware visibility check: whether [caller] can access a member declared in [decl] with [visibility]. */
 fun canAccessMember(visibility: Visibility, decl: net.sergeych.lyng.obj.ObjClass?, caller: net.sergeych.lyng.obj.ObjClass?): Boolean {
-    return when (visibility) {
+    val res = when (visibility) {
         Visibility.Public -> true
         Visibility.Private -> (decl != null && caller === decl)
         Visibility.Protected -> when {
@@ -36,4 +36,5 @@ fun canAccessMember(visibility: Visibility, decl: net.sergeych.lyng.obj.ObjClass
             else -> (caller.allParentsSet.contains(decl))
         }
     }
+    return res
 }

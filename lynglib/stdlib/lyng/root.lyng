@@ -16,7 +16,7 @@ fun cached(builder) {
     }
 }
 /* Filter elements of this iterable using the provided predicate. */
-fun Iterable.filter(predicate) {
+fun Iterable.filterFlow(predicate) {
     val list = this
     flow {
         for( item in list ) {
@@ -27,10 +27,20 @@ fun Iterable.filter(predicate) {
     }
 }
 
+fun Iterable.filter(predicate) {
+    val result = []
+    for( item in this ) if( predicate(item) ) result.add(item)
+    result
+}
+
 /*
 filter out all null elements from this collection (Iterable); collection of
 non-null elements is returned
 */
+fun Iterable.filterFlowNotNull() {
+    filterFlow { it != null }
+}
+
 fun Iterable.filterNotNull() {
     filter { it != null }
 }
@@ -42,10 +52,10 @@ fun Iterable.drop(n) {
 }
 
 /* Return the first element or throw if the iterable is empty. */
-fun Iterable.first() {
+val Iterable.first get() {
     val i = iterator()
     if( !i.hasNext() ) throw NoSuchElementException()
-        i.next().also { i.cancelIteration() }
+    i.next().also { i.cancelIteration() }
 }
 
 /*
@@ -73,7 +83,7 @@ fun Iterable.findFirstOrNull(predicate) {
 
 
 /* Return the last element or throw if the iterable is empty. */
-fun Iterable.last() {
+val Iterable.last get() {
     var found = false
     var element = null
     for( i in this ) {
@@ -81,7 +91,7 @@ fun Iterable.last() {
         found = true
     }
     if( !found ) throw NoSuchElementException()
-        element
+    element
 }
 
 /* Emit all but the last N elements of this iterable. */
@@ -247,5 +257,5 @@ fun Exception.printStackTrace() {
 }
 
 /* Compile this string into a regular expression. */
-fun String.re(): Regex { Regex(this) }
+val String.re get() = Regex(this)
 

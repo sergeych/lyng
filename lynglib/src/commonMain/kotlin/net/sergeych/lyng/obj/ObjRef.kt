@@ -1178,18 +1178,25 @@ class MethodCallRef(
             when (base) {
                 is ObjInstance -> {
                     // Prefer resolved class member to avoid per-call lookup on hit
-                    val member = base.objClass.getInstanceMemberOrNull(name)
-                    if (member != null) {
-                        val visibility = member.visibility
-                        val callable = member.value
+                    // BUT only if it's NOT a root object member (which can be shadowed by extensions)
+                    var hierarchyMember: ObjRecord? = null
+                    for (cls in base.objClass.mro) {
+                        if (cls.className == "Obj") break
+                        hierarchyMember = cls.members[name] ?: cls.classScope?.objects?.get(name)
+                        if (hierarchyMember != null) break
+                    }
+
+                    if (hierarchyMember != null) {
+                        val visibility = hierarchyMember.visibility
+                        val callable = hierarchyMember.value
                         mKey1 = key; mVer1 = ver; mInvoker1 = { obj, sc, a ->
                             val inst = obj as ObjInstance
-                            if (!visibility.isPublic)
+                            if (!visibility.isPublic && !canAccessMember(visibility, hierarchyMember.declaringClass ?: inst.objClass, sc.currentClassCtx))
                                 sc.raiseError(ObjAccessException(sc, "can't invoke non-public method $name"))
                             callable.invoke(inst.instanceScope, inst, a)
                         }
                     } else {
-                        // Fallback to name-based lookup per call (uncommon)
+                        // Fallback to name-based lookup per call (handles extensions and root members)
                         mKey1 = key; mVer1 = ver; mInvoker1 = { obj, sc, a -> obj.invokeInstanceMethod(sc, name, a) }
                     }
                 }
@@ -1281,10 +1288,15 @@ class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
         val hit = (cachedFrameId == scope.frameId && cachedSlot >= 0 && cachedSlot < scope.slotCount())
         val slot = if (hit) cachedSlot else resolveSlot(scope)
         if (slot >= 0) {
-            if (PerfFlags.PIC_DEBUG_COUNTERS) {
-                if (hit) PerfStats.localVarPicHit++ else PerfStats.localVarPicMiss++
+            val rec = scope.getSlotRecord(slot)
+            if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx)) {
+                // Not visible via slot, fallback to other lookups
+            } else {
+                if (PerfFlags.PIC_DEBUG_COUNTERS) {
+                    if (hit) PerfStats.localVarPicHit++ else PerfStats.localVarPicMiss++
+                }
+                return rec
             }
-            return scope.getSlotRecord(slot)
         }
         if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.localVarPicMiss++
         // 2) Fallback name in scope or field on `this`
@@ -1336,7 +1348,11 @@ class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
         }
         val hit = (cachedFrameId == scope.frameId && cachedSlot >= 0 && cachedSlot < scope.slotCount())
         val slot = if (hit) cachedSlot else resolveSlot(scope)
-        if (slot >= 0) return scope.getSlotRecord(slot).value
+        if (slot >= 0) {
+            val rec = scope.getSlotRecord(slot)
+            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx))
+                return rec.value
+        }
         // Fallback name in scope or field on `this`
         scope[name]?.let { return it.value }
         run {
@@ -1400,9 +1416,11 @@ class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
         val slot = if (cachedFrameId == scope.frameId && cachedSlot >= 0 && cachedSlot < scope.slotCount()) cachedSlot else resolveSlot(scope)
         if (slot >= 0) {
             val rec = scope.getSlotRecord(slot)
-            if (!rec.isMutable) scope.raiseError("Cannot assign to immutable value")
-            rec.value = newValue
-            return
+            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx)) {
+                if (!rec.isMutable) scope.raiseError("Cannot assign to immutable value")
+                rec.value = newValue
+                return
+            }
         }
         scope[name]?.let { stored ->
             if (stored.isMutable) stored.value = newValue
@@ -1444,17 +1462,25 @@ class BoundLocalVarRef(
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
         scope.pos = atPos
-        return scope.getSlotRecord(slot)
+        val rec = scope.getSlotRecord(slot)
+        if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx))
+            scope.raiseError(ObjAccessException(scope, "private field access"))
+        return rec
     }
 
     override suspend fun evalValue(scope: Scope): Obj {
         scope.pos = atPos
-        return scope.getSlotRecord(slot).value
+        val rec = scope.getSlotRecord(slot)
+        if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx))
+            scope.raiseError(ObjAccessException(scope, "private field access"))
+        return rec.value
     }
 
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
         scope.pos = atPos
         val rec = scope.getSlotRecord(slot)
+        if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx))
+            scope.raiseError(ObjAccessException(scope, "private field access"))
         if (!rec.isMutable) scope.raiseError("Cannot assign to immutable value")
         rec.value = newValue
     }
@@ -1518,10 +1544,13 @@ class FastLocalVarRef(
         val slot = if (ownerValid && cachedSlot >= 0) cachedSlot else resolveSlotInAncestry(scope)
         val actualOwner = cachedOwnerScope
         if (slot >= 0 && actualOwner != null) {
-            if (PerfFlags.PIC_DEBUG_COUNTERS) {
-                if (ownerValid) PerfStats.fastLocalHit++ else PerfStats.fastLocalMiss++
+            val rec = actualOwner.getSlotRecord(slot)
+            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx)) {
+                if (PerfFlags.PIC_DEBUG_COUNTERS) {
+                    if (ownerValid) PerfStats.fastLocalHit++ else PerfStats.fastLocalMiss++
+                }
+                return rec
             }
-            return actualOwner.getSlotRecord(slot)
         }
         // Try per-frame local binding maps in the ancestry first (locals declared in frames)
         run {
@@ -1558,7 +1587,11 @@ class FastLocalVarRef(
         val ownerValid = isOwnerValidFor(scope)
         val slot = if (ownerValid && cachedSlot >= 0) cachedSlot else resolveSlotInAncestry(scope)
         val actualOwner = cachedOwnerScope
-        if (slot >= 0 && actualOwner != null) return actualOwner.getSlotRecord(slot).value
+        if (slot >= 0 && actualOwner != null) {
+            val rec = actualOwner.getSlotRecord(slot)
+            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx))
+                return rec.value
+        }
         // Try per-frame local binding maps in the ancestry first
         run {
             var s: Scope? = scope
@@ -1595,9 +1628,11 @@ class FastLocalVarRef(
         val actualOwner = cachedOwnerScope
         if (slot >= 0 && actualOwner != null) {
             val rec = actualOwner.getSlotRecord(slot)
-            if (!rec.isMutable) scope.raiseError("Cannot assign to immutable value")
-            rec.value = newValue
-            return
+            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx)) {
+                if (!rec.isMutable) scope.raiseError("Cannot assign to immutable value")
+                rec.value = newValue
+                return
+            }
         }
         // Try per-frame local binding maps in the ancestry first
         run {

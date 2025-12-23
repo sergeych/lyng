@@ -58,17 +58,25 @@ class ClosureScope(val callScope: Scope, val closureScope: Scope) :
             ?.instanceScope
             ?.objects
             ?.get(name)
-            ?.let { return it }
-        closureScope.thisObj.objClass.getInstanceMemberOrNull(name)?.let { return it }
+            ?.let { rec ->
+                if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) return rec
+            }
+        findExtension(closureScope.thisObj.objClass, name)?.let { return it }
+        closureScope.thisObj.objClass.getInstanceMemberOrNull(name)?.let { rec ->
+            if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) return rec
+        }
 
         // 3) Closure scope chain (locals/parents + members), ignore ClosureScope overrides to prevent recursion
-        closureScope.chainLookupWithMembers(name)?.let { return it }
+        closureScope.chainLookupWithMembers(name, currentClassCtx)?.let { return it }
 
         // 4) Caller `this` members
-        callScope.thisObj.objClass.getInstanceMemberOrNull(name)?.let { return it }
+        findExtension(callScope.thisObj.objClass, name)?.let { return it }
+        callScope.thisObj.objClass.getInstanceMemberOrNull(name)?.let { rec ->
+            if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) return rec
+        }
 
         // 5) Caller chain (locals/parents + members)
-        callScope.chainLookupWithMembers(name)?.let { return it }
+        callScope.chainLookupWithMembers(name, currentClassCtx)?.let { return it }
 
         // 6) Module pseudo-symbols (e.g., __PACKAGE__) — walk caller ancestry and query ModuleScope directly
         if (name.startsWith("__")) {

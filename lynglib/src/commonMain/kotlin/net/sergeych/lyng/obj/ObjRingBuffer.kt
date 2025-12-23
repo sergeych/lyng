@@ -122,6 +122,12 @@ class ObjRingBuffer(val capacity: Int) : Obj() {
                 returns = type("lyng.Void"),
                 moduleName = "lyng.stdlib"
             ) { thisAs<ObjRingBuffer>().apply { buffer.add(requireOnlyArg<Obj>()) } }
+            addFnDoc(
+                name = "first",
+                doc = "Return the oldest element in the buffer.",
+                returns = type("lyng.Any"),
+                moduleName = "lyng.stdlib"
+            ) { thisAs<ObjRingBuffer>().buffer.first() }
         }
     }
 }

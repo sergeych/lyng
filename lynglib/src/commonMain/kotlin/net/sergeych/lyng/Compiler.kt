@@ -2366,6 +2366,7 @@ class Compiler(
             throw ScriptError(t.pos, "Expected identifier after 'fun'")
         else t.value
         var nameStartPos: Pos = t.pos
+        var receiverMini: MiniTypeRef? = null
 
         val annotation = lastAnnotation
         val parentContext = codeContexts.last()
@@ -2374,6 +2375,12 @@ class Compiler(
         // Is extension?
         if (t.type == Token.Type.DOT) {
             extTypeName = name
+            val receiverEnd = Pos(start.source, start.line, start.column + name.length)
+            receiverMini = MiniTypeName(
+                range = MiniRange(start, receiverEnd),
+                segments = listOf(MiniTypeName.Segment(name, MiniRange(start, receiverEnd))),
+                nullable = false
+            )
             t = cc.next()
             if (t.type != Token.Type.ID)
                 throw ScriptError(t.pos, "illegal extension format: expected function name")
@@ -2417,7 +2424,8 @@ class Compiler(
                 returnType = returnTypeMini,
                 body = null,
                 doc = declDocLocal,
-                nameStart = nameStartPos
+                nameStart = nameStartPos,
+                receiver = receiverMini
             )
             miniSink?.onFunDecl(node)
             pendingDeclDoc = null
@@ -2486,7 +2494,7 @@ class Compiler(
                     // class extension method
                     val type = context[typeName]?.value ?: context.raiseSymbolNotFound("class $typeName not found")
                     if (type !is ObjClass) context.raiseClassCastError("$typeName is not the class instance")
-                    type.addFn(name, isOpen = true, visibility = visibility) {
+                    val stmt = statement {
                         // ObjInstance has a fixed instance scope, so we need to build a closure
                         (thisObj as? ObjInstance)?.let { i ->
                             annotatedFnBody.execute(ClosureScope(this, i.instanceScope))
@@ -2494,6 +2502,7 @@ class Compiler(
                         // other classes can create one-time scope for this rare case:
                             ?: annotatedFnBody.execute(thisObj.autoInstanceScope(this))
                     }
+                    context.addExtension(type, name, ObjRecord(stmt, isMutable = false, visibility = visibility, declaringClass = null))
                 }
                 // regular function/method
                     ?: run {
@@ -2640,7 +2649,27 @@ class Compiler(
 
         if (nextToken.type != Token.Type.ID)
             throw ScriptError(nextToken.pos, "Expected identifier or [ here")
-        val name = nextToken.value
+        var name = nextToken.value
+        var extTypeName: String? = null
+        var nameStartPos: Pos = nextToken.pos
+        var receiverMini: MiniTypeRef? = null
+
+        if (cc.peekNextNonWhitespace().type == Token.Type.DOT) {
+            cc.skipWsTokens()
+            cc.next() // consume dot
+            extTypeName = name
+            val receiverEnd = Pos(nextToken.pos.source, nextToken.pos.line, nextToken.pos.column + name.length)
+            receiverMini = MiniTypeName(
+                range = MiniRange(nextToken.pos, receiverEnd),
+                segments = listOf(MiniTypeName.Segment(name, MiniRange(nextToken.pos, receiverEnd))),
+                nullable = false
+            )
+            val nameToken = cc.next()
+            if (nameToken.type != Token.Type.ID)
+                throw ScriptError(nameToken.pos, "Expected identifier after dot in extension declaration")
+            name = nameToken.value
+            nameStartPos = nameToken.pos
+        }
 
         // Optional explicit type annotation
         val varTypeMini: MiniTypeRef? = if (cc.current().type == Token.Type.COLON) {
@@ -2648,19 +2677,22 @@ class Compiler(
         } else null
 
         val markBeforeEq = cc.savePos()
+        cc.skipWsTokens()
         val eqToken = cc.next()
         var setNull = false
         var isProperty = false
 
         val declaringClassNameCaptured = (codeContexts.lastOrNull() as? CodeContext.ClassBody)?.name
 
-        if (declaringClassNameCaptured != null) {
+        if (declaringClassNameCaptured != null || extTypeName != null) {
             val mark = cc.savePos()
             cc.restorePos(markBeforeEq)
+            cc.skipWsTokens()
             val next = cc.peekNextNonWhitespace()
             if (next.isId("get") || next.isId("set")) {
                 isProperty = true
                 cc.restorePos(markBeforeEq)
+                cc.skipWsTokens()
             } else {
                 cc.restorePos(mark)
             }
@@ -2673,10 +2705,11 @@ class Compiler(
             true
         } else {
             if (!isProperty && eqToken.type != Token.Type.ASSIGN) {
-                if (!isMutable && (declaringClassNameCaptured == null))
+                if (!isMutable && (declaringClassNameCaptured == null) && (extTypeName == null))
                     throw ScriptError(start, "val must be initialized")
                 else {
                     cc.restorePos(markBeforeEq)
+                    cc.skipWsTokens()
                     setNull = true
                 }
             }
@@ -2698,7 +2731,8 @@ class Compiler(
                 type = varTypeMini,
                 initRange = initR,
                 doc = pendingDeclDoc,
-                nameStart = start
+                nameStart = nameStartPos,
+                receiver = receiverMini
             )
             miniSink?.onValDecl(node)
             pendingDeclDoc = null
@@ -2722,7 +2756,7 @@ class Compiler(
         // Check for accessors if it is a class member
         var getter: Statement? = null
         var setter: Statement? = null
-        if (declaringClassNameCaptured != null) {
+        if (declaringClassNameCaptured != null || extTypeName != null) {
             while (true) {
                 val t = cc.peekNextNonWhitespace()
                 if (t.isId("get")) {
@@ -2785,6 +2819,22 @@ class Compiler(
         }
 
         return statement(start) { context ->
+            if (extTypeName != null) {
+                val prop = if (getter != null || setter != null) {
+                    ObjProperty(name, getter, setter)
+                } else {
+                    // Simple val extension with initializer
+                    val initExpr = initialExpression ?: throw ScriptError(start, "Extension val must be initialized")
+                    ObjProperty(name, statement(initExpr.pos) { scp -> initExpr.execute(scp) }, null)
+                }
+
+                val type = context[extTypeName]?.value ?: context.raiseSymbolNotFound("class $extTypeName not found")
+                if (type !is ObjClass) context.raiseClassCastError("$extTypeName is not the class instance")
+
+                context.addExtension(type, name, ObjRecord(prop, isMutable = false, visibility = visibility, declaringClass = null, type = ObjRecord.Type.Property))
+
+                return@statement prop
+            }
             // In true class bodies (not inside a function), store fields under a class-qualified key to support MI collisions
             // Do NOT infer declaring class from runtime thisObj here; only the compile-time captured
             // ClassBody qualifies for class-field storage. Otherwise, this is a plain local.

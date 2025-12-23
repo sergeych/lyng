@@ -157,8 +157,12 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
                 is MiniFunDecl -> {
                     addTypeSegments(d.returnType)
                     d.params.forEach { addTypeSegments(it.type) }
+                    addTypeSegments(d.receiver)
                 }
-                is MiniValDecl -> addTypeSegments(d.type)
+                is MiniValDecl -> {
+                    addTypeSegments(d.type)
+                    addTypeSegments(d.receiver)
+                }
                 is MiniClassDecl -> {
                     d.ctorFields.forEach { addTypeSegments(it.type) }
                     d.classFields.forEach { addTypeSegments(it.type) }

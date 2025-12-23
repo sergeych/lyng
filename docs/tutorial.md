@@ -1608,4 +1608,28 @@ Notes:
 - `private` is visible only inside the declaring class; `protected` is visible from the declaring class and any of its transitive subclasses. Qualialsofication (`this@Type`) or casts do not bypass visibility.
 - Safe‑call `?.` works with `as?` for optional dispatch.
 
-To get details on OOP in Lyng, see [OOP notes](oop.md).
+## Extension members
+
+You can add new methods and properties to existing classes without modifying them.
+
+### Extension functions
+
+    fun String.shout() = this.upper() + "!!!"
+    "hello".shout()
+    >>> "HELLO!!!"
+
+### Extension properties
+
+    val Int.isEven = this % 2 == 0
+    4.isEven
+    >>> true
+
+Example with custom accessors:
+
+    val String.firstChar get() = this[0]
+    "abc".firstChar
+    >>> 'a'
+
+Extension members are **scope-isolated**: they are visible only in the scope where they are defined and its children. This prevents name collisions and improves security.
+
+To get details on OOP in Lyng, see [OOP notes](OOP.md).

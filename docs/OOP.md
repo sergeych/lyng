@@ -491,9 +491,11 @@ As usual, private statics are not accessible from the outside:
 
 # Extending classes
 
-It sometimes happen that the class is missing some particular functionality that can be _added to it_ without rewriting its inner logic and using its private state. In this case _extension methods_ could be used, for example. we want to create an extension method
-that would test if some object of unknown type contains something that can be interpreted
-as an integer. In this case we _extend_ class `Object`, as it is the parent class for any instance of any type:
+It sometimes happen that the class is missing some particular functionality that can be _added to it_ without rewriting its inner logic and using its private state. In this case _extension members_ could be used.
+
+## Extension methods
+
+For example, we want to create an extension method that would test if some object of unknown type contains something that can be interpreted as an integer. In this case we _extend_ class `Object`, as it is the parent class for any instance of any type:
 
         fun Object.isInteger() {
             when(this) {
@@ -518,10 +520,67 @@ as an integer. In this case we _extend_ class `Object`, as it is the parent clas
         assert( ! "5.2".isInteger() )
         >>> void
 
-__Important note__ as for version 0.6.9, extensions are in __global scope__. It means, that once applied to a global type (Int in our sample), they will be available for _all_ contexts, even new created, 
-as they are modifying the type, not the context.
+## Extension properties
 
-Beware of it. We might need to reconsider it later.
+Just like methods, you can extend existing classes with properties. These can be defined using simple initialization (for `val` only) or with custom accessors.
+
+### Simple val extension
+
+A read-only extension can be defined by assigning an expression:
+
+```kotlin
+val String.isLong = length > 10
+
+val s = "Hello, world!"
+assert(s.isLong)
+```
+
+### Properties with accessors
+
+For more complex logic, use `get()` and `set()` blocks:
+
+```kotlin
+class Box(var value: Int)
+
+var Box.doubledValue
+    get() = value * 2
+    set(v) = value = v / 2
+
+val b = Box(10)
+assertEquals(20, b.doubledValue)
+b.doubledValue = 30
+assertEquals(15, b.value)
+```
+
+Extension members are strictly barred from accessing private members of the class they extend, maintaining encapsulation.
+
+### Extension Scoping and Isolation
+
+Extensions in Lyng are **scope-isolated**. This means an extension is only visible within the scope where it is defined and its child scopes. This reduces the "attack surface" and prevents extensions from polluting the global space or other modules.
+
+#### Scope Isolation Example
+
+You can define different extensions with the same name in different scopes:
+
+```kotlin
+fun scopeA() {
+    val Int.description = "Number: " + toString()
+    assertEquals("Number: 42", 42.description)
+}
+
+fun scopeB() {
+    val Int.description = "Value: " + toString()
+    assertEquals("Value: 42", 42.description)
+}
+
+scopeA()
+scopeB()
+
+// Outside those scopes, Int.description is not defined
+assertThrows { 42.description }
+```
+
+This isolation ensures that libraries can use extensions internally without worrying about name collisions with other libraries or the user's code. When a module is imported using `use`, its top-level extensions become available in the importing scope.
 
 ## dynamic symbols
 

@@ -85,21 +85,50 @@ open class Obj {
         args: Arguments = Arguments.EMPTY,
         onNotFoundResult: (suspend () -> Obj?)? = null
     ): Obj {
-        val rec = objClass.getInstanceMemberOrNull(name)
-        if (rec != null) {
-            val decl = rec.declaringClass ?: objClass.findDeclaringClassOf(name)
-            val caller = scope.currentClassCtx
-            if (!canAccessMember(rec.visibility, decl, caller))
-                scope.raiseError(ObjAccessException(scope, "can't invoke ${name}: not visible (declared in ${decl?.className ?: "?"}, caller ${caller?.className ?: "?"})"))
-            // Propagate declaring class as current class context during method execution
-            val saved = scope.currentClassCtx
-            scope.currentClassCtx = decl
-            try {
-                return rec.value.invoke(scope, this, args)
-            } finally {
-                scope.currentClassCtx = saved
+        // 1. Hierarchy members (excluding root fallback)
+        for (cls in objClass.mro) {
+            if (cls.className == "Obj") break
+            val rec = cls.members[name] ?: cls.classScope?.objects?.get(name)
+            if (rec != null) {
+                val decl = rec.declaringClass ?: cls
+                val caller = scope.currentClassCtx
+                if (!canAccessMember(rec.visibility, decl, caller))
+                    scope.raiseError(ObjAccessException(scope, "can't invoke ${name}: not visible (declared in ${decl.className}, caller ${caller?.className ?: "?"})"))
+                val saved = scope.currentClassCtx
+                scope.currentClassCtx = decl
+                try {
+                    return rec.value.invoke(scope, this, args)
+                } finally {
+                    scope.currentClassCtx = saved
+                }
             }
         }
+
+        // 2. Extensions in scope
+        val extension = scope.findExtension(objClass, name)
+        if (extension != null) {
+            return extension.value.invoke(scope, this, args)
+        }
+
+        // 3. Root object fallback
+        for (cls in objClass.mro) {
+            if (cls.className == "Obj") {
+                cls.members[name]?.let { rec ->
+                    val decl = rec.declaringClass ?: cls
+                    val caller = scope.currentClassCtx
+                    if (!canAccessMember(rec.visibility, decl, caller))
+                        scope.raiseError(ObjAccessException(scope, "can't invoke ${name}: not visible (declared in ${decl.className}, caller ${caller?.className ?: "?"})"))
+                    val saved = scope.currentClassCtx
+                    scope.currentClassCtx = decl
+                    try {
+                        return rec.value.invoke(scope, this, args)
+                    } finally {
+                        scope.currentClassCtx = saved
+                    }
+                }
+            }
+        }
+
         return onNotFoundResult?.invoke()
             ?: scope.raiseError(
                 "no such member: $name on ${objClass.className}. Considered order: ${objClass.renderLinearization(true)}. " +
@@ -313,34 +342,83 @@ open class Obj {
 //    suspend fun <T> sync(block: () -> T): T = monitor.withLock { block() }
 
     open suspend fun readField(scope: Scope, name: String): ObjRecord {
-        // could be property or class field:
-        val obj = objClass.getInstanceMemberOrNull(name) ?: scope.raiseError(
+        // 1. Hierarchy members (excluding root fallback)
+        for (cls in objClass.mro) {
+            if (cls.className == "Obj") break
+            cls.members[name]?.let { return resolveRecord(scope, it, name, it.declaringClass) }
+            cls.classScope?.objects?.get(name)?.let { return resolveRecord(scope, it, name, it.declaringClass) }
+        }
+
+        // 2. Extensions
+        val extension = scope.findExtension(objClass, name)
+        if (extension != null) {
+            return resolveRecord(scope, extension, name, extension.declaringClass)
+        }
+
+        // 3. Root fallback
+        for (cls in objClass.mro) {
+            if (cls.className == "Obj") {
+                cls.members[name]?.let {
+                    val decl = it.declaringClass ?: cls
+                    return resolveRecord(scope, it, name, decl)
+                }
+            }
+        }
+
+        scope.raiseError(
             "no such field: $name on ${objClass.className}. Considered order: ${objClass.renderLinearization(true)}"
         )
-        val decl = obj.declaringClass ?: objClass.findDeclaringClassOf(name)
+    }
+
+    protected suspend fun resolveRecord(scope: Scope, obj: ObjRecord, name: String, decl: ObjClass?): ObjRecord {
+        val value = obj.value
+        if (value is ObjProperty) {
+            return ObjRecord(value.callGetter(scope, this, decl), obj.isMutable)
+        }
+        if (value is Statement && decl != null) {
+            return ObjRecord(value.execute(scope.createChildScope(scope.pos, newThisObj = this)), obj.isMutable)
+        }
         val caller = scope.currentClassCtx
+        // Check visibility for non-property members here if they weren't checked before
         if (!canAccessMember(obj.visibility, decl, caller))
             scope.raiseError(ObjAccessException(scope, "can't access field ${name}: not visible (declared in ${decl?.className ?: "?"}, caller ${caller?.className ?: "?"})"))
-        return when (val value = obj.value) {
-            is Statement -> {
-                ObjRecord(value.execute(scope.createChildScope(scope.pos, newThisObj = this)), obj.isMutable)
-            }
-            // could be writable property naturally
-//            null -> ObjNull.asReadonly
-            else -> obj
-        }
+        return obj
     }
 
     open suspend fun writeField(scope: Scope, name: String, newValue: Obj) {
         willMutate(scope)
-        val field = objClass.getInstanceMemberOrNull(name) ?: scope.raiseError(
+        var field: ObjRecord? = null
+        // 1. Hierarchy members (excluding root fallback)
+        for (cls in objClass.mro) {
+            if (cls.className == "Obj") break
+            field = cls.members[name] ?: cls.classScope?.objects?.get(name)
+            if (field != null) break
+        }
+        // 2. Extensions
+        if (field == null) {
+            field = scope.findExtension(objClass, name)
+        }
+        // 3. Root fallback
+        if (field == null) {
+            for (cls in objClass.mro) {
+                if (cls.className == "Obj") {
+                    field = cls.members[name]
+                    if (field != null) break
+                }
+            }
+        }
+
+        if (field == null) scope.raiseError(
             "no such field: $name on ${objClass.className}. Considered order: ${objClass.renderLinearization(true)}"
         )
-        val decl = field.declaringClass ?: objClass.findDeclaringClassOf(name)
+
+        val decl = field.declaringClass
         val caller = scope.currentClassCtx
         if (!canAccessMember(field.visibility, decl, caller))
             scope.raiseError(ObjAccessException(scope, "can't assign field ${name}: not visible (declared in ${decl?.className ?: "?"}, caller ${caller?.className ?: "?"})"))
-        if (field.isMutable) field.value = newValue else scope.raiseError("can't assign to read-only field: $name")
+        if (field.value is ObjProperty) {
+            (field.value as ObjProperty).callSetter(scope, this, newValue, decl)
+        } else if (field.isMutable) field.value = newValue else scope.raiseError("can't assign to read-only field: $name")
     }
 
     open suspend fun getAt(scope: Scope, index: Obj): Obj {

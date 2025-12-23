@@ -22,6 +22,7 @@ import net.sergeych.lyng.obj.ObjInstance
 import net.sergeych.lyng.obj.ObjList
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFails
 
 class OOTest {
     @Test
@@ -342,5 +343,57 @@ class OOTest {
         val b1 = list.list[0] as ObjInstance
         val b2 = list.list[1] as ObjInstance
         assertEquals(0, b1.compareTo(scope, b2))
+    }
+
+    @Test
+    fun testPropAsExtension() = runTest {
+        val scope = Script.newScope()
+        scope.eval("""
+            class A(x) {
+                private val privateVal = 100
+                val p1 get() = x + 1
+             }
+             assertEquals(2, A(1).p1)
+             
+             fun A.f() = x + 5
+             assertEquals(7, A(2).f())
+             
+             // The same, we should be able to add member values to a class;
+             // notice it should access to the class public instance members, 
+             // somewhat like it is declared in the class body
+             val A.simple = x + 3
+                          
+             assertEquals(5, A(2).simple)
+             
+             // it should also work with properties:
+             val A.p10 get() = x * 10
+             assertEquals(20, A(2).p10)
+        """.trimIndent())
+
+        // important is that such extensions should not be able to access private members
+        // and thus remove privateness:
+        assertFails {
+            scope.eval("val A.exportPrivateVal = privateVal; A(1).exportPrivateVal")
+        }
+        assertFails {
+            scope.eval("val A.exportPrivateValProp get() = privateVal; A(1).exportPrivateValProp")
+        }
+    }
+
+    @Test
+    fun testExtensionsAreScopeIsolated() = runTest {
+        val scope1 = Script.newScope()
+        scope1.eval("""
+            val String.totalDigits get() {
+                // notice using `this`:
+                this.characters.filter{ it.isDigit() }.size()
+            }
+            assertEquals(2, "answer is 42".totalDigits)
+        """)
+        val scope2 = Script.newScope()
+        scope2.eval("""
+            // in scope2 we didn't override `totalDigits` extension:
+            assertThrows { "answer is 42".totalDigits }
+        """.trimIndent())
     }
 }

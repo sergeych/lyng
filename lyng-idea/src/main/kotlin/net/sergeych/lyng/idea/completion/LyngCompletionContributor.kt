@@ -184,7 +184,7 @@ class LyngCompletionContributor : CompletionContributor() {
                         ?: guessReturnClassAcrossKnownCallees(text, memberDotPos, imported)
                         ?: guessReceiverClass(text, memberDotPos, imported)
                 if (!inferredClass.isNullOrBlank()) {
-                    val ext = BuiltinDocRegistry.extensionMethodNamesFor(inferredClass)
+                    val ext = BuiltinDocRegistry.extensionMemberNamesFor(inferredClass)
                     if (DEBUG_COMPLETION) log.info("[LYNG_DEBUG] Post-engine extension check for $inferredClass: ${'$'}{ext}")
                     for (name in ext) {
                         if (existing.contains(name)) continue
@@ -494,10 +494,10 @@ class LyngCompletionContributor : CompletionContributor() {
                 }
             }
 
-            // Supplement with stdlib extension-like methods defined in root.lyng (e.g., fun String.trim(...))
+            // Supplement with stdlib extension members defined in root.lyng (e.g., fun String.trim(...))
             run {
                 val already = (directMap.keys + inheritedMap.keys).toMutableSet()
-                val ext = BuiltinDocRegistry.extensionMethodNamesFor(className)
+                val ext = BuiltinDocRegistry.extensionMemberNamesFor(className)
                 if (DEBUG_COMPLETION) log.info("[LYNG_DEBUG] Extensions for $className: count=${ext.size} -> ${ext}")
                 for (name in ext) {
                     if (already.contains(name)) continue

@@ -62,6 +62,30 @@ open class Scope(
      */
     internal val localBindings: MutableMap<String, ObjRecord> = mutableMapOf()
 
+    internal val extensions: MutableMap<ObjClass, MutableMap<String, ObjRecord>> = mutableMapOf()
+
+    fun addExtension(cls: ObjClass, name: String, record: ObjRecord) {
+        extensions.getOrPut(cls) { mutableMapOf() }[name] = record
+    }
+
+    internal fun findExtension(receiverClass: ObjClass, name: String): ObjRecord? {
+        var s: Scope? = this
+        val visited = HashSet<Long>(4)
+        while (s != null) {
+            if (!visited.add(s.frameId)) break
+            // Proximity rule: check all extensions in the current scope before going to parent.
+            // Priority within scope: more specific class in MRO wins.
+            for (cls in receiverClass.mro) {
+                s.extensions[cls]?.get(name)?.let { return it }
+            }
+            if (s is ClosureScope) {
+                s.closureScope.findExtension(receiverClass, name)?.let { return it }
+            }
+            s = s.parent
+        }
+        return null
+    }
+
     /** Debug helper: ensure assigning [candidateParent] does not create a structural cycle. */
     private fun ensureNoCycle(candidateParent: Scope?) {
         if (candidateParent == null) return
@@ -82,10 +106,17 @@ open class Scope(
      * intertwined closure frames. They traverse the plain parent chain and consult only locals
      * and bindings of each frame. Instance/class member fallback must be decided by the caller.
      */
-    private fun tryGetLocalRecord(s: Scope, name: String): ObjRecord? {
-        s.objects[name]?.let { return it }
-        s.localBindings[name]?.let { return it }
-        s.getSlotIndexOf(name)?.let { return s.getSlotRecord(it) }
+    private fun tryGetLocalRecord(s: Scope, name: String, caller: net.sergeych.lyng.obj.ObjClass?): ObjRecord? {
+        s.objects[name]?.let { rec ->
+            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, caller)) return rec
+        }
+        s.localBindings[name]?.let { rec ->
+            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, caller)) return rec
+        }
+        s.getSlotIndexOf(name)?.let { idx ->
+            val rec = s.getSlotRecord(idx)
+            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, caller)) return rec
+        }
         return null
     }
 
@@ -95,7 +126,7 @@ open class Scope(
         val visited = HashSet<Long>(4)
         while (s != null) {
             if (!visited.add(s.frameId)) return null
-            tryGetLocalRecord(s, name)?.let { return it }
+            tryGetLocalRecord(s, name, currentClassCtx)?.let { return it }
             s = s.parent
         }
         return null
@@ -110,17 +141,22 @@ open class Scope(
      */
     internal fun baseGetIgnoreClosure(name: String): ObjRecord? {
         // 1) locals/bindings in this frame
-        tryGetLocalRecord(this, name)?.let { return it }
+        tryGetLocalRecord(this, name, currentClassCtx)?.let { return it }
         // 2) walk parents for plain locals/bindings only
         var s = parent
         val visited = HashSet<Long>(4)
         while (s != null) {
             if (!visited.add(s.frameId)) return null
-            tryGetLocalRecord(s, name)?.let { return it }
+            tryGetLocalRecord(s, name, currentClassCtx)?.let { return it }
             s = s.parent
         }
         // 3) fallback to instance/class members of this frame's thisObj
-        return thisObj.objClass.getInstanceMemberOrNull(name)
+        for (cls in thisObj.objClass.mro) {
+            this.extensions[cls]?.get(name)?.let { return it }
+        }
+        return thisObj.objClass.getInstanceMemberOrNull(name)?.let { rec ->
+            if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) rec else null
+        }
     }
 
     /**
@@ -130,13 +166,18 @@ open class Scope(
      * This completely avoids invoking overridden `get` implementations, preventing
      * ping-pong recursion between `ClosureScope` frames.
      */
-    internal fun chainLookupWithMembers(name: String): ObjRecord? {
+    internal fun chainLookupWithMembers(name: String, caller: net.sergeych.lyng.obj.ObjClass? = currentClassCtx): ObjRecord? {
         var s: Scope? = this
         val visited = HashSet<Long>(4)
         while (s != null) {
             if (!visited.add(s.frameId)) return null
-            tryGetLocalRecord(s, name)?.let { return it }
-            s.thisObj.objClass.getInstanceMemberOrNull(name)?.let { return it }
+            tryGetLocalRecord(s, name, caller)?.let { return it }
+            for (cls in s.thisObj.objClass.mro) {
+                s.extensions[cls]?.get(name)?.let { return it }
+            }
+            s.thisObj.objClass.getInstanceMemberOrNull(name)?.let { rec ->
+                if (canAccessMember(rec.visibility, rec.declaringClass, caller)) return rec
+            }
             s = s.parent
         }
         return null
@@ -152,6 +193,10 @@ open class Scope(
         // copy locals and bindings
         snap.objects.putAll(this.objects)
         snap.localBindings.putAll(this.localBindings)
+        // copy extensions
+        for ((cls, map) in extensions) {
+            snap.extensions[cls] = map.toMutableMap()
+        }
         // copy slots map preserving indices
         if (this.slotCount() > 0) {
             var i = 0
@@ -273,13 +318,19 @@ open class Scope(
         if (name == "this") thisObj.asReadonly
         else {
             // Prefer direct locals/bindings declared in this frame
-            (objects[name]
+            (objects[name]?.let { rec ->
+                if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) rec else null
+            }
                 // Then, check known local bindings in this frame (helps after suspension)
-                ?: localBindings[name]
+                ?: localBindings[name]?.let { rec ->
+                    if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) rec else null
+                }
                 // Walk up ancestry
                 ?: parent?.get(name)
                 // Finally, fallback to class members on thisObj
-                ?: thisObj.objClass.getInstanceMemberOrNull(name)
+                ?: thisObj.objClass.getInstanceMemberOrNull(name)?.let { rec ->
+                    if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) rec else null
+                }
                 )
         }
 
@@ -317,6 +368,7 @@ open class Scope(
         slots.clear()
         nameToSlot.clear()
         localBindings.clear()
+        extensions.clear()
         // Now safe to validate and re-parent
         ensureNoCycle(parent)
         this.parent = parent
@@ -400,9 +452,10 @@ open class Scope(
         isMutable: Boolean,
         value: Obj,
         visibility: Visibility = Visibility.Public,
-        recordType: ObjRecord.Type = ObjRecord.Type.Other
+        recordType: ObjRecord.Type = ObjRecord.Type.Other,
+        declaringClass: net.sergeych.lyng.obj.ObjClass? = currentClassCtx
     ): ObjRecord {
-        val rec = ObjRecord(value, isMutable, visibility, declaringClass = currentClassCtx, type = recordType)
+        val rec = ObjRecord(value, isMutable, visibility, declaringClass = declaringClass, type = recordType)
         objects[name] = rec
         // Index this binding within the current frame to help resolve locals across suspension
         localBindings[name] = rec

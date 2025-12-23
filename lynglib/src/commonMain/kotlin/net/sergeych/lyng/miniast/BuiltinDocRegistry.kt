@@ -105,20 +105,24 @@ object BuiltinDocRegistry : BuiltinDocSource {
     }
 
     /**
-     * List names of extension-like methods defined for [className] in the stdlib text (`root.lyng`).
-     * We do a lightweight regex scan like: `fun ClassName.methodName(` and collect distinct names.
+     * List names of extension members defined for [className] in the stdlib text (`root.lyng`).
+     * We do a lightweight regex scan like: `fun ClassName.methodName(` or `val ClassName.propName`
+     * and collect distinct names.
      */
-    fun extensionMethodNamesFor(className: String): List<String> {
+    fun extensionMemberNamesFor(className: String): List<String> {
         val src = try { rootLyng } catch (_: Throwable) { null } ?: return emptyList()
         val out = LinkedHashSet<String>()
-        // Match lines like: fun String.trim(...)
-        val re = Regex("(?m)^\\s*fun\\s+${className}\\.([A-Za-z_][A-Za-z0-9_]*)\\s*\\(")
+        // Match lines like: fun String.trim(...) or val Int.isEven = ...
+        val re = Regex("(?m)^\\s*(?:fun|val|var)\\s+${className}\\.([A-Za-z_][A-Za-z0-9_]*)\\b")
         re.findAll(src).forEach { m ->
             val name = m.groupValues.getOrNull(1)?.trim()
             if (!name.isNullOrEmpty()) out.add(name)
         }
         return out.toList()
     }
+
+    @Deprecated("Use extensionMemberNamesFor", ReplaceWith("extensionMemberNamesFor(className)"))
+    fun extensionMethodNamesFor(className: String): List<String> = extensionMemberNamesFor(className)
 }
 
 // ---------------- Builders ----------------
@@ -367,8 +371,8 @@ private object StdlibInlineDocIndex {
                 else -> {
                     // Non-comment, non-blank: try to match a declaration just after comments
                     if (buf.isNotEmpty()) {
-                        // fun Class.name( ... )
-                        val mExt = Regex("^fun\\s+([A-Za-z_][A-Za-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)\\s*\\(").find(line)
+                        // fun/val/var Class.name( ... )
+                        val mExt = Regex("^(?:fun|val|var)\\s+([A-Za-z_][A-Za-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)\\b").find(line)
                         if (mExt != null) {
                             val (cls, name) = mExt.destructured
                             flushTo(Key.Method(cls, name))

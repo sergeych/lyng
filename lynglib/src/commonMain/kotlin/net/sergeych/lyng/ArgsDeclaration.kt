@@ -49,12 +49,14 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
         arguments: Arguments = scope.args,
         defaultAccessType: AccessType = AccessType.Var,
         defaultVisibility: Visibility = Visibility.Public,
+        declaringClass: net.sergeych.lyng.obj.ObjClass? = scope.currentClassCtx
     ) {
         fun assign(a: Item, value: Obj) {
             scope.addItem(a.name, (a.accessType ?: defaultAccessType).isMutable,
                 value.byValueCopy(),
                 a.visibility ?: defaultVisibility,
-                recordType = ObjRecord.Type.Argument)
+                recordType = ObjRecord.Type.Argument,
+                declaringClass = declaringClass)
         }
 
         // Prepare positional args and parameter count, handle tail-block binding

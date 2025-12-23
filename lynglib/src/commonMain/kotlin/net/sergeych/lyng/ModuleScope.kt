@@ -45,19 +45,36 @@ class ModuleScope(
             if (record.visibility.isPublic) {
                 val newName = symbols?.let { ss: Map<String, String> ->
                     ss[symbol]
-                        ?.also { symbolsToImport!!.remove(it) }
-                        ?: scope.raiseError("internal error: symbol $symbol not found though the module is cached")
-                } ?: symbol
-                val existing = scope.objects[newName]
-                if (existing != null ) {
-                    if (existing.importedFrom != record.importedFrom)
-                        scope.raiseError("symbol ${existing.importedFrom?.packageName}.$newName already exists, redefinition on import is not allowed")
-                    // already imported
+                        ?.also { symbolsToImport!!.remove(symbol) }
+                        ?: return@let null
+                } ?: if (symbols == null) symbol else null
+
+                if (newName != null) {
+                    val existing = scope.objects[newName]
+                    if (existing != null) {
+                        if (existing.importedFrom != record.importedFrom)
+                            scope.raiseError("symbol ${existing.importedFrom?.packageName}.$newName already exists, redefinition on import is not allowed")
+                        // already imported
+                    } else {
+                        // when importing records, we keep track of its package (not otherwise needed)
+                        if (record.importedFrom == null) record.importedFrom = this
+                        scope.objects[newName] = record
+                    }
                 }
-                else {
-                    // when importing records, we keep track of its package (not otherwise needed)
-                    if (record.importedFrom == null) record.importedFrom = this
-                    scope.objects[newName] = record
+            }
+        }
+        for ((cls, map) in this.extensions) {
+            for ((symbol, record) in map) {
+                if (record.visibility.isPublic) {
+                    val newName = symbols?.let { ss: Map<String, String> ->
+                        ss[symbol]
+                            ?.also { symbolsToImport!!.remove(symbol) }
+                            ?: return@let null
+                    } ?: if (symbols == null) symbol else null
+
+                    if (newName != null) {
+                        scope.addExtension(cls, newName, record)
+                    }
                 }
             }
         }

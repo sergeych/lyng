@@ -98,7 +98,17 @@ esac
 
 die() { echo "ERROR: $*" 1>&2 ; exit 1; }
 
+function refreshTextmateZip() {
+  echo "Refreshing distributables/lyng-textmate.zip from editors/..."
+  mkdir -p distributables
+  # We use -r for recursive and -q for quiet (optional)
+  # -j can be used if we want to junk paths, but the request says "contents of editors/"
+  # usually we want to preserve the structure inside editors/
+  (cd editors && zip -rq ../distributables/lyng-textmate.zip .)
+}
+
 # Update the IDEA plugin download link in docs (temporarily), then build, then restore the doc
+refreshTextmateZip
 updateIdeaPluginDownloadLink || echo "WARN: proceeding without updating IDEA plugin download link"
 
 ./gradlew site:jsBrowserDistribution

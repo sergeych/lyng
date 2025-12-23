@@ -109,7 +109,8 @@ data class MiniFunDecl(
     val returnType: MiniTypeRef?,
     val body: MiniBlock?,
     override val doc: MiniDoc?,
-    override val nameStart: Pos
+    override val nameStart: Pos,
+    val receiver: MiniTypeRef? = null
 ) : MiniDecl
 
 data class MiniValDecl(
@@ -119,7 +120,8 @@ data class MiniValDecl(
     val type: MiniTypeRef?,
     val initRange: MiniRange?,
     override val doc: MiniDoc?,
-    override val nameStart: Pos
+    override val nameStart: Pos,
+    val receiver: MiniTypeRef? = null
 ) : MiniDecl
 
 data class MiniClassDecl(

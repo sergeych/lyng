@@ -53,6 +53,12 @@ class ObjChar(val value: Char): Obj() {
                 returns = type("lyng.Int"),
                 moduleName = "lyng.stdlib"
             ) { ObjInt(thisAs<ObjChar>().value.code.toLong()) }
+            addFn("isDigit") {
+                thisAs<ObjChar>().value.isDigit().toObj()
+            }
+            addFn("isSpace") {
+                thisAs<ObjChar>().value.isWhitespace().toObj()
+            }
         }
     }
 }

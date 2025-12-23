@@ -208,10 +208,10 @@ object CompletionEngineLight {
         emitGroup(directMap)
         emitGroup(inheritedMap)
 
-        // Supplement with stdlib extension-like methods defined in root.lyng (e.g., fun String.re(...))
+        // Supplement with stdlib extension members defined in root.lyng (e.g., fun String.re(...))
         run {
             val already = (directMap.keys + inheritedMap.keys).toMutableSet()
-            val ext = BuiltinDocRegistry.extensionMethodNamesFor(className)
+            val ext = BuiltinDocRegistry.extensionMemberNamesFor(className)
             for (name in ext) {
                 if (already.contains(name)) continue
                 val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, className, name)
