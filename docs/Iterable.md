@@ -55,7 +55,7 @@ Here is the sample:
     assertEquals( (1..3).joinToString { it * 10 }, "10 20 30")
     >>> void
 
-## `sum` and `sumBy`
+## `sum` and `sumOf`
 
 These, again, does the thing:
 
@@ -68,16 +68,61 @@ These, again, does the thing:
 
     >>> void
 
-## map and mapNotNull
+## map, filter and their variations
 
-Used to transform either the whole iterable stream or also skipping som elements from it:
+Used to transform or filter the whole iterable stream:
 
     val source = [1,2,3,4]
-    // transform every element to string or null:
-    assertEquals(["n1", "n2", null, "n4"], source.map { if( it == 3 ) null else "n"+it } )
     
-    // transform every element to stirng, skipping 3:
+    // map: transform every element to something else
+    assertEquals(["n1", "n2", "n3", "n4"], source.map { "n"+it } )
+    
+    // filter: keep only elements matching the predicate
+    assertEquals([2, 4], source.filter { it % 2 == 0 } )
+
+    // count: count elements matching the predicate
+    assertEquals(2, source.count { it % 2 == 0 } )
+
+    // mapNotNull: transform every element, skipping null results:
     assertEquals(["n1", "n2", "n4"], source.mapNotNull { if( it == 3 ) null else "n"+it } )
+    
+    // filterNotNull: skip all null elements:
+    assertEquals([1, 2, 4], [1, 2, null, 4].filterNotNull())
+
+    >>> void
+
+You can also use flow variations that return a cold `Flow` instead of a `List`, which is useful for large or infinite sequences:
+
+    val source = [1, 2, 3, 4]
+    
+    // filterFlow: returns a Flow of filtered elements
+    assert( source.filterFlow { it % 2 == 0 } is Flow )
+    
+    // filterFlowNotNull: returns a Flow of non-null elements
+    assert( [1, null, 2].filterFlowNotNull() is Flow )
+    
+    >>> void
+
+## minOf and maxOf
+
+Find the minimum or maximum value of a function applied to each element:
+
+    val source = ["abc", "de", "fghi"]
+    assertEquals(2, source.minOf { it.length })
+    assertEquals(4, source.maxOf { it.length })
+    >>> void
+
+## flatten and flatMap
+
+Work with nested collections:
+
+    val nested = [[1, 2], [3, 4]]
+    
+    // flatten: combine nested collections into one list
+    assertEquals([1, 2, 3, 4], nested.flatten())
+    
+    // flatMap: map each element to a collection and flatten the result
+    assertEquals([1, 10, 2, 20], [1, 2].flatMap { [it, it*10] })
     
     >>> void
 
@@ -108,10 +153,21 @@ Search for the first element that satisfies the given predicate:
 | isEmpty()              | check iterable is empty                                                         |
 | forEach(f)             | call f for each element                                                         |
 | toMap()                | create a map from list of key-value pairs (arrays of 2 items or like)           |
+| any(p)                 | true if any element matches predicate `p`                        |
+| all(p)                 | true if all elements match predicate `p`                         |
 | map(f)                 | create a list of values returned by `f` called for each element of the iterable |
 | indexOf(i)             | return index if the first encounter of i or a negative value if not found       |
 | associateBy(kf)        | create a map where keys are returned by kf that will be called for each element |
-| findFirst(p)           | return first element matching predicate `p` or throw (1)                         |
+| filter(p)              | create a list of elements matching predicate `p`                |
+| count(p)               | count elements matching predicate `p`                            |
+| filterFlow(p)          | create a [Flow] of elements matching predicate `p`               |
+| filterNotNull()        | create a list of non-null elements                               |
+| filterFlowNotNull()    | create a [Flow] of non-null elements                             |
+| minOf(f)               | return minimum value of `f` applied to elements                  |
+| maxOf(f)               | return maximum value of `f` applied to elements                  |
+| flatten()              | flatten nested collections into a single [List]                  |
+| flatMap(f)             | map each element with `f` and flatten results into a [List]      |
+| findFirst(p)           | return first element matching predicate `p` or throw (1)         |
 | findFirstOrNull(p)     | return first element matching predicate `p` or `null`                            |
 | first                  | first element (1)                                                               |
 | last                   | last element (1)                                                                |
@@ -120,13 +176,13 @@ Search for the first element that satisfies the given predicate:
 | drop(n)                | return new [Iterable] without first n elements                                  |
 | dropLast(n)            | return new [Iterable] without last n elements                                   |
 | sum()                  | return sum of the collection applying `+` to its elements (3)                   |
-| sumOf(predicate)       | sum of the modified collection items (3)                                        |
+| sumOf(f)               | sum of the modified collection items (3)                                        |
 | sorted()               | return [List] with collection items sorted naturally                            |
 | sortedWith(comparator) | sort using a comparator that compares elements (1)                              |
 | sortedBy(predicate)    | sort by comparing results of the predicate function                             |
 | joinToString(s,t)      | convert iterable to string, see (2)                                             |
 | reversed()             | create a list containing items from this in reverse order                       |
-| shuffled()             | create a listof shiffled elements                                               |
+| shuffled()             | create a list of shuffled elements                                              |
 
 (1)
 :: throws `NoSuchElementException` if there is no such element
@@ -155,6 +211,8 @@ For high-performance Kotlin-side interop and custom iterable implementation deta
 [Collection]: Collection.md
 
 [List]: List.md
+
+[Flow]: parallelism.md#flow
 
 [Range]: Range.md
 

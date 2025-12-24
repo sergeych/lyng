@@ -106,4 +106,11 @@ class StdlibTest {
             assertEquals([1,2,3,4,5,6], [1,3,5].flatMap { [it,it+1] }.toList() )
         """)
     }
+
+    @Test
+    fun testCount() = runTest {
+        eval("""
+            assertEquals(5, (1..10).toList().count { it % 2 == 1 } )
+        """)
+    }
 }

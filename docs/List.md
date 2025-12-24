@@ -158,7 +158,8 @@ List could be sorted in place, just like [Collection] provide sorted copies, in 
 | `sort()`                      | in-place sort, natural order                 | void        |
 | `sortBy(predicate)`           | in-place sort bu `predicate` call result (3) | void        |
 | `sortWith(comparator)`        | in-place sort using `comarator` function (4) | void        |
-| `shiffle()`                   | in-place shiffle contents                    |             |
+| `shuffle()`                   | in-place shuffle contents                    |             |
+| `toString()`                 | string representation like `[a,b,c]`         |             |
 
 (1)
 : optimized implementation that override `Array` one

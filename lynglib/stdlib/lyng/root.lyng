@@ -15,8 +15,10 @@ fun cached(builder) {
         value
     }
 }
-/* Filter elements of this iterable using the provided predicate. */
-fun Iterable.filterFlow(predicate) {
+/* Filter elements of this iterable using the provided predicate and provide a flow
+   of results. Coudl be used to map infinte flows, etc.
+*/
+fun Iterable.filterFlow(predicate): Flow {
     val list = this
     flow {
         for( item in list ) {
@@ -27,6 +29,9 @@ fun Iterable.filterFlow(predicate) {
     }
 }
 
+/*
+Filter this iterable and return List of elements
+*/
 fun Iterable.filter(predicate) {
     val result = []
     for( item in this ) if( predicate(item) ) result.add(item)
@@ -34,14 +39,26 @@ fun Iterable.filter(predicate) {
 }
 
 /*
-filter out all null elements from this collection (Iterable); collection of
+Count all items in this iterable for which predicate return true
+*/
+fun Iterable.count(predicate): Int {
+    var hits = 0
+    this.forEach {
+        if( predicate(it) ) hits++
+    }
+    hits
+}
+/*
+filter out all null elements from this collection (Iterable); flow of
 non-null elements is returned
 */
-fun Iterable.filterFlowNotNull() {
+fun Iterable.filterFlowNotNull(): Flow {
     filterFlow { it != null }
 }
 
-fun Iterable.filterNotNull() {
+/* Filter non-null elements and collect them into a List
+*/
+fun Iterable.filterNotNull(): List {
     filter { it != null }
 }
 
