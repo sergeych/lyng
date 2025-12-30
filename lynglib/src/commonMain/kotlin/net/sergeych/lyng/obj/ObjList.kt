@@ -105,7 +105,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
             }
 
             else ->
-                scope.raiseError("'+': can't concatenate $this with $other")
+                scope.raiseError("'+': can't concatenate ${this.toString(scope)} with ${other.toString(scope)}")
         }
 
 
