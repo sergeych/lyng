@@ -17,7 +17,6 @@
 
 package net.sergeych.lyng
 
-import ObjEnumClass
 import net.sergeych.lyng.Compiler.Companion.compile
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
