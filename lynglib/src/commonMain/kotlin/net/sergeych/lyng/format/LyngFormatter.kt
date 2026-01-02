@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,19 @@ object LyngFormatter {
         var parenBalance = 0
         var bracketBalance = 0
         var prevBracketContinuation = false
+        var inBlockComment = false
         // We don't keep per-"[" base alignment; continuation rules define alignment.
+
+        fun updateBalances(ch: Char) {
+            when (ch) {
+                '{' -> blockLevel++
+                '}' -> if (blockLevel > 0) blockLevel--
+                '(' -> parenBalance++
+                ')' -> if (parenBalance > 0) parenBalance--
+                '[' -> bracketBalance++
+                ']' -> if (bracketBalance > 0) bracketBalance--
+            }
+        }
 
         fun codePart(s: String): String {
             val idx = s.indexOf("//")
@@ -58,12 +70,19 @@ object LyngFormatter {
 
         for ((i, rawLine) in lines.withIndex()) {
             val line = rawLine
+            val trimmedLine = line.trim()
             val code = codePart(line)
             val trimmedStart = code.dropWhile { it == ' ' || it == '\t' }
 
             // Compute effective indent level for this line
             var effectiveLevel = blockLevel
-            if (trimmedStart.startsWith("}")) effectiveLevel = (effectiveLevel - 1).coerceAtLeast(0)
+            if (inBlockComment) {
+                if (!trimmedLine.startsWith("*/")) {
+                    effectiveLevel += 1
+                }
+            } else if (trimmedStart.startsWith("}")) {
+                effectiveLevel = (effectiveLevel - 1).coerceAtLeast(0)
+            }
             // else/catch/finally should align with the parent block level; no extra dedent here,
             // because the preceding '}' has already reduced [blockLevel] appropriately.
 
@@ -91,6 +110,7 @@ object LyngFormatter {
                 bracketBalance > 0 && firstChar != ']' -> config.continuationIndentSize
                 // While inside parentheses, continuation applies scaled by nesting level
                 parenContLevels > 0 -> config.continuationIndentSize * parenContLevels
+                trimmedStart.startsWith(".") -> config.indentSize
                 else -> 0
             }
 
@@ -127,13 +147,33 @@ object LyngFormatter {
             if (i < lines.lastIndex) sb.append('\n')
 
             // Update balances using this line's code content
-            for (ch in code) when (ch) {
-                '{' -> blockLevel++
-                '}' -> if (blockLevel > 0) blockLevel--
-                '(' -> parenBalance++
-                ')' -> if (parenBalance > 0) parenBalance--
-                '[' -> bracketBalance++
-                ']' -> if (bracketBalance > 0) bracketBalance--
+            if (!inBlockComment) {
+                val startIdx = code.indexOf("/*")
+                if (startIdx >= 0) {
+                    val endIdx = code.indexOf("*/", startIdx + 2)
+                    if (endIdx < 0) {
+                        inBlockComment = true
+                        // Process code before /*
+                        val before = code.substring(0, startIdx)
+                        for (ch in before) updateBalances(ch)
+                    } else {
+                        // Block comment starts and ends on the same line
+                        val before = code.substring(0, startIdx)
+                        val after = code.substring(endIdx + 2)
+                        for (ch in before) updateBalances(ch)
+                        for (ch in after) updateBalances(ch)
+                    }
+                } else {
+                    for (ch in code) updateBalances(ch)
+                }
+            } else {
+                val endIdx = line.indexOf("*/")
+                if (endIdx >= 0) {
+                    inBlockComment = false
+                    val after = line.substring(endIdx + 2)
+                    val codeAfter = codePart(after)
+                    for (ch in codeAfter) updateBalances(ch)
+                }
             }
 
             // Update awaitingSingleIndent based on current line
@@ -408,15 +448,16 @@ private fun applyMinimalSpacing(code: String): String {
     s = s.replace(Regex(", \\)"), ",)")
     s = s.replace(Regex(", \\]"), ",]")
     // Equality/boolean operators: ensure spaces around
-    s = s.replace(Regex("\\s*(==|!=|<=|>=|&&|\\|\\|)\\s*"), " $1 ")
-    // Assignment '=' (not part of '==', '!=', '<=', '>=', '=>'): collapse whitespace to single spaces around '='
-    s = s.replace(Regex("(?<![=!<>])\\s*=\\s*(?![=>])"), " = ")
-    // Multiply/Divide/Mod as binary: spaces around
-    s = s.replace(Regex("\\s*([*/%])\\s*"), " $1 ")
+    s = s.replace(Regex("\\s*(==|!=|<=|>=|&&|\\|\\||\\+=|-=|\\*=|/=|=>|->)\\s*"), " $1 ")
+    // Assignment '=' (not part of '==', '!=', '<=', '>=', '=>', '+=', '-=', '*=', '/=', '->'): collapse whitespace to single spaces around '='
+    s = s.replace(Regex("(?<![=!<>+\\-*/])\\s*=\\s*(?![=>])"), " = ")
+    // Multiply/Divide/Mod as binary: spaces around. Avoid '*=', '/='
+    s = s.replace(Regex("(?<![*])\\s*([*/%])\\s*(?![=])"), " $1 ")
     // Addition as binary: spaces around '+'. We try not to break '++' and '+=' here.
     s = s.replace(Regex("(?<![+])\\s*\\+\\s*(?![+=])"), " + ")
     // Subtraction as binary: add spaces when it looks binary. Keep unary '-' tight (after start or ( [ { = : ,)
-    s = s.replace(Regex("(?<=[^\\s(\\[\\{=:,])-(?=[^=])"), " - ")
+    // and avoid splitting '-=', '--', '->'
+    s = s.replace(Regex("(?<=[^\\s(\\[\\{=:,])\\s*-\\s*(?=[^=\\->])"), " - ")
     // Colon in types/extends: remove spaces before, ensure one space after (keep '::' intact)
     s = s.replace(Regex("(?<!:)\\s*:(?!:)\\s*"), ": ")
     return s

@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -332,6 +332,25 @@ class LyngFormatterTest {
     }
 
     @Test
+    fun multiLineChainCalls() {
+        val src = """
+            somevar.where
+            .isGreen()
+            .isWarm()
+        """.trimIndent()
+
+        val expected = """
+            somevar.where
+                .isGreen()
+                .isWarm()
+        """.trimIndent()
+
+        val cfg = LyngFormatConfig(indentSize = 4, continuationIndentSize = 8)
+        val out = LyngFormatter.reindent(src, cfg)
+        assertEquals(expected, out)
+    }
+
+    @Test
     fun chainedCalls_and_MemberAccess() {
         val src = """
             fun demo() {
@@ -411,6 +430,55 @@ class LyngFormatterTest {
         val out = LyngFormatter.format(src, cfg)
         assertEquals(expected, out)
         assertEquals(expected, LyngFormatter.format(out, cfg))
+    }
+
+    @Test
+    fun multilineCommentIndentation() {
+        val src = """
+            /*
+            This is
+            a comment
+            */
+            fun f() {
+                /*
+                Inner
+                comment
+                */
+                val x = 1 /* end of line
+                comment */
+            }
+        """.trimIndent()
+
+        val expected = """
+            /*
+                This is
+                a comment
+            */
+            fun f() {
+                /*
+                    Inner
+                    comment
+                */
+                val x = 1 /* end of line
+                    comment */
+            }
+        """.trimIndent()
+
+        val cfg = LyngFormatConfig(indentSize = 4)
+        val out = LyngFormatter.reindent(src, cfg)
+        assertEquals(expected, out)
+    }
+
+    @Test
+    fun multicharacterOperators_spacing() {
+        val operators = listOf("+=", "-=", "*=", "/=", "=>", "==", "!=", "<=", ">=", "&&", "||", "->")
+        for (op in operators) {
+            val src = "a${op}b"
+            val expected = "a $op b"
+            val cfg = LyngFormatConfig(applySpacing = true)
+            val out = LyngFormatter.format(src, cfg)
+            assertEquals(expected, out, "Failed for operator $op")
+        }
     }
 
     @Test
