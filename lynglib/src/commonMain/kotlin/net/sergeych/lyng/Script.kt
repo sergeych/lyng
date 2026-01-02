@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -302,6 +302,7 @@ class Script(
             addConst("Deferred", ObjDeferred.type)
             addConst("CompletableDeferred", ObjCompletableDeferred.type)
             addConst("Mutex", ObjMutex.type)
+            addConst("Flow", ObjFlow.type)
 
             addConst("Regex", ObjRegex.type)
 

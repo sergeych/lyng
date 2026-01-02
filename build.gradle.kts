@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,4 +28,10 @@ tasks.register<org.gradle.api.DefaultTask>("runIde") {
     group = "intellij"
     description = "Run IntelliJ IDEA with the Lyng plugin (:lyng-idea)"
     dependsOn(":lyng-idea:runIde")
+}
+
+tasks.register<Exec>("generateDocs") {
+    group = "documentation"
+    description = "Generates a single-file documentation HTML using bin/generate_docs.sh"
+    commandLine("./bin/generate_docs.sh")
 }

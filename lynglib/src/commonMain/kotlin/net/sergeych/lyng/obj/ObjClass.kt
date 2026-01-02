@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -391,6 +391,21 @@ open class ObjClass(
     }
 
     fun addConst(name: String, value: Obj) = createField(name, value, isMutable = false)
+
+    fun addProperty(
+        name: String,
+        getter: (suspend Scope.() -> Obj)? = null,
+        setter: (suspend Scope.(Obj) -> Unit)? = null,
+        visibility: Visibility = Visibility.Public,
+        declaringClass: ObjClass? = this
+    ) {
+        val g = getter?.let { statement { it() } }
+        val s = setter?.let { statement { it(requiredArg(0)); ObjVoid } }
+        val prop = ObjProperty(name, g, s)
+        members[name] = ObjRecord(prop, false, visibility, declaringClass, type = ObjRecord.Type.Property)
+        layoutVersion += 1
+    }
+
     fun addClassConst(name: String, value: Obj) = createClassField(name, value)
     fun addClassFn(name: String, isOpen: Boolean = false, code: suspend Scope.() -> Obj) {
         createClassField(name, statement { code() }, isOpen)
