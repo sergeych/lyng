@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -137,6 +137,14 @@ data class MiniClassDecl(
     val members: List<MiniMemberDecl> = emptyList()
 ) : MiniDecl
 
+data class MiniEnumDecl(
+    override val range: MiniRange,
+    override val name: String,
+    val entries: List<String>,
+    override val doc: MiniDoc?,
+    override val nameStart: Pos
+) : MiniDecl
+
 data class MiniCtorField(
     val name: String,
     val mutable: Boolean,
@@ -206,6 +214,7 @@ interface MiniAstSink {
     fun onValDecl(node: MiniValDecl) {}
     fun onInitDecl(node: MiniInitDecl) {}
     fun onClassDecl(node: MiniClassDecl) {}
+    fun onEnumDecl(node: MiniEnumDecl) {}
 
     fun onBlock(node: MiniBlock) {}
     fun onIdentifier(node: MiniIdentifier) {}
@@ -270,6 +279,12 @@ class MiniAstBuilder : MiniAstSink {
     }
 
     override fun onClassDecl(node: MiniClassDecl) {
+        val attach = node.copy(doc = node.doc ?: lastDoc)
+        currentScript?.declarations?.add(attach)
+        lastDoc = null
+    }
+
+    override fun onEnumDecl(node: MiniEnumDecl) {
         val attach = node.copy(doc = node.doc ?: lastDoc)
         currentScript?.declarations?.add(attach)
         lastDoc = null

@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1750,6 +1750,9 @@ class Compiler(
     }
 
     private fun parseEnumDeclaration(): Statement {
+        val startPos = pendingDeclStart ?: cc.currentPos()
+        val doc = pendingDeclDoc ?: consumePendingDoc()
+        pendingDeclDoc = null
         val nameToken = cc.requireToken(Token.Type.ID)
         // so far only simplest enums:
         val names = mutableListOf<String>()
@@ -1776,6 +1779,16 @@ class Compiler(
                 else -> t.raiseSyntax("expected enum entry name")
             }
         } while (true)
+
+        miniSink?.onEnumDecl(
+            MiniEnumDecl(
+                range = MiniRange(startPos, cc.currentPos()),
+                name = nameToken.value,
+                entries = names,
+                doc = doc,
+                nameStart = nameToken.pos
+            )
+        )
 
         return statement {
             ObjEnumClass.createSimpleEnum(nameToken.value, names).also {

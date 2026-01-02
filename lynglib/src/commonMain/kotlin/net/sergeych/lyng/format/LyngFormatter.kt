@@ -48,11 +48,6 @@ object LyngFormatter {
             }
         }
 
-        fun codePart(s: String): String {
-            val idx = s.indexOf("//")
-            return if (idx >= 0) s.substring(0, idx) else s
-        }
-
         fun indentOf(level: Int, continuation: Int): String =
             // Always produce spaces; tabs are not allowed in resulting code
             " ".repeat(level * config.indentSize + continuation)
@@ -69,10 +64,10 @@ object LyngFormatter {
         }
 
         for ((i, rawLine) in lines.withIndex()) {
-            val line = rawLine
-            val trimmedLine = line.trim()
-            val code = codePart(line)
+            val (parts, nextInBlockComment) = splitIntoParts(rawLine, inBlockComment)
+            val code = parts.filter { it.type == PartType.Code }.joinToString("") { it.text }
             val trimmedStart = code.dropWhile { it == ' ' || it == '\t' }
+            val trimmedLine = rawLine.trim()
 
             // Compute effective indent level for this line
             var effectiveLevel = blockLevel
@@ -93,15 +88,7 @@ object LyngFormatter {
             if (applyAwaiting) effectiveLevel += 1
 
             val firstChar = trimmedStart.firstOrNull()
-            // Do not apply continuation on a line that starts with a closer ')' or ']'
-            val startsWithCloser = firstChar == ')' || firstChar == ']'
-            // Kotlin-like rule: continuation persists while inside parentheses; it applies
-            // even on the line that starts with ')'. For brackets, do not apply on the ']' line itself.
-            // Continuation rules:
-            // - For brackets: one-shot continuation for first element after '[', and while inside brackets
-            //   (except on the ']' line) continuation equals one unit.
-            // - For parentheses: continuation depth scales with nested level; e.g., inside two nested
-            //   parentheses lines get 2 * continuationIndentSize. No continuation on a line that starts with ')'.
+            // While inside parentheses, continuation applies scaled by nesting level
             val parenContLevels = if (parenBalance > 0 && firstChar != ')') parenBalance else 0
             val continuation = when {
                 // One-shot continuation when previous line ended with '[' to align first element
@@ -120,8 +107,8 @@ object LyngFormatter {
             }
 
             // Replace leading whitespace with the exact target indent; but keep fully blank lines truly empty
-            val contentStart = line.indexOfFirst { it != ' ' && it != '\t' }.let { if (it < 0) line.length else it }
-            var content = line.substring(contentStart)
+            val contentStart = rawLine.indexOfFirst { it != ' ' && it != '\t' }.let { if (it < 0) rawLine.length else it }
+            var content = rawLine.substring(contentStart)
             // Collapse spaces right after an opening '[' to avoid "[    1"; make it "[1"
             if (content.startsWith("[")) {
                 content = "[" + content.drop(1).trimStart()
@@ -135,11 +122,7 @@ object LyngFormatter {
             }
             // Determine base indent using structural level and continuation only (spaces only)
             val indentString = indentOf(effectiveLevel, continuation)
-            if (content.isEmpty()) {
-                // preserve truly blank line as empty to avoid trailing spaces on empty lines
-                // (also keeps continuation blocks visually clean)
-                // do nothing, just append nothing; newline will be appended below if needed
-            } else {
+            if (content.isNotEmpty()) {
                 sb.append(indentString).append(content)
             }
 
@@ -147,34 +130,12 @@ object LyngFormatter {
             if (i < lines.lastIndex) sb.append('\n')
 
             // Update balances using this line's code content
-            if (!inBlockComment) {
-                val startIdx = code.indexOf("/*")
-                if (startIdx >= 0) {
-                    val endIdx = code.indexOf("*/", startIdx + 2)
-                    if (endIdx < 0) {
-                        inBlockComment = true
-                        // Process code before /*
-                        val before = code.substring(0, startIdx)
-                        for (ch in before) updateBalances(ch)
-                    } else {
-                        // Block comment starts and ends on the same line
-                        val before = code.substring(0, startIdx)
-                        val after = code.substring(endIdx + 2)
-                        for (ch in before) updateBalances(ch)
-                        for (ch in after) updateBalances(ch)
-                    }
-                } else {
-                    for (ch in code) updateBalances(ch)
-                }
-            } else {
-                val endIdx = line.indexOf("*/")
-                if (endIdx >= 0) {
-                    inBlockComment = false
-                    val after = line.substring(endIdx + 2)
-                    val codeAfter = codePart(after)
-                    for (ch in codeAfter) updateBalances(ch)
+            for (part in parts) {
+                if (part.type == PartType.Code) {
+                    for (ch in part.text) updateBalances(ch)
                 }
             }
+            inBlockComment = nextInBlockComment
 
             // Update awaitingSingleIndent based on current line
             if (applyAwaiting && trimmedStart.isNotEmpty()) {
@@ -189,70 +150,41 @@ object LyngFormatter {
             }
 
             // Prepare one-shot bracket continuation if the current line ends with '['
-            // (first element line gets continuation even before balances update propagate).
             val endsWithBracket = code.trimEnd().endsWith("[")
-            // Reset one-shot flag after we used it on this line
-            if (prevBracketContinuation) prevBracketContinuation = false
-            // Set for the next iteration if current line ends with '['
-            // Record whether THIS line ends with an opening '[' so the NEXT line gets a one-shot
-            // continuation indent for the first element.
             if (endsWithBracket) {
                 // One-shot continuation for the very next line
                 prevBracketContinuation = true
             } else {
-                // Reset the one-shot flag if the previous line didn't end with '['
+                // Reset the one-shot flag if it was used or if line doesn't end with '['
                 prevBracketContinuation = false
             }
         }
         return sb.toString()
     }
 
-    /** Full format. Currently performs indentation only; spacing/wrapping can be added later. */
     fun format(text: String, config: LyngFormatConfig = LyngFormatConfig()): String {
         // Phase 1: indentation
         val indented = reindent(text, config)
         if (!config.applySpacing && !config.applyWrapping) return indented
 
-        // Phase 2: minimal, safe spacing (PSI-free). Skip block comments completely and
-        // only apply spacing to the part before '//' on each line.
+        // Phase 2: minimal, safe spacing (PSI-free).
         val lines = indented.split('\n')
         val out = StringBuilder(indented.length)
         var inBlockComment = false
         for ((i, rawLine) in lines.withIndex()) {
             var line = rawLine
             if (config.applySpacing) {
-                if (inBlockComment) {
-                    // Pass-through until we see the end of the block comment on some line
-                    val end = line.indexOf("*/")
-                    if (end >= 0) {
-                        inBlockComment = false
-                    }
-                } else {
-                    // If this line opens a block comment, apply spacing only before the opener
-                    val startIdx = line.indexOf("/*")
-                    val endIdx = line.indexOf("*/")
-                    if (startIdx >= 0 && (endIdx < 0 || endIdx < startIdx)) {
-                        val before = line.substring(0, startIdx)
-                        val after = line.substring(startIdx)
-                        val commentIdx = before.indexOf("//")
-                        val code = if (commentIdx >= 0) before.substring(0, commentIdx) else before
-                        val tail = if (commentIdx >= 0) before.substring(commentIdx) else ""
-                        val spaced = applyMinimalSpacing(code)
-                        line = (spaced + tail) + after
-                        inBlockComment = true
+                val (parts, nextInBlockComment) = splitIntoParts(rawLine, inBlockComment)
+                val sb = StringBuilder()
+                for (part in parts) {
+                    if (part.type == PartType.Code) {
+                        sb.append(applyMinimalSpacingRules(part.text))
                     } else {
-                        // Normal code line: respect single-line comments
-                        val commentIdx = line.indexOf("//")
-                        if (commentIdx >= 0) {
-                            val code = line.substring(0, commentIdx)
-                            val tail = line.substring(commentIdx)
-                            val spaced = applyMinimalSpacing(code)
-                            line = spaced + tail
-                        } else {
-                            line = applyMinimalSpacing(line)
-                        }
+                        sb.append(part.text)
                     }
                 }
+                line = sb.toString()
+                inBlockComment = nextInBlockComment
             }
             out.append(line.trimEnd())
             if (i < lines.lastIndex) out.append('\n')
@@ -409,7 +341,80 @@ object LyngFormatter {
     }
 }
 
-private fun applyMinimalSpacing(code: String): String {
+private enum class PartType { Code, StringLiteral, BlockComment, LineComment }
+private data class Part(val text: String, val type: PartType)
+
+/**
+ * Split a line into parts: code, string literals, and comments.
+ * Tracks [inBlockComment] state across lines.
+ */
+private fun splitIntoParts(
+    text: String,
+    inBlockCommentInitial: Boolean
+): Pair<List<Part>, Boolean> {
+    val result = mutableListOf<Part>()
+    var i = 0
+    var last = 0
+    var inBlockComment = inBlockCommentInitial
+    var inString = false
+    var quoteChar = ' '
+
+    while (i < text.length) {
+        if (inBlockComment) {
+            if (text.startsWith("*/", i)) {
+                result.add(Part(text.substring(last, i + 2), PartType.BlockComment))
+                inBlockComment = false
+                i += 2
+                last = i
+            } else {
+                i++
+            }
+        } else if (inString) {
+            if (text[i] == quoteChar) {
+                var escapeCount = 0
+                var j = i - 1
+                while (j >= 0 && text[j] == '\\') {
+                    escapeCount++
+                    j--
+                }
+                if (escapeCount % 2 == 0) {
+                    inString = false
+                    result.add(Part(text.substring(last, i + 1), PartType.StringLiteral))
+                    last = i + 1
+                }
+            }
+            i++
+        } else {
+            if (text.startsWith("//", i)) {
+                if (i > last) result.add(Part(text.substring(last, i), PartType.Code))
+                result.add(Part(text.substring(i), PartType.LineComment))
+                last = text.length
+                break
+            } else if (text.startsWith("/*", i)) {
+                if (i > last) result.add(Part(text.substring(last, i), PartType.Code))
+                inBlockComment = true
+                last = i
+                i += 2
+            } else if (text[i] == '"' || text[i] == '\'') {
+                if (i > last) result.add(Part(text.substring(last, i), PartType.Code))
+                inString = true
+                quoteChar = text[i]
+                last = i
+                i++
+            } else {
+                i++
+            }
+        }
+    }
+    if (last < text.length) {
+        val leftover = text.substring(last)
+        val type = if (inBlockComment) PartType.BlockComment else PartType.Code
+        result.add(Part(leftover, type))
+    }
+    return result to inBlockComment
+}
+
+private fun applyMinimalSpacingRules(code: String): String {
     var s = code
     // Ensure space before '(' for control-flow keywords
     s = s.replace(Regex("\\b(if|for|while)\\("), "$1 (")

@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -110,7 +110,66 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                 }
             }
         }
-        // 3) Member-context resolution first (dot immediately before identifier): handle literals and calls
+        // 3) usages in current file via Binder (resolves local variables, parameters, and classes)
+        if (haveMini) {
+            try {
+                val binding = net.sergeych.lyng.binding.Binder.bind(text, mini)
+                val ref = binding.references.firstOrNull { offset in it.start until it.end }
+                if (ref != null) {
+                    val sym = binding.symbols.firstOrNull { it.id == ref.symbolId }
+                    if (sym != null) {
+                        // Find local declaration that matches this symbol
+                        val ds = mini.declarations.firstOrNull { decl ->
+                            val s = source.offsetOf(decl.nameStart)
+                            decl.name == sym.name && s == sym.declStart
+                        }
+                        if (ds != null) return renderDeclDoc(ds)
+
+                        // Check parameters
+                        for (fn in mini.declarations.filterIsInstance<MiniFunDecl>()) {
+                            for (p in fn.params) {
+                                val s = source.offsetOf(p.nameStart)
+                                if (p.name == sym.name && s == sym.declStart) {
+                                    return renderParamDoc(fn, p)
+                                }
+                            }
+                        }
+                        
+                        // Check class members (fields/functions)
+                        for (cls in mini.declarations.filterIsInstance<MiniClassDecl>()) {
+                            for (m in cls.members) {
+                                val s = source.offsetOf(m.nameStart)
+                                if (m.name == sym.name && s == sym.declStart) {
+                                    return when (m) {
+                                        is MiniMemberFunDecl -> renderMemberFunDoc(cls.name, m)
+                                        is MiniMemberValDecl -> renderMemberValDoc(cls.name, m)
+                                        is MiniInitDecl -> null
+                                    }
+                                }
+                            }
+                            for (cf in cls.ctorFields) {
+                                val s = source.offsetOf(cf.nameStart)
+                                if (cf.name == sym.name && s == sym.declStart) {
+                                    // Render as a member val
+                                    val mv = MiniMemberValDecl(
+                                        range = MiniRange(cf.nameStart, cf.nameStart), // dummy
+                                        name = cf.name,
+                                        mutable = cf.mutable,
+                                        type = cf.type,
+                                        doc = null,
+                                        nameStart = cf.nameStart
+                                    )
+                                    return renderMemberValDoc(cls.name, mv)
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: Throwable) {
+                if (DEBUG_LOG) log.warn("[LYNG_DEBUG] QuickDoc: local binder resolution failed: ${e.message}")
+            }
+        }
+        // 4) Member-context resolution first (dot immediately before identifier): handle literals and calls
         run {
             val dotPos = TextCtx.findDotLeft(text, idRange.startOffset)
                 ?: TextCtx.findDotLeft(text, offset)
@@ -225,8 +284,9 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
             }
             // Also allow values/consts
             docs.filterIsInstance<MiniValDecl>().firstOrNull { it.name == ident }?.let { return renderDeclDoc(it) }
-            // And classes
+            // And classes/enums
             docs.filterIsInstance<MiniClassDecl>().firstOrNull { it.name == ident }?.let { return renderDeclDoc(it) }
+            docs.filterIsInstance<MiniEnumDecl>().firstOrNull { it.name == ident }?.let { return renderDeclDoc(it) }
         }
         // Defensive fallback: if nothing found and it's a well-known stdlib function, render minimal inline docs
         if (ident == "println" || ident == "print") {
@@ -320,7 +380,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
      */
     private fun extractImportsFromText(text: String): List<String> {
         val result = LinkedHashSet<String>()
-        val re = Regex("(?m)^\\s*import\\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)*)")
+        val re = Regex("^\\s*import\\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)*)", RegexOption.MULTILINE)
         re.findAll(text).forEach { m ->
             val raw = m.groupValues.getOrNull(1)?.trim().orEmpty()
             if (raw.isNotEmpty()) {
@@ -373,8 +433,8 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         val title = when (d) {
             is MiniFunDecl -> "function ${d.name}${signatureOf(d)}"
             is MiniClassDecl -> "class ${d.name}"
+            is MiniEnumDecl -> "enum ${d.name} { ${d.entries.joinToString(", ")} }"
             is MiniValDecl -> if (d.mutable) "var ${d.name}${typeOf(d.type)}" else "val ${d.name}${typeOf(d.type)}"
-            else -> d.name
         }
         // Show full detailed documentation, not just the summary
         val raw = d.doc?.raw

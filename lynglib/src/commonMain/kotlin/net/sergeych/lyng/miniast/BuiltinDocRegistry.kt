@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -113,7 +113,7 @@ object BuiltinDocRegistry : BuiltinDocSource {
         val src = try { rootLyng } catch (_: Throwable) { null } ?: return emptyList()
         val out = LinkedHashSet<String>()
         // Match lines like: fun String.trim(...) or val Int.isEven = ...
-        val re = Regex("(?m)^\\s*(?:fun|val|var)\\s+${className}\\.([A-Za-z_][A-Za-z0-9_]*)\\b")
+        val re = Regex("^\\s*(?:fun|val|var)\\s+${className}\\.([A-Za-z_][A-Za-z0-9_]*)\\b", RegexOption.MULTILINE)
         re.findAll(src).forEach { m ->
             val name = m.groupValues.getOrNull(1)?.trim()
             if (!name.isNullOrEmpty()) out.add(name)
@@ -602,6 +602,11 @@ private fun buildStdlibDocs(): List<MiniDecl> {
     // Exceptions and utilities
     mod.classDoc(name = "Exception", doc = StdlibInlineDocIndex.classDoc("Exception") ?: "Exception helpers.") {
         method(name = "printStackTrace", doc = StdlibInlineDocIndex.methodDoc("Exception", "printStackTrace") ?: "Print this exception and its stack trace to standard output.")
+    }
+
+    mod.classDoc(name = "Enum", doc = StdlibInlineDocIndex.classDoc("Enum") ?: "Base class for all enums.") {
+        method(name = "name", doc = "Returns the name of this enum constant.", returns = type("lyng.String"))
+        method(name = "ordinal", doc = "Returns the ordinal of this enum constant.", returns = type("lyng.Int"))
     }
 
     mod.classDoc(name = "String", doc = StdlibInlineDocIndex.classDoc("String") ?: "String helpers.") {

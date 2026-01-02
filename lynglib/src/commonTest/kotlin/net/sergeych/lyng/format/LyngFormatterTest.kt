@@ -676,4 +676,58 @@ class LyngFormatterTest {
         // Idempotent
         assertEquals(expected, LyngFormatter.reindent(out, cfg))
     }
+
+    @Test
+    fun stringLiterals_areNotNormalized() {
+        val src = """
+            val s = "a=b"
+            val s2 = "a + b"
+            val s3 = "a  -  b"
+            val s4 = "a,b"
+            val s5 = "if(x){}"
+        """.trimIndent()
+
+        val cfg = LyngFormatConfig(applySpacing = true)
+        val formatted = LyngFormatter.format(src, cfg)
+
+        assertEquals(src, formatted, "String literals should not be changed by space normalization")
+    }
+
+    @Test
+    fun mixedCodeAndStrings_normalization() {
+        val src = "val x=1+\"a+b\"+2"
+        val expected = "val x = 1 + \"a+b\" + 2"
+
+        val cfg = LyngFormatConfig(applySpacing = true)
+        val formatted = LyngFormatter.format(src, cfg)
+
+        assertEquals(expected, formatted)
+    }
+
+    @Test
+    fun reindent_ignoresBracesInStrings() {
+        val src = """
+            fun test() {
+                val s = "{"
+                val s2 = "}"
+            }
+        """.trimIndent()
+
+        val cfg = LyngFormatConfig(indentSize = 4)
+        val formatted = LyngFormatter.reindent(src, cfg)
+
+        // If it fails, s2 will be indented differently
+        assertEquals(src, formatted, "Braces in strings should not affect indentation")
+    }
+
+    @Test
+    fun blockComments_spacing_robustness() {
+        val src = "val x=1/*a=b*/+2"
+        val expected = "val x = 1/*a=b*/ + 2"
+
+        val cfg = LyngFormatConfig(applySpacing = true)
+        val formatted = LyngFormatter.format(src, cfg)
+
+        assertEquals(expected, formatted)
+    }
 }

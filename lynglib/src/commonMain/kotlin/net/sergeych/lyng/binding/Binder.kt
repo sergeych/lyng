@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,10 +25,7 @@ import net.sergeych.lyng.Source
 import net.sergeych.lyng.highlight.HighlightKind
 import net.sergeych.lyng.highlight.SimpleLyngHighlighter
 import net.sergeych.lyng.highlight.offsetOf
-import net.sergeych.lyng.miniast.MiniClassDecl
-import net.sergeych.lyng.miniast.MiniFunDecl
-import net.sergeych.lyng.miniast.MiniScript
-import net.sergeych.lyng.miniast.MiniValDecl
+import net.sergeych.lyng.miniast.*
 
 enum class SymbolKind { Class, Enum, Function, Val, Var, Param }
 
@@ -159,6 +156,12 @@ object Binder {
                         symbols += sym
                         topLevelByName.getOrPut(d.name) { mutableListOf() }.add(sym.id)
                     }
+                }
+                is MiniEnumDecl -> {
+                    val (s, e) = nameOffsets(d.nameStart, d.name)
+                    val sym = Symbol(nextId++, d.name, SymbolKind.Enum, s, e, containerId = null)
+                    symbols += sym
+                    topLevelByName.getOrPut(d.name) { mutableListOf() }.add(sym.id)
                 }
             }
         }

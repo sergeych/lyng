@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -130,5 +130,79 @@ class MiniAstTest {
         assertTrue(cd.doc!!.raw.contains("Class C docs"))
         // Bases captured as plain names for now
         assertEquals(listOf("Base1", "Base2"), cd.bases)
+    }
+
+    @Test
+    fun miniAst_captures_enum_entries_and_doc() = runTest {
+        val code = """
+            /** Enum E docs */
+            enum E {
+                A,
+                B,
+                C
+            }
+        """
+        val (_, sink) = compileWithMini(code)
+        val mini = sink.build()
+        assertNotNull(mini)
+        val ed = mini!!.declarations.filterIsInstance<MiniEnumDecl>().firstOrNull { it.name == "E" }
+        assertNotNull(ed)
+        assertNotNull(ed.doc)
+        assertTrue(ed.doc!!.raw.contains("Enum E docs"))
+        assertEquals(listOf("A", "B", "C"), ed.entries)
+        assertEquals("E", ed.name)
+    }
+
+    @Test
+    fun enum_to_synthetic_class_members() = runTest {
+        val code = """
+            enum MyEnum { V1, V2 }
+        """
+        val (_, sink) = compileWithMini(code)
+        val mini = sink.build()
+        assertNotNull(mini)
+        
+        // I'll check via aggregateClasses by mocking the registry or just checking it includes Enum base.
+        val stdlib = BuiltinDocRegistry.docsForModule("lyng.stdlib")
+        val enumBase = stdlib.filterIsInstance<MiniClassDecl>().firstOrNull { it.name == "Enum" }
+        assertNotNull(enumBase, "Enum base class should be in stdlib")
+        assertTrue(enumBase.members.any { it.name == "name" })
+        assertTrue(enumBase.members.any { it.name == "ordinal" })
+
+        // Check if aggregateClasses handles enums from local MiniScript
+        val classes = DocLookupUtils.aggregateClasses(listOf("lyng.stdlib"), mini)
+        val myEnum = classes["MyEnum"]
+        assertNotNull(myEnum, "Local enum should be aggregated as a class")
+        assertEquals(listOf("Enum"), myEnum.bases)
+        assertTrue(myEnum.members.any { it.name == "entries" }, "Should have entries")
+        assertTrue(myEnum.members.any { it.name == "valueOf" }, "Should have valueOf")
+        assertTrue(myEnum.members.any { it.name == "V1" }, "Should have V1")
+        assertTrue(myEnum.members.any { it.name == "V2" }, "Should have V2")
+    }
+
+    @Test
+    fun complete_enum_members() = runTest {
+        val code = """
+            enum MyEnum { V1, V2 }
+            val x = MyEnum.V1.<caret>
+        """
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val names = items.map { it.name }.toSet()
+        assertTrue(names.contains("name"), "Should contain name from Enum base")
+        assertTrue(names.contains("ordinal"), "Should contain ordinal from Enum base")
+    }
+
+    @Test
+    fun complete_enum_class_members() = runTest {
+        val code = """
+            enum MyEnum { V1, V2 }
+            val x = MyEnum.<caret>
+        """
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val names = items.map { it.name }.toSet()
+        assertTrue(names.contains("entries"), "Should contain entries")
+        assertTrue(names.contains("valueOf"), "Should contain valueOf")
+        assertTrue(names.contains("V1"), "Should contain V1")
+        assertTrue(names.contains("V2"), "Should contain V2")
     }
 }

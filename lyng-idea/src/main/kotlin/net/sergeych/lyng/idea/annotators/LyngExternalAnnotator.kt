@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -117,6 +117,7 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
                     d.name,
                     if (d.mutable) LyngHighlighterColors.VARIABLE else LyngHighlighterColors.VALUE
                 )
+                is MiniEnumDecl -> putName(d.nameStart, d.name, LyngHighlighterColors.TYPE)
             }
         }
 
@@ -167,6 +168,7 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
                     d.ctorFields.forEach { addTypeSegments(it.type) }
                     d.classFields.forEach { addTypeSegments(it.type) }
                 }
+                is MiniEnumDecl -> {}
             }
         }
 

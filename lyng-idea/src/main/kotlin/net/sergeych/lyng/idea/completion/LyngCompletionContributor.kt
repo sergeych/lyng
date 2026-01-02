@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -124,10 +124,10 @@ class LyngCompletionContributor : CompletionContributor() {
                     guessReturnClassFromMemberCallBeforeMini(mini, text, memberDotPos, imported)
                         ?: guessReceiverClassViaMini(mini, text, memberDotPos, imported)
                         ?: 
-                    guessReturnClassFromMemberCallBefore(text, memberDotPos, imported)
-                        ?: guessReturnClassFromTopLevelCallBefore(text, memberDotPos, imported)
-                        ?: guessReturnClassAcrossKnownCallees(text, memberDotPos, imported)
-                        ?: guessReceiverClass(text, memberDotPos, imported)
+                    guessReturnClassFromMemberCallBefore(text, memberDotPos, imported, mini)
+                        ?: guessReturnClassFromTopLevelCallBefore(text, memberDotPos, imported, mini)
+                        ?: guessReturnClassAcrossKnownCallees(text, memberDotPos, imported, mini)
+                        ?: guessReceiverClass(text, memberDotPos, imported, mini)
 
                 if (inferred != null) {
                     if (DEBUG_COMPLETION) log.info("[LYNG_DEBUG] Fallback inferred receiver/return class='$inferred' — offering its members")
@@ -159,6 +159,8 @@ class LyngCompletionContributor : CompletionContributor() {
                         .withInsertHandler(ParenInsertHandler)
                     Kind.Class_ -> LookupElementBuilder.create(ci.name)
                         .withIcon(AllIcons.Nodes.Class)
+                    Kind.Enum -> LookupElementBuilder.create(ci.name)
+                        .withIcon(AllIcons.Nodes.Enum)
                     Kind.Value -> LookupElementBuilder.create(ci.name)
                         .withIcon(AllIcons.Nodes.Field)
                         .let { b -> if (!ci.typeText.isNullOrBlank()) b.withTypeText(ci.typeText, true) else b }
@@ -179,16 +181,16 @@ class LyngCompletionContributor : CompletionContributor() {
                 val inferredClass =
                     guessReturnClassFromMemberCallBeforeMini(mini, text, memberDotPos, imported)
                         ?: guessReceiverClassViaMini(mini, text, memberDotPos, imported)
-                        ?: guessReturnClassFromMemberCallBefore(text, memberDotPos, imported)
-                        ?: guessReturnClassFromTopLevelCallBefore(text, memberDotPos, imported)
-                        ?: guessReturnClassAcrossKnownCallees(text, memberDotPos, imported)
-                        ?: guessReceiverClass(text, memberDotPos, imported)
+                        ?: guessReturnClassFromMemberCallBefore(text, memberDotPos, imported, mini)
+                        ?: guessReturnClassFromTopLevelCallBefore(text, memberDotPos, imported, mini)
+                        ?: guessReturnClassAcrossKnownCallees(text, memberDotPos, imported, mini)
+                        ?: guessReceiverClass(text, memberDotPos, imported, mini)
                 if (!inferredClass.isNullOrBlank()) {
                     val ext = BuiltinDocRegistry.extensionMemberNamesFor(inferredClass)
                     if (DEBUG_COMPLETION) log.info("[LYNG_DEBUG] Post-engine extension check for $inferredClass: ${'$'}{ext}")
                     for (name in ext) {
                         if (existing.contains(name)) continue
-                        val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, inferredClass, name)
+                        val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, inferredClass, name, mini)
                         if (resolved != null) {
                             when (val member = resolved.second) {
                                 is MiniMemberFunDecl -> {
@@ -267,7 +269,8 @@ class LyngCompletionContributor : CompletionContributor() {
                         .withIcon(kindIcon)
                         .withTypeText(typeOf(d.type), true)
                 }
-                else -> LookupElementBuilder.create(name)
+                is MiniEnumDecl -> LookupElementBuilder.create(name)
+                    .withIcon(AllIcons.Nodes.Enum)
             }
             emit(builder)
         }
@@ -294,9 +297,7 @@ class LyngCompletionContributor : CompletionContributor() {
         , sourceText: String,
         mini: MiniScript? = null
         ) {
-            // Ensure modules are seeded in the registry (triggers lazy stdlib build too)
-            for (m in imported) BuiltinDocRegistry.docsForModule(m)
-            val classes = DocLookupUtils.aggregateClasses(imported)
+            val classes = DocLookupUtils.aggregateClasses(imported, mini)
             if (DEBUG_COMPLETION) {
                 val keys = classes.keys.joinToString(", ")
                 log.info("[LYNG_DEBUG] offerMembers: imported=${imported} classes=[${keys}] target=${className}")
@@ -553,32 +554,51 @@ class LyngCompletionContributor : CompletionContributor() {
 
         private fun guessReceiverClassViaMini(mini: MiniScript?, text: String, dotPos: Int, imported: List<String>): String? {
             if (mini == null) return null
-            val ident = previousIdentifierBeforeDot(text, dotPos) ?: return null
-            // 1) Local val/var in the file
-            val valDecl = mini.declarations.filterIsInstance<MiniValDecl>().firstOrNull { it.name == ident }
-            val typeFromVal = valDecl?.type?.let { simpleClassNameOf(it) }
-            if (!typeFromVal.isNullOrBlank()) return typeFromVal
-            // If initializer exists, try to sniff ClassName(
-            val initR = valDecl?.initRange
-            if (initR != null) {
-                val src = mini.range.start.source
-                val s = src.offsetOf(initR.start)
-                val e = src.offsetOf(initR.end).coerceAtMost(text.length)
-                if (s in 0..e && e <= text.length) {
-                    val init = text.substring(s, e)
-                    Regex("([A-Za-z_][A-Za-z0-9_]*)\\s*\\(").find(init)?.let { m ->
-                        val cls = m.groupValues[1]
-                        return cls
-                    }
+            val i = TextCtx.prevNonWs(text, dotPos - 1)
+            if (i < 0) return null
+            val wordRange = TextCtx.wordRangeAt(text, i + 1) ?: return null
+            val ident = text.substring(wordRange.startOffset, wordRange.endOffset)
+
+            // 1) Global declarations in current file (val/var/fun/class/enum)
+            val d = mini.declarations.firstOrNull { it.name == ident }
+            if (d != null) {
+                return when (d) {
+                    is MiniClassDecl -> d.name
+                    is MiniEnumDecl -> d.name
+                    is MiniValDecl -> simpleClassNameOf(d.type)
+                    is MiniFunDecl -> simpleClassNameOf(d.returnType)
                 }
             }
+
             // 2) Parameters in any function (best-effort without scope mapping)
             val paramType = mini.declarations.filterIsInstance<MiniFunDecl>()
                 .asSequence()
                 .flatMap { it.params.asSequence() }
                 .firstOrNull { it.name == ident }?.type
-            val typeFromParam = simpleClassNameOf(paramType)
-            if (!typeFromParam.isNullOrBlank()) return typeFromParam
+            simpleClassNameOf(paramType)?.let { return it }
+
+            // 3) Recursive chaining: Base.ident.
+            val dotBefore = TextCtx.findDotLeft(text, wordRange.startOffset)
+            if (dotBefore != null) {
+                val receiverClass = guessReceiverClassViaMini(mini, text, dotBefore, imported)
+                    ?: guessReceiverClass(text, dotBefore, imported)
+                if (receiverClass != null) {
+                    val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, receiverClass, ident, mini)
+                    if (resolved != null) {
+                        val rt = when (val m = resolved.second) {
+                            is MiniMemberFunDecl -> m.returnType
+                            is MiniMemberValDecl -> m.type
+                            else -> null
+                        }
+                        return simpleClassNameOf(rt)
+                    }
+                }
+            }
+
+            // 4) Check if it's a known class (static access)
+            val classes = DocLookupUtils.aggregateClasses(imported, mini)
+            if (classes.containsKey(ident)) return ident
+
             return null
         }
 
@@ -631,7 +651,7 @@ class LyngCompletionContributor : CompletionContributor() {
                 }
             }
             // Else fallback to registry-based resolution (covers imported classes)
-            return DocLookupUtils.resolveMemberWithInheritance(imported, receiverClass, callee)?.second?.let { m ->
+            return DocLookupUtils.resolveMemberWithInheritance(imported, receiverClass, callee, mini)?.second?.let { m ->
                 val rt = when (m) {
                     is MiniMemberFunDecl -> m.returnType
                     is MiniMemberValDecl -> m.type
@@ -651,7 +671,7 @@ class LyngCompletionContributor : CompletionContributor() {
             val body = text.substring(start, end)
             val map = LinkedHashMap<String, ScannedSig>()
             // fun name(params): Type
-            val funRe = Regex("(?m)^\\s*fun\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)\\s*(?::\\s*([A-Za-z_][A-Za-z0-9_]*))?")
+            val funRe = Regex("^\\s*fun\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)\\s*(?::\\s*([A-Za-z_][A-Za-z0-9_]*))?", RegexOption.MULTILINE)
             for (m in funRe.findAll(body)) {
                 val name = m.groupValues.getOrNull(1) ?: continue
                 val params = m.groupValues.getOrNull(2)?.split(',')?.mapNotNull { it.trim().takeIf { it.isNotEmpty() } } ?: emptyList()
@@ -659,7 +679,7 @@ class LyngCompletionContributor : CompletionContributor() {
                 map[name] = ScannedSig("fun", params, type)
             }
             // val/var name: Type
-            val valRe = Regex("(?m)^\\s*(val|var)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(?::\\s*([A-Za-z_][A-Za-z0-9_]*))?")
+            val valRe = Regex("^\\s*(val|var)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(?::\\s*([A-Za-z_][A-Za-z0-9_]*))?", RegexOption.MULTILINE)
             for (m in valRe.findAll(body)) {
                 val kind = m.groupValues.getOrNull(1) ?: continue
                 val name = m.groupValues.getOrNull(2) ?: continue
@@ -669,9 +689,9 @@ class LyngCompletionContributor : CompletionContributor() {
             return map
         }
 
-        private fun guessReceiverClass(text: String, dotPos: Int, imported: List<String>): String? {
+        private fun guessReceiverClass(text: String, dotPos: Int, imported: List<String>, mini: MiniScript? = null): String? {
             // 1) Try call-based: ClassName(...).
-            DocLookupUtils.guessClassFromCallBefore(text, dotPos, imported)?.let { return it }
+            DocLookupUtils.guessClassFromCallBefore(text, dotPos, imported, mini)?.let { return it }
 
             // 2) Literal heuristics based on the immediate char before '.'
             var i = TextCtx.prevNonWs(text, dotPos - 1)
@@ -706,6 +726,32 @@ class LyngCompletionContributor : CompletionContributor() {
                         }
                     }
                 }
+
+                // If it's an identifier, check if it's a known class (static access) or chain
+                val wordRange = TextCtx.wordRangeAt(text, i + 1)
+                if (wordRange != null) {
+                    val ident = text.substring(wordRange.startOffset, wordRange.endOffset)
+                    val classes = DocLookupUtils.aggregateClasses(imported, mini)
+                    if (classes.containsKey(ident)) return ident
+
+                    // Chaining without MiniAst
+                    val dotBefore = TextCtx.findDotLeft(text, wordRange.startOffset)
+                    if (dotBefore != null) {
+                        val base = guessReceiverClass(text, dotBefore, imported, mini)
+                        if (base != null) {
+                            val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, base, ident, mini)
+                            if (resolved != null) {
+                                val rt = when (val m = resolved.second) {
+                                    is MiniMemberFunDecl -> m.returnType
+                                    is MiniMemberValDecl -> m.type
+                                    else -> null
+                                }
+                                return simpleClassNameOf(rt)
+                            }
+                        }
+                    }
+                }
+
                 // Numeric literal: support decimal, hex (0x..), and scientific notation (1e-3)
                 var j = i
                 var hasDigits = false
@@ -764,7 +810,7 @@ class LyngCompletionContributor : CompletionContributor() {
          * Try to infer the class of the return value of the member call immediately before the dot.
          * Example: `Path(".." ).lines().<caret>` → detects `lines()` on receiver class `Path` and returns `Iterator`.
          */
-        private fun guessReturnClassFromMemberCallBefore(text: String, dotPos: Int, imported: List<String>): String? {
+        private fun guessReturnClassFromMemberCallBefore(text: String, dotPos: Int, imported: List<String>, mini: MiniScript? = null): String? {
             var i = TextCtx.prevNonWs(text, dotPos - 1)
             if (i < 0) return null
             // We expect a call just before the dot, i.e., ')' ... '.'
@@ -795,9 +841,9 @@ class LyngCompletionContributor : CompletionContributor() {
             if (k < 0 || text[k] != '.') return null
             val prevDot = k
             // Infer receiver class at the previous dot
-            val receiverClass = guessReceiverClass(text, prevDot, imported) ?: return null
+            val receiverClass = guessReceiverClass(text, prevDot, imported, mini) ?: return null
             // Resolve the callee as a member of receiver class, including inheritance
-            val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, receiverClass, callee) ?: return null
+            val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, receiverClass, callee, mini) ?: return null
             val member = resolved.second
             val returnType = when (member) {
                 is MiniMemberFunDecl -> member.returnType
@@ -811,7 +857,7 @@ class LyngCompletionContributor : CompletionContributor() {
          * Infer return class of a top-level call right before the dot: e.g., `files().<caret>`.
          * We extract callee name and resolve it among imported modules' top-level functions.
          */
-        private fun guessReturnClassFromTopLevelCallBefore(text: String, dotPos: Int, imported: List<String>): String? {
+        private fun guessReturnClassFromTopLevelCallBefore(text: String, dotPos: Int, imported: List<String>, mini: MiniScript? = null): String? {
             var i = TextCtx.prevNonWs(text, dotPos - 1)
             if (i < 0 || text[i] != ')') return null
             // Walk back to matching '('
@@ -845,6 +891,10 @@ class LyngCompletionContributor : CompletionContributor() {
                 val fn = decls.asSequence().filterIsInstance<MiniFunDecl>().firstOrNull { it.name == callee }
                 if (fn != null) return simpleClassNameOf(fn.returnType)
             }
+            
+            // Also check local declarations
+            mini?.declarations?.filterIsInstance<MiniFunDecl>()?.firstOrNull { it.name == callee }?.let { return simpleClassNameOf(it.returnType) }
+            
             return null
         }
 
@@ -853,7 +903,7 @@ class LyngCompletionContributor : CompletionContributor() {
          * derive its return type using cross-class lookup (Iterable/Iterator/List preference). This ignores the receiver.
          * Example: `something.lines().<caret>` where `something` type is unknown, but `lines()` commonly returns Iterator<String>.
          */
-        private fun guessReturnClassAcrossKnownCallees(text: String, dotPos: Int, imported: List<String>): String? {
+        private fun guessReturnClassAcrossKnownCallees(text: String, dotPos: Int, imported: List<String>, mini: MiniScript? = null): String? {
             var i = TextCtx.prevNonWs(text, dotPos - 1)
             if (i < 0 || text[i] != ')') return null
             // Walk back to matching '('
@@ -877,7 +927,7 @@ class LyngCompletionContributor : CompletionContributor() {
             if (start >= end) return null
             val callee = text.substring(start, end)
             // Try cross-class resolution
-            val resolved = DocLookupUtils.findMemberAcrossClasses(imported, callee) ?: return null
+            val resolved = DocLookupUtils.findMemberAcrossClasses(imported, callee, mini) ?: return null
             val member = resolved.second
             val returnType = when (member) {
                 is MiniMemberFunDecl -> member.returnType
@@ -949,7 +999,7 @@ class LyngCompletionContributor : CompletionContributor() {
         // Lenient textual import extractor (duplicated from QuickDoc privately)
         private fun extractImportsFromText(text: String): List<String> {
             val result = LinkedHashSet<String>()
-            val re = Regex("(?m)^\\s*import\\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)*)")
+            val re = Regex("^\\s*import\\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)*)", RegexOption.MULTILINE)
             re.findAll(text).forEach { m ->
                 val raw = m.groupValues.getOrNull(1)?.trim().orEmpty()
                 if (raw.isNotEmpty()) {

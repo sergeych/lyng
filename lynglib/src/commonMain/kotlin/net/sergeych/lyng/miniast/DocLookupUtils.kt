@@ -1,4 +1,21 @@
 /*
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+/*
  * Shared QuickDoc lookup helpers reusable outside the IDEA plugin.
  */
 package net.sergeych.lyng.miniast
@@ -24,13 +41,30 @@ object DocLookupUtils {
         return result.toList()
     }
 
-    fun aggregateClasses(importedModules: List<String>): Map<String, MiniClassDecl> {
+    fun aggregateClasses(importedModules: List<String>, localMini: MiniScript? = null): Map<String, MiniClassDecl> {
         // Collect all class decls by name across modules, then merge duplicates by unioning members and bases.
         val buckets = LinkedHashMap<String, MutableList<MiniClassDecl>>()
         for (mod in importedModules) {
             val docs = BuiltinDocRegistry.docsForModule(mod)
             for (cls in docs.filterIsInstance<MiniClassDecl>()) {
                 buckets.getOrPut(cls.name) { mutableListOf() }.add(cls)
+            }
+            for (en in docs.filterIsInstance<MiniEnumDecl>()) {
+                buckets.getOrPut(en.name) { mutableListOf() }.add(en.toSyntheticClass())
+            }
+        }
+        
+        // Add local declarations
+        localMini?.declarations?.forEach { d ->
+            when (d) {
+                is MiniClassDecl -> {
+                    buckets.getOrPut(d.name) { mutableListOf() }.add(d)
+                }
+                is MiniEnumDecl -> {
+                    val syn = d.toSyntheticClass()
+                    buckets.getOrPut(d.name) { mutableListOf() }.add(syn)
+                }
+                else -> {}
             }
         }
 
@@ -72,8 +106,8 @@ object DocLookupUtils {
         return result
     }
 
-    fun resolveMemberWithInheritance(importedModules: List<String>, className: String, member: String): Pair<String, MiniMemberDecl>? {
-        val classes = aggregateClasses(importedModules)
+    fun resolveMemberWithInheritance(importedModules: List<String>, className: String, member: String, localMini: MiniScript? = null): Pair<String, MiniMemberDecl>? {
+        val classes = aggregateClasses(importedModules, localMini)
         fun dfs(name: String, visited: MutableSet<String>): Pair<String, MiniMemberDecl>? {
             val cls = classes[name] ?: return null
             cls.members.firstOrNull { it.name == member }?.let { return name to it }
@@ -86,12 +120,12 @@ object DocLookupUtils {
         return dfs(className, mutableSetOf())
     }
 
-    fun findMemberAcrossClasses(importedModules: List<String>, member: String): Pair<String, MiniMemberDecl>? {
-        val classes = aggregateClasses(importedModules)
+    fun findMemberAcrossClasses(importedModules: List<String>, member: String, localMini: MiniScript? = null): Pair<String, MiniMemberDecl>? {
+        val classes = aggregateClasses(importedModules, localMini)
         // Preferred order for ambiguous common ops
         val preference = listOf("Iterable", "Iterator", "List")
         for (name in preference) {
-            resolveMemberWithInheritance(importedModules, name, member)?.let { return it }
+            resolveMemberWithInheritance(importedModules, name, member, localMini)?.let { return it }
         }
         for ((name, cls) in classes) {
             cls.members.firstOrNull { it.name == member }?.let { return name to it }
@@ -104,7 +138,7 @@ object DocLookupUtils {
      * We walk left from the dot, find a matching `)` and then the identifier immediately before the `(`.
      * If that identifier matches a known class in any of the imported modules, return it.
      */
-    fun guessClassFromCallBefore(text: String, dotPos: Int, importedModules: List<String>): String? {
+    fun guessClassFromCallBefore(text: String, dotPos: Int, importedModules: List<String>, localMini: MiniScript? = null): String? {
         var i = (dotPos - 1).coerceAtLeast(0)
         // Skip spaces
         while (i >= 0 && text[i].isWhitespace()) i++
@@ -134,9 +168,32 @@ object DocLookupUtils {
         if (start >= end) return null
         val name = text.substring(start, end)
         // Validate against imported classes
-        val classes = aggregateClasses(importedModules)
+        val classes = aggregateClasses(importedModules, localMini)
         return if (classes.containsKey(name)) name else null
     }
 
     private fun isIdentChar(c: Char): Boolean = c == '_' || c.isLetterOrDigit()
+
+    private fun MiniEnumDecl.toSyntheticClass(): MiniClassDecl {
+        val staticMembers = mutableListOf<MiniMemberDecl>()
+        // entries: List
+        staticMembers.add(MiniMemberValDecl(range, "entries", false, null, null, nameStart, isStatic = true))
+        // valueOf(name: String): Enum
+        staticMembers.add(MiniMemberFunDecl(range, "valueOf", listOf(MiniParam("name", null, nameStart)), null, null, nameStart, isStatic = true))
+
+        // Also add each entry as a static member (const)
+        for (entry in entries) {
+            staticMembers.add(MiniMemberValDecl(range, entry, false, MiniTypeName(range, listOf(MiniTypeName.Segment(name, range)), false), null, nameStart, isStatic = true))
+        }
+
+        return MiniClassDecl(
+            range = range,
+            name = name,
+            bases = listOf("Enum"),
+            bodyRange = null,
+            doc = doc,
+            nameStart = nameStart,
+            members = staticMembers
+        )
+    }
 }
