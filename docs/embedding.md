@@ -109,7 +109,31 @@ scope.eval("val y = inc(41); log('Answer:', y)")
 
 You can register multiple names (aliases) at once: `addFn<ObjInt>("inc", "increment") { ... }`.
 
-### 5) Add Kotlin‑backed properties
+### 5) Add Kotlin‑backed fields
+
+If you need a simple field (with a value) instead of a computed property, use `createField`. This adds a field to the class that will be present in all its instances.
+
+```kotlin
+val myClass = ObjClass("MyClass")
+
+// Add a read-only field (constant)
+myClass.createField("version", ObjString("1.0.0"), isMutable = false)
+
+// Add a mutable field with an initial value
+myClass.createField("count", ObjInt(0), isMutable = true)
+
+scope.addConst("MyClass", myClass)
+```
+
+In Lyng:
+```lyng
+val instance = MyClass()
+println(instance.version) // -> "1.0.0"
+instance.count = 5
+println(instance.count)   // -> 5
+```
+
+### 6) Add Kotlin‑backed properties
 
 Properties in Lyng are pure accessors (getters and setters) and do not have automatic backing fields. You can add them to a class using `addProperty`.
 
@@ -133,14 +157,14 @@ scope.addConst("MyClass", myClass)
 ```
 
 Usage in Lyng:
-```kotlin
+```lyng
 val instance = MyClass()
 println(instance.value) // -> 10
 instance.value = 42
 println(instance.value) // -> 42
 ```
 
-### 6) Read variable values back in Kotlin
+### 7) Read variable values back in Kotlin
 
 The simplest approach: evaluate an expression that yields the value and convert it.
 
@@ -155,7 +179,7 @@ val kotlinName = scope.eval("name").toKotlin(scope) // -> "Lyng rocks!"
 
 Advanced: you can also grab a variable record directly via `scope.get(name)` and work with its `Obj` value, but evaluating `"name"` is often clearer and enforces Lyng semantics consistently.
 
-### 7) Execute scripts with parameters; call Lyng functions from Kotlin
+### 8) Execute scripts with parameters; call Lyng functions from Kotlin
 
 There are two convenient patterns.
 
@@ -188,7 +212,7 @@ val result = resultObj.toKotlin(scope) // -> 42
 
 If you need to pass complex data (lists, maps), construct the corresponding Lyng `Obj` types (`ObjList`, `ObjMap`, etc.) and pass them in `Arguments`.
 
-### 8) Create your own packages and import them in Lyng
+### 9) Create your own packages and import them in Lyng
 
 Lyng supports packages that are imported from scripts. You can register packages programmatically via `ImportManager` or by providing source texts that declare `package ...`.
 
@@ -243,7 +267,7 @@ val s = scope.eval("s").toKotlin(scope) // -> 144
 
 You can also register from parsed `Source` instances via `addSourcePackages(source)`.
 
-### 9) Executing from files, security, and isolation
+### 10) Executing from files, security, and isolation
 
 - To run code from a file, read it and pass to `scope.eval(text)` or compile with `Compiler.compile(Source(fileName, text))`.
 - `ImportManager` takes an optional `SecurityManager` if you need to restrict what packages or operations are available. By default, `Script.defaultImportManager` allows everything suitable for embedded use; clamp it down in sandboxed environments.
@@ -254,7 +278,7 @@ You can also register from parsed `Source` instances via `addSourcePackages(sour
 val isolated = net.sergeych.lyng.Scope.new()
 ```
 
-### 10) Tips and troubleshooting
+### 11) Tips and troubleshooting
 
 - All values that cross the boundary must be Lyng `Obj` instances. Convert Kotlin values explicitly (e.g., `ObjInt`, `ObjReal`, `ObjString`).
 - Use `toKotlin(scope)` to get Kotlin values back. Collections convert to Kotlin collections recursively.
