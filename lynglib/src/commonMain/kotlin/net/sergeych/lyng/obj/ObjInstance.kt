@@ -97,8 +97,8 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             val decl = f.declaringClass
             if (scope.thisObj !== this || scope.currentClassCtx == null) {
                 val caller = scope.currentClassCtx
-                if (!canAccessMember(f.visibility, decl, caller))
-                    ObjIllegalAssignmentException(
+                if (!canAccessMember(f.effectiveWriteVisibility, decl, caller))
+                    ObjAccessException(
                         scope,
                         "can't assign to field $name (declared in ${decl?.className ?: "?"})"
                     ).raise()
@@ -131,8 +131,8 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             }
             if (scope.thisObj !== this || scope.currentClassCtx == null) {
                 val caller = scope.currentClassCtx
-                if (!canAccessMember(rec.visibility, declaring, caller))
-                    ObjIllegalAssignmentException(
+                if (!canAccessMember(rec.effectiveWriteVisibility, declaring, caller))
+                    ObjAccessException(
                         scope,
                         "can't assign to field $name (declared in ${declaring?.className ?: "?"})"
                     ).raise()
@@ -350,8 +350,8 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
         instance.instanceScope.objects[mangled]?.let { f ->
             val decl = f.declaringClass ?: startClass
             val caller = scope.currentClassCtx
-            if (!canAccessMember(f.visibility, decl, caller))
-                ObjIllegalAssignmentException(
+            if (!canAccessMember(f.effectiveWriteVisibility, decl, caller))
+                ObjAccessException(
                     scope,
                     "can't assign to field $name (declared in ${decl.className})"
                 ).raise()
@@ -364,8 +364,8 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
             instance.instanceScope[name]?.let { f ->
                 val decl = f.declaringClass ?: instance.objClass.findDeclaringClassOf(name)
                 val caller = scope.currentClassCtx
-                if (!canAccessMember(f.visibility, decl, caller))
-                    ObjIllegalAssignmentException(
+                if (!canAccessMember(f.effectiveWriteVisibility, decl, caller))
+                    ObjAccessException(
                         scope,
                         "can't assign to field $name (declared in ${decl?.className ?: "?"})"
                     ).raise()
@@ -377,8 +377,8 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
         val r = memberFromAncestor(name) ?: scope.raiseError("no such field: $name")
         val decl = r.declaringClass ?: startClass
         val caller = scope.currentClassCtx
-        if (!canAccessMember(r.visibility, decl, caller))
-            ObjIllegalAssignmentException(scope, "can't assign to field $name (declared in ${decl.className})").raise()
+        if (!canAccessMember(r.effectiveWriteVisibility, decl, caller))
+            ObjAccessException(scope, "can't assign to field $name (declared in ${decl.className})").raise()
         if (!r.isMutable) scope.raiseError("can't assign to read-only field: $name")
         if (r.value.assign(scope, newValue) == null) r.value = newValue
     }

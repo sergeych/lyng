@@ -513,24 +513,32 @@ class Compiler(
                     // there could be terminal operators or keywords:// variable to read or like
                     when (t.value) {
                         in stopKeywords -> {
-                            if (operand != null) throw ScriptError(t.pos, "unexpected keyword")
-                            // Allow certain statement-like constructs to act as expressions
-                            // when they appear in expression position (e.g., `if (...) ... else ...`).
-                            // Other keywords should be handled by the outer statement parser.
-                            when (t.value) {
-                                "if" -> {
-                                    val s = parseIfStatement()
-                                    operand = StatementRef(s)
-                                }
-                                "when" -> {
-                                    val s = parseWhenStatement()
-                                    operand = StatementRef(s)
-                                }
-                                else -> {
-                                    // Do not consume the keyword as part of a term; backtrack
-                                    // and return null so outer parser handles it.
-                                    cc.previous()
-                                    return null
+                            if (t.value == "init" && !(codeContexts.lastOrNull() is CodeContext.ClassBody && cc.peekNextNonWhitespace().type == Token.Type.LBRACE)) {
+                                // Soft keyword: init is only a keyword in class body when followed by {
+                                cc.previous()
+                                operand = parseAccessor()
+                            } else {
+                                if (operand != null) throw ScriptError(t.pos, "unexpected keyword")
+                                // Allow certain statement-like constructs to act as expressions
+                                // when they appear in expression position (e.g., `if (...) ... else ...`).
+                                // Other keywords should be handled by the outer statement parser.
+                                when (t.value) {
+                                    "if" -> {
+                                        val s = parseIfStatement()
+                                        operand = StatementRef(s)
+                                    }
+
+                                    "when" -> {
+                                        val s = parseWhenStatement()
+                                        operand = StatementRef(s)
+                                    }
+
+                                    else -> {
+                                        // Do not consume the keyword as part of a term; backtrack
+                                        // and return null so outer parser handles it.
+                                        cc.previous()
+                                        return null
+                                    }
                                 }
                             }
                         }
@@ -1388,7 +1396,7 @@ class Compiler(
         }
 
         "init" -> {
-            if (codeContexts.lastOrNull() is CodeContext.ClassBody) {
+            if (codeContexts.lastOrNull() is CodeContext.ClassBody && cc.peekNextNonWhitespace().type == Token.Type.LBRACE) {
                 val block = parseBlock()
                 lastParsedBlockRange?.let { range ->
                     miniSink?.onInitDecl(MiniInitDecl(MiniRange(id.pos, range.end), id.pos))
@@ -2717,7 +2725,7 @@ class Compiler(
             cc.restorePos(markBeforeEq)
             cc.skipWsTokens()
             val next = cc.peekNextNonWhitespace()
-            if (next.isId("get") || next.isId("set")) {
+            if (next.isId("get") || next.isId("set") || next.isId("private") || next.isId("protected")) {
                 isProperty = true
                 cc.restorePos(markBeforeEq)
                 cc.skipWsTokens()
@@ -2780,8 +2788,8 @@ class Compiler(
 //            if (isDelegate) throw ScriptError(start, "static delegates are not yet implemented")
             currentInitScope += statement {
                 val initValue = initialExpression?.execute(this)?.byValueCopy() ?: ObjNull
-                (thisObj as ObjClass).createClassField(name, initValue, isMutable, visibility, pos)
-                addItem(name, isMutable, initValue, visibility, ObjRecord.Type.Field)
+                (thisObj as ObjClass).createClassField(name, initValue, isMutable, visibility, null, pos)
+                addItem(name, isMutable, initValue, visibility, null, ObjRecord.Type.Field)
                 ObjVoid
             }
             return NopStatement
@@ -2790,11 +2798,11 @@ class Compiler(
         // Check for accessors if it is a class member
         var getter: Statement? = null
         var setter: Statement? = null
+        var setterVisibility: Visibility? = null
         if (declaringClassNameCaptured != null || extTypeName != null) {
             while (true) {
-                val t = cc.peekNextNonWhitespace()
+                val t = cc.skipWsTokens()
                 if (t.isId("get")) {
-                    cc.skipWsTokens()
                     cc.next() // consume 'get'
                     cc.requireToken(Token.Type.LPAREN)
                     cc.requireToken(Token.Type.RPAREN)
@@ -2810,7 +2818,6 @@ class Compiler(
                         throw ScriptError(cc.current().pos, "Expected { or = after get()")
                     }
                 } else if (t.isId("set")) {
-                    cc.skipWsTokens()
                     cc.next() // consume 'set'
                     cc.requireToken(Token.Type.LPAREN)
                     val setArg = cc.requireToken(Token.Type.ID, "Expected setter argument name")
@@ -2836,6 +2843,46 @@ class Compiler(
                     } else {
                         throw ScriptError(cc.current().pos, "Expected { or = after set(...)")
                     }
+                } else if (t.isId("private") || t.isId("protected")) {
+                    val vis = if (t.isId("private")) Visibility.Private else Visibility.Protected
+                    val mark = cc.savePos()
+                    cc.next() // consume modifier
+                    if (cc.skipWsTokens().isId("set")) {
+                        cc.next() // consume 'set'
+                        setterVisibility = vis
+                        if (cc.skipWsTokens().type == Token.Type.LPAREN) {
+                            cc.next() // consume '('
+                            val setArg = cc.requireToken(Token.Type.ID, "Expected setter argument name")
+                            cc.requireToken(Token.Type.RPAREN)
+                            setter = if (cc.peekNextNonWhitespace().type == Token.Type.LBRACE) {
+                                cc.skipWsTokens()
+                                val body = parseBlock()
+                                statement(body.pos) { scope ->
+                                    val value = scope.args.list.firstOrNull() ?: ObjNull
+                                    scope.addItem(setArg.value, true, value, recordType = ObjRecord.Type.Argument)
+                                    body.execute(scope)
+                                }
+                            } else if (cc.peekNextNonWhitespace().type == Token.Type.ASSIGN) {
+                                cc.skipWsTokens()
+                                cc.next() // consume '='
+                                val expr = parseExpression() ?: throw ScriptError(
+                                    cc.current().pos,
+                                    "Expected setter expression"
+                                )
+                                val st = (expr as? Statement) ?: statement(expr.pos) { s -> expr.execute(s) }
+                                statement(st.pos) { scope ->
+                                    val value = scope.args.list.firstOrNull() ?: ObjNull
+                                    scope.addItem(setArg.value, true, value, recordType = ObjRecord.Type.Argument)
+                                    st.execute(scope)
+                                }
+                            } else {
+                                throw ScriptError(cc.current().pos, "Expected { or = after set(...)")
+                            }
+                        }
+                    } else {
+                        cc.restorePos(mark)
+                        break
+                    }
                 } else break
             }
             if (getter != null || setter != null) {
@@ -2844,11 +2891,13 @@ class Compiler(
                         throw ScriptError(start, "var property must have both get() and set()")
                     }
                 } else {
-                    if (setter != null)
-                        throw ScriptError(start, "val property cannot have a setter (name: $name)")
+                    if (setter != null || setterVisibility != null)
+                        throw ScriptError(start, "val property cannot have a setter or restricted visibility set (name: $name)")
                     if (getter == null)
                         throw ScriptError(start, "val property with accessors must have a getter (name: $name)")
                 }
+            } else if (setterVisibility != null && !isMutable) {
+                throw ScriptError(start, "val field cannot have restricted visibility set (name: $name)")
             }
         }
 
@@ -2865,7 +2914,7 @@ class Compiler(
                 val type = context[extTypeName]?.value ?: context.raiseSymbolNotFound("class $extTypeName not found")
                 if (type !is ObjClass) context.raiseClassCastError("$extTypeName is not the class instance")
 
-                context.addExtension(type, name, ObjRecord(prop, isMutable = false, visibility = visibility, declaringClass = null, type = ObjRecord.Type.Property))
+                context.addExtension(type, name, ObjRecord(prop, isMutable = false, visibility = visibility, writeVisibility = setterVisibility, declaringClass = null, type = ObjRecord.Type.Property))
 
                 return@statement prop
             }
@@ -2899,6 +2948,7 @@ class Compiler(
                             isMutable,
                             prop,
                             visibility,
+                            setterVisibility,
                             recordType = ObjRecord.Type.Property
                         )
                         ObjVoid
@@ -2906,7 +2956,7 @@ class Compiler(
                     ObjVoid
                 } else {
                     // We are in instance scope already: perform initialization immediately
-                    context.addItem(storageName, isMutable, prop, visibility, recordType = ObjRecord.Type.Property)
+                    context.addItem(storageName, isMutable, prop, visibility, setterVisibility, recordType = ObjRecord.Type.Property)
                     prop
                 }
             } else {
@@ -2922,7 +2972,7 @@ class Compiler(
                                 val initValue =
                                     initialExpression?.execute(scp)?.byValueCopy() ?: if (isLateInitVal) ObjUnset else ObjNull
                                 // Preserve mutability of declaration: do NOT use addOrUpdateItem here, as it creates mutable records
-                                scp.addItem(storageName, isMutable, initValue, visibility, recordType = ObjRecord.Type.Field)
+                                scp.addItem(storageName, isMutable, initValue, visibility, setterVisibility, recordType = ObjRecord.Type.Field)
                                 ObjVoid
                             }
                             cls.instanceInitializers += initStmt
@@ -2932,7 +2982,7 @@ class Compiler(
                             val initValue =
                                 initialExpression?.execute(context)?.byValueCopy() ?: if (isLateInitVal) ObjUnset else ObjNull
                             // Preserve mutability of declaration: create record with correct mutability
-                            context.addItem(storageName, isMutable, initValue, visibility, recordType = ObjRecord.Type.Field)
+                            context.addItem(storageName, isMutable, initValue, visibility, setterVisibility, recordType = ObjRecord.Type.Field)
                             initValue
                         }
                     } else {
@@ -3243,7 +3293,10 @@ class Compiler(
          * The keywords that stop processing of expression term
          */
         val stopKeywords =
-            setOf("do", "break", "continue", "return", "if", "when", "do", "while", "for", "class")
+            setOf(
+                "break", "continue", "return", "if", "when", "do", "while", "for", "class",
+                "private", "protected", "val", "var", "fun", "fn", "static", "init", "enum"
+            )
     }
 }
 

@@ -11,7 +11,22 @@
   - Integration: Updated TextMate grammar and IntelliJ plugin (highlighting + keywords).
   - Documentation: New "Properties" section in `docs/OOP.md`.
 
-- Docs: Scopes and Closures guidance
+- Language: Restricted Setter Visibility
+  - Support for `private set` and `protected set` modifiers on `var` fields and properties.
+  - Allows members to be publicly readable but only writable from within the declaring class or its subclasses.
+  - Enforcement at runtime: throws `AccessException` on unauthorized writes.
+  - Supported only for declarations in class bodies (fields and properties).
+  - Documentation: New "Restricted Setter Visibility" section in `docs/OOP.md`.
+
+- Language: Late-initialized `val` fields in classes
+  - Support for declaring `val` without an immediate initializer in class bodies.
+  - Compulsory initialization: every late-init `val` must be assigned at least once within the class body or an `init` block.
+  - Write-once enforcement: assigning to a `val` is allowed only if its current value is `Unset`.
+  - Access protection: reading a late-init `val` before it is assigned returns the `Unset` singleton; using `Unset` for most operations throws an `UnsetException`.
+  - Extension properties do not support late-init.
+  - Documentation: New "Late-initialized `val` fields" and "The `Unset` singleton" sections in `docs/OOP.md`.
+
+- Docs: OOP improvements
   - New page: `docs/scopes_and_closures.md` detailing `ClosureScope` resolution order, recursion‑safe helpers (`chainLookupIgnoreClosure`, `chainLookupWithMembers`, `baseGetIgnoreClosure`), cycle prevention, and capturing lexical environments for callbacks (`snapshotForClosure`).
   - Updated: `docs/advanced_topics.md` (link to the new page), `docs/parallelism.md` (closures in `launch`/`flow`), `docs/OOP.md` (visibility from closures with preserved `currentClassCtx`), `docs/exceptions_handling.md` (compatibility alias `SymbolNotFound`).
   - Tutorial: added quick link to Scopes and Closures.

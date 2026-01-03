@@ -432,6 +432,69 @@ Are declared with var
     assert( p.isSpecial == true )
     >>> void
 
+### Restricted Setter Visibility
+
+You can restrict the visibility of a `var` field's or property's setter by using `private set` or `protected set` modifiers. This allows the member to be publicly readable but only writable from within the class or its subclasses.
+
+#### On Fields
+
+```kotlin
+class SecretCounter {
+    var count = 0
+        private set // Can be read anywhere, but written only in SecretCounter
+        
+    fun increment() { count++ }
+}
+
+val c = SecretCounter()
+println(c.count) // OK
+c.count = 10     // Throws AccessException
+c.increment()    // OK
+```
+
+#### On Properties
+
+You can also apply restricted visibility to custom property setters:
+
+```kotlin
+class Person(private var _age: Int) {
+    var age
+        get() = _age
+        private set(v) { if (v >= 0) _age = v }
+}
+```
+
+#### Protected Setters and Inheritance
+
+A `protected set` allows subclasses to modify a field that is otherwise read-only to the public:
+
+```kotlin
+class Base {
+    var state = "initial"
+        protected set
+}
+
+class Derived : Base() {
+    fun changeState(newVal) {
+        state = newVal // OK: protected access from subclass
+    }
+}
+
+val d = Derived()
+println(d.state) // OK: "initial"
+d.changeState("updated")
+println(d.state) // OK: "updated"
+d.state = "bad"  // Throws AccessException: public write not allowed
+```
+
+### Key Rules and Limitations
+
+- **Only for `var`**: Restricted setter visibility cannot be used with `val` declarations, as they are inherently read-only. Attempting to use it with `val` results in a syntax error.
+- **Class Body Only**: These modifiers can only be used on members declared within the class body. They are not supported for primary constructor parameters.
+- **`private set`**: The setter is only accessible within the same class context (specifically, when `this` is an instance of that class).
+- **`protected set`**: The setter is accessible within the declaring class and all its transitive subclasses.
+- **Multiple Inheritance**: In MI scenarios, visibility is checked against the class that actually declared the member. Qualified access (e.g., `this@Base.field = value`) also respects restricted setter visibility.
+
 ### Private fields
 
 Private fields are visible only _inside the class instance_:

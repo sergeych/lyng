@@ -345,6 +345,7 @@ open class ObjClass(
         initialValue: Obj,
         isMutable: Boolean = false,
         visibility: Visibility = Visibility.Public,
+        writeVisibility: Visibility? = null,
         pos: Pos = Pos.builtIn,
         declaringClass: ObjClass? = this
     ) {
@@ -353,7 +354,7 @@ open class ObjClass(
         if (existingInSelf != null && existingInSelf.isMutable == false)
             throw ScriptError(pos, "$name is already defined in $objClass")
         // Install/override in this class
-        members[name] = ObjRecord(initialValue, isMutable, visibility, declaringClass = declaringClass)
+        members[name] = ObjRecord(initialValue, isMutable, visibility, writeVisibility, declaringClass = declaringClass)
         // Structural change: bump layout version for PIC invalidation
         layoutVersion += 1
     }
@@ -368,13 +369,14 @@ open class ObjClass(
         initialValue: Obj,
         isMutable: Boolean = false,
         visibility: Visibility = Visibility.Public,
+        writeVisibility: Visibility? = null,
         pos: Pos = Pos.builtIn
     ) {
         initClassScope()
         val existing = classScope!!.objects[name]
         if (existing != null)
             throw ScriptError(pos, "$name is already defined in $objClass or one of its supertypes")
-        classScope!!.addItem(name, isMutable, initialValue, visibility)
+        classScope!!.addItem(name, isMutable, initialValue, visibility, writeVisibility)
         // Structural change: bump layout version for PIC invalidation
         layoutVersion += 1
     }
@@ -383,11 +385,12 @@ open class ObjClass(
         name: String,
         isOpen: Boolean = false,
         visibility: Visibility = Visibility.Public,
+        writeVisibility: Visibility? = null,
         declaringClass: ObjClass? = this,
         code: suspend Scope.() -> Obj
     ) {
         val stmt = statement { code() }
-        createField(name, stmt, isOpen, visibility, Pos.builtIn, declaringClass)
+        createField(name, stmt, isOpen, visibility, writeVisibility, Pos.builtIn, declaringClass)
     }
 
     fun addConst(name: String, value: Obj) = createField(name, value, isMutable = false)
@@ -397,12 +400,13 @@ open class ObjClass(
         getter: (suspend Scope.() -> Obj)? = null,
         setter: (suspend Scope.(Obj) -> Unit)? = null,
         visibility: Visibility = Visibility.Public,
+        writeVisibility: Visibility? = null,
         declaringClass: ObjClass? = this
     ) {
         val g = getter?.let { statement { it() } }
         val s = setter?.let { statement { it(requiredArg(0)); ObjVoid } }
         val prop = ObjProperty(name, g, s)
-        members[name] = ObjRecord(prop, false, visibility, declaringClass, type = ObjRecord.Type.Property)
+        members[name] = ObjRecord(prop, false, visibility, writeVisibility, declaringClass, type = ObjRecord.Type.Property)
         layoutVersion += 1
     }
 

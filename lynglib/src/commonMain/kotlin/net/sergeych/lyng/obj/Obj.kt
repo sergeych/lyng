@@ -416,7 +416,7 @@ open class Obj {
 
         val decl = field.declaringClass
         val caller = scope.currentClassCtx
-        if (!canAccessMember(field.visibility, decl, caller))
+        if (!canAccessMember(field.effectiveWriteVisibility, decl, caller))
             scope.raiseError(ObjAccessException(scope, "can't assign field ${name}: not visible (declared in ${decl?.className ?: "?"}, caller ${caller?.className ?: "?"})"))
         if (field.value is ObjProperty) {
             (field.value as ObjProperty).callSetter(scope, this, newValue, decl)

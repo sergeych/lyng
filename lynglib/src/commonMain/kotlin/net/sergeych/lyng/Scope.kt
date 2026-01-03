@@ -434,6 +434,7 @@ open class Scope(
         name: String,
         value: Obj,
         visibility: Visibility = Visibility.Public,
+        writeVisibility: Visibility? = null,
         recordType: ObjRecord.Type = ObjRecord.Type.Other
     ): ObjRecord =
         objects[name]?.let {
@@ -448,17 +449,18 @@ open class Scope(
                 callScope.localBindings[name] = it
             }
             it
-        } ?: addItem(name, true, value, visibility, recordType)
+        } ?: addItem(name, true, value, visibility, writeVisibility, recordType)
 
     fun addItem(
         name: String,
         isMutable: Boolean,
         value: Obj,
         visibility: Visibility = Visibility.Public,
+        writeVisibility: Visibility? = null,
         recordType: ObjRecord.Type = ObjRecord.Type.Other,
         declaringClass: net.sergeych.lyng.obj.ObjClass? = currentClassCtx
     ): ObjRecord {
-        val rec = ObjRecord(value, isMutable, visibility, declaringClass = declaringClass, type = recordType)
+        val rec = ObjRecord(value, isMutable, visibility, writeVisibility, declaringClass = declaringClass, type = recordType)
         objects[name] = rec
         // Index this binding within the current frame to help resolve locals across suspension
         localBindings[name] = rec

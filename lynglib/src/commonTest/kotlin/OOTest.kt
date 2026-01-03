@@ -465,4 +465,54 @@ class OOTest {
             AccessBefore()
         """.trimIndent())
     }
+
+    @Test
+    fun testPrivateSet() = runTest {
+        eval("""
+            class A {
+                var y = 100
+                    private set
+                fun setValue(newValue) { y = newValue }
+            }
+            assertEquals(100, A().y)
+            assertThrows(AccessException) { A().y = 200 }
+            val a = A()
+            a.setValue(200)
+            assertEquals(200, a.y)
+            
+            class B(initial) {
+                var y = initial
+                    protected set
+            }
+            class C(initial) : B(initial) {
+                fun setBValue(v) { y = v }
+            }
+            val c = C(10)
+            assertEquals(10, c.y)
+            assertThrows(AccessException) { c.y = 20 }
+            c.setBValue(30)
+            assertEquals(30, c.y)
+            
+            class D {
+                private var _y = 0
+                var y 
+                    get() = _y
+                    private set(v) { _y = v }
+                fun setY(v) { y = v }
+            }
+            val d = D()
+            assertEquals(0, d.y)
+            assertThrows(AccessException) { d.y = 10 }
+            d.setY(20)
+            assertEquals(20, d.y)
+        """)
+    }
+
+    @Test
+    fun testValPrivateSetError() = runTest {
+        assertFails {
+            eval("class E { val x = 1 private set }")
+        }
+    }
+
 }
