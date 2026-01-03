@@ -113,6 +113,15 @@ object Binder {
                 symbols += fieldSym
                 classes.last().fields += fieldSym.id
             }
+            // Class fields (val/var in class body, if any are reported here)
+            for (cf in d.classFields) {
+                val fs = source.offsetOf(cf.nameStart)
+                val fe = fs + cf.name.length
+                val kind = if (cf.mutable) SymbolKind.Variable else SymbolKind.Value
+                val fieldSym = Symbol(nextId++, cf.name, kind, fs, fe, containerId = sym.id)
+                symbols += fieldSym
+                classes.last().fields += fieldSym.id
+            }
         }
 
         // Second pass: functions and top-level/class vals/vars

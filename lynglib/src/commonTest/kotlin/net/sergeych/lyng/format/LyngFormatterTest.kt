@@ -730,4 +730,76 @@ class LyngFormatterTest {
 
         assertEquals(expected, formatted)
     }
+
+    @Test
+    fun privateSet_indentation() {
+        val src = """
+            class A {
+                var x = 1
+                private set
+            }
+        """.trimIndent()
+
+        // What we expect: private set should be indented relative to the property
+        val expected = """
+            class A {
+                var x = 1
+                    private set
+            }
+        """.trimIndent()
+
+        val cfg = LyngFormatConfig(indentSize = 4, continuationIndentSize = 4)
+        val out = LyngFormatter.reindent(src, cfg)
+        assertEquals(expected, out)
+    }
+
+    @Test
+    fun propertyAccessors_indentation() {
+        val src = """
+            class A {
+                var x
+                get() = 1
+                private set(v) {
+                _x = v
+                }
+            }
+        """.trimIndent()
+
+        val expected = """
+            class A {
+                var x
+                    get() = 1
+                    private set(v) {
+                        _x = v
+                    }
+            }
+        """.trimIndent()
+
+        val cfg = LyngFormatConfig(indentSize = 4, continuationIndentSize = 4)
+        val out = LyngFormatter.reindent(src, cfg)
+        assertEquals(expected, out)
+    }
+
+    @Test
+    fun nestedAwaitingIndentation() {
+        val src = """
+            if (cond)
+            if (other)
+            fun f() {
+            stmt
+            }
+        """.trimIndent()
+
+        val expected = """
+            if (cond)
+                if (other)
+                    fun f() {
+                        stmt
+                    }
+        """.trimIndent()
+
+        val cfg = LyngFormatConfig(indentSize = 4, continuationIndentSize = 4)
+        val out = LyngFormatter.reindent(src, cfg)
+        assertEquals(expected, out)
+    }
 }

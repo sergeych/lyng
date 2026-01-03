@@ -24,6 +24,24 @@ package net.sergeych.lyng.format
  */
 object LyngFormatter {
 
+    private fun startsWithWord(s: String, w: String): Boolean =
+        s.startsWith(w) && s.getOrNull(w.length)?.let { !it.isLetterOrDigit() && it != '_' } != false
+
+    private fun isPropertyAccessor(s: String): Boolean {
+        val t = s.trim()
+        if (t.isEmpty()) return false
+        if (startsWithWord(t, "get") || startsWithWord(t, "set")) return true
+        if (startsWithWord(t, "private")) {
+            val rest = t.substring("private".length).trimStart()
+            if (startsWithWord(rest, "set")) return true
+        }
+        if (startsWithWord(t, "protected")) {
+            val rest = t.substring("protected".length).trimStart()
+            if (startsWithWord(rest, "set")) return true
+        }
+        return false
+    }
+
     /** Returns the input with indentation recomputed from scratch, line by line. */
     fun reindent(text: String, config: LyngFormatConfig = LyngFormatConfig()): String {
         // Normalize tabs to spaces globally before any transformation; results must contain no tabs
@@ -35,6 +53,7 @@ object LyngFormatter {
         var bracketBalance = 0
         var prevBracketContinuation = false
         var inBlockComment = false
+        val extraIndents = mutableListOf<Int>()
         // We don't keep per-"[" base alignment; continuation rules define alignment.
 
         fun updateBalances(ch: Char) {
@@ -52,7 +71,7 @@ object LyngFormatter {
             // Always produce spaces; tabs are not allowed in resulting code
             " ".repeat(level * config.indentSize + continuation)
 
-        var awaitingSingleIndent = false
+        var awaitingExtraIndent = 0
         fun isControlHeaderNoBrace(s: String): Boolean {
             val t = s.trim()
             if (t.isEmpty()) return false
@@ -60,7 +79,13 @@ object LyngFormatter {
             val isIf = Regex("^if\\s*\\(.*\\)\\s*$").matches(t)
             val isElseIf = Regex("^else\\s+if\\s*\\(.*\\)\\s*$").matches(t)
             val isElse = t == "else"
-            return isIf || isElseIf || isElse
+            if (isIf || isElseIf || isElse) return true
+
+            // property accessors ending with ) or =
+            if (isPropertyAccessor(t)) {
+                return t.endsWith(")") || t.endsWith("=")
+            }
+            return false
         }
 
         for ((i, rawLine) in lines.withIndex()) {
@@ -70,7 +95,12 @@ object LyngFormatter {
             val trimmedLine = rawLine.trim()
 
             // Compute effective indent level for this line
-            var effectiveLevel = blockLevel
+            val currentExtraIndent = extraIndents.sum()
+            var effectiveLevel = blockLevel + currentExtraIndent
+
+            val isAccessor = !inBlockComment && isPropertyAccessor(trimmedStart)
+            if (isAccessor) effectiveLevel += 1
+
             if (inBlockComment) {
                 if (!trimmedLine.startsWith("*/")) {
                     effectiveLevel += 1
@@ -83,9 +113,9 @@ object LyngFormatter {
 
             // Single-line control header (if/else/else if) without braces: indent the next
             // non-empty, non-'}', non-'else' line by one extra level
-            val applyAwaiting = awaitingSingleIndent && trimmedStart.isNotEmpty() &&
+            val applyAwaiting = awaitingExtraIndent > 0 && trimmedStart.isNotEmpty() &&
                     !trimmedStart.startsWith("else") && !trimmedStart.startsWith("}")
-            if (applyAwaiting) effectiveLevel += 1
+            if (applyAwaiting) effectiveLevel += awaitingExtraIndent
 
             val firstChar = trimmedStart.firstOrNull()
             // While inside parentheses, continuation applies scaled by nesting level
@@ -129,23 +159,43 @@ object LyngFormatter {
             // New line (keep EOF semantics similar to input)
             if (i < lines.lastIndex) sb.append('\n')
 
+            val oldBlockLevel = blockLevel
             // Update balances using this line's code content
             for (part in parts) {
                 if (part.type == PartType.Code) {
                     for (ch in part.text) updateBalances(ch)
                 }
             }
+            val newBlockLevel = blockLevel
+            if (newBlockLevel > oldBlockLevel) {
+                val addedThisLine = (if (applyAwaiting) awaitingExtraIndent else 0) + (if (isAccessor) 1 else 0)
+                repeat(newBlockLevel - oldBlockLevel) {
+                    extraIndents.add(addedThisLine)
+                }
+            } else if (newBlockLevel < oldBlockLevel) {
+                repeat(oldBlockLevel - newBlockLevel) {
+                    if (extraIndents.isNotEmpty()) extraIndents.removeAt(extraIndents.size - 1)
+                }
+            }
+
             inBlockComment = nextInBlockComment
 
-            // Update awaitingSingleIndent based on current line
+            // Update awaitingExtraIndent based on current line
             if (applyAwaiting && trimmedStart.isNotEmpty()) {
-                // we have just consumed the body line
-                awaitingSingleIndent = false
+                // we have just applied it.
+                val endsWithBrace = code.trimEnd().endsWith("{")
+                if (!endsWithBrace && isControlHeaderNoBrace(code)) {
+                    // It's another header, increment
+                    awaitingExtraIndent += 1
+                } else {
+                    // It's the body, reset
+                    awaitingExtraIndent = 0
+                }
             } else {
                 // start awaiting if current line is a control header without '{'
                 val endsWithBrace = code.trimEnd().endsWith("{")
                 if (!endsWithBrace && isControlHeaderNoBrace(code)) {
-                    awaitingSingleIndent = true
+                    awaitingExtraIndent = 1
                 }
             }
 
@@ -195,9 +245,6 @@ object LyngFormatter {
         if (!config.applyWrapping) return spacedText
         return applyControlledWrapping(spacedText, config)
     }
-
-    private fun startsWithWord(s: String, w: String): Boolean =
-        s.startsWith(w) && s.getOrNull(w.length)?.let { !it.isLetterOrDigit() && it != '_' } != false
 
     /**
      * Reindents a slice of [text] specified by [range] and returns a new string with that slice replaced.

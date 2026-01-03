@@ -98,6 +98,8 @@ All notable changes to this project will be documented in this file.
   - Mutually exclusive: `--check` and `--in-place` together now produce an error and exit with code 1.
   - Multi-file stdout prints headers `--- <path> ---` per file.
   - `lyng --help` shows `fmt`; `lyng fmt --help` displays dedicated help.
+  - Fix: Property accessors (`get`, `set`, `private set`, `protected set`) are now correctly indented relative to the property declaration.
+  - Fix: Indentation now correctly carries over into blocks that start on extra‑indented lines (e.g., nested `if` statements or property accessor bodies).
 
 - CLI: Preserved legacy script invocation fast-paths:
   - `lyng script.lyng [args...]` executes the script directly.

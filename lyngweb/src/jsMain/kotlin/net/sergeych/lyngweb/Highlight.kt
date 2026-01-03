@@ -28,10 +28,7 @@ import net.sergeych.lyng.binding.SymbolKind
 import net.sergeych.lyng.highlight.HighlightKind
 import net.sergeych.lyng.highlight.SimpleLyngHighlighter
 import net.sergeych.lyng.highlight.offsetOf
-import net.sergeych.lyng.miniast.MiniAstBuilder
-import net.sergeych.lyng.miniast.MiniClassDecl
-import net.sergeych.lyng.miniast.MiniFunDecl
-import net.sergeych.lyng.miniast.MiniTypeName
+import net.sergeych.lyng.miniast.*
 import org.w3c.dom.HTMLStyleElement
 
 fun ensureBootstrapCodeBlocks(html: String): String {
@@ -367,6 +364,7 @@ suspend fun applyLyngHighlightToTextAst(text: String): String {
                 is MiniFunDecl -> putName(d.nameStart, d.name, "hl-fn")
                 is MiniClassDecl -> putName(d.nameStart, d.name, "hl-class")
                 is net.sergeych.lyng.miniast.MiniValDecl -> putName(d.nameStart, d.name, if (d.mutable) "hl-var" else "hl-val")
+                is MiniEnumDecl -> putName(d.nameStart, d.name, "hl-class")
             }
         }
         // Imports: color each segment as directive/path
@@ -404,6 +402,7 @@ suspend fun applyLyngHighlightToTextAst(text: String): String {
                 }
                 is net.sergeych.lyng.miniast.MiniValDecl -> addTypeSegments(d.type)
                 is MiniClassDecl -> {}
+                is MiniEnumDecl -> {}
             }
         }
 
@@ -534,7 +533,8 @@ private fun detectDeclarationAndParamOverrides(text: String): Map<Pair<Int, Int>
         "package", "import", "fun", "fn", "class", "enum", "val", "var",
         "if", "else", "while", "do", "for", "when", "try", "catch", "finally",
         "throw", "return", "break", "continue", "in", "is", "as", "as?", "not",
-        "true", "false", "null", "private", "protected", "open", "extern", "static"
+        "true", "false", "null", "private", "protected", "open", "extern", "static",
+        "init", "get", "set", "Unset", "by"
     )
     fun skipWs(idx0: Int): Int {
         var idx = idx0
