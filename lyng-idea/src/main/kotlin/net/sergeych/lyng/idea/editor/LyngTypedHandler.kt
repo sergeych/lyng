@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,31 +32,54 @@ import net.sergeych.lyng.format.LyngFormatConfig
 import net.sergeych.lyng.format.LyngFormatter
 import net.sergeych.lyng.idea.LyngLanguage
 import net.sergeych.lyng.idea.settings.LyngFormatterSettings
+import net.sergeych.lyng.idea.util.FormattingUtils.computeDesiredIndent
+import net.sergeych.lyng.idea.util.FormattingUtils.findFirstNonWs
 
 class LyngTypedHandler : TypedHandlerDelegate() {
     private val log = Logger.getInstance(LyngTypedHandler::class.java)
 
     override fun charTyped(c: Char, project: Project, editor: Editor, file: PsiFile): Result {
         if (file.language != LyngLanguage) return Result.CONTINUE
-        if (c != '}') return Result.CONTINUE
+        
+        if (c == '}') {
+            val doc = editor.document
+            PsiDocumentManager.getInstance(project).commitDocument(doc)
 
-        val doc = editor.document
-        PsiDocumentManager.getInstance(project).commitDocument(doc)
+            val offset = editor.caretModel.offset
+            val line = doc.getLineNumber((offset - 1).coerceAtLeast(0))
+            if (line < 0) return Result.CONTINUE
 
-        val offset = editor.caretModel.offset
-        val line = doc.getLineNumber((offset - 1).coerceAtLeast(0))
-        if (line < 0) return Result.CONTINUE
-
-        val rawLine = doc.getLineText(line)
-        val code = rawLine.substringBefore("//").trim()
-        if (code == "}") {
-            val settings = LyngFormatterSettings.getInstance(project)
-            if (settings.reindentClosedBlockOnEnter) {
-                reindentClosedBlockAroundBrace(project, file, doc, line)
+            val rawLine = doc.getLineText(line)
+            val code = rawLine.substringBefore("//").trim()
+            if (code == "}") {
+                val settings = LyngFormatterSettings.getInstance(project)
+                if (settings.reindentClosedBlockOnEnter) {
+                    reindentClosedBlockAroundBrace(project, file, doc, line)
+                }
+                // After block reindent, adjust line indent to what platform thinks (no-op in many cases)
+                val lineStart = doc.getLineStartOffset(line)
+                CodeStyleManager.getInstance(project).adjustLineIndent(file, lineStart)
             }
-            // After block reindent, adjust line indent to what platform thinks (no-op in many cases)
-            val lineStart = doc.getLineStartOffset(line)
-            CodeStyleManager.getInstance(project).adjustLineIndent(file, lineStart)
+        } else if (c == '/') {
+            val doc = editor.document
+            val offset = editor.caretModel.offset
+            if (offset >= 2 && doc.getText(TextRange(offset - 2, offset)) == "*/") {
+                PsiDocumentManager.getInstance(project).commitDocument(doc)
+                val line = doc.getLineNumber(offset - 1)
+                val lineStart = doc.getLineStartOffset(line)
+                CodeStyleManager.getInstance(project).adjustLineIndent(file, lineStart)
+
+                // Manual application fallback
+                val desired = computeDesiredIndent(project, doc, line)
+                val lineEnd = doc.getLineEndOffset(line)
+                val firstNonWs = findFirstNonWs(doc, lineStart, lineEnd)
+                val currentIndentLen = firstNonWs - lineStart
+                if (doc.getText(TextRange(lineStart, lineStart + currentIndentLen)) != desired) {
+                    WriteCommandAction.runWriteCommandAction(project) {
+                        doc.replaceString(lineStart, lineStart + currentIndentLen, desired)
+                    }
+                }
+            }
         }
         return Result.CONTINUE
     }

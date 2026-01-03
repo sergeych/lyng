@@ -185,9 +185,9 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
             fun keyForKind(k: SymbolKind) = when (k) {
                 SymbolKind.Function -> LyngHighlighterColors.FUNCTION
                 SymbolKind.Class, SymbolKind.Enum -> LyngHighlighterColors.TYPE
-                SymbolKind.Param -> LyngHighlighterColors.PARAMETER
-                SymbolKind.Val -> LyngHighlighterColors.VALUE
-                SymbolKind.Var -> LyngHighlighterColors.VARIABLE
+                SymbolKind.Parameter -> LyngHighlighterColors.PARAMETER
+                SymbolKind.Value -> LyngHighlighterColors.VALUE
+                SymbolKind.Variable -> LyngHighlighterColors.VARIABLE
             }
 
             // Track covered ranges to not override later heuristics

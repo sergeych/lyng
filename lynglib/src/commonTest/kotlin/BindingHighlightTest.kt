@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,10 +49,10 @@ class BindingHighlightTest {
 
         val binding = Binder.bind(text, mini!!)
 
-        // Find the top-level symbol for counter and ensure it is mutable (Var)
+        // Find the top-level symbol for counter and ensure it is mutable (Variable)
         val sym = binding.symbols.firstOrNull { it.name == "counter" }
         assertNotNull(sym, "Top-level var 'counter' must be registered as a symbol")
-        assertEquals(SymbolKind.Var, sym.kind, "'counter' declared with var should be SymbolKind.Var")
+        assertEquals(SymbolKind.Variable, sym.kind, "'counter' declared with var should be SymbolKind.Variable")
 
         // Declaration position
         val declRange = sym.declStart to sym.declEnd
@@ -82,7 +82,7 @@ class BindingHighlightTest {
 
         val sym = binding.symbols.firstOrNull { it.name == "answer" }
         assertNotNull(sym, "Top-level val 'answer' must be registered as a symbol")
-        assertEquals(SymbolKind.Val, sym.kind, "'answer' declared with val should be SymbolKind.Val")
+        assertEquals(SymbolKind.Value, sym.kind, "'answer' declared with val should be SymbolKind.Value")
 
         val declRange = sym.declStart to sym.declEnd
         val refs = binding.references.filter { it.symbolId == sym.id && (it.start to it.end) != declRange }
@@ -119,7 +119,7 @@ class BindingHighlightTest {
         // Ensure we registered the local var/val symbol for `name`
         val nameSym = binding.symbols.firstOrNull { it.name == "name" }
         assertNotNull(nameSym, "Local variable 'name' should be registered as a symbol")
-        assertEquals(SymbolKind.Var, nameSym.kind, "'name' is declared with var and must be SymbolKind.Var")
+        assertEquals(SymbolKind.Variable, nameSym.kind, "'name' is declared with var and must be SymbolKind.Variable")
 
         // Ensure there is at least one usage reference to `name` (not just the declaration)
         val nameRefs = binding.references.filter { it.symbolId == nameSym.id }
@@ -165,7 +165,7 @@ class BindingHighlightTest {
 
         val binding = Binder.bind(text, mini!!)
 
-        val nameSym = binding.symbols.firstOrNull { it.name == "name" && (it.kind == SymbolKind.Var || it.kind == SymbolKind.Val) }
+        val nameSym = binding.symbols.firstOrNull { it.name == "name" && (it.kind == SymbolKind.Variable || it.kind == SymbolKind.Value) }
         assertNotNull(nameSym, "Local variable 'name' should be registered as a symbol")
 
         // Find the specific usage inside string-literal invocation: "%s is directory"(name)

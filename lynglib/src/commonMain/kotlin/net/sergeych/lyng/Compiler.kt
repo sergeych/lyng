@@ -1891,7 +1891,7 @@ class Compiler(
             // create class
             val className = nameToken.value
 
-//        @Suppress("UNUSED_VARIABLE") val defaultAccess = if (isStruct) AccessType.Var else AccessType.Initialization
+//        @Suppress("UNUSED_VARIABLE") val defaultAccess = if (isStruct) AccessType.Variable else AccessType.Initialization
 //        @Suppress("UNUSED_VARIABLE") val defaultVisibility = Visibility.Public
 
             // create instance constructor

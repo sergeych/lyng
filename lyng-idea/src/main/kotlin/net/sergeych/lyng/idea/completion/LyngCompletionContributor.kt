@@ -21,23 +21,21 @@
  */
 package net.sergeych.lyng.idea.completion
 
+import LyngAstManager
 import com.intellij.codeInsight.completion.*
 import com.intellij.codeInsight.lookup.LookupElementBuilder
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Document
-import com.intellij.openapi.util.Key
 import com.intellij.patterns.PlatformPatterns
 import com.intellij.psi.PsiFile
 import com.intellij.util.ProcessingContext
 import kotlinx.coroutines.runBlocking
-import net.sergeych.lyng.Compiler
-import net.sergeych.lyng.Source
 import net.sergeych.lyng.highlight.offsetOf
 import net.sergeych.lyng.idea.LyngLanguage
+import net.sergeych.lyng.idea.highlight.LyngTokenTypes
 import net.sergeych.lyng.idea.settings.LyngFormatterSettings
 import net.sergeych.lyng.idea.util.DocsBootstrap
-import net.sergeych.lyng.idea.util.IdeLenientImportProvider
 import net.sergeych.lyng.idea.util.TextCtx
 import net.sergeych.lyng.miniast.*
 
@@ -65,6 +63,12 @@ class LyngCompletionContributor : CompletionContributor() {
             StdlibDocsBootstrap.ensure()
             val file: PsiFile = parameters.originalFile
             if (file.language != LyngLanguage) return
+
+            // Disable completion inside comments
+            val pos = parameters.position
+            val et = pos.node.elementType
+            if (et == LyngTokenTypes.LINE_COMMENT || et == LyngTokenTypes.BLOCK_COMMENT) return
+
             // Feature toggle: allow turning completion off from settings
             val settings = LyngFormatterSettings.getInstance(file.project)
             if (!settings.enableLyngCompletionExperimental) return
@@ -94,7 +98,8 @@ class LyngCompletionContributor : CompletionContributor() {
             }
 
             // Build MiniAst (cached) for both global and member contexts to enable local class/val inference
-            val mini = buildMiniAstCached(file, text)
+            val mini = LyngAstManager.getMiniAst(file)
+            val binding = LyngAstManager.getBinding(file)
 
             // Delegate computation to the shared engine to keep behavior in sync with tests
             val engineItems = try {
@@ -121,13 +126,13 @@ class LyngCompletionContributor : CompletionContributor() {
                 // Try inferring return/receiver class around the dot
                 val inferred =
                     // Prefer MiniAst-based inference (return type from member call or receiver type)
-                    guessReturnClassFromMemberCallBeforeMini(mini, text, memberDotPos, imported)
-                        ?: guessReceiverClassViaMini(mini, text, memberDotPos, imported)
+                    DocLookupUtils.guessReturnClassFromMemberCallBeforeMini(mini, text, memberDotPos, imported, binding)
+                        ?: DocLookupUtils.guessReceiverClassViaMini(mini, text, memberDotPos, imported, binding)
                         ?: 
-                    guessReturnClassFromMemberCallBefore(text, memberDotPos, imported, mini)
-                        ?: guessReturnClassFromTopLevelCallBefore(text, memberDotPos, imported, mini)
-                        ?: guessReturnClassAcrossKnownCallees(text, memberDotPos, imported, mini)
-                        ?: guessReceiverClass(text, memberDotPos, imported, mini)
+                    DocLookupUtils.guessReturnClassFromMemberCallBefore(text, memberDotPos, imported, mini)
+                        ?: DocLookupUtils.guessReturnClassFromTopLevelCallBefore(text, memberDotPos, imported, mini)
+                        ?: DocLookupUtils.guessReturnClassAcrossKnownCallees(text, memberDotPos, imported, mini)
+                        ?: DocLookupUtils.guessReceiverClass(text, memberDotPos, imported, mini)
 
                 if (inferred != null) {
                     if (DEBUG_COMPLETION) log.info("[LYNG_DEBUG] Fallback inferred receiver/return class='$inferred' — offering its members")
@@ -179,12 +184,12 @@ class LyngCompletionContributor : CompletionContributor() {
                     add("lyng.stdlib")
                 }.toList()
                 val inferredClass =
-                    guessReturnClassFromMemberCallBeforeMini(mini, text, memberDotPos, imported)
-                        ?: guessReceiverClassViaMini(mini, text, memberDotPos, imported)
-                        ?: guessReturnClassFromMemberCallBefore(text, memberDotPos, imported, mini)
-                        ?: guessReturnClassFromTopLevelCallBefore(text, memberDotPos, imported, mini)
-                        ?: guessReturnClassAcrossKnownCallees(text, memberDotPos, imported, mini)
-                        ?: guessReceiverClass(text, memberDotPos, imported, mini)
+                    DocLookupUtils.guessReturnClassFromMemberCallBeforeMini(mini, text, memberDotPos, imported, binding)
+                        ?: DocLookupUtils.guessReceiverClassViaMini(mini, text, memberDotPos, imported, binding)
+                        ?: DocLookupUtils.guessReturnClassFromMemberCallBefore(text, memberDotPos, imported, mini)
+                        ?: DocLookupUtils.guessReturnClassFromTopLevelCallBefore(text, memberDotPos, imported, mini)
+                        ?: DocLookupUtils.guessReturnClassAcrossKnownCallees(text, memberDotPos, imported, mini)
+                        ?: DocLookupUtils.guessReceiverClass(text, memberDotPos, imported, mini)
                 if (!inferredClass.isNullOrBlank()) {
                     val ext = BuiltinDocRegistry.extensionMemberNamesFor(inferredClass)
                     if (DEBUG_COMPLETION) log.info("[LYNG_DEBUG] Post-engine extension check for $inferredClass: ${'$'}{ext}")
@@ -234,12 +239,12 @@ class LyngCompletionContributor : CompletionContributor() {
                     add("lyng.stdlib")
                 }.toList()
                 val inferred =
-                    guessReturnClassFromMemberCallBeforeMini(mini, text, memberDotPos, imported)
-                        ?: guessReceiverClassViaMini(mini, text, memberDotPos, imported)
-                        ?: guessReturnClassFromMemberCallBefore(text, memberDotPos, imported)
-                        ?: guessReturnClassFromTopLevelCallBefore(text, memberDotPos, imported)
-                        ?: guessReturnClassAcrossKnownCallees(text, memberDotPos, imported)
-                        ?: guessReceiverClass(text, memberDotPos, imported)
+                    DocLookupUtils.guessReturnClassFromMemberCallBeforeMini(mini, text, memberDotPos, imported, binding)
+                        ?: DocLookupUtils.guessReceiverClassViaMini(mini, text, memberDotPos, imported, binding)
+                        ?: DocLookupUtils.guessReturnClassFromMemberCallBefore(text, memberDotPos, imported, mini)
+                        ?: DocLookupUtils.guessReturnClassFromTopLevelCallBefore(text, memberDotPos, imported, mini)
+                        ?: DocLookupUtils.guessReturnClassAcrossKnownCallees(text, memberDotPos, imported, mini)
+                        ?: DocLookupUtils.guessReceiverClass(text, memberDotPos, imported, mini)
                 if (inferred != null) {
                     if (DEBUG_COMPLETION) log.info("[LYNG_DEBUG] Enrichment inferred class='$inferred' — offering its members")
                     offerMembers(emit, imported, inferred, sourceText = text, mini = mini)
@@ -316,7 +321,7 @@ class LyngCompletionContributor : CompletionContributor() {
                 }
                 // If MiniAst didn't populate members (empty), try to scan class body text for member signatures
                 if (localClass.members.isEmpty()) {
-                    val scanned = scanLocalClassMembersFromText(mini, text = sourceText, cls = localClass)
+                    val scanned = DocLookupUtils.scanLocalClassMembersFromText(mini, text = sourceText, cls = localClass)
                     if (DEBUG_COMPLETION) log.info("[LYNG_DEBUG] Local scan for class ${localClass.name}: found ${scanned.size} members -> ${scanned.keys}")
                     for ((name, sig) in scanned) {
                         when (sig.kind) {
@@ -421,7 +426,7 @@ class LyngCompletionContributor : CompletionContributor() {
                                 .firstOrNull { it.type != null } ?: rep
                             val builder = LookupElementBuilder.create(name)
                                 .withIcon(icon)
-                                .withTypeText(typeOf((chosen as MiniMemberValDecl).type), true)
+                                .withTypeText(typeOf(chosen.type), true)
                             emit(builder)
                         }
                         is MiniInitDecl -> {}
@@ -541,441 +546,6 @@ class LyngCompletionContributor : CompletionContributor() {
         }
 
         // --- MiniAst-based inference helpers ---
-
-        private fun previousIdentifierBeforeDot(text: String, dotPos: Int): String? {
-            var i = dotPos - 1
-            // skip whitespace
-            while (i >= 0 && text[i].isWhitespace()) i--
-            val end = i + 1
-            while (i >= 0 && TextCtx.isIdentChar(text[i])) i--
-            val start = i + 1
-            return if (start < end) text.substring(start, end) else null
-        }
-
-        private fun guessReceiverClassViaMini(mini: MiniScript?, text: String, dotPos: Int, imported: List<String>): String? {
-            if (mini == null) return null
-            val i = TextCtx.prevNonWs(text, dotPos - 1)
-            if (i < 0) return null
-            val wordRange = TextCtx.wordRangeAt(text, i + 1) ?: return null
-            val ident = text.substring(wordRange.startOffset, wordRange.endOffset)
-
-            // 1) Global declarations in current file (val/var/fun/class/enum)
-            val d = mini.declarations.firstOrNull { it.name == ident }
-            if (d != null) {
-                return when (d) {
-                    is MiniClassDecl -> d.name
-                    is MiniEnumDecl -> d.name
-                    is MiniValDecl -> simpleClassNameOf(d.type)
-                    is MiniFunDecl -> simpleClassNameOf(d.returnType)
-                }
-            }
-
-            // 2) Parameters in any function (best-effort without scope mapping)
-            val paramType = mini.declarations.filterIsInstance<MiniFunDecl>()
-                .asSequence()
-                .flatMap { it.params.asSequence() }
-                .firstOrNull { it.name == ident }?.type
-            simpleClassNameOf(paramType)?.let { return it }
-
-            // 3) Recursive chaining: Base.ident.
-            val dotBefore = TextCtx.findDotLeft(text, wordRange.startOffset)
-            if (dotBefore != null) {
-                val receiverClass = guessReceiverClassViaMini(mini, text, dotBefore, imported)
-                    ?: guessReceiverClass(text, dotBefore, imported)
-                if (receiverClass != null) {
-                    val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, receiverClass, ident, mini)
-                    if (resolved != null) {
-                        val rt = when (val m = resolved.second) {
-                            is MiniMemberFunDecl -> m.returnType
-                            is MiniMemberValDecl -> m.type
-                            else -> null
-                        }
-                        return simpleClassNameOf(rt)
-                    }
-                }
-            }
-
-            // 4) Check if it's a known class (static access)
-            val classes = DocLookupUtils.aggregateClasses(imported, mini)
-            if (classes.containsKey(ident)) return ident
-
-            return null
-        }
-
-        private fun guessReturnClassFromMemberCallBeforeMini(mini: MiniScript?, text: String, dotPos: Int, imported: List<String>): String? {
-            if (mini == null) return null
-            var i = TextCtx.prevNonWs(text, dotPos - 1)
-            if (i < 0 || text[i] != ')') return null
-            // back to matching '('
-            i--
-            var depth = 0
-            while (i >= 0) {
-                when (text[i]) {
-                    ')' -> depth++
-                    '(' -> if (depth == 0) break else depth--
-                }
-                i--
-            }
-            if (i < 0 || text[i] != '(') return null
-            var j = i - 1
-            while (j >= 0 && text[j].isWhitespace()) j--
-            val end = j + 1
-            while (j >= 0 && TextCtx.isIdentChar(text[j])) j--
-            val start = j + 1
-            if (start >= end) return null
-            val callee = text.substring(start, end)
-            // Ensure member call: dot before callee
-            var k = start - 1
-            while (k >= 0 && text[k].isWhitespace()) k--
-            if (k < 0 || text[k] != '.') return null
-            val prevDot = k
-            // Resolve receiver class via MiniAst (ident like `x`)
-            val receiverClass = guessReceiverClassViaMini(mini, text, prevDot, imported) ?: return null
-            // If receiver class is a locally declared class, resolve member on it
-            val localClass = mini.declarations.filterIsInstance<MiniClassDecl>().firstOrNull { it.name == receiverClass }
-            if (localClass != null) {
-                val mm = localClass.members.firstOrNull { it.name == callee }
-                if (mm != null) {
-                    val rt = when (mm) {
-                        is MiniMemberFunDecl -> mm.returnType
-                        is MiniMemberValDecl -> mm.type
-                        else -> null
-                    }
-                    return simpleClassNameOf(rt)
-                } else {
-                    // Try to scan class body text for method signature and extract return type
-                    val sigs = scanLocalClassMembersFromText(mini, text, localClass)
-                    if (DEBUG_COMPLETION) log.info("[LYNG_DEBUG] Local scan for return type in ${receiverClass}.${callee}: candidates=${sigs.keys}")
-                    val sig = sigs[callee]
-                    if (sig != null && sig.typeText != null) return sig.typeText
-                }
-            }
-            // Else fallback to registry-based resolution (covers imported classes)
-            return DocLookupUtils.resolveMemberWithInheritance(imported, receiverClass, callee, mini)?.second?.let { m ->
-                val rt = when (m) {
-                    is MiniMemberFunDecl -> m.returnType
-                    is MiniMemberValDecl -> m.type
-                    is MiniInitDecl -> null
-                }
-                simpleClassNameOf(rt)
-            }
-        }
-
-        private data class ScannedSig(val kind: String, val params: List<String>?, val typeText: String?)
-
-        private fun scanLocalClassMembersFromText(mini: MiniScript, text: String, cls: MiniClassDecl): Map<String, ScannedSig> {
-            val src = mini.range.start.source
-            val start = src.offsetOf(cls.bodyRange?.start ?: cls.range.start)
-            val end = src.offsetOf(cls.bodyRange?.end ?: cls.range.end).coerceAtMost(text.length)
-            if (start !in 0..end) return emptyMap()
-            val body = text.substring(start, end)
-            val map = LinkedHashMap<String, ScannedSig>()
-            // fun name(params): Type
-            val funRe = Regex("^\\s*fun\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)\\s*(?::\\s*([A-Za-z_][A-Za-z0-9_]*))?", RegexOption.MULTILINE)
-            for (m in funRe.findAll(body)) {
-                val name = m.groupValues.getOrNull(1) ?: continue
-                val params = m.groupValues.getOrNull(2)?.split(',')?.mapNotNull { it.trim().takeIf { it.isNotEmpty() } } ?: emptyList()
-                val type = m.groupValues.getOrNull(3)?.takeIf { it.isNotBlank() }
-                map[name] = ScannedSig("fun", params, type)
-            }
-            // val/var name: Type
-            val valRe = Regex("^\\s*(val|var)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(?::\\s*([A-Za-z_][A-Za-z0-9_]*))?", RegexOption.MULTILINE)
-            for (m in valRe.findAll(body)) {
-                val kind = m.groupValues.getOrNull(1) ?: continue
-                val name = m.groupValues.getOrNull(2) ?: continue
-                val type = m.groupValues.getOrNull(3)?.takeIf { it.isNotBlank() }
-                map.putIfAbsent(name, ScannedSig(kind, null, type))
-            }
-            return map
-        }
-
-        private fun guessReceiverClass(text: String, dotPos: Int, imported: List<String>, mini: MiniScript? = null): String? {
-            // 1) Try call-based: ClassName(...).
-            DocLookupUtils.guessClassFromCallBefore(text, dotPos, imported, mini)?.let { return it }
-
-            // 2) Literal heuristics based on the immediate char before '.'
-            var i = TextCtx.prevNonWs(text, dotPos - 1)
-            if (i >= 0) {
-                when (text[i]) {
-                    '"' -> {
-                        // Either regular or triple-quoted string; both map to String
-                        return "String"
-                    }
-                    ']' -> return "List" // very rough heuristic
-                    '}' -> return "Dict" // map/dictionary literal heuristic
-                    ')' -> {
-                        // Parenthesized expression: walk back to matching '(' and inspect inner expression
-                        var j = i - 1
-                        var depth = 0
-                        while (j >= 0) {
-                            when (text[j]) {
-                                ')' -> depth++
-                                '(' -> if (depth == 0) break else depth--
-                            }
-                            j--
-                        }
-                        if (j >= 0 && text[j] == '(') {
-                            val innerS = (j + 1).coerceAtLeast(0)
-                            val innerE = i.coerceAtMost(text.length)
-                            if (innerS < innerE) {
-                                val inner = text.substring(innerS, innerE).trim()
-                                if (inner.startsWith('"') && inner.endsWith('"')) return "String"
-                                if (inner.startsWith('[') && inner.endsWith(']')) return "List"
-                                if (inner.startsWith('{') && inner.endsWith('}')) return "Dict"
-                            }
-                        }
-                    }
-                }
-
-                // If it's an identifier, check if it's a known class (static access) or chain
-                val wordRange = TextCtx.wordRangeAt(text, i + 1)
-                if (wordRange != null) {
-                    val ident = text.substring(wordRange.startOffset, wordRange.endOffset)
-                    val classes = DocLookupUtils.aggregateClasses(imported, mini)
-                    if (classes.containsKey(ident)) return ident
-
-                    // Chaining without MiniAst
-                    val dotBefore = TextCtx.findDotLeft(text, wordRange.startOffset)
-                    if (dotBefore != null) {
-                        val base = guessReceiverClass(text, dotBefore, imported, mini)
-                        if (base != null) {
-                            val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, base, ident, mini)
-                            if (resolved != null) {
-                                val rt = when (val m = resolved.second) {
-                                    is MiniMemberFunDecl -> m.returnType
-                                    is MiniMemberValDecl -> m.type
-                                    else -> null
-                                }
-                                return simpleClassNameOf(rt)
-                            }
-                        }
-                    }
-                }
-
-                // Numeric literal: support decimal, hex (0x..), and scientific notation (1e-3)
-                var j = i
-                var hasDigits = false
-                var hasDot = false
-                var hasExp = false
-                // Walk over digits, letters for hex, dots, and exponent markers
-                while (j >= 0) {
-                    val ch = text[j]
-                    if (ch.isDigit()) { hasDigits = true; j-- ; continue }
-                    if (ch == '.') { hasDot = true; j-- ; continue }
-                    if (ch == 'e' || ch == 'E') { hasExp = true; j-- ; // optional sign directly before digits
-                        if (j >= 0 && (text[j] == '+' || text[j] == '-')) j--
-                        continue
-                    }
-                    if (ch in listOf('x','X')) { // part of 0x prefix
-                        j--
-                        continue
-                    }
-                    if (ch == 'a' || ch == 'b' || ch == 'c' || ch == 'd' || ch == 'f' ||
-                        ch == 'A' || ch == 'B' || ch == 'C' || ch == 'D' || ch == 'F') {
-                        // hex digit in 0x...
-                        j--
-                        continue
-                    }
-                    break
-                }
-                // Now check for 0x/0X prefix
-                val k = j
-                val isHex = k >= 1 && text[k] == '0' && (text[k+1] == 'x' || text[k+1] == 'X')
-                if (hasDigits) {
-                    return if (isHex) "Int" else if (hasDot || hasExp) "Real" else "Int"
-                }
-
-                // 3) this@Type or as Type
-                val identRange = TextCtx.wordRangeAt(text, i + 1)
-                if (identRange != null) {
-                    val ident = text.substring(identRange.startOffset, identRange.endOffset)
-                    // if it's "as Type", we want Type
-                    var k2 = TextCtx.prevNonWs(text, identRange.startOffset - 1)
-                    if (k2 >= 1 && text[k2] == 's' && text[k2 - 1] == 'a' && (k2 - 1 == 0 || !text[k2 - 2].isLetterOrDigit())) {
-                        return ident
-                    }
-                    // if it's "this@Type", we want Type
-                    if (k2 >= 0 && text[k2] == '@') {
-                        val k3 = TextCtx.prevNonWs(text, k2 - 1)
-                        if (k3 >= 3 && text.substring(k3 - 3, k3 + 1) == "this") {
-                            return ident
-                        }
-                    }
-                }
-            }
-            return null
-        }
-
-        /**
-         * Try to infer the class of the return value of the member call immediately before the dot.
-         * Example: `Path(".." ).lines().<caret>` → detects `lines()` on receiver class `Path` and returns `Iterator`.
-         */
-        private fun guessReturnClassFromMemberCallBefore(text: String, dotPos: Int, imported: List<String>, mini: MiniScript? = null): String? {
-            var i = TextCtx.prevNonWs(text, dotPos - 1)
-            if (i < 0) return null
-            // We expect a call just before the dot, i.e., ')' ... '.'
-            if (text[i] != ')') return null
-            // Walk back to matching '('
-            i--
-            var depth = 0
-            while (i >= 0) {
-                val ch = text[i]
-                when (ch) {
-                    ')' -> depth++
-                    '(' -> if (depth == 0) break else depth--
-                }
-                i--
-            }
-            if (i < 0 || text[i] != '(') return null
-            // Identify callee identifier just before '('
-            var j = i - 1
-            while (j >= 0 && text[j].isWhitespace()) j--
-            val end = j + 1
-            while (j >= 0 && TextCtx.isIdentChar(text[j])) j--
-            val start = j + 1
-            if (start >= end) return null
-            val callee = text.substring(start, end)
-            // Ensure it's a member call (there must be a dot immediately before the callee, ignoring spaces)
-            var k = start - 1
-            while (k >= 0 && text[k].isWhitespace()) k--
-            if (k < 0 || text[k] != '.') return null
-            val prevDot = k
-            // Infer receiver class at the previous dot
-            val receiverClass = guessReceiverClass(text, prevDot, imported, mini) ?: return null
-            // Resolve the callee as a member of receiver class, including inheritance
-            val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, receiverClass, callee, mini) ?: return null
-            val member = resolved.second
-            val returnType = when (member) {
-                is MiniMemberFunDecl -> member.returnType
-                is MiniMemberValDecl -> member.type
-                is MiniInitDecl -> null
-            }
-            return simpleClassNameOf(returnType)
-        }
-
-        /**
-         * Infer return class of a top-level call right before the dot: e.g., `files().<caret>`.
-         * We extract callee name and resolve it among imported modules' top-level functions.
-         */
-        private fun guessReturnClassFromTopLevelCallBefore(text: String, dotPos: Int, imported: List<String>, mini: MiniScript? = null): String? {
-            var i = TextCtx.prevNonWs(text, dotPos - 1)
-            if (i < 0 || text[i] != ')') return null
-            // Walk back to matching '('
-            i--
-            var depth = 0
-            while (i >= 0) {
-                val ch = text[i]
-                when (ch) {
-                    ')' -> depth++
-                    '(' -> if (depth == 0) break else depth--
-                }
-                i--
-            }
-            if (i < 0 || text[i] != '(') return null
-            // Extract callee ident before '('
-            var j = i - 1
-            while (j >= 0 && text[j].isWhitespace()) j--
-            val end = j + 1
-            while (j >= 0 && TextCtx.isIdentChar(text[j])) j--
-            val start = j + 1
-            if (start >= end) return null
-            val callee = text.substring(start, end)
-            // If it's a member call, bail out (handled in member-call inference)
-            var k = start - 1
-            while (k >= 0 && text[k].isWhitespace()) k--
-            if (k >= 0 && text[k] == '.') return null
-
-            // Resolve top-level function in imported modules
-            for (mod in imported) {
-                val decls = BuiltinDocRegistry.docsForModule(mod)
-                val fn = decls.asSequence().filterIsInstance<MiniFunDecl>().firstOrNull { it.name == callee }
-                if (fn != null) return simpleClassNameOf(fn.returnType)
-            }
-            
-            // Also check local declarations
-            mini?.declarations?.filterIsInstance<MiniFunDecl>()?.firstOrNull { it.name == callee }?.let { return simpleClassNameOf(it.returnType) }
-            
-            return null
-        }
-
-        /**
-         * Fallback: if we can at least extract a callee name before the dot and it exists across common classes,
-         * derive its return type using cross-class lookup (Iterable/Iterator/List preference). This ignores the receiver.
-         * Example: `something.lines().<caret>` where `something` type is unknown, but `lines()` commonly returns Iterator<String>.
-         */
-        private fun guessReturnClassAcrossKnownCallees(text: String, dotPos: Int, imported: List<String>, mini: MiniScript? = null): String? {
-            var i = TextCtx.prevNonWs(text, dotPos - 1)
-            if (i < 0 || text[i] != ')') return null
-            // Walk back to matching '('
-            i--
-            var depth = 0
-            while (i >= 0) {
-                val ch = text[i]
-                when (ch) {
-                    ')' -> depth++
-                    '(' -> if (depth == 0) break else depth--
-                }
-                i--
-            }
-            if (i < 0 || text[i] != '(') return null
-            // Extract callee ident before '('
-            var j = i - 1
-            while (j >= 0 && text[j].isWhitespace()) j--
-            val end = j + 1
-            while (j >= 0 && TextCtx.isIdentChar(text[j])) j--
-            val start = j + 1
-            if (start >= end) return null
-            val callee = text.substring(start, end)
-            // Try cross-class resolution
-            val resolved = DocLookupUtils.findMemberAcrossClasses(imported, callee, mini) ?: return null
-            val member = resolved.second
-            val returnType = when (member) {
-                is MiniMemberFunDecl -> member.returnType
-                is MiniMemberValDecl -> member.type
-                is MiniInitDecl -> null
-            }
-            return simpleClassNameOf(returnType)
-        }
-
-        /** Convert a MiniTypeRef to a simple class name as used by docs (e.g., Iterator from Iterator<String>). */
-        private fun simpleClassNameOf(t: MiniTypeRef?): String? = when (t) {
-            null -> null
-            is MiniTypeName -> t.segments.lastOrNull()?.name
-            is MiniGenericType -> simpleClassNameOf(t.base)
-            is MiniFunctionType -> null
-            is MiniTypeVar -> null
-        }
-
-        private fun buildMiniAst(text: String): MiniScript? {
-            return try {
-                val sink = MiniAstBuilder()
-                val provider = IdeLenientImportProvider.create()
-                val src = Source("<ide>", text)
-                runBlocking { Compiler.compileWithMini(src, provider, sink) }
-                sink.build()
-            } catch (_: Throwable) {
-                null
-            }
-        }
-
-        // Cached per PsiFile by document modification stamp
-        private val MINI_KEY = Key.create<MiniScript>("lyng.mini.cache")
-        private val STAMP_KEY = Key.create<Long>("lyng.mini.cache.stamp")
-
-        private fun buildMiniAstCached(file: PsiFile, text: String): MiniScript? {
-            val doc = file.viewProvider.document ?: return null
-            val stamp = doc.modificationStamp
-            val prevStamp = file.getUserData(STAMP_KEY)
-            val cached = file.getUserData(MINI_KEY)
-            if (cached != null && prevStamp != null && prevStamp == stamp) return cached
-            val built = buildMiniAst(text)
-            // Cache even null? avoid caching failures; only cache non-null
-            if (built != null) {
-                file.putUserData(MINI_KEY, built)
-                file.putUserData(STAMP_KEY, stamp)
-            }
-            return built
-        }
 
         private fun offerParamsInScope(emit: (com.intellij.codeInsight.lookup.LookupElement) -> Unit, mini: MiniScript, text: String, caret: Int) {
             val src = mini.range.start.source

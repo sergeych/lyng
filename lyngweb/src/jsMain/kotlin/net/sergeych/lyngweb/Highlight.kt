@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -420,9 +420,9 @@ suspend fun applyLyngHighlightToTextAst(text: String): String {
                 fun classForKind(k: SymbolKind): String? = when (k) {
                     SymbolKind.Function -> "hl-fn"
                     SymbolKind.Class, SymbolKind.Enum -> "hl-class"
-                    SymbolKind.Param -> "hl-param"
-                    SymbolKind.Val -> "hl-val"
-                    SymbolKind.Var -> "hl-var"
+                    SymbolKind.Parameter -> "hl-param"
+                    SymbolKind.Value -> "hl-val"
+                    SymbolKind.Variable -> "hl-var"
                 }
                 for (ref in binding.references) {
                     val key = ref.start to ref.end

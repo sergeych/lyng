@@ -1,5 +1,5 @@
 <!--
-  ~ Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+  ~ Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -95,6 +95,12 @@
 
         <!-- If targeting SDKs with stable RawText API, the EP below can be enabled instead: -->
         <!-- <copyPastePreProcessor implementation="net.sergeych.lyng.idea.editor.LyngCopyPastePreProcessor"/> -->
+
+        <!-- Navigation and Find Usages -->
+        <psi.referenceContributor language="Lyng" implementation="net.sergeych.lyng.idea.navigation.LyngPsiReferenceContributor"/>
+        <gotoDeclarationHandler implementation="net.sergeych.lyng.idea.navigation.LyngGotoDeclarationHandler"/>
+        <lang.findUsagesProvider language="Lyng" implementationClass="net.sergeych.lyng.idea.navigation.LyngFindUsagesProvider"/>
+        <iconProvider implementation="net.sergeych.lyng.idea.navigation.LyngIconProvider"/>
 
     </extensions>
 

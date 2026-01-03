@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,6 +35,8 @@ import com.intellij.psi.codeStyle.CodeStyleManager
 import net.sergeych.lyng.format.LyngFormatConfig
 import net.sergeych.lyng.format.LyngFormatter
 import net.sergeych.lyng.idea.LyngLanguage
+import net.sergeych.lyng.idea.util.FormattingUtils.computeDesiredIndent
+import net.sergeych.lyng.idea.util.FormattingUtils.findFirstNonWs
 
 class LyngEnterHandler : EnterHandlerDelegate {
     private val log = Logger.getInstance(LyngEnterHandler::class.java)
@@ -80,10 +82,22 @@ class LyngEnterHandler : EnterHandlerDelegate {
             val trimmed = prevText.trimStart()
             // consider only code part before // comment
             val code = trimmed.substringBefore("//").trim()
-            if (code == "}") {
-                // Previously we reindented the enclosed block on Enter after a lone '}'.
-                // Per new behavior, this action is now bound to typing '}' instead.
-                // Keep Enter flow limited to indenting the new line only.
+            if (code == "}" || code == "*/") {
+                // Adjust indent for the previous line if it's a block or comment closer
+                val prevStart = doc.getLineStartOffset(prevLine)
+                CodeStyleManager.getInstance(project).adjustLineIndent(file, prevStart)
+
+                // Fallback for previous line: manual application
+                val desiredPrev = computeDesiredIndent(project, doc, prevLine)
+                val lineStartPrev = doc.getLineStartOffset(prevLine)
+                val lineEndPrev = doc.getLineEndOffset(prevLine)
+                val firstNonWsPrev = findFirstNonWs(doc, lineStartPrev, lineEndPrev)
+                val currentIndentLenPrev = firstNonWsPrev - lineStartPrev
+                if (doc.getText(TextRange(lineStartPrev, lineStartPrev + currentIndentLenPrev)) != desiredPrev) {
+                    WriteCommandAction.runWriteCommandAction(project) {
+                        doc.replaceString(lineStartPrev, lineStartPrev + currentIndentLenPrev, desiredPrev)
+                    }
+                }
             }
         }
         // Adjust indent for the current (new) line
@@ -159,35 +173,6 @@ class LyngEnterHandler : EnterHandlerDelegate {
         caret.moveToOffset(target)
     }
 
-    private fun computeDesiredIndent(project: Project, doc: Document, line: Int): String {
-        val options = CodeStyle.getIndentOptions(project, doc)
-        val start = 0
-        val end = doc.getLineEndOffset(line)
-        val snippet = doc.getText(TextRange(start, end))
-        val isBlankLine = doc.getLineText(line).trim().isEmpty()
-        val snippetForCalc = if (isBlankLine) snippet + "x" else snippet
-        val cfg = LyngFormatConfig(
-            indentSize = options.INDENT_SIZE.coerceAtLeast(1),
-            useTabs = options.USE_TAB_CHARACTER,
-            continuationIndentSize = options.CONTINUATION_INDENT_SIZE.coerceAtLeast(options.INDENT_SIZE.coerceAtLeast(1)),
-        )
-        val formatted = LyngFormatter.reindent(snippetForCalc, cfg)
-        val lastNl = formatted.lastIndexOf('\n')
-        val lastLine = if (lastNl >= 0) formatted.substring(lastNl + 1) else formatted
-        val wsLen = lastLine.indexOfFirst { it != ' ' && it != '\t' }.let { if (it < 0) lastLine.length else it }
-        return lastLine.substring(0, wsLen)
-    }
-
-    private fun findFirstNonWs(doc: Document, start: Int, end: Int): Int {
-        var i = start
-        val text = doc.charsSequence
-        while (i < end) {
-            val ch = text[i]
-            if (ch != ' ' && ch != '\t') break
-            i++
-        }
-        return i
-    }
 
     private fun Document.safeLineNumber(offset: Int): Int =
         getLineNumber(offset.coerceIn(0, textLength))

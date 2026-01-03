@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,7 +49,7 @@ class BindingTest {
             }
             """
         )
-        // Expect at least one Param symbol "a" and one Val symbol "x"
+        // Expect at least one Parameter symbol "a" and one Value symbol "x"
         val aIds = snap.symbols.filter { it.name == "a" }.map { it.id }
         val xIds = snap.symbols.filter { it.name == "x" }.map { it.id }
         assertTrue(aIds.isNotEmpty())

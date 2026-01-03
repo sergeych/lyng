@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,9 +24,8 @@ import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.codeStyle.CommonCodeStyleSettings.IndentOptions
 import com.intellij.psi.codeStyle.lineIndent.LineIndentProvider
-import net.sergeych.lyng.format.LyngFormatConfig
-import net.sergeych.lyng.format.LyngFormatter
 import net.sergeych.lyng.idea.LyngLanguage
+import net.sergeych.lyng.idea.util.FormattingUtils
 
 /**
  * Lightweight indentation provider for Lyng.
@@ -45,8 +44,7 @@ class LyngLineIndentProvider : LineIndentProvider {
         val options = CodeStyle.getIndentOptions(project, doc)
 
         val line = doc.getLineNumberSafe(offset)
-        val indent = computeDesiredIndentFromCore(doc, line, options)
-        return indent
+        return FormattingUtils.computeDesiredIndent(project, doc, line)
     }
 
     override fun isSuitableFor(language: Language?): Boolean = language == null || language == LyngLanguage
@@ -79,25 +77,4 @@ class LyngLineIndentProvider : LineIndentProvider {
         return spaces / size
     }
 
-    private fun computeDesiredIndentFromCore(doc: Document, line: Int, options: IndentOptions): String {
-        // Build a minimal text consisting of all previous lines and the current line.
-        // Special case: when the current line is blank (newly created by Enter), compute the
-        // indent as if there was a non-whitespace character at line start (append a sentinel).
-        val start = 0
-        val end = doc.getLineEndOffset(line)
-        val snippet = doc.getText(TextRange(start, end))
-        val isBlankLine = doc.getLineText(line).trim().isEmpty()
-        val snippetForCalc = if (isBlankLine) snippet + "x" else snippet
-        val cfg = LyngFormatConfig(
-            indentSize = options.INDENT_SIZE.coerceAtLeast(1),
-            useTabs = options.USE_TAB_CHARACTER,
-            continuationIndentSize = options.CONTINUATION_INDENT_SIZE.coerceAtLeast(options.INDENT_SIZE.coerceAtLeast(1)),
-        )
-        val formatted = LyngFormatter.reindent(snippetForCalc, cfg)
-        // Grab the last line's leading whitespace as the indent for the current line
-        val lastNl = formatted.lastIndexOf('\n')
-        val lastLine = if (lastNl >= 0) formatted.substring(lastNl + 1) else formatted
-        val wsLen = lastLine.indexOfFirst { it != ' ' && it != '\t' }.let { if (it < 0) lastLine.length else it }
-        return lastLine.substring(0, wsLen)
-    }
 }

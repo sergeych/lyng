@@ -27,7 +27,7 @@ import net.sergeych.lyng.highlight.SimpleLyngHighlighter
 import net.sergeych.lyng.highlight.offsetOf
 import net.sergeych.lyng.miniast.*
 
-enum class SymbolKind { Class, Enum, Function, Val, Var, Param }
+enum class SymbolKind { Class, Enum, Function, Value, Variable, Parameter }
 
 data class Symbol(
     val id: Int,
@@ -108,7 +108,7 @@ object Binder {
             for (cf in d.ctorFields) {
                 val fs = source.offsetOf(cf.nameStart)
                 val fe = fs + cf.name.length
-                val kind = if (cf.mutable) SymbolKind.Var else SymbolKind.Val
+                val kind = if (cf.mutable) SymbolKind.Variable else SymbolKind.Value
                 val fieldSym = Symbol(nextId++, cf.name, kind, fs, fe, containerId = sym.id)
                 symbols += fieldSym
                 classes.last().fields += fieldSym.id
@@ -135,7 +135,7 @@ object Binder {
                     for (p in d.params) {
                         val ps = source.offsetOf(p.nameStart)
                         val pe = ps + p.name.length
-                        val pk = SymbolKind.Param
+                        val pk = SymbolKind.Parameter
                         val paramSym = Symbol(nextId++, p.name, pk, ps, pe, containerId = sym.id)
                         fnScope.locals += paramSym.id
                         symbols += paramSym
@@ -144,7 +144,7 @@ object Binder {
                 }
                 is MiniValDecl -> {
                     val (s, e) = nameOffsets(d.nameStart, d.name)
-                    val kind = if (d.mutable) SymbolKind.Var else SymbolKind.Val
+                    val kind = if (d.mutable) SymbolKind.Variable else SymbolKind.Value
                     val ownerClass = classContaining(s)
                     if (ownerClass != null) {
                         // class field
@@ -194,7 +194,7 @@ object Binder {
                 .maxByOrNull { it.rangeEnd - it.rangeStart }
             if (containerFn != null) {
                 val fnSymId = containerFn.id
-                val kind = if (d.mutable) SymbolKind.Var else SymbolKind.Val
+                val kind = if (d.mutable) SymbolKind.Variable else SymbolKind.Value
                 val localSym = Symbol(nextId++, d.name, kind, s, e, containerId = fnSymId)
                 symbols += localSym
                 containerFn.locals += localSym.id
@@ -234,7 +234,7 @@ object Binder {
                                 val inFn = functions.asSequence()
                                     .filter { it.rangeEnd > it.rangeStart && nameStart >= it.rangeStart && nameStart <= it.rangeEnd }
                                     .maxByOrNull { it.rangeEnd - it.rangeStart }
-                                val kind = if (kw.equals("var", true)) SymbolKind.Var else SymbolKind.Val
+                                val kind = if (kw.equals("var", true)) SymbolKind.Variable else SymbolKind.Value
                                 if (inFn != null) {
                                     val localSym = Symbol(nextId++, text.substring(nameStart, nameEnd), kind, nameStart, nameEnd, containerId = inFn.id)
                                     symbols += localSym

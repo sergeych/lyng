@@ -69,105 +69,156 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         val ident = text.substring(idRange.startOffset, idRange.endOffset)
         if (DEBUG_LOG) log.info("[LYNG_DEBUG] QuickDoc: ident='$ident' at ${idRange.startOffset}..${idRange.endOffset} in ${file.name}")
 
-        // Build MiniAst for this file (fast and resilient). Best-effort; on failure continue with registry lookup only.
+        // Build MiniAst for this file (fast and resilient). Best-effort; on failure continue with partial AST.
         val sink = MiniAstBuilder()
-        // Use lenient import provider so unresolved imports (e.g., lyng.io.fs) don't break docs
         val provider = IdeLenientImportProvider.create()
         val src = Source("<ide>", text)
-        var mini: MiniScript? = try {
+        val mini = try {
             runBlocking { Compiler.compileWithMini(src, provider, sink) }
             sink.build()
         } catch (t: Throwable) {
-            // Do not bail out completely: we still can resolve built-in and imported docs (e.g., println)
-            if (DEBUG_LOG) log.warn("[LYNG_DEBUG] QuickDoc: compileWithMini failed: ${t.message}")
-            null
-        }
-        val haveMini = mini != null
-        if (mini == null) {
-            // Ensure we have a dummy script object to avoid NPE in downstream helpers that expect a MiniScript
-            mini = MiniScript(MiniRange(Pos(src, 1, 1), Pos(src, 1, 1)))
-        }
+            if (DEBUG_LOG) log.warn("[LYNG_DEBUG] QuickDoc: compileWithMini produced partial AST: ${t.message}")
+            sink.build()
+        } ?: MiniScript(MiniRange(Pos(src, 1, 1), Pos(src, 1, 1)))
         val source = src
 
         // Try resolve to: function param at position, function/class/val declaration at position
-        // 1) Check declarations whose name range contains offset
-        if (haveMini) for (d in mini.declarations) {
-            val s = source.offsetOf(d.nameStart)
-            val e = (s + d.name.length).coerceAtMost(text.length)
-            if (offset in s until e) {
-                if (DEBUG_LOG) log.info("[LYNG_DEBUG] QuickDoc: matched decl '${d.name}' kind=${d::class.simpleName}")
-                return renderDeclDoc(d)
+        // 1) Use unified declaration detection
+        DocLookupUtils.findDeclarationAt(mini, offset, ident)?.let { (name, kind) ->
+            if (DEBUG_LOG) log.info("[LYNG_DEBUG] QuickDoc: matched declaration '$name' kind=$kind")
+            // Find the actual declaration object to render
+            for (d in mini.declarations) {
+                if (d.name == name && source.offsetOf(d.nameStart) <= offset && source.offsetOf(d.nameStart) + d.name.length > offset) {
+                    return renderDeclDoc(d)
+                }
+                // Handle members if it was a member
+                if (d is MiniClassDecl) {
+                    for (m in d.members) {
+                        if (m.name == name && source.offsetOf(m.nameStart) <= offset && source.offsetOf(m.nameStart) + m.name.length > offset) {
+                            return when (m) {
+                                is MiniMemberFunDecl -> renderMemberFunDoc(d.name, m)
+                                is MiniMemberValDecl -> renderMemberValDoc(d.name, m)
+                                is MiniInitDecl -> null
+                            }
+                        }
+                    }
+                    for (cf in d.ctorFields) {
+                        if (cf.name == name && source.offsetOf(cf.nameStart) <= offset && source.offsetOf(cf.nameStart) + cf.name.length > offset) {
+                            // Render as a member val
+                            val mv = MiniMemberValDecl(
+                                range = MiniRange(cf.nameStart, cf.nameStart), // dummy
+                                name = cf.name,
+                                mutable = cf.mutable,
+                                type = cf.type,
+                                doc = null,
+                                nameStart = cf.nameStart
+                            )
+                            return renderMemberValDoc(d.name, mv)
+                        }
+                    }
+                    for (cf in d.classFields) {
+                        if (cf.name == name && source.offsetOf(cf.nameStart) <= offset && source.offsetOf(cf.nameStart) + cf.name.length > offset) {
+                            // Render as a member val
+                            val mv = MiniMemberValDecl(
+                                range = MiniRange(cf.nameStart, cf.nameStart), // dummy
+                                name = cf.name,
+                                mutable = cf.mutable,
+                                type = cf.type,
+                                doc = null,
+                                nameStart = cf.nameStart
+                            )
+                            return renderMemberValDoc(d.name, mv)
+                        }
+                    }
+                }
+                if (d is MiniEnumDecl) {
+                    if (d.entries.contains(name) && offset >= source.offsetOf(d.range.start) && offset <= source.offsetOf(d.range.end)) {
+                        // For enum constant, we don't have detailed docs in MiniAst yet, but we can render a title
+                        return "<div class='doc-title'>enum constant ${d.name}.${name}</div>"
+                    }
+                }
             }
-        }
-        // 2) Check parameters of functions
-        if (haveMini) for (fn in mini.declarations.filterIsInstance<MiniFunDecl>()) {
-            for (p in fn.params) {
-                val s = source.offsetOf(p.nameStart)
-                val e = (s + p.name.length).coerceAtMost(text.length)
-                if (offset in s until e) {
-                    if (DEBUG_LOG) log.info("[LYNG_DEBUG] QuickDoc: matched param '${p.name}' in fun '${fn.name}'")
-                    return renderParamDoc(fn, p)
+            // Check parameters
+            for (fn in mini.declarations.filterIsInstance<MiniFunDecl>()) {
+                for (p in fn.params) {
+                    if (p.name == name && source.offsetOf(p.nameStart) <= offset && source.offsetOf(p.nameStart) + p.name.length > offset) {
+                        return renderParamDoc(fn, p)
+                    }
                 }
             }
         }
-        // 3) usages in current file via Binder (resolves local variables, parameters, and classes)
-        if (haveMini) {
-            try {
-                val binding = net.sergeych.lyng.binding.Binder.bind(text, mini)
-                val ref = binding.references.firstOrNull { offset in it.start until it.end }
-                if (ref != null) {
-                    val sym = binding.symbols.firstOrNull { it.id == ref.symbolId }
-                    if (sym != null) {
-                        // Find local declaration that matches this symbol
-                        val ds = mini.declarations.firstOrNull { decl ->
-                            val s = source.offsetOf(decl.nameStart)
-                            decl.name == sym.name && s == sym.declStart
-                        }
-                        if (ds != null) return renderDeclDoc(ds)
 
-                        // Check parameters
-                        for (fn in mini.declarations.filterIsInstance<MiniFunDecl>()) {
-                            for (p in fn.params) {
-                                val s = source.offsetOf(p.nameStart)
-                                if (p.name == sym.name && s == sym.declStart) {
-                                    return renderParamDoc(fn, p)
+        // 3) usages in current file via Binder (resolves local variables, parameters, and classes)
+        try {
+            val binding = net.sergeych.lyng.binding.Binder.bind(text, mini)
+            val ref = binding.references.firstOrNull { offset in it.start until it.end }
+            if (ref != null) {
+                val sym = binding.symbols.firstOrNull { it.id == ref.symbolId }
+                if (sym != null) {
+                    // Find local declaration that matches this symbol
+                    val ds = mini.declarations.firstOrNull { decl ->
+                        val s = source.offsetOf(decl.nameStart)
+                        decl.name == sym.name && s == sym.declStart
+                    }
+                    if (ds != null) return renderDeclDoc(ds)
+
+                    // Check parameters
+                    for (fn in mini.declarations.filterIsInstance<MiniFunDecl>()) {
+                        for (p in fn.params) {
+                            val s = source.offsetOf(p.nameStart)
+                            if (p.name == sym.name && s == sym.declStart) {
+                                return renderParamDoc(fn, p)
+                            }
+                        }
+                    }
+
+                    // Check class members (fields/functions)
+                    for (cls in mini.declarations.filterIsInstance<MiniClassDecl>()) {
+                        for (m in cls.members) {
+                            val s = source.offsetOf(m.nameStart)
+                            if (m.name == sym.name && s == sym.declStart) {
+                                return when (m) {
+                                    is MiniMemberFunDecl -> renderMemberFunDoc(cls.name, m)
+                                    is MiniMemberValDecl -> renderMemberValDoc(cls.name, m)
+                                    is MiniInitDecl -> null
                                 }
                             }
                         }
-                        
-                        // Check class members (fields/functions)
-                        for (cls in mini.declarations.filterIsInstance<MiniClassDecl>()) {
-                            for (m in cls.members) {
-                                val s = source.offsetOf(m.nameStart)
-                                if (m.name == sym.name && s == sym.declStart) {
-                                    return when (m) {
-                                        is MiniMemberFunDecl -> renderMemberFunDoc(cls.name, m)
-                                        is MiniMemberValDecl -> renderMemberValDoc(cls.name, m)
-                                        is MiniInitDecl -> null
-                                    }
-                                }
+                        for (cf in cls.ctorFields) {
+                            val s = source.offsetOf(cf.nameStart)
+                            if (cf.name == sym.name && s == sym.declStart) {
+                                // Render as a member val
+                                val mv = MiniMemberValDecl(
+                                    range = MiniRange(cf.nameStart, cf.nameStart), // dummy
+                                    name = cf.name,
+                                    mutable = cf.mutable,
+                                    type = cf.type,
+                                    doc = null,
+                                    nameStart = cf.nameStart
+                                )
+                                return renderMemberValDoc(cls.name, mv)
                             }
-                            for (cf in cls.ctorFields) {
-                                val s = source.offsetOf(cf.nameStart)
-                                if (cf.name == sym.name && s == sym.declStart) {
-                                    // Render as a member val
-                                    val mv = MiniMemberValDecl(
-                                        range = MiniRange(cf.nameStart, cf.nameStart), // dummy
-                                        name = cf.name,
-                                        mutable = cf.mutable,
-                                        type = cf.type,
-                                        doc = null,
-                                        nameStart = cf.nameStart
-                                    )
-                                    return renderMemberValDoc(cls.name, mv)
-                                }
+                        }
+                        for (cf in cls.classFields) {
+                            val s = source.offsetOf(cf.nameStart)
+                            if (cf.name == sym.name && s == sym.declStart) {
+                                // Render as a member val
+                                val mv = MiniMemberValDecl(
+                                    range = MiniRange(cf.nameStart, cf.nameStart), // dummy
+                                    name = cf.name,
+                                    mutable = cf.mutable,
+                                    type = cf.type,
+                                    doc = null,
+                                    nameStart = cf.nameStart
+                                )
+                                return renderMemberValDoc(cls.name, mv)
                             }
                         }
                     }
                 }
-            } catch (e: Throwable) {
-                if (DEBUG_LOG) log.warn("[LYNG_DEBUG] QuickDoc: local binder resolution failed: ${e.message}")
             }
+        } catch (e: Throwable) {
+            if (DEBUG_LOG) log.warn("[LYNG_DEBUG] QuickDoc: local binder resolution failed: ${e.message}")
         }
         // 4) Member-context resolution first (dot immediately before identifier): handle literals and calls
         run {
@@ -175,12 +226,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                 ?: TextCtx.findDotLeft(text, offset)
             if (dotPos != null) {
                 // Build imported modules (MiniAst-derived if available, else lenient from text) and ensure stdlib is present
-                var importedModules = if (haveMini) DocLookupUtils.canonicalImportedModules(mini) else emptyList()
-                if (importedModules.isEmpty()) {
-                    val fromText = extractImportsFromText(text)
-                    importedModules = if (fromText.isEmpty()) listOf("lyng.stdlib") else fromText
-                }
-                if (!importedModules.contains("lyng.stdlib")) importedModules = importedModules + "lyng.stdlib"
+                val importedModules = DocLookupUtils.canonicalImportedModules(mini, text)
 
                 // Try literal and call-based receiver inference around the dot
                 val i = TextCtx.prevNonWs(text, dotPos - 1)
@@ -251,21 +297,14 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         }
 
         // 4) As a fallback, if the caret is on an identifier text that matches any declaration name, show that
-        if (haveMini) mini.declarations.firstOrNull { it.name == ident }?.let {
+        mini.declarations.firstOrNull { it.name == ident }?.let {
             log.info("[LYNG_DEBUG] QuickDoc: fallback by name '${it.name}' kind=${it::class.simpleName}")
             return renderDeclDoc(it)
         }
 
         // 4) Consult BuiltinDocRegistry for imported modules (top-level and class members)
         // Canonicalize import names using ImportManager, as users may write shortened names (e.g., "io.fs")
-        var importedModules = if (haveMini) DocLookupUtils.canonicalImportedModules(mini) else emptyList()
-        // If MiniAst failed or captured no imports, try a lightweight textual import scan
-        if (importedModules.isEmpty()) {
-            val fromText = extractImportsFromText(text)
-            if (fromText.isNotEmpty()) {
-                importedModules = fromText
-            }
-        }
+        var importedModules = DocLookupUtils.canonicalImportedModules(mini, text)
         // Always include stdlib as a fallback context
         if (!importedModules.contains("lyng.stdlib")) importedModules = importedModules + "lyng.stdlib"
         // 4a) try top-level decls
@@ -373,25 +412,6 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         return null
     }
 
-    /**
-     * Very lenient import extractor for cases when MiniAst is unavailable.
-     * Looks for lines like `import xxx.yyy` and returns canonical module names
-     * (prefixing with `lyng.` if missing).
-     */
-    private fun extractImportsFromText(text: String): List<String> {
-        val result = LinkedHashSet<String>()
-        val re = Regex("^\\s*import\\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)*)", RegexOption.MULTILINE)
-        re.findAll(text).forEach { m ->
-            val raw = m.groupValues.getOrNull(1)?.trim().orEmpty()
-            if (raw.isNotEmpty()) {
-                val canon = if (raw.startsWith("lyng.")) raw else "lyng.$raw"
-                result.add(canon)
-            }
-        }
-        return result.toList()
-    }
-
-    // External docs registrars discovery via reflection to avoid hard dependencies on optional modules
     private val externalDocsLoaded: Boolean by lazy { tryLoadExternalDocs() }
 
     private fun ensureExternalDocsRegistered() { @Suppress("UNUSED_EXPRESSION") externalDocsLoaded }
@@ -441,7 +461,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         val doc: String? = if (raw.isNullOrBlank()) null else MarkdownRenderer.render(raw)
         val sb = StringBuilder()
         sb.append("<div class='doc-title'>").append(htmlEscape(title)).append("</div>")
-        if (!doc.isNullOrBlank()) sb.append(styledMarkdown(doc!!))
+        if (!doc.isNullOrBlank()) sb.append(styledMarkdown(doc))
         return sb.toString()
     }
 
@@ -462,7 +482,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         val doc: String? = if (raw.isNullOrBlank()) null else MarkdownRenderer.render(raw)
         val sb = StringBuilder()
         sb.append("<div class='doc-title'>").append(htmlEscape(title)).append("</div>")
-        if (!doc.isNullOrBlank()) sb.append(styledMarkdown(doc!!))
+        if (!doc.isNullOrBlank()) sb.append(styledMarkdown(doc))
         return sb.toString()
     }
 
@@ -475,7 +495,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         val doc: String? = if (raw.isNullOrBlank()) null else MarkdownRenderer.render(raw)
         val sb = StringBuilder()
         sb.append("<div class='doc-title'>").append(htmlEscape(title)).append("</div>")
-        if (!doc.isNullOrBlank()) sb.append(styledMarkdown(doc!!))
+        if (!doc.isNullOrBlank()) sb.append(styledMarkdown(doc))
         return sb.toString()
     }
 
