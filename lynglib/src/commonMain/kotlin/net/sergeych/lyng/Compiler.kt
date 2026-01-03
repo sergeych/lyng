@@ -138,9 +138,16 @@ class Compiler(
     private var lastParsedBlockRange: MiniRange? = null
 
     private suspend fun <T> inCodeContext(context: CodeContext, f: suspend () -> T): T {
-        return try {
-            codeContexts.add(context)
-            f()
+        codeContexts.add(context)
+        try {
+            val res = f()
+            if (context is CodeContext.ClassBody) {
+                if (context.pendingInitializations.isNotEmpty()) {
+                    val (name, pos) = context.pendingInitializations.entries.first()
+                    throw ScriptError(pos, "val '$name' must be initialized in the class body or init block")
+                }
+            }
+            return res
         } finally {
             codeContexts.removeLast()
         }
@@ -360,7 +367,21 @@ class Compiler(
             val rvalue = parseExpressionLevel(level + 1)
                 ?: throw ScriptError(opToken.pos, "Expecting expression")
 
-            lvalue = op.generate(opToken.pos, lvalue!!, rvalue)
+            val res = op.generate(opToken.pos, lvalue!!, rvalue)
+            if (opToken.type == Token.Type.ASSIGN) {
+                val ctx = codeContexts.lastOrNull()
+                if (ctx is CodeContext.ClassBody) {
+                    val target = lvalue
+                    val name = when (target) {
+                        is LocalVarRef -> target.name
+                        is FastLocalVarRef -> target.name
+                        is FieldRef -> if (target.target is LocalVarRef && target.target.name == "this") target.name else null
+                        else -> null
+                    }
+                    if (name != null) ctx.pendingInitializations.remove(name)
+                }
+            }
+            lvalue = res
         }
         return lvalue
     }
@@ -2714,7 +2735,13 @@ class Compiler(
             if (!isProperty && eqToken.type != Token.Type.ASSIGN) {
                 if (!isMutable && (declaringClassNameCaptured == null) && (extTypeName == null))
                     throw ScriptError(start, "val must be initialized")
-                else {
+                else if (!isMutable && declaringClassNameCaptured != null && extTypeName == null) {
+                    // lateinit val in class: track it
+                    (codeContexts.lastOrNull() as? CodeContext.ClassBody)?.pendingInitializations?.put(name, start)
+                    cc.restorePos(markBeforeEq)
+                    cc.skipWsTokens()
+                    setNull = true
+                } else {
                     cc.restorePos(markBeforeEq)
                     cc.skipWsTokens()
                     setNull = true
@@ -2883,34 +2910,37 @@ class Compiler(
                     prop
                 }
             } else {
-                if (declaringClassName != null && !isStatic) {
-                    val storageName = "$declaringClassName::$name"
-                    // If we are in class scope now (defining instance field), defer initialization to instance time
-                    val isClassScope = context.thisObj is ObjClass && (context.thisObj !is ObjInstance)
-                    if (isClassScope) {
-                        val cls = context.thisObj as ObjClass
-                        // Defer: at instance construction, evaluate initializer in instance scope and store under mangled name
-                        val initStmt = statement(start) { scp ->
-                            val initValue = initialExpression?.execute(scp)?.byValueCopy() ?: ObjNull
-                            // Preserve mutability of declaration: do NOT use addOrUpdateItem here, as it creates mutable records
-                            scp.addItem(storageName, isMutable, initValue, visibility, recordType = ObjRecord.Type.Field)
+                    val isLateInitVal = !isMutable && initialExpression == null && getter == null && setter == null
+                    if (declaringClassName != null && !isStatic) {
+                        val storageName = "$declaringClassName::$name"
+                        // If we are in class scope now (defining instance field), defer initialization to instance time
+                        val isClassScope = context.thisObj is ObjClass && (context.thisObj !is ObjInstance)
+                        if (isClassScope) {
+                            val cls = context.thisObj as ObjClass
+                            // Defer: at instance construction, evaluate initializer in instance scope and store under mangled name
+                            val initStmt = statement(start) { scp ->
+                                val initValue =
+                                    initialExpression?.execute(scp)?.byValueCopy() ?: if (isLateInitVal) ObjUnset else ObjNull
+                                // Preserve mutability of declaration: do NOT use addOrUpdateItem here, as it creates mutable records
+                                scp.addItem(storageName, isMutable, initValue, visibility, recordType = ObjRecord.Type.Field)
+                                ObjVoid
+                            }
+                            cls.instanceInitializers += initStmt
                             ObjVoid
+                        } else {
+                            // We are in instance scope already: perform initialization immediately
+                            val initValue =
+                                initialExpression?.execute(context)?.byValueCopy() ?: if (isLateInitVal) ObjUnset else ObjNull
+                            // Preserve mutability of declaration: create record with correct mutability
+                            context.addItem(storageName, isMutable, initValue, visibility, recordType = ObjRecord.Type.Field)
+                            initValue
                         }
-                        cls.instanceInitializers += initStmt
-                        ObjVoid
                     } else {
-                        // We are in instance scope already: perform initialization immediately
+                        // Not in class body: regular local/var declaration
                         val initValue = initialExpression?.execute(context)?.byValueCopy() ?: ObjNull
-                        // Preserve mutability of declaration: create record with correct mutability
-                        context.addItem(storageName, isMutable, initValue, visibility, recordType = ObjRecord.Type.Field)
+                        context.addItem(name, isMutable, initValue, visibility, recordType = ObjRecord.Type.Field)
                         initValue
                     }
-                } else {
-                    // Not in class body: regular local/var declaration
-                    val initValue = initialExpression?.execute(context)?.byValueCopy() ?: ObjNull
-                    context.addItem(name, isMutable, initValue, visibility, recordType = ObjRecord.Type.Field)
-                    initValue
-                }
             }
         }
     }

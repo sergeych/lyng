@@ -194,7 +194,9 @@ open class ObjException(
                 "AccessException",
                 "UnknownException",
                 "NotFoundException",
-                "IllegalOperationException"
+                "IllegalOperationException",
+                "UnsetException",
+                "SyntaxError"
             )) {
                 scope.addConst(name, getOrCreateExceptionClass(name))
             }
@@ -245,3 +247,6 @@ class ObjIllegalOperationException(scope: Scope, message: String = "Operation is
 
 class ObjNotFoundException(scope: Scope, message: String = "not found") :
     ObjException("NotFoundException", scope, message)
+
+class ObjUnsetException(scope: Scope, message: String = "property is unset (not initialized)") :
+    ObjException("UnsetException", scope, message)

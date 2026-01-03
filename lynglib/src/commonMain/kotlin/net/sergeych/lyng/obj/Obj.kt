@@ -665,6 +665,50 @@ object ObjNull : Obj() {
     }
 }
 
+@Serializable
+@SerialName("unset")
+object ObjUnset : Obj() {
+    override suspend fun compareTo(scope: Scope, other: Obj): Int = if (other === this) 0 else -1
+    override fun equals(other: Any?): Boolean = other === this
+    override fun toString(): String = "Unset"
+
+    override suspend fun readField(scope: Scope, name: String): ObjRecord = scope.raiseUnset()
+    override suspend fun invokeInstanceMethod(
+        scope: Scope,
+        name: String,
+        args: Arguments,
+        onNotFoundResult: (suspend () -> Obj?)?
+    ): Obj = scope.raiseUnset()
+
+    override suspend fun getAt(scope: Scope, index: Obj): Obj = scope.raiseUnset()
+    override suspend fun putAt(scope: Scope, index: Obj, newValue: Obj) = scope.raiseUnset()
+    override suspend fun callOn(scope: Scope): Obj = scope.raiseUnset()
+    override suspend fun plus(scope: Scope, other: Obj): Obj = scope.raiseUnset()
+    override suspend fun minus(scope: Scope, other: Obj): Obj = scope.raiseUnset()
+    override suspend fun negate(scope: Scope): Obj = scope.raiseUnset()
+    override suspend fun mul(scope: Scope, other: Obj): Obj = scope.raiseUnset()
+    override suspend fun div(scope: Scope, other: Obj): Obj = scope.raiseUnset()
+    override suspend fun mod(scope: Scope, other: Obj): Obj = scope.raiseUnset()
+    override suspend fun logicalNot(scope: Scope): Obj = scope.raiseUnset()
+    override suspend fun logicalAnd(scope: Scope, other: Obj): Obj = scope.raiseUnset()
+    override suspend fun logicalOr(scope: Scope, other: Obj): Obj = scope.raiseUnset()
+    override suspend fun operatorMatch(scope: Scope, other: Obj): Obj = scope.raiseUnset()
+    override suspend fun bitAnd(scope: Scope, other: Obj): Obj = scope.raiseUnset()
+    override suspend fun bitOr(scope: Scope, other: Obj): Obj = scope.raiseUnset()
+    override suspend fun bitXor(scope: Scope, other: Obj): Obj = scope.raiseUnset()
+    override suspend fun shl(scope: Scope, other: Obj): Obj = scope.raiseUnset()
+    override suspend fun shr(scope: Scope, other: Obj): Obj = scope.raiseUnset()
+    override suspend fun bitNot(scope: Scope): Obj = scope.raiseUnset()
+
+    override val objClass: ObjClass by lazy {
+        object : ObjClass("Unset") {
+            override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj {
+                return ObjUnset
+            }
+        }
+    }
+}
+
 /**
  * TODO: get rid of it. Maybe we ise some Lyng inheritance instead
  */

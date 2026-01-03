@@ -262,6 +262,9 @@ open class Scope(
 
     fun raiseClassCastError(msg: String): Nothing = raiseError(ObjClassCastException(this, msg))
 
+    fun raiseUnset(message: String = "property is unset (not initialized)"): Nothing =
+        raiseError(ObjUnsetException(this, message))
+
     @Suppress("unused")
     fun raiseSymbolNotFound(name: String): Nothing =
         raiseError(ObjSymbolNotDefinedException(this, "symbol is not defined: $name"))

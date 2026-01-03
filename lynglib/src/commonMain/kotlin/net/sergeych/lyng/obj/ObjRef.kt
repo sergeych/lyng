@@ -442,9 +442,9 @@ class ConstRef(private val record: ObjRecord) : ObjRef {
  * Reference to an object's field with optional chaining.
  */
 class FieldRef(
-    private val target: ObjRef,
-    private val name: String,
-    private val isOptional: Boolean,
+    val target: ObjRef,
+    val name: String,
+    val isOptional: Boolean,
 ) : ObjRef {
     // 4-entry PIC for reads/writes (guarded by PerfFlags.FIELD_PIC)
     // Reads

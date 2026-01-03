@@ -20,5 +20,7 @@ package net.sergeych.lyng
 sealed class CodeContext {
     class Module(@Suppress("unused") val packageName: String?): CodeContext()
     class Function(val name: String): CodeContext()
-    class ClassBody(val name: String): CodeContext()
+    class ClassBody(val name: String): CodeContext() {
+        val pendingInitializations = mutableMapOf<String, Pos>()
+    }
 }

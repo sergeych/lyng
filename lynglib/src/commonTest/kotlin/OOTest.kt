@@ -418,4 +418,51 @@ class OOTest {
             
         """.trimIndent())
     }
+
+    @Test
+    fun testLateInitValsInClasses() = runTest {
+        assertFails {
+            eval("""
+                class T {
+                    val x
+                }
+            """)
+        }
+
+        assertFails {
+            eval("val String.late")
+        }
+
+        eval("""
+            // but we can "late-init" them in init block:
+            class OK {
+                val x
+                
+                init {
+                    x = "foo"
+                }
+            }
+            val ok = OK()
+            assertEquals("foo", ok.x)
+            
+            // they can't be reassigned:
+            assertThrows(IllegalAssignmentException) {
+                ok.x = "bar"
+            }
+            
+            // To test access before init, we need a trick:
+            class AccessBefore {
+                val x
+                fun readX() = x
+                init {
+                    assertEquals(x, Unset)
+                    // if we call readX() here, x is Unset. 
+                    // Just reading it is fine, but using it should throw:
+                    assertThrows(UnsetException) { readX() + 1 }
+                    x = 42
+                }
+            }
+            AccessBefore()
+        """.trimIndent())
+    }
 }

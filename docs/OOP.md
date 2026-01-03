@@ -175,6 +175,44 @@ statements discussed later, there could be default values, ellipsis, etc.
 
 Note that unlike **Kotlin**, which uses `=` for named arguments, Lyng uses `:` to avoid ambiguity with assignment expressions.
 
+### Late-initialized `val` fields
+
+You can declare a `val` field without an immediate initializer if you provide an assignment for it within an `init` block or the class body. This is useful when the initial value depends on logic that cannot be expressed in a single expression.
+
+```kotlin
+class DataProcessor(data: Object) {
+    val result: Object
+    
+    init {
+        // Complex initialization logic
+        result = transform(data)
+    }
+}
+```
+
+Key rules for late-init `val`:
+- **Compile-time Check**: The compiler ensures that every `val` declared without an initializer in a class body has at least one assignment within that class body (including `init` blocks). Failing to do so results in a syntax error.
+- **Write-Once**: A `val` can only be assigned once. Even if it was declared without an initializer, once it is assigned a value (e.g., in `init`), any subsequent assignment will throw an `IllegalAssignmentException`.
+- **Access before Initialization**: If you attempt to read a late-init `val` before it has been assigned (for example, by calling a method in `init` that reads the field before its assignment), it will hold a special `Unset` value. Using `Unset` for most operations (like arithmetic or method calls) will throw an `UnsetException`.
+- **No Extensions**: Extension properties do not support late initialization as they do not have per-instance storage. Extension `val`s must always have an initializer or a `get()` accessor.
+
+### The `Unset` singleton
+
+The `Unset` singleton represents a field that has been declared but not yet initialized. While it can be compared and converted to a string, most other operations on it are forbidden to prevent accidental use of uninitialized data.
+
+```kotlin
+class T {
+    val x
+    fun check() {
+        if (x == Unset) println("Not ready")
+    }
+    init {
+        check() // Prints "Not ready"
+        x = 42
+    }
+}
+```
+
 ## Methods
 
 Functions defined inside a class body are methods, and unless declared

@@ -108,7 +108,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 prop.callSetter(scope, this, newValue, decl)
                 return
             }
-            if (!f.isMutable) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
+            if (!f.isMutable && f.value !== ObjUnset) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
             if (f.value.assign(scope, newValue) == null)
                 f.value = newValue
             return
@@ -142,7 +142,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 prop.callSetter(scope, this, newValue, declaring)
                 return
             }
-            if (!rec.isMutable) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
+            if (!rec.isMutable && rec.value !== ObjUnset) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
             if (rec.value.assign(scope, newValue) == null)
                 rec.value = newValue
             return
@@ -355,7 +355,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
                     scope,
                     "can't assign to field $name (declared in ${decl.className})"
                 ).raise()
-            if (!f.isMutable) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
+            if (!f.isMutable && f.value !== ObjUnset) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
             if (f.value.assign(scope, newValue) == null) f.value = newValue
             return
         }
@@ -369,7 +369,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
                         scope,
                         "can't assign to field $name (declared in ${decl?.className ?: "?"})"
                     ).raise()
-                if (!f.isMutable) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
+                if (!f.isMutable && f.value !== ObjUnset) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
                 if (f.value.assign(scope, newValue) == null) f.value = newValue
                 return
             }

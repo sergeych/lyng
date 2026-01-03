@@ -60,6 +60,7 @@ class Script(
 
         internal val rootScope: Scope = Scope(null).apply {
             ObjException.addExceptionsToContext(this)
+            addConst("Unset", ObjUnset)
             addFn("print") {
                 for ((i, a) in args.withIndex()) {
                     if (i > 0) print(' ' + a.toString(this).value)
