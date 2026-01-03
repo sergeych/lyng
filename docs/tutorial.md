@@ -1497,7 +1497,7 @@ See [math functions](math.md). Other general purpose functions are:
 | print(args...)                        | Open for overriding, it prints to stdout without newline.  |
 | flow {}                               | create flow sequence, see [parallelism]                    |
 | delay, launch, yield                  | see [parallelism]                                          |
-| cached(builder)                       | remembers builder() on first invocation and return it then |
+| cached(builder)                       | [Lazy evaluation with `cached`](#lazy-evaluation-with-cached) |
 | let, also, apply, run                 | see above, flow controls                                   |
 
 (1)
@@ -1544,6 +1544,50 @@ Lambda avoid unnecessary execution if assertion is not failed. for example:
 [Array]: Array.md
 
 [Regex]: Regex.md
+
+## Lazy evaluation with `cached`
+
+Sometimes you have an expensive computation that you only want to perform if and when it is actually needed, and then remember (cache) the result for all future calls. Lyng provides the `cached(builder)` function for this purpose.
+
+It is extremely simple to use: you pass it a block (lambda) that performs the computation, and it returns a zero-argument function that manages the caching for you.
+
+### Basic Example
+
+```kotlin
+val expensive = cached {
+    println("Performing expensive calculation...")
+    2 + 2
+}
+
+println(expensive()) // Prints "Performing expensive calculation..." then "4"
+println(expensive()) // Prints only "4" (result is cached)
+```
+
+### Benefits and Simplicity
+
+1.  **Lazy Execution:** The code inside the `cached` block doesn't run until you actually call the resulting function.
+2.  **Automatic State Management:** You don't need to manually check if a value has been computed or store it in a separate variable.
+3.  **Closures and Class Support:** `cached` works perfectly with closures. If you use it inside a class, it will correctly capture the instance variables, and each instance will have its own independent cache.
+
+### Use Case: Lazy Properties in Classes
+
+This is the most common use case for `cached`. It allows you to define expensive "fields" that are only computed if someone actually uses them:
+
+```kotlin
+class User(val id: Int) {
+    // The details will be fetched only once, on demand
+    val details = cached {
+        println("Fetching details for user " + id)
+        // Db.query is a hypothetical example
+        Db.query("SELECT * FROM users WHERE id = " + id)
+    }
+}
+
+val u = User(101)
+// ... nothing happens yet ...
+val d = u.details() // Computation happens here
+val sameD = u.details() // Returns the same result immediately
+```
 
 ## Multiple Inheritance (quick start)
 

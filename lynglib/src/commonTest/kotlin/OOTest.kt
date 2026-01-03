@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -394,6 +394,28 @@ class OOTest {
         scope2.eval("""
             // in scope2 we didn't override `totalDigits` extension:
             assertThrows { "answer is 42".totalDigits }
+        """.trimIndent())
+    }
+
+    @Test
+    fun testCacheInClass() = runTest {
+        eval("""
+            class T(salt) {
+                private var c
+                 
+                init {
+                    println("create cached with "+salt)
+                    c = cached { salt + "." }
+                }
+                
+                fun getResult() = c()
+            }
+            
+            val t1 = T("foo")
+            val t2 = T("bar")
+            assertEquals("bar.", t2.getResult())
+            assertEquals("foo.", t1.getResult())
+            
         """.trimIndent())
     }
 }

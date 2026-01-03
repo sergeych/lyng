@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ package net.sergeych.lyng
 
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjClass
-import net.sergeych.lyng.obj.ObjNull
 import net.sergeych.lyng.obj.ObjVoid
 
 fun String.toSource(name: String = "eval"): Source = Source(name, this)
@@ -46,9 +45,8 @@ abstract class Statement(
     abstract suspend fun execute(scope: Scope): Obj
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
-        if( other == ObjNull || other == ObjVoid ) return 1
         if( other === this ) return 0
-        return -1
+        return -3
     }
 
     override suspend fun callOn(scope: Scope): Obj {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -271,7 +271,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
 
     protected val comparableVars: Map<String, ObjRecord> by lazy {
         instanceScope.objects.filter {
-            it.value.type.comparable
+            it.value.type.comparable && (it.value.type != ObjRecord.Type.Field || it.value.isMutable)
         }
     }
 

@@ -628,35 +628,30 @@ class Compiler(
 
         val body = parseBlock(skipLeadingBrace = true)
 
-        var closure: Scope? = null
-
-        val callStatement = statement {
-            // and the source closure of the lambda which might have other thisObj.
-            val context = this.applyClosure(closure!!)
-            // Execute lambda body in a closure-aware context. Blocks inside the lambda
-            // will create child scopes as usual, so re-declarations inside loops work.
-            if (argsDeclaration == null) {
-                // no args: automatic var 'it'
-                val l = args.list
-                val itValue: Obj = when (l.size) {
-                    // no args: it == void
-                    0 -> ObjVoid
-                    // one args: it is this arg
-                    1 -> l[0]
-                    // more args: it is a list of args
-                    else -> ObjList(l.toMutableList())
+        return ValueFnRef { closureScope ->
+            statement {
+                // and the source closure of the lambda which might have other thisObj.
+                val context = this.applyClosure(closureScope)
+                // Execute lambda body in a closure-aware context. Blocks inside the lambda
+                // will create child scopes as usual, so re-declarations inside loops work.
+                if (argsDeclaration == null) {
+                    // no args: automatic var 'it'
+                    val l = args.list
+                    val itValue: Obj = when (l.size) {
+                        // no args: it == void
+                        0 -> ObjVoid
+                        // one args: it is this arg
+                        1 -> l[0]
+                        // more args: it is a list of args
+                        else -> ObjList(l.toMutableList())
+                    }
+                    context.addItem("it", false, itValue, recordType = ObjRecord.Type.Argument)
+                } else {
+                    // assign vars as declared the standard way
+                    argsDeclaration.assignToContext(context, defaultAccessType = AccessType.Val)
                 }
-                context.addItem("it", false, itValue, recordType = ObjRecord.Type.Argument)
-            } else {
-                // assign vars as declared the standard way
-                argsDeclaration.assignToContext(context, defaultAccessType = AccessType.Val)
-            }
-            body.execute(context)
-        }
-
-        return ValueFnRef { x ->
-            closure = x
-            callStatement.asReadonly
+                body.execute(context)
+            }.asReadonly
         }
     }
 

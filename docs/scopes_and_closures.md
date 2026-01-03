@@ -68,6 +68,26 @@ Tip: If a closure unexpectedly cannot see an outer local, check whether an inter
 - The `visited` sets used for cycle detection are tiny and short‑lived; in typical scripts the overhead is negligible.
 - If profiling shows hotspots, consider limiting ancestry depth in your custom helpers or using small fixed arrays instead of hash sets—only for extremely hot code paths.
 
+## Practical Example: `cached`
+
+The `cached` function (defined in `lyng.stdlib`) is a classic example of using closures to maintain state. It wraps a builder into a zero-argument function that computes once and remembers the result:
+
+```kotlin
+fun cached(builder) {
+    var calculated = false
+    var value = null
+    { // This lambda captures `calculated`, `value`, and `builder`
+        if( !calculated ) {
+            value = builder()
+            calculated = true
+        }
+        value
+    }
+}
+```
+
+Because Lyng now correctly isolates closures for each evaluation of a lambda literal, using `cached` inside a class instance works as expected: each instance maintains its own private `calculated` and `value` state, even if they share the same property declaration.
+
 ## Dos and Don’ts
 - Do use `chainLookupIgnoreClosure` / `chainLookupWithMembers` for ancestry traversals.
 - Do maintain the resolution order above for predictable behavior.

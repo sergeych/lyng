@@ -100,6 +100,28 @@ class Counter {
 - **No Backing Fields**: There is no magic `field` identifier. If you need to store state, you must declare a separate (usually `private`) field.
 - **Type Inference**: You can omit the type declaration if it can be inferred or if you don't need strict typing.
 
+### Lazy Properties with `cached`
+
+When you want to define a property that is computed only once (on demand) and then remembered, use the built-in `cached` function. This is more efficient than a regular property with `get()` if the computation is expensive, as it avoids re-calculating the value on every access.
+
+```kotlin
+class DataService(val id: Int) {
+    // The lambda passed to cached is only executed once, the first time data() is called.
+    val data = cached {
+        println("Fetching data for " + id)
+        // Perform expensive operation
+        "Record " + id
+    }
+}
+
+val service = DataService(42)
+// No printing yet
+println(service.data()) // Prints "Fetching data for 42", then returns "Record 42"
+println(service.data()) // Returns "Record 42" immediately (no second fetch)
+```
+
+Note that `cached` returns a lambda, so you access the value by calling it like a method: `service.data()`. This is a powerful pattern for lazy-loading resources, caching results of database queries, or delaying expensive computations until they are truly needed.
+
 ## Instance initialization: init block
 
 In addition to the primary constructor arguments, you can provide an `init` block that runs on each instance creation. This is useful for more complex initializations, side effects, or setting up fields that depend on multiple constructor parameters.
