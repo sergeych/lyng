@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -324,15 +324,14 @@ private class Parser(fromPos: Pos) {
             }
 
             '?' -> {
-                when (currentChar.also { pos.advance() }) {
-                    ':' -> Token("??", from, Token.Type.ELVIS)
-                    '?' -> Token("??", from, Token.Type.ELVIS)
-                    '.' -> Token("?.", from, Token.Type.NULL_COALESCE)
-                    '[' -> Token("?(", from, Token.Type.NULL_COALESCE_INDEX)
-                    '(' -> Token("?(", from, Token.Type.NULL_COALESCE_INVOKE)
-                    '{' -> Token("?{", from, Token.Type.NULL_COALESCE_BLOCKINVOKE)
+                when (currentChar) {
+                    ':' -> { pos.advance(); Token("?:", from, Token.Type.ELVIS) }
+                    '?' -> { pos.advance(); Token("??", from, Token.Type.ELVIS) }
+                    '.' -> { pos.advance(); Token("?.", from, Token.Type.NULL_COALESCE) }
+                    '[' -> { pos.advance(); Token("?[", from, Token.Type.NULL_COALESCE_INDEX) }
+                    '(' -> { pos.advance(); Token("?(", from, Token.Type.NULL_COALESCE_INVOKE) }
+                    '{' -> { pos.advance(); Token("?{", from, Token.Type.NULL_COALESCE_BLOCKINVOKE) }
                     else -> {
-                        pos.back()
                         Token("?", from, Token.Type.QUESTION)
                     }
                 }
