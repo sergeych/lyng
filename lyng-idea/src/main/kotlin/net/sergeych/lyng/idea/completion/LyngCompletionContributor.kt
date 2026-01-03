@@ -21,7 +21,6 @@
  */
 package net.sergeych.lyng.idea.completion
 
-import LyngAstManager
 import com.intellij.codeInsight.completion.*
 import com.intellij.codeInsight.lookup.LookupElementBuilder
 import com.intellij.icons.AllIcons
@@ -36,6 +35,7 @@ import net.sergeych.lyng.idea.LyngLanguage
 import net.sergeych.lyng.idea.highlight.LyngTokenTypes
 import net.sergeych.lyng.idea.settings.LyngFormatterSettings
 import net.sergeych.lyng.idea.util.DocsBootstrap
+import net.sergeych.lyng.idea.util.LyngAstManager
 import net.sergeych.lyng.idea.util.TextCtx
 import net.sergeych.lyng.miniast.*
 

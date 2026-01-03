@@ -366,6 +366,7 @@ suspend fun applyLyngHighlightToTextAst(text: String): String {
             when (d) {
                 is MiniFunDecl -> putName(d.nameStart, d.name, "hl-fn")
                 is MiniClassDecl -> putName(d.nameStart, d.name, "hl-class")
+                is net.sergeych.lyng.miniast.MiniEnumDecl -> putName(d.nameStart, d.name, "hl-class")
                 is net.sergeych.lyng.miniast.MiniValDecl -> putName(d.nameStart, d.name, if (d.mutable) "hl-var" else "hl-val")
             }
         }
@@ -404,6 +405,7 @@ suspend fun applyLyngHighlightToTextAst(text: String): String {
                 }
                 is net.sergeych.lyng.miniast.MiniValDecl -> addTypeSegments(d.type)
                 is MiniClassDecl -> {}
+                is net.sergeych.lyng.miniast.MiniEnumDecl -> {}
             }
         }
 

@@ -17,13 +17,13 @@
 
 package net.sergeych.lyng.idea.navigation
 
-import LyngAstManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.*
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
 import net.sergeych.lyng.highlight.offsetOf
+import net.sergeych.lyng.idea.util.LyngAstManager
 import net.sergeych.lyng.idea.util.TextCtx
 import net.sergeych.lyng.miniast.*
 

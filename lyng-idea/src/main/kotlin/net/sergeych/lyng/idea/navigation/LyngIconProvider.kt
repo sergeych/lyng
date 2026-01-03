@@ -17,10 +17,10 @@
 
 package net.sergeych.lyng.idea.navigation
 
-import LyngAstManager
 import com.intellij.icons.AllIcons
 import com.intellij.ide.IconProvider
 import com.intellij.psi.PsiElement
+import net.sergeych.lyng.idea.util.LyngAstManager
 import net.sergeych.lyng.miniast.DocLookupUtils
 import javax.swing.Icon
 
