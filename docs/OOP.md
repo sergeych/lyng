@@ -566,7 +566,7 @@ c.increment()    // OK
 
 You can also apply restricted visibility to custom property setters:
 
-```kotlin
+```lyng
 class Person(private var _age: Int) {
     var age
         get() = _age
@@ -578,7 +578,7 @@ class Person(private var _age: Int) {
 
 A `protected set` allows subclasses to modify a field that is otherwise read-only to the public:
 
-```kotlin
+```lyng
 class Base {
     var state = "initial"
         protected set
@@ -761,7 +761,7 @@ Just like methods, you can extend existing classes with properties. These can be
 
 A read-only extension can be defined by assigning an expression:
 
-```kotlin
+```lyng
 val String.isLong = length > 10
 
 val s = "Hello, world!"
@@ -772,7 +772,7 @@ assert(s.isLong)
 
 For more complex logic, use `get()` and `set()` blocks:
 
-```kotlin
+```lyng
 class Box(var value: Int)
 
 var Box.doubledValue
@@ -795,7 +795,7 @@ Extensions in Lyng are **scope-isolated**. This means an extension is only visib
 
 You can define different extensions with the same name in different scopes:
 
-```kotlin
+```lyng
 fun scopeA() {
     val Int.description = "Number: " + toString()
     assertEquals("Number: 42", 42.description)

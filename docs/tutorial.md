@@ -1553,13 +1553,13 @@ It is extremely simple to use: you pass it a block (lambda) that performs the co
 
 ### Basic Example
 
-```kotlin
+```lyng
 val expensive = cached {
     println("Performing expensive calculation...")
     2 + 2
 }
 
-println(expensive()) // Prints "Performing expensive calculation..." then "4"
+println(expensive()) // Prints "Performing expensive calculation...") then "4"
 println(expensive()) // Prints only "4" (result is cached)
 ```
 
@@ -1573,7 +1573,7 @@ println(expensive()) // Prints only "4" (result is cached)
 
 This is the most common use case for `cached`. It allows you to define expensive "fields" that are only computed if someone actually uses them:
 
-```kotlin
+```lyng
 class User(val id: Int) {
     // The details will be fetched only once, on demand
     val details = cached {

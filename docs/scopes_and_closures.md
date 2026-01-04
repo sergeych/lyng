@@ -72,7 +72,7 @@ Tip: If a closure unexpectedly cannot see an outer local, check whether an inter
 
 The `cached` function (defined in `lyng.stdlib`) is a classic example of using closures to maintain state. It wraps a builder into a zero-argument function that computes once and remembers the result:
 
-```kotlin
+```lyng
 fun cached(builder) {
     var calculated = false
     var value = null

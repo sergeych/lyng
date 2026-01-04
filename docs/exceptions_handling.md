@@ -136,7 +136,7 @@ Serializable class that conveys information about the exception. Important membe
 
 A simple structire that stores single entry in Lyng stack, it is created automatically on exception creation:
 
-```kotlin
+```lyng
 class StackTraceEntry(
     val sourceName: String,
     val line: Int,
