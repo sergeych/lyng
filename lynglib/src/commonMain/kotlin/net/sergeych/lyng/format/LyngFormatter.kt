@@ -83,7 +83,7 @@ object LyngFormatter {
 
             // property accessors ending with ) or =
             if (isPropertyAccessor(t)) {
-                return t.endsWith(")") || t.endsWith("=")
+                return if (t.contains('=')) t.endsWith('=') else t.endsWith(')')
             }
             return false
         }
@@ -186,7 +186,7 @@ object LyngFormatter {
                 val endsWithBrace = code.trimEnd().endsWith("{")
                 if (!endsWithBrace && isControlHeaderNoBrace(code)) {
                     // It's another header, increment
-                    awaitingExtraIndent += 1
+                    awaitingExtraIndent += if (isAccessor) 2 else 1
                 } else {
                     // It's the body, reset
                     awaitingExtraIndent = 0
@@ -195,7 +195,7 @@ object LyngFormatter {
                 // start awaiting if current line is a control header without '{'
                 val endsWithBrace = code.trimEnd().endsWith("{")
                 if (!endsWithBrace && isControlHeaderNoBrace(code)) {
-                    awaitingExtraIndent = 1
+                    awaitingExtraIndent = if (isAccessor) 2 else 1
                 }
             }
 

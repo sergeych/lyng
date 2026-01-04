@@ -85,7 +85,13 @@ class LyngEnterHandler : EnterHandlerDelegate {
             if (code == "}" || code == "*/") {
                 // Adjust indent for the previous line if it's a block or comment closer
                 val prevStart = doc.getLineStartOffset(prevLine)
-                CodeStyleManager.getInstance(project).adjustLineIndent(file, prevStart)
+                if (file.context == null) {
+                    try {
+                        CodeStyleManager.getInstance(project).adjustLineIndent(file, prevStart)
+                    } catch (e: Exception) {
+                        log.warn("Failed to adjust line indent for previous line: ${e.message}")
+                    }
+                }
 
                 // Fallback for previous line: manual application
                 val desiredPrev = computeDesiredIndent(project, doc, prevLine)
@@ -102,8 +108,13 @@ class LyngEnterHandler : EnterHandlerDelegate {
         }
         // Adjust indent for the current (new) line
         val currentStart = doc.getLineStartOffsetSafe(currentLine)
-        val csm = CodeStyleManager.getInstance(project)
-        csm.adjustLineIndent(file, currentStart)
+        if (file.context == null) {
+            try {
+                CodeStyleManager.getInstance(project).adjustLineIndent(file, currentStart)
+            } catch (e: Exception) {
+                log.warn("Failed to adjust line indent for current line: ${e.message}")
+            }
+        }
 
         // Fallback: if the platform didn't physically insert indentation, compute it from our formatter and apply
         val lineStart = doc.getLineStartOffset(currentLine)

@@ -802,4 +802,52 @@ class LyngFormatterTest {
         val out = LyngFormatter.reindent(src, cfg)
         assertEquals(expected, out)
     }
+
+    @Test
+    fun propertyAccessor_followedByMethod() {
+        val src = """
+            var state: BarRequestState get() = getState()
+                set(value) = setState(value)
+
+            fun save() { cell.value = this }
+        """.trimIndent()
+
+        val expected = """
+            var state: BarRequestState get() = getState()
+                set(value) = setState(value)
+
+            fun save() { cell.value = this }
+        """.trimIndent()
+
+        val cfg = LyngFormatConfig(indentSize = 4, continuationIndentSize = 4)
+        val out = LyngFormatter.reindent(src, cfg)
+        assertEquals(expected, out)
+    }
+
+    @Test
+    fun propertyAccessor_dangling() {
+        val src1 = """
+            var x
+                get()
+                = 1
+        """.trimIndent()
+        val expected1 = """
+            var x
+                get()
+                    = 1
+        """.trimIndent()
+        assertEquals(expected1, LyngFormatter.reindent(src1, LyngFormatConfig(indentSize = 4)))
+
+        val src2 = """
+            var x
+                get() =
+                1
+        """.trimIndent()
+        val expected2 = """
+            var x
+                get() =
+                    1
+        """.trimIndent()
+        assertEquals(expected2, LyngFormatter.reindent(src2, LyngFormatConfig(indentSize = 4)))
+    }
 }

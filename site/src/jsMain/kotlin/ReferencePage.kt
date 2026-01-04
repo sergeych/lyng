@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -127,7 +127,7 @@ fun ReferencePage() {
                                     Ul({ classes("mt-2") }) {
                                         d.members.forEach { m ->
                                             when (m) {
-                                                is MiniMemberFunDecl, -> {
+                                                is MiniMemberFunDecl -> {
                                                     val params = m.params.joinToString(", ") { p ->
                                                         val ts = typeOf(p.type)
                                                         if (ts.isNotBlank()) "${p.name}${ts}" else p.name
@@ -146,6 +146,17 @@ fun ReferencePage() {
                                                     Li { Text("${staticStr}${kindM} ${d.name}.${m.name}${ts}") }
                                                 }
                                             }
+                                        }
+                                    }
+                                }
+                            }
+                            is MiniEnumDecl -> {
+                                Div { Text("enum ${d.name}") }
+                                d.doc?.summary?.let { Small({ classes("text-muted") }) { Text(it) } }
+                                if (d.entries.isNotEmpty()) {
+                                    Ul({ classes("mt-2") }) {
+                                        d.entries.forEach { entry ->
+                                            Li { Text(entry) }
                                         }
                                     }
                                 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 group = "net.sergeych"
-version = "1.1.0-SNAPSHOT"
+version = "1.1.0-rc"
 
 // Removed legacy buildscript classpath declarations; plugins are applied via the plugins DSL below
 

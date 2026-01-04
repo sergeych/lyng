@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -80,7 +80,14 @@ class LyngPreFormatProcessor : PreFormatProcessor {
             val lineStart = doc.getLineStartOffset(line)
             // adjustLineIndent delegates to our LineIndentProvider which computes
             // indentation from scratch; this is safe and idempotent
-            CodeStyleManager.getInstance(project).adjustLineIndent(file, lineStart)
+            if (file.context == null) {
+                try {
+                    CodeStyleManager.getInstance(project).adjustLineIndent(file, lineStart)
+                } catch (e: Exception) {
+                    // Log as debug because this can be called many times during reformat
+                    // and we don't want to spam warnings if it's a known platform issue with injections
+                }
+            }
 
             // After indentation, update block/paren/bracket balances using the current line text
             val lineEnd = doc.getLineEndOffset(line)

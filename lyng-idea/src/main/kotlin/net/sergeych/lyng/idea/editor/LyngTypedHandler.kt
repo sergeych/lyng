@@ -58,7 +58,13 @@ class LyngTypedHandler : TypedHandlerDelegate() {
                 }
                 // After block reindent, adjust line indent to what platform thinks (no-op in many cases)
                 val lineStart = doc.getLineStartOffset(line)
-                CodeStyleManager.getInstance(project).adjustLineIndent(file, lineStart)
+                if (file.context == null) {
+                    try {
+                        CodeStyleManager.getInstance(project).adjustLineIndent(file, lineStart)
+                    } catch (e: Exception) {
+                        log.warn("Failed to adjust line indent for current line: ${e.message}")
+                    }
+                }
             }
         } else if (c == '/') {
             val doc = editor.document
@@ -67,7 +73,13 @@ class LyngTypedHandler : TypedHandlerDelegate() {
                 PsiDocumentManager.getInstance(project).commitDocument(doc)
                 val line = doc.getLineNumber(offset - 1)
                 val lineStart = doc.getLineStartOffset(line)
-                CodeStyleManager.getInstance(project).adjustLineIndent(file, lineStart)
+                if (file.context == null) {
+                    try {
+                        CodeStyleManager.getInstance(project).adjustLineIndent(file, lineStart)
+                    } catch (e: Exception) {
+                        log.warn("Failed to adjust line indent for comment: ${e.message}")
+                    }
+                }
 
                 // Manual application fallback
                 val desired = computeDesiredIndent(project, doc, line)

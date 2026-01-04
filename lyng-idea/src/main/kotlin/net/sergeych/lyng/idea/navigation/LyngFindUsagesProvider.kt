@@ -17,7 +17,6 @@
 
 package net.sergeych.lyng.idea.navigation
 
-import LyngAstManager
 import com.intellij.lang.cacheBuilder.DefaultWordsScanner
 import com.intellij.lang.cacheBuilder.WordsScanner
 import com.intellij.lang.findUsages.FindUsagesProvider
@@ -26,6 +25,7 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.tree.TokenSet
 import net.sergeych.lyng.idea.highlight.LyngLexer
 import net.sergeych.lyng.idea.highlight.LyngTokenTypes
+import net.sergeych.lyng.idea.util.LyngAstManager
 import net.sergeych.lyng.miniast.DocLookupUtils
 
 class LyngFindUsagesProvider : FindUsagesProvider {
