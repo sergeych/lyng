@@ -1773,10 +1773,11 @@ class Compiler(
     }
 
     private fun parseEnumDeclaration(): Statement {
-        val startPos = pendingDeclStart ?: cc.currentPos()
+        val nameToken = cc.requireToken(Token.Type.ID)
+        val startPos = pendingDeclStart ?: nameToken.pos
         val doc = pendingDeclDoc ?: consumePendingDoc()
         pendingDeclDoc = null
-        val nameToken = cc.requireToken(Token.Type.ID)
+        pendingDeclStart = null
         // so far only simplest enums:
         val names = mutableListOf<String>()
         // skip '{'
@@ -1822,6 +1823,10 @@ class Compiler(
 
     private suspend fun parseClassDeclaration(): Statement {
         val nameToken = cc.requireToken(Token.Type.ID)
+        val startPos = pendingDeclStart ?: nameToken.pos
+        val doc = pendingDeclDoc ?: consumePendingDoc()
+        pendingDeclDoc = null
+        pendingDeclStart = null
         return inCodeContext(CodeContext.ClassBody(nameToken.value)) {
             val constructorArgsDeclaration =
                 if (cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true))
@@ -1879,7 +1884,7 @@ class Compiler(
 
             // Emit MiniClassDecl with collected base names; bodyRange is omitted for now
             run {
-                val declRange = MiniRange(pendingDeclStart ?: nameToken.pos, cc.currentPos())
+                val declRange = MiniRange(startPos, cc.currentPos())
                 val bases = baseSpecs.map { it.name }
                 // Collect constructor fields declared as val/var in primary constructor
                 val ctorFields = mutableListOf<MiniCtorField>()
@@ -1903,11 +1908,10 @@ class Compiler(
                     bases = bases,
                     bodyRange = classBodyRange,
                     ctorFields = ctorFields,
-                    doc = pendingDeclDoc,
+                    doc = doc,
                     nameStart = nameToken.pos
                 )
                 miniSink?.onClassDecl(node)
-                pendingDeclDoc = null
             }
 
             val initScope = popInitScope()

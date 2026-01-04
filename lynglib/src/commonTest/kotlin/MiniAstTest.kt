@@ -116,6 +116,23 @@ class MiniAstTest {
     }
 
     @Test
+    fun miniAst_captures_class_doc_with_members() = runTest {
+        val code = """
+            /** Class C docs */
+            class C {
+                fun foo() {}
+            }
+        """
+        val (_, sink) = compileWithMini(code)
+        val mini = sink.build()
+        assertNotNull(mini)
+        val cd = mini!!.declarations.filterIsInstance<MiniClassDecl>().firstOrNull { it.name == "C" }
+        assertNotNull(cd)
+        assertNotNull(cd.doc, "Class doc should be preserved even with members")
+        assertTrue(cd.doc!!.raw.contains("Class C docs"))
+    }
+
+    @Test
     fun miniAst_captures_class_bases_and_doc() = runTest {
         val code = """
             /** Class C docs */

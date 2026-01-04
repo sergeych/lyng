@@ -288,7 +288,20 @@ object LyngFormatter {
                 i++
             }
             // Normalize collected base indent: replace tabs with spaces
-            var baseIndent = if (onlyWs) base.toString().replace("\t", " ".repeat(config.indentSize)) else ""
+            var baseIndent = if (onlyWs) {
+                if (start == lineStart) {
+                    // Range starts at line start, pick up this line's indentation as base
+                    var k = start
+                    val lineIndent = StringBuilder()
+                    while (k < text.length && text[k] != '\n' && (text[k] == ' ' || text[k] == '\t')) {
+                        lineIndent.append(text[k])
+                        k++
+                    }
+                    lineIndent.toString().replace("\t", " ".repeat(config.indentSize))
+                } else {
+                    base.toString().replace("\t", " ".repeat(config.indentSize))
+                }
+            } else ""
             var parentBaseIndent: String? = baseIndent
             if (baseIndent.isEmpty()) {
                 // Fallback: use the indent of the nearest previous non-empty line as base.

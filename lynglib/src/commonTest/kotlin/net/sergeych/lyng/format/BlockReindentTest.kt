@@ -434,4 +434,37 @@ class BlockReindentTest {
         kotlin.test.assertTrue(lines.getOrNull(innerStart + 1)?.trimStart()?.startsWith("1") == true)
         kotlin.test.assertEquals("}", lines.getOrNull(innerStart + 2)?.trim())
     }
+    @Test
+    fun reindentRange_doubledIndentationFix() {
+        val src = """
+            class X {
+                fun funA(): String {
+                    "a"
+                }
+                fun runB() {
+                      }
+            }
+        """.trimIndent()
+
+        // The range for runB should be from the start of 'fun runB' line to the end of '}' line.
+        val startOfRunB = src.indexOf("    fun runB")
+        val endOfRunB = src.indexOf("          }") + "          }".length
+        val range = startOfRunB until endOfRunB
+
+        val cfg = LyngFormatConfig(indentSize = 4)
+        val updated = LyngFormatter.reindentRange(src, range, cfg, preserveBaseIndent = true)
+
+        val expected = """
+            class X {
+                fun funA(): String {
+                    "a"
+                }
+                fun runB() {
+                }
+            }
+        """.trimIndent()
+
+        assertEquals(expected, updated)
+    }
+
 }
