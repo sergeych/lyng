@@ -365,8 +365,8 @@ Example:
 ```lyng
 // Interface with state (id) and abstract requirements
 interface Character(val id) {
-    abstract var health
-    abstract var mana
+    var health
+    var mana
     
     fun isAlive() = health > 0
     fun status() = name + " (#" + id + "): " + health + " HP, " + mana + " MP"
