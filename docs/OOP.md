@@ -822,12 +822,12 @@ request](https://gitea.sergeych.net/SergeychWorks/lyng/issues).
 - ObjClass sole parent is Obj
 - ObjClass contains code for instance methods, class fields, hierarchy information.
 - Class information is also scoped. 
-- We acoid imported classes duplication using packages and import caching, so the same imported module is the same object in all its classes.
+- We avoid imported classes duplication using packages and import caching, so the same imported module is the same object in all its classes.
 
 ## Instances
 
 Result of executing of any expression or statement in the Lyng is the object that
-inherits `Obj`, but is not `Obj`. For example it could be Int, void, null, real, string, bool, etc.
+inherits `Obj`, but is not `Obj`. For example, it could be Int, void, null, real, string, bool, etc.
 
 This means whatever expression returns or the variable holds, is the first-class
 object, no differenes. For example:
