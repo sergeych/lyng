@@ -20,7 +20,7 @@ Files
   - Constants: `true`, `false`, `null`, `this`
   - Annotations: `@name` (Unicode identifiers supported)
   - Labels: `name:` (Unicode identifiers supported)
-  - Declarations: highlights declared names in `fun|fn name`, `class|enum Name`, `val|var name`
+  - Declarations: highlights declared names in `fun|fn name`, `class|enum|interface Name`, `val|var name`
   - Types: built-ins (`Int|Real|String|Bool|Char|Regex`) and Capitalized identifiers (heuristic)
   - Operators including ranges (`..`, `..<`, `...`), null-safe (`?.`, `?[`, `?(`, `?{`, `?:`, `??`), arrows (`->`, `=>`, `::`), match operators (`=~`, `!~`), bitwise, arithmetic, etc.
   - Shuttle operator `<=>`

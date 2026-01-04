@@ -1182,8 +1182,11 @@ class MethodCallRef(
                     var hierarchyMember: ObjRecord? = null
                     for (cls in base.objClass.mro) {
                         if (cls.className == "Obj") break
-                        hierarchyMember = cls.members[name] ?: cls.classScope?.objects?.get(name)
-                        if (hierarchyMember != null) break
+                        val rec = cls.members[name] ?: cls.classScope?.objects?.get(name)
+                        if (rec != null && !rec.isAbstract && rec.type != ObjRecord.Type.Field) {
+                            hierarchyMember = rec
+                            break
+                        }
                     }
 
                     if (hierarchyMember != null) {

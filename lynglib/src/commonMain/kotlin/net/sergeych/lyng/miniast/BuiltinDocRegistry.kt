@@ -112,8 +112,8 @@ object BuiltinDocRegistry : BuiltinDocSource {
     fun extensionMemberNamesFor(className: String): List<String> {
         val src = try { rootLyng } catch (_: Throwable) { null } ?: return emptyList()
         val out = LinkedHashSet<String>()
-        // Match lines like: fun String.trim(...) or val Int.isEven = ...
-        val re = Regex("^\\s*(?:fun|val|var)\\s+${className}\\.([A-Za-z_][A-Za-z0-9_]*)\\b", RegexOption.MULTILINE)
+        // Match lines like: fun String.trim(...) or val Int.isEven = ... (allowing modifiers)
+        val re = Regex("^\\s*(?:(?:abstract|override|closed|private|protected|static|open|extern)\\s+)*(?:fun|val|var)\\s+${className}\\.([A-Za-z_][A-Za-z0-9_]*)\\b", RegexOption.MULTILINE)
         re.findAll(src).forEach { m ->
             val name = m.groupValues.getOrNull(1)?.trim()
             if (!name.isNullOrEmpty()) out.add(name)
@@ -371,20 +371,20 @@ private object StdlibInlineDocIndex {
                 else -> {
                     // Non-comment, non-blank: try to match a declaration just after comments
                     if (buf.isNotEmpty()) {
-                        // fun/val/var Class.name( ... )
-                        val mExt = Regex("^(?:fun|val|var)\\s+([A-Za-z_][A-Za-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)\\b").find(line)
+                        // fun/val/var Class.name( ... ) (allowing modifiers)
+                        val mExt = Regex("^(?:(?:abstract|override|closed|private|protected|static|open|extern)\\s+)*(?:fun|val|var)\\s+([A-Za-z_][A-Za-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)\\b").find(line)
                         if (mExt != null) {
                             val (cls, name) = mExt.destructured
                             flushTo(Key.Method(cls, name))
                         } else {
-                            // fun name( ... )
-                            val mTop = Regex("^fun\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(").find(line)
+                            // fun name( ... ) (allowing modifiers)
+                            val mTop = Regex("^(?:(?:abstract|override|closed|private|protected|static|open|extern)\\s+)*fun\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(").find(line)
                             if (mTop != null) {
                                 val (name) = mTop.destructured
                                 flushTo(Key.TopFun(name))
                             } else {
-                                // class Name
-                                val mClass = Regex("^class\\s+([A-Za-z_][A-Za-z0-9_]*)\\b").find(line)
+                                // class/interface Name (allowing modifiers)
+                                val mClass = Regex("^(?:(?:abstract|private|protected|static|open|extern)\\s+)*(?:class|interface)\\s+([A-Za-z_][A-Za-z0-9_]*)\\b").find(line)
                                 if (mClass != null) {
                                     val (name) = mClass.destructured
                                     flushTo(Key.Clazz(name))

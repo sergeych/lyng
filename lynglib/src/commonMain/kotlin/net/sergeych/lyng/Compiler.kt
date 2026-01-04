@@ -236,7 +236,7 @@ class Compiler(
                         cc.next()
                         pendingDeclStart = t.pos
                         pendingDeclDoc = consumePendingDoc()
-                        val st = parseFunctionDeclaration(isOpen = false, isExtern = false, isStatic = false)
+                        val st = parseFunctionDeclaration(isExtern = false, isStatic = false)
                         statements += st
                         continue
                     }
@@ -1298,11 +1298,93 @@ class Compiler(
         else
             null
 
+    private suspend fun parseDeclarationWithModifiers(firstId: Token): Statement {
+        val modifiers = mutableSetOf<String>()
+        var currentToken = firstId
+
+        while (true) {
+            when (currentToken.value) {
+                "private", "protected", "static", "abstract", "closed", "override", "extern", "open" -> {
+                    modifiers.add(currentToken.value)
+                    val next = cc.peekNextNonWhitespace()
+                    if (next.type == Token.Type.ID) {
+                        currentToken = cc.next()
+                    } else {
+                        break
+                    }
+                }
+
+                else -> break
+            }
+        }
+
+        val visibility = when {
+            modifiers.contains("private") -> Visibility.Private
+            modifiers.contains("protected") -> Visibility.Protected
+            else -> Visibility.Public
+        }
+        val isStatic = modifiers.contains("static")
+        val isAbstract = modifiers.contains("abstract")
+        val isClosed = modifiers.contains("closed")
+        val isOverride = modifiers.contains("override")
+        val isExtern = modifiers.contains("extern")
+
+        if (isStatic && (isAbstract || isOverride || isClosed))
+            throw ScriptError(currentToken.pos, "static members cannot be abstract, closed or override")
+
+        if (visibility == Visibility.Private && isAbstract)
+            throw ScriptError(currentToken.pos, "abstract members cannot be private")
+
+        pendingDeclStart = firstId.pos
+        pendingDeclDoc = consumePendingDoc()
+
+        val isMember = (codeContexts.lastOrNull() is CodeContext.ClassBody)
+
+        if (!isMember && (isOverride || isClosed))
+            throw ScriptError(currentToken.pos, "modifiers override and closed are only allowed for class members")
+
+        if (!isMember && isAbstract && currentToken.value != "class")
+            throw ScriptError(currentToken.pos, "modifier abstract at top level is only allowed for classes")
+
+        return when (currentToken.value) {
+            "val" -> parseVarDeclaration(false, visibility, isAbstract, isClosed, isOverride, isStatic)
+            "var" -> parseVarDeclaration(true, visibility, isAbstract, isClosed, isOverride, isStatic)
+            "fun", "fn" -> parseFunctionDeclaration(visibility, isAbstract, isClosed, isOverride, isExtern, isStatic)
+            "class" -> {
+                if (isStatic || isClosed || isOverride || isExtern)
+                    throw ScriptError(currentToken.pos, "unsupported modifiers for class: ${modifiers.joinToString(" ")}")
+                parseClassDeclaration(isAbstract)
+            }
+
+            "interface" -> {
+                if (isStatic || isClosed || isOverride || isExtern || isAbstract)
+                    throw ScriptError(
+                        currentToken.pos,
+                        "unsupported modifiers for interface: ${modifiers.joinToString(" ")}"
+                    )
+                // interface is synonym for abstract class
+                parseClassDeclaration(isAbstract = true)
+            }
+
+            else -> throw ScriptError(currentToken.pos, "expected declaration after modifiers, found ${currentToken.value}")
+        }
+    }
+
     /**
      * Parse keyword-starting statement.
      * @return parsed statement or null if, for example. [id] is not among keywords
      */
     private suspend fun parseKeywordStatement(id: Token): Statement? = when (id.value) {
+        "abstract", "closed", "override", "extern", "private", "protected", "static" -> {
+            parseDeclarationWithModifiers(id)
+        }
+
+        "interface" -> {
+            pendingDeclStart = id.pos
+            pendingDeclDoc = consumePendingDoc()
+            parseClassDeclaration(isAbstract = true)
+        }
+
         "val" -> {
             pendingDeclStart = id.pos
             pendingDeclDoc = consumePendingDoc()
@@ -1318,71 +1400,15 @@ class Compiler(
         "fun" -> {
             pendingDeclStart = id.pos
             pendingDeclDoc = consumePendingDoc()
-            parseFunctionDeclaration(isOpen = false, isExtern = false, isStatic = false)
+            parseFunctionDeclaration(isExtern = false, isStatic = false)
         }
 
         "fn" -> {
             pendingDeclStart = id.pos
             pendingDeclDoc = consumePendingDoc()
-            parseFunctionDeclaration(isOpen = false, isExtern = false, isStatic = false)
+            parseFunctionDeclaration(isExtern = false, isStatic = false)
         }
         // Visibility modifiers for declarations: private/protected val/var/fun/fn
-        "private" -> {
-            var k = cc.requireToken(Token.Type.ID, "declaration expected after 'private'")
-            var isStatic = false
-            if (k.value == "static") {
-                isStatic = true
-                k = cc.requireToken(Token.Type.ID, "declaration expected after 'private static'")
-            }
-            when (k.value) {
-                "val" -> parseVarDeclaration(false, Visibility.Private, isStatic = isStatic)
-                "var" -> parseVarDeclaration(true, Visibility.Private, isStatic = isStatic)
-                "fun" -> parseFunctionDeclaration(
-                    visibility = Visibility.Private,
-                    isOpen = false,
-                    isExtern = false,
-                    isStatic = isStatic
-                )
-
-                "fn" -> parseFunctionDeclaration(
-                    visibility = Visibility.Private,
-                    isOpen = false,
-                    isExtern = false,
-                    isStatic = isStatic
-                )
-
-                else -> k.raiseSyntax("unsupported private declaration kind: ${k.value}")
-            }
-        }
-
-        "protected" -> {
-            var k = cc.requireToken(Token.Type.ID, "declaration expected after 'protected'")
-            var isStatic = false
-            if (k.value == "static") {
-                isStatic = true
-                k = cc.requireToken(Token.Type.ID, "declaration expected after 'protected static'")
-            }
-            when (k.value) {
-                "val" -> parseVarDeclaration(false, Visibility.Protected, isStatic = isStatic)
-                "var" -> parseVarDeclaration(true, Visibility.Protected, isStatic = isStatic)
-                "fun" -> parseFunctionDeclaration(
-                    visibility = Visibility.Protected,
-                    isOpen = false,
-                    isExtern = false,
-                    isStatic = isStatic
-                )
-
-                "fn" -> parseFunctionDeclaration(
-                    visibility = Visibility.Protected,
-                    isOpen = false,
-                    isExtern = false,
-                    isStatic = isStatic
-                )
-
-                else -> k.raiseSyntax("unsupported protected declaration kind: ${k.value}")
-            }
-        }
-
         "while" -> parseWhileStatement()
         "do" -> parseDoWhileStatement()
         "for" -> parseForStatement()
@@ -1444,17 +1470,17 @@ class Compiler(
                 )
 
                 cc.matchQualifiers("fn", "private") -> parseFunctionDeclaration(Visibility.Private, isExtern)
-                cc.matchQualifiers("fun", "open") -> parseFunctionDeclaration(isOpen = true, isExtern = isExtern)
-                cc.matchQualifiers("fn", "open") -> parseFunctionDeclaration(isOpen = true, isExtern = isExtern)
+                cc.matchQualifiers("fun", "open") -> parseFunctionDeclaration(isExtern = isExtern)
+                cc.matchQualifiers("fn", "open") -> parseFunctionDeclaration(isExtern = isExtern)
 
                 cc.matchQualifiers("fun") -> {
                     pendingDeclStart = id.pos; pendingDeclDoc =
-                        consumePendingDoc(); parseFunctionDeclaration(isOpen = false, isExtern = isExtern)
+                        consumePendingDoc(); parseFunctionDeclaration(isExtern = isExtern)
                 }
 
                 cc.matchQualifiers("fn") -> {
                     pendingDeclStart = id.pos; pendingDeclDoc =
-                        consumePendingDoc(); parseFunctionDeclaration(isOpen = false, isExtern = isExtern)
+                        consumePendingDoc(); parseFunctionDeclaration(isExtern = isExtern)
                 }
 
                 cc.matchQualifiers("val", "private", "static") -> {
@@ -1821,7 +1847,7 @@ class Compiler(
         }
     }
 
-    private suspend fun parseClassDeclaration(): Statement {
+    private suspend fun parseClassDeclaration(isAbstract: Boolean = false): Statement {
         val nameToken = cc.requireToken(Token.Type.ID)
         val startPos = pendingDeclStart ?: nameToken.pos
         val doc = pendingDeclDoc ?: consumePendingDoc()
@@ -1947,12 +1973,29 @@ class Compiler(
                 }
 
                 val newClass = ObjInstanceClass(className, *parentClasses.toTypedArray()).also {
+                    it.isAbstract = isAbstract
                     it.instanceConstructor = constructorCode
                     it.constructorMeta = constructorArgsDeclaration
                     // Attach per-parent constructor args (thunks) if provided
                     for (i in parentClasses.indices) {
                         val argsList = baseSpecs[i].args
                         if (argsList != null) it.directParentArgs[parentClasses[i]] = argsList
+                    }
+                    // Register constructor fields in the class members
+                    constructorArgsDeclaration?.params?.forEach { p ->
+                        if (p.accessType != null) {
+                            it.createField(
+                                p.name, ObjNull,
+                                isMutable = p.accessType == AccessType.Var,
+                                visibility = p.visibility ?: Visibility.Public,
+                                declaringClass = it,
+                                // Constructor fields are not currently supporting override/closed in parser
+                                // but we should pass Pos.builtIn to skip validation for now if needed,
+                                // or p.pos to allow it.
+                                pos = Pos.builtIn,
+                                type = ObjRecord.Type.ConstructorField
+                            )
+                        }
                     }
                 }
 
@@ -1974,7 +2017,7 @@ class Compiler(
                     val v = rec.value
                     if (v is Statement) {
                         if (newClass.members[k] == null) {
-                            newClass.addFn(k, isOpen = true) {
+                            newClass.addFn(k, isMutable = true, pos = rec.importedFrom?.pos ?: nameToken.pos) {
                                 (thisObj as? ObjInstance)?.let { i ->
                                     v.execute(ClosureScope(this, i.instanceScope))
                                 } ?: v.execute(thisObj.autoInstanceScope(this))
@@ -1982,6 +2025,7 @@ class Compiler(
                         }
                     }
                 }
+                newClass.checkAbstractSatisfaction(nameToken.pos)
                 // Debug summary: list registered instance methods and class-scope functions for this class
                 newClass
             }
@@ -2395,7 +2439,9 @@ class Compiler(
 
     private suspend fun parseFunctionDeclaration(
         visibility: Visibility = Visibility.Public,
-        @Suppress("UNUSED_PARAMETER") isOpen: Boolean = false,
+        isAbstract: Boolean = false,
+        isClosed: Boolean = false,
+        isOverride: Boolean = false,
         isExtern: Boolean = false,
         isStatic: Boolean = false,
     ): Statement {
@@ -2480,7 +2526,12 @@ class Compiler(
             localDeclCountStack.add(0)
             val fnStatements = if (isExtern)
                 statement { raiseError("extern function not provided: $name") }
-            else
+            else if (isAbstract) {
+                val next = cc.peekNextNonWhitespace()
+                if (next.type == Token.Type.ASSIGN || next.type == Token.Type.LBRACE)
+                    throw ScriptError(next.pos, "abstract function $name cannot have a body")
+                null
+            } else
                 withLocalNames(paramNames) {
                     val next = cc.peekNextNonWhitespace()
                     if (next.type == Token.Type.ASSIGN) {
@@ -2518,7 +2569,7 @@ class Compiler(
                 if (extTypeName != null) {
                     context.thisObj = callerContext.thisObj
                 }
-                fnStatements.execute(context)
+                fnStatements?.execute(context) ?: ObjVoid
             }
 //            parentContext
             val fnCreateStatement = statement(start) { context ->
@@ -2550,7 +2601,15 @@ class Compiler(
                         if (!isStatic && th is ObjClass) {
                             // Instance method declared inside a class body: register on the class
                             val cls: ObjClass = th
-                            cls.addFn(name, isOpen = true, visibility = visibility) {
+                            cls.addFn(
+                                name,
+                                isMutable = true,
+                                visibility = visibility,
+                                isAbstract = isAbstract,
+                                isClosed = isClosed,
+                                isOverride = isOverride,
+                                pos = start
+                            ) {
                                 // Execute with the instance as receiver; set caller lexical class for visibility
                                 val savedCtx = this.currentClassCtx
                                 this.currentClassCtx = cls
@@ -2628,7 +2687,9 @@ class Compiler(
     private suspend fun parseVarDeclaration(
         isMutable: Boolean,
         visibility: Visibility,
-        @Suppress("UNUSED_PARAMETER") isOpen: Boolean = false,
+        isAbstract: Boolean = false,
+        isClosed: Boolean = false,
+        isOverride: Boolean = false,
         isStatic: Boolean = false
     ): Statement {
         val nextToken = cc.next()
@@ -2741,7 +2802,15 @@ class Compiler(
         // Register the local name at compile time so that subsequent identifiers can be emitted as fast locals
         if (!isStatic) declareLocalName(name)
 
-        val isDelegate = if (!isProperty && eqToken.isId("by")) {
+        val isDelegate = if (isAbstract) {
+            if (!isProperty && (eqToken.type == Token.Type.ASSIGN || eqToken.isId("by")))
+                throw ScriptError(eqToken.pos, "abstract variable $name cannot have an initializer or delegate")
+            // Abstract variables don't have initializers
+            cc.restorePos(markBeforeEq)
+            cc.skipWsTokens()
+            setNull = true
+            false
+        } else if (!isProperty && eqToken.isId("by")) {
             true
         } else {
             if (!isProperty && eqToken.type != Token.Type.ASSIGN) {
@@ -2945,22 +3014,58 @@ class Compiler(
                 val isClassScope = context.thisObj is ObjClass && (context.thisObj !is ObjInstance)
                 if (isClassScope) {
                     val cls = context.thisObj as ObjClass
-                    // Register the property
-                    cls.instanceInitializers += statement(start) { scp ->
-                        scp.addItem(
-                            storageName,
-                            isMutable,
-                            prop,
-                            visibility,
-                            setterVisibility,
-                            recordType = ObjRecord.Type.Property
+                    // Register in class members for reflection/MRO/satisfaction checks
+                    if (isProperty) {
+                        cls.addProperty(
+                            name,
+                            visibility = visibility,
+                            writeVisibility = setterVisibility,
+                            isAbstract = isAbstract,
+                            isClosed = isClosed,
+                            isOverride = isOverride,
+                            pos = start
                         )
-                        ObjVoid
+                    } else {
+                        cls.createField(
+                            name,
+                            ObjNull,
+                            isMutable = isMutable,
+                            visibility = visibility,
+                            writeVisibility = setterVisibility,
+                            isAbstract = isAbstract,
+                            isClosed = isClosed,
+                            isOverride = isOverride,
+                            type = ObjRecord.Type.Field
+                        )
+                    }
+
+                    // Register the property/field initialization thunk
+                    if (!isAbstract) {
+                        cls.instanceInitializers += statement(start) { scp ->
+                            scp.addItem(
+                                storageName,
+                                isMutable,
+                                prop,
+                                visibility,
+                                setterVisibility,
+                                recordType = ObjRecord.Type.Property,
+                                isAbstract = isAbstract,
+                                isClosed = isClosed,
+                                isOverride = isOverride
+                            )
+                            ObjVoid
+                        }
                     }
                     ObjVoid
                 } else {
                     // We are in instance scope already: perform initialization immediately
-                    context.addItem(storageName, isMutable, prop, visibility, setterVisibility, recordType = ObjRecord.Type.Property)
+                    context.addItem(
+                        storageName, isMutable, prop, visibility, setterVisibility,
+                        recordType = ObjRecord.Type.Property,
+                        isAbstract = isAbstract,
+                        isClosed = isClosed,
+                        isOverride = isOverride
+                    )
                     prop
                 }
             } else {
@@ -2971,22 +3076,51 @@ class Compiler(
                         val isClassScope = context.thisObj is ObjClass && (context.thisObj !is ObjInstance)
                         if (isClassScope) {
                             val cls = context.thisObj as ObjClass
+                            // Register in class members for reflection/MRO/satisfaction checks
+                            cls.createField(
+                                name,
+                                ObjNull,
+                                isMutable = isMutable,
+                                visibility = visibility,
+                                writeVisibility = setterVisibility,
+                                isAbstract = isAbstract,
+                                isClosed = isClosed,
+                                isOverride = isOverride,
+                                pos = start,
+                                type = ObjRecord.Type.Field
+                            )
+
                             // Defer: at instance construction, evaluate initializer in instance scope and store under mangled name
-                            val initStmt = statement(start) { scp ->
-                                val initValue =
-                                    initialExpression?.execute(scp)?.byValueCopy() ?: if (isLateInitVal) ObjUnset else ObjNull
-                                // Preserve mutability of declaration: do NOT use addOrUpdateItem here, as it creates mutable records
-                                scp.addItem(storageName, isMutable, initValue, visibility, setterVisibility, recordType = ObjRecord.Type.Field)
-                                ObjVoid
+                            if (!isAbstract) {
+                                val initStmt = statement(start) { scp ->
+                                    val initValue =
+                                        initialExpression?.execute(scp)?.byValueCopy()
+                                            ?: if (isLateInitVal) ObjUnset else ObjNull
+                                    // Preserve mutability of declaration: do NOT use addOrUpdateItem here, as it creates mutable records
+                                    scp.addItem(
+                                        storageName, isMutable, initValue, visibility, setterVisibility,
+                                        recordType = ObjRecord.Type.Field,
+                                        isAbstract = isAbstract,
+                                        isClosed = isClosed,
+                                        isOverride = isOverride
+                                    )
+                                    ObjVoid
+                                }
+                                cls.instanceInitializers += initStmt
                             }
-                            cls.instanceInitializers += initStmt
                             ObjVoid
                         } else {
                             // We are in instance scope already: perform initialization immediately
                             val initValue =
                                 initialExpression?.execute(context)?.byValueCopy() ?: if (isLateInitVal) ObjUnset else ObjNull
                             // Preserve mutability of declaration: create record with correct mutability
-                            context.addItem(storageName, isMutable, initValue, visibility, setterVisibility, recordType = ObjRecord.Type.Field)
+                            context.addItem(
+                                storageName, isMutable, initValue, visibility, setterVisibility,
+                                recordType = ObjRecord.Type.Field,
+                                isAbstract = isAbstract,
+                                isClosed = isClosed,
+                                isOverride = isOverride
+                            )
                             initValue
                         }
                     } else {

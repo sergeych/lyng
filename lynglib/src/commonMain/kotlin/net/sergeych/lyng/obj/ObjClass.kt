@@ -91,6 +91,8 @@ open class ObjClass(
     vararg parents: ObjClass,
 ) : Obj() {
 
+    var isAbstract: Boolean = false
+
     // Stable identity and simple structural version for PICs
     val classId: Long = ClassIdGen.nextId()
     var layoutVersion: Int = 0
@@ -178,7 +180,13 @@ open class ObjClass(
     val mro: List<ObjClass> by lazy {
         val base = c3Linearize(this, mutableMapOf())
         if (this.className == "Obj" || base.any { it.className == "Obj" }) base
-        else base + rootObjectType
+        else {
+            // During very early bootstrap rootObjectType might not be initialized yet.
+            // We use a safe check here.
+            @Suppress("UNNECESSARY_SAFE_CALL")
+            val root = net.sergeych.lyng.obj.Obj.rootObjectType
+            if (root != null) base + root else base
+        }
     }
 
     /** Parents in C3 order (no self). */
@@ -204,6 +212,7 @@ open class ObjClass(
     override suspend fun compareTo(scope: Scope, other: Obj): Int = if (other === this) 0 else -1
 
     override suspend fun callOn(scope: Scope): Obj {
+        if (isAbstract) scope.raiseError("can't instantiate abstract class $className")
         val instance = createInstance(scope)
         initializeInstance(instance, scope.args, runConstructors = true)
         return instance
@@ -347,14 +356,54 @@ open class ObjClass(
         visibility: Visibility = Visibility.Public,
         writeVisibility: Visibility? = null,
         pos: Pos = Pos.builtIn,
-        declaringClass: ObjClass? = this
+        declaringClass: ObjClass? = this,
+        isAbstract: Boolean = false,
+        isClosed: Boolean = false,
+        isOverride: Boolean = false,
+        type: ObjRecord.Type = ObjRecord.Type.Field,
     ) {
+        // Validation of override rules: only for non-system declarations
+        if (pos != Pos.builtIn) {
+            val existing = getInstanceMemberOrNull(name)
+            var actualOverride = false
+            if (existing != null && existing.declaringClass != this) {
+                // If the existing member is private in the ancestor, it's not visible for overriding.
+                // It should be treated as a new member in this class.
+                if (!existing.visibility.isPublic && !canAccessMember(existing.visibility, existing.declaringClass, this)) {
+                    // It's effectively not there for us, so actualOverride remains false
+                } else {
+                    actualOverride = true
+                    // It's an override (implicit or explicit)
+                    if (existing.isClosed)
+                        throw ScriptError(pos, "can't override closed member $name from ${existing.declaringClass?.className}")
+                    
+                    if (!isOverride)
+                        throw ScriptError(pos, "member $name overrides parent member but 'override' keyword is missing")
+
+                    if (visibility.ordinal > existing.visibility.ordinal)
+                        throw ScriptError(pos, "can't narrow visibility of $name from ${existing.visibility} to $visibility")
+                }
+            }
+            
+            if (isOverride && !actualOverride) {
+                throw ScriptError(pos, "member $name is marked 'override' but does not override anything")
+            }
+        }
+
         // Allow overriding ancestors: only prevent redefinition if THIS class already defines an immutable member
         val existingInSelf = members[name]
         if (existingInSelf != null && existingInSelf.isMutable == false)
             throw ScriptError(pos, "$name is already defined in $objClass")
+        
         // Install/override in this class
-        members[name] = ObjRecord(initialValue, isMutable, visibility, writeVisibility, declaringClass = declaringClass)
+        members[name] = ObjRecord(
+            initialValue, isMutable, visibility, writeVisibility, 
+            declaringClass = declaringClass,
+            isAbstract = isAbstract,
+            isClosed = isClosed,
+            isOverride = isOverride,
+            type = type
+        )
         // Structural change: bump layout version for PIC invalidation
         layoutVersion += 1
     }
@@ -383,14 +432,22 @@ open class ObjClass(
 
     fun addFn(
         name: String,
-        isOpen: Boolean = false,
+        isMutable: Boolean = false,
         visibility: Visibility = Visibility.Public,
         writeVisibility: Visibility? = null,
         declaringClass: ObjClass? = this,
-        code: suspend Scope.() -> Obj
+        isAbstract: Boolean = false,
+        isClosed: Boolean = false,
+        isOverride: Boolean = false,
+        pos: Pos = Pos.builtIn,
+        code: (suspend Scope.() -> Obj)? = null
     ) {
-        val stmt = statement { code() }
-        createField(name, stmt, isOpen, visibility, writeVisibility, Pos.builtIn, declaringClass)
+        val stmt = code?.let { statement { it() } } ?: ObjNull
+        createField(
+            name, stmt, isMutable, visibility, writeVisibility, pos, declaringClass,
+            isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride,
+            type = ObjRecord.Type.Fun
+        )
     }
 
     fun addConst(name: String, value: Obj) = createField(name, value, isMutable = false)
@@ -401,13 +458,20 @@ open class ObjClass(
         setter: (suspend Scope.(Obj) -> Unit)? = null,
         visibility: Visibility = Visibility.Public,
         writeVisibility: Visibility? = null,
-        declaringClass: ObjClass? = this
+        declaringClass: ObjClass? = this,
+        isAbstract: Boolean = false,
+        isClosed: Boolean = false,
+        isOverride: Boolean = false,
+        pos: Pos = Pos.builtIn,
     ) {
         val g = getter?.let { statement { it() } }
         val s = setter?.let { statement { it(requiredArg(0)); ObjVoid } }
-        val prop = ObjProperty(name, g, s)
-        members[name] = ObjRecord(prop, false, visibility, writeVisibility, declaringClass, type = ObjRecord.Type.Property)
-        layoutVersion += 1
+        val prop = if (isAbstract) ObjNull else ObjProperty(name, g, s)
+        createField(
+            name, prop, false, visibility, writeVisibility, pos, declaringClass,
+            isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride,
+            type = ObjRecord.Type.Property
+        )
     }
 
     fun addClassConst(name: String, value: Obj) = createClassField(name, value)
@@ -441,6 +505,38 @@ open class ObjClass(
     fun getInstanceMember(atPos: Pos, name: String): ObjRecord =
         getInstanceMemberOrNull(name)
             ?: throw ScriptError(atPos, "symbol doesn't exist: $name")
+
+    fun findFirstConcreteMember(name: String): ObjRecord? {
+        for (cls in mro) {
+            cls.members[name]?.let {
+                if (!it.isAbstract) return it
+            }
+        }
+        return null
+    }
+
+    fun checkAbstractSatisfaction(pos: Pos) {
+        if (isAbstract) return
+
+        val missing = mutableSetOf<String>()
+        for (cls in mroParents) {
+            for ((name, rec) in cls.members) {
+                if (rec.isAbstract) {
+                    val current = findFirstConcreteMember(name)
+                    if (current == null) {
+                        missing.add(name)
+                    }
+                }
+            }
+        }
+
+        if (missing.isNotEmpty()) {
+            throw ScriptError(
+                pos,
+                "class $className is not abstract and does not implement abstract members: ${missing.joinToString(", ")}"
+            )
+        }
+    }
 
     /**
      * Resolve member starting from a specific ancestor class [start], not from this class.

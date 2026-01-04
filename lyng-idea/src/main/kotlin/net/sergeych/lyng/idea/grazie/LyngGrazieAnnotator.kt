@@ -579,7 +579,8 @@ class LyngGrazieAnnotator : ExternalAnnotator<LyngGrazieAnnotator.Input, LyngGra
         val s = w.lowercase()
         return s in setOf(
             // common code words / language keywords to avoid noise
-            "val","var","fun","class","enum","type","import","package","return","if","else","when","while","for","try","catch","finally","true","false","null",
+            "val","var","fun","class","interface","enum","type","import","package","return","if","else","when","while","for","try","catch","finally","true","false","null",
+            "abstract","closed","override",
             // very common English words
             "the","and","or","not","with","from","into","this","that","file","found","count","name","value","object"
         )

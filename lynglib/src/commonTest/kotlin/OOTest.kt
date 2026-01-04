@@ -348,7 +348,8 @@ class OOTest {
     @Test
     fun testPropAsExtension() = runTest {
         val scope = Script.newScope()
-        scope.eval("""
+        scope.eval(
+            """
             class A(x) {
                 private val privateVal = 100
                 val p1 get() = x + 1
@@ -368,7 +369,8 @@ class OOTest {
              // it should also work with properties:
              val A.p10 get() = x * 10
              assertEquals(20, A(2).p10)
-        """.trimIndent())
+        """.trimIndent()
+        )
 
         // important is that such extensions should not be able to access private members
         // and thus remove privateness:
@@ -383,23 +385,28 @@ class OOTest {
     @Test
     fun testExtensionsAreScopeIsolated() = runTest {
         val scope1 = Script.newScope()
-        scope1.eval("""
+        scope1.eval(
+            """
             val String.totalDigits get() {
                 // notice using `this`:
                 this.characters.filter{ it.isDigit() }.size()
             }
             assertEquals(2, "answer is 42".totalDigits)
-        """)
+        """
+        )
         val scope2 = Script.newScope()
-        scope2.eval("""
+        scope2.eval(
+            """
             // in scope2 we didn't override `totalDigits` extension:
             assertThrows { "answer is 42".totalDigits }
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testCacheInClass() = runTest {
-        eval("""
+        eval(
+            """
             class T(salt) {
                 private var c
                  
@@ -416,24 +423,28 @@ class OOTest {
             assertEquals("bar.", t2.getResult())
             assertEquals("foo.", t1.getResult())
             
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testLateInitValsInClasses() = runTest {
         assertFails {
-            eval("""
+            eval(
+                """
                 class T {
                     val x
                 }
-            """)
+            """
+            )
         }
 
         assertFails {
             eval("val String.late")
         }
 
-        eval("""
+        eval(
+            """
             // but we can "late-init" them in init block:
             class OK {
                 val x
@@ -463,12 +474,14 @@ class OOTest {
                 }
             }
             AccessBefore()
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     @Test
     fun testPrivateSet() = runTest {
-        eval("""
+        eval(
+            """
             class A {
                 var y = 100
                     private set
@@ -505,7 +518,8 @@ class OOTest {
             assertThrows(AccessException) { d.y = 10 }
             d.setY(20)
             assertEquals(20, d.y)
-        """)
+        """
+        )
     }
 
     @Test
@@ -515,4 +529,205 @@ class OOTest {
         }
     }
 
+    @Test
+    fun testAbstractClassesAndOverridingProposal() = runTest {
+        val scope = Script.newScope()
+        /*
+            Abstract class is a sort of interface on steroidsL it is a class some members/methods of which
+            are required to be implemented by heirs. Still it is a regular class in all other respects.
+            Just can't be instantiated
+         */
+        scope.eval(
+            """
+            // abstract modifier is required. It can have a constructor, or be without it:    
+            abstract class A(someParam=1) {
+                // if the method is marked as abstract, it has no body:
+                abstract fun foo(): Int
+                
+                // abstract var/var have no initializer:
+                abstract var bar
+            }
+            // can't create instance of the abstract class:
+            assertThrows { A() }
+            """.trimIndent()
+        )
+        // create abstract method with body or val/var with initializer is an error:
+        assertFails { scope.eval("abstract class B { abstract fun foo() = 1 }") }
+        assertFails { scope.eval("abstract class C { abstract val bar = 1 }") }
+
+        // inheriting an abstract class without implementing all of it abstract members and methods
+        // is not allowed:
+        assertFails { scope.eval("class D : A(1) { override fun foo() = 10 }") }
+
+        // but it is allowed to inherit in another abstract class:
+        scope.eval("abstract class E : A(1) { override fun foo() = 10 }")
+
+        // implementing all abstracts let us have regular class:
+        scope.eval(
+            """
+            class F : E() {  override val bar = 11 }
+            assertEquals(10, F().foo())
+            assertEquals(11, F().bar)
+            """.trimIndent()
+        )
+
+        // Another possibility to override symbol is multiple inheritance: the parent that
+        // follows the abstract class in MI chain can override the abstract symbol:
+        scope.eval(
+            """
+            // This implementor know nothing of A but still implements de-facto its needs:
+            class Implementor {
+                val bar = 3
+                fun foo() = 1
+            }
+            
+            // now we can use MI to implement abstract class:
+            class F2 : A(42), Implementor 
+            
+            assertEquals(1, F2().foo())
+            assertEquals(3, F2().bar)
+            """
+        )
+        /*
+        Notes.
+
+        The override keyword is an _optional_ flag that the symbol must exist in one of the parents
+        and can be overridden.
+
+        Compiler checks as early as possible that the symbol exists in one of the parents and is open.
+        By default, all public/protected symbols are open. If there is no such symbol, the exception is thrown.
+
+        In contrast, if the symbol has no special flags, the compiler either creates a new one of overrides
+        existing, checking that override is allowed.
+
+        Question to AI: the keyword to mark non-overridable symbols? final is not the best option as for me.
+
+        Overriding the var/val should also be possible with an initializer of with get()/set(value).
+
+        overriding can't alter visibility: it must remain as declared in the parent. Private symbols can't be
+        neither declared abstract nor overridden.
+        */
+    }
+
+    @Test
+    fun testAbstractAndOverrideEdgeCases() = runTest {
+        val scope = Script.newScope()
+
+        // 1. abstract private is an error:
+        assertFails { scope.eval("abstract class Err { abstract private fun foo() }") }
+        assertFails { scope.eval("abstract class Err { abstract private val x }") }
+
+        // 2. private member in parent is not visible for overriding:
+        scope.eval(
+            """
+            class Base {
+                private fun secret() = 1
+                fun callSecret() = secret()
+            }
+            class Derived : Base() {
+                // This is NOT an override, but a new method
+                fun secret() = 2
+            }
+            val d = Derived()
+            assertEquals(2, d.secret())
+            assertEquals(1, d.callSecret())
+            """.trimIndent()
+        )
+        // Using override keyword when there is only a private member in parent is an error:
+        assertFails { scope.eval("class D2 : Base() { override fun secret() = 3 }") }
+
+        // 3. interface can have state (constructor, fields, init):
+        scope.eval(
+            """
+            interface I(val x) {
+                var y = x * 2
+                val z
+                init {
+                    z = y + 1
+                }
+                fun foo() = x + y + z
+            }
+            class Impl : I(10)
+            val impl = Impl()
+            assertEquals(10, impl.x)
+            assertEquals(20, impl.y)
+            assertEquals(21, impl.z)
+            assertEquals(51, impl.foo())
+            """.trimIndent()
+        )
+
+        // 4. closed members cannot be overridden:
+        scope.eval(
+            """
+            class G {
+                closed fun locked() = "locked"
+                closed val permanent = 42
+            }
+            """.trimIndent()
+        )
+        assertFails { scope.eval("class H : G() { override fun locked() = \"free\" }") }
+        assertFails { scope.eval("class H : G() { override val permanent = 0 }") }
+        // Even without override keyword, it should fail if it's closed:
+        assertFails { scope.eval("class H : G() { fun locked() = \"free\" }") }
+
+        // 5. Visibility widening is allowed, narrowing is forbidden:
+        scope.eval(
+            """
+            class BaseVis {
+                protected fun prot() = 1
+            }
+            class Widened : BaseVis() {
+                override fun prot() = 2 // Widened to public (default)
+            }
+            assertEquals(2, Widened().prot())
+            
+            class BasePub {
+                fun pub() = 1
+            }
+            """.trimIndent()
+        )
+        // Narrowing:
+        assertFails { scope.eval("class Narrowed : BasePub() { override protected fun pub() = 2 }") }
+        assertFails { scope.eval("class Narrowed : BasePub() { override private fun pub() = 2 }") }
+    }
+
+    @Test
+    fun testInterfaceImplementationByParts() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            // Interface with state (id) and abstract requirements
+            interface Character(val id) {
+                abstract var health
+                abstract var mana
+                fun isAlive() = health > 0
+                fun status() = name + " (#" + id + "): " + health + " HP, " + mana + " MP"
+                // name is also abstractly required by the status method, 
+                // even if not explicitly marked 'abstract val' here, 
+                // it will be looked up in MRO
+            }
+
+            // Part 1: Provides health
+            class HealthPool(var health)
+
+            // Part 2: Provides mana and name
+            class ManaPool(var mana) {
+                val name = "Hero"
+            }
+
+            // Composite class implementing Character by parts
+            class Warrior(id, h, m) : HealthPool(h), ManaPool(m), Character(id)
+
+            val w = Warrior(1, 100, 50)
+            assertEquals(100, w.health)
+            assertEquals(50, w.mana)
+            assertEquals(1, w.id)
+            assert(w.isAlive())
+            assertEquals("Hero (#1): 100 HP, 50 MP", w.status())
+
+            w.health = 0
+            assert(!w.isAlive())
+            """.trimIndent()
+        )
+    }
 }

@@ -155,7 +155,10 @@ open class Scope(
             this.extensions[cls]?.get(name)?.let { return it }
         }
         return thisObj.objClass.getInstanceMemberOrNull(name)?.let { rec ->
-            if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) rec else null
+            if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) {
+                if (rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.Property || rec.isAbstract) null
+                else rec
+            } else null
         }
     }
 
@@ -176,7 +179,11 @@ open class Scope(
                 s.extensions[cls]?.get(name)?.let { return it }
             }
             s.thisObj.objClass.getInstanceMemberOrNull(name)?.let { rec ->
-                if (canAccessMember(rec.visibility, rec.declaringClass, caller)) return rec
+                if (canAccessMember(rec.visibility, rec.declaringClass, caller)) {
+                    if (rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.Property || rec.isAbstract) {
+                        // ignore fields, properties and abstracts here, they will be handled by the caller via readField
+                    } else return rec
+                }
             }
             s = s.parent
         }
@@ -332,7 +339,10 @@ open class Scope(
                 ?: parent?.get(name)
                 // Finally, fallback to class members on thisObj
                 ?: thisObj.objClass.getInstanceMemberOrNull(name)?.let { rec ->
-                    if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) rec else null
+                    if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) {
+                        if (rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.Property || rec.isAbstract) null
+                        else rec
+                    } else null
                 }
                 )
         }
@@ -435,7 +445,10 @@ open class Scope(
         value: Obj,
         visibility: Visibility = Visibility.Public,
         writeVisibility: Visibility? = null,
-        recordType: ObjRecord.Type = ObjRecord.Type.Other
+        recordType: ObjRecord.Type = ObjRecord.Type.Other,
+        isAbstract: Boolean = false,
+        isClosed: Boolean = false,
+        isOverride: Boolean = false
     ): ObjRecord =
         objects[name]?.let {
             if( !it.isMutable )
@@ -449,7 +462,7 @@ open class Scope(
                 callScope.localBindings[name] = it
             }
             it
-        } ?: addItem(name, true, value, visibility, writeVisibility, recordType)
+        } ?: addItem(name, true, value, visibility, writeVisibility, recordType, isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride)
 
     fun addItem(
         name: String,
@@ -458,9 +471,19 @@ open class Scope(
         visibility: Visibility = Visibility.Public,
         writeVisibility: Visibility? = null,
         recordType: ObjRecord.Type = ObjRecord.Type.Other,
-        declaringClass: net.sergeych.lyng.obj.ObjClass? = currentClassCtx
+        declaringClass: net.sergeych.lyng.obj.ObjClass? = currentClassCtx,
+        isAbstract: Boolean = false,
+        isClosed: Boolean = false,
+        isOverride: Boolean = false
     ): ObjRecord {
-        val rec = ObjRecord(value, isMutable, visibility, writeVisibility, declaringClass = declaringClass, type = recordType)
+        val rec = ObjRecord(
+            value, isMutable, visibility, writeVisibility,
+            declaringClass = declaringClass,
+            type = recordType,
+            isAbstract = isAbstract,
+            isClosed = isClosed,
+            isOverride = isOverride
+        )
         objects[name] = rec
         // Index this binding within the current frame to help resolve locals across suspension
         localBindings[name] = rec

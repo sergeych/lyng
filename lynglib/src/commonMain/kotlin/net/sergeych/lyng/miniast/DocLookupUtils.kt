@@ -435,16 +435,16 @@ object DocLookupUtils {
         if (start !in 0..end) return emptyMap()
         val body = text.substring(start, end)
         val map = LinkedHashMap<String, ScannedSig>()
-        // fun name(params): Type
-        val funRe = Regex("^\\s*fun\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)\\s*(?::\\s*([A-Za-z_][A-Za-z0-9_]*))?", RegexOption.MULTILINE)
+        // fun name(params): Type (allowing modifiers like abstract, override, closed)
+        val funRe = Regex("^\\s*(?:(?:abstract|override|closed|private|protected|static|open|extern)\\s+)*fun\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)\\s*(?::\\s*([A-Za-z_][A-Za-z0-9_]*))?", RegexOption.MULTILINE)
         for (m in funRe.findAll(body)) {
             val name = m.groupValues.getOrNull(1) ?: continue
             val params = m.groupValues.getOrNull(2)?.split(',')?.mapNotNull { it.trim().takeIf { it.isNotEmpty() } } ?: emptyList()
             val type = m.groupValues.getOrNull(3)?.takeIf { it.isNotBlank() }
             map[name] = ScannedSig("fun", params, type)
         }
-        // val/var name: Type
-        val valRe = Regex("^\\s*(val|var)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(?::\\s*([A-Za-z_][A-Za-z0-9_]*))?", RegexOption.MULTILINE)
+        // val/var name: Type (allowing modifiers)
+        val valRe = Regex("^\\s*(?:(?:abstract|override|closed|private|protected|static|open|extern)\\s+)*(val|var)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(?::\\s*([A-Za-z_][A-Za-z0-9_]*))?", RegexOption.MULTILINE)
         for (m in valRe.findAll(body)) {
             val kind = m.groupValues.getOrNull(1) ?: continue
             val name = m.groupValues.getOrNull(2) ?: continue

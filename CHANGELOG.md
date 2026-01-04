@@ -2,6 +2,15 @@
 
 ### Unreleased
 
+- Language: Abstract Classes and Interfaces
+  - Support for `abstract` modifier on classes, methods, and variables.
+  - Introduced `interface` as a synonym for `abstract class`, supporting full state (constructors, fields, `init` blocks) and implementation by parts via MI.
+  - New `closed` modifier (antonym to `open`) to prevent overriding class members.
+  - Refined `override` logic: mandatory keyword when re-declaring members that exist in the ancestor chain (MRO).
+  - MI Satisfaction: Abstract requirements are automatically satisfied by matching concrete members found later in the C3 MRO chain without requiring explicit proxy methods.
+  - Integration: Updated highlighters (lynglib, lyngweb, IDEA plugin), IDEA completion, and Grazie grammar checking.
+  - Documentation: Updated `docs/OOP.md` with sections on "Abstract Classes and Members", "Interfaces", and "Overriding and Virtual Dispatch".
+
 - Language: Class properties with accessors
   - Support for `val` (read-only) and `var` (read-write) properties in classes.
   - Syntax: `val name [ : Type ] get() { body }` or `var name [ : Type ] get() { body } set(value) { body }`.

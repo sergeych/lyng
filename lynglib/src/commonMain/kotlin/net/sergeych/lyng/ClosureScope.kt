@@ -53,26 +53,71 @@ class ClosureScope(val callScope: Scope, val closureScope: Scope) :
         super.objects[name]?.let { return it }
         super.localBindings[name]?.let { return it }
 
-        // 2) Members on the captured receiver instance
-        (closureScope.thisObj as? net.sergeych.lyng.obj.ObjInstance)
-            ?.instanceScope
-            ?.objects
-            ?.get(name)
-            ?.let { rec ->
-                if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) return rec
+        // 1a) Priority: if we are in a class context, prefer our own private members to support 
+        // non-virtual private dispatch. This prevents a subclass from accidentally 
+        // capturing a private member call from a base class.
+        // We only return non-field/non-property members (methods) here; fields must
+        // be resolved via instance storage in priority 2.
+        currentClassCtx?.let { ctx ->
+            ctx.members[name]?.let { rec ->
+                if (rec.visibility == Visibility.Private && 
+                    rec.type != net.sergeych.lyng.obj.ObjRecord.Type.Field && 
+                    rec.type != net.sergeych.lyng.obj.ObjRecord.Type.Property) return rec
             }
+        }
+
+        // 2) Members on the captured receiver instance
+        (closureScope.thisObj as? net.sergeych.lyng.obj.ObjInstance)?.let { inst ->
+            // Check direct locals in instance scope (unmangled)
+            inst.instanceScope.objects[name]?.let { rec ->
+                if (rec.type != net.sergeych.lyng.obj.ObjRecord.Type.Property && 
+                    canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) return rec
+            }
+            // Check mangled names for fields along MRO
+            for (cls in inst.objClass.mro) {
+                inst.instanceScope.objects["${cls.className}::$name"]?.let { rec ->
+                    if (rec.type != net.sergeych.lyng.obj.ObjRecord.Type.Property && 
+                        canAccessMember(rec.visibility, rec.declaringClass ?: cls, currentClassCtx)) return rec
+                }
+            }
+        }
+
         findExtension(closureScope.thisObj.objClass, name)?.let { return it }
         closureScope.thisObj.objClass.getInstanceMemberOrNull(name)?.let { rec ->
-            if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) return rec
+            if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) {
+                // Return only non-field/non-property members (methods) from class-level records.
+                // Fields and properties must be resolved via instance storage (mangled) or readField.
+                if (rec.type != net.sergeych.lyng.obj.ObjRecord.Type.Field && 
+                    rec.type != net.sergeych.lyng.obj.ObjRecord.Type.Property && 
+                    !rec.isAbstract) return rec
+            }
         }
 
         // 3) Closure scope chain (locals/parents + members), ignore ClosureScope overrides to prevent recursion
         closureScope.chainLookupWithMembers(name, currentClassCtx)?.let { return it }
 
         // 4) Caller `this` members
+        (callScope.thisObj as? net.sergeych.lyng.obj.ObjInstance)?.let { inst ->
+            // Check direct locals in instance scope (unmangled)
+            inst.instanceScope.objects[name]?.let { rec ->
+                if (rec.type != net.sergeych.lyng.obj.ObjRecord.Type.Property && 
+                    canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) return rec
+            }
+            // Check mangled names for fields along MRO
+            for (cls in inst.objClass.mro) {
+                inst.instanceScope.objects["${cls.className}::$name"]?.let { rec ->
+                    if (rec.type != net.sergeych.lyng.obj.ObjRecord.Type.Property && 
+                        canAccessMember(rec.visibility, rec.declaringClass ?: cls, currentClassCtx)) return rec
+                }
+            }
+        }
         findExtension(callScope.thisObj.objClass, name)?.let { return it }
         callScope.thisObj.objClass.getInstanceMemberOrNull(name)?.let { rec ->
-            if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) return rec
+            if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) {
+                if (rec.type != net.sergeych.lyng.obj.ObjRecord.Type.Field && 
+                    rec.type != net.sergeych.lyng.obj.ObjRecord.Type.Property && 
+                    !rec.isAbstract) return rec
+            }
         }
 
         // 5) Caller chain (locals/parents + members)

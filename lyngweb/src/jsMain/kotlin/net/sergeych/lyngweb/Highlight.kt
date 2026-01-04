@@ -530,10 +530,10 @@ private fun detectDeclarationAndParamOverrides(text: String): Map<Pair<Int, Int>
     fun isIdentPart(ch: Char) = ch == '_' || ch == '$' || ch == '~' || ch.isLetterOrDigit()
     // A conservative list of language keywords to avoid misclassifying as function calls
     val kw = setOf(
-        "package", "import", "fun", "fn", "class", "enum", "val", "var",
+        "package", "import", "fun", "fn", "class", "interface", "enum", "val", "var",
         "if", "else", "while", "do", "for", "when", "try", "catch", "finally",
         "throw", "return", "break", "continue", "in", "is", "as", "as?", "not",
-        "true", "false", "null", "private", "protected", "open", "extern", "static",
+        "true", "false", "null", "private", "protected", "abstract", "closed", "override", "open", "extern", "static",
         "init", "get", "set", "Unset", "by"
     )
     fun skipWs(idx0: Int): Int {

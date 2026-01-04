@@ -58,10 +58,16 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         // self first, then parents
         fun findMangled(): ObjRecord? {
             // self
-            instanceScope.objects["${cls.className}::$name"]?.let { return it }
+            instanceScope.objects["${cls.className}::$name"]?.let {
+                if (name == "c") println("[DEBUG_LOG] findMangled('c') found in self (${cls.className}): value=${it.value}")
+                return it
+            }
             // ancestors in deterministic C3 order
             for (p in cls.mroParents) {
-                instanceScope.objects["${p.className}::$name"]?.let { return it }
+                instanceScope.objects["${p.className}::$name"]?.let {
+                    if (name == "c") println("[DEBUG_LOG] findMangled('c') found in parent (${p.className}): value=${it.value}")
+                    return it
+                }
             }
             return null
         }
@@ -125,6 +131,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
 
         val rec = findMangled()
         if (rec != null) {
+            if (name == "c") println("[DEBUG_LOG] writeField('c') found in mangled: value was ${rec.value}, setting to $newValue")
             val declaring = when {
                 instanceScope.objects.containsKey("${cls.className}::$name") -> cls
                 else -> cls.mroParents.firstOrNull { instanceScope.objects.containsKey("${it.className}::$name") }
@@ -155,34 +162,40 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         onNotFoundResult: (suspend () -> Obj?)?
     ): Obj =
         instanceScope[name]?.let { rec ->
-            val decl = rec.declaringClass
-            val caller = scope.currentClassCtx ?: if (scope.thisObj === this) objClass else null
-            if (!canAccessMember(rec.visibility, decl, caller))
-                scope.raiseError(
-                    ObjAccessException(
-                        scope,
-                        "can't invoke method $name (declared in ${decl?.className ?: "?"})"
+            if (rec.type == ObjRecord.Type.Property || rec.isAbstract) null
+            else {
+                val decl = rec.declaringClass
+                val caller = scope.currentClassCtx ?: if (scope.thisObj === this) objClass else null
+                if (!canAccessMember(rec.visibility, decl, caller))
+                    scope.raiseError(
+                        ObjAccessException(
+                            scope,
+                            "can't invoke method $name (declared in ${decl?.className ?: "?"})"
+                        )
                     )
+                rec.value.invoke(
+                    instanceScope,
+                    this,
+                    args
                 )
-            rec.value.invoke(
-                instanceScope,
-                this,
-                args
-            )
+            }
         }
             ?: run {
                 // fallback: class-scope function (registered during class body execution)
                 objClass.classScope?.objects?.get(name)?.let { rec ->
-                    val decl = rec.declaringClass
-                    val caller = scope.currentClassCtx ?: if (scope.thisObj === this) objClass else null
-                    if (!canAccessMember(rec.visibility, decl, caller))
-                        scope.raiseError(
-                            ObjAccessException(
-                                scope,
-                                "can't invoke method $name (declared in ${decl?.className ?: "?"})"
+                    if (rec.type == ObjRecord.Type.Property || rec.isAbstract) null
+                    else {
+                        val decl = rec.declaringClass
+                        val caller = scope.currentClassCtx ?: if (scope.thisObj === this) objClass else null
+                        if (!canAccessMember(rec.visibility, decl, caller))
+                            scope.raiseError(
+                                ObjAccessException(
+                                    scope,
+                                    "can't invoke method $name (declared in ${decl?.className ?: "?"})"
+                                )
                             )
-                        )
-                    rec.value.invoke(instanceScope, this, args)
+                        rec.value.invoke(instanceScope, this, args)
+                    }
                 }
             }
             ?: super.invokeInstanceMethod(scope, name, args, onNotFoundResult)

@@ -32,7 +32,8 @@ class LyngLexer : LexerBase() {
     private var myTokenType: IElementType? = null
 
     private val keywords = setOf(
-        "fun", "val", "var", "class", "type", "import", "as",
+        "fun", "val", "var", "class", "interface", "type", "import", "as",
+        "abstract", "closed", "override",
         "if", "else", "for", "while", "return", "true", "false", "null",
         "when", "in", "is", "break", "continue", "try", "catch", "finally",
         "get", "set"

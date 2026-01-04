@@ -89,7 +89,7 @@ open class Obj {
         for (cls in objClass.mro) {
             if (cls.className == "Obj") break
             val rec = cls.members[name] ?: cls.classScope?.objects?.get(name)
-            if (rec != null) {
+            if (rec != null && !rec.isAbstract && rec.type != ObjRecord.Type.Property) {
                 val decl = rec.declaringClass ?: cls
                 val caller = scope.currentClassCtx
                 if (!canAccessMember(rec.visibility, decl, caller))
@@ -347,8 +347,12 @@ open class Obj {
         // 1. Hierarchy members (excluding root fallback)
         for (cls in objClass.mro) {
             if (cls.className == "Obj") break
-            cls.members[name]?.let { return resolveRecord(scope, it, name, it.declaringClass) }
-            cls.classScope?.objects?.get(name)?.let { return resolveRecord(scope, it, name, it.declaringClass) }
+            val rec = cls.members[name] ?: cls.classScope?.objects?.get(name)
+            if (rec != null) {
+                if (!rec.isAbstract) {
+                    return resolveRecord(scope, rec, name, rec.declaringClass)
+                }
+            }
         }
 
         // 2. Extensions
@@ -393,8 +397,11 @@ open class Obj {
         // 1. Hierarchy members (excluding root fallback)
         for (cls in objClass.mro) {
             if (cls.className == "Obj") break
-            field = cls.members[name] ?: cls.classScope?.objects?.get(name)
-            if (field != null) break
+            val rec = cls.members[name] ?: cls.classScope?.objects?.get(name)
+            if (rec != null && !rec.isAbstract) {
+                field = rec
+                break
+            }
         }
         // 2. Extensions
         if (field == null) {

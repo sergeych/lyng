@@ -32,6 +32,9 @@ data class ObjRecord(
     var importedFrom: Scope? = null,
     val isTransient: Boolean = false,
     val type: Type = Type.Other,
+    val isAbstract: Boolean = false,
+    val isClosed: Boolean = false,
+    val isOverride: Boolean = false,
 ) {
     val effectiveWriteVisibility: Visibility get() = writeVisibility ?: visibility
     enum class Type(val comparable: Boolean = false,val serializable: Boolean = false) {

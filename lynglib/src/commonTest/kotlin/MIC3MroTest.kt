@@ -52,8 +52,8 @@ class MIC3MroTest {
         eval(
             """
             class A() { fun common() { "A" } }
-            class B() : A() { fun common() { "B" } }
-            class C() : A() { fun common() { "C" } }
+            class B() : A() { override fun common() { "B" } }
+            class C() : A() { override fun common() { "C" } }
             class D() : B(), C()
 
             val d = D()

@@ -50,7 +50,7 @@ Properties allow you to define member accessors that look like fields but execut
 
 Properties are declared using `val` (read-only) or `var` (read-write) followed by a name and `get()`/`set()` blocks:
 
-```kotlin
+```lyng
 class Person(private var _age: Int) {
     // Read-only property
     val ageCategory 
@@ -76,7 +76,7 @@ assertEquals("Adult", p.ageCategory)
 
 For simple accessors and methods, you can use the `=` shorthand for a more elegant and laconic form:
 
-```kotlin
+```lyng
 class Circle(val radius: Real) {
     val area get() = π * radius * radius
     val circumference get() = 2 * π * radius
@@ -104,7 +104,7 @@ class Counter {
 
 When you want to define a property that is computed only once (on demand) and then remembered, use the built-in `cached` function. This is more efficient than a regular property with `get()` if the computation is expensive, as it avoids re-calculating the value on every access.
 
-```kotlin
+```lyng
 class DataService(val id: Int) {
     // The lambda passed to cached is only executed once, the first time data() is called.
     val data = cached {
@@ -179,7 +179,7 @@ Note that unlike **Kotlin**, which uses `=` for named arguments, Lyng uses `:` t
 
 You can declare a `val` field without an immediate initializer if you provide an assignment for it within an `init` block or the class body. This is useful when the initial value depends on logic that cannot be expressed in a single expression.
 
-```kotlin
+```lyng
 class DataProcessor(data: Object) {
     val result: Object
     
@@ -200,7 +200,7 @@ Key rules for late-init `val`:
 
 The `Unset` singleton represents a field that has been declared but not yet initialized. While it can be compared and converted to a string, most other operations on it are forbidden to prevent accidental use of uninitialized data.
 
-```kotlin
+```lyng
 class T {
     val x
     fun check() {
@@ -237,7 +237,7 @@ Functions defined inside a class body are methods, and unless declared
 
 Lyng supports declaring a class with multiple direct base classes. The syntax is:
 
-```
+```lyng
 class Foo(val a) {
     var tag = "F"
     fun runA() { "ResultA:" + a }
@@ -286,16 +286,16 @@ Key rules and features:
 
 - Syntax
   - `class Derived(args) : Base1(b1Args), Base2(b2Args)`
-  - Each direct base may receive constructor arguments specified in the header. Only direct bases receive header args; indirect bases must either be default‑constructible or receive their args through their direct child (future extensions may add more control).
+  - Each direct base may receive constructor arguments specified in the header. Only direct bases receive header args; indirect bases must either be default‑constructible or receive their args through their direct child.
 
-- Resolution order (C3 MRO — active)
+- Resolution order (C3 MRO)
   - Member lookup is deterministic and follows C3 linearization (Python‑like), which provides a monotonic, predictable order for complex hierarchies and diamonds.
   - Intuition: for `class D() : B(), C()` where `B()` and `C()` both derive from `A()`, the C3 order is `D → B → C → A`.
   - The first visible match along this order wins.
 
 - Qualified dispatch
   - Inside a class body, use `this@Type.member(...)` to start lookup at the specified ancestor.
-  - For arbitrary receivers, use casts: `(expr as Type).member(...)` or `(expr as? Type)?.member(...)` (safe‑call `?.` is already available in Lyng).
+  - For arbitrary receivers, use casts: `(expr as Type).member(...)` or `(expr as? Type)?.member(...)`.
   - Qualified access does not relax visibility.
 
 - Field inheritance (`val`/`var`) and collisions
@@ -312,10 +312,120 @@ Key rules and features:
   - `private`: accessible only inside the declaring class body; not visible in subclasses and cannot be accessed via `this@Type` or casts.
   - `protected`: accessible in the declaring class and in any of its transitive subclasses (including MI), but not from unrelated contexts; qualification/casts do not bypass it.
 
-- Diagnostics
-  - When a member/field is not found, error messages include the receiver class name and the considered linearization order, with suggestions to disambiguate using `this@Type` or casts if appropriate.
-  - Qualifying with a non‑ancestor in `this@Type` reports a clear error mentioning the receiver lineage.
-  - `as`/`as?` cast errors mention the actual and target types.
+## Abstract Classes and Members
+
+An `abstract` class is a class that cannot be instantiated and is intended to be inherited by other classes. It can contain `abstract` members that have no implementation and must be implemented by concrete subclasses.
+
+### Abstract Classes
+
+To declare an abstract class, use the `abstract` modifier:
+
+```lyng
+abstract class Shape {
+    abstract fun area(): Real
+}
+```
+
+Abstract classes can have constructors, fields, and concrete methods, just like regular classes.
+
+### Abstract Members
+
+Methods and variables (`val`/`var`) can be marked as `abstract`. Abstract members must not have a body or initializer.
+
+```lyng
+abstract class Base {
+    abstract fun foo(): Int
+    abstract var bar: String
+}
+```
+
+- **Safety**: `abstract` members cannot be `private`, as they must be visible to subclasses for implementation.
+- **Contract of Capability**: An `abstract val/var` represents a requirement for a capability. It can be implemented by either a **field** (storage) or a **property** (logic) in a subclass.
+
+## Interfaces
+
+An `interface` in Lyng is a synonym for an `abstract class`. Following the principle that Lyng's Multiple Inheritance system is powerful enough to handle stateful contracts, interfaces support everything classes do, including constructors, fields, and `init` blocks.
+
+```lyng
+interface Named(val name: String) {
+    fun greet() { "Hello, " + name }
+}
+
+class Person(name) : Named(name)
+```
+
+Using `interface` instead of `abstract class` is a matter of semantic intent, signaling that the class is primarily intended to be used as a contract in MI.
+
+### Implementation by Parts
+
+One of the most powerful benefits of Lyng's Multiple Inheritance and C3 MRO is the ability to satisfy an interface's requirements "by parts" from different parent classes. Since an `interface` can have state and requirements, a subclass can inherit these requirements and satisfy them using members inherited from other parents in the MRO chain.
+
+Example:
+
+```lyng
+// Interface with state (id) and abstract requirements
+interface Character(val id) {
+    abstract var health
+    abstract var mana
+    
+    fun isAlive() = health > 0
+    fun status() = name + " (#" + id + "): " + health + " HP, " + mana + " MP"
+}
+
+// Parent class 1: provides health
+class HealthPool(var health)
+
+// Parent class 2: provides mana and name
+class ManaPool(var mana) {
+    val name = "Hero"
+}
+
+// Composite class: implements Character by combining HealthPool and ManaPool
+class Warrior(id, h, m) : HealthPool(h), ManaPool(m), Character(id)
+
+val w = Warrior(1, 100, 50)
+assertEquals("Hero (#1): 100 HP, 50 MP", w.status())
+```
+
+In this example, `Warrior` inherits from `HealthPool`, `ManaPool`, and `Character`. The abstract requirements `health` and `mana` from `Character` are automatically satisfied by the matching members inherited from `HealthPool` and `ManaPool`. The `status()` method also successfully finds the `name` field from `ManaPool`. This pattern allows for highly modular and reusable "trait-like" classes that can be combined to fulfill complex contracts without boilerplate proxy methods.
+
+## Overriding and Virtual Dispatch
+
+When a class defines a member that already exists in one of its parents, it is called **overriding**.
+
+### The `override` Keyword
+
+In Lyng, the `override` keyword is **mandatory when declaring a member** that exists in the ancestor chain (MRO).
+
+```lyng
+class Parent {
+    fun foo() = 1
+}
+
+class Child : Parent() {
+    override fun foo() = 2 // Mandatory override keyword
+}
+```
+
+- **Implicit Satisfaction**: If a class inherits an abstract requirement and a matching implementation from different parents, the requirement is satisfied automatically without needing an explicit `override` proxy.
+- **No Accidental Overrides**: If you define a member that happens to match a parent's member but you didn't use `override`, the compiler will throw an error. This prevents the "Fragile Base Class" problem.
+- **Private Members**: Private members in parent classes are NOT part of the virtual interface and cannot be overridden. Defining a member with the same name in a subclass is allowed without `override` and is treated as a new, independent member.
+
+### Visibility Widening
+
+A subclass can increase the visibility of an overridden member (e.g., `protected` → `public`), but it is strictly forbidden from narrowing it (e.g., `public` → `protected`).
+
+### The `closed` Modifier
+
+To prevent a member from being overridden in subclasses, use the `closed` modifier (equivalent to `final` in other languages).
+
+```lyng
+class Critical {
+    closed fun secureStep() { ... }
+}
+```
+
+Attempting to override a `closed` member results in a compile-time error.
 
 Compatibility notes:
 
@@ -438,7 +548,7 @@ You can restrict the visibility of a `var` field's or property's setter by using
 
 #### On Fields
 
-```kotlin
+```lyng
 class SecretCounter {
     var count = 0
         private set // Can be read anywhere, but written only in SecretCounter
