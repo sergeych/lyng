@@ -20,3 +20,4 @@ xcuserdata
 .output*.txt
 debug.log
 /build.log
+/test.md

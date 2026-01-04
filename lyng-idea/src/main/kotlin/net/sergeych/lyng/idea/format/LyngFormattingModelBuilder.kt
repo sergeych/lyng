@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,7 +42,7 @@ private class LineBlocksRootBlock(
     private val file: PsiFile,
     private val settings: CodeStyleSettings
 ) : Block {
-    override fun getTextRange(): TextRange = file.textRange
+    override fun getTextRange(): TextRange = TextRange(0, file.textLength)
 
     override fun getSubBlocks(): List<Block> = emptyList()
 
@@ -52,7 +52,7 @@ private class LineBlocksRootBlock(
     override fun getSpacing(child1: Block?, child2: Block): Spacing? = null
     override fun getChildAttributes(newChildIndex: Int): ChildAttributes = ChildAttributes(Indent.getNoneIndent(), null)
     override fun isIncomplete(): Boolean = false
-    override fun isLeaf(): Boolean = false
+    override fun isLeaf(): Boolean = true
 }
 
 // Intentionally no sub-blocks/spacing: indentation is handled by PreFormatProcessor + LineIndentProvider

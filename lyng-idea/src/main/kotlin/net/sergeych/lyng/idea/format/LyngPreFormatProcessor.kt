@@ -44,25 +44,67 @@ class LyngPreFormatProcessor : PreFormatProcessor {
         // When both spacing and wrapping are OFF, still fix indentation for the whole file to
         // guarantee visible changes on Reformat Code.
         val runFullFileIndent = !settings.enableSpacing && !settings.enableWrapping
-        // Maintain a working range and a modification flag to avoid stale offsets after replacements
         var modified = false
-        fun fullRange(): TextRange = TextRange(0, doc.textLength)
-        var workingRange: TextRange = range.intersection(fullRange()) ?: fullRange()
 
-        val startLine = if (runFullFileIndent) 0 else doc.getLineNumber(workingRange.startOffset)
-        val endLine = if (runFullFileIndent) (doc.lineCount - 1).coerceAtLeast(0)
-        else doc.getLineNumber(workingRange.endOffset.coerceAtMost(doc.textLength))
+        val docW = doc as? com.intellij.injected.editor.DocumentWindow
+        // The host range of the entire injected fragment (or the whole file if not injected).
+        fun currentHostRange(): TextRange = if (docW != null) {
+            TextRange(docW.injectedToHost(0), docW.injectedToHost(doc.textLength))
+        } else {
+            file.textRange
+        }
+
+        // The range in 'doc' coordinate system (local 0..len for injections, host offsets for normal files).
+        fun currentLocalRange(): TextRange = if (docW != null) {
+            TextRange(0, doc.textLength)
+        } else {
+            file.textRange
+        }
+
+        val clr = currentLocalRange()
+        val chr = currentHostRange()
+
+        // Convert the input range to the coordinate system of 'doc'
+        var workingRangeLocal: TextRange = if (docW != null) {
+            val hostIntersection = range.intersection(chr)
+            if (hostIntersection != null) {
+                try {
+                    val start = docW.hostToInjected(hostIntersection.startOffset)
+                    val end = docW.hostToInjected(hostIntersection.endOffset)
+                    TextRange(start.coerceAtMost(end), end.coerceAtLeast(start))
+                } catch (e: Exception) {
+                    clr
+                }
+            } else {
+                range.intersection(clr) ?: clr
+            }
+        } else {
+            range.intersection(clr) ?: clr
+        }
+
+        val startLine = if (runFullFileIndent) {
+            doc.getLineNumber(currentLocalRange().startOffset)
+        } else {
+            doc.getLineNumber(workingRangeLocal.startOffset)
+        }
+        val endLine = if (runFullFileIndent) {
+            if (clr.endOffset <= clr.startOffset) doc.getLineNumber(clr.startOffset)
+            else doc.getLineNumber(clr.endOffset)
+        } else {
+            doc.getLineNumber(workingRangeLocal.endOffset.coerceAtMost(doc.textLength))
+        }
 
         fun codePart(s: String): String {
             val idx = s.indexOf("//")
             return if (idx >= 0) s.substring(0, idx) else s
         }
 
-        // Pre-scan to compute balances up to startLine
+        // Pre-scan to compute balances up to startLine.
+        val fragmentStartLine = doc.getLineNumber(currentLocalRange().startOffset)
         var blockLevel = 0
         var parenBalance = 0
         var bracketBalance = 0
-        for (ln in 0 until startLine) {
+        for (ln in fragmentStartLine until startLine) {
             val text = doc.getText(TextRange(doc.getLineStartOffset(ln), doc.getLineEndOffset(ln)))
             for (ch in codePart(text)) when (ch) {
                 '{' -> blockLevel++
@@ -85,7 +127,6 @@ class LyngPreFormatProcessor : PreFormatProcessor {
                     CodeStyleManager.getInstance(project).adjustLineIndent(file, lineStart)
                 } catch (e: Exception) {
                     // Log as debug because this can be called many times during reformat
-                    // and we don't want to spam warnings if it's a known platform issue with injections
                 }
             }
 
@@ -110,15 +151,14 @@ class LyngPreFormatProcessor : PreFormatProcessor {
                 useTabs = options.USE_TAB_CHARACTER,
                 continuationIndentSize = options.CONTINUATION_INDENT_SIZE.coerceAtLeast(options.INDENT_SIZE.coerceAtLeast(1)),
             )
-            val full = fullRange()
-            val r = if (runFullFileIndent) full else workingRange.intersection(full) ?: full
+            val r = if (runFullFileIndent) currentLocalRange() else workingRangeLocal.intersection(currentLocalRange()) ?: currentLocalRange()
             val text = doc.getText(r)
             val formatted = LyngFormatter.reindent(text, cfg)
             if (formatted != text) {
                 doc.replaceString(r.startOffset, r.endOffset, formatted)
                 modified = true
                 psiDoc.commitDocument(doc)
-                workingRange = fullRange()
+                workingRangeLocal = currentLocalRange()
             }
         }
 
@@ -131,14 +171,14 @@ class LyngPreFormatProcessor : PreFormatProcessor {
                 applySpacing = true,
                 applyWrapping = false,
             )
-            val safe = workingRange.intersection(fullRange()) ?: fullRange()
-            val text = doc.getText(safe)
+            val r = if (runFullFileIndent) currentLocalRange() else workingRangeLocal.intersection(currentLocalRange()) ?: currentLocalRange()
+            val text = doc.getText(r)
             val formatted = LyngFormatter.format(text, cfg)
             if (formatted != text) {
-                doc.replaceString(safe.startOffset, safe.endOffset, formatted)
+                doc.replaceString(r.startOffset, r.endOffset, formatted)
                 modified = true
                 psiDoc.commitDocument(doc)
-                workingRange = fullRange()
+                workingRangeLocal = currentLocalRange()
             }
         }
         // Optionally apply wrapping (after spacing) when enabled
@@ -150,17 +190,19 @@ class LyngPreFormatProcessor : PreFormatProcessor {
                 applySpacing = settings.enableSpacing,
                 applyWrapping = true,
             )
-            val safe2 = workingRange.intersection(fullRange()) ?: fullRange()
-            val text2 = doc.getText(safe2)
-            val wrapped = LyngFormatter.format(text2, cfg)
-            if (wrapped != text2) {
-                doc.replaceString(safe2.startOffset, safe2.endOffset, wrapped)
+            val r = if (runFullFileIndent) currentLocalRange() else workingRangeLocal.intersection(currentLocalRange()) ?: currentLocalRange()
+            val text = doc.getText(r)
+            val wrapped = LyngFormatter.format(text, cfg)
+            if (wrapped != text) {
+                doc.replaceString(r.startOffset, r.endOffset, wrapped)
                 modified = true
                 psiDoc.commitDocument(doc)
-                workingRange = fullRange()
+                workingRangeLocal = currentLocalRange()
             }
         }
-        // Return a safe range for the formatter to continue with, preventing stale offsets
-        return if (modified) fullRange() else (range.intersection(fullRange()) ?: fullRange())
+        // Return a safe range for the formatter to continue with, preventing stale offsets.
+        // For injected files, ALWAYS return a range in local coordinates.
+        val finalRange = currentLocalRange()
+        return if (modified) finalRange else (range.intersection(finalRange) ?: finalRange)
     }
 }

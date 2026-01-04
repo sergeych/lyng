@@ -100,6 +100,7 @@ All notable changes to this project will be documented in this file.
   - `lyng --help` shows `fmt`; `lyng fmt --help` displays dedicated help.
   - Fix: Property accessors (`get`, `set`, `private set`, `protected set`) are now correctly indented relative to the property declaration.
   - Fix: Indentation now correctly carries over into blocks that start on extra‑indented lines (e.g., nested `if` statements or property accessor bodies).
+  - Fix: Formatting Markdown files no longer deletes content in `.lyng` code fences and works correctly with injected files (resolves clobbering, `StringIndexOutOfBoundsException`, and `nonempty text is not covered by block` errors).
 
 - CLI: Preserved legacy script invocation fast-paths:
   - `lyng script.lyng [args...]` executes the script directly.

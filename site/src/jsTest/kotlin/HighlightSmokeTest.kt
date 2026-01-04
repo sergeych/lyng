@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -60,7 +60,7 @@ class HighlightSmokeTest {
         // Spread operator present
         assertContains(html, "<span class=\"hl-op\">...</span>")
         // String key and identifier key appear
-        assertContains(html, "<span class=\"hl-str\">\"a\"</span>")
+        assertContains(html, "<span class=\"hl-str\">&quot;a&quot;</span>")
         assertContains(html, "<span class=\"hl-id\">b</span>")
     }
 
