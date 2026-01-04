@@ -180,6 +180,17 @@ fun ensureDocsLayoutStyles() {
                 .markdown-body h1:first-child {
                   margin-top: 0 !important;
                 }
+                /* Hide scrollbar for the TOC nav but allow scrolling */
+                nav.position-sticky::-webkit-scrollbar {
+                  width: 4px;
+                }
+                nav.position-sticky::-webkit-scrollbar-thumb {
+                  background: rgba(128,128,128,0.2);
+                  border-radius: 4px;
+                }
+                nav.position-sticky:hover::-webkit-scrollbar-thumb {
+                  background: rgba(128,128,128,0.5);
+                }
                 """
                 .trimIndent()
             )

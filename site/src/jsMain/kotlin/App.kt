@@ -28,6 +28,7 @@ fun App() {
     var toc by remember { mutableStateOf<List<TocItem>>(emptyList()) }
     var activeTocId by remember { mutableStateOf<String?>(null) }
     var contentEl by remember { mutableStateOf<HTMLElement?>(null) }
+    var navEl by remember { mutableStateOf<HTMLElement?>(null) }
     val isDocsRoute = route.startsWith("docs/")
     val docKey = stripFragment(route)
 
@@ -60,6 +61,13 @@ fun App() {
         onDispose { window.removeEventListener("hashchange", listener) }
     }
 
+    LaunchedEffect(activeTocId) {
+        val activeId = activeTocId ?: return@LaunchedEffect
+        val nav = navEl ?: return@LaunchedEffect
+        val activeLink = nav.querySelector("a[data-toc-id=\"$activeId\"]") as? HTMLElement
+        activeLink?.scrollIntoView(js("({block: 'nearest', behavior: 'smooth'})"))
+    }
+
     PageTemplate(title = when {
         isDocsRoute -> null
         route.startsWith("reference") -> "Reference"
@@ -71,7 +79,11 @@ fun App() {
                 Div({ classes("col-12", "col-lg-3") }) {
                     Nav({
                         classes("position-sticky")
-                        attr("style", "top: calc(var(--navbar-offset) + 1rem)")
+                        attr("style", "top: calc(var(--navbar-offset) + 1rem); max-height: calc(100vh - var(--navbar-offset) - 2rem); overflow-y: auto;")
+                        ref {
+                            navEl = it
+                            onDispose { navEl = null }
+                        }
                     }) {
                         H2({ classes("h6", "text-uppercase", "text-muted") }) { Text("On this page") }
                         Ul({ classes("list-unstyled") }) {
@@ -82,6 +94,7 @@ fun App() {
                                     val tocHref = "#/$routeNoFrag#${item.id}"
                                     A(attrs = {
                                         attr("href", tocHref)
+                                        attr("data-toc-id", item.id)
                                         attr("style", "padding-left: $pad")
                                         classes("link-body-emphasis", "text-decoration-none")
                                         if (activeTocId == item.id) {
