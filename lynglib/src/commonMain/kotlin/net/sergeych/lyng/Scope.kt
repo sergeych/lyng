@@ -623,9 +623,16 @@ open class Scope(
 
     suspend fun resolve(rec: ObjRecord, name: String): Obj {
         if (rec.type == ObjRecord.Type.Delegated) {
-            val del = rec.delegate ?: raiseError("Internal error: delegated property $name has no delegate")
+            val del = rec.delegate ?: run {
+                if (thisObj is ObjInstance) {
+                    val res = (thisObj as ObjInstance).resolveRecord(this, rec, name, rec.declaringClass).value
+                    rec.value = res
+                    return res
+                }
+                raiseError("Internal error: delegated property $name has no delegate")
+            }
             val th = if (thisObj === ObjVoid) ObjNull else thisObj
-            return del.invokeInstanceMethod(this, "getValue", Arguments(th, ObjString(name)), onNotFoundResult = {
+            val res = del.invokeInstanceMethod(this, "getValue", Arguments(th, ObjString(name)), onNotFoundResult = {
                 // If getValue not found, return a wrapper that calls invoke
                 object : Statement() {
                     override val pos: Pos = Pos.builtIn
@@ -636,13 +643,21 @@ open class Scope(
                     }
                 }
             })!!
+            rec.value = res
+            return res
         }
         return rec.value
     }
 
     suspend fun assign(rec: ObjRecord, name: String, newValue: Obj) {
         if (rec.type == ObjRecord.Type.Delegated) {
-            val del = rec.delegate ?: raiseError("Internal error: delegated property $name has no delegate")
+            val del = rec.delegate ?: run {
+                if (thisObj is ObjInstance) {
+                    (thisObj as ObjInstance).writeField(this, name, newValue)
+                    return
+                }
+                raiseError("Internal error: delegated property $name has no delegate")
+            }
             val th = if (thisObj === ObjVoid) ObjNull else thisObj
             del.invokeInstanceMethod(this, "setValue", Arguments(th, ObjString(name), newValue))
             return

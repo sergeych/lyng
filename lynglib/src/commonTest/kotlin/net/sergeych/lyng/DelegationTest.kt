@@ -210,4 +210,81 @@ class DelegationTest {
             assert(l is Delegate)
         """)
     }
+
+    @Test
+    fun testRealLifeBug1() = runTest {
+        eval("""
+            class Cell {
+                val tags = [1,2,3]
+            }
+            class T {
+                val cell by lazy { Cell() }
+                val tags get() = cell.tags
+            }
+            assertEquals([1,2,3], T().tags)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testInstanceIsolation() = runTest {
+        eval("""
+            class CounterDelegate() {
+                private var count = 0
+                fun getValue(thisRef, name) = ++count
+            }
+            
+            class Foo {
+                val x by CounterDelegate()
+            }
+            
+            val f1 = Foo()
+            val f2 = Foo()
+            
+            assertEquals(1, f1.x)
+            assertEquals(1, f2.x)
+            assertEquals(2, f1.x)
+            assertEquals(2, f2.x)
+        """)
+    }
+
+    @Test
+    fun testLazyRegexBug() = runTest {
+        eval("""
+            class T {
+                val re by lazy { Regex(".*") }
+            }
+            val t = T()
+            t.re
+            // Second access triggered the bug before fix (value == Unset failed)
+            t.re
+        """)
+    }
+
+    @Test
+    fun testEqualityRobustness() = runTest {
+        eval("""
+            val re1 = Regex("a")
+            val re2 = Regex("a")
+            // Equality should not throw even if types don't implement compareTo
+            assertEquals(true, re1 == re1)
+            assertEquals(false, re1 == re2)
+            assertEquals(false, re1 == Unset)
+            assertEquals(false, re1 == null)
+        """)
+    }
+
+    @Test
+    fun testLazy2() = runTest {
+        eval("""
+            class A {
+                val tags = [1,2,3]
+            }
+            class B {
+                val tags by lazy { myA.tags }
+                val myA by lazy { A() }
+            }
+            assert( B().tags == [1,2,3])
+        """.trimIndent())
+    }
+
 }

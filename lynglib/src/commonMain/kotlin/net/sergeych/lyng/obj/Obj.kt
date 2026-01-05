@@ -137,9 +137,18 @@ open class Obj {
     // methods that to override
 
     open suspend fun compareTo(scope: Scope, other: Obj): Int {
-        if( other === this) return 0
-        if( other === ObjNull ) return 2
+        if (other === this) return 0
+        if (other === ObjNull || other === ObjUnset || other === ObjVoid) return 2
         scope.raiseNotImplemented()
+    }
+
+    open suspend fun equals(scope: Scope, other: Obj): Boolean {
+        if (other === this) return true
+        return try {
+            compareTo(scope, other) == 0
+        } catch (e: ExecutionError) {
+            false
+        }
     }
 
     open suspend fun contains(scope: Scope, other: Obj): Boolean {
@@ -364,7 +373,7 @@ open class Obj {
         )
     }
 
-    protected open suspend fun resolveRecord(scope: Scope, obj: ObjRecord, name: String, decl: ObjClass?): ObjRecord {
+    open suspend fun resolveRecord(scope: Scope, obj: ObjRecord, name: String, decl: ObjClass?): ObjRecord {
         if (obj.type == ObjRecord.Type.Delegated) {
             val del = obj.delegate ?: scope.raiseError("Internal error: delegated property $name has no delegate")
             return obj.copy(

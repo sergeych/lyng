@@ -1,0 +1,117 @@
+/*
+    This is a tech proposal under construction, please do not use it yet
+    for any purpose
+*/
+
+/*
+    Abstract delegate can be used to proxy read/wrtie field access
+    or method call. Default implementation reports error.
+*/
+interface Delegate {
+    fun getValue() = Unset
+    fun setValue(newValue) { throw NotImplementedException("delegate setter is not implemented") }
+    fun invoke(args...) { throw NotImplementedException("delegate setter is not implemented") }
+}
+
+/*
+    Delegate cam be used to implement a val, var or fun, so there are
+    access type enum to distinguish:
+*/
+enum DelegateAccess {
+    Val,
+    Var,
+    Callable
+}
+
+// Delegate can be associated by a val/var/fun in a declaraion site using `by` keyword
+
+val proxiedVal by proxy(1)
+var proxiedVar by proxy(2, 3)
+fun proxiedFun by proxy()
+
+// each proxy is a Lyng expression returning instance of the Proxy interface:
+
+/*
+    Proxy interface is connecting some named property of a given kind with the `Delegate`.
+    It removes the burden of dealing with property name and this ref on each get/set value
+    or invoke allowing having one delegate per instance, execution buff.
+*/
+interface Proxy {
+    fun getDelegate(propertyName: String,access: DelegateAccess,thisRef: Obj?): Delegate
+}
+
+// val, var and fun can be delegated, local or class instance:
+class TestProxy: Proxy {
+    override getDelegate(name,access,thisRef) {
+        Delegate()
+    }
+}
+
+val proxy = TestProxy()
+
+class Allowed {
+    val v1 by proxy
+    var v2 by proxy
+    fun f1 by proxy
+}
+val v3 by proxy
+var v4 by proxy
+fun f2 by proxy
+
+/*
+    It means that for example
+    Allowed().f1("foo")
+    would call a delegate.invoke("foo") on the `Delegate` instance supplied by `proxy`, etc.
+*/
+
+// The practic sample: lazy value
+
+/*
+    The delegate that caches single time evaluated value
+*/
+class LazyDelegate(creator): Delegate {
+    private var currentValue=Unset
+
+    override fun getValue() {
+        if( currentValue == Unset )
+            currentValue = creator()
+        currentValue
+    }
+}
+
+/*
+    The proxy to assign it
+*/
+class LazyProxy(creator) {
+    fun getDelegate(name,access,thisRef) {
+        if( access != DelegateAccess.Val )
+            throw IllegalArgumentException("only lazy val are allowed")
+        LazyDelegate(creator)
+    }
+}
+
+
+/*
+    A helper function to simplify creation:
+*/
+fun lazy(creator) {
+    LazyProxy(creator)
+}
+
+// Usage sample and the test:
+var callCounter = 0
+assertEquals(0, clallCounter)
+
+val lazyText by lazy { "evaluated text" }
+
+// the lazy property is not yet evaluated:
+assertEquals(0, clallCounter)
+// now evaluate it by using it:
+assertEquals("evaluated text", lazyText)
+assertEquals(1, callCounter)
+
+// lazy delegate should fail on vars or funs:
+assertThrows { var bad by lazy { "should not happen" } }
+assertThrows { fun bad by lazy { 42 } }
+
+

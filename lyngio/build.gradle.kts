@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@
  */
 
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
-import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -53,11 +52,11 @@ kotlin {
         browser()
         nodejs()
     }
-    @OptIn(ExperimentalWasmDsl::class)
-    wasmJs() {
-        browser()
-        nodejs()
-    }
+//    @OptIn(ExperimentalWasmDsl::class)
+//    wasmJs() {
+//        browser()
+//        nodejs()
+//    }
 
     // Keep expect/actual warning suppressed consistently with other modules
     targets.configureEach {
@@ -94,13 +93,13 @@ kotlin {
                 implementation("com.squareup.okio:okio-nodefilesystem:${libs.versions.okioVersion.get()}")
             }
         }
-        // For Wasm we use in-memory VFS for now
-        val wasmJsMain by getting {
-            dependencies {
-                api(libs.okio)
-                implementation(libs.okio.fakefilesystem)
-            }
-        }
+//        // For Wasm we use in-memory VFS for now
+//        val wasmJsMain by getting {
+//            dependencies {
+//                api(libs.okio)
+//                implementation(libs.okio.fakefilesystem)
+//            }
+//        }
     }
 }
 

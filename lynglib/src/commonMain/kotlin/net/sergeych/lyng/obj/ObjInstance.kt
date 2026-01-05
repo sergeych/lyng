@@ -92,10 +92,9 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 }
             }
             del = del ?: obj.delegate ?: scope.raiseError("Internal error: delegated property $name has no delegate (tried $storageName)")
-            return obj.copy(
-                value = del.invokeInstanceMethod(scope, "getValue", Arguments(this, ObjString(name))),
-                type = ObjRecord.Type.Other
-            )
+            val res = del.invokeInstanceMethod(scope, "getValue", Arguments(this, ObjString(name)))
+            obj.value = res
+            return obj
         }
         return super.resolveRecord(scope, obj, name, decl)
     }
@@ -197,11 +196,15 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 if (rec.type == ObjRecord.Type.Delegated) {
                     val storageName = "${cls.className}::$name"
                     val del = instanceScope[storageName]?.delegate ?: rec.delegate
-                    ?: scope.raiseError("Internal error: delegated function $name has no delegate (tried $storageName)")
+                    ?: scope.raiseError("Internal error: delegated member $name has no delegate (tried $storageName)")
                     val allArgs = (listOf(this, ObjString(name)) + args.list).toTypedArray()
-                    return del.invokeInstanceMethod(scope, "invoke", Arguments(*allArgs))
+                    return del.invokeInstanceMethod(scope, "invoke", Arguments(*allArgs), onNotFoundResult = {
+                        // Fallback: property delegation
+                        val propVal = del.invokeInstanceMethod(scope, "getValue", Arguments(this, ObjString(name)))
+                        propVal.invoke(scope, this, args, rec.declaringClass ?: cls)
+                    })!!
                 }
-                if (rec.type != ObjRecord.Type.Property && !rec.isAbstract) {
+                if (rec.type == ObjRecord.Type.Fun && !rec.isAbstract) {
                     val decl = rec.declaringClass ?: cls
                     val caller = scope.currentClassCtx ?: if (scope.thisObj === this) objClass else null
                     if (!canAccessMember(rec.visibility, decl, caller))
@@ -217,6 +220,9 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                         args,
                         decl
                     )
+                } else if ((rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.Property) && !rec.isAbstract) {
+                    val resolved = readField(scope, name)
+                    return resolved.value.invoke(scope, this, args, resolved.declaringClass)
                 }
             }
         }

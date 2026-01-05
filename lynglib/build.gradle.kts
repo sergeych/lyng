@@ -17,11 +17,10 @@
 
 import com.codingfeline.buildkonfig.compiler.FieldSpec.Type.STRING
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
-import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 group = "net.sergeych"
-version = "1.1.0-SNAPSHOT"
+version = "1.1.1-SNAPSHOT"
 
 // Removed legacy buildscript classpath declarations; plugins are applied via the plugins DSL below
 
@@ -66,11 +65,11 @@ kotlin {
         browser()
         nodejs()
     }
-    @OptIn(ExperimentalWasmDsl::class)
-    wasmJs() {
-        browser()
-        nodejs()
-    }
+//    @OptIn(ExperimentalWasmDsl::class)
+//    wasmJs() {
+//        browser()
+//        nodejs()
+//    }
 
     // Suppress Beta warning for expect/actual classes across all targets
     targets.configureEach {

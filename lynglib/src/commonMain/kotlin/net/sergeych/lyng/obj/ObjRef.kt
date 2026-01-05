@@ -243,8 +243,8 @@ class BinaryOpRef(private val op: BinOp, private val left: ObjRef, private val r
             BinOp.OR -> a.logicalOr(scope, b)
             BinOp.AND -> a.logicalAnd(scope, b)
             BinOp.EQARROW -> ObjMapEntry(a, b)
-            BinOp.EQ -> ObjBool(a.compareTo(scope, b) == 0)
-            BinOp.NEQ -> ObjBool(a.compareTo(scope, b) != 0)
+            BinOp.EQ -> ObjBool(a.equals(scope, b))
+            BinOp.NEQ -> ObjBool(!a.equals(scope, b))
             BinOp.REF_EQ -> ObjBool(a === b)
             BinOp.REF_NEQ -> ObjBool(a !== b)
             BinOp.MATCH -> a.operatorMatch(scope, b)
@@ -611,7 +611,7 @@ class FieldRef(
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
         val fieldPic = PerfFlags.FIELD_PIC
         val picCounters = PerfFlags.PIC_DEBUG_COUNTERS
-        val base = target.get(scope).value
+        val base = target.evalValue(scope)
         if (base == ObjNull && isOptional) {
             // no-op on null receiver for optional chaining assignment
             return
@@ -714,10 +714,9 @@ class FieldRef(
 
     override suspend fun evalValue(scope: Scope): Obj {
         // Mirror get(), but return raw Obj to avoid transient ObjRecord on R-value paths
-        val fastRval = PerfFlags.RVAL_FASTPATH
         val fieldPic = PerfFlags.FIELD_PIC
         val picCounters = PerfFlags.PIC_DEBUG_COUNTERS
-        val base = if (fastRval) target.evalValue(scope) else target.get(scope).value
+        val base = target.evalValue(scope)
         if (base == ObjNull && isOptional) return ObjNull
         if (fieldPic) {
             val (key, ver) = receiverKeyAndVersion(base)
@@ -1583,7 +1582,7 @@ class FastLocalVarRef(
         if (slot >= 0 && actualOwner != null) {
             val rec = actualOwner.getSlotRecord(slot)
             if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx)) {
-                return actualOwner.resolve(rec, name)
+                return scope.resolve(rec, name)
             }
         }
         // Try per-frame local binding maps in the ancestry first

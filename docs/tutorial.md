@@ -1546,7 +1546,7 @@ Lambda avoid unnecessary execution if assertion is not failed. for example:
 
 [Range]: Range.md
 
-[String]: development/String.md
+[String]: ../archived/development/String.md
 
 [string formatting]: https://github.com/sergeych/mp_stools?tab=readme-ov-file#sprintf-syntax-summary
 

@@ -235,7 +235,7 @@ open class ObjClass(
         // 1) members-defined methods
         for ((k, v) in members) {
             if (v.value is Statement || v.type == ObjRecord.Type.Delegated) {
-                instance.instanceScope.objects[k] = v
+                instance.instanceScope.objects[k] = if (v.type == ObjRecord.Type.Delegated) v.copy() else v
             }
         }
         // 2) class-scope methods registered during class-body execution
@@ -243,7 +243,7 @@ open class ObjClass(
             if (rec.value is Statement || rec.type == ObjRecord.Type.Delegated) {
                 // if not already present, copy reference for dispatch
                 if (!instance.instanceScope.objects.containsKey(k)) {
-                    instance.instanceScope.objects[k] = rec
+                    instance.instanceScope.objects[k] = if (rec.type == ObjRecord.Type.Delegated) rec.copy() else rec
                 }
             }
         }
@@ -480,7 +480,7 @@ open class ObjClass(
 
     fun addClassConst(name: String, value: Obj) = createClassField(name, value)
     fun addClassFn(name: String, isOpen: Boolean = false, code: suspend Scope.() -> Obj) {
-        createClassField(name, statement { code() }, isOpen)
+        createClassField(name, statement { code() }, isOpen, type = ObjRecord.Type.Fun)
     }
 
 
@@ -588,11 +588,21 @@ open class ObjClass(
         getInstanceMemberOrNull(name)?.let { rec ->
             val decl = rec.declaringClass ?: findDeclaringClassOf(name) ?: this
             if (rec.type == ObjRecord.Type.Delegated) {
-                val del = rec.delegate ?: scope.raiseError("Internal error: delegated function $name has no delegate")
+                val del = rec.delegate ?: scope.raiseError("Internal error: delegated member $name has no delegate")
                 val allArgs = (listOf(this, ObjString(name)) + args.list).toTypedArray()
-                return del.invokeInstanceMethod(scope, "invoke", Arguments(*allArgs))
+                return del.invokeInstanceMethod(scope, "invoke", Arguments(*allArgs), onNotFoundResult = {
+                    // Fallback: property delegation
+                    val propVal = del.invokeInstanceMethod(scope, "getValue", Arguments(this, ObjString(name)))
+                    propVal.invoke(scope, this, args, decl)
+                })!!
             }
-            return rec.value.invoke(scope, this, args, decl)
+            if (rec.type == ObjRecord.Type.Fun) {
+                return rec.value.invoke(scope, this, args, decl)
+            } else {
+                // Resolved field or property value
+                val resolved = readField(scope, name)
+                return resolved.value.invoke(scope, this, args, decl)
+            }
         }
         return super.invokeInstanceMethod(scope, name, args, onNotFoundResult)
     }
