@@ -558,7 +558,7 @@ class SecretCounter {
 
 val c = SecretCounter()
 println(c.count) // OK
-c.count = 10     // Throws AccessException
+c.count = 10     // Throws IllegalAccessException
 c.increment()    // OK
 ```
 
@@ -594,7 +594,7 @@ val d = Derived()
 println(d.state) // OK: "initial"
 d.changeState("updated")
 println(d.state) // OK: "updated"
-d.state = "bad"  // Throws AccessException: public write not allowed
+d.state = "bad"  // Throws IllegalAccessException: public write not allowed
 ```
 
 ### Key Rules and Limitations

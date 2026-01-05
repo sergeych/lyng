@@ -165,7 +165,7 @@ _this functionality is not yet released_
 | IllegalAssignmentException | assigning to val, etc.                                |
 | SymbolNotDefinedException  |                                                       |
 | IterationEndException      | attempt to read iterator past end, `hasNext == false` |
-| AccessException            | attempt to access private members or like             |
+| IllegalAccessException     | attempt to access private members or like             |
 | UnknownException           | unexpected kotlin exception caught                    |
 |                            |                                                       |
 
