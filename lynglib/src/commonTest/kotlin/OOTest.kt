@@ -588,25 +588,6 @@ class OOTest {
             assertEquals(3, F2().bar)
             """
         )
-        /*
-        Notes.
-
-        The override keyword is an _optional_ flag that the symbol must exist in one of the parents
-        and can be overridden.
-
-        Compiler checks as early as possible that the symbol exists in one of the parents and is open.
-        By default, all public/protected symbols are open. If there is no such symbol, the exception is thrown.
-
-        In contrast, if the symbol has no special flags, the compiler either creates a new one of overrides
-        existing, checking that override is allowed.
-
-        Question to AI: the keyword to mark non-overridable symbols? final is not the best option as for me.
-
-        Overriding the var/val should also be possible with an initializer of with get()/set(value).
-
-        overriding can't alter visibility: it must remain as declared in the parent. Private symbols can't be
-        neither declared abstract nor overridden.
-        */
     }
 
     @Test
