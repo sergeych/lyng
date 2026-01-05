@@ -87,6 +87,27 @@ Lyng supports simple enums for a fixed set of named constants. Declare with `enu
 
 For more details (usage patterns, `when` switching, serialization), see OOP notes: [Enums in detail](OOP.md#enums).
 
+## Singleton Objects
+
+Singleton objects are declared using the `object` keyword. They define a class and create its single instance immediately.
+
+    object Logger {
+        fun log(msg) { println("[LOG] " + msg) }
+    }
+    
+    Logger.log("Hello singleton!")
+
+## Delegation (briefly)
+
+You can delegate properties and functions to other objects using the `by` keyword. This is perfect for patterns like `lazy` initialization.
+
+    val expensiveData by lazy {
+        // computed only once on demand
+        "computed"
+    }
+
+For more details on these features, see [Delegation in Lyng](delegation.md) and [OOP notes](OOP.md).
+
 When putting multiple statments in the same line it is convenient and recommended to use `;`:
 
     var from; var to

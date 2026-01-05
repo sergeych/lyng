@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -83,55 +83,6 @@ private fun nextNonWs(text: String, idxInclusive: Int): Int {
 
 /** Apply Enter key behavior with smart indent/undent rules. */
 fun applyEnter(text: String, selStart: Int, selEnd: Int, tabSize: Int): EditResult {
-    // Global early rule (Rule 3): if the line after the current line is brace-only, dedent that line by one block and
-    // do NOT insert a newline. This uses precise line boundaries.
-    run {
-        val start = minOf(selStart, text.length)
-        val eol = lineEndAt(text, start)
-        val nextLineStart = if (eol < text.length && text[eol] == '\n') eol + 1 else eol
-        val nextLineEnd = lineEndAt(text, nextLineStart)
-        if (nextLineStart <= nextLineEnd && nextLineStart < text.length) {
-            val trimmedNext = text.substring(nextLineStart, nextLineEnd).trim()
-            if (trimmedNext == "}") {
-                val rbraceIndent = countIndentSpaces(text, nextLineStart, nextLineEnd)
-                val removeCount = kotlin.math.min(tabSize, rbraceIndent)
-                val crShift = if (nextLineStart < text.length && text[nextLineStart] == '\r') 1 else 0
-                val out = buildString(text.length) {
-                    append(safeSubstring(text, 0, nextLineStart))
-                    append(safeSubstring(text, nextLineStart + crShift + removeCount, text.length))
-                }
-                val caret = nextLineStart + kotlin.math.max(0, rbraceIndent - removeCount)
-                return EditResult(out, caret, caret)
-            }
-        }
-    }
-    // Absolute top-priority: caret is exactly at a line break and the next line is '}'-only (ignoring spaces).
-    // Dedent that next line by one block (tabSize) and do NOT insert a newline.
-    run {
-        if (selStart < text.length) {
-            val isCrLf = selStart + 1 < text.length && text[selStart] == '\r' && text[selStart + 1] == '\n'
-            val isLf = text[selStart] == '\n'
-            if (isCrLf || isLf) {
-                val nextLineStart = selStart + if (isCrLf) 2 else 1
-                val nextLineEnd = lineEndAt(text, nextLineStart)
-                if (nextLineStart <= nextLineEnd) {
-                    val trimmed = text.substring(nextLineStart, nextLineEnd).trim()
-                    if (trimmed == "}") {
-                        val rbraceIndent = countIndentSpaces(text, nextLineStart, nextLineEnd)
-                        val removeCount = kotlin.math.min(tabSize, rbraceIndent)
-                        val crShift = if (nextLineStart < text.length && text[nextLineStart] == '\r') 1 else 0
-                        val out = buildString(text.length) {
-                            append(safeSubstring(text, 0, nextLineStart))
-                            append(safeSubstring(text, nextLineStart + crShift + removeCount, text.length))
-                        }
-                        val caret = nextLineStart + kotlin.math.max(0, rbraceIndent - removeCount)
-                        return EditResult(out, caret, caret)
-                    }
-                }
-            }
-        }
-    }
-
     // If there is a selection, replace it by newline + current line indent
     if (selEnd != selStart) {
         val lineStart = lineStartAt(text, selStart)
@@ -148,8 +99,6 @@ fun applyEnter(text: String, selStart: Int, selEnd: Int, tabSize: Int): EditResu
     val lineEnd = lineEndAt(text, start)
     val indent = countIndentSpaces(text, lineStart, lineEnd)
 
-    // (Handled by the global early rule above; no need for additional EOL variants.)
-
     // Compute neighborhood characters early so rule precedence can use them
     val prevIdx = prevNonWs(text, start)
     val nextIdx = nextNonWs(text, start)
@@ -157,85 +106,6 @@ fun applyEnter(text: String, selStart: Int, selEnd: Int, tabSize: Int): EditResu
     val nextCh = if (nextIdx >= 0) text[nextIdx] else '\u0000'
     val before = text.substring(0, start)
     val after = text.substring(start)
-
-    // Rule 2: On a brace-only line '}' (caret on the same line)
-    // If the current line’s trimmed text is exactly '}', decrease that line’s indent by one block (not below 0),
-    // then insert a newline. The newly inserted line uses the (decreased) indent. Place the caret at the start of
-    // the newly inserted line.
-    run {
-        val trimmed = text.substring(lineStart, lineEnd).trim()
-        // IMPORTANT: Rule precedence — do NOT trigger this rule when caret is after '}' and the rest of the line
-        // up to EOL contains only spaces (Rule 5 handles that case). That scenario must insert AFTER the brace,
-        // not before it.
-        var onlySpacesAfterCaret = true
-        var k = start
-        while (k < lineEnd) { if (text[k] != ' ') { onlySpacesAfterCaret = false; break }; k++ }
-        val rule5Situation = (prevCh == '}') && onlySpacesAfterCaret
-
-        if (trimmed == "}" && !rule5Situation) {
-            val removeCount = kotlin.math.min(tabSize, indent)
-            val newIndent = (indent - removeCount).coerceAtLeast(0)
-            val crShift = if (lineStart < text.length && text[lineStart] == '\r') 1 else 0
-            val out = buildString(text.length + 1 + newIndent) {
-                append(safeSubstring(text, 0, lineStart))
-                append("\n")
-                append(" ".repeat(newIndent))
-                // Write the brace line but with its indent reduced by removeCount spaces
-                append(safeSubstring(text, lineStart + crShift + removeCount, text.length))
-            }
-            val caret = lineStart + 1 + newIndent
-            return EditResult(out, caret, caret)
-        }
-    }
-
-    // (The special case of caret after the last non-ws on a '}'-only line is covered by the rule above.)
-
-    // 0) Caret is at end-of-line and the next line is a closing brace-only line: dedent that line, no extra newline
-    run {
-        val atCr = start + 1 < text.length && text[start] == '\r' && text[start + 1] == '\n'
-        val atNl = start < text.length && text[start] == '\n'
-        val atEol = atNl || atCr
-        if (atEol) {
-            val nlAdvance = if (atCr) 2 else 1
-            val nextLineStart = start + nlAdvance
-            val nextLineEnd = lineEndAt(text, nextLineStart)
-            val trimmedNext = text.substring(nextLineStart, nextLineEnd).trim()
-            if (trimmedNext == "}") {
-                val rbraceIndent = countIndentSpaces(text, nextLineStart, nextLineEnd)
-                // Dedent the '}' line by one block level (tabSize), but not below column 0
-                val removeCount = kotlin.math.min(tabSize, rbraceIndent)
-                val crShift = if (nextLineStart < text.length && text[nextLineStart] == '\r') 1 else 0
-                val out = buildString(text.length) {
-                    append(safeSubstring(text, 0, nextLineStart))
-                    append(safeSubstring(text, nextLineStart + crShift + removeCount, text.length))
-                }
-                val caret = start + nlAdvance + kotlin.math.max(0, rbraceIndent - removeCount)
-                return EditResult(out, caret, caret)
-            }
-        }
-    }
-
-    // 0b) If there is a newline at or after caret and the next line starts (ignoring spaces) with '}',
-    // dedent that '}' line without inserting an extra newline.
-    run {
-        val nlPos = text.indexOf('\n', start)
-        if (nlPos >= 0) {
-            val nextLineStart = nlPos + 1
-            val nextLineEnd = lineEndAt(text, nextLineStart)
-            val nextLineFirstNonWs = nextNonWs(text, nextLineStart)
-            if (nextLineFirstNonWs in nextLineStart until nextLineEnd && text[nextLineFirstNonWs] == '}') {
-                val rbraceIndent = countIndentSpaces(text, nextLineStart, nextLineEnd)
-                val removeCount = kotlin.math.min(tabSize, rbraceIndent)
-                val crShift = if (nextLineStart < text.length && text[nextLineStart] == '\r') 1 else 0
-                val out = buildString(text.length) {
-                    append(safeSubstring(text, 0, nextLineStart))
-                    append(safeSubstring(text, nextLineStart + crShift + removeCount, text.length))
-                }
-                val caret = nextLineStart + kotlin.math.max(0, rbraceIndent - removeCount)
-                return EditResult(out, caret, caret)
-            }
-        }
-    }
 
     // 1) Between braces { | } -> two lines, inner indented
     if (prevCh == '{' && nextCh == '}') {
@@ -254,119 +124,17 @@ fun applyEnter(text: String, selStart: Int, selEnd: Int, tabSize: Int): EditResu
     }
     // 3) Before '}'
     if (nextCh == '}') {
-        // We want two things:
-        //  - reduce indentation of the upcoming '}' line by one level
-        //  - avoid creating an extra blank line if caret is already at EOL (the next char is a newline)
-
-        // Compute where the '}' line starts and how many leading spaces it has
-        val rbraceLineStart = lineStartAt(text, nextIdx)
-        val rbraceLineEnd = lineEndAt(text, nextIdx)
-        val rbraceIndent = countIndentSpaces(text, rbraceLineStart, rbraceLineEnd)
-        // Dedent the '}' line by one block level (tabSize), but not below column 0
-        val removeCount = kotlin.math.min(tabSize, rbraceIndent)
-        val crShift = if (rbraceLineStart < text.length && text[rbraceLineStart] == '\r') 1 else 0
-
-        // If there is already a newline between caret and the '}', do NOT insert another newline.
-        // Just dedent the existing '}' line by one block and place caret at its start.
-        run {
-            val nlBetween = text.indexOf('\n', start)
-            if (nlBetween in start until rbraceLineStart) {
-                val out = buildString(text.length) {
-                    append(safeSubstring(text, 0, rbraceLineStart))
-                    append(safeSubstring(text, rbraceLineStart + crShift + removeCount, text.length))
-                }
-                val caret = rbraceLineStart + kotlin.math.max(0, rbraceIndent - removeCount)
-                return EditResult(out, caret, caret)
-            }
-        }
-
-        val hasNewlineAtCaret = (start < text.length && text[start] == '\n')
-
-        // New indentation for the line we create (if we actually insert one now)
-        val newLineIndent = (indent - tabSize).coerceAtLeast(0)
-        val insertion = if (hasNewlineAtCaret) "" else "\n" + " ".repeat(newLineIndent)
-
-        val out = buildString(text.length + insertion.length) {
-            append(before)
-            append(insertion)
-            // keep text up to the start of '}' line
-            append(safeSubstring(text, start, rbraceLineStart))
-            // drop up to tabSize spaces before '}'
-            append(safeSubstring(text, rbraceLineStart + crShift + removeCount, text.length))
-        }
-        val caret = if (hasNewlineAtCaret) {
-            // Caret moves to the beginning of the '}' line after dedent (right after the single newline)
-            start + 1 + kotlin.math.max(0, rbraceIndent - removeCount)
-        } else {
-            start + insertion.length
-        }
-        return EditResult(out, caret, caret)
-    }
-    // 4) After '}' with only trailing spaces before EOL
-    // According to Rule 5: if the last non-whitespace before the caret is '}' and
-    // only spaces remain until EOL, we must:
-    //  - dedent the current (brace) line by one block (not below 0)
-    //  - insert a newline just AFTER '}' (do NOT move caret backward)
-    //  - set the caret at the start of the newly inserted blank line, whose indent equals the dedented indent
-    if (prevCh == '}') {
-        var onlySpaces = true
-        var k = prevIdx + 1
-        while (k < lineEnd) { if (text[k] != ' ') { onlySpaces = false; break }; k++ }
-        if (onlySpaces) {
-            val removeCount = kotlin.math.min(tabSize, indent)
-            val newIndent = (indent - removeCount).coerceAtLeast(0)
-            val crShift = if (lineStart < text.length && text[lineStart] == '\r') 1 else 0
-
-            // Build the result:
-            //  - keep everything before the line start
-            //  - write the current line content up to the caret, but with its left indent reduced by removeCount
-            //  - insert newline + spaces(newIndent)
-            //  - drop trailing spaces after caret up to EOL
-            //  - keep the rest of the text starting from EOL
-            val out = buildString(text.length) {
-                append(safeSubstring(text, 0, lineStart))
-                append(safeSubstring(text, lineStart + crShift + removeCount, start))
-                append("\n")
-                append(" ".repeat(newIndent))
-                append(safeSubstring(text, lineEnd, text.length))
-            }
-            val caret = (lineStart + (start - (lineStart + crShift + removeCount)) + 1 + newIndent)
-            return EditResult(out, caret, caret)
-        } else {
-            // Default smart indent for cases where there are non-space characters after '}'
-            val insertion = "\n" + " ".repeat(indent)
-            val out = before + insertion + after
-            val caret = start + insertion.length
-            return EditResult(out, caret, caret)
-        }
-    }
-    // 5) Fallback: if there is a newline ahead and the next line, trimmed, equals '}', dedent that '}' line by one block
-    run {
-        val nlPos = text.indexOf('\n', start)
-        if (nlPos >= 0) {
-            val nextLineStart = nlPos + 1
-            val nextLineEnd = lineEndAt(text, nextLineStart)
-            val trimmedNext = text.substring(nextLineStart, nextLineEnd).trim()
-            if (trimmedNext == "}") {
-                val rbraceIndent = countIndentSpaces(text, nextLineStart, nextLineEnd)
-                val removeCount = kotlin.math.min(tabSize, rbraceIndent)
-                val crShift = if (nextLineStart < text.length && text[nextLineStart] == '\r') 1 else 0
-                val out = buildString(text.length) {
-                    append(safeSubstring(text, 0, nextLineStart))
-                    append(safeSubstring(text, nextLineStart + crShift + removeCount, text.length))
-                }
-                val caret = nextLineStart + kotlin.math.max(0, rbraceIndent - removeCount)
-                return EditResult(out, caret, caret)
-            }
-        }
-    }
-    // default keep same indent
-    run {
         val insertion = "\n" + " ".repeat(indent)
         val out = before + insertion + after
         val caret = start + insertion.length
         return EditResult(out, caret, caret)
     }
+
+    // default keep same indent
+    val insertion = "\n" + " ".repeat(indent)
+    val out = before + insertion + after
+    val caret = start + insertion.length
+    return EditResult(out, caret, caret)
 }
 
 /** Apply Tab key: insert spaces at caret (single-caret only). */
@@ -422,4 +190,38 @@ fun applyShiftTab(text: String, selStart: Int, selEnd: Int, tabSize: Int): EditR
     val s = minOf(newSelStart, newSelEnd)
     val e = maxOf(newSelStart, newSelEnd)
     return EditResult(sb.toString(), s, e)
+}
+
+/**
+ * Apply a typed character. If the character is '}', and it's the only non-whitespace on the line,
+ * it may be dedented.
+ */
+fun applyChar(text: String, selStart: Int, selEnd: Int, ch: Char, tabSize: Int): EditResult {
+    // Selection replacement
+    val current = if (selStart != selEnd) {
+        text.substring(0, minOf(selStart, selEnd)) + text.substring(maxOf(selStart, selEnd))
+    } else text
+    val pos = minOf(selStart, selEnd)
+
+    val before = current.substring(0, pos)
+    val after = current.substring(pos)
+    val newText = before + ch + after
+    val newPos = pos + 1
+
+    if (ch == '}') {
+        val lineStart = lineStartAt(newText, pos)
+        val lineEnd = lineEndAt(newText, newPos)
+        val trimmed = newText.substring(lineStart, lineEnd).trim()
+        if (trimmed == "}") {
+            // Dedent this line
+            val indent = countIndentSpaces(newText, lineStart, lineEnd)
+            val removeCount = minOf(tabSize, indent)
+            if (removeCount > 0) {
+                val out = newText.substring(0, lineStart) + newText.substring(lineStart + removeCount)
+                return EditResult(out, newPos - removeCount, newPos - removeCount)
+            }
+        }
+    }
+
+    return EditResult(newText, newPos, newPos)
 }

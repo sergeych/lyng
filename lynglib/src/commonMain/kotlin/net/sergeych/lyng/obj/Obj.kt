@@ -94,13 +94,7 @@ open class Obj {
                 val caller = scope.currentClassCtx
                 if (!canAccessMember(rec.visibility, decl, caller))
                     scope.raiseError(ObjIllegalAccessException(scope, "can't invoke ${name}: not visible (declared in ${decl.className}, caller ${caller?.className ?: "?"})"))
-                val saved = scope.currentClassCtx
-                scope.currentClassCtx = decl
-                try {
-                    return rec.value.invoke(scope, this, args)
-                } finally {
-                    scope.currentClassCtx = saved
-                }
+                return rec.value.invoke(scope, this, args, decl)
             }
         }
 
@@ -118,13 +112,7 @@ open class Obj {
                     val caller = scope.currentClassCtx
                     if (!canAccessMember(rec.visibility, decl, caller))
                         scope.raiseError(ObjIllegalAccessException(scope, "can't invoke ${name}: not visible (declared in ${decl.className}, caller ${caller?.className ?: "?"})"))
-                    val saved = scope.currentClassCtx
-                    scope.currentClassCtx = decl
-                    try {
-                        return rec.value.invoke(scope, this, args)
-                    } finally {
-                        scope.currentClassCtx = saved
-                    }
+                    return rec.value.invoke(scope, this, args, decl)
                 }
             }
         }
@@ -376,7 +364,14 @@ open class Obj {
         )
     }
 
-    protected suspend fun resolveRecord(scope: Scope, obj: ObjRecord, name: String, decl: ObjClass?): ObjRecord {
+    protected open suspend fun resolveRecord(scope: Scope, obj: ObjRecord, name: String, decl: ObjClass?): ObjRecord {
+        if (obj.type == ObjRecord.Type.Delegated) {
+            val del = obj.delegate ?: scope.raiseError("Internal error: delegated property $name has no delegate")
+            return obj.copy(
+                value = del.invokeInstanceMethod(scope, "getValue", Arguments(this, ObjString(name))),
+                type = ObjRecord.Type.Other
+            )
+        }
         val value = obj.value
         if (value is ObjProperty) {
             return ObjRecord(value.callGetter(scope, this, decl), obj.isMutable)
@@ -425,7 +420,10 @@ open class Obj {
         val caller = scope.currentClassCtx
         if (!canAccessMember(field.effectiveWriteVisibility, decl, caller))
             scope.raiseError(ObjIllegalAccessException(scope, "can't assign field ${name}: not visible (declared in ${decl?.className ?: "?"}, caller ${caller?.className ?: "?"})"))
-        if (field.value is ObjProperty) {
+        if (field.type == ObjRecord.Type.Delegated) {
+            val del = field.delegate ?: scope.raiseError("Internal error: delegated property $name has no delegate")
+            del.invokeInstanceMethod(scope, "setValue", Arguments(this, ObjString(name), newValue))
+        } else if (field.value is ObjProperty) {
             (field.value as ObjProperty).callSetter(scope, this, newValue, decl)
         } else if (field.isMutable) field.value = newValue else scope.raiseError("can't assign to read-only field: $name")
     }
@@ -444,13 +442,16 @@ open class Obj {
         scope.raiseNotImplemented()
     }
 
-    suspend fun invoke(scope: Scope, thisObj: Obj, args: Arguments): Obj =
+    suspend fun invoke(scope: Scope, thisObj: Obj, args: Arguments, declaringClass: ObjClass? = null): Obj =
         if (PerfFlags.SCOPE_POOL)
             scope.withChildFrame(args, newThisObj = thisObj) { child ->
+                if (declaringClass != null) child.currentClassCtx = declaringClass
                 callOn(child)
             }
         else
-            callOn(scope.createChildScope(scope.pos, args = args, newThisObj = thisObj))
+            callOn(scope.createChildScope(scope.pos, args = args, newThisObj = thisObj).also {
+                if (declaringClass != null) it.currentClassCtx = declaringClass
+            })
 
     suspend fun invoke(scope: Scope, thisObj: Obj, vararg args: Obj): Obj =
         callOn(

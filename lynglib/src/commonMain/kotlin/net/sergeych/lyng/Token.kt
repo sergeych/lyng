@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ data class Token(val value: String, val pos: Pos, val type: Type) {
         PLUS, MINUS, STAR, SLASH, PERCENT,
         ASSIGN, PLUSASSIGN, MINUSASSIGN, STARASSIGN, SLASHASSIGN, PERCENTASSIGN,
         PLUS2, MINUS2,
-        IN, NOTIN, IS, NOTIS,
+        IN, NOTIN, IS, NOTIS, BY,
         EQ, NEQ, LT, LTE, GT, GTE, REF_EQ, REF_NEQ, MATCH, NOTMATCH,
         SHUTTLE,
         AND, BITAND, OR, BITOR, BITXOR, NOT, BITNOT, DOT, ARROW, EQARROW, QUESTION, COLONCOLON,
@@ -44,7 +44,7 @@ data class Token(val value: String, val pos: Pos, val type: Type) {
         SINLGE_LINE_COMMENT, MULTILINE_COMMENT,
         LABEL, ATLABEL, // label@ at@label
         // type-checking/casting
-        AS, ASNULL,
+        AS, ASNULL, OBJECT,
         //PUBLIC, PROTECTED, INTERNAL, EXPORT, OPEN, INLINE, OVERRIDE, ABSTRACT, SEALED, EXTERNAL, VAL, VAR, CONST, TYPE, FUN, CLASS, INTERFACE, ENUM, OBJECT, TRAIT, THIS,
         ELLIPSIS, DOTDOT, DOTDOTLT,
         NEWLINE,

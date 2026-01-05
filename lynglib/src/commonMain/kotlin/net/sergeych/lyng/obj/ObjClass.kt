@@ -197,7 +197,7 @@ open class ObjClass(
         val list = mutableListOf<String>()
         if (includeSelf) list += className
         mroParents.forEach { list += it.className }
-        return list.joinToString(" → ")
+        return list.joinToString(", ")
     }
 
     override val objClass: ObjClass by lazy { ObjClassType }
@@ -234,13 +234,13 @@ open class ObjClass(
         // This mirrors Obj.autoInstanceScope behavior for ad-hoc scopes and makes fb.method() resolution robust
         // 1) members-defined methods
         for ((k, v) in members) {
-            if (v.value is Statement) {
+            if (v.value is Statement || v.type == ObjRecord.Type.Delegated) {
                 instance.instanceScope.objects[k] = v
             }
         }
         // 2) class-scope methods registered during class-body execution
         classScope?.objects?.forEach { (k, rec) ->
-            if (rec.value is Statement) {
+            if (rec.value is Statement || rec.type == ObjRecord.Type.Delegated) {
                 // if not already present, copy reference for dispatch
                 if (!instance.instanceScope.objects.containsKey(k)) {
                     instance.instanceScope.objects[k] = rec
@@ -361,7 +361,7 @@ open class ObjClass(
         isClosed: Boolean = false,
         isOverride: Boolean = false,
         type: ObjRecord.Type = ObjRecord.Type.Field,
-    ) {
+    ): ObjRecord {
         // Validation of override rules: only for non-system declarations
         if (pos != Pos.builtIn) {
             val existing = getInstanceMemberOrNull(name)
@@ -396,7 +396,7 @@ open class ObjClass(
             throw ScriptError(pos, "$name is already defined in $objClass")
         
         // Install/override in this class
-        members[name] = ObjRecord(
+        val rec = ObjRecord(
             initialValue, isMutable, visibility, writeVisibility, 
             declaringClass = declaringClass,
             isAbstract = isAbstract,
@@ -404,8 +404,10 @@ open class ObjClass(
             isOverride = isOverride,
             type = type
         )
+        members[name] = rec
         // Structural change: bump layout version for PIC invalidation
         layoutVersion += 1
+        return rec
     }
 
     private fun initClassScope(): Scope {
@@ -419,15 +421,17 @@ open class ObjClass(
         isMutable: Boolean = false,
         visibility: Visibility = Visibility.Public,
         writeVisibility: Visibility? = null,
-        pos: Pos = Pos.builtIn
-    ) {
+        pos: Pos = Pos.builtIn,
+        type: ObjRecord.Type = ObjRecord.Type.Field
+    ): ObjRecord {
         initClassScope()
         val existing = classScope!!.objects[name]
         if (existing != null)
             throw ScriptError(pos, "$name is already defined in $objClass or one of its supertypes")
-        classScope!!.addItem(name, isMutable, initialValue, visibility, writeVisibility)
+        val rec = classScope!!.addItem(name, isMutable, initialValue, visibility, writeVisibility, recordType = type)
         // Structural change: bump layout version for PIC invalidation
         layoutVersion += 1
+        return rec
     }
 
     fun addFn(
@@ -558,15 +562,21 @@ open class ObjClass(
 
     override suspend fun readField(scope: Scope, name: String): ObjRecord {
         classScope?.objects?.get(name)?.let {
-            if (it.visibility.isPublic) return it
+            if (it.visibility.isPublic) return resolveRecord(scope, it, name, this)
         }
         return super.readField(scope, name)
     }
 
     override suspend fun writeField(scope: Scope, name: String, newValue: Obj) {
-        initClassScope().objects[name]?.let {
-            if (it.isMutable) it.value = newValue
+        initClassScope().objects[name]?.let { rec ->
+            if (rec.type == ObjRecord.Type.Delegated) {
+                val del = rec.delegate ?: scope.raiseError("Internal error: delegated property $name has no delegate")
+                del.invokeInstanceMethod(scope, "setValue", Arguments(this, ObjString(name), newValue))
+                return
+            }
+            if (rec.isMutable) rec.value = newValue
             else scope.raiseIllegalAssignment("can't assign $name is not mutable")
+            return
         }
             ?: super.writeField(scope, name, newValue)
     }
@@ -575,8 +585,16 @@ open class ObjClass(
         scope: Scope, name: String, args: Arguments,
         onNotFoundResult: (suspend () -> Obj?)?
     ): Obj {
-        return classScope?.objects?.get(name)?.value?.invoke(scope, this, args)
-            ?: super.invokeInstanceMethod(scope, name, args, onNotFoundResult)
+        getInstanceMemberOrNull(name)?.let { rec ->
+            val decl = rec.declaringClass ?: findDeclaringClassOf(name) ?: this
+            if (rec.type == ObjRecord.Type.Delegated) {
+                val del = rec.delegate ?: scope.raiseError("Internal error: delegated function $name has no delegate")
+                val allArgs = (listOf(this, ObjString(name)) + args.list).toTypedArray()
+                return del.invokeInstanceMethod(scope, "invoke", Arguments(*allArgs))
+            }
+            return rec.value.invoke(scope, this, args, decl)
+        }
+        return super.invokeInstanceMethod(scope, name, args, onNotFoundResult)
     }
 
     open suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj =

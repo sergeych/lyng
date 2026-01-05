@@ -74,7 +74,7 @@ private fun kindOf(type: Type, value: String): HighlightKind? = when (type) {
     Type.COMMA, Type.SEMICOLON, Type.COLON -> HighlightKind.Punctuation
 
     // textual control keywords
-    Type.IN, Type.NOTIN, Type.IS, Type.NOTIS, Type.AS, Type.ASNULL,
+    Type.IN, Type.NOTIN, Type.IS, Type.NOTIS, Type.AS, Type.ASNULL, Type.BY, Type.OBJECT,
     Type.AND, Type.OR, Type.NOT -> HighlightKind.Keyword
 
     // labels / annotations

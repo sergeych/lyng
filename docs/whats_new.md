@@ -93,6 +93,36 @@ let d = Derived()
 println((d as B).foo())             // Disambiguation via cast
 ```
 
+### Singleton Objects
+Singleton objects are declared using the `object` keyword. They provide a convenient way to define a class and its single instance in one go.
+
+```lyng
+object Config {
+    val version = "1.2.3"
+    fun show() = println("Config version: " + version)
+}
+
+Config.show()
+```
+
+### Unified Delegation Model
+A powerful new delegation system allows `val`, `var`, and `fun` members to delegate their logic to other objects using the `by` keyword.
+
+```lyng
+// Property delegation
+val lazyValue by lazy { "expensive" }
+
+// Function delegation
+fun remoteAction by myProxy
+
+// Observable properties
+var name by Observable("initial") { n, old, new -> 
+    println("Changed!") 
+}
+```
+
+The system features a unified interface (`getValue`, `setValue`, `invoke`) and a `bind` hook for initialization-time validation and configuration. See the [Delegation Guide](delegation.md) for more.
+
 ## Tooling and Infrastructure
 
 ### CLI: Formatting Command

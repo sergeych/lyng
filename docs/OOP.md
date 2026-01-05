@@ -42,6 +42,35 @@ a _constructor_ that requires two parameters for fields. So when creating it wit
 Form now on `Point` is a class, it's type is `Class`, and we can create instances with it as in the
 example above.
 
+## Singleton Objects
+
+Singleton objects are declared using the `object` keyword. An `object` declaration defines both a class and a single instance of that class at the same time. This is perfect for stateless utilities, global configuration, or shared delegates.
+
+```lyng
+object Config {
+    val version = "1.0.0"
+    val debug = true
+    
+    fun printInfo() {
+        println("App version: " + version)
+    }
+}
+
+// Usage:
+println(Config.version)
+Config.printInfo()
+```
+
+Objects can also inherit from classes or interfaces:
+
+```lyng
+object DefaultLogger : Logger("Default") {
+    override fun log(msg) {
+        println("[DEFAULT] " + msg)
+    }
+}
+```
+
 ## Properties
 
 Properties allow you to define member accessors that look like fields but execute code when read or written. Unlike regular fields, properties in Lyng do **not** have automatic backing fields; they are pure accessors.
@@ -121,6 +150,39 @@ println(service.data()) // Returns "Record 42" immediately (no second fetch)
 ```
 
 Note that `cached` returns a lambda, so you access the value by calling it like a method: `service.data()`. This is a powerful pattern for lazy-loading resources, caching results of database queries, or delaying expensive computations until they are truly needed.
+
+## Delegation
+
+Delegation allows you to hand over the logic of a property or function to another object. This is done using the `by` keyword.
+
+### Property Delegation
+
+Instead of providing `get()` and `set()` accessors, you can delegate them to an object that implements the `getValue` and `setValue` methods.
+
+```lyng
+class User {
+    var name by MyDelegate()
+}
+```
+
+### Function Delegation
+
+You can also delegate a whole function to an object. When the function is called, it will invoke the delegate's `invoke` method.
+
+```lyng
+fun remoteAction by RemoteProxy("actionName")
+```
+
+### The Unified Delegate Interface
+
+A delegate is any object that provides the following methods (all optional depending on usage):
+
+- `getValue(thisRef, name)`: Called when a delegated `val` or `var` is read.
+- `setValue(thisRef, name, newValue)`: Called when a delegated `var` is written.
+- `invoke(thisRef, name, args...)`: Called when a delegated `fun` is invoked.
+- `bind(name, access, thisRef)`: Called once during initialization to configure or validate the delegate.
+
+For more details and advanced patterns (like `lazy`, `observable`, and shared stateless delegates), see the [Delegation Guide](delegation.md).
 
 ## Instance initialization: init block
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -318,6 +318,21 @@ fun EditorWithOverlay(
                     try { ta.setSelectionRange(res.selStart, res.selEnd) } catch (_: Throwable) {}
                     pendingSelStart = res.selStart
                     pendingSelEnd = res.selEnd
+                } else if (key.length == 1 && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+                    // Handle single character input (like '}') for dedenting
+                    // This is an alternative to onInput to have better control
+                    val start = ta.selectionStart ?: 0
+                    val end = ta.selectionEnd ?: start
+                    val current = ta.value
+                    val res = applyChar(current, start, end, key[0], tabSize)
+                    if (res.text != (current.substring(0, start) + key + current.substring(end))) {
+                        // Logic decided to change something else (e.g. dedent)
+                        ev.preventDefault()
+                        setCode(res.text)
+                        try { ta.setSelectionRange(res.selStart, res.selEnd) } catch (_: Throwable) {}
+                        pendingSelStart = res.selStart
+                        pendingSelEnd = res.selEnd
+                    }
                 }
             }
 

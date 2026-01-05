@@ -32,7 +32,11 @@ sealed interface ObjRef {
      * Fast path for evaluating an expression to a raw Obj value without wrapping it into ObjRecord.
      * Default implementation calls [get] and returns its value. Nodes can override to avoid record traffic.
      */
-    suspend fun evalValue(scope: Scope): Obj = get(scope).value
+    suspend fun evalValue(scope: Scope): Obj {
+        val rec = get(scope)
+        if (rec.type == ObjRecord.Type.Delegated) return scope.resolve(rec, "unknown")
+        return rec.value
+    }
     suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
         throw ScriptError(pos, "can't assign value")
     }
@@ -79,8 +83,7 @@ enum class BinOp {
 /** R-value reference for unary operations. */
 class UnaryOpRef(private val op: UnaryOp, private val a: ObjRef) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
-        val fastRval = PerfFlags.RVAL_FASTPATH
-        val v = if (fastRval) a.evalValue(scope) else a.get(scope).value
+        val v = a.evalValue(scope)
         if (PerfFlags.PRIMITIVE_FASTOPS) {
             val rFast: Obj? = when (op) {
                 UnaryOp.NOT -> if (v is ObjBool) if (!v.value) ObjTrue else ObjFalse else null
@@ -108,8 +111,8 @@ class UnaryOpRef(private val op: UnaryOp, private val a: ObjRef) : ObjRef {
 /** R-value reference for binary operations. */
 class BinaryOpRef(private val op: BinOp, private val left: ObjRef, private val right: ObjRef) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
-        val a = if (PerfFlags.RVAL_FASTPATH) left.evalValue(scope) else left.get(scope).value
-        val b = if (PerfFlags.RVAL_FASTPATH) right.evalValue(scope) else right.get(scope).value
+        val a = left.evalValue(scope)
+        val b = right.evalValue(scope)
 
         // Primitive fast paths for common cases (guarded by PerfFlags.PRIMITIVE_FASTOPS)
         if (PerfFlags.PRIMITIVE_FASTOPS) {
@@ -277,7 +280,7 @@ class ConditionalRef(
     private val ifFalse: ObjRef
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
-        val condVal = if (PerfFlags.RVAL_FASTPATH) condition.evalValue(scope) else condition.get(scope).value
+        val condVal = condition.evalValue(scope)
         val condTrue = when (condVal) {
             is ObjBool -> condVal.value
             is ObjInt -> condVal.value != 0L
@@ -296,8 +299,8 @@ class CastRef(
     private val atPos: Pos,
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
-        val v0 = if (PerfFlags.RVAL_FASTPATH) valueRef.evalValue(scope) else valueRef.get(scope).value
-        val t = if (PerfFlags.RVAL_FASTPATH) typeRef.evalValue(scope) else typeRef.get(scope).value
+        val v0 = valueRef.evalValue(scope)
+        val t = typeRef.evalValue(scope)
         val target = (t as? ObjClass) ?: scope.raiseClassCastError("${'$'}t is not the class instance")
         // unwrap qualified views
         val v = when (v0) {
@@ -339,8 +342,8 @@ class AssignOpRef(
     private val atPos: Pos,
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
-        val x = target.get(scope).value
-        val y = if (PerfFlags.RVAL_FASTPATH) value.evalValue(scope) else value.get(scope).value
+        val x = target.evalValue(scope)
+        val y = value.evalValue(scope)
         val inPlace: Obj? = when (op) {
             BinOp.PLUS -> x.plusAssign(scope, y)
             BinOp.MINUS -> x.minusAssign(scope, y)
@@ -373,7 +376,7 @@ class IncDecRef(
     override suspend fun get(scope: Scope): ObjRecord {
         val rec = target.get(scope)
         if (!rec.isMutable) scope.raiseError("Cannot ${if (isIncrement) "increment" else "decrement"} immutable value")
-        val v = rec.value
+        val v = scope.resolve(rec, "unknown")
         val one = ObjInt.One
         // We now treat numbers as immutable and always perform write-back via setAt.
         // This avoids issues where literals are shared and mutated in-place.
@@ -387,9 +390,8 @@ class IncDecRef(
 /** Elvis operator reference: a ?: b */
 class ElvisRef(private val left: ObjRef, private val right: ObjRef) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
-        val fastRval = PerfFlags.RVAL_FASTPATH
-        val a = if (fastRval) left.evalValue(scope) else left.get(scope).value
-        val r = if (a != ObjNull) a else if (fastRval) right.evalValue(scope) else right.get(scope).value
+        val a = left.evalValue(scope)
+        val r = if (a != ObjNull) a else right.evalValue(scope)
         return r.asReadonly
     }
 }
@@ -397,12 +399,10 @@ class ElvisRef(private val left: ObjRef, private val right: ObjRef) : ObjRef {
 /** Logical OR with short-circuit: a || b */
 class LogicalOrRef(private val left: ObjRef, private val right: ObjRef) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
-        val fastRval = PerfFlags.RVAL_FASTPATH
-        val fastPrim = PerfFlags.PRIMITIVE_FASTOPS
-        val a = if (fastRval) left.evalValue(scope) else left.get(scope).value
+        val a = left.evalValue(scope)
         if ((a as? ObjBool)?.value == true) return ObjTrue.asReadonly
-        val b = if (fastRval) right.evalValue(scope) else right.get(scope).value
-        if (fastPrim) {
+        val b = right.evalValue(scope)
+        if (PerfFlags.PRIMITIVE_FASTOPS) {
             if (a is ObjBool && b is ObjBool) {
                 return if (a.value || b.value) ObjTrue.asReadonly else ObjFalse.asReadonly
             }
@@ -414,13 +414,10 @@ class LogicalOrRef(private val left: ObjRef, private val right: ObjRef) : ObjRef
 /** Logical AND with short-circuit: a && b */
 class LogicalAndRef(private val left: ObjRef, private val right: ObjRef) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
-        // Hoist flags to locals for JIT friendliness
-        val fastRval = PerfFlags.RVAL_FASTPATH
-        val fastPrim = PerfFlags.PRIMITIVE_FASTOPS
-        val a = if (fastRval) left.evalValue(scope) else left.get(scope).value
+        val a = left.evalValue(scope)
         if ((a as? ObjBool)?.value == false) return ObjFalse.asReadonly
-        val b = if (fastRval) right.evalValue(scope) else right.get(scope).value
-        if (fastPrim) {
+        val b = right.evalValue(scope)
+        if (PerfFlags.PRIMITIVE_FASTOPS) {
             if (a is ObjBool && b is ObjBool) {
                 return if (a.value && b.value) ObjTrue.asReadonly else ObjFalse.asReadonly
             }
@@ -505,10 +502,9 @@ class FieldRef(
     }
 
     override suspend fun get(scope: Scope): ObjRecord {
-        val fastRval = PerfFlags.RVAL_FASTPATH
         val fieldPic = PerfFlags.FIELD_PIC
         val picCounters = PerfFlags.PIC_DEBUG_COUNTERS
-        val base = if (fastRval) target.evalValue(scope) else target.get(scope).value
+        val base = target.evalValue(scope)
         if (base == ObjNull && isOptional) return ObjNull.asMutable
         if (fieldPic) {
             val (key, ver) = receiverKeyAndVersion(base)
@@ -800,11 +796,10 @@ class IndexRef(
         else -> 0L to -1
     }
     override suspend fun get(scope: Scope): ObjRecord {
-        val fastRval = PerfFlags.RVAL_FASTPATH
-        val base = if (fastRval) target.evalValue(scope) else target.get(scope).value
+        val base = target.evalValue(scope)
         if (base == ObjNull && isOptional) return ObjNull.asMutable
-        val idx = if (fastRval) index.evalValue(scope) else index.get(scope).value
-        if (fastRval) {
+        val idx = index.evalValue(scope)
+        if (PerfFlags.RVAL_FASTPATH) {
             // Primitive list index fast path: avoid virtual dispatch to getAt when shapes match
             if (base is ObjList && idx is ObjInt) {
                 val i = idx.toInt()
@@ -874,11 +869,10 @@ class IndexRef(
     }
 
     override suspend fun evalValue(scope: Scope): Obj {
-        val fastRval = PerfFlags.RVAL_FASTPATH
-        val base = if (fastRval) target.evalValue(scope) else target.get(scope).value
+        val base = target.evalValue(scope)
         if (base == ObjNull && isOptional) return ObjNull
-        val idx = if (fastRval) index.evalValue(scope) else index.get(scope).value
-        if (fastRval) {
+        val idx = index.evalValue(scope)
+        if (PerfFlags.RVAL_FASTPATH) {
             // Fast list[int] path
             if (base is ObjList && idx is ObjInt) {
                 val i = idx.toInt()
@@ -1027,9 +1021,8 @@ class CallRef(
     private val isOptionalInvoke: Boolean,
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
-        val fastRval = PerfFlags.RVAL_FASTPATH
         val usePool = PerfFlags.SCOPE_POOL
-        val callee = if (fastRval) target.evalValue(scope) else target.get(scope).value
+        val callee = target.evalValue(scope)
         if (callee == ObjNull && isOptionalInvoke) return ObjNull.asReadonly
         val callArgs = args.toArguments(scope, tailBlock)
         val result: Obj = if (usePool) {
@@ -1117,10 +1110,9 @@ class MethodCallRef(
     }
 
     override suspend fun get(scope: Scope): ObjRecord {
-        val fastRval = PerfFlags.RVAL_FASTPATH
         val methodPic = PerfFlags.METHOD_PIC
         val picCounters = PerfFlags.PIC_DEBUG_COUNTERS
-        val base = if (fastRval) receiver.evalValue(scope) else receiver.get(scope).value
+        val base = receiver.evalValue(scope)
         if (base == ObjNull && isOptional) return ObjNull.asReadonly
         val callArgs = args.toArguments(scope, tailBlock)
         if (methodPic) {
@@ -1327,21 +1319,21 @@ class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
     override suspend fun evalValue(scope: Scope): Obj {
         scope.pos = atPos
         if (!PerfFlags.LOCAL_SLOT_PIC) {
-            scope.getSlotIndexOf(name)?.let { return scope.getSlotRecord(it).value }
+            scope.getSlotIndexOf(name)?.let { return scope.resolve(scope.getSlotRecord(it), name) }
             // fallback to current-scope object or field on `this`
-            scope[name]?.let { return it.value }
+            scope[name]?.let { return scope.resolve(it, name) }
             run {
                 var s: Scope? = scope
                 val visited = HashSet<Long>(4)
                 while (s != null) {
                     if (!visited.add(s.frameId)) break
                     if (s is ClosureScope) {
-                        s.closureScope.chainLookupWithMembers(name)?.let { return it.value }
+                        s.closureScope.chainLookupWithMembers(name)?.let { return s.resolve(it, name) }
                     }
                     s = s.parent
                 }
             }
-            scope.chainLookupIgnoreClosure(name)?.let { return it.value }
+            scope.chainLookupIgnoreClosure(name)?.let { return scope.resolve(it, name) }
             return try {
                 scope.thisObj.readField(scope, name).value
             } catch (e: ExecutionError) {
@@ -1353,25 +1345,29 @@ class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
         val slot = if (hit) cachedSlot else resolveSlot(scope)
         if (slot >= 0) {
             val rec = scope.getSlotRecord(slot)
-            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx))
-                return rec.value
+            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx)) {
+                return scope.resolve(rec, name)
+            }
         }
         // Fallback name in scope or field on `this`
-        scope[name]?.let { return it.value }
+        scope[name]?.let { 
+            return scope.resolve(it, name) 
+        }
         run {
             var s: Scope? = scope
             val visited = HashSet<Long>(4)
             while (s != null) {
                 if (!visited.add(s.frameId)) break
                 if (s is ClosureScope) {
-                    s.closureScope.chainLookupWithMembers(name)?.let { return it.value }
+                    s.closureScope.chainLookupWithMembers(name)?.let { return s.resolve(it, name) }
                 }
                 s = s.parent
             }
         }
-        scope.chainLookupIgnoreClosure(name)?.let { return it.value }
+        scope.chainLookupIgnoreClosure(name)?.let { return scope.resolve(it, name) }
         return try {
-            scope.thisObj.readField(scope, name).value
+            val res = scope.thisObj.readField(scope, name).value
+            res
         } catch (e: ExecutionError) {
             if ((e.message ?: "").contains("no such field: $name")) scope.raiseSymbolNotFound(name)
             throw e
@@ -1383,13 +1379,11 @@ class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
         if (!PerfFlags.LOCAL_SLOT_PIC) {
             scope.getSlotIndexOf(name)?.let {
                 val rec = scope.getSlotRecord(it)
-                if (!rec.isMutable) scope.raiseError("Cannot assign to immutable value")
-                rec.value = newValue
+                scope.assign(rec, name, newValue)
                 return
             }
             scope[name]?.let { stored ->
-                if (stored.isMutable) stored.value = newValue
-                else scope.raiseError("Cannot assign to immutable value")
+                scope.assign(stored, name, newValue)
                 return
             }
             run {
@@ -1399,8 +1393,7 @@ class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
                     if (!visited.add(s.frameId)) break
                     if (s is ClosureScope) {
                         s.closureScope.chainLookupWithMembers(name)?.let { stored ->
-                            if (stored.isMutable) stored.value = newValue
-                            else scope.raiseError("Cannot assign to immutable value")
+                            s.assign(stored, name, newValue)
                             return
                         }
                     }
@@ -1408,8 +1401,7 @@ class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
                 }
             }
             scope.chainLookupIgnoreClosure(name)?.let { stored ->
-                if (stored.isMutable) stored.value = newValue
-                else scope.raiseError("Cannot assign to immutable value")
+                scope.assign(stored, name, newValue)
                 return
             }
             // Fallback: write to field on `this`
@@ -1420,14 +1412,12 @@ class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
         if (slot >= 0) {
             val rec = scope.getSlotRecord(slot)
             if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx)) {
-                if (!rec.isMutable) scope.raiseError("Cannot assign to immutable value")
-                rec.value = newValue
+                scope.assign(rec, name, newValue)
                 return
             }
         }
         scope[name]?.let { stored ->
-            if (stored.isMutable) stored.value = newValue
-            else scope.raiseError("Cannot assign to immutable value")
+            scope.assign(stored, name, newValue)
             return
         }
         run {
@@ -1437,8 +1427,7 @@ class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
                 if (!visited.add(s.frameId)) break
                 if (s is ClosureScope) {
                     s.closureScope.chainLookupWithMembers(name)?.let { stored ->
-                        if (stored.isMutable) stored.value = newValue
-                        else scope.raiseError("Cannot assign to immutable value")
+                        s.assign(stored, name, newValue)
                         return
                     }
                 }
@@ -1446,8 +1435,7 @@ class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
             }
         }
         scope.chainLookupIgnoreClosure(name)?.let { stored ->
-            if (stored.isMutable) stored.value = newValue
-            else scope.raiseError("Cannot assign to immutable value")
+            scope.assign(stored, name, newValue)
             return
         }
         scope.thisObj.writeField(scope, name, newValue)
@@ -1476,7 +1464,10 @@ class BoundLocalVarRef(
         val rec = scope.getSlotRecord(slot)
         if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx))
             scope.raiseError(ObjIllegalAccessException(scope, "private field access"))
-        return rec.value
+        // We might not have the name in BoundLocalVarRef, but let's try to find it or use a placeholder
+        // Actually BoundLocalVarRef is mostly used for parameters which are not delegated yet.
+        // But for consistency:
+        return scope.resolve(rec, "local")
     }
 
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
@@ -1484,8 +1475,7 @@ class BoundLocalVarRef(
         val rec = scope.getSlotRecord(slot)
         if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx))
             scope.raiseError(ObjIllegalAccessException(scope, "private field access"))
-        if (!rec.isMutable) scope.raiseError("Cannot assign to immutable value")
-        rec.value = newValue
+        scope.assign(rec, "local", newValue)
     }
 }
 
@@ -1592,15 +1582,18 @@ class FastLocalVarRef(
         val actualOwner = cachedOwnerScope
         if (slot >= 0 && actualOwner != null) {
             val rec = actualOwner.getSlotRecord(slot)
-            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx))
-                return rec.value
+            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx)) {
+                return actualOwner.resolve(rec, name)
+            }
         }
         // Try per-frame local binding maps in the ancestry first
         run {
             var s: Scope? = scope
             var guard = 0
             while (s != null) {
-                s.localBindings[name]?.let { return it.value }
+                s.localBindings[name]?.let { 
+                    return s.resolve(it, name) 
+                }
                 val next = s.parent
                 if (next === s) break
                 s = next
@@ -1612,7 +1605,9 @@ class FastLocalVarRef(
             var s: Scope? = scope
             var guard = 0
             while (s != null) {
-                s.objects[name]?.let { return it.value }
+                s.objects[name]?.let { 
+                    return s.resolve(it, name) 
+                }
                 val next = s.parent
                 if (next === s) break
                 s = next
@@ -1620,7 +1615,9 @@ class FastLocalVarRef(
             }
         }
         // Fallback to standard name lookup (locals or closure chain)
-        scope[name]?.let { return it.value }
+        scope[name]?.let { 
+            return scope.resolve(it, name) 
+        }
         return scope.thisObj.readField(scope, name).value
     }
 
@@ -1632,8 +1629,7 @@ class FastLocalVarRef(
         if (slot >= 0 && actualOwner != null) {
             val rec = actualOwner.getSlotRecord(slot)
             if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx)) {
-                if (!rec.isMutable) scope.raiseError("Cannot assign to immutable value")
-                rec.value = newValue
+                scope.assign(rec, name, newValue)
                 return
             }
         }
@@ -1644,8 +1640,7 @@ class FastLocalVarRef(
             while (s != null) {
                 val rec = s.localBindings[name]
                 if (rec != null) {
-                    if (!rec.isMutable) scope.raiseError("Cannot assign to immutable value")
-                    rec.value = newValue
+                    s.assign(rec, name, newValue)
                     return
                 }
                 val next = s.parent
@@ -1656,8 +1651,7 @@ class FastLocalVarRef(
         }
         // Fallback to standard name lookup
         scope[name]?.let { stored ->
-            if (stored.isMutable) stored.value = newValue
-            else scope.raiseError("Cannot assign to immutable value")
+            scope.assign(stored, name, newValue)
             return
         }
         scope.thisObj.writeField(scope, name, newValue)
@@ -1691,11 +1685,11 @@ class ListLiteralRef(private val entries: List<ListEntry>) : ObjRef {
         for (e in entries) {
             when (e) {
                 is ListEntry.Element -> {
-                    val v = if (PerfFlags.RVAL_FASTPATH) e.ref.evalValue(scope) else e.ref.get(scope).value
+                    val v = if (PerfFlags.RVAL_FASTPATH) e.ref.evalValue(scope) else e.ref.evalValue(scope)
                     list += v
                 }
                 is ListEntry.Spread -> {
-                    val elements = if (PerfFlags.RVAL_FASTPATH) e.ref.evalValue(scope) else e.ref.get(scope).value
+                    val elements = e.ref.evalValue(scope)
                     when (elements) {
                         is ObjList -> {
                             // Grow underlying array once when possible
@@ -1771,11 +1765,11 @@ class MapLiteralRef(private val entries: List<MapLiteralEntry>) : ObjRef {
         for (e in entries) {
             when (e) {
                 is MapLiteralEntry.Named -> {
-                    val v = if (PerfFlags.RVAL_FASTPATH) e.value.evalValue(scope) else e.value.get(scope).value
+                    val v = e.value.evalValue(scope)
                     result.map[ObjString(e.key)] = v
                 }
                 is MapLiteralEntry.Spread -> {
-                    val m = if (PerfFlags.RVAL_FASTPATH) e.ref.evalValue(scope) else e.ref.get(scope).value
+                    val m = e.ref.evalValue(scope)
                     if (m !is ObjMap) scope.raiseIllegalArgument("spread element in map literal must be a Map")
                     for ((k, v) in m.map) {
                         result.map[k] = v
@@ -1796,8 +1790,8 @@ class RangeRef(
     private val isEndInclusive: Boolean
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
-        val l = left?.let { if (PerfFlags.RVAL_FASTPATH) it.evalValue(scope) else it.get(scope).value } ?: ObjNull
-        val r = right?.let { if (PerfFlags.RVAL_FASTPATH) it.evalValue(scope) else it.get(scope).value } ?: ObjNull
+        val l = left?.evalValue(scope) ?: ObjNull
+        val r = right?.evalValue(scope) ?: ObjNull
         return ObjRange(l, r, isEndInclusive = isEndInclusive).asReadonly
     }
 }
@@ -1809,7 +1803,7 @@ class AssignRef(
     private val atPos: Pos,
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
-        val v = if (PerfFlags.RVAL_FASTPATH) value.evalValue(scope) else value.get(scope).value
+        val v = value.evalValue(scope)
         // For properties, we should not call get() on target because it invokes the getter.
         // Instead, we call setAt directly.
         if (target is FieldRef || target is IndexRef || target is LocalVarRef || target is FastLocalVarRef || target is BoundLocalVarRef) {

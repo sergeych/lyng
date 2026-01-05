@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -619,6 +619,36 @@ open class Scope(
             ref = FieldRef(ref, parts[i], false)
         }
         return ref.evalValue(this)
+    }
+
+    suspend fun resolve(rec: ObjRecord, name: String): Obj {
+        if (rec.type == ObjRecord.Type.Delegated) {
+            val del = rec.delegate ?: raiseError("Internal error: delegated property $name has no delegate")
+            val th = if (thisObj === ObjVoid) ObjNull else thisObj
+            return del.invokeInstanceMethod(this, "getValue", Arguments(th, ObjString(name)), onNotFoundResult = {
+                // If getValue not found, return a wrapper that calls invoke
+                object : Statement() {
+                    override val pos: Pos = Pos.builtIn
+                    override suspend fun execute(scope: Scope): Obj {
+                        val th2 = if (scope.thisObj === ObjVoid) ObjNull else scope.thisObj
+                        val allArgs = (listOf(th2, ObjString(name)) + scope.args.list).toTypedArray()
+                        return del.invokeInstanceMethod(scope, "invoke", Arguments(*allArgs))
+                    }
+                }
+            })!!
+        }
+        return rec.value
+    }
+
+    suspend fun assign(rec: ObjRecord, name: String, newValue: Obj) {
+        if (rec.type == ObjRecord.Type.Delegated) {
+            val del = rec.delegate ?: raiseError("Internal error: delegated property $name has no delegate")
+            val th = if (thisObj === ObjVoid) ObjNull else thisObj
+            del.invokeInstanceMethod(this, "setValue", Arguments(th, ObjString(name), newValue))
+            return
+        }
+        if (!rec.isMutable && rec.value !== ObjUnset) raiseIllegalAssignment("can't reassign val $name")
+        rec.value = newValue
     }
 
     companion object {

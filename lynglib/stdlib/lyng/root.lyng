@@ -277,3 +277,55 @@ fun Exception.printStackTrace() {
 val String.re get() = Regex(this)
 
 fun TODO(message=null) = throw NotImplementedException(message ?: "not implemented")
+
+/* 
+Provides different access types for delegates.
+Used in the 'bind' hook to validate delegate usage.
+*/
+enum DelegateAccess {
+    Val,
+    Var,
+    Callable
+}
+
+/*
+Base interface for all delegates.
+Implementing this interface is optional as Lyng uses dynamic dispatch,
+but it is recommended for documentation and clarity.
+*/
+interface Delegate {
+    /* Called when a delegated 'val' or 'var' is read. */
+    fun getValue(thisRef, name) = TODO("delegate getter is not implemented")
+    
+    /* Called when a delegated 'var' is written. */
+    fun setValue(thisRef, name, newValue) = TODO("delegate setter is not implemented")
+    
+    /* Called when a delegated function is invoked. */
+    fun invoke(thisRef, name, args...) = TODO("delegate invoke is not implemented")
+    
+    /* 
+    Called once during initialization to configure or validate the delegate.
+    Should return the delegate object to be used (usually 'this').
+    */
+    fun bind(name, access, thisRef) = this
+}
+
+/*
+Standard implementation of a lazy-initialized property delegate.
+The provided creator lambda is called once on the first access to compute the value.
+Can only be used with 'val' properties.
+*/
+class lazy(creatorParam) : Delegate {
+    private val creator = creatorParam
+    private var value = Unset
+
+    override fun bind(name, access, thisRef) {
+        if (access != DelegateAccess.Val) throw "lazy delegate can only be used with 'val'"
+        this
+    }
+
+    override fun getValue(thisRef, name) {
+        if (value == Unset) value = creator()
+        value
+    }
+}

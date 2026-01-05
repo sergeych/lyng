@@ -286,7 +286,7 @@ class Compiler(
         while (true) {
             val t = cc.next()
             return when (t.type) {
-                Token.Type.ID -> {
+                Token.Type.ID, Token.Type.OBJECT -> {
                     parseKeywordStatement(t)
                         ?: run {
                             cc.previous()
@@ -337,7 +337,7 @@ class Compiler(
 
     private suspend fun parseExpression(): Statement? {
         val pos = cc.currentPos()
-        return parseExpressionLevel()?.let { a -> statement(pos) { a.get(it).value } }
+        return parseExpressionLevel()?.let { a -> statement(pos) { a.evalValue(it) } }
     }
 
     private suspend fun parseExpressionLevel(level: Int = 0): ObjRef? {
@@ -1063,7 +1063,7 @@ class Compiler(
                     val next = cc.peekNextNonWhitespace()
                     if (next.type == Token.Type.COMMA || next.type == Token.Type.RPAREN) {
                         val localVar = LocalVarRef(name, t1.pos)
-                        return ParsedArgument(statement(t1.pos) { localVar.get(it).value }, t1.pos, isSplat = false, name = name)
+                        return ParsedArgument(statement(t1.pos) { localVar.evalValue(it) }, t1.pos, isSplat = false, name = name)
                     }
                     val rhs = parseExpression() ?: t2.raiseSyntax("expected expression after named argument '${name}:'")
                     return ParsedArgument(rhs, t1.pos, isSplat = false, name = name)
@@ -1135,7 +1135,7 @@ class Compiler(
                     val next = cc.peekNextNonWhitespace()
                     if (next.type == Token.Type.COMMA || next.type == Token.Type.RPAREN) {
                         val localVar = LocalVarRef(name, t1.pos)
-                        return ParsedArgument(statement(t1.pos) { localVar.get(it).value }, t1.pos, isSplat = false, name = name)
+                        return ParsedArgument(statement(t1.pos) { localVar.evalValue(it) }, t1.pos, isSplat = false, name = name)
                     }
                     val rhs = parseExpression() ?: t2.raiseSyntax("expected expression after named argument '${name}:'")
                     return ParsedArgument(rhs, t1.pos, isSplat = false, name = name)
@@ -1356,6 +1356,12 @@ class Compiler(
                 parseClassDeclaration(isAbstract)
             }
 
+            "object" -> {
+                if (isStatic || isClosed || isOverride || isExtern || isAbstract)
+                    throw ScriptError(currentToken.pos, "unsupported modifiers for object: ${modifiers.joinToString(" ")}")
+                parseObjectDeclaration()
+            }
+
             "interface" -> {
                 if (isStatic || isClosed || isOverride || isExtern || isAbstract)
                     throw ScriptError(
@@ -1419,6 +1425,12 @@ class Compiler(
             pendingDeclStart = id.pos
             pendingDeclDoc = consumePendingDoc()
             parseClassDeclaration()
+        }
+
+        "object" -> {
+            pendingDeclStart = id.pos
+            pendingDeclDoc = consumePendingDoc()
+            parseObjectDeclaration()
         }
 
         "init" -> {
@@ -1844,6 +1856,81 @@ class Compiler(
             ObjEnumClass.createSimpleEnum(nameToken.value, names).also {
                 addItem(nameToken.value, false, it, recordType = ObjRecord.Type.Enum)
             }
+        }
+    }
+
+    private suspend fun parseObjectDeclaration(): Statement {
+        val nameToken = cc.requireToken(Token.Type.ID)
+        val startPos = pendingDeclStart ?: nameToken.pos
+        val doc = pendingDeclDoc ?: consumePendingDoc()
+        pendingDeclDoc = null
+        pendingDeclStart = null
+
+        // Optional base list: ":" Base ("," Base)* where Base := ID ( "(" args? ")" )?
+        data class BaseSpec(val name: String, val args: List<ParsedArgument>?)
+
+        val baseSpecs = mutableListOf<BaseSpec>()
+        if (cc.skipTokenOfType(Token.Type.COLON, isOptional = true)) {
+            do {
+                val baseId = cc.requireToken(Token.Type.ID, "base class name expected")
+                var argsList: List<ParsedArgument>? = null
+                if (cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true)) {
+                    argsList = parseArgsNoTailBlock()
+                }
+                baseSpecs += BaseSpec(baseId.value, argsList)
+            } while (cc.skipTokenOfType(Token.Type.COMMA, isOptional = true))
+        }
+
+        cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
+
+        pushInitScope()
+
+        // Robust body detection
+        var classBodyRange: MiniRange? = null
+        val bodyInit: Statement? = run {
+            val saved = cc.savePos()
+            val next = cc.nextNonWhitespace()
+            if (next.type == Token.Type.LBRACE) {
+                val bodyStart = next.pos
+                val st = withLocalNames(emptySet()) {
+                    parseScript()
+                }
+                val rbTok = cc.next()
+                if (rbTok.type != Token.Type.RBRACE) throw ScriptError(rbTok.pos, "unbalanced braces in object body")
+                classBodyRange = MiniRange(bodyStart, rbTok.pos)
+                st
+            } else {
+                cc.restorePos(saved)
+                null
+            }
+        }
+
+        val initScope = popInitScope()
+        val className = nameToken.value
+
+        return statement(startPos) { context ->
+            val parentClasses = baseSpecs.map { baseSpec ->
+                val rec = context[baseSpec.name] ?: throw ScriptError(nameToken.pos, "unknown base class: ${baseSpec.name}")
+                (rec.value as? ObjClass) ?: throw ScriptError(nameToken.pos, "${baseSpec.name} is not a class")
+            }
+
+            val newClass = ObjInstanceClass(className, *parentClasses.toTypedArray())
+            for (i in parentClasses.indices) {
+                val argsList = baseSpecs[i].args
+                // In object, we evaluate parent args once at creation time
+                if (argsList != null) newClass.directParentArgs[parentClasses[i]] = argsList
+            }
+
+            val classScope = context.createChildScope(newThisObj = newClass)
+            classScope.currentClassCtx = newClass
+            newClass.classScope = classScope
+
+            bodyInit?.execute(classScope)
+
+            // Create instance (singleton)
+            val instance = newClass.callOn(context.createChildScope(Arguments.EMPTY))
+            context.addItem(className, false, instance)
+            instance
         }
     }
 
@@ -2457,9 +2544,9 @@ class Compiler(
         val annotation = lastAnnotation
         val parentContext = codeContexts.last()
 
-        t = cc.next()
         // Is extension?
-        if (t.type == Token.Type.DOT) {
+        if (cc.peekNextNonWhitespace().type == Token.Type.DOT) {
+            cc.nextNonWhitespace() // consume DOT
             extTypeName = name
             val receiverEnd = Pos(start.source, start.line, start.column + name.length)
             receiverMini = MiniTypeName(
@@ -2472,23 +2559,32 @@ class Compiler(
                 throw ScriptError(t.pos, "illegal extension format: expected function name")
             name = t.value
             nameStartPos = t.pos
-            t = cc.next()
         }
 
-        if (t.type != Token.Type.LPAREN)
-            throw ScriptError(t.pos, "Bad function definition: expected '(' after 'fn ${name}'")
+        val argsDeclaration: ArgsDeclaration =
+            if (cc.peekNextNonWhitespace().type == Token.Type.LPAREN) {
+                cc.nextNonWhitespace() // consume (
+                parseArgsDeclaration() ?: ArgsDeclaration(emptyList(), Token.Type.RPAREN)
+            } else ArgsDeclaration(emptyList(), Token.Type.RPAREN)
 
-        val argsDeclaration = parseArgsDeclaration()
-        if (argsDeclaration == null || argsDeclaration.endTokenType != Token.Type.RPAREN)
+        // Optional return type
+        val returnTypeMini: MiniTypeRef? = if (cc.peekNextNonWhitespace().type == Token.Type.COLON) {
+            parseTypeDeclarationWithMini().second
+        } else null
+
+        var isDelegated = false
+        var delegateExpression: Statement? = null
+        if (cc.peekNextNonWhitespace().type == Token.Type.BY) {
+            cc.nextNonWhitespace() // consume by
+            isDelegated = true
+            delegateExpression = parseExpression() ?: throw ScriptError(cc.current().pos, "Expected delegate expression")
+        }
+
+        if (!isDelegated && argsDeclaration.endTokenType != Token.Type.RPAREN)
             throw ScriptError(
                 t.pos,
                 "Bad function definition: expected valid argument declaration or () after 'fn ${name}'"
             )
-
-        // Optional return type
-        val returnTypeMini: MiniTypeRef? = if (cc.current().type == Token.Type.COLON) {
-            parseTypeDeclarationWithMini().second
-        } else null
 
         // Capture doc locally to reuse even if we need to emit later
         val declDocLocal = pendingDeclDoc
@@ -2526,17 +2622,13 @@ class Compiler(
             localDeclCountStack.add(0)
             val fnStatements = if (isExtern)
                 statement { raiseError("extern function not provided: $name") }
-            else if (isAbstract) {
-                val next = cc.peekNextNonWhitespace()
-                if (next.type == Token.Type.ASSIGN || next.type == Token.Type.LBRACE)
-                    throw ScriptError(next.pos, "abstract function $name cannot have a body")
+            else if (isAbstract || isDelegated) {
                 null
             } else
                 withLocalNames(paramNames) {
                     val next = cc.peekNextNonWhitespace()
                     if (next.type == Token.Type.ASSIGN) {
-                        cc.skipWsTokens()
-                        cc.next() // consume '='
+                        cc.nextNonWhitespace() // consume '='
                         val expr = parseExpression() ?: throw ScriptError(cc.current().pos, "Expected function body expression")
                         // Shorthand function returns the expression value
                         statement(expr.pos) { scope ->
@@ -2573,6 +2665,57 @@ class Compiler(
             }
 //            parentContext
             val fnCreateStatement = statement(start) { context ->
+                if (isDelegated) {
+                    val accessType = context.resolveQualifiedIdentifier("DelegateAccess.Callable")
+                    val initValue = delegateExpression!!.execute(context)
+                    val finalDelegate = try {
+                        initValue.invokeInstanceMethod(context, "bind", Arguments(ObjString(name), accessType, context.thisObj))
+                    } catch (e: Exception) {
+                        initValue
+                    }
+
+                    if (extTypeName != null) {
+                        val type = context[extTypeName!!]?.value ?: context.raiseSymbolNotFound("class $extTypeName not found")
+                        if (type !is ObjClass) context.raiseClassCastError("$extTypeName is not the class instance")
+                        context.addExtension(type, name, ObjRecord(ObjUnset, isMutable = false, visibility = visibility, declaringClass = null, type = ObjRecord.Type.Delegated).apply {
+                            delegate = finalDelegate
+                        })
+                        return@statement ObjVoid
+                    }
+
+                    val th = context.thisObj
+                    if (isStatic) {
+                        (th as ObjClass).createClassField(name, ObjUnset, false, visibility, null, start, type = ObjRecord.Type.Delegated).apply {
+                            delegate = finalDelegate
+                        }
+                        context.addItem(name, false, ObjUnset, visibility, recordType = ObjRecord.Type.Delegated).apply {
+                            delegate = finalDelegate
+                        }
+                    } else if (th is ObjClass) {
+                        val cls: ObjClass = th
+                        val storageName = "${cls.className}::$name"
+                        cls.createField(name, ObjUnset, false, visibility, null, start, declaringClass = cls, isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride, type = ObjRecord.Type.Delegated)
+                        cls.instanceInitializers += statement(start) { scp ->
+                            val accessType2 = scp.resolveQualifiedIdentifier("DelegateAccess.Callable")
+                            val initValue2 = delegateExpression!!.execute(scp)
+                            val finalDelegate2 = try {
+                                initValue2.invokeInstanceMethod(scp, "bind", Arguments(ObjString(name), accessType2, scp.thisObj))
+                            } catch (e: Exception) {
+                                initValue2
+                            }
+                            scp.addItem(storageName, false, ObjUnset, visibility, null, recordType = ObjRecord.Type.Delegated, isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride).apply {
+                                delegate = finalDelegate2
+                            }
+                            ObjVoid
+                        }
+                    } else {
+                        context.addItem(name, false, ObjUnset, visibility, recordType = ObjRecord.Type.Delegated).apply {
+                            delegate = finalDelegate
+                        }
+                    }
+                    return@statement ObjVoid
+                }
+
                 // we added fn in the context. now we must save closure
                 // for the function, unless we're in the class scope:
                 if (isStatic || parentContext !is CodeContext.ClassBody)
@@ -2803,14 +2946,14 @@ class Compiler(
         if (!isStatic) declareLocalName(name)
 
         val isDelegate = if (isAbstract) {
-            if (!isProperty && (eqToken.type == Token.Type.ASSIGN || eqToken.isId("by")))
+            if (!isProperty && (eqToken.type == Token.Type.ASSIGN || eqToken.type == Token.Type.BY))
                 throw ScriptError(eqToken.pos, "abstract variable $name cannot have an initializer or delegate")
             // Abstract variables don't have initializers
             cc.restorePos(markBeforeEq)
             cc.skipWsTokens()
             setNull = true
             false
-        } else if (!isProperty && eqToken.isId("by")) {
+        } else if (!isProperty && eqToken.type == Token.Type.BY) {
             true
         } else {
             if (!isProperty && eqToken.type != Token.Type.ASSIGN) {
@@ -2858,11 +3001,35 @@ class Compiler(
             // when creating instance, but we need to execute it in the class initializer which
             // is missing as for now. Add it to the compiler context?
 
-//            if (isDelegate) throw ScriptError(start, "static delegates are not yet implemented")
             currentInitScope += statement {
                 val initValue = initialExpression?.execute(this)?.byValueCopy() ?: ObjNull
-                (thisObj as ObjClass).createClassField(name, initValue, isMutable, visibility, null, pos)
-                addItem(name, isMutable, initValue, visibility, null, ObjRecord.Type.Field)
+                if (isDelegate) {
+                    val accessTypeStr = if (isMutable) "Var" else "Val"
+                    val accessType = resolveQualifiedIdentifier("DelegateAccess.$accessTypeStr")
+                    val finalDelegate = try {
+                        initValue.invokeInstanceMethod(this, "bind", Arguments(ObjString(name), accessType, thisObj))
+                    } catch (e: Exception) {
+                        initValue
+                    }
+                    (thisObj as ObjClass).createClassField(
+                        name,
+                        ObjUnset,
+                        isMutable,
+                        visibility,
+                        null,
+                        start,
+                        type = ObjRecord.Type.Delegated
+                    ).apply {
+                        delegate = finalDelegate
+                    }
+                    // Also expose in current init scope
+                    addItem(name, isMutable, ObjUnset, visibility, null, ObjRecord.Type.Delegated).apply {
+                        delegate = finalDelegate
+                    }
+                } else {
+                    (thisObj as ObjClass).createClassField(name, initValue, isMutable, visibility, null, start)
+                    addItem(name, isMutable, initValue, visibility, null, ObjRecord.Type.Field)
+                }
                 ObjVoid
             }
             return NopStatement
@@ -3004,7 +3171,83 @@ class Compiler(
             if (!isStatic) declareLocalName(name)
 
             if (isDelegate) {
-                TODO()
+                val declaringClassName = declaringClassNameCaptured
+                if (declaringClassName != null) {
+                    val storageName = "$declaringClassName::$name"
+                    val isClassScope = context.thisObj is ObjClass && (context.thisObj !is ObjInstance)
+                    if (isClassScope) {
+                        val cls = context.thisObj as ObjClass
+                        cls.createField(
+                            name,
+                            ObjUnset,
+                            isMutable,
+                            visibility,
+                            setterVisibility,
+                            start,
+                            type = ObjRecord.Type.Delegated,
+                            isAbstract = isAbstract,
+                            isClosed = isClosed,
+                            isOverride = isOverride
+                        )
+                        cls.instanceInitializers += statement(start) { scp ->
+                            val initValue = initialExpression!!.execute(scp)
+                            val accessTypeStr = if (isMutable) "Var" else "Val"
+                            val accessType = scp.resolveQualifiedIdentifier("DelegateAccess.$accessTypeStr")
+                            val finalDelegate = try {
+                                initValue.invokeInstanceMethod(scp, "bind", Arguments(ObjString(name), accessType, scp.thisObj))
+                            } catch (e: Exception) {
+                                initValue
+                            }
+                            scp.addItem(
+                                storageName, isMutable, ObjUnset, visibility, setterVisibility,
+                                recordType = ObjRecord.Type.Delegated,
+                                isAbstract = isAbstract,
+                                isClosed = isClosed,
+                                isOverride = isOverride
+                            ).apply {
+                                delegate = finalDelegate
+                            }
+                            ObjVoid
+                        }
+                        return@statement ObjVoid
+                    } else {
+                        val initValue = initialExpression!!.execute(context)
+                        val accessTypeStr = if (isMutable) "Var" else "Val"
+                        val accessType = context.resolveQualifiedIdentifier("DelegateAccess.$accessTypeStr")
+                        val finalDelegate = try {
+                            initValue.invokeInstanceMethod(context, "bind", Arguments(ObjString(name), accessType, context.thisObj))
+                        } catch (e: Exception) {
+                            initValue
+                        }
+                        val rec = context.addItem(
+                            storageName, isMutable, ObjUnset, visibility, setterVisibility,
+                            recordType = ObjRecord.Type.Delegated,
+                            isAbstract = isAbstract,
+                            isClosed = isClosed,
+                            isOverride = isOverride
+                        )
+                        rec.delegate = finalDelegate
+                        return@statement finalDelegate
+                    }
+                } else {
+                    val initValue = initialExpression!!.execute(context)
+                    val accessTypeStr = if (isMutable) "Var" else "Val"
+                    val accessType = context.resolveQualifiedIdentifier("DelegateAccess.$accessTypeStr")
+                    val finalDelegate = try {
+                        initValue.invokeInstanceMethod(context, "bind", Arguments(ObjString(name), accessType, ObjNull))
+                    } catch (e: Exception) {
+                        initValue
+                    }
+                    val rec = context.addItem(
+                        name, isMutable, ObjUnset, visibility, setterVisibility,
+                        recordType = ObjRecord.Type.Delegated,
+                        isAbstract = isAbstract,
+                        isClosed = isClosed,
+                        isOverride = isOverride
+                    )
+                    rec.delegate = finalDelegate
+                    return@statement finalDelegate
+                }
             } else if (getter != null || setter != null) {
                 val declaringClassName = declaringClassNameCaptured!!
                 val storageName = "$declaringClassName::$name"
