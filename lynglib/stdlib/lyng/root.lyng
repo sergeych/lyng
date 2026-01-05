@@ -335,7 +335,8 @@ class lazy(creatorParam) : Delegate {
     }
 
     override fun getValue(thisRef, name) {
-        if (value == Unset) value = with(thisRef,creator)
-            value
+        if (value == Unset)
+            value = with(thisRef,creator)
+        value
     }
 }
