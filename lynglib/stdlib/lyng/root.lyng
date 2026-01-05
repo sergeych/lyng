@@ -1,8 +1,8 @@
 package lyng.stdlib
 
 /*
-Wrap a builder into a zero-argument thunk that computes once and caches the result.
-The first call invokes builder() and stores the value; subsequent calls return the cached value.
+    Wrap a builder into a zero-argument thunk that computes once and caches the result.
+    The first call invokes builder() and stores the value; subsequent calls return the cached value.
 */
 fun cached(builder) {
     var calculated = false
@@ -16,7 +16,7 @@ fun cached(builder) {
     }
 }
 /* Filter elements of this iterable using the provided predicate and provide a flow
-   of results. Coudl be used to map infinte flows, etc.
+    of results. Coudl be used to map infinte flows, etc.
 */
 fun Iterable.filterFlow(predicate): Flow {
     val list = this
@@ -30,7 +30,7 @@ fun Iterable.filterFlow(predicate): Flow {
 }
 
 /*
-Filter this iterable and return List of elements
+    Filter this iterable and return List of elements
 */
 fun Iterable.filter(predicate) {
     val result = []
@@ -39,7 +39,7 @@ fun Iterable.filter(predicate) {
 }
 
 /*
-Count all items in this iterable for which predicate return true
+    Count all items in this iterable for which predicate return true
 */
 fun Iterable.count(predicate): Int {
     var hits = 0
@@ -49,8 +49,8 @@ fun Iterable.count(predicate): Int {
     hits
 }
 /*
-filter out all null elements from this collection (Iterable); flow of
-non-null elements is returned
+    filter out all null elements from this collection (Iterable); flow of
+    non-null elements is returned
 */
 fun Iterable.filterFlowNotNull(): Flow {
     filterFlow { it != null }
@@ -72,12 +72,12 @@ fun Iterable.drop(n) {
 val Iterable.first get() {
     val i = iterator()
     if( !i.hasNext() ) throw NoSuchElementException()
-    i.next().also { i.cancelIteration() }
+        i.next().also { i.cancelIteration() }
 }
 
 /*
-Return the first element that matches the predicate or throws
-NuSuchElementException
+    Return the first element that matches the predicate or throws
+    NuSuchElementException
 */
 fun Iterable.findFirst(predicate) {
     for( x in this ) {
@@ -88,7 +88,7 @@ fun Iterable.findFirst(predicate) {
 }
 
 /*
-return the first element matching the predicate or null
+    return the first element matching the predicate or null
 */
 fun Iterable.findFirstOrNull(predicate) {
     for( x in this ) {
@@ -108,7 +108,7 @@ val Iterable.last get() {
         found = true
     }
     if( !found ) throw NoSuchElementException()
-    element
+        element
 }
 
 /* Emit all but the last N elements of this iterable. */
@@ -215,8 +215,8 @@ fun Iterable.shuffled() {
 }
 
 /*
-Returns a single list of all elements from all collections in the given collection.
-@return List
+    Returns a single list of all elements from all collections in the given collection.
+    @return List
 */
 fun Iterable.flatten() {
     val result = []
@@ -227,8 +227,8 @@ fun Iterable.flatten() {
 }
 
 /*
-Returns a single list of all elements yielded from results of transform function being
-invoked on each element of original collection.
+    Returns a single list of all elements yielded from results of transform function being
+    invoked on each element of original collection.
 */
 fun Iterable.flatMap(transform): List {
     map(transform).flatten()
@@ -278,9 +278,9 @@ val String.re get() = Regex(this)
 
 fun TODO(message=null) = throw NotImplementedException(message ?: "not implemented")
 
-/* 
-Provides different access types for delegates.
-Used in the 'bind' hook to validate delegate usage.
+/*
+    Provides different access types for delegates.
+    Used in the 'bind' hook to validate delegate usage.
 */
 enum DelegateAccess {
     Val,
@@ -289,23 +289,23 @@ enum DelegateAccess {
 }
 
 /*
-Base interface for all delegates.
-Implementing this interface is optional as Lyng uses dynamic dispatch,
-but it is recommended for documentation and clarity.
+    Base interface for all delegates.
+    Implementing this interface is optional as Lyng uses dynamic dispatch,
+    but it is recommended for documentation and clarity.
 */
 interface Delegate {
     /* Called when a delegated 'val' or 'var' is read. */
     fun getValue(thisRef, name) = TODO("delegate getter is not implemented")
-    
+
     /* Called when a delegated 'var' is written. */
     fun setValue(thisRef, name, newValue) = TODO("delegate setter is not implemented")
-    
+
     /* Called when a delegated function is invoked. */
     fun invoke(thisRef, name, args...) = TODO("delegate invoke is not implemented")
-    
-    /* 
-    Called once during initialization to configure or validate the delegate.
-    Should return the delegate object to be used (usually 'this').
+
+    /*
+        Called once during initialization to configure or validate the delegate.
+        Should return the delegate object to be used (usually 'this').
     */
     fun bind(name, access, thisRef) = this
 }
@@ -321,9 +321,9 @@ fun with(self, block) {
 }
 
 /*
-Standard implementation of a lazy-initialized property delegate.
-The provided creator lambda is called once on the first access to compute the value.
-Can only be used with 'val' properties.
+    Standard implementation of a lazy-initialized property delegate.
+    The provided creator lambda is called once on the first access to compute the value.
+    Can only be used with 'val' properties.
 */
 class lazy(creatorParam) : Delegate {
     private val creator = creatorParam
@@ -336,6 +336,6 @@ class lazy(creatorParam) : Delegate {
 
     override fun getValue(thisRef, name) {
         if (value == Unset) value = with(thisRef,creator)
-        value
+            value
     }
 }
