@@ -276,3 +276,4 @@ fun Exception.printStackTrace() {
 /* Compile this string into a regular expression. */
 val String.re get() = Regex(this)
 
+fun TODO(message=null) = throw NotImplementedException(message ?: "not implemented")

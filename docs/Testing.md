@@ -93,8 +93,6 @@ If we want to evaluate the message lazily:
 
 In this case, formatting will only occur if the condition is not met.
 
-
-
 ### `check`
 
     check(condition, message="check failed")
@@ -107,3 +105,17 @@ With lazy message evaluation:
 
 In this case, formatting will only occur if the condition is not met.
 
+### TODO
+
+It is easy to mark some code and make it throw a special exception at cone with:
+
+    TODO()
+
+or
+
+    TODO("some message")
+
+It raises an `NotImplementedException` with the given message. You can catch it
+as any other exception when necessary.
+
+Many IDE and editors have built-in support for marking code with TODOs.

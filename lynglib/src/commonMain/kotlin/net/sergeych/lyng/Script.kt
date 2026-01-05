@@ -21,6 +21,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
 import net.sergeych.lyng.Script.Companion.defaultImportManager
 import net.sergeych.lyng.miniast.addConstDoc
+import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lyng.miniast.addVoidFnDoc
 import net.sergeych.lyng.miniast.type
 import net.sergeych.lyng.obj.*
@@ -204,18 +205,32 @@ class Script(
                         )
                     )
             }
-            addFn("assertThrows") {
+            addFnDoc(
+                "assertThrows",
+                doc = """
+                    Asserts that the provided code block throws an exception, with or without exception: 
+                    ```lyng
+                        assertThrows { /* ode */ }
+                        assertThrows(IllegalArgumentException) { /* code */ }
+                    ```
+                    If an expected exception class is provided,
+                    it checks that the thrown exception is of that class. If no expected class is provided, any exception
+                    will be accepted.
+                """.trimIndent()
+            ) {
                 val code: Statement
                 val expectedClass: ObjClass?
-                when(args.size) {
+                when (args.size) {
                     1 -> {
                         code = requiredArg<Statement>(0)
                         expectedClass = null
                     }
+
                     2 -> {
                         code = requiredArg<Statement>(1)
                         expectedClass = requiredArg<ObjClass>(0)
                     }
+
                     else -> raiseIllegalArgument("Expected 1 or 2 arguments, got ${args.size}")
                 }
                 val result = try {
@@ -226,10 +241,15 @@ class Script(
                 } catch (_: ScriptError) {
                     ObjNull
                 }
-                if( result == null ) raiseError(ObjAssertionFailedException(this, "Expected exception but nothing was thrown"))
+                if (result == null) raiseError(
+                    ObjAssertionFailedException(
+                        this,
+                        "Expected exception but nothing was thrown"
+                    )
+                )
                 expectedClass?.let {
-                    if( result !is ObjException)
-                        raiseError("Expected $expectedClass, got $result")
+                    if (result !is ObjException)
+                        raiseError("Expected $expectedClass, got non-lyng exception $result")
                     if (result.exceptionClass != expectedClass) {
                         raiseError("Expected $expectedClass, got ${result.exceptionClass}")
                     }
@@ -255,7 +275,7 @@ class Script(
                 val condition = requiredArg<ObjBool>(0)
                 if (!condition.value) {
                     var message = args.list.getOrNull(1)
-                    if( message is Statement ) message = message.execute(this)
+                    if (message is Statement) message = message.execute(this)
                     raiseIllegalArgument(message?.toString() ?: "requirement not met")
                 }
                 ObjVoid
@@ -264,7 +284,7 @@ class Script(
                 val condition = requiredArg<ObjBool>(0)
                 if (!condition.value) {
                     var message = args.list.getOrNull(1)
-                    if( message is Statement ) message = message.execute(this)
+                    if (message is Statement) message = message.execute(this)
                     raiseIllegalState(message?.toString() ?: "check failed")
                 }
                 ObjVoid

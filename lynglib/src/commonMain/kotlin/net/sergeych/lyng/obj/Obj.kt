@@ -93,7 +93,7 @@ open class Obj {
                 val decl = rec.declaringClass ?: cls
                 val caller = scope.currentClassCtx
                 if (!canAccessMember(rec.visibility, decl, caller))
-                    scope.raiseError(ObjAccessException(scope, "can't invoke ${name}: not visible (declared in ${decl.className}, caller ${caller?.className ?: "?"})"))
+                    scope.raiseError(ObjIllegalAccessException(scope, "can't invoke ${name}: not visible (declared in ${decl.className}, caller ${caller?.className ?: "?"})"))
                 val saved = scope.currentClassCtx
                 scope.currentClassCtx = decl
                 try {
@@ -117,7 +117,7 @@ open class Obj {
                     val decl = rec.declaringClass ?: cls
                     val caller = scope.currentClassCtx
                     if (!canAccessMember(rec.visibility, decl, caller))
-                        scope.raiseError(ObjAccessException(scope, "can't invoke ${name}: not visible (declared in ${decl.className}, caller ${caller?.className ?: "?"})"))
+                        scope.raiseError(ObjIllegalAccessException(scope, "can't invoke ${name}: not visible (declared in ${decl.className}, caller ${caller?.className ?: "?"})"))
                     val saved = scope.currentClassCtx
                     scope.currentClassCtx = decl
                     try {
@@ -387,7 +387,7 @@ open class Obj {
         val caller = scope.currentClassCtx
         // Check visibility for non-property members here if they weren't checked before
         if (!canAccessMember(obj.visibility, decl, caller))
-            scope.raiseError(ObjAccessException(scope, "can't access field ${name}: not visible (declared in ${decl?.className ?: "?"}, caller ${caller?.className ?: "?"})"))
+            scope.raiseError(ObjIllegalAccessException(scope, "can't access field ${name}: not visible (declared in ${decl?.className ?: "?"}, caller ${caller?.className ?: "?"})"))
         return obj
     }
 
@@ -424,7 +424,7 @@ open class Obj {
         val decl = field.declaringClass
         val caller = scope.currentClassCtx
         if (!canAccessMember(field.effectiveWriteVisibility, decl, caller))
-            scope.raiseError(ObjAccessException(scope, "can't assign field ${name}: not visible (declared in ${decl?.className ?: "?"}, caller ${caller?.className ?: "?"})"))
+            scope.raiseError(ObjIllegalAccessException(scope, "can't assign field ${name}: not visible (declared in ${decl?.className ?: "?"}, caller ${caller?.className ?: "?"})"))
         if (field.value is ObjProperty) {
             (field.value as ObjProperty).callSetter(scope, this, newValue, decl)
         } else if (field.isMutable) field.value = newValue else scope.raiseError("can't assign to read-only field: $name")

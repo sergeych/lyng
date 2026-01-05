@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -595,7 +595,7 @@ class FieldRef(
                             val scope0 = (obj as ObjClass).classScope!!
                             val r0 = scope0.getSlotRecord(capturedIdx)
                             if (!r0.visibility.isPublic)
-                                sc.raiseError(ObjAccessException(sc, "can't access non-public field $name"))
+                                sc.raiseError(ObjIllegalAccessException(sc, "can't access non-public field $name"))
                             r0
                         }
                     } else {
@@ -631,7 +631,7 @@ class FieldRef(
                     // visibility/mutability checks
                     if (!rec.isMutable) scope.raiseError(ObjIllegalAssignmentException(scope, "can't reassign val $name"))
                     if (!rec.visibility.isPublic)
-                        scope.raiseError(ObjAccessException(scope, "can't access non-public field $name"))
+                        scope.raiseError(ObjIllegalAccessException(scope, "can't access non-public field $name"))
                     if (rec.value.assign(scope, newValue) == null) rec.value = newValue
                     return
                 }
@@ -1195,7 +1195,7 @@ class MethodCallRef(
                         mKey1 = key; mVer1 = ver; mInvoker1 = { obj, sc, a ->
                             val inst = obj as ObjInstance
                             if (!visibility.isPublic && !canAccessMember(visibility, hierarchyMember.declaringClass ?: inst.objClass, sc.currentClassCtx))
-                                sc.raiseError(ObjAccessException(sc, "can't invoke non-public method $name"))
+                                sc.raiseError(ObjIllegalAccessException(sc, "can't invoke non-public method $name"))
                             callable.invoke(inst.instanceScope, inst, a)
                         }
                     } else {
@@ -1467,7 +1467,7 @@ class BoundLocalVarRef(
         scope.pos = atPos
         val rec = scope.getSlotRecord(slot)
         if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx))
-            scope.raiseError(ObjAccessException(scope, "private field access"))
+            scope.raiseError(ObjIllegalAccessException(scope, "private field access"))
         return rec
     }
 
@@ -1475,7 +1475,7 @@ class BoundLocalVarRef(
         scope.pos = atPos
         val rec = scope.getSlotRecord(slot)
         if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx))
-            scope.raiseError(ObjAccessException(scope, "private field access"))
+            scope.raiseError(ObjIllegalAccessException(scope, "private field access"))
         return rec.value
     }
 
@@ -1483,7 +1483,7 @@ class BoundLocalVarRef(
         scope.pos = atPos
         val rec = scope.getSlotRecord(slot)
         if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx))
-            scope.raiseError(ObjAccessException(scope, "private field access"))
+            scope.raiseError(ObjIllegalAccessException(scope, "private field access"))
         if (!rec.isMutable) scope.raiseError("Cannot assign to immutable value")
         rec.value = newValue
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -191,11 +191,12 @@ open class ObjException(
                 "IllegalAssignmentException",
                 "SymbolNotDefinedException",
                 "IterationEndException",
-                "AccessException",
+                "IllegalAccessException",
                 "UnknownException",
                 "NotFoundException",
                 "IllegalOperationException",
                 "UnsetException",
+                "NotImplementedException",
                 "SyntaxError"
             )) {
                 scope.addConst(name, getOrCreateExceptionClass(name))
@@ -236,8 +237,8 @@ class ObjSymbolNotDefinedException(scope: Scope, message: String = "symbol is no
 class ObjIterationFinishedException(scope: Scope) :
     ObjException("IterationEndException", scope, "iteration finished")
 
-class ObjAccessException(scope: Scope, message: String = "access not allowed error") :
-    ObjException("AccessException", scope, message)
+class ObjIllegalAccessException(scope: Scope, message: String = "access not allowed error") :
+    ObjException("IllegalAccessException", scope, message)
 
 class ObjUnknownException(scope: Scope, message: String = "access not allowed error") :
     ObjException("UnknownException", scope, message)
@@ -250,3 +251,6 @@ class ObjNotFoundException(scope: Scope, message: String = "not found") :
 
 class ObjUnsetException(scope: Scope, message: String = "property is unset (not initialized)") :
     ObjException("UnsetException", scope, message)
+
+class ObjNotImplementedException(scope: Scope, message: String = "not implemented") :
+    ObjException("NotImplementedException", scope, message)

@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -4529,6 +4529,34 @@ class ScriptTest {
              
             assertEquals(11, T(10).method())
             assertEquals(2, median(1,3))
+        """.trimIndent())
+    }
+
+//    @Test
+//    fun testUserClassExceptions() = runTest {
+//        eval("""
+//            val x = try { throw IllegalAccessException("test1") } catch { it }
+//            assertEquals("test1", x.message)
+//            assert( x is IllegalAccessException)
+//            assertThrows(IllegalAccessException) {   throw IllegalAccessException("test2") }
+//
+//            class X : Exception("test3")
+//            val y = try { throw X() } catch { it }
+//            println(y)
+//            assertEquals("test3", y.message)
+//            assert( y is X)
+//
+//        """.trimIndent())
+//    }
+
+    @Test
+    fun testTodo() = runTest {
+        eval("""
+            assertThrows(NotImplementedException) {
+                TODO()
+            }
+            val x = try { TODO("check me") } catch { it }
+            assertEquals("check me", x.message)
         """.trimIndent())
     }
 
