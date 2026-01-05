@@ -17,6 +17,7 @@
 
 import com.codingfeline.buildkonfig.compiler.FieldSpec.Type.STRING
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 group = "net.sergeych"
@@ -65,11 +66,11 @@ kotlin {
         browser()
         nodejs()
     }
-//    @OptIn(ExperimentalWasmDsl::class)
-//    wasmJs() {
-//        browser()
-//        nodejs()
-//    }
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs() {
+        browser()
+        nodejs()
+    }
 
     // Suppress Beta warning for expect/actual classes across all targets
     targets.configureEach {

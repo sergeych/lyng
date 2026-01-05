@@ -311,6 +311,16 @@ interface Delegate {
 }
 
 /*
+    Executes the block with `this` set to self and
+    returns what the block returns.
+*/
+fun with(self, block) {
+    var result = Unset
+    self.apply { result = block() }
+    result
+}
+
+/*
 Standard implementation of a lazy-initialized property delegate.
 The provided creator lambda is called once on the first access to compute the value.
 Can only be used with 'val' properties.
@@ -325,7 +335,7 @@ class lazy(creatorParam) : Delegate {
     }
 
     override fun getValue(thisRef, name) {
-        if (value == Unset) value = creator()
+        if (value == Unset) value = with(thisRef,creator)
         value
     }
 }

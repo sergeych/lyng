@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+- Language: stdlib improvements
+  - Added `with(self, block)` function to `root.lyng` which executes a block with `this` set to the provided object.
 - Language: Abstract Classes and Interfaces
   - Support for `abstract` modifier on classes, methods, and variables.
   - Introduced `interface` as a synonym for `abstract class`, supporting full state (constructors, fields, `init` blocks) and implementation by parts via MI.

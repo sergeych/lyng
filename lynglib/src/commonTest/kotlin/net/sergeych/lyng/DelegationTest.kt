@@ -287,4 +287,40 @@ class DelegationTest {
         """.trimIndent())
     }
 
+    @Test
+    fun testThisInLazy() = runTest {
+        eval("""
+            class A {
+                val numbers = [1,2,3]
+                val tags by lazy { this.numbers }
+            }
+            class B {
+                val a by lazy { A() }
+                val test by lazy { a.tags + [4] }
+            }
+            assertEquals( [1,2,3], A().tags)
+            assertEquals( [1,2,3,4], B().test)
+        """)
+    }
+
+    @Test
+    fun testScopeInLazy() = runTest {
+        val s1 = Script.newScope()
+        s1.eval("""
+            class A {
+                val tags by lazy { GLOBAL_NUMBERS }
+            }
+            """.trimIndent())
+        // on the same scope, it will see my GLOBAL_NUMBERS:
+        s1.eval("""
+            val GLOBAL_NUMBERS = [1,2,3]
+            class B {
+                val a by lazy { A() }
+                val test by lazy { a.tags + [4] }
+            }
+            assertEquals( [1,2,3], A().tags)
+            assertEquals( [1,2,3,4], B().test)
+        """)
+    }
+
 }

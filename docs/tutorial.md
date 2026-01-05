@@ -298,6 +298,16 @@ It works much like `also`, but is executed in the context of the source object:
     assertEquals(p, Point(2,3))
     >>> void
 
+## with
+
+Sets `this` to the first argument and executes the block. Returns the value returned by the block:
+
+    class Point(x,y)
+    val p = Point(1,2)
+    val sum = with(p) { x + y }
+    assertEquals(3, sum)
+    >>> void
+
 ## run
 
 Executes a block after it returning the value passed by the block. for example, can be used with elvis operator:
@@ -1519,7 +1529,7 @@ See [math functions](math.md). Other general purpose functions are:
 | flow {}                               | create flow sequence, see [parallelism]                    |
 | delay, launch, yield                  | see [parallelism]                                          |
 | cached(builder)                       | [Lazy evaluation with `cached`](#lazy-evaluation-with-cached) |
-| let, also, apply, run                 | see above, flow controls                                   |
+| let, also, apply, run, with       | see above, flow controls                                   |
 
 (1)
 : `fn` is optional lambda returning string message to add to exception string. 

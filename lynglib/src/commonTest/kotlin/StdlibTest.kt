@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -112,5 +112,23 @@ class StdlibTest {
         eval("""
             assertEquals(5, (1..10).toList().count { it % 2 == 1 } )
         """)
+    }
+
+    @Test
+    fun testWith() = runTest {
+        eval("""
+            class Person(val name, var age)
+            val p = Person("Alice", 30)
+            
+            val result = with(p) {
+                assertEquals("Alice", name)
+                assertEquals(30, age)
+                age = 31
+                "done"
+            }
+            
+            assertEquals("done", result)
+            assertEquals(31, p.age)
+        """.trimIndent())
     }
 }
