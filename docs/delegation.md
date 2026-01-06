@@ -57,7 +57,8 @@ class lazy(val creator) : Delegate {
 
     override fun getValue(thisRef, name) {
         if (value == Unset) {
-            value = creator()
+            // calculate value using thisRef as this:
+            value = with(thisRef) creator()
         }
         value
     }
