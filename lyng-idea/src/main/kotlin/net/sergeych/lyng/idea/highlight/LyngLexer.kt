@@ -133,10 +133,24 @@ class LyngLexer : LexerBase() {
             return
         }
 
-        // Identifier / keyword
+        // Labels / Annotations: @label or label@
+        if (ch == '@') {
+            i++
+            while (i < endOffset && (buffer[i].isIdentifierPart())) i++
+            myTokenEnd = i
+            myTokenType = LyngTokenTypes.LABEL
+            return
+        }
+
         if (ch.isIdentifierStart()) {
             i++
             while (i < endOffset && buffer[i].isIdentifierPart()) i++
+            if (i < endOffset && buffer[i] == '@') {
+                i++
+                myTokenEnd = i
+                myTokenType = LyngTokenTypes.LABEL
+                return
+            }
             myTokenEnd = i
             val text = buffer.subSequence(myTokenStart, myTokenEnd).toString()
             myTokenType = if (text in keywords) LyngTokenTypes.KEYWORD else LyngTokenTypes.IDENTIFIER

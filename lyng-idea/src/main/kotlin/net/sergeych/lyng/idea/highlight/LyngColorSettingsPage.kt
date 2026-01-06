@@ -43,10 +43,15 @@ class LyngColorSettingsPage : ColorSettingsPage {
         }
         
         var counter = 0
-        counter = counter + 1
+        outer@ while (counter < 10) {
+          if (counter == 5) return@outer
+          counter = counter + 1
+        }
     """.trimIndent()
 
-    override fun getAdditionalHighlightingTagToDescriptorMap(): MutableMap<String, TextAttributesKey>? = null
+    override fun getAdditionalHighlightingTagToDescriptorMap(): MutableMap<String, TextAttributesKey> = mutableMapOf(
+        "label" to LyngHighlighterColors.LABEL
+    )
 
     override fun getAttributeDescriptors(): Array<AttributesDescriptor> = arrayOf(
         AttributesDescriptor("Keyword", LyngHighlighterColors.KEYWORD),
@@ -58,6 +63,7 @@ class LyngColorSettingsPage : ColorSettingsPage {
         AttributesDescriptor("Punctuation", LyngHighlighterColors.PUNCT),
         // Semantic
         AttributesDescriptor("Annotation (semantic)", LyngHighlighterColors.ANNOTATION),
+        AttributesDescriptor("Label (semantic)", LyngHighlighterColors.LABEL),
         AttributesDescriptor("Variable (semantic)", LyngHighlighterColors.VARIABLE),
         AttributesDescriptor("Value (semantic)", LyngHighlighterColors.VALUE),
         AttributesDescriptor("Function (semantic)", LyngHighlighterColors.FUNCTION),

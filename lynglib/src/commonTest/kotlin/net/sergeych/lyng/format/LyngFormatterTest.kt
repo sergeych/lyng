@@ -22,6 +22,15 @@ import kotlin.test.assertEquals
 class LyngFormatterTest {
 
     @Test
+    fun labelFormatting() {
+        val src = "return  @label; break  @outer; continue  @inner"
+        val expected = "return@label; break@outer; continue@inner"
+        val cfg = LyngFormatConfig(applySpacing = true)
+        val out = LyngFormatter.format(src, cfg)
+        assertEquals(expected, out)
+    }
+
+    @Test
     fun reindent_simpleFunction() {
         val src = """
             fun test21() {

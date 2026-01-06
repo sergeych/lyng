@@ -82,4 +82,9 @@ object LyngHighlighterColors {
     val ENUM_CONSTANT: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
         "LYNG_ENUM_CONSTANT", DefaultLanguageHighlighterColors.STATIC_FIELD
     )
+
+    // Labels (label@ or @label used as exit target)
+    val LABEL: TextAttributesKey = TextAttributesKey.createTextAttributesKey(
+        "LYNG_LABEL", DefaultLanguageHighlighterColors.LABEL
+    )
 }

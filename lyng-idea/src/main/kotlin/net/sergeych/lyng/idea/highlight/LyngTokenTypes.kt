@@ -29,6 +29,7 @@ object LyngTokenTypes {
     val NUMBER = LyngTokenType("NUMBER")
     val KEYWORD = LyngTokenType("KEYWORD")
     val IDENTIFIER = LyngTokenType("IDENTIFIER")
+    val LABEL = LyngTokenType("LABEL")
     val PUNCT = LyngTokenType("PUNCT")
     val BAD_CHAR = LyngTokenType("BAD_CHAR")
 }

@@ -26,6 +26,16 @@ class HighlightMappingTest {
         spans.map { text.substring(it.range.start, it.range.endExclusive) to it.kind }
 
     @Test
+    fun returnAndExits() {
+        val text = "return 42; break@outer null"
+        val spans = SimpleLyngHighlighter().highlight(text)
+        val labeled = spansToLabeled(text, spans)
+        assertTrue(labeled.any { it.first == "return" && it.second == HighlightKind.Keyword })
+        assertTrue(labeled.any { it.first == "break" && it.second == HighlightKind.Keyword })
+        assertTrue(labeled.any { it.first == "@outer" && it.second == HighlightKind.Label })
+    }
+
+    @Test
     fun keywordsAndIdentifiers() {
         val text = "a and b or not c"
         val spans = SimpleLyngHighlighter().highlight(text)

@@ -21,6 +21,22 @@ import kotlin.test.assertTrue
 
 class LyngHighlightTest {
     @Test
+    fun highlightsReturnAndLabels() {
+        val md = """
+            ```lyng
+            return 42
+            break@outer null
+            return@fn val
+            ```
+        """.trimIndent()
+        val html = renderMarkdown(md)
+
+        assertTrue(html.contains("hl-kw"), "Expected keyword class for 'return': $html")
+        assertTrue(html.contains("hl-lbl") || html.contains("hl-ann"), "Expected label/annotation class for @outer/@fn: $html")
+        assertTrue(html.contains("&gt;&gt;&gt;").xor(true), "Should not contain prompt marker unless expected")
+    }
+
+    @Test
     fun highlightsLyngFencedBlock() {
         val md = """
             ```lyng

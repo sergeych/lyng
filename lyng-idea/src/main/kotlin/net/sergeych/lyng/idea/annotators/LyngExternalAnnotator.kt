@@ -94,6 +94,16 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
 
         val out = ArrayList<Span>(256)
 
+        fun isFollowedByParenOrBlock(rangeEnd: Int): Boolean {
+            var i = rangeEnd
+            while (i < text.length) {
+                val ch = text[i]
+                if (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') { i++; continue }
+                return ch == '(' || ch == '{'
+            }
+            return false
+        }
+
         fun putRange(start: Int, end: Int, key: com.intellij.openapi.editor.colors.TextAttributesKey) {
             if (start in 0..end && end <= text.length && start < end) out += Span(start, end, key)
         }
@@ -207,16 +217,6 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
 
             val tokens = try { SimpleLyngHighlighter().highlight(text) } catch (_: Throwable) { emptyList() }
 
-            fun isFollowedByParenOrBlock(rangeEnd: Int): Boolean {
-                var i = rangeEnd
-                while (i < text.length) {
-                    val ch = text[i]
-                    if (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') { i++; continue }
-                    return ch == '(' || ch == '{'
-                }
-                return false
-            }
-
             // Build simple name -> role map for top-level vals/vars and parameters
             val nameRole = HashMap<String, com.intellij.openapi.editor.colors.TextAttributesKey>(8)
             for (d in mini.declarations) when (d) {
@@ -253,7 +253,7 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
             if (e is com.intellij.openapi.progress.ProcessCanceledException) throw e
         }
 
-        // Add annotation coloring using token highlighter (treat @Label as annotation)
+        // Add annotation/label coloring using token highlighter
         run {
             val tokens = try { SimpleLyngHighlighter().highlight(text) } catch (_: Throwable) { emptyList() }
             for (s in tokens) if (s.kind == HighlightKind.Label) {
@@ -261,8 +261,29 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
                 val end = s.range.endExclusive
                 if (start in 0..end && end <= text.length && start < end) {
                     val lexeme = try { text.substring(start, end) } catch (_: Throwable) { null }
-                    if (lexeme != null && lexeme.startsWith("@")) {
-                        putRange(start, end, LyngHighlighterColors.ANNOTATION)
+                    if (lexeme != null) {
+                        // Heuristic: if it starts with @ and follows a control keyword, it's likely a label
+                        // Otherwise if it starts with @ it's an annotation.
+                        // If it ends with @ it's a loop label.
+                        when {
+                            lexeme.endsWith("@") -> putRange(start, end, LyngHighlighterColors.LABEL)
+                            lexeme.startsWith("@") -> {
+                                // Try to see if it's an exit label
+                                val prevNonWs = prevNonWs(text, start)
+                                val prevWord = if (prevNonWs >= 0) {
+                                    var wEnd = prevNonWs + 1
+                                    var wStart = prevNonWs
+                                    while (wStart > 0 && text[wStart - 1].isLetter()) wStart--
+                                    text.substring(wStart, wEnd)
+                                } else null
+                                
+                                if (prevWord in setOf("return", "break", "continue") || isFollowedByParenOrBlock(end)) {
+                                    putRange(start, end, LyngHighlighterColors.LABEL)
+                                } else {
+                                    putRange(start, end, LyngHighlighterColors.ANNOTATION)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -362,6 +383,16 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
 
     companion object {
         private val CACHE_KEY: Key<Result> = Key.create("LYNG_SEMANTIC_CACHE")
+    }
+
+    private fun prevNonWs(text: String, idxExclusive: Int): Int {
+        var i = idxExclusive - 1
+        while (i >= 0) {
+            val ch = text[i]
+            if (ch != ' ' && ch != '\t' && ch != '\n' && ch != '\r') return i
+            i--
+        }
+        return -1
     }
 
     /**

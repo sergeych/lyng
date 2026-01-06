@@ -77,6 +77,14 @@ fun HomePage() {
 // Create, transform, and verify — the Lyng way
 import lyng.stdlib
 
+fun findFirstPositive(list) {
+    list.forEach { 
+        if (it > 0) return@findFirstPositive it 
+    }
+    null
+}
+assertEquals(42, findFirstPositive([-1, 42, -5]))
+
 val data = 1..5 // or [1,2,3,4,5]
 val evens2 = data.filter { it % 2 == 0 }.map { it * it }
 assertEquals([4, 16], evens2)

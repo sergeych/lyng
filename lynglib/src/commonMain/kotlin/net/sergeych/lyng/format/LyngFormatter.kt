@@ -477,7 +477,7 @@ private fun splitIntoParts(
 private fun applyMinimalSpacingRules(code: String): String {
     var s = code
     // Ensure space before '(' for control-flow keywords
-    s = s.replace(Regex("\\b(if|for|while)\\("), "$1 (")
+    s = s.replace(Regex("\\b(if|for|while|return|break|continue)\\("), "$1 (")
     // Space before '{' for control-flow headers only (avoid function declarations)
     s = s.replace(Regex("\\b(if|for|while)(\\s*\\([^)]*\\))\\s*\\{"), "$1$2 {")
     s = s.replace(Regex("\\belse\\s+if(\\s*\\([^)]*\\))\\s*\\{"), "else if$1 {")
@@ -498,6 +498,8 @@ private fun applyMinimalSpacingRules(code: String): String {
     s = s.replace(Regex("(\\bcatch\\s*\\([^)]*\\))\\s*\\{"), "$1 {")
     // Ensure space before '(' for catch parameter
     s = s.replace(Regex("\\bcatch\\("), "catch (")
+    // Remove space between control keyword and label: return @label -> return@label
+    s = s.replace(Regex("\\b(return|break|continue)\\s+(@[\\p{L}_][\\p{L}\\p{N}_]*)"), "$1$2")
     // Remove spaces just inside parentheses/brackets: "( a )" -> "(a)"
     s = s.replace(Regex("\\(\\s+"), "(")
     // Do not strip leading indentation before a closing bracket/paren on its own line

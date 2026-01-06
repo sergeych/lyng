@@ -33,6 +33,7 @@ class LyngSyntaxHighlighter : SyntaxHighlighter {
         LyngTokenTypes.BLOCK_COMMENT -> pack(LyngHighlighterColors.BLOCK_COMMENT)
         LyngTokenTypes.PUNCT -> pack(LyngHighlighterColors.PUNCT)
         LyngTokenTypes.IDENTIFIER -> pack(LyngHighlighterColors.IDENTIFIER)
+        LyngTokenTypes.LABEL -> pack(LyngHighlighterColors.LABEL)
         else -> emptyArray()
     }
 

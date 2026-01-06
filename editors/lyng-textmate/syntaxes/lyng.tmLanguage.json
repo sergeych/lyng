@@ -42,7 +42,7 @@
         { "name": "constant.numeric.decimal.lyng", "match": "(?<![A-Za-z_])(?:[0-9][0-9_]*)\\.(?:[0-9_]+)(?:[eE][+-]?[0-9_]+)?|(?<![A-Za-z_])(?:[0-9][0-9_]*)(?:[eE][+-]?[0-9_]+)?" }
       ]
     },
-    "annotations": { "patterns": [ { "name": "entity.name.label.at.lyng", "match": "@[\\p{L}_][\\p{L}\\p{N}_]*:" }, { "name": "storage.modifier.annotation.lyng", "match": "@[\\p{L}_][\\p{L}\\p{N}_]*" } ] },
+    "annotations": { "patterns": [ { "name": "entity.name.label.at.lyng", "match": "@[\\p{L}_][\\p{L}\\p{N}_]*" } ] },
     "mapLiterals": {
       "patterns": [
         {
@@ -74,7 +74,7 @@
         }
       ]
     },
-    "labels": { "patterns": [ { "name": "entity.name.label.lyng", "match": "[\\p{L}_][\\p{L}\\p{N}_]*:" } ] },
+    "labels": { "patterns": [ { "name": "entity.name.label.lyng", "match": "[\\p{L}_][\\p{L}\\p{N}_]*@" } ] },
     "directives": { "patterns": [ { "name": "meta.directive.lyng", "match": "^\\s*#[_A-Za-z][_A-Za-z0-9]*" } ] },
     "declarations": { "patterns": [ { "name": "meta.function.declaration.lyng", "match": "\\b(fun|fn)\\s+(?:([\\p{L}_][\\p{L}\\p{N}_]*)\\.)?([\\p{L}_][\\p{L}\\p{N}_]*)", "captures": { "1": { "name": "keyword.declaration.lyng" }, "2": { "name": "entity.name.type.lyng" }, "3": { "name": "entity.name.function.lyng" } } }, { "name": "meta.type.declaration.lyng", "match": "\\b(?:class|enum|interface|object)(?:\\s+([\\p{L}_][\\p{L}\\p{N}_]*))?", "captures": { "1": { "name": "entity.name.type.lyng" } } }, { "name": "meta.variable.declaration.lyng", "match": "\\b(val|var)\\s+(?:([\\p{L}_][\\p{L}\\p{N}_]*)\\.)?([\\p{L}_][\\p{L}\\p{N}_]*)", "captures": { "1": { "name": "keyword.declaration.lyng" }, "2": { "name": "entity.name.type.lyng" }, "3": { "name": "variable.other.declaration.lyng" } } } ] },
     "keywords": { "patterns": [ { "name": "keyword.control.lyng", "match": "\\b(?:if|else|when|while|do|for|try|catch|finally|throw|return|break|continue)\\b" }, { "name": "keyword.declaration.lyng", "match": "\\b(?:fun|fn|class|enum|interface|val|var|import|package|constructor|property|abstract|override|open|closed|extern|private|protected|static|get|set|object|init|by)\\b" }, { "name": "keyword.operator.word.lyng", "match": "\\bnot\\s+(?:in|is)\\b" }, { "name": "keyword.operator.word.lyng", "match": "\\b(?:and|or|not|in|is|as|as\\?)\\b" } ] },
