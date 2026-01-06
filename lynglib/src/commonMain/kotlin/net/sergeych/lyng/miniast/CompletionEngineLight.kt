@@ -23,6 +23,7 @@ package net.sergeych.lyng.miniast
 import net.sergeych.lyng.Compiler
 import net.sergeych.lyng.Script
 import net.sergeych.lyng.Source
+import net.sergeych.lyng.highlight.offsetOf
 import net.sergeych.lyng.pacman.ImportProvider
 
 /** Minimal completion item description (IDE-agnostic). */
@@ -96,7 +97,11 @@ object CompletionEngineLight {
         }
 
         // Global identifiers: params > local decls > imported > stdlib; Functions > Classes > Values; alphabetical
-        val decls = mini.declarations
+        if (mini != null) {
+            offerParamsInScope(out, prefix, mini, text, caret)
+        }
+
+        val decls = mini?.declarations ?: emptyList()
         val funs = decls.filterIsInstance<MiniFunDecl>().sortedBy { it.name.lowercase() }
         val classes = decls.filterIsInstance<MiniClassDecl>().sortedBy { it.name.lowercase() }
         val enums = decls.filterIsInstance<MiniEnumDecl>().sortedBy { it.name.lowercase() }
@@ -129,6 +134,74 @@ object CompletionEngineLight {
     }
 
     // --- Emission helpers ---
+
+    private fun offerParamsInScope(out: MutableList<CompletionItem>, prefix: String, mini: MiniScript, text: String, caret: Int) {
+        val src = mini.range.start.source
+        val already = mutableSetOf<String>()
+
+        fun add(ci: CompletionItem) {
+            if (ci.name.startsWith(prefix, true) && already.add(ci.name)) {
+                out.add(ci)
+            }
+        }
+
+        fun checkNode(node: Any) {
+            val range: MiniRange = when (node) {
+                is MiniDecl -> node.range
+                is MiniMemberDecl -> node.range
+                else -> return
+            }
+            val start = src.offsetOf(range.start)
+            val end = src.offsetOf(range.end).coerceAtMost(text.length)
+
+            if (caret in start..end) {
+                when (node) {
+                    is MiniFunDecl -> {
+                        for (p in node.params) {
+                            add(CompletionItem(p.name, Kind.Value, typeText = typeOf(p.type)))
+                        }
+                    }
+                    is MiniClassDecl -> {
+                        // Propose constructor parameters (ctorFields)
+                        for (p in node.ctorFields) {
+                            add(CompletionItem(p.name, if (p.mutable) Kind.Value else Kind.Field, typeText = typeOf(p.type)))
+                        }
+                        // Propose class-level fields
+                        for (p in node.classFields) {
+                            add(CompletionItem(p.name, if (p.mutable) Kind.Value else Kind.Field, typeText = typeOf(p.type)))
+                        }
+                        // Process members (methods/fields)
+                        for (m in node.members) {
+                            // If the member itself contains the caret (like a method), recurse
+                            checkNode(m)
+
+                            // Also offer the member itself for the class scope
+                            when (m) {
+                                is MiniMemberFunDecl -> {
+                                    val params = m.params.joinToString(", ") { it.name }
+                                    add(CompletionItem(m.name, Kind.Method, tailText = "(${params})", typeText = typeOf(m.returnType)))
+                                }
+                                is MiniMemberValDecl -> {
+                                    add(CompletionItem(m.name, if (m.mutable) Kind.Value else Kind.Field, typeText = typeOf(m.type)))
+                                }
+                                is MiniInitDecl -> {}
+                            }
+                        }
+                    }
+                    is MiniMemberFunDecl -> {
+                        for (p in node.params) {
+                            add(CompletionItem(p.name, Kind.Value, typeText = typeOf(p.type)))
+                        }
+                    }
+                    else -> {}
+                }
+            }
+        }
+
+        for (decl in mini.declarations) {
+            checkNode(decl)
+        }
+    }
 
     private fun offerDeclAdd(out: MutableList<CompletionItem>, prefix: String, d: MiniDecl) {
         fun add(ci: CompletionItem) { if (ci.name.startsWith(prefix, true)) out += ci }

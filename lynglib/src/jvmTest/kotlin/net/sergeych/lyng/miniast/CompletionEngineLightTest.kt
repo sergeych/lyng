@@ -145,4 +145,33 @@ class CompletionEngineLightTest {
         // Should contain some iterator members
         assertTrue(ns.isNotEmpty(), "Iterator members should be suggested after lines() with shebang present")
     }
+
+    @Test
+    fun constructorParametersInMethod() = runBlocking {
+        val code = """
+            class MyClass(myParam) {
+                fun myMethod() {
+                    myp<caret>
+                }
+            }
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("myParam"), "Constructor parameter 'myParam' should be proposed, but got: $ns")
+    }
+
+    @Test
+    fun classFieldsInMethod() = runBlocking {
+        val code = """
+            class MyClass {
+                val myField = 1
+                fun myMethod() {
+                    myf<caret>
+                }
+            }
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("myField"), "Class field 'myField' should be proposed, but got: $ns")
+    }
 }

@@ -30,7 +30,6 @@ import com.intellij.patterns.PlatformPatterns
 import com.intellij.psi.PsiFile
 import com.intellij.util.ProcessingContext
 import kotlinx.coroutines.runBlocking
-import net.sergeych.lyng.highlight.offsetOf
 import net.sergeych.lyng.idea.LyngLanguage
 import net.sergeych.lyng.idea.highlight.LyngTokenTypes
 import net.sergeych.lyng.idea.settings.LyngFormatterSettings
@@ -144,11 +143,6 @@ class LyngCompletionContributor : CompletionContributor() {
                 }
             }
 
-            // In global context, add params in scope first (engine does not include them)
-            if (memberDotPos == null && mini != null) {
-                offerParamsInScope(emit, mini, text, caret)
-            }
-
             // Render engine items
             for (ci in engineItems) {
                 val builder = when (ci.kind) {
@@ -167,7 +161,7 @@ class LyngCompletionContributor : CompletionContributor() {
                     Kind.Enum -> LookupElementBuilder.create(ci.name)
                         .withIcon(AllIcons.Nodes.Enum)
                     Kind.Value -> LookupElementBuilder.create(ci.name)
-                        .withIcon(AllIcons.Nodes.Field)
+                        .withIcon(AllIcons.Nodes.Variable)
                         .let { b -> if (!ci.typeText.isNullOrBlank()) b.withTypeText(ci.typeText, true) else b }
                     Kind.Field -> LookupElementBuilder.create(ci.name)
                         .withIcon(AllIcons.Nodes.Field)
@@ -541,27 +535,6 @@ class LyngCompletionContributor : CompletionContributor() {
                         .withInsertHandler(ParenInsertHandler)
                     emit(builder)
                     already.add(name)
-                }
-            }
-        }
-
-        // --- MiniAst-based inference helpers ---
-
-        private fun offerParamsInScope(emit: (com.intellij.codeInsight.lookup.LookupElement) -> Unit, mini: MiniScript, text: String, caret: Int) {
-            val src = mini.range.start.source
-            // Find function whose body contains caret or whose whole range contains caret
-            val fns = mini.declarations.filterIsInstance<MiniFunDecl>()
-            for (fn in fns) {
-                val start = src.offsetOf(fn.range.start)
-                val end = src.offsetOf(fn.range.end).coerceAtMost(text.length)
-                if (caret in start..end) {
-                    for (p in fn.params) {
-                        val builder = LookupElementBuilder.create(p.name)
-                            .withIcon(AllIcons.Nodes.Variable)
-                            .withTypeText(typeOf(p.type), true)
-                        emit(builder)
-                    }
-                    return
                 }
             }
         }

@@ -2030,20 +2030,18 @@ class Compiler(
             run {
                 val declRange = MiniRange(startPos, cc.currentPos())
                 val bases = baseSpecs.map { it.name }
-                // Collect constructor fields declared as val/var in primary constructor
+                // Collect constructor fields declared in primary constructor
                 val ctorFields = mutableListOf<MiniCtorField>()
                 constructorArgsDeclaration?.let { ad ->
                     for (p in ad.params) {
                         val at = p.accessType
-                        if (at != null) {
-                            val mutable = at == AccessType.Var
-                            ctorFields += MiniCtorField(
-                                name = p.name,
-                                mutable = mutable,
-                                type = p.miniType,
-                                nameStart = p.pos
-                            )
-                        }
+                        val mutable = at == AccessType.Var
+                        ctorFields += MiniCtorField(
+                            name = p.name,
+                            mutable = mutable,
+                            type = p.miniType,
+                            nameStart = p.pos
+                        )
                     }
                 }
                 val node = MiniClassDecl(
