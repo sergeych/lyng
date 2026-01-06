@@ -193,6 +193,15 @@ Ready features:
 - [x] regular exceptions + extended `when`
 - [x] multiple inheritance for user classes
 - [x] class properties (accessors)
+- [x] `return` statement for local and non-local exit
+- [x] Unified Delegation model: val, var and fun
+- [x] `lazy val` using delegation
+- [x] singletons `object TheOnly { ... }`
+- [x] object expressions `object: List { ... }`
+- [x] late-init vals in classes
+- [x] properties with getters and setters
+
+All of this is documented in the [language site](https://lynglang.com) and locally [docs/language.md](docs/tutorial.md). the current nightly builds published on the site and in the private maven repository.  
 
 ## plan: towards v1.5 Enhancing
 
