@@ -86,6 +86,7 @@ sealed interface MiniDecl : MiniNode {
     val doc: MiniDoc?
     // Start position of the declaration name identifier in source; end can be derived as start + name.length
     val nameStart: Pos
+    val isExtern: Boolean
 }
 
 data class MiniScript(
@@ -110,7 +111,8 @@ data class MiniFunDecl(
     val body: MiniBlock?,
     override val doc: MiniDoc?,
     override val nameStart: Pos,
-    val receiver: MiniTypeRef? = null
+    val receiver: MiniTypeRef? = null,
+    override val isExtern: Boolean = false
 ) : MiniDecl
 
 data class MiniValDecl(
@@ -121,7 +123,8 @@ data class MiniValDecl(
     val initRange: MiniRange?,
     override val doc: MiniDoc?,
     override val nameStart: Pos,
-    val receiver: MiniTypeRef? = null
+    val receiver: MiniTypeRef? = null,
+    override val isExtern: Boolean = false
 ) : MiniDecl
 
 data class MiniClassDecl(
@@ -134,7 +137,9 @@ data class MiniClassDecl(
     override val doc: MiniDoc?,
     override val nameStart: Pos,
     // Built-in extension: list of member declarations (functions and fields)
-    val members: List<MiniMemberDecl> = emptyList()
+    val members: List<MiniMemberDecl> = emptyList(),
+    override val isExtern: Boolean = false,
+    val isObject: Boolean = false
 ) : MiniDecl
 
 data class MiniEnumDecl(
@@ -142,7 +147,8 @@ data class MiniEnumDecl(
     override val name: String,
     val entries: List<String>,
     override val doc: MiniDoc?,
-    override val nameStart: Pos
+    override val nameStart: Pos,
+    override val isExtern: Boolean = false
 ) : MiniDecl
 
 data class MiniCtorField(
@@ -171,6 +177,7 @@ sealed interface MiniMemberDecl : MiniNode {
     val doc: MiniDoc?
     val nameStart: Pos
     val isStatic: Boolean
+    val isExtern: Boolean
 }
 
 data class MiniMemberFunDecl(
@@ -181,6 +188,7 @@ data class MiniMemberFunDecl(
     override val doc: MiniDoc?,
     override val nameStart: Pos,
     override val isStatic: Boolean = false,
+    override val isExtern: Boolean = false,
 ) : MiniMemberDecl
 
 data class MiniMemberValDecl(
@@ -191,6 +199,7 @@ data class MiniMemberValDecl(
     override val doc: MiniDoc?,
     override val nameStart: Pos,
     override val isStatic: Boolean = false,
+    override val isExtern: Boolean = false,
 ) : MiniMemberDecl
 
 data class MiniInitDecl(
@@ -200,6 +209,7 @@ data class MiniInitDecl(
     override val name: String get() = "init"
     override val doc: MiniDoc? get() = null
     override val isStatic: Boolean get() = false
+    override val isExtern: Boolean get() = false
 }
 
 // Streaming sink to collect mini-AST during parsing. Implementations may assemble a tree or process events.
@@ -208,6 +218,9 @@ interface MiniAstSink {
     fun onScriptEnd(end: Pos, script: MiniScript) {}
 
     fun onDocCandidate(doc: MiniDoc) {}
+
+    fun onEnterClass(node: MiniClassDecl) {}
+    fun onExitClass(end: Pos) {}
 
     fun onImport(node: MiniImport) {}
     fun onFunDecl(node: MiniFunDecl) {}
@@ -238,6 +251,7 @@ interface MiniTypeTrace {
 class MiniAstBuilder : MiniAstSink {
     private var currentScript: MiniScript? = null
     private val blocks = ArrayDeque<MiniBlock>()
+    private val classStack = ArrayDeque<MiniClassDecl>()
     private var lastDoc: MiniDoc? = null
     private var scriptDepth: Int = 0
 
@@ -262,26 +276,80 @@ class MiniAstBuilder : MiniAstSink {
         lastDoc = doc
     }
 
+    override fun onEnterClass(node: MiniClassDecl) {
+        val attach = node.copy(doc = node.doc ?: lastDoc)
+        classStack.addLast(attach)
+        lastDoc = null
+    }
+
+    override fun onExitClass(end: Pos) {
+        val finished = classStack.removeLastOrNull()
+        if (finished != null) {
+            val updated = finished.copy(range = MiniRange(finished.range.start, end))
+            // Always add to top-level for now to ensure visibility in light engine
+            currentScript?.declarations?.add(updated)
+        }
+    }
+
     override fun onImport(node: MiniImport) {
         currentScript?.imports?.add(node)
     }
 
     override fun onFunDecl(node: MiniFunDecl) {
         val attach = node.copy(doc = node.doc ?: lastDoc)
-        currentScript?.declarations?.add(attach)
+        val currentClass = classStack.lastOrNull()
+        if (currentClass != null) {
+            // Convert MiniFunDecl to MiniMemberFunDecl for inclusion in members
+            val member = MiniMemberFunDecl(
+                range = attach.range,
+                name = attach.name,
+                params = attach.params,
+                returnType = attach.returnType,
+                doc = attach.doc,
+                nameStart = attach.nameStart,
+                isStatic = false, // TODO: track static if needed
+                isExtern = attach.isExtern
+            )
+            // Need to update the class in the stack since it's immutable-ish (data class)
+            classStack.removeLast()
+            classStack.addLast(currentClass.copy(members = currentClass.members + member))
+        } else {
+            currentScript?.declarations?.add(attach)
+        }
         lastDoc = null
     }
 
     override fun onValDecl(node: MiniValDecl) {
         val attach = node.copy(doc = node.doc ?: lastDoc)
-        currentScript?.declarations?.add(attach)
+        val currentClass = classStack.lastOrNull()
+        if (currentClass != null) {
+            val member = MiniMemberValDecl(
+                range = attach.range,
+                name = attach.name,
+                mutable = attach.mutable,
+                type = attach.type,
+                doc = attach.doc,
+                nameStart = attach.nameStart,
+                isStatic = false, // TODO: track static if needed
+                isExtern = attach.isExtern
+            )
+            classStack.removeLast()
+            classStack.addLast(currentClass.copy(members = currentClass.members + member))
+        } else {
+            currentScript?.declarations?.add(attach)
+        }
         lastDoc = null
     }
 
     override fun onClassDecl(node: MiniClassDecl) {
-        val attach = node.copy(doc = node.doc ?: lastDoc)
-        currentScript?.declarations?.add(attach)
-        lastDoc = null
+        // This is the old way, we might want to deprecate it or make it call onEnterClass
+        // For now, if we are NOT using enter/exit, keep behavior.
+        // But Compiler.kt will be updated to use enter/exit.
+        if (classStack.isEmpty()) {
+            val attach = node.copy(doc = node.doc ?: lastDoc)
+            currentScript?.declarations?.add(attach)
+            lastDoc = null
+        }
     }
 
     override fun onEnumDecl(node: MiniEnumDecl) {

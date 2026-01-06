@@ -222,4 +222,55 @@ class MiniAstTest {
         assertTrue(names.contains("V1"), "Should contain V1")
         assertTrue(names.contains("V2"), "Should contain V2")
     }
+
+    @Test
+    fun miniAst_captures_extern_docs() = runTest {
+        val code = """
+            // Doc1
+            extern fun f1()
+            
+            // Doc2
+            extern class C1 {
+                // Doc3
+                fun m1()
+            }
+            
+            // Doc4
+            extern object O1 {
+                // Doc5
+                val v1: String
+            }
+            
+            // Doc6
+            extern enum E1 {
+                V1, V2
+            }
+        """.trimIndent()
+        val (_, sink) = compileWithMini(code)
+        val mini = sink.build()
+        assertNotNull(mini)
+        
+        val f1 = mini.declarations.filterIsInstance<MiniFunDecl>().firstOrNull { it.name == "f1" }
+        assertNotNull(f1)
+        assertEquals("Doc1", f1.doc?.summary)
+        
+        val c1 = mini.declarations.filterIsInstance<MiniClassDecl>().firstOrNull { it.name == "C1" }
+        assertNotNull(c1)
+        assertEquals("Doc2", c1.doc?.summary)
+        val m1 = c1.members.filterIsInstance<MiniMemberFunDecl>().firstOrNull { it.name == "m1" }
+        assertNotNull(m1)
+        assertEquals("Doc3", m1.doc?.summary)
+        
+        val o1 = mini.declarations.filterIsInstance<MiniClassDecl>().firstOrNull { it.name == "O1" }
+        assertNotNull(o1)
+        assertTrue(o1.isObject)
+        assertEquals("Doc4", o1.doc?.summary)
+        val v1 = o1.members.filterIsInstance<MiniMemberValDecl>().firstOrNull { it.name == "v1" }
+        assertNotNull(v1)
+        assertEquals("Doc5", v1.doc?.summary)
+        
+        val e1 = mini.declarations.filterIsInstance<MiniEnumDecl>().firstOrNull { it.name == "E1" }
+        assertNotNull(e1)
+        assertEquals("Doc6", e1.doc?.summary)
+    }
 }

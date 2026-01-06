@@ -42,7 +42,7 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <!-- Language and file type -->
-        <fileType implementationClass="net.sergeych.lyng.idea.LyngFileType" name="Lyng" extensions="lyng" fieldName="INSTANCE" language="Lyng"/>
+        <fileType implementationClass="net.sergeych.lyng.idea.LyngFileType" name="Lyng" extensions="lyng;lyng.d" fieldName="INSTANCE" language="Lyng"/>
 
         <!-- Minimal parser/PSI to fully wire editor services for the language -->
         <lang.parserDefinition language="Lyng" implementationClass="net.sergeych.lyng.idea.psi.LyngParserDefinition"/>

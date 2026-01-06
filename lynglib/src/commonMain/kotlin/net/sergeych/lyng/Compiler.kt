@@ -1327,7 +1327,7 @@ class Compiler(
                 "private", "protected", "static", "abstract", "closed", "override", "extern", "open" -> {
                     modifiers.add(currentToken.value)
                     val next = cc.peekNextNonWhitespace()
-                    if (next.type == Token.Type.ID) {
+                    if (next.type == Token.Type.ID || next.type == Token.Type.OBJECT) {
                         currentToken = cc.next()
                     } else {
                         break
@@ -1367,32 +1367,50 @@ class Compiler(
             throw ScriptError(currentToken.pos, "modifier abstract at top level is only allowed for classes")
 
         return when (currentToken.value) {
-            "val" -> parseVarDeclaration(false, visibility, isAbstract, isClosed, isOverride, isStatic)
-            "var" -> parseVarDeclaration(true, visibility, isAbstract, isClosed, isOverride, isStatic)
+            "val" -> parseVarDeclaration(false, visibility, isAbstract, isClosed, isOverride, isStatic, isExtern)
+            "var" -> parseVarDeclaration(true, visibility, isAbstract, isClosed, isOverride, isStatic, isExtern)
             "fun", "fn" -> parseFunctionDeclaration(visibility, isAbstract, isClosed, isOverride, isExtern, isStatic)
             "class" -> {
-                if (isStatic || isClosed || isOverride || isExtern)
-                    throw ScriptError(currentToken.pos, "unsupported modifiers for class: ${modifiers.joinToString(" ")}")
-                parseClassDeclaration(isAbstract)
+                if (isStatic || isClosed || isOverride)
+                    throw ScriptError(
+                        currentToken.pos,
+                        "unsupported modifiers for class: ${modifiers.joinToString(" ")}"
+                    )
+                parseClassDeclaration(isAbstract, isExtern)
             }
 
             "object" -> {
-                if (isStatic || isClosed || isOverride || isExtern || isAbstract)
-                    throw ScriptError(currentToken.pos, "unsupported modifiers for object: ${modifiers.joinToString(" ")}")
-                parseObjectDeclaration()
+                if (isStatic || isClosed || isOverride || isAbstract)
+                    throw ScriptError(
+                        currentToken.pos,
+                        "unsupported modifiers for object: ${modifiers.joinToString(" ")}"
+                    )
+                parseObjectDeclaration(isExtern)
             }
 
             "interface" -> {
-                if (isStatic || isClosed || isOverride || isExtern || isAbstract)
+                if (isStatic || isClosed || isOverride || isAbstract)
                     throw ScriptError(
                         currentToken.pos,
                         "unsupported modifiers for interface: ${modifiers.joinToString(" ")}"
                     )
                 // interface is synonym for abstract class
-                parseClassDeclaration(isAbstract = true)
+                parseClassDeclaration(isAbstract = true, isExtern = isExtern)
             }
 
-            else -> throw ScriptError(currentToken.pos, "expected declaration after modifiers, found ${currentToken.value}")
+            "enum" -> {
+                if (isStatic || isClosed || isOverride || isAbstract)
+                    throw ScriptError(
+                        currentToken.pos,
+                        "unsupported modifiers for enum: ${modifiers.joinToString(" ")}"
+                    )
+                parseEnumDeclaration(isExtern)
+            }
+
+            else -> throw ScriptError(
+                currentToken.pos,
+                "expected declaration after modifiers, found ${currentToken.value}"
+            )
         }
     }
 
@@ -1401,7 +1419,7 @@ class Compiler(
      * @return parsed statement or null if, for example. [id] is not among keywords
      */
     private suspend fun parseKeywordStatement(id: Token): Statement? = when (id.value) {
-        "abstract", "closed", "override", "extern", "private", "protected", "static" -> {
+        "abstract", "closed", "override", "extern", "private", "protected", "static", "open" -> {
             parseDeclarationWithModifiers(id)
         }
 
@@ -1835,7 +1853,7 @@ class Compiler(
         }
     }
 
-    private fun parseEnumDeclaration(): Statement {
+    private fun parseEnumDeclaration(isExtern: Boolean = false): Statement {
         val nameToken = cc.requireToken(Token.Type.ID)
         val startPos = pendingDeclStart ?: nameToken.pos
         val doc = pendingDeclDoc ?: consumePendingDoc()
@@ -1873,7 +1891,8 @@ class Compiler(
                 name = nameToken.value,
                 entries = names,
                 doc = doc,
-                nameStart = nameToken.pos
+                nameStart = nameToken.pos,
+                isExtern = isExtern
             )
         )
 
@@ -1884,7 +1903,7 @@ class Compiler(
         }
     }
 
-    private suspend fun parseObjectDeclaration(): Statement {
+    private suspend fun parseObjectDeclaration(isExtern: Boolean = false): Statement {
         val next = cc.peekNextNonWhitespace()
         val nameToken = if (next.type == Token.Type.ID) cc.requireToken(Token.Type.ID) else null
 
@@ -1916,10 +1935,24 @@ class Compiler(
 
         // Robust body detection
         var classBodyRange: MiniRange? = null
-        val bodyInit: Statement? = inCodeContext(CodeContext.ClassBody(className)) {
+        val bodyInit: Statement? = inCodeContext(CodeContext.ClassBody(className, isExtern = isExtern)) {
             val saved = cc.savePos()
             val nextBody = cc.nextNonWhitespace()
             if (nextBody.type == Token.Type.LBRACE) {
+                // Emit MiniClassDecl before body parsing to track members via enter/exit
+                run {
+                    val node = MiniClassDecl(
+                        range = MiniRange(startPos, cc.currentPos()),
+                        name = className,
+                        bases = baseSpecs.map { it.name },
+                        bodyRange = null,
+                        doc = doc,
+                        nameStart = nameToken?.pos ?: startPos,
+                        isObject = true,
+                        isExtern = isExtern
+                    )
+                    miniSink?.onEnterClass(node)
+                }
                 val bodyStart = nextBody.pos
                 val st = withLocalNames(emptySet()) {
                     parseScript()
@@ -1927,8 +1960,23 @@ class Compiler(
                 val rbTok = cc.next()
                 if (rbTok.type != Token.Type.RBRACE) throw ScriptError(rbTok.pos, "unbalanced braces in object body")
                 classBodyRange = MiniRange(bodyStart, rbTok.pos)
+                miniSink?.onExitClass(rbTok.pos)
                 st
             } else {
+                // No body, but still emit the class
+                run {
+                    val node = MiniClassDecl(
+                        range = MiniRange(startPos, cc.currentPos()),
+                        name = className,
+                        bases = baseSpecs.map { it.name },
+                        bodyRange = null,
+                        doc = doc,
+                        nameStart = nameToken?.pos ?: startPos,
+                        isObject = true,
+                        isExtern = isExtern
+                    )
+                    miniSink?.onClassDecl(node)
+                }
                 cc.restorePos(saved)
                 null
             }
@@ -1965,13 +2013,13 @@ class Compiler(
         }
     }
 
-    private suspend fun parseClassDeclaration(isAbstract: Boolean = false): Statement {
+    private suspend fun parseClassDeclaration(isAbstract: Boolean = false, isExtern: Boolean = false): Statement {
         val nameToken = cc.requireToken(Token.Type.ID)
         val startPos = pendingDeclStart ?: nameToken.pos
         val doc = pendingDeclDoc ?: consumePendingDoc()
         pendingDeclDoc = null
         pendingDeclStart = null
-        return inCodeContext(CodeContext.ClassBody(nameToken.value)) {
+        return inCodeContext(CodeContext.ClassBody(nameToken.value, isExtern = isExtern)) {
             val constructorArgsDeclaration =
                 if (cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true))
                     parseArgsDeclaration(isClassDeclaration = true)
@@ -2009,28 +2057,7 @@ class Compiler(
             val bodyInit: Statement? = run {
                 val saved = cc.savePos()
                 val next = cc.nextNonWhitespace()
-                if (next.type == Token.Type.LBRACE) {
-                    // parse body
-                    val bodyStart = next.pos
-                    val st = withLocalNames(constructorArgsDeclaration?.params?.map { it.name }?.toSet() ?: emptySet()) {
-                        parseScript()
-                    }
-                    val rbTok = cc.next()
-                    if (rbTok.type != Token.Type.RBRACE) throw ScriptError(rbTok.pos, "unbalanced braces in class body")
-                    classBodyRange = MiniRange(bodyStart, rbTok.pos)
-                    st
-                } else {
-                    // restore if no body starts here
-                    cc.restorePos(saved)
-                    null
-                }
-            }
-
-            // Emit MiniClassDecl with collected base names; bodyRange is omitted for now
-            run {
-                val declRange = MiniRange(startPos, cc.currentPos())
-                val bases = baseSpecs.map { it.name }
-                // Collect constructor fields declared in primary constructor
+                
                 val ctorFields = mutableListOf<MiniCtorField>()
                 constructorArgsDeclaration?.let { ad ->
                     for (p in ad.params) {
@@ -2044,16 +2071,51 @@ class Compiler(
                         )
                     }
                 }
-                val node = MiniClassDecl(
-                    range = declRange,
-                    name = nameToken.value,
-                    bases = bases,
-                    bodyRange = classBodyRange,
-                    ctorFields = ctorFields,
-                    doc = doc,
-                    nameStart = nameToken.pos
-                )
-                miniSink?.onClassDecl(node)
+
+                if (next.type == Token.Type.LBRACE) {
+                    // Emit MiniClassDecl before body parsing to track members via enter/exit
+                    run {
+                        val node = MiniClassDecl(
+                            range = MiniRange(startPos, cc.currentPos()),
+                            name = nameToken.value,
+                            bases = baseSpecs.map { it.name },
+                            bodyRange = null,
+                            ctorFields = ctorFields,
+                            doc = doc,
+                            nameStart = nameToken.pos,
+                            isExtern = isExtern
+                        )
+                        miniSink?.onEnterClass(node)
+                    }
+                    // parse body
+                    val bodyStart = next.pos
+                    val st = withLocalNames(constructorArgsDeclaration?.params?.map { it.name }?.toSet() ?: emptySet()) {
+                        parseScript()
+                    }
+                    val rbTok = cc.next()
+                    if (rbTok.type != Token.Type.RBRACE) throw ScriptError(rbTok.pos, "unbalanced braces in class body")
+                    classBodyRange = MiniRange(bodyStart, rbTok.pos)
+                    miniSink?.onExitClass(rbTok.pos)
+                    st
+                } else {
+                    // No body, but still emit the class
+                    run {
+                        val node = MiniClassDecl(
+                            range = MiniRange(startPos, cc.currentPos()),
+                            name = nameToken.value,
+                            bases = baseSpecs.map { it.name },
+                            bodyRange = null,
+                            ctorFields = ctorFields,
+                            doc = doc,
+                            nameStart = nameToken.pos,
+                            isExtern = isExtern
+                        )
+                        miniSink?.onClassDecl(node)
+                    }
+                    // restore if no body starts here
+                    cc.restorePos(saved)
+                    null
+                }
             }
 
             val initScope = popInitScope()
@@ -2593,6 +2655,7 @@ class Compiler(
         isExtern: Boolean = false,
         isStatic: Boolean = false,
     ): Statement {
+        val actualExtern = isExtern || (codeContexts.lastOrNull() as? CodeContext.ClassBody)?.isExtern == true
         var t = cc.next()
         val start = t.pos
         var extTypeName: String? = null
@@ -2669,7 +2732,8 @@ class Compiler(
                 body = null,
                 doc = declDocLocal,
                 nameStart = nameStartPos,
-                receiver = receiverMini
+                receiver = receiverMini,
+                isExtern = actualExtern
             )
             miniSink?.onFunDecl(node)
             pendingDeclDoc = null
@@ -2684,7 +2748,7 @@ class Compiler(
             // Parse function body while tracking declared locals to compute precise capacity hints
             currentLocalDeclCount
             localDeclCountStack.add(0)
-            val fnStatements = if (isExtern)
+            val fnStatements = if (actualExtern)
                 statement { raiseError("extern function not provided: $name") }
             else if (isAbstract || isDelegated) {
                 null
@@ -2906,8 +2970,10 @@ class Compiler(
         isAbstract: Boolean = false,
         isClosed: Boolean = false,
         isOverride: Boolean = false,
-        isStatic: Boolean = false
+        isStatic: Boolean = false,
+        isExtern: Boolean = false
     ): Statement {
+        val actualExtern = isExtern || (codeContexts.lastOrNull() as? CodeContext.ClassBody)?.isExtern == true
         val nextToken = cc.next()
         val start = nextToken.pos
 
@@ -2929,7 +2995,8 @@ class Compiler(
                     type = null,
                     initRange = null,
                     doc = pendingDeclDoc,
-                    nameStart = namePos
+                    nameStart = namePos,
+                    isExtern = actualExtern
                 )
                 miniSink?.onValDecl(node)
             }
@@ -3018,10 +3085,10 @@ class Compiler(
         // Register the local name at compile time so that subsequent identifiers can be emitted as fast locals
         if (!isStatic) declareLocalName(name)
 
-        val isDelegate = if (isAbstract) {
+        val isDelegate = if (isAbstract || actualExtern) {
             if (!isProperty && (eqToken.type == Token.Type.ASSIGN || eqToken.type == Token.Type.BY))
-                throw ScriptError(eqToken.pos, "abstract variable $name cannot have an initializer or delegate")
-            // Abstract variables don't have initializers
+                throw ScriptError(eqToken.pos, "${if (isAbstract) "abstract" else "extern"} variable $name cannot have an initializer or delegate")
+            // Abstract or extern variables don't have initializers
             cc.restorePos(markBeforeEq)
             cc.skipWsTokens()
             setNull = true
@@ -3063,7 +3130,8 @@ class Compiler(
                 initRange = initR,
                 doc = pendingDeclDoc,
                 nameStart = nameStartPos,
-                receiver = receiverMini
+                receiver = receiverMini,
+                isExtern = actualExtern
             )
             miniSink?.onValDecl(node)
             pendingDeclDoc = null

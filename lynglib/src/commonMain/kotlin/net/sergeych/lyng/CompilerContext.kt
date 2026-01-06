@@ -151,10 +151,11 @@ class CompilerContext(val tokens: List<Token>) {
      * @return next non-whitespace token without extracting it from tokens list
      */
     fun peekNextNonWhitespace(): Token {
+        val saved = savePos()
         while (true) {
             val t = next()
             if (t.type !in wstokens) {
-                previous()
+                restorePos(saved)
                 return t
             }
         }
