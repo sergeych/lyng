@@ -193,7 +193,6 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
             return map
         }
 
-
         val type = object : ObjClass("Map", ObjCollection) {
             override suspend fun callOn(scope: Scope): Obj {
                 return ObjMap(listToMap(scope, scope.args.list))
@@ -206,6 +205,25 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
                 return ObjMap(keys.zip(values).toMap().toMutableMap())
             }
         }.apply {
+            implementingNames.add("Delegate")
+            addFn("getValue") {
+                val self = thisAs<ObjMap>()
+                val key = requiredArg<Obj>(1)
+                self.map[key] ?: ObjNull
+            }
+            addFn("setValue") {
+                val self = thisAs<ObjMap>()
+                val key = requiredArg<Obj>(1)
+                val value = requiredArg<Obj>(2)
+                self.map[key] = value
+                self
+            }
+            addFn("bind") {
+                val mode = requiredArg<ObjEnumEntry>(1)
+                if(  mode.ordinal.value > 1)
+                    raiseIllegalArgument("Map can be delegated only to val or var, got ${mode.name.value}")
+                thisObj
+            }
             addFnDoc(
                 name = "getOrNull",
                 doc = "Get value by key or return null if the key is absent.",

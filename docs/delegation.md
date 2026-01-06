@@ -151,6 +151,24 @@ fun test() {
 }
 ```
 
+### 6. Map as a Delegate
+
+Maps can be used as delegates for `val` and `var` properties. When a map is used as a delegate, it uses the property name as a key to read from or write to the map.
+
+```lyng
+val m = { "a": 1, "b": 2 }
+val a by m
+var b by m
+
+println(a) // 1
+println(b) // 2
+
+b = 42
+println(m["b"]) // 42
+```
+
+Because `Map` implements `getValue` and `setValue`, it works seamlessly with any object that needs to store its properties in a map (e.g., when implementing dynamic schemas or JSON-backed objects).
+
 ## The `bind` Hook
 
 The `bind(name, access, thisRef)` method is called exactly once when the member is being initialized. It allows the delegate to:

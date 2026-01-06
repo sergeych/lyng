@@ -61,7 +61,8 @@ open class Obj {
     @Suppress("SuspiciousEqualsCombination")
     fun isInstanceOf(someClass: Obj) = someClass === objClass ||
             objClass.allParentsSet.contains(someClass) ||
-            someClass == rootObjectType
+            someClass == rootObjectType ||
+            (someClass is ObjClass && objClass.allImplementingNames.contains(someClass.className))
 
 
     suspend fun invokeInstanceMethod(scope: Scope, name: String, vararg args: Obj): Obj =

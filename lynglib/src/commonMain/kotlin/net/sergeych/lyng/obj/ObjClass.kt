@@ -124,6 +124,24 @@ open class ObjClass(
     /** Direct parents in declaration order (kept deterministic). */
     val directParents: List<ObjClass> = parents.toList()
 
+    /**
+     * Names of additional interfaces this class implements, but they are not (yet) available
+     * as [ObjClass] instances. This is used for "implementing existing interfaces" feature.
+     */
+    val implementingNames = mutableSetOf<String>()
+
+    /**
+     * Combined set of [implementingNames] from this class and all its ancestors.
+     */
+    val allImplementingNames: Set<String> by lazy {
+        buildSet {
+            addAll(implementingNames)
+            for (p in allParentsSet) {
+                addAll(p.implementingNames)
+            }
+        }
+    }
+
     /** Optional constructor argument specs for each direct parent (set by compiler for user classes). */
     open val directParentArgs: MutableMap<ObjClass, List<ParsedArgument>> = mutableMapOf()
 

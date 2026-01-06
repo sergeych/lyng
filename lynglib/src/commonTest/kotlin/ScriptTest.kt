@@ -3025,6 +3025,24 @@ class ScriptTest {
     }
 
     @Test
+    fun testMapAsDelegate() = runTest {
+        eval(
+            """
+                val m = { a: 1, b: 2 }
+                assert(m is Delegate)
+                val a by m
+                var b by m
+                assertEquals(1, a)
+                assertEquals(2, b)
+                b = 42
+                assertEquals(42, m["b"])
+                assertEquals(1, a)
+                assertEquals(1, m["a"])
+            """.trimIndent()
+        )
+    }
+
+    @Test
     fun testMapWithNonStringKeys() = runTest {
         eval(
             """

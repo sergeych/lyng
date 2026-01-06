@@ -224,6 +224,19 @@ A delegate is any object that provides the following methods (all optional depen
 - `invoke(thisRef, name, args...)`: Called when a delegated `fun` is invoked.
 - `bind(name, access, thisRef)`: Called once during initialization to configure or validate the delegate.
 
+### Map as a Delegate
+
+Maps can also be used as delegates. When delegated to a property, the map uses the property name as the key:
+
+```lyng
+val settings = { "theme": "dark", "fontSize": 14 }
+val theme by settings
+var fontSize by settings
+
+println(theme)    // "dark"
+fontSize = 16     // Updates settings["fontSize"]
+```
+
 For more details and advanced patterns (like `lazy`, `observable`, and shared stateless delegates), see the [Delegation Guide](delegation.md).
 
 ## Instance initialization: init block
