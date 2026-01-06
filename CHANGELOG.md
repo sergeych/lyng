@@ -2,6 +2,15 @@
 
 ### Unreleased
 
+- Language: Added `return` statement
+  - `return [expression]` exits the innermost enclosing callable (function or lambda).
+  - Supports non-local returns using `@label` syntax (e.g., `return@outer 42`).
+  - Named functions automatically provide their name as a label for non-local returns.
+  - Labeled lambdas: lambdas can be explicitly labeled using `@label { ... }`.
+  - Restriction: `return` is forbidden in shorthand function definitions (e.g., `fun f(x) = return x` is a syntax error).
+  - Control Flow: `return` and `break` are now protected from being caught by user-defined `try-catch` blocks in Lyng.
+  - Documentation: New `docs/return_statement.md` and updated `tutorial.md`.
+
 - Language: stdlib improvements
   - Added `with(self, block)` function to `root.lyng` which executes a block with `this` set to the provided object.
 - Language: Abstract Classes and Interfaces

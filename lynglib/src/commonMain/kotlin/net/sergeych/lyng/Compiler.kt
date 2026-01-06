@@ -285,9 +285,11 @@ class Compiler(
     }
 
     private var lastAnnotation: (suspend (Scope, ObjString, Statement) -> Statement)? = null
+    private var lastLabel: String? = null
 
     private suspend fun parseStatement(braceMeansLambda: Boolean = false): Statement? {
         lastAnnotation = null
+        lastLabel = null
         while (true) {
             val t = cc.next()
             return when (t.type) {
@@ -305,6 +307,10 @@ class Compiler(
                 }
 
                 Token.Type.ATLABEL -> {
+                    val label = t.value
+                    if (cc.peekNextNonWhitespace().type == Token.Type.LBRACE) {
+                        lastLabel = label
+                    }
                     lastAnnotation = parseAnnotation(t)
                     continue
                 }
@@ -653,6 +659,7 @@ class Compiler(
     private suspend fun parseLambdaExpression(): ObjRef {
         // lambda args are different:
         val startPos = cc.currentPos()
+        val label = lastLabel
         val argsDeclaration = parseArgsDeclaration()
         if (argsDeclaration != null && argsDeclaration.endTokenType != Token.Type.ARROW)
             throw ScriptError(
@@ -660,7 +667,9 @@ class Compiler(
                 "lambda must have either valid arguments declaration with '->' or no arguments"
             )
 
+        label?.let { cc.labels.add(it) }
         val body = parseBlock(skipLeadingBrace = true)
+        label?.let { cc.labels.remove(it) }
 
         return ValueFnRef { closureScope ->
             statement {
@@ -684,7 +693,12 @@ class Compiler(
                     // assign vars as declared the standard way
                     argsDeclaration.assignToContext(context, defaultAccessType = AccessType.Val)
                 }
-                body.execute(context)
+                try {
+                    body.execute(context)
+                } catch (e: ReturnException) {
+                    if (e.label == null || e.label == label) e.result
+                    else throw e
+                }
             }.asReadonly
         }
     }
@@ -1425,6 +1439,7 @@ class Compiler(
         "while" -> parseWhileStatement()
         "do" -> parseDoWhileStatement()
         "for" -> parseForStatement()
+        "return" -> parseReturnStatement(id.pos)
         "break" -> parseBreakStatement(id.pos)
         "continue" -> parseContinueStatement(id.pos)
         "if" -> parseIfStatement()
@@ -1780,6 +1795,10 @@ class Compiler(
             try {
                 // body is a parsed block, it already has separate context
                 result = body.execute(this)
+            } catch (e: ReturnException) {
+                throw e
+            } catch (e: LoopBreakContinueException) {
+                throw e
             } catch (e: Exception) {
                 // convert to appropriate exception
                 val objException = when (e) {
@@ -2488,6 +2507,38 @@ class Compiler(
         }
     }
 
+    private suspend fun parseReturnStatement(start: Pos): Statement {
+        var t = cc.next()
+
+        val label = if (t.pos.line != start.line || t.type != Token.Type.ATLABEL) {
+            cc.previous()
+            null
+        } else {
+            t.value
+        }
+
+        // expression?
+        t = cc.next()
+        cc.previous()
+        val resultExpr = if (t.pos.line == start.line && (!t.isComment &&
+                    t.type != Token.Type.SEMICOLON &&
+                    t.type != Token.Type.NEWLINE &&
+                    t.type != Token.Type.RBRACE &&
+                    t.type != Token.Type.RPAREN &&
+                    t.type != Token.Type.RBRACKET &&
+                    t.type != Token.Type.COMMA &&
+                    t.type != Token.Type.EOF)
+        ) {
+            // we have something on this line, could be expression
+            parseExpression()
+        } else null
+
+        return statement(start) {
+            val returnValue = resultExpr?.execute(it) ?: ObjVoid
+            throw ReturnException(returnValue, label)
+        }
+    }
+
     private fun ensureRparen(): Pos {
         val t = cc.next()
         if (t.type != Token.Type.RPAREN)
@@ -2601,6 +2652,7 @@ class Compiler(
 
         // Capture doc locally to reuse even if we need to emit later
         val declDocLocal = pendingDeclDoc
+        val outerLabel = lastLabel
 
         // Emit MiniFunDecl before body parsing (body range unknown yet)
         run {
@@ -2627,6 +2679,8 @@ class Compiler(
         }
 
         return inCodeContext(CodeContext.Function(name)) {
+            cc.labels.add(name)
+            outerLabel?.let { cc.labels.add(it) }
 
             val paramNames: Set<String> = argsDeclaration.params.map { it.name }.toSet()
 
@@ -2642,7 +2696,9 @@ class Compiler(
                     val next = cc.peekNextNonWhitespace()
                     if (next.type == Token.Type.ASSIGN) {
                         cc.nextNonWhitespace() // consume '='
-                        val expr = parseExpression() ?: throw ScriptError(cc.current().pos, "Expected function body expression")
+                        if (cc.peekNextNonWhitespace().value == "return")
+                            throw ScriptError(cc.currentPos(), "return is not allowed in shorthand function")
+                        val expr = parseExpression() ?: throw ScriptError(cc.currentPos(), "Expected function body expression")
                         // Shorthand function returns the expression value
                         statement(expr.pos) { scope ->
                             expr.execute(scope)
@@ -2674,8 +2730,15 @@ class Compiler(
                 if (extTypeName != null) {
                     context.thisObj = callerContext.thisObj
                 }
-                fnStatements?.execute(context) ?: ObjVoid
+                try {
+                    fnStatements?.execute(context) ?: ObjVoid
+                } catch (e: ReturnException) {
+                    if (e.label == null || e.label == name || e.label == outerLabel) e.result
+                    else throw e
+                }
             }
+            cc.labels.remove(name)
+            outerLabel?.let { cc.labels.remove(it) }
 //            parentContext
             val fnCreateStatement = statement(start) { context ->
                 if (isDelegated) {

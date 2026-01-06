@@ -8,7 +8,7 @@ __Other documents to read__ maybe after this one:
 
 - [Advanced topics](advanced_topics.md), [declaring arguments](declaring_arguments.md), [Scopes and Closures](scopes_and_closures.md)
 - [OOP notes](OOP.md), [exception handling](exceptions_handling.md)
-- [math in Lyng](math.md), [the `when` statement](when.md)
+- [math in Lyng](math.md), [the `when` statement](when.md), [return statement](return_statement.md)
 - [Testing and Assertions](Testing.md)
 - [time](time.md) and [parallelism](parallelism.md)
 - [parallelism] - multithreaded code, coroutines, etc.
@@ -31,6 +31,15 @@ any block also returns it's last expression:
         3 + 3
     }
     >>> 6
+
+If you want to exit a function or lambda earlier, use the `return` statement:
+
+    fn divide(a, b) {
+        if( b == 0 ) return null
+        a / b
+    }
+
+See [return statement](return_statement.md) for more details on scoping and non-local returns.
 
 If you don't want block to return anything, use `void`:
 
