@@ -859,4 +859,31 @@ class LyngFormatterTest {
         """.trimIndent()
         assertEquals(expected2, LyngFormatter.reindent(src2, LyngFormatConfig(indentSize = 4)))
     }
+
+    @Test
+    fun mixedPropertyAccessors() {
+        val src = """
+            class X {
+                var x get() {
+                    11
+                }
+                set(value) {
+                }
+            }
+        """.trimIndent()
+
+        val expected = """
+            class X {
+                var x get() {
+                        11
+                    }
+                    set(value) {
+                    }
+            }
+        """.trimIndent()
+
+        val cfg = LyngFormatConfig(indentSize = 4, continuationIndentSize = 4)
+        val out = LyngFormatter.reindent(src, cfg)
+        assertEquals(expected, out)
+    }
 }

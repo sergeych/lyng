@@ -42,6 +42,31 @@ object LyngFormatter {
         return false
     }
 
+    private fun isAccessorRelated(code: String): Boolean {
+        val t = code.trim()
+        if (t.isEmpty()) return false
+        if (isPropertyAccessor(t)) return true
+
+        // If it contains 'fun' or 'fn' as a word, it's probably a function declaration, not an accessor
+        if (Regex("\\b(fun|fn)\\b").containsMatchIn(t)) return false
+
+        val hasDecl = startsWithWord(t, "var") || startsWithWord(t, "val") ||
+                startsWithWord(t, "private") || startsWithWord(t, "protected") ||
+                startsWithWord(t, "override") || startsWithWord(t, "public")
+
+        if (hasDecl) {
+            val getSetMatch = Regex("\\b(get|set)\\b").find(t)
+            if (getSetMatch != null) {
+                // Check it's not part of an assignment to the property itself (e.g. val x = get())
+                val equalIndex = t.indexOf('=')
+                if (equalIndex == -1 || equalIndex > getSetMatch.range.first) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
     /** Returns the input with indentation recomputed from scratch, line by line. */
     fun reindent(text: String, config: LyngFormatConfig = LyngFormatConfig()): String {
         // Normalize tabs to spaces globally before any transformation; results must contain no tabs
@@ -82,7 +107,7 @@ object LyngFormatter {
             if (isIf || isElseIf || isElse) return true
 
             // property accessors ending with ) or =
-            if (isPropertyAccessor(t)) {
+            if (isAccessorRelated(t)) {
                 return if (t.contains('=')) t.endsWith('=') else t.endsWith(')')
             }
             return false
@@ -168,7 +193,8 @@ object LyngFormatter {
             }
             val newBlockLevel = blockLevel
             if (newBlockLevel > oldBlockLevel) {
-                val addedThisLine = (if (applyAwaiting) awaitingExtraIndent else 0) + (if (isAccessor) 1 else 0)
+                val isAccessorRelatedLine = isAccessor || (!inBlockComment && isAccessorRelated(code))
+                val addedThisLine = (if (applyAwaiting) awaitingExtraIndent else 0) + (if (isAccessorRelatedLine) 1 else 0)
                 repeat(newBlockLevel - oldBlockLevel) {
                     extraIndents.add(addedThisLine)
                 }
@@ -186,7 +212,8 @@ object LyngFormatter {
                 val endsWithBrace = code.trimEnd().endsWith("{")
                 if (!endsWithBrace && isControlHeaderNoBrace(code)) {
                     // It's another header, increment
-                    awaitingExtraIndent += if (isAccessor) 2 else 1
+                    val isAccessorRelatedLine = isAccessor || (!inBlockComment && isAccessorRelated(code))
+                    awaitingExtraIndent += if (isAccessorRelatedLine) 2 else 1
                 } else {
                     // It's the body, reset
                     awaitingExtraIndent = 0
@@ -195,7 +222,8 @@ object LyngFormatter {
                 // start awaiting if current line is a control header without '{'
                 val endsWithBrace = code.trimEnd().endsWith("{")
                 if (!endsWithBrace && isControlHeaderNoBrace(code)) {
-                    awaitingExtraIndent = if (isAccessor) 2 else 1
+                    val isAccessorRelatedLine = isAccessor || (!inBlockComment && isAccessorRelated(code))
+                    awaitingExtraIndent = if (isAccessorRelatedLine) 2 else 1
                 }
             }
 
