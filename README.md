@@ -195,6 +195,7 @@ Ready features:
 - [x] object expressions `object: List { ... }`
 - [x] late-init vals in classes
 - [x] properties with getters and setters
+- [x] assign-if-null operator `?=`
 
 All of this is documented in the [language site](https://lynglang.com) and locally [docs/language.md](docs/tutorial.md). the current nightly builds published on the site and in the private maven repository.  
 

@@ -4560,4 +4560,16 @@ class ScriptTest {
         """.trimIndent())
     }
 
+    @Test
+    fun testOptOnNullAssignment() = runTest {
+        eval("""
+            var x = null
+            assertEquals(null, x)
+            x ?= 1
+            assertEquals(1, x)
+            x ?= 2
+            assertEquals(1, x)
+        """.trimIndent())
+    }
+
 }

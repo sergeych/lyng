@@ -1805,6 +1805,21 @@ class RangeRef(
     }
 }
 
+/** Assignment if null op: target ?= value */
+class AssignIfNullRef(
+    private val target: ObjRef,
+    private val value: ObjRef,
+    private val atPos: Pos,
+) : ObjRef {
+    override suspend fun get(scope: Scope): ObjRecord {
+        val current = target.evalValue(scope)
+        if (current != ObjNull) return current.asReadonly
+        val newValue = value.evalValue(scope)
+        target.setAt(atPos, scope, newValue)
+        return newValue.asReadonly
+    }
+}
+
 /** Simple assignment: target = value */
 class AssignRef(
     private val target: ObjRef,

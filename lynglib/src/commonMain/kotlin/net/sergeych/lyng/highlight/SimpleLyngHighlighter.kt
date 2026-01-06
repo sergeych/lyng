@@ -82,7 +82,7 @@ private fun kindOf(type: Type, value: String): HighlightKind? = when (type) {
 
     // operators and symbolic constructs
     Type.PLUS, Type.MINUS, Type.STAR, Type.SLASH, Type.PERCENT,
-    Type.ASSIGN, Type.PLUSASSIGN, Type.MINUSASSIGN, Type.STARASSIGN, Type.SLASHASSIGN, Type.PERCENTASSIGN,
+    Type.ASSIGN, Type.PLUSASSIGN, Type.MINUSASSIGN, Type.STARASSIGN, Type.SLASHASSIGN, Type.PERCENTASSIGN, Type.IFNULLASSIGN,
     Type.PLUS2, Type.MINUS2,
     Type.EQ, Type.NEQ, Type.LT, Type.LTE, Type.GT, Type.GTE, Type.REF_EQ, Type.REF_NEQ, Type.MATCH, Type.NOTMATCH,
     Type.DOT, Type.ARROW, Type.EQARROW, Type.QUESTION, Type.COLONCOLON,

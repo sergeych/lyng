@@ -21,3 +21,8 @@ xcuserdata
 debug.log
 /build.log
 /test.md
+/build_output.txt
+/build_output_full.txt
+/check_output.txt
+/compile_jvm_output.txt
+/compile_metadata_output.txt

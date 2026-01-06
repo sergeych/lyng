@@ -175,6 +175,7 @@ class Compiler(
                             // A standalone newline not immediately following a comment resets doc buffer
                             if (!prevWasComment) clearPendingDoc() else prevWasComment = false
                         }
+                        else -> {}
                     }
                     cc.next()
                     continue
@@ -3601,6 +3602,9 @@ class Compiler(
             },
             Operator(Token.Type.PERCENTASSIGN, lastPriority) { pos, a, b ->
                 AssignOpRef(BinOp.PERCENT, a, b, pos)
+            },
+            Operator(Token.Type.IFNULLASSIGN, lastPriority) { pos, a, b ->
+                AssignIfNullRef(a, b, pos)
             },
             // logical 1
             Operator(Token.Type.OR, ++lastPriority) { _, a, b ->

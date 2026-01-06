@@ -139,6 +139,21 @@ var name by Observable("initial") { n, old, new ->
 
 The system features a unified interface (`getValue`, `setValue`, `invoke`) and a `bind` hook for initialization-time validation and configuration. See the [Delegation Guide](delegation.md) for more.
 
+### Assign-if-null Operator (`?=`)
+The new `?=` operator provides a concise way to assign a value only if the target is `null`. It is especially useful for setting default values or lazy initialization.
+
+```lyng
+var x = null
+x ?= 42          // x is now 42
+x ?= 100         // x remains 42 (not null)
+
+// Works with properties and index access
+config.port ?= 8080
+settings["theme"] ?= "dark"
+```
+
+The operator returns the final value of the receiver (the original value if it was not `null`, or the new value if the assignment occurred).
+
 ## Tooling and Infrastructure
 
 ### CLI: Formatting Command

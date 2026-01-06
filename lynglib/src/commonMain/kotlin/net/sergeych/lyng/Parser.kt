@@ -325,6 +325,7 @@ private class Parser(fromPos: Pos) {
 
             '?' -> {
                 when (currentChar) {
+                    '=' -> { pos.advance(); Token("?=", from, Token.Type.IFNULLASSIGN) }
                     ':' -> { pos.advance(); Token("?:", from, Token.Type.ELVIS) }
                     '?' -> { pos.advance(); Token("??", from, Token.Type.ELVIS) }
                     '.' -> { pos.advance(); Token("?.", from, Token.Type.NULL_COALESCE) }

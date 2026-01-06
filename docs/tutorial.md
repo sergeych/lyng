@@ -188,14 +188,13 @@ Note that assignment operator returns rvalue, it can't be assigned.
 ## Modifying arithmetics
 
 There is a set of assigning operations: `+=`, `-=`, `*=`, `/=` and even `%=`.
+There is also a special null-aware assignment operator `?=`: it performs the assignment only if the lvalue is `null`.
 
-    var x = 5
-    assert( 25 == (x*=5) )
-    assert( 25 == x)
-    assert( 24 == (x-=1) )
-    assert( 12 == (x/=2) )
-    x
-    >>> 12
+    var x = null
+    x ?= 10
+    assertEquals(10, x)
+    x ?= 20
+    assertEquals(10, x)
 
 Notice the parentheses here: the assignment has low priority!
 
@@ -247,6 +246,13 @@ There is also "elvis operator", null-coalesce infix operator '?:' that returns r
 
     null ?: "nothing"
     >>> "nothing"
+
+There is also a null-aware assignment operator `?=`, which assigns a value only if the target is `null`:
+
+    var config = null
+    config ?= { port: 8080 }
+    config ?= { port: 9000 } // no-op, config is already not null
+    assertEquals(8080, config.port)
 
 ## Utility functions
 
