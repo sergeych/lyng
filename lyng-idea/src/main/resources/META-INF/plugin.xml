@@ -19,7 +19,7 @@
     <!-- Open-ended compatibility: 2024.3+ (build 243 and newer) -->
     <idea-version since-build="243"/>
     <id>net.sergeych.lyng.idea</id>
-    <name>Lyng Language Support</name>
+    <name>Lyng</name>
     <vendor email="real.sergeych@gmail.com">Sergey Chernov</vendor>
 
     <description>
@@ -42,7 +42,8 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <!-- Language and file type -->
-        <fileType implementationClass="net.sergeych.lyng.idea.LyngFileType" name="Lyng" extensions="lyng;lyng.d" fieldName="INSTANCE" language="Lyng"/>
+        <fileType implementationClass="net.sergeych.lyng.idea.LyngFileType" name="Lyng" extensions="lyng" fieldName="INSTANCE" language="Lyng"/>
+        <fileTypeFactory implementation="net.sergeych.lyng.idea.LyngFileTypeFactory"/>
 
         <!-- Minimal parser/PSI to fully wire editor services for the language -->
         <lang.parserDefinition language="Lyng" implementationClass="net.sergeych.lyng.idea.psi.LyngParserDefinition"/>

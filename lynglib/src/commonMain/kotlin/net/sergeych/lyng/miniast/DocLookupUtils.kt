@@ -430,6 +430,7 @@ object DocLookupUtils {
 
     fun scanLocalClassMembersFromText(mini: MiniScript, text: String, cls: MiniClassDecl): Map<String, ScannedSig> {
         val src = mini.range.start.source
+        if (cls.nameStart.source != src) return emptyMap()
         val start = src.offsetOf(cls.bodyRange?.start ?: cls.range.start)
         val end = src.offsetOf(cls.bodyRange?.end ?: cls.range.end).coerceAtMost(text.length)
         if (start !in 0..end) return emptyMap()

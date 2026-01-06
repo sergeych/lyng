@@ -102,7 +102,7 @@ class LyngCompletionContributor : CompletionContributor() {
 
             // Delegate computation to the shared engine to keep behavior in sync with tests
             val engineItems = try {
-                runBlocking { CompletionEngineLight.completeSuspend(text, caret) }
+                runBlocking { CompletionEngineLight.completeSuspend(text, caret, mini) }
             } catch (t: Throwable) {
                 if (DEBUG_COMPLETION) log.warn("[LYNG_DEBUG] Engine completion failed: ${t.message}")
                 emptyList()
@@ -452,7 +452,7 @@ class LyngCompletionContributor : CompletionContributor() {
                 for (name in common) {
                     if (name in already) continue
                     // Try resolve across classes first to get types/params; if it fails, emit a synthetic safe suggestion.
-                    val resolved = DocLookupUtils.findMemberAcrossClasses(imported, name)
+                    val resolved = DocLookupUtils.findMemberAcrossClasses(imported, name, mini)
                     if (resolved != null) {
                         val member = resolved.second
                         when (member) {
@@ -502,7 +502,7 @@ class LyngCompletionContributor : CompletionContributor() {
                 for (name in ext) {
                     if (already.contains(name)) continue
                     // Try to resolve full signature via registry first to get params and return type
-                    val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, className, name)
+                    val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, className, name, mini)
                     if (resolved != null) {
                         when (val member = resolved.second) {
                             is MiniMemberFunDecl -> {

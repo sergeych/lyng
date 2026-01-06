@@ -2936,7 +2936,9 @@ class Compiler(
                 returnType = returnTypeMini,
                 body = bodyRange?.let { MiniBlock(it) },
                 doc = declDocLocal,
-                nameStart = nameStartPos
+                nameStart = nameStartPos,
+                receiver = receiverMini,
+                isExtern = actualExtern
             )
             miniSink?.onFunDecl(node)
         }

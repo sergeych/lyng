@@ -273,4 +273,42 @@ class MiniAstTest {
         assertNotNull(e1)
         assertEquals("Doc6", e1.doc?.summary)
     }
+
+    @Test
+    fun miniAst_captures_user_sample_extern_doc() = runTest {
+        val code = """
+            /*
+              the plugin testing .d sample
+            */
+            extern fun test(value: Int): String
+        """.trimIndent()
+        val (_, sink) = compileWithMini(code)
+        val mini = sink.build()
+        assertNotNull(mini)
+        val test = mini.declarations.filterIsInstance<MiniFunDecl>().firstOrNull { it.name == "test" }
+        assertNotNull(test, "function 'test' should be captured")
+        assertNotNull(test.doc, "doc for 'test' should be captured")
+        assertEquals("the plugin testing .d sample", test.doc.summary)
+        assertTrue(test.isExtern, "function 'test' should be extern")
+    }
+
+    @Test
+    fun resolve_object_member_doc() = runTest {
+        val code = """
+            object O3 {
+                /* doc for name */
+                fun name() = "ozone"
+            }
+        """.trimIndent()
+        val (_, sink) = compileWithMini(code)
+        val mini = sink.build()
+        assertNotNull(mini)
+
+        val imported = listOf("lyng.stdlib")
+        // Simulate looking up O3.name
+        val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, "O3", "name", mini)
+        assertNotNull(resolved)
+        assertEquals("O3", resolved.first)
+        assertEquals("doc for name", resolved.second.doc?.summary)
+    }
 }

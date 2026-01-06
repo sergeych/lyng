@@ -25,9 +25,6 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiFile
-import kotlinx.coroutines.runBlocking
-import net.sergeych.lyng.Compiler
-import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.Source
 import net.sergeych.lyng.binding.Binder
 import net.sergeych.lyng.binding.SymbolKind
@@ -35,7 +32,7 @@ import net.sergeych.lyng.highlight.HighlightKind
 import net.sergeych.lyng.highlight.SimpleLyngHighlighter
 import net.sergeych.lyng.highlight.offsetOf
 import net.sergeych.lyng.idea.highlight.LyngHighlighterColors
-import net.sergeych.lyng.idea.util.IdeLenientImportProvider
+import net.sergeych.lyng.idea.util.LyngAstManager
 import net.sergeych.lyng.miniast.*
 
 /**
@@ -43,7 +40,7 @@ import net.sergeych.lyng.miniast.*
  * and applies semantic highlighting comparable with the web highlighter.
  */
 class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, LyngExternalAnnotator.Result>() {
-    data class Input(val text: String, val modStamp: Long, val previousSpans: List<Span>?)
+    data class Input(val text: String, val modStamp: Long, val previousSpans: List<Span>?, val file: PsiFile)
 
     data class Span(val start: Int, val end: Int, val key: com.intellij.openapi.editor.colors.TextAttributesKey)
     data class Error(val start: Int, val end: Int, val message: String)
@@ -55,43 +52,24 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
     override fun collectInformation(file: PsiFile): Input? {
         val doc: Document = file.viewProvider.document ?: return null
         val cached = file.getUserData(CACHE_KEY)
-        // Fast fix (1): reuse cached spans only if they were computed for the same modification stamp
-        val prev = if (cached != null && cached.modStamp == doc.modificationStamp) cached.spans else null
-        return Input(doc.text, doc.modificationStamp, prev)
+        val combinedStamp = LyngAstManager.getCombinedStamp(file)
+
+        val prev = if (cached != null && cached.modStamp == combinedStamp) cached.spans else null
+        return Input(doc.text, combinedStamp, prev, file)
     }
 
     override fun doAnnotate(collectedInfo: Input?): Result? {
         if (collectedInfo == null) return null
         ProgressManager.checkCanceled()
         val text = collectedInfo.text
-        // Build Mini-AST using the same mechanism as web highlighter
-        val sink = MiniAstBuilder()
-        val source = Source("<ide>", text)
-        try {
-            // Call suspend API from blocking context
-            val provider = IdeLenientImportProvider.create()
-            runBlocking { Compiler.compileWithMini(source, provider, sink) }
-        } catch (e: Throwable) {
-            if (e is com.intellij.openapi.progress.ProcessCanceledException) throw e
-            // On script parse error: keep previous spans and report the error location
-            if (e is ScriptError) {
-                val off = try { source.offsetOf(e.pos) } catch (_: Throwable) { -1 }
-                val start0 = off.coerceIn(0, text.length.coerceAtLeast(0))
-                val (start, end) = expandErrorRange(text, start0)
-                // Fast fix (5): clear cached highlighting after the error start position
-                val trimmed = collectedInfo.previousSpans?.filter { it.end <= start } ?: emptyList()
-                return Result(
-                    collectedInfo.modStamp,
-                    trimmed,
-                    Error(start, end, e.errorMessage)
-                )
-            }
-            // Other failures: keep previous spans without error
-            return Result(collectedInfo.modStamp, collectedInfo.previousSpans ?: emptyList(), null)
-        }
+        
+        // Use LyngAstManager to get the (potentially merged) Mini-AST
+        val mini = LyngAstManager.getMiniAst(collectedInfo.file) 
+            ?: return Result(collectedInfo.modStamp, collectedInfo.previousSpans ?: emptyList())
+        
         ProgressManager.checkCanceled()
-        val mini = sink.build() ?: return Result(collectedInfo.modStamp, collectedInfo.previousSpans ?: emptyList())
-
+        val source = Source(collectedInfo.file.name, text)
+        
         val out = ArrayList<Span>(256)
 
         fun isFollowedByParenOrBlock(rangeEnd: Int): Boolean {
@@ -118,7 +96,8 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
         }
 
         // Declarations
-        for (d in mini.declarations) {
+        mini.declarations.forEach { d ->
+            if (d.nameStart.source != source) return@forEach
             when (d) {
                 is MiniFunDecl -> putName(d.nameStart, d.name, LyngHighlighterColors.FUNCTION_DECLARATION)
                 is MiniClassDecl -> putName(d.nameStart, d.name, LyngHighlighterColors.TYPE)
@@ -132,19 +111,22 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
         }
 
         // Imports: each segment as namespace/path
-        for (imp in mini.imports) {
-            for (seg in imp.segments) putMiniRange(seg.range, LyngHighlighterColors.NAMESPACE)
+        mini.imports.forEach { imp ->
+            if (imp.range.start.source != source) return@forEach
+            imp.segments.forEach { seg -> putMiniRange(seg.range, LyngHighlighterColors.NAMESPACE) }
         }
 
         // Parameters
-        for (fn in mini.declarations.filterIsInstance<MiniFunDecl>()) {
-            for (p in fn.params) putName(p.nameStart, p.name, LyngHighlighterColors.PARAMETER)
+        mini.declarations.filterIsInstance<MiniFunDecl>().forEach { fn ->
+            if (fn.nameStart.source != source) return@forEach
+            fn.params.forEach { p -> putName(p.nameStart, p.name, LyngHighlighterColors.PARAMETER) }
         }
 
         // Type name segments (including generics base & args)
         fun addTypeSegments(t: MiniTypeRef?) {
             when (t) {
                 is MiniTypeName -> t.segments.forEach { seg ->
+                    if (seg.range.start.source != source) return@forEach
                     val s = source.offsetOf(seg.range.start)
                     putRange(s, (s + seg.name.length).coerceAtMost(text.length), LyngHighlighterColors.TYPE)
                 }
@@ -158,12 +140,14 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
                     addTypeSegments(t.returnType)
                 }
                 is MiniTypeVar -> { /* name is in range; could be highlighted as TYPE as well */
-                    putMiniRange(t.range, LyngHighlighterColors.TYPE)
+                    if (t.range.start.source == source)
+                        putMiniRange(t.range, LyngHighlighterColors.TYPE)
                 }
                 null -> {}
             }
         }
-        for (d in mini.declarations) {
+        mini.declarations.forEach { d ->
+            if (d.nameStart.source != source) return@forEach
             when (d) {
                 is MiniFunDecl -> {
                     addTypeSegments(d.returnType)
@@ -190,7 +174,7 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
 
             // Map declaration ranges to avoid duplicating them as usages
             val declKeys = HashSet<Pair<Int, Int>>(binding.symbols.size * 2)
-            for (sym in binding.symbols) declKeys += (sym.declStart to sym.declEnd)
+            binding.symbols.forEach { sym -> declKeys += (sym.declStart to sym.declEnd) }
 
             fun keyForKind(k: SymbolKind) = when (k) {
                 SymbolKind.Function -> LyngHighlighterColors.FUNCTION
@@ -203,13 +187,16 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
             // Track covered ranges to not override later heuristics
             val covered = HashSet<Pair<Int, Int>>()
 
-            for (ref in binding.references) {
+            binding.references.forEach { ref ->
                 val key = ref.start to ref.end
-                if (declKeys.contains(key)) continue
-                val sym = binding.symbols.firstOrNull { it.id == ref.symbolId } ?: continue
-                val color = keyForKind(sym.kind)
-                putRange(ref.start, ref.end, color)
-                covered += key
+                if (!declKeys.contains(key)) {
+                    val sym = binding.symbols.firstOrNull { it.id == ref.symbolId }
+                    if (sym != null) {
+                        val color = keyForKind(sym.kind)
+                        putRange(ref.start, ref.end, color)
+                        covered += key
+                    }
+                }
             }
 
             // Heuristics on top of binder: function call-sites and simple name-based roles
@@ -219,32 +206,41 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
 
             // Build simple name -> role map for top-level vals/vars and parameters
             val nameRole = HashMap<String, com.intellij.openapi.editor.colors.TextAttributesKey>(8)
-            for (d in mini.declarations) when (d) {
-                is MiniValDecl -> nameRole[d.name] = if (d.mutable) LyngHighlighterColors.VARIABLE else LyngHighlighterColors.VALUE
-                is MiniFunDecl -> d.params.forEach { p -> nameRole[p.name] = LyngHighlighterColors.PARAMETER }
-                else -> {}
+            mini.declarations.forEach { d ->
+                when (d) {
+                    is MiniValDecl -> nameRole[d.name] =
+                        if (d.mutable) LyngHighlighterColors.VARIABLE else LyngHighlighterColors.VALUE
+
+                    is MiniFunDecl -> d.params.forEach { p -> nameRole[p.name] = LyngHighlighterColors.PARAMETER }
+                    else -> {}
+                }
             }
 
-            for (s in tokens) if (s.kind == HighlightKind.Identifier) {
-                val start = s.range.start
-                val end = s.range.endExclusive
-                val key = start to end
-                if (key in covered || key in declKeys) continue
-
-                // Call-site detection first so it wins over var/param role
-                if (isFollowedByParenOrBlock(end)) {
-                    putRange(start, end, LyngHighlighterColors.FUNCTION)
-                    covered += key
-                    continue
-                }
-
-                // Simple role by known names
-                val ident = try { text.substring(start, end) } catch (_: Throwable) { null }
-                if (ident != null) {
-                    val roleKey = nameRole[ident]
-                    if (roleKey != null) {
-                        putRange(start, end, roleKey)
-                        covered += key
+            tokens.forEach { s ->
+                if (s.kind == HighlightKind.Identifier) {
+                    val start = s.range.start
+                    val end = s.range.endExclusive
+                    val key = start to end
+                    if (key !in covered && key !in declKeys) {
+                        // Call-site detection first so it wins over var/param role
+                        if (isFollowedByParenOrBlock(end)) {
+                            putRange(start, end, LyngHighlighterColors.FUNCTION)
+                            covered += key
+                        } else {
+                            // Simple role by known names
+                            val ident = try {
+                                text.substring(start, end)
+                            } catch (_: Throwable) {
+                                null
+                            }
+                            if (ident != null) {
+                                val roleKey = nameRole[ident]
+                                if (roleKey != null) {
+                                    putRange(start, end, roleKey)
+                                    covered += key
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -256,31 +252,37 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
         // Add annotation/label coloring using token highlighter
         run {
             val tokens = try { SimpleLyngHighlighter().highlight(text) } catch (_: Throwable) { emptyList() }
-            for (s in tokens) if (s.kind == HighlightKind.Label) {
-                val start = s.range.start
-                val end = s.range.endExclusive
-                if (start in 0..end && end <= text.length && start < end) {
-                    val lexeme = try { text.substring(start, end) } catch (_: Throwable) { null }
-                    if (lexeme != null) {
-                        // Heuristic: if it starts with @ and follows a control keyword, it's likely a label
-                        // Otherwise if it starts with @ it's an annotation.
-                        // If it ends with @ it's a loop label.
-                        when {
-                            lexeme.endsWith("@") -> putRange(start, end, LyngHighlighterColors.LABEL)
-                            lexeme.startsWith("@") -> {
-                                // Try to see if it's an exit label
-                                val prevNonWs = prevNonWs(text, start)
-                                val prevWord = if (prevNonWs >= 0) {
-                                    var wEnd = prevNonWs + 1
-                                    var wStart = prevNonWs
-                                    while (wStart > 0 && text[wStart - 1].isLetter()) wStart--
-                                    text.substring(wStart, wEnd)
-                                } else null
-                                
-                                if (prevWord in setOf("return", "break", "continue") || isFollowedByParenOrBlock(end)) {
-                                    putRange(start, end, LyngHighlighterColors.LABEL)
-                                } else {
-                                    putRange(start, end, LyngHighlighterColors.ANNOTATION)
+            tokens.forEach { s ->
+                if (s.kind == HighlightKind.Label) {
+                    val start = s.range.start
+                    val end = s.range.endExclusive
+                    if (start in 0..end && end <= text.length && start < end) {
+                        val lexeme = try {
+                            text.substring(start, end)
+                        } catch (_: Throwable) {
+                            null
+                        }
+                        if (lexeme != null) {
+                            // Heuristic: if it starts with @ and follows a control keyword, it's likely a label
+                            // Otherwise if it starts with @ it's an annotation.
+                            // If it ends with @ it's a loop label.
+                            when {
+                                lexeme.endsWith("@") -> putRange(start, end, LyngHighlighterColors.LABEL)
+                                lexeme.startsWith("@") -> {
+                                    // Try to see if it's an exit label
+                                    val prevNonWs = prevNonWs(text, start)
+                                    val prevWord = if (prevNonWs >= 0) {
+                                        var wEnd = prevNonWs + 1
+                                        var wStart = prevNonWs
+                                        while (wStart > 0 && text[wStart - 1].isLetter()) wStart--
+                                        text.substring(wStart, wEnd)
+                                    } else null
+
+                                    if (prevWord in setOf("return", "break", "continue") || isFollowedByParenOrBlock(end)) {
+                                        putRange(start, end, LyngHighlighterColors.LABEL)
+                                    } else {
+                                        putRange(start, end, LyngHighlighterColors.ANNOTATION)
+                                    }
                                 }
                             }
                         }
@@ -292,11 +294,13 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
         // Map Enum constants from token highlighter to IDEA enum constant color
         run {
             val tokens = try { SimpleLyngHighlighter().highlight(text) } catch (_: Throwable) { emptyList() }
-            for (s in tokens) if (s.kind == HighlightKind.EnumConstant) {
-                val start = s.range.start
-                val end = s.range.endExclusive
-                if (start in 0..end && end <= text.length && start < end) {
-                    putRange(start, end, LyngHighlighterColors.ENUM_CONSTANT)
+            tokens.forEach { s ->
+                if (s.kind == HighlightKind.EnumConstant) {
+                    val start = s.range.start
+                    val end = s.range.endExclusive
+                    if (start in 0..end && end <= text.length && start < end) {
+                        putRange(start, end, LyngHighlighterColors.ENUM_CONSTANT)
+                    }
                 }
             }
         }
@@ -305,12 +309,14 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
         val idRanges = mutableSetOf<IntRange>()
         try {
             val binding = Binder.bind(text, mini)
-            for (sym in binding.symbols) {
-                val s = sym.declStart; val e = sym.declEnd
+            binding.symbols.forEach { sym ->
+                val s = sym.declStart
+                val e = sym.declEnd
                 if (s in 0..e && e <= text.length && s < e) idRanges += (s until e)
             }
-            for (ref in binding.references) {
-                val s = ref.start; val e = ref.end
+            binding.references.forEach { ref ->
+                val s = ref.start
+                val e = ref.end
                 if (s in 0..e && e <= text.length && s < e) idRanges += (s until e)
             }
         } catch (_: Throwable) {
@@ -329,11 +335,12 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
     override fun apply(file: PsiFile, annotationResult: Result?, holder: AnnotationHolder) {
         if (annotationResult == null) return
         // Skip if cache is up-to-date
-        val doc = file.viewProvider.document
-        val currentStamp = doc?.modificationStamp
+        val combinedStamp = LyngAstManager.getCombinedStamp(file)
         val cached = file.getUserData(CACHE_KEY)
-        val result = if (cached != null && currentStamp != null && cached.modStamp == currentStamp) cached else annotationResult
+        val result = if (cached != null && cached.modStamp == combinedStamp) cached else annotationResult
         file.putUserData(CACHE_KEY, result)
+
+        val doc = file.viewProvider.document
 
         // Store spell index for spell/grammar engines to consume (suspend until ready)
         val ids = result.spellIdentifiers.map { TextRange(it.first, it.last + 1) }

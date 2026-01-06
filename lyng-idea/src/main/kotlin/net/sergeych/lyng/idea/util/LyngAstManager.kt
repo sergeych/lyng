@@ -17,6 +17,7 @@
 
 package net.sergeych.lyng.idea.util
 
+import com.intellij.openapi.application.runReadAction
 import com.intellij.openapi.util.Key
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiManager
@@ -33,14 +34,15 @@ object LyngAstManager {
     private val BINDING_KEY = Key.create<BindingSnapshot>("lyng.binding.cache")
     private val STAMP_KEY = Key.create<Long>("lyng.mini.cache.stamp")
 
-    fun getMiniAst(file: PsiFile): MiniScript? {
-        val doc = file.viewProvider.document ?: return null
-        val stamp = doc.modificationStamp
+    fun getMiniAst(file: PsiFile): MiniScript? = runReadAction {
+        val vFile = file.virtualFile ?: return@runReadAction null
+        val combinedStamp = getCombinedStamp(file)
+
         val prevStamp = file.getUserData(STAMP_KEY)
         val cached = file.getUserData(MINI_KEY)
-        if (cached != null && prevStamp != null && prevStamp == stamp) return cached
+        if (cached != null && prevStamp != null && prevStamp == combinedStamp) return@runReadAction cached
 
-        val text = doc.text
+        val text = file.viewProvider.contents.toString()
         val sink = MiniAstBuilder()
         val built = try {
             val provider = IdeLenientImportProvider.create()
@@ -48,7 +50,14 @@ object LyngAstManager {
             runBlocking { Compiler.compileWithMini(src, provider, sink) }
             val script = sink.build()
             if (script != null && !file.name.endsWith(".lyng.d")) {
-                mergeDeclarationFiles(file, script)
+                val dFiles = collectDeclarationFiles(file)
+                for (df in dFiles) {
+                    val scriptD = getMiniAst(df)
+                    if (scriptD != null) {
+                        script.declarations.addAll(scriptD.declarations)
+                        script.imports.addAll(scriptD.imports)
+                    }
+                }
             }
             script
         } catch (_: Throwable) {
@@ -57,53 +66,68 @@ object LyngAstManager {
 
         if (built != null) {
             file.putUserData(MINI_KEY, built)
-            file.putUserData(STAMP_KEY, stamp)
+            file.putUserData(STAMP_KEY, combinedStamp)
             // Invalidate binding too
             file.putUserData(BINDING_KEY, null)
         }
-        return built
+        built
     }
 
-    private fun mergeDeclarationFiles(file: PsiFile, mainScript: MiniScript) {
+    fun getCombinedStamp(file: PsiFile): Long = runReadAction {
+        var combinedStamp = file.viewProvider.modificationStamp
+        if (!file.name.endsWith(".lyng.d")) {
+            collectDeclarationFiles(file).forEach { df ->
+                combinedStamp += df.viewProvider.modificationStamp
+            }
+        }
+        combinedStamp
+    }
+
+    private fun collectDeclarationFiles(file: PsiFile): List<PsiFile> = runReadAction {
         val psiManager = PsiManager.getInstance(file.project)
         var current = file.virtualFile?.parent
         val seen = mutableSetOf<String>()
+        val result = mutableListOf<PsiFile>()
 
         while (current != null) {
             for (child in current.children) {
                 if (child.name.endsWith(".lyng.d") && child != file.virtualFile && seen.add(child.path)) {
                     val psiD = psiManager.findFile(child) ?: continue
-                    val scriptD = getMiniAst(psiD)
-                    if (scriptD != null) {
-                        mainScript.declarations.addAll(scriptD.declarations)
-                        mainScript.imports.addAll(scriptD.imports)
-                    }
+                    result.add(psiD)
                 }
             }
             current = current.parent
         }
+        result
     }
 
-    fun getBinding(file: PsiFile): BindingSnapshot? {
-        val doc = file.viewProvider.document ?: return null
-        val stamp = doc.modificationStamp
+    fun getBinding(file: PsiFile): BindingSnapshot? = runReadAction {
+        val vFile = file.virtualFile ?: return@runReadAction null
+        var combinedStamp = file.viewProvider.modificationStamp
+
+        val dFiles = if (!file.name.endsWith(".lyng.d")) collectDeclarationFiles(file) else emptyList()
+        for (df in dFiles) {
+            combinedStamp += df.viewProvider.modificationStamp
+        }
+
         val prevStamp = file.getUserData(STAMP_KEY)
         val cached = file.getUserData(BINDING_KEY)
-        
-        if (cached != null && prevStamp != null && prevStamp == stamp) return cached
-        
-        val mini = getMiniAst(file) ?: return null
-        val text = doc.text
+
+        if (cached != null && prevStamp != null && prevStamp == combinedStamp) return@runReadAction cached
+
+        val mini = getMiniAst(file) ?: return@runReadAction null
+        val text = file.viewProvider.contents.toString()
         val binding = try {
             Binder.bind(text, mini)
         } catch (_: Throwable) {
             null
         }
-        
+
         if (binding != null) {
             file.putUserData(BINDING_KEY, binding)
-            // stamp is already set by getMiniAst
+            // stamp is already set by getMiniAst or we set it here if getMiniAst was cached
+            file.putUserData(STAMP_KEY, combinedStamp)
         }
-        return binding
+        binding
     }
 }

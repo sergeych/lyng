@@ -58,11 +58,11 @@ object CompletionEngineLight {
         return completeSuspend(text, idx)
     }
 
-    suspend fun completeSuspend(text: String, caret: Int): List<CompletionItem> {
+    suspend fun completeSuspend(text: String, caret: Int, providedMini: MiniScript? = null): List<CompletionItem> {
         // Ensure stdlib Obj*-defined docs (e.g., String methods) are initialized before registry lookup
         StdlibDocsBootstrap.ensure()
         val prefix = prefixAt(text, caret)
-        val mini = buildMiniAst(text)
+        val mini = providedMini ?: buildMiniAst(text)
         val imported: List<String> = DocLookupUtils.canonicalImportedModules(mini ?: return emptyList(), text)
 
         val cap = 200
