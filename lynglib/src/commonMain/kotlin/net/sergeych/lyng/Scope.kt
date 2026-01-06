@@ -314,11 +314,11 @@ open class Scope(
 
     inline fun <reified T : Obj> thisAs(): T {
         var s: Scope? = this
-        do {
-            val t = s!!.thisObj
+        while (s != null) {
+            val t = s.thisObj
             if (t is T) return t
             s = s.parent
-        } while (s != null)
+        }
         raiseClassCastError("Cannot cast ${thisObj.objClass.className} to ${T::class.simpleName}")
     }
 
@@ -642,7 +642,7 @@ open class Scope(
                         return del.invokeInstanceMethod(scope, "invoke", Arguments(*allArgs))
                     }
                 }
-            })!!
+            })
             rec.value = res
             return res
         }

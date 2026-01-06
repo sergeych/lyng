@@ -47,7 +47,7 @@ class BindingHighlightTest {
         val mini = sink.build()
         assertNotNull(mini, "Mini-AST must be built")
 
-        val binding = Binder.bind(text, mini!!)
+        val binding = Binder.bind(text, mini)
 
         // Find the top-level symbol for counter and ensure it is mutable (Variable)
         val sym = binding.symbols.firstOrNull { it.name == "counter" }
@@ -78,7 +78,7 @@ class BindingHighlightTest {
         val mini = sink.build()
         assertNotNull(mini, "Mini-AST must be built")
 
-        val binding = Binder.bind(text, mini!!)
+        val binding = Binder.bind(text, mini)
 
         val sym = binding.symbols.firstOrNull { it.name == "answer" }
         assertNotNull(sym, "Top-level val 'answer' must be registered as a symbol")
@@ -114,7 +114,7 @@ class BindingHighlightTest {
         val mini = sink.build()
         assertNotNull(mini, "Mini-AST must be built")
 
-        val binding = Binder.bind(text, mini!!)
+        val binding = Binder.bind(text, mini)
 
         // Ensure we registered the local var/val symbol for `name`
         val nameSym = binding.symbols.firstOrNull { it.name == "name" }
@@ -163,7 +163,7 @@ class BindingHighlightTest {
         val mini = sink.build()
         assertNotNull(mini, "Mini-AST must be built")
 
-        val binding = Binder.bind(text, mini!!)
+        val binding = Binder.bind(text, mini)
 
         val nameSym = binding.symbols.firstOrNull { it.name == "name" && (it.kind == SymbolKind.Variable || it.kind == SymbolKind.Value) }
         assertNotNull(nameSym, "Local variable 'name' should be registered as a symbol")

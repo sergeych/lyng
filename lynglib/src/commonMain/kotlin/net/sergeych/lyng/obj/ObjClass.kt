@@ -184,11 +184,8 @@ open class ObjClass(
         val base = c3Linearize(this, mutableMapOf())
         if (this.className == "Obj" || base.any { it.className == "Obj" }) base
         else {
-            // During very early bootstrap rootObjectType might not be initialized yet.
-            // We use a safe check here.
-            @Suppress("UNNECESSARY_SAFE_CALL")
-            val root = net.sergeych.lyng.obj.Obj.rootObjectType
-            if (root != null) base + root else base
+            val root = Obj.rootObjectType
+            base + root
         }
     }
 
@@ -597,7 +594,7 @@ open class ObjClass(
                     // Fallback: property delegation
                     val propVal = del.invokeInstanceMethod(scope, "getValue", Arguments(this, ObjString(name)))
                     propVal.invoke(scope, this, args, decl)
-                })!!
+                })
             }
             if (rec.type == ObjRecord.Type.Fun) {
                 return rec.value.invoke(scope, this, args, decl)

@@ -469,9 +469,11 @@ class FieldRef(
     // Adaptive PIC (2→4) for reads/writes
     private var rAccesses: Int = 0; private var rMisses: Int = 0; private var rPromotedTo4: Boolean = false
     private var wAccesses: Int = 0; private var wMisses: Int = 0; private var wPromotedTo4: Boolean = false
+    @Suppress("NOTHING_TO_INLINE")
     private inline fun size4ReadsEnabled(): Boolean =
         PerfFlags.FIELD_PIC_SIZE_4 ||
             (PerfFlags.PIC_ADAPTIVE_2_TO_4 && rPromotedTo4)
+    @Suppress("NOTHING_TO_INLINE")
     private inline fun size4WritesEnabled(): Boolean =
         PerfFlags.FIELD_PIC_SIZE_4 ||
             (PerfFlags.PIC_ADAPTIVE_2_TO_4 && wPromotedTo4)
@@ -1064,6 +1066,7 @@ class MethodCallRef(
     private var mFreezeWindowsLeft: Int = 0
     private var mWindowAccesses: Int = 0
     private var mWindowMisses: Int = 0
+    @Suppress("NOTHING_TO_INLINE")
     private inline fun size4MethodsEnabled(): Boolean =
         PerfFlags.METHOD_PIC_SIZE_4 ||
             ((PerfFlags.PIC_ADAPTIVE_2_TO_4 || PerfFlags.PIC_ADAPTIVE_METHODS_ONLY) && mPromotedTo4 && mFreezeWindowsLeft == 0)

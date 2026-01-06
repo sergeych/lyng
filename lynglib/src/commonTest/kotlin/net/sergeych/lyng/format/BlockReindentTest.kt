@@ -39,7 +39,7 @@ class BlockReindentTest {
         val open = BraceUtils.findMatchingOpenBrace(text, close)
         assertNotNull(open)
         // The char at open must be '{'
-        assertEquals('{', text[open!!])
+        assertEquals('{', text[open])
     }
 
     @Test
@@ -55,7 +55,7 @@ class BlockReindentTest {
         val range = BraceUtils.findEnclosingBlockRange(text, close, includeTrailingNewline = true)
         assertNotNull(range)
         // The range must start at the line start of the matching '{' and end at or after the newline after '}'
-        val start = range!!.first
+        val start = range.first
         val end = range.last + 1
         val startLinePrefix = text.substring(BraceUtils.lineStart(text, start), start)
         // start at column 0 of the line

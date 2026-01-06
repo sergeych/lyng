@@ -175,8 +175,6 @@ class Compiler(
                             // A standalone newline not immediately following a comment resets doc buffer
                             if (!prevWasComment) clearPendingDoc() else prevWasComment = false
                         }
-
-                        else -> {}
                     }
                     cc.next()
                     continue
@@ -2751,7 +2749,7 @@ class Compiler(
                     }
 
                     if (extTypeName != null) {
-                        val type = context[extTypeName!!]?.value ?: context.raiseSymbolNotFound("class $extTypeName not found")
+                        val type = context[extTypeName]?.value ?: context.raiseSymbolNotFound("class $extTypeName not found")
                         if (type !is ObjClass) context.raiseClassCastError("$extTypeName is not the class instance")
                         context.addExtension(type, name, ObjRecord(ObjUnset, isMutable = false, visibility = visibility, declaringClass = null, type = ObjRecord.Type.Delegated).apply {
                             delegate = finalDelegate
@@ -2773,7 +2771,7 @@ class Compiler(
                         cls.createField(name, ObjUnset, false, visibility, null, start, declaringClass = cls, isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride, type = ObjRecord.Type.Delegated)
                         cls.instanceInitializers += statement(start) { scp ->
                             val accessType2 = scp.resolveQualifiedIdentifier("DelegateAccess.Callable")
-                            val initValue2 = delegateExpression!!.execute(scp)
+                            val initValue2 = delegateExpression.execute(scp)
                             val finalDelegate2 = try {
                                 initValue2.invokeInstanceMethod(scp, "bind", Arguments(ObjString(name), accessType2, scp.thisObj))
                             } catch (e: Exception) {
@@ -3129,7 +3127,7 @@ class Compiler(
                         cc.skipWsTokens()
                         cc.next() // consume '='
                         val expr = parseExpression() ?: throw ScriptError(cc.current().pos, "Expected getter expression")
-                        (expr as? Statement) ?: statement(expr.pos) { s -> expr.execute(s) }
+                        expr
                     } else {
                         throw ScriptError(cc.current().pos, "Expected { or = after get()")
                     }
@@ -3150,7 +3148,7 @@ class Compiler(
                         cc.skipWsTokens()
                         cc.next() // consume '='
                         val expr = parseExpression() ?: throw ScriptError(cc.current().pos, "Expected setter expression")
-                        val st = (expr as? Statement) ?: statement(expr.pos) { s -> expr.execute(s) }
+                        val st = expr
                         statement(st.pos) { scope ->
                             val value = scope.args.list.firstOrNull() ?: ObjNull
                             scope.addItem(setArg.value, true, value, recordType = ObjRecord.Type.Argument)
@@ -3185,7 +3183,7 @@ class Compiler(
                                     cc.current().pos,
                                     "Expected setter expression"
                                 )
-                                val st = (expr as? Statement) ?: statement(expr.pos) { s -> expr.execute(s) }
+                                val st = expr
                                 statement(st.pos) { scope ->
                                     val value = scope.args.list.firstOrNull() ?: ObjNull
                                     scope.addItem(setArg.value, true, value, recordType = ObjRecord.Type.Argument)
@@ -3388,7 +3386,7 @@ class Compiler(
                     prop
                 }
             } else {
-                    val isLateInitVal = !isMutable && initialExpression == null && getter == null && setter == null
+                    val isLateInitVal = !isMutable && initialExpression == null
                     if (declaringClassName != null && !isStatic) {
                         val storageName = "$declaringClassName::$name"
                         // If we are in class scope now (defining instance field), defer initialization to instance time

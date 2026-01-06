@@ -96,17 +96,15 @@ object CompletionEngineLight {
         }
 
         // Global identifiers: params > local decls > imported > stdlib; Functions > Classes > Values; alphabetical
-        mini?.let { m ->
-            val decls = m.declarations
-            val funs = decls.filterIsInstance<MiniFunDecl>().sortedBy { it.name.lowercase() }
-            val classes = decls.filterIsInstance<MiniClassDecl>().sortedBy { it.name.lowercase() }
-            val enums = decls.filterIsInstance<MiniEnumDecl>().sortedBy { it.name.lowercase() }
-            val vals = decls.filterIsInstance<MiniValDecl>().sortedBy { it.name.lowercase() }
-            funs.forEach { offerDeclAdd(out, prefix, it) }
-            classes.forEach { offerDeclAdd(out, prefix, it) }
-            enums.forEach { offerDeclAdd(out, prefix, it) }
-            vals.forEach { offerDeclAdd(out, prefix, it) }
-        }
+        val decls = mini.declarations
+        val funs = decls.filterIsInstance<MiniFunDecl>().sortedBy { it.name.lowercase() }
+        val classes = decls.filterIsInstance<MiniClassDecl>().sortedBy { it.name.lowercase() }
+        val enums = decls.filterIsInstance<MiniEnumDecl>().sortedBy { it.name.lowercase() }
+        val vals = decls.filterIsInstance<MiniValDecl>().sortedBy { it.name.lowercase() }
+        funs.forEach { offerDeclAdd(out, prefix, it) }
+        classes.forEach { offerDeclAdd(out, prefix, it) }
+        enums.forEach { offerDeclAdd(out, prefix, it) }
+        vals.forEach { offerDeclAdd(out, prefix, it) }
 
         // Imported and builtin
         val (nonStd, std) = imported.partition { it != "lyng.stdlib" }
@@ -192,7 +190,7 @@ object CompletionEngineLight {
                         val chosen = variants.asSequence()
                             .filterIsInstance<MiniMemberValDecl>()
                             .firstOrNull { it.type != null } ?: rep
-                        val ci = CompletionItem(name, Kind.Field, typeText = typeOf((chosen as MiniMemberValDecl).type))
+                        val ci = CompletionItem(name, Kind.Field, typeText = typeOf(chosen.type))
                         if (ci.name.startsWith(prefix, true)) out += ci
                     }
                     is MiniInitDecl -> {}

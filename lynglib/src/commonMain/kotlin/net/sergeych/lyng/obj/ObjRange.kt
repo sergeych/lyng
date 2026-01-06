@@ -115,9 +115,9 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
     }
 
     override suspend fun enumerate(scope: Scope, callback: suspend (Obj) -> Boolean) {
-        if (isIntRange) {
-            val s = (start as ObjInt).value
-            val e = (end as ObjInt).value
+        if (start is ObjInt && end is ObjInt) {
+            val s = start.value
+            val e = end.value
             if (isEndInclusive) {
                 for (i in s..e) {
                     if (!callback(ObjInt.of(i))) break
@@ -127,9 +127,9 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
                     if (!callback(ObjInt.of(i))) break
                 }
             }
-        } else if (isCharRange) {
-            val s = (start as ObjChar).value
-            val e = (end as ObjChar).value
+        } else if (start is ObjChar && end is ObjChar) {
+            val s = start.value
+            val e = end.value
             if (isEndInclusive) {
                 for (c in s..e) {
                     if (!callback(ObjChar(c))) break

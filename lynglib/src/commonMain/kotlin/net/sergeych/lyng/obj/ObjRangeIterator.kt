@@ -29,14 +29,19 @@ class ObjRangeIterator(val self: ObjRange) : Obj() {
     override val objClass: ObjClass = type
 
     fun Scope.init() {
-        if (self.start == null || self.end == null)
-            raiseError("next is only available for finite ranges")
-        isCharRange = self.isCharRange
-        lastIndex = if (self.isIntRange || self.isCharRange) {
-            if (self.isEndInclusive)
-                self.end.toInt() - self.start.toInt() + 1
+        val s = self.start
+        val e = self.end
+        if (s is ObjInt && e is ObjInt) {
+            lastIndex = if (self.isEndInclusive)
+                (e.value - s.value + 1).toInt()
             else
-                self.end.toInt() - self.start.toInt()
+                (e.value - s.value).toInt()
+        } else if (s is ObjChar && e is ObjChar) {
+            isCharRange = true
+            lastIndex = if (self.isEndInclusive)
+                (e.value.code - s.value.code + 1)
+            else
+                (e.value.code - s.value.code)
         } else {
             raiseError("not implemented iterator for range of $this")
         }
@@ -46,10 +51,13 @@ class ObjRangeIterator(val self: ObjRange) : Obj() {
 
     fun next(scope: Scope): Obj =
         if (nextIndex < lastIndex) {
-            val x = if (self.isEndInclusive)
-                self.start!!.toLong() + nextIndex++
+            val start = self.start
+            val x = if (start is ObjInt)
+                start.value + nextIndex++
+            else if (start is ObjChar)
+                start.value.code.toLong() + nextIndex++
             else
-                self.start!!.toLong() + nextIndex++
+                scope.raiseError("iterator error: unsupported range start")
             if( isCharRange ) ObjChar(x.toInt().toChar()) else ObjInt(x)
         }
         else {

@@ -87,7 +87,7 @@ class ObjRegexMatch(val match: MatchResult) : Obj() {
         // Use groupValues so that index 0 is the whole match and subsequent indices are capturing groups,
         // which matches the language/tests expectation for `$~[i]`.
         ObjList(
-            match.groupValues.map { ObjString(it) as Obj }.toMutableList()
+            match.groupValues.map { ObjString(it) }.toMutableList()
         )
     }
 

@@ -44,7 +44,7 @@ class MiniAstTest {
         val (_, sink) = compileWithMini(code)
         val mini = sink.build()
         assertNotNull(mini)
-        val imps = mini!!.imports
+        val imps = mini.imports
         assertTrue(imps.isNotEmpty(), "imports should be captured")
         val first = imps.first()
         val segNames = first.segments.map { it.name }
@@ -68,12 +68,12 @@ class MiniAstTest {
         val (_, sink) = compileWithMini(code)
         val mini = sink.build()
         assertNotNull(mini)
-        val fn = mini!!.declarations.filterIsInstance<MiniFunDecl>().firstOrNull { it.name == "foo" }
+        val fn = mini.declarations.filterIsInstance<MiniFunDecl>().firstOrNull { it.name == "foo" }
         assertNotNull(fn, "function decl should be captured")
         // Doc
         assertNotNull(fn.doc)
-        assertEquals("Summary: does foo", fn.doc!!.summary)
-        assertTrue(fn.doc!!.raw.contains("details"))
+        assertEquals("Summary: does foo", fn.doc.summary)
+        assertTrue(fn.doc.raw.contains("details"))
         // Params
         assertEquals(2, fn.params.size)
         val p1 = fn.params[0]
@@ -99,10 +99,10 @@ class MiniAstTest {
         val (_, sink) = compileWithMini(code)
         val mini = sink.build()
         assertNotNull(mini)
-        val vd = mini!!.declarations.filterIsInstance<net.sergeych.lyng.miniast.MiniValDecl>().firstOrNull { it.name == "x" }
+        val vd = mini.declarations.filterIsInstance<net.sergeych.lyng.miniast.MiniValDecl>().firstOrNull { it.name == "x" }
         assertNotNull(vd)
         assertNotNull(vd.doc)
-        assertEquals("docs for x", vd.doc!!.summary)
+        assertEquals("docs for x", vd.doc.summary)
         val ty = vd.type
         assertNotNull(ty)
         val gen = ty as MiniGenericType
@@ -126,10 +126,10 @@ class MiniAstTest {
         val (_, sink) = compileWithMini(code)
         val mini = sink.build()
         assertNotNull(mini)
-        val cd = mini!!.declarations.filterIsInstance<MiniClassDecl>().firstOrNull { it.name == "C" }
+        val cd = mini.declarations.filterIsInstance<MiniClassDecl>().firstOrNull { it.name == "C" }
         assertNotNull(cd)
         assertNotNull(cd.doc, "Class doc should be preserved even with members")
-        assertTrue(cd.doc!!.raw.contains("Class C docs"))
+        assertTrue(cd.doc.raw.contains("Class C docs"))
     }
 
     @Test
@@ -141,10 +141,10 @@ class MiniAstTest {
         val (_, sink) = compileWithMini(code)
         val mini = sink.build()
         assertNotNull(mini)
-        val cd = mini!!.declarations.filterIsInstance<MiniClassDecl>().firstOrNull { it.name == "C" }
+        val cd = mini.declarations.filterIsInstance<MiniClassDecl>().firstOrNull { it.name == "C" }
         assertNotNull(cd)
         assertNotNull(cd.doc)
-        assertTrue(cd.doc!!.raw.contains("Class C docs"))
+        assertTrue(cd.doc.raw.contains("Class C docs"))
         // Bases captured as plain names for now
         assertEquals(listOf("Base1", "Base2"), cd.bases)
     }
@@ -162,10 +162,10 @@ class MiniAstTest {
         val (_, sink) = compileWithMini(code)
         val mini = sink.build()
         assertNotNull(mini)
-        val ed = mini!!.declarations.filterIsInstance<MiniEnumDecl>().firstOrNull { it.name == "E" }
+        val ed = mini.declarations.filterIsInstance<MiniEnumDecl>().firstOrNull { it.name == "E" }
         assertNotNull(ed)
         assertNotNull(ed.doc)
-        assertTrue(ed.doc!!.raw.contains("Enum E docs"))
+        assertTrue(ed.doc.raw.contains("Enum E docs"))
         assertEquals(listOf("A", "B", "C"), ed.entries)
         assertEquals("E", ed.name)
     }

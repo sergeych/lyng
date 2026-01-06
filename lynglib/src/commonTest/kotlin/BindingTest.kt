@@ -36,7 +36,7 @@ class BindingTest {
         Compiler.compileWithMini(src, sink)
         val mini = sink.build()
         assertNotNull(mini, "MiniScript should be built")
-        return Binder.bind(src, mini!!)
+        return Binder.bind(src, mini)
     }
 
     @Test
@@ -72,7 +72,7 @@ class BindingTest {
         val xSym = snap.symbols.firstOrNull { it.name == "x" }
         assertNotNull(xSym)
         // One reference usage to top-level x
-        val refs = snap.references.filter { it.symbolId == xSym!!.id }
+        val refs = snap.references.filter { it.symbolId == xSym.id }
         assertEquals(1, refs.size)
     }
 
@@ -111,7 +111,7 @@ class BindingTest {
         val fooField = snap.symbols.firstOrNull { it.name == "foo" }
         assertNotNull(fooField)
         // Should have at least one reference (usage in bar)
-        val refs = snap.references.count { it.symbolId == fooField!!.id }
+        val refs = snap.references.count { it.symbolId == fooField.id }
         assertEquals(1, refs)
     }
 
@@ -126,7 +126,7 @@ class BindingTest {
         )
         val xField = snap.symbols.firstOrNull { it.name == "x" }
         assertNotNull(xField)
-        val refs = snap.references.count { it.symbolId == xField!!.id }
+        val refs = snap.references.count { it.symbolId == xField.id }
         assertEquals(1, refs)
     }
 }

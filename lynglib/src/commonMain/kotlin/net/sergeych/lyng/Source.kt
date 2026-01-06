@@ -40,7 +40,7 @@ class Source(val fileName: String, val text: String) {
 
     fun extractPackageName(): String {
         for ((n,line) in lines.withIndex()) {
-            if( line.isBlank() || line.isEmpty() )
+            if( line.isBlank() )
                 continue
             if( line.startsWith("package ") )
                 return line.substring(8).trim()

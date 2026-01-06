@@ -202,7 +202,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                         // Fallback: property delegation
                         val propVal = del.invokeInstanceMethod(scope, "getValue", Arguments(this, ObjString(name)))
                         propVal.invoke(scope, this, args, rec.declaringClass ?: cls)
-                    })!!
+                    })
                 }
                 if (rec.type == ObjRecord.Type.Fun && !rec.isAbstract) {
                     val decl = rec.declaringClass ?: cls
@@ -211,7 +211,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                         scope.raiseError(
                             ObjIllegalAccessException(
                                 scope,
-                                "can't invoke method $name (declared in ${decl.className ?: "?"})"
+                                "can't invoke method $name (declared in ${decl.className})"
                             )
                         )
                     return rec.value.invoke(
@@ -263,7 +263,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         val params = meta.params.map { readField(scope, it.name).value }
         encoder.encodeAnyList(scope, params)
         val vars = serializingVars.values.map { it.value }
-        if (vars.isNotEmpty<Obj>()) {
+        if (vars.isNotEmpty()) {
             encoder.encodeAnyList(scope, vars)
         }
     }

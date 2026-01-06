@@ -34,7 +34,7 @@ class CommentEolTest {
         assertTrue(cmt != null, "Expected a comment span")
         // It should start at 0 and extend exactly to the end of the line (before \n)
         val eol = text.indexOf('\n')
-        assertEquals(0, cmt!!.range.start, "Comment should start at column 0")
+        assertEquals(0, cmt.range.start, "Comment should start at column 0")
         assertEquals(eol, cmt.range.endExclusive, "Comment should extend to EOL")
         // Ensure there is no other span overlapping within the same line
         spans.filter { it !== cmt }.forEach {
@@ -50,7 +50,7 @@ class CommentEolTest {
         assertTrue(cmt != null, "Expected a block comment span")
         // The comment should end right after "/* block */"
         val expectedEnd = "/* block */".length
-        assertEquals(expectedEnd, cmt!!.range.endExclusive, "Block comment should not be extended to EOL")
+        assertEquals(expectedEnd, cmt.range.endExclusive, "Block comment should not be extended to EOL")
     }
 
     @Test
