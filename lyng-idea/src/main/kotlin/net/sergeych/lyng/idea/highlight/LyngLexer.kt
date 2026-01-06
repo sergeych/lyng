@@ -33,10 +33,10 @@ class LyngLexer : LexerBase() {
 
     private val keywords = setOf(
         "fun", "val", "var", "class", "interface", "type", "import", "as",
-        "abstract", "closed", "override",
+        "abstract", "closed", "override", "static", "extern", "open", "private", "protected",
         "if", "else", "for", "while", "return", "true", "false", "null",
         "when", "in", "is", "break", "continue", "try", "catch", "finally",
-        "get", "set"
+        "get", "set", "object", "enum", "init", "by", "property", "constructor"
     )
 
     override fun start(buffer: CharSequence, startOffset: Int, endOffset: Int, initialState: Int) {
@@ -160,5 +160,5 @@ class LyngLexer : LexerBase() {
     private fun Char.isDigit(): Boolean = this in '0'..'9'
     private fun Char.isIdentifierStart(): Boolean = this == '_' || this.isLetter()
     private fun Char.isIdentifierPart(): Boolean = this.isIdentifierStart() || this.isDigit()
-    private fun isPunct(c: Char): Boolean = c in setOf('(', ')', '{', '}', '[', ']', '.', ',', ';', ':', '+', '-', '*', '/', '%', '=', '<', '>', '!', '?', '&', '|', '^', '~')
+    private fun isPunct(c: Char): Boolean = c in setOf('(', ')', '{', '}', '[', ']', '.', ',', ';', ':', '+', '-', '*', '/', '%', '=', '<', '>', '!', '?', '&', '|', '^', '~', '@')
 }

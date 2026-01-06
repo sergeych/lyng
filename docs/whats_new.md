@@ -105,6 +105,22 @@ object Config {
 Config.show()
 ```
 
+### Object Expressions
+You can now create anonymous objects that inherit from classes or interfaces using the `object : Base { ... }` syntax. These expressions capture their lexical scope and support multiple inheritance.
+
+```lyng
+val worker = object : Runnable {
+    override fun run() = println("Working...")
+}
+
+val x = object : Base(arg1), Interface1 {
+    val property = 42
+    override fun method() = this@object.property * 2
+}
+```
+
+Use `this@object` to refer to the innermost anonymous object instance when `this` is rebound.
+
 ### Unified Delegation Model
 A powerful new delegation system allows `val`, `var`, and `fun` members to delegate their logic to other objects using the `by` keyword.
 

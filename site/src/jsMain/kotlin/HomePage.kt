@@ -86,8 +86,12 @@ val base = { a: 1, b: 2 }
 val patch = { b: 3, c: }
 val m = { "a": 0, ...base, ...patch, d: 4 }
 assertEquals(1, m["a"]) // base overwrites 0
-assertEquals(3, m["b"]) // patch overwrites base
-assertEquals(4, m["d"]) // literal key
+
+// Object expressions: anonymous classes on the fly
+val worker = object : Runnable {
+    override fun run() = println("Working...")
+}
+worker.run()
 >>> void
 """.trimIndent()
     val mapHtml = "<pre><code>" + htmlEscape(code) + "</code></pre>"

@@ -530,7 +530,7 @@ private fun detectDeclarationAndParamOverrides(text: String): Map<Pair<Int, Int>
     fun isIdentPart(ch: Char) = ch == '_' || ch == '$' || ch == '~' || ch.isLetterOrDigit()
     // A conservative list of language keywords to avoid misclassifying as function calls
     val kw = setOf(
-        "package", "import", "fun", "fn", "class", "interface", "enum", "val", "var",
+        "package", "import", "fun", "fn", "class", "interface", "enum", "object", "val", "var",
         "if", "else", "while", "do", "for", "when", "try", "catch", "finally",
         "throw", "return", "break", "continue", "in", "is", "as", "as?", "not",
         "true", "false", "null", "private", "protected", "abstract", "closed", "override", "open", "extern", "static",
@@ -640,8 +640,12 @@ private fun detectDeclarationAndParamOverrides(text: String): Map<Pair<Int, Int>
             i = p
             continue
         }
-        if (text.startsWith("class", i) && (i == 0 || !isIdentPart(text[i-1])) && (i+5 >= n || !isIdentPart(text.getOrNull(i+5) ?: '\u0000'))) {
-            var p = skipWs(i + 5)
+        if ((text.startsWith("class", i) && (i == 0 || !isIdentPart(text[i-1])) && (i+5 >= n || !isIdentPart(text.getOrNull(i+5) ?: '\u0000'))) ||
+            (text.startsWith("object", i) && (i == 0 || !isIdentPart(text[i-1])) && (i+6 >= n || !isIdentPart(text.getOrNull(i+6) ?: '\u0000'))) ||
+            (text.startsWith("enum", i) && (i == 0 || !isIdentPart(text[i-1])) && (i+4 >= n || !isIdentPart(text.getOrNull(i+4) ?: '\u0000'))) ||
+            (text.startsWith("interface", i) && (i == 0 || !isIdentPart(text[i-1])) && (i+9 >= n || !isIdentPart(text.getOrNull(i+9) ?: '\u0000')))) {
+            val kwLen = if (text.startsWith("class", i)) 5 else if (text.startsWith("object", i)) 6 else if (text.startsWith("enum", i)) 4 else 9
+            var p = skipWs(i + kwLen)
             val name = readIdent(p)
             if (name != null) result[p to name.second] = "hl-class"
             i = p
