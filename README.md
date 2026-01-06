@@ -2,10 +2,12 @@
 
 __Please visit the project homepage: [https://lynglang.com](https://lynglang.com) and a [telegram channel](https://t.me/lynglang).__
 
-### Main development site [https://gitea.sergeych.net/SergeychWorks/lyng](https://gitea.sergeych.net/SergeychWorks/lyng)
-### github mirror: [https://github.com/sergeych/lyng](https://github.com/sergeych/lyng)
+__Main development site:__ [https://gitea.sergeych.net/SergeychWorks/lyng](https://gitea.sergeych.net/SergeychWorks/lyng)
+__github mirror__: [https://github.com/sergeych/lyng](https://github.com/sergeych/lyng)
 
-We keep github as a mirror and backup for the project, while the main development site is hosted on gitea.sergeych.net. We use gitea for issues and pull requests, and as a main point of trust, as github access now is a thing that can momentarily be revoked for no apparent reason..
+We keep github as a mirror and backup for the project, while the main development site is hosted on gitea.sergeych.net. We use gitea for issues and pull requests, and as a main point of trust, as github access now is a thing that can momentarily be revoked for no apparent reason.
+
+We encourage using the github if the main site is not accessible from your country and vice versa. We recommend to `publishToMavenLocal` and not depend on politics.
 
 
 - simple, compact, intuitive and elegant modern code:
