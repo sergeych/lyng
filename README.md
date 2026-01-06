@@ -1,6 +1,6 @@
-# Lyng: modern scripting for kotlin multiplatform
+# Lyng: ideal scripting for kotlin multiplatform
 
-Please visit the project homepage: [https://lynglang.com](https://lynglang.com) and a [telegram channel](https://t.me/lynglang) for updates.
+__Please visit the project homepage: [https://lynglang.com](https://lynglang.com) and a [telegram channel](https://t.me/lynglang).__
 
 - simple, compact, intuitive and elegant modern code:
 
