@@ -711,4 +711,24 @@ class OOTest {
             """.trimIndent()
         )
     }
+    @Test
+    fun testBasicObjectExpression() = runTest {
+        eval("""
+            val x = object { val y = 1 }
+            assertEquals(1, x.y)
+            
+            class Base(v) {
+                val value = v
+                fun squares() = value * value
+            }
+            
+            val y = object : Base(2) {
+                override val value = 5
+            }
+            
+            assertEquals(25, y.squares())
+            
+            """.trimIndent())
+    }
+
 }

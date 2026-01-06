@@ -95,6 +95,11 @@ class Compiler(
         }
     }
 
+    private var anonCounter = 0
+    private fun generateAnonName(pos: Pos): String {
+        return "${"$"}${"Anon"}_${pos.line+1}_${pos.column}_${++anonCounter}"
+    }
+
     private fun pushPendingDocToken(t: Token) {
         val s = stripCommentLexeme(t.value)
         if (pendingDocStart == null) pendingDocStart = t.pos
@@ -248,7 +253,7 @@ class Compiler(
                     when (t.type) {
                         Token.Type.RBRACE, Token.Type.EOF, Token.Type.SEMICOLON -> {}
                         else ->
-                            throw ScriptError(t.pos, "unexpeced `${t.value}` here")
+                            throw ScriptError(t.pos, "unexpected `${t.value}` here")
                     }
                     break
                 }
@@ -1248,6 +1253,8 @@ class Compiler(
                 }
             }
 
+            Token.Type.OBJECT -> StatementRef(parseObjectDeclaration())
+
             else -> null
         }
     }
@@ -1860,8 +1867,12 @@ class Compiler(
     }
 
     private suspend fun parseObjectDeclaration(): Statement {
-        val nameToken = cc.requireToken(Token.Type.ID)
-        val startPos = pendingDeclStart ?: nameToken.pos
+        val next = cc.peekNextNonWhitespace()
+        val nameToken = if (next.type == Token.Type.ID) cc.requireToken(Token.Type.ID) else null
+
+        val startPos = pendingDeclStart ?: nameToken?.pos ?: cc.current().pos
+        val className = nameToken?.value ?: generateAnonName(startPos)
+
         val doc = pendingDeclDoc ?: consumePendingDoc()
         pendingDeclDoc = null
         pendingDeclStart = null
@@ -1887,11 +1898,11 @@ class Compiler(
 
         // Robust body detection
         var classBodyRange: MiniRange? = null
-        val bodyInit: Statement? = run {
+        val bodyInit: Statement? = inCodeContext(CodeContext.ClassBody(className)) {
             val saved = cc.savePos()
-            val next = cc.nextNonWhitespace()
-            if (next.type == Token.Type.LBRACE) {
-                val bodyStart = next.pos
+            val nextBody = cc.nextNonWhitespace()
+            if (nextBody.type == Token.Type.LBRACE) {
+                val bodyStart = nextBody.pos
                 val st = withLocalNames(emptySet()) {
                     parseScript()
                 }
@@ -1906,15 +1917,15 @@ class Compiler(
         }
 
         val initScope = popInitScope()
-        val className = nameToken.value
 
         return statement(startPos) { context ->
             val parentClasses = baseSpecs.map { baseSpec ->
-                val rec = context[baseSpec.name] ?: throw ScriptError(nameToken.pos, "unknown base class: ${baseSpec.name}")
-                (rec.value as? ObjClass) ?: throw ScriptError(nameToken.pos, "${baseSpec.name} is not a class")
+                val rec = context[baseSpec.name] ?: throw ScriptError(startPos, "unknown base class: ${baseSpec.name}")
+                (rec.value as? ObjClass) ?: throw ScriptError(startPos, "${baseSpec.name} is not a class")
             }
 
             val newClass = ObjInstanceClass(className, *parentClasses.toTypedArray())
+            newClass.isAnonymous = nameToken == null
             for (i in parentClasses.indices) {
                 val argsList = baseSpecs[i].args
                 // In object, we evaluate parent args once at creation time
@@ -1924,12 +1935,14 @@ class Compiler(
             val classScope = context.createChildScope(newThisObj = newClass)
             classScope.currentClassCtx = newClass
             newClass.classScope = classScope
+            classScope.addConst("object", newClass)
 
             bodyInit?.execute(classScope)
 
             // Create instance (singleton)
             val instance = newClass.callOn(context.createChildScope(Arguments.EMPTY))
-            context.addItem(className, false, instance)
+            if (nameToken != null)
+                context.addItem(className, false, instance)
             instance
         }
     }

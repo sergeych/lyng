@@ -30,6 +30,7 @@ private object ClassIdGen { var c: Long = 1L; fun nextId(): Long = c++ }
 
 val ObjClassType by lazy {
     ObjClass("Class").apply {
+        addProperty("className", getter = { thisAs<ObjClass>().classNameObj })
         addFnDoc(
             name = "name",
             doc = "Simple name of this class (without package).",
@@ -90,6 +91,8 @@ open class ObjClass(
     val className: String,
     vararg parents: ObjClass,
 ) : Obj() {
+
+    var isAnonymous: Boolean = false
 
     var isAbstract: Boolean = false
 

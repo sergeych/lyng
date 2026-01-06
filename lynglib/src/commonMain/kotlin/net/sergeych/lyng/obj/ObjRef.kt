@@ -321,16 +321,23 @@ class CastRef(
 /** Qualified `this@Type`: resolves to a view of current `this` starting dispatch from the ancestor Type. */
 class QualifiedThisRef(private val typeName: String, private val atPos: Pos) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
-        val thisObj = scope.thisObj
         val t = scope[typeName]?.value as? ObjClass
             ?: scope.raiseError("unknown type $typeName")
-        val inst = (thisObj as? ObjInstance)
-            ?: scope.raiseClassCastError("this is not an instance")
-        if (!inst.objClass.allParentsSet.contains(t) && inst.objClass !== t)
-            scope.raiseClassCastError(
-                "Qualifier ${'$'}{t.className} is not an ancestor of ${'$'}{inst.objClass.className} (order: ${'$'}{inst.objClass.renderLinearization(true)})"
-            )
-        return ObjQualifiedView(inst, t).asReadonly
+
+        var s: Scope? = scope
+        while (s != null) {
+            val inst = s.thisObj as? ObjInstance
+            if (inst != null) {
+                if (inst.objClass === t || inst.objClass.allParentsSet.contains(t)) {
+                    return ObjQualifiedView(inst, t).asReadonly
+                }
+            }
+            s = s.parent
+        }
+
+        scope.raiseClassCastError(
+            "No instance of type ${t.className} found in the scope chain"
+        )
     }
 }
 

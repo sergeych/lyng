@@ -101,6 +101,7 @@ open class LynonEncoder(val bout: BitOutput, val settings: LynonSettings = Lynon
      * Caching is used automatically.
      */
     suspend fun encodeAny(scope: Scope, obj: Obj) {
+        if (obj.objClass.isAnonymous) scope.raiseError("Cannot serialize anonymous object")
         encodeCached(obj) {
             val type = putTypeRecord(scope, obj, obj.lynonType())
             obj.serialize(scope, this, type)

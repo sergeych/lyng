@@ -71,6 +71,48 @@ object DefaultLogger : Logger("Default") {
 }
 ```
 
+## Object Expressions
+
+Object expressions allow you to create an instance of an anonymous class. This is useful when you need to provide a one-off implementation of an interface or inherit from a class without declaring a new named subclass.
+
+```lyng
+val worker = object : Runnable {
+    override fun run() {
+        println("Working...")
+    }
+}
+```
+
+Object expressions can implement multiple interfaces and inherit from one class:
+
+```lyng
+val x = object : Base(arg1), Interface1, Interface2 {
+    val property = 42
+    override fun method() = property * 2
+}
+```
+
+### Scoping and `this@object`
+
+Object expressions capture their lexical scope, meaning they can access local variables and members of the outer class. When `this` is rebound (for example, inside an `apply` block), you can use the reserved alias `this@object` to refer to the innermost anonymous object instance.
+
+```lyng
+val handler = object {
+    fun process() {
+        this@object.apply {
+            // here 'this' is rebound to the map/context
+            // but we can still access the anonymous object via this@object
+            println("Processing in " + this@object)
+        }
+    }
+}
+```
+
+### Serialization and Identity
+
+- **Serialization**: Anonymous objects are **not serializable**. Attempting to encode an anonymous object via `Lynon` will throw a `SerializationException`. This is because their class definition is transient and cannot be safely restored in a different session or process.
+- **Type Identity**: Every object expression creates a unique anonymous class. Two identical object expressions will result in two different classes with distinct type identities.
+
 ## Properties
 
 Properties allow you to define member accessors that look like fields but execute code when read or written. Unlike regular fields, properties in Lyng do **not** have automatic backing fields; they are pure accessors.
