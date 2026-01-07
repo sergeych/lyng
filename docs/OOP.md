@@ -544,6 +544,99 @@ class Critical {
 
 Attempting to override a `closed` member results in a compile-time error.
 
+## Operator Overloading
+
+Lyng allows you to overload standard operators by defining specific named methods in your classes. When an operator expression is evaluated, Lyng delegates the operation to these methods if they are available.
+
+### Binary Operators
+
+To overload a binary operator, define the corresponding method that takes one argument:
+
+| Operator | Method Name |
+| :--- | :--- |
+| `a + b` | `plus(other)` |
+| `a - b` | `minus(other)` |
+| `a * b` | `mul(other)` |
+| `a / b` | `div(other)` |
+| `a % b` | `mod(other)` |
+| `a && b` | `logicalAnd(other)` |
+| `a \|\| b` | `logicalOr(other)` |
+| `a =~ b` | `operatorMatch(other)` |
+| `a & b` | `bitAnd(other)` |
+| `a \| b` | `bitOr(other)` |
+| `a ^ b` | `bitXor(other)` |
+| `a << b` | `shl(other)` |
+| `a >> b` | `shr(other)` |
+
+Example:
+```lyng
+class Vector(val x, val y) {
+    fun plus(other) = Vector(x + other.x, y + other.y)
+    override fun toString() = "Vector(${x}, ${y})"
+}
+
+val v1 = Vector(1, 2)
+val v2 = Vector(3, 4)
+assertEquals(Vector(4, 6), v1 + v2)
+```
+
+### Unary Operators
+
+Unary operators are overloaded by defining methods with no arguments:
+
+| Operator | Method Name |
+| :--- | :--- |
+| `-a` | `negate()` |
+| `!a` | `logicalNot()` |
+| `~a` | `bitNot()` |
+
+### Assignment Operators
+
+Assignment operators like `+=` first attempt to call a specific assignment method. If that method is not defined, they fall back to a combination of the binary operator and a regular assignment (e.g., `a = a + b`).
+
+| Operator | Method Name | Fallback |
+| :--- | :--- | :--- |
+| `a += b` | `plusAssign(other)` | `a = a + b` |
+| `a -= b` | `minusAssign(other)` | `a = a - b` |
+| `a *= b` | `mulAssign(other)` | `a = a * b` |
+| `a /= b` | `divAssign(other)` | `a = a / b` |
+| `a %= b` | `modAssign(other)` | `a = a % b` |
+
+Example of in-place mutation:
+```lyng
+class Counter(var value) {
+    fun plusAssign(n) {
+        value = value + n
+    }
+}
+
+val c = Counter(10)
+c += 5
+assertEquals(15, c.value)
+```
+
+### Comparison Operators
+
+Comparison operators use `compareTo` and `equals`.
+
+| Operator | Method Name |
+| :--- | :--- |
+| `a == b`, `a != b` | `equals(other)` |
+| `<`, `>`, `<=`, `>=`, `<=>` | `compareTo(other)` |
+
+- `compareTo` should return:
+  - `0` if `a == b`
+  - A negative integer if `a < b`
+  - A positive integer if `a > b`
+- The `<=>` (shuttle) operator returns the result of `compareTo` directly.
+- `equals` returns a `Bool`. If `equals` is not explicitly defined, Lyng falls back to `compareTo(other) == 0`.
+
+> **Note**: Methods that are already defined in the base `Obj` class (like `equals`, `toString`, or `contains`) require the `override` keyword when redefined in your class or as an extension. Other operator methods (like `plus` or `negate`) do not require `override` unless they are already present in your class's hierarchy.
+
+### Increment and Decrement
+
+`++` and `--` operators are implemented using `plus(1)` or `minus(1)` combined with an assignment back to the variable. If the variable is a field or local variable, it will be updated with the result of the operation.
+
 Compatibility notes:
 
 - Existing single‑inheritance code continues to work unchanged; its resolution order reduces to the single base.

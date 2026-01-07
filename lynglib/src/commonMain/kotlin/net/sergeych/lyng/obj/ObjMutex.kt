@@ -26,7 +26,7 @@ import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lyng.miniast.type
 
 class ObjMutex(val mutex: Mutex): Obj() {
-    override val objClass = type
+    override val objClass get() = type
 
     companion object {
         val type = object: ObjClass("Mutex") {

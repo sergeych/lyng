@@ -23,7 +23,7 @@ import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Statement
 
 class ObjDynamicContext(val delegate: ObjDynamic) : Obj() {
-    override val objClass: ObjClass = type
+    override val objClass: ObjClass get() = type
 
     companion object {
         val type = ObjClass("DelegateContext").apply {
@@ -54,7 +54,7 @@ class ObjDynamicContext(val delegate: ObjDynamic) : Obj() {
  */
 open class ObjDynamic(var readCallback: Statement? = null, var writeCallback: Statement? = null) : Obj() {
 
-    override val objClass: ObjClass = type
+    override val objClass: ObjClass get() = type
     // Capture the lexical scope used to build this dynamic so callbacks can see outer locals
     internal var builderScope: Scope? = null
 

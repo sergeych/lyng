@@ -24,7 +24,7 @@ import net.sergeych.lyng.miniast.type
 
 open class ObjDeferred(val deferred: Deferred<Obj>): Obj() {
 
-    override val objClass = type
+    override val objClass get() = type
 
     companion object {
         val type = object: ObjClass("Deferred"){

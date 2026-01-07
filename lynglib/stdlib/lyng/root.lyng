@@ -235,7 +235,7 @@ fun Iterable.flatMap(transform): List {
 }
 
 /* Return string representation like [a,b,c]. */
-fun List.toString() {
+override fun List.toString() {
     "[" + joinToString(",") + "]"
 }
 
@@ -257,7 +257,7 @@ class StackTraceEntry(
         val sourceString: String
 ) {
     /* Formatted representation: source:line:column: text. */
-    fun toString() {
+    override fun toString() {
         "%s:%d:%d: %s"(sourceName, line, column, sourceString.trim())
     }
 }

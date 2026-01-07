@@ -1351,8 +1351,11 @@ class Compiler(
 
         val isMember = (codeContexts.lastOrNull() is CodeContext.ClassBody)
 
-        if (!isMember && (isOverride || isClosed))
-            throw ScriptError(currentToken.pos, "modifiers override and closed are only allowed for class members")
+        if (!isMember && isClosed)
+            throw ScriptError(currentToken.pos, "modifier closed is only allowed for class members")
+
+        if (!isMember && isOverride && currentToken.value != "fun" && currentToken.value != "fn")
+            throw ScriptError(currentToken.pos, "modifier override outside class is only allowed for extension functions")
 
         if (!isMember && isAbstract && currentToken.value != "class")
             throw ScriptError(currentToken.pos, "modifier abstract at top level is only allowed for classes")

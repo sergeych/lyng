@@ -143,11 +143,17 @@ open class Obj {
     open suspend fun compareTo(scope: Scope, other: Obj): Int {
         if (other === this) return 0
         if (other === ObjNull || other === ObjUnset || other === ObjVoid) return 2
-        scope.raiseNotImplemented()
+        return invokeInstanceMethod(scope, "compareTo", Arguments(other)) {
+            scope.raiseNotImplemented("compareTo for ${objClass.className}")
+        }.cast<ObjInt>(scope).toInt()
     }
 
     open suspend fun equals(scope: Scope, other: Obj): Boolean {
         if (other === this) return true
+        val m = objClass.getInstanceMemberOrNull("equals") ?: scope.findExtension(objClass, "equals")
+        if (m != null) {
+            return invokeInstanceMethod(scope, "equals", Arguments(other)).toBool()
+        }
         return try {
             compareTo(scope, other) == 0
         } catch (e: ExecutionError) {
@@ -225,46 +231,66 @@ open class Obj {
      * Class of the object: definition of member functions (top-level), etc.
      * Note that using lazy allows to avoid endless recursion here
      */
-    open val objClass: ObjClass = rootObjectType
+    open val objClass: ObjClass get() = rootObjectType
 
     open suspend fun plus(scope: Scope, other: Obj): Obj {
-        scope.raiseNotImplemented()
+        return invokeInstanceMethod(scope, "plus", Arguments(other)) {
+            scope.raiseNotImplemented("plus for ${objClass.className}")
+        }
     }
 
     open suspend fun minus(scope: Scope, other: Obj): Obj {
-        scope.raiseNotImplemented()
+        return invokeInstanceMethod(scope, "minus", Arguments(other)) {
+            scope.raiseNotImplemented("minus for ${objClass.className}")
+        }
     }
 
     open suspend fun negate(scope: Scope): Obj {
-        scope.raiseNotImplemented()
+        return invokeInstanceMethod(scope, "negate", Arguments.EMPTY) {
+            scope.raiseNotImplemented("negate for ${objClass.className}")
+        }
     }
 
     open suspend fun mul(scope: Scope, other: Obj): Obj {
-        scope.raiseNotImplemented()
+        return invokeInstanceMethod(scope, "mul", Arguments(other)) {
+            scope.raiseNotImplemented("mul for ${objClass.className}")
+        }
     }
 
     open suspend fun div(scope: Scope, other: Obj): Obj {
-        scope.raiseNotImplemented()
+        return invokeInstanceMethod(scope, "div", Arguments(other)) {
+            scope.raiseNotImplemented("div for ${objClass.className}")
+        }
     }
 
     open suspend fun mod(scope: Scope, other: Obj): Obj {
-        scope.raiseNotImplemented()
+        return invokeInstanceMethod(scope, "mod", Arguments(other)) {
+            scope.raiseNotImplemented("mod for ${objClass.className}")
+        }
     }
 
     open suspend fun logicalNot(scope: Scope): Obj {
-        scope.raiseNotImplemented()
+        return invokeInstanceMethod(scope, "logicalNot", Arguments.EMPTY) {
+            scope.raiseNotImplemented("logicalNot for ${objClass.className}")
+        }
     }
 
     open suspend fun logicalAnd(scope: Scope, other: Obj): Obj {
-        scope.raiseNotImplemented()
+        return invokeInstanceMethod(scope, "logicalAnd", Arguments(other)) {
+            scope.raiseNotImplemented("logicalAnd for ${objClass.className}")
+        }
     }
 
     open suspend fun logicalOr(scope: Scope, other: Obj): Obj {
-        scope.raiseNotImplemented()
+        return invokeInstanceMethod(scope, "logicalOr", Arguments(other)) {
+            scope.raiseNotImplemented("logicalOr for ${objClass.className}")
+        }
     }
 
     open suspend fun operatorMatch(scope: Scope, other: Obj): Obj {
-        scope.raiseNotImplemented()
+        return invokeInstanceMethod(scope, "operatorMatch", Arguments(other)) {
+            scope.raiseNotImplemented("operatorMatch for ${objClass.className}")
+        }
     }
 
     open suspend fun operatorNotMatch(scope: Scope, other: Obj): Obj {
@@ -273,27 +299,39 @@ open class Obj {
 
     // Bitwise ops default (override in numeric types that support them)
     open suspend fun bitAnd(scope: Scope, other: Obj): Obj {
-        scope.raiseNotImplemented()
+        return invokeInstanceMethod(scope, "bitAnd", Arguments(other)) {
+            scope.raiseNotImplemented("bitAnd for ${objClass.className}")
+        }
     }
 
     open suspend fun bitOr(scope: Scope, other: Obj): Obj {
-        scope.raiseNotImplemented()
+        return invokeInstanceMethod(scope, "bitOr", Arguments(other)) {
+            scope.raiseNotImplemented("bitOr for ${objClass.className}")
+        }
     }
 
     open suspend fun bitXor(scope: Scope, other: Obj): Obj {
-        scope.raiseNotImplemented()
+        return invokeInstanceMethod(scope, "bitXor", Arguments(other)) {
+            scope.raiseNotImplemented("bitXor for ${objClass.className}")
+        }
     }
 
     open suspend fun shl(scope: Scope, other: Obj): Obj {
-        scope.raiseNotImplemented()
+        return invokeInstanceMethod(scope, "shl", Arguments(other)) {
+            scope.raiseNotImplemented("shl for ${objClass.className}")
+        }
     }
 
     open suspend fun shr(scope: Scope, other: Obj): Obj {
-        scope.raiseNotImplemented()
+        return invokeInstanceMethod(scope, "shr", Arguments(other)) {
+            scope.raiseNotImplemented("shr for ${objClass.className}")
+        }
     }
 
     open suspend fun bitNot(scope: Scope): Obj {
-        scope.raiseNotImplemented()
+        return invokeInstanceMethod(scope, "bitNot", Arguments.EMPTY) {
+            scope.raiseNotImplemented("bitNot for ${objClass.className}")
+        }
     }
 
     open suspend fun assign(scope: Scope, other: Obj): Obj? = null
@@ -305,15 +343,43 @@ open class Obj {
      * if( the operation is not defined, it returns null and the compiler would try
      * to generate it as 'this = this + other', reassigning its variable
      */
-    open suspend fun plusAssign(scope: Scope, other: Obj): Obj? = null
+    open suspend fun plusAssign(scope: Scope, other: Obj): Obj? {
+        val m = objClass.getInstanceMemberOrNull("plusAssign") ?: scope.findExtension(objClass, "plusAssign")
+        return if (m != null) {
+            invokeInstanceMethod(scope, "plusAssign", Arguments(other))
+        } else null
+    }
 
     /**
      * `-=` operations, see [plusAssign]
      */
-    open suspend fun minusAssign(scope: Scope, other: Obj): Obj? = null
-    open suspend fun mulAssign(scope: Scope, other: Obj): Obj? = null
-    open suspend fun divAssign(scope: Scope, other: Obj): Obj? = null
-    open suspend fun modAssign(scope: Scope, other: Obj): Obj? = null
+    open suspend fun minusAssign(scope: Scope, other: Obj): Obj? {
+        val m = objClass.getInstanceMemberOrNull("minusAssign") ?: scope.findExtension(objClass, "minusAssign")
+        return if (m != null) {
+            invokeInstanceMethod(scope, "minusAssign", Arguments(other))
+        } else null
+    }
+
+    open suspend fun mulAssign(scope: Scope, other: Obj): Obj? {
+        val m = objClass.getInstanceMemberOrNull("mulAssign") ?: scope.findExtension(objClass, "mulAssign")
+        return if (m != null) {
+            invokeInstanceMethod(scope, "mulAssign", Arguments(other))
+        } else null
+    }
+
+    open suspend fun divAssign(scope: Scope, other: Obj): Obj? {
+        val m = objClass.getInstanceMemberOrNull("divAssign") ?: scope.findExtension(objClass, "divAssign")
+        return if (m != null) {
+            invokeInstanceMethod(scope, "divAssign", Arguments(other))
+        } else null
+    }
+
+    open suspend fun modAssign(scope: Scope, other: Obj): Obj? {
+        val m = objClass.getInstanceMemberOrNull("modAssign") ?: scope.findExtension(objClass, "modAssign")
+        return if (m != null) {
+            invokeInstanceMethod(scope, "modAssign", Arguments(other))
+        } else null
+    }
 
     open suspend fun getAndIncrement(scope: Scope): Obj {
         scope.raiseNotImplemented()

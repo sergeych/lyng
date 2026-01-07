@@ -37,7 +37,7 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
     override val toObjInt: ObjInt get() = ObjInt.of(longValue)
     override val toObjReal: ObjReal get() = this
 
-    override val objClass: ObjClass = type
+    override val objClass: ObjClass get() = type
 
     override fun byValueCopy(): Obj = this
 

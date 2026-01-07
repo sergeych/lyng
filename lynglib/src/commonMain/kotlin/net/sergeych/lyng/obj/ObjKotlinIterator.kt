@@ -29,7 +29,7 @@ import net.sergeych.lyng.Scope
  */
 class ObjKotlinIterator(val iterator: Iterator<Any?>) : Obj() {
 
-    override val objClass = type
+    override val objClass get() = type
 
     companion object {
         val type = ObjClass("KotlinIterator", ObjIterator).apply {
@@ -46,7 +46,7 @@ class ObjKotlinIterator(val iterator: Iterator<Any?>) : Obj() {
  */
 class ObjKotlinObjIterator(val iterator: Iterator<Obj>) : Obj() {
 
-    override val objClass = type
+    override val objClass get() = type
 
     companion object {
         val type = ObjClass("KotlinIterator", ObjIterator).apply {

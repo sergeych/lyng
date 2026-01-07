@@ -23,7 +23,7 @@ import net.sergeych.lynon.BitArray
 
 class ObjBitBuffer(val bitArray: BitArray) : Obj() {
 
-    override val objClass = type
+    override val objClass get() = type
 
     override suspend fun getAt(scope: Scope, index: Obj): Obj {
         return bitArray[index.toLong()].toObj()

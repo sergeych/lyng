@@ -26,7 +26,7 @@ import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lyng.miniast.type
 
 class ObjRegex(val regex: Regex) : Obj() {
-    override val objClass = type
+    override val objClass get() = type
 
     override suspend fun operatorMatch(scope: Scope, other: Obj): Obj {
         return regex.find(other.cast<ObjString>(scope).value)?.let {
@@ -81,7 +81,7 @@ class ObjRegex(val regex: Regex) : Obj() {
 }
 
 class ObjRegexMatch(val match: MatchResult) : Obj() {
-    override val objClass = type
+    override val objClass get() = type
 
     val objGroups: ObjList by lazy {
         // Use groupValues so that index 0 is the whole match and subsequent indices are capturing groups,

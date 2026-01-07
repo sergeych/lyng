@@ -25,7 +25,7 @@ import net.sergeych.lyng.miniast.type
 
 class ObjCompletableDeferred(val completableDeferred: CompletableDeferred<Obj>): ObjDeferred(completableDeferred) {
 
-    override val objClass = type
+    override val objClass get() = type
 
     companion object {
         val type = object: ObjClass("CompletableDeferred", ObjDeferred.type){

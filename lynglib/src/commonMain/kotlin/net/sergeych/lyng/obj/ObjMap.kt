@@ -56,7 +56,7 @@ class ObjMapEntry(val key: Obj, val value: Obj) : Obj() {
         return ObjString("(${key.toString(scope).value} => ${value.toString(scope).value})")
     }
 
-    override val objClass = type
+    override val objClass get() = type
 
     override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
         encoder.encodeAny(scope,key)
@@ -106,7 +106,7 @@ class ObjMapEntry(val key: Obj, val value: Obj) : Obj() {
 
 class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
 
-    override val objClass = type
+    override val objClass get() = type
 
     override suspend fun getAt(scope: Scope, index: Obj): Obj =
         map.get(index) ?: ObjNull

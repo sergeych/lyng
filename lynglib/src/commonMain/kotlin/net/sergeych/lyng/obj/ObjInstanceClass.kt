@@ -42,9 +42,6 @@ class ObjInstanceClass(val name: String, vararg parents: ObjClass) : ObjClass(na
     }
 
     init {
-        addFn("toString", true) {
-            thisObj.toString(this, true)
-        }
     }
 
 }

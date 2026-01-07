@@ -27,7 +27,7 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
     val isOpenStart by lazy { start == null || start.isNull }
     val isOpenEnd by lazy { end == null || end.isNull }
 
-    override val objClass: ObjClass = type
+    override val objClass: ObjClass get() = type
 
     override suspend fun defaultToString(scope: Scope): ObjString {
         val result = StringBuilder()

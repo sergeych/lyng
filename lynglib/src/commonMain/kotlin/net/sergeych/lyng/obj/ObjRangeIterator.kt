@@ -26,7 +26,7 @@ class ObjRangeIterator(val self: ObjRange) : Obj() {
     private var lastIndex = 0
     private var isCharRange: Boolean = false
 
-    override val objClass: ObjClass = type
+    override val objClass: ObjClass get() = type
 
     fun Scope.init() {
         val s = self.start
@@ -84,7 +84,7 @@ class ObjFastIntRangeIterator(private val start: Int, private val endExclusive: 
 
     private var cur: Int = start
 
-    override val objClass: ObjClass = type
+    override val objClass: ObjClass get() = type
 
     fun hasNext(): Boolean = cur < endExclusive
 

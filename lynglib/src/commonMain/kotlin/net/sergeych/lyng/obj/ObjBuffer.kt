@@ -34,7 +34,7 @@ import kotlin.math.min
 
 open class ObjBuffer(val byteArray: UByteArray) : Obj() {
 
-    override val objClass: ObjClass = type
+    override val objClass: ObjClass get() = type
 
     val hex by lazy { byteArray.encodeToHex("")}
     val base64 by lazy { byteArray.toByteArray().encodeToBase64Url()}

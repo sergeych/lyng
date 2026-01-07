@@ -81,7 +81,7 @@ class RingBuffer<T>(val maxSize: Int) : Iterable<T> {
 class ObjRingBuffer(val capacity: Int) : Obj() {
     val buffer = RingBuffer<Obj>(capacity)
 
-    override val objClass: ObjClass = type
+    override val objClass: ObjClass get() = type
 
     override suspend fun plusAssign(scope: Scope, other: Obj): Obj {
         buffer.add(other.byValueCopy())

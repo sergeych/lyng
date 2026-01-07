@@ -37,7 +37,7 @@ data class ObjBool(val value: Boolean) : Obj() {
 
     override fun toString(): String = value.toString()
 
-    override val objClass: ObjClass = type
+    override val objClass: ObjClass get() = type
 
     override suspend fun logicalNot(scope: Scope): Obj = ObjBool(!value)
 

@@ -28,7 +28,7 @@ import net.sergeych.lynon.LynonType
 
 class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
 
-    override val objClass = type
+    override val objClass get() = type
 
     override suspend fun contains(scope: Scope, other: Obj): Boolean {
         return set.contains(other)

@@ -29,7 +29,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
 
 class ObjDuration(val duration: Duration) : Obj() {
-    override val objClass: ObjClass = type
+    override val objClass: ObjClass get() = type
 
     override fun toString(): String {
         return duration.toString()

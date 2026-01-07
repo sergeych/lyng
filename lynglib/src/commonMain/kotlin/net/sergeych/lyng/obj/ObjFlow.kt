@@ -35,7 +35,7 @@ import kotlin.coroutines.cancellation.CancellationException
 
 class ObjFlowBuilder(val output: SendChannel<Obj>) : Obj() {
 
-    override val objClass = type
+    override val objClass get() = type
 
     companion object {
         @OptIn(DelicateCoroutinesApi::class)
@@ -91,7 +91,7 @@ private fun createLyngFlowInput(scope: Scope, producer: Statement): ReceiveChann
 
 class ObjFlow(val producer: Statement, val scope: Scope) : Obj() {
 
-    override val objClass = type
+    override val objClass get() = type
 
     companion object {
         val type = object : ObjClass("Flow", ObjIterable) {
@@ -119,7 +119,7 @@ class ObjFlow(val producer: Statement, val scope: Scope) : Obj() {
 
 class ObjFlowIterator(val producer: Statement) : Obj() {
 
-    override val objClass: ObjClass = type
+    override val objClass: ObjClass get() = type
 
     private var channel: ReceiveChannel<Obj>? = null
 

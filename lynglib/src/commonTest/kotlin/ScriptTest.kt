@@ -4386,7 +4386,7 @@ class ScriptTest {
             """
             class A(x,y)
             class B(x,y) {
-                fun toString() {
+                override fun toString() {
                     "B(%d,%d)"(x,y)
                 }
             }
@@ -4394,7 +4394,7 @@ class ScriptTest {
             assertEquals("B(1,2)", B(1,2).toString())
             assertEquals("A(x=1,y=2)", A(1,2).toString())
             
-            // now tricky part: this _should_ cakk custom toString()
+            // now tricky part: this _should_ call custom toString()
             assertEquals(":B(1,2)", ":" + B(1,2).toString())
             // and this must be exactly same:
             assertEquals(":B(1,2)", ":" + B(1,2))
