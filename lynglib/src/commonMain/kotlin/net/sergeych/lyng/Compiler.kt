@@ -973,7 +973,10 @@ class Compiler(
     private fun parseTypeDeclarationWithMini(): Pair<TypeDecl, MiniTypeRef?> {
         // Only parse a type if a ':' follows; otherwise keep current behavior
         if (!cc.skipTokenOfType(Token.Type.COLON, isOptional = true)) return Pair(TypeDecl.TypeAny, null)
+        return parseTypeExpressionWithMini()
+    }
 
+    private fun parseTypeExpressionWithMini(): Pair<TypeDecl, MiniTypeRef> {
         // Parse a qualified base name: ID ('.' ID)*
         val segments = mutableListOf<MiniTypeName.Segment>()
         var first = true
@@ -1009,41 +1012,28 @@ class Compiler(
             else MiniGenericType(MiniRange(typeStart, rangeEnd), base, args, nullable)
         }
 
-        // Optional generic arguments: '<' Type (',' Type)* '>' — single-level only (no nested generics for now)
-        var args: MutableList<MiniTypeRef>? = null
+        // Optional generic arguments: '<' Type (',' Type)* '>'
+        var miniArgs: MutableList<MiniTypeRef>? = null
+        var semArgs: MutableList<TypeDecl>? = null
         val afterBasePos = cc.savePos()
         if (cc.skipTokenOfType(Token.Type.LT, isOptional = true)) {
-            args = mutableListOf()
+            miniArgs = mutableListOf()
+            semArgs = mutableListOf()
             do {
-                // Parse argument as simple or qualified type (single level), with optional nullable '?'
-                val argSegs = mutableListOf<MiniTypeName.Segment>()
-                var argFirst = true
-                val argStart = cc.currentPos()
-                while (true) {
-                    val idTok = if (argFirst) cc.requireToken(
-                        Token.Type.ID,
-                        "type argument name expected"
-                    ) else cc.requireToken(Token.Type.ID, "identifier expected after '.' in type argument")
-                    argFirst = false
-                    argSegs += MiniTypeName.Segment(idTok.value, MiniRange(idTok.pos, idTok.pos))
-                    val p = cc.savePos()
-                    val tt = cc.next()
-                    if (tt.type == Token.Type.DOT) continue else {
-                        cc.restorePos(p); break
-                    }
-                }
-                val argNullable = cc.skipTokenOfType(Token.Type.QUESTION, isOptional = true)
-                val argEnd = cc.currentPos()
-                val argRef = MiniTypeName(MiniRange(argStart, argEnd), argSegs.toList(), nullable = argNullable)
-                args += argRef
+                val (argSem, argMini) = parseTypeExpressionWithMini()
+                miniArgs += argMini
+                semArgs += argSem
 
                 val sep = cc.next()
-                when (sep.type) {
-                    Token.Type.COMMA -> { /* continue */
-                    }
-
-                    Token.Type.GT -> break
-                    else -> sep.raiseSyntax("expected ',' or '>' in generic arguments")
+                if (sep.type == Token.Type.COMMA) {
+                    // continue
+                } else if (sep.type == Token.Type.GT) {
+                    break
+                } else if (sep.type == Token.Type.SHR) {
+                    cc.pushPendingGT()
+                    break
+                } else {
+                    sep.raiseSyntax("expected ',' or '>' in generic arguments")
                 }
             } while (true)
             lastEnd = cc.currentPos()
@@ -1055,10 +1045,11 @@ class Compiler(
         val isNullable = cc.skipTokenOfType(Token.Type.QUESTION, isOptional = true)
         val endPos = cc.currentPos()
 
-        val miniRef = buildBaseRef(if (args != null) endPos else lastEnd, args, isNullable)
+        val miniRef = buildBaseRef(if (miniArgs != null) endPos else lastEnd, miniArgs, isNullable)
         // Semantic: keep simple for now, just use qualified base name with nullable flag
         val qualified = segments.joinToString(".") { it.name }
-        val sem = TypeDecl.Simple(qualified, isNullable)
+        val sem = if (semArgs != null) TypeDecl.Generic(qualified, semArgs, isNullable)
+        else TypeDecl.Simple(qualified, isNullable)
         return Pair(sem, miniRef)
     }
 
@@ -1474,7 +1465,9 @@ class Compiler(
 
         "init" -> {
             if (codeContexts.lastOrNull() is CodeContext.ClassBody && cc.peekNextNonWhitespace().type == Token.Type.LBRACE) {
+                miniSink?.onEnterFunction(null)
                 val block = parseBlock()
+                miniSink?.onExitFunction(cc.currentPos())
                 lastParsedBlockRange?.let { range ->
                     miniSink?.onInitDecl(MiniInitDecl(MiniRange(id.pos, range.end), id.pos))
                 }
@@ -2714,8 +2707,7 @@ class Compiler(
         val declDocLocal = pendingDeclDoc
         val outerLabel = lastLabel
 
-        // Emit MiniFunDecl before body parsing (body range unknown yet)
-        run {
+        val node = run {
             val params = argsDeclaration.params.map { p ->
                 MiniParam(
                     name = p.name,
@@ -2737,8 +2729,10 @@ class Compiler(
             )
             miniSink?.onFunDecl(node)
             pendingDeclDoc = null
+            node
         }
 
+        miniSink?.onEnterFunction(node)
         return inCodeContext(CodeContext.Function(name)) {
             cc.labels.add(name)
             outerLabel?.let { cc.labels.add(it) }
@@ -2941,6 +2935,7 @@ class Compiler(
                 isExtern = actualExtern
             )
             miniSink?.onFunDecl(node)
+            miniSink?.onExitFunction(cc.currentPos())
         }
     }
 
@@ -3186,9 +3181,11 @@ class Compiler(
             while (true) {
                 val t = cc.skipWsTokens()
                 if (t.isId("get")) {
+                    val getStart = cc.currentPos()
                     cc.next() // consume 'get'
                     cc.requireToken(Token.Type.LPAREN)
                     cc.requireToken(Token.Type.RPAREN)
+                    miniSink?.onEnterFunction(null)
                     getter = if (cc.peekNextNonWhitespace().type == Token.Type.LBRACE) {
                         cc.skipWsTokens()
                         parseBlock()
@@ -3200,11 +3197,14 @@ class Compiler(
                     } else {
                         throw ScriptError(cc.current().pos, "Expected { or = after get()")
                     }
+                    miniSink?.onExitFunction(cc.currentPos())
                 } else if (t.isId("set")) {
+                    val setStart = cc.currentPos()
                     cc.next() // consume 'set'
                     cc.requireToken(Token.Type.LPAREN)
                     val setArg = cc.requireToken(Token.Type.ID, "Expected setter argument name")
                     cc.requireToken(Token.Type.RPAREN)
+                    miniSink?.onEnterFunction(null)
                     setter = if (cc.peekNextNonWhitespace().type == Token.Type.LBRACE) {
                         cc.skipWsTokens()
                         val body = parseBlock()
@@ -3226,6 +3226,7 @@ class Compiler(
                     } else {
                         throw ScriptError(cc.current().pos, "Expected { or = after set(...)")
                     }
+                    miniSink?.onExitFunction(cc.currentPos())
                 } else if (t.isId("private") || t.isId("protected")) {
                     val vis = if (t.isId("private")) Visibility.Private else Visibility.Protected
                     val mark = cc.savePos()
@@ -3237,6 +3238,7 @@ class Compiler(
                             cc.next() // consume '('
                             val setArg = cc.requireToken(Token.Type.ID, "Expected setter argument name")
                             cc.requireToken(Token.Type.RPAREN)
+                            miniSink?.onEnterFunction(null)
                             setter = if (cc.peekNextNonWhitespace().type == Token.Type.LBRACE) {
                                 cc.skipWsTokens()
                                 val body = parseBlock()
@@ -3261,6 +3263,7 @@ class Compiler(
                             } else {
                                 throw ScriptError(cc.current().pos, "Expected { or = after set(...)")
                             }
+                            miniSink?.onExitFunction(cc.currentPos())
                         }
                     } else {
                         cc.restorePos(mark)

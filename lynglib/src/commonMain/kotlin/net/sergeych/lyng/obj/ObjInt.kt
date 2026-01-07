@@ -20,6 +20,7 @@ package net.sergeych.lyng.obj
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
@@ -178,7 +179,12 @@ class ObjInt(val value: Long, override val isConst: Boolean = false) : Obj(), Nu
                     else -> scope.raiseIllegalState("illegal type code for Int: $lynonType")
                 }
         }.apply {
-            addFn("toInt") {
+            addFnDoc(
+                name = "toInt",
+                doc = "Returns this integer (identity operation).",
+                returns = net.sergeych.lyng.miniast.type("lyng.Int"),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisObj
             }
         }

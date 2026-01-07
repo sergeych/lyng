@@ -27,5 +27,6 @@ sealed class TypeDecl(val isNullable:Boolean = false) {
     object TypeAny : TypeDecl()
     object TypeNullableAny : TypeDecl(true)
 
-    class Simple(val name: String,isNullable: Boolean) : TypeDecl(isNullable)
+    class Simple(val name: String, isNullable: Boolean) : TypeDecl(isNullable)
+    class Generic(val name: String, val args: List<TypeDecl>, isNullable: Boolean) : TypeDecl(isNullable)
 }

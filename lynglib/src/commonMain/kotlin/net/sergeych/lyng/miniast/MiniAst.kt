@@ -81,13 +81,15 @@ data class MiniTypeVar(
 ) : MiniTypeRef
 
 // Script and declarations (lean subset; can be extended later)
-sealed interface MiniDecl : MiniNode {
+sealed interface MiniNamedDecl : MiniNode {
     val name: String
     val doc: MiniDoc?
     // Start position of the declaration name identifier in source; end can be derived as start + name.length
     val nameStart: Pos
     val isExtern: Boolean
 }
+
+sealed interface MiniDecl : MiniNamedDecl
 
 data class MiniScript(
     override val range: MiniRange,
@@ -172,12 +174,8 @@ data class MiniIdentifier(
 ) : MiniNode
 
 // --- Class member declarations (for built-in/registry docs) ---
-sealed interface MiniMemberDecl : MiniNode {
-    val name: String
-    val doc: MiniDoc?
-    val nameStart: Pos
+sealed interface MiniMemberDecl : MiniNamedDecl {
     val isStatic: Boolean
-    val isExtern: Boolean
 }
 
 data class MiniMemberFunDecl(
@@ -189,6 +187,7 @@ data class MiniMemberFunDecl(
     override val nameStart: Pos,
     override val isStatic: Boolean = false,
     override val isExtern: Boolean = false,
+    val body: MiniBlock? = null
 ) : MiniMemberDecl
 
 data class MiniMemberValDecl(
@@ -196,6 +195,7 @@ data class MiniMemberValDecl(
     override val name: String,
     val mutable: Boolean,
     val type: MiniTypeRef?,
+    val initRange: MiniRange?,
     override val doc: MiniDoc?,
     override val nameStart: Pos,
     override val isStatic: Boolean = false,
@@ -221,6 +221,9 @@ interface MiniAstSink {
 
     fun onEnterClass(node: MiniClassDecl) {}
     fun onExitClass(end: Pos) {}
+
+    fun onEnterFunction(node: MiniFunDecl?) {}
+    fun onExitFunction(end: Pos) {}
 
     fun onImport(node: MiniImport) {}
     fun onFunDecl(node: MiniFunDecl) {}
@@ -254,6 +257,7 @@ class MiniAstBuilder : MiniAstSink {
     private val classStack = ArrayDeque<MiniClassDecl>()
     private var lastDoc: MiniDoc? = null
     private var scriptDepth: Int = 0
+    private var functionDepth: Int = 0
 
     fun build(): MiniScript? = currentScript
 
@@ -291,6 +295,14 @@ class MiniAstBuilder : MiniAstSink {
         }
     }
 
+    override fun onEnterFunction(node: MiniFunDecl?) {
+        functionDepth++
+    }
+
+    override fun onExitFunction(end: Pos) {
+        functionDepth--
+    }
+
     override fun onImport(node: MiniImport) {
         currentScript?.imports?.add(node)
     }
@@ -298,7 +310,7 @@ class MiniAstBuilder : MiniAstSink {
     override fun onFunDecl(node: MiniFunDecl) {
         val attach = node.copy(doc = node.doc ?: lastDoc)
         val currentClass = classStack.lastOrNull()
-        if (currentClass != null) {
+        if (currentClass != null && functionDepth == 0) {
             // Convert MiniFunDecl to MiniMemberFunDecl for inclusion in members
             val member = MiniMemberFunDecl(
                 range = attach.range,
@@ -308,13 +320,29 @@ class MiniAstBuilder : MiniAstSink {
                 doc = attach.doc,
                 nameStart = attach.nameStart,
                 isStatic = false, // TODO: track static if needed
-                isExtern = attach.isExtern
+                isExtern = attach.isExtern,
+                body = attach.body
             )
             // Need to update the class in the stack since it's immutable-ish (data class)
-            classStack.removeLast()
-            classStack.addLast(currentClass.copy(members = currentClass.members + member))
+            // Check if we already have this member (from a previous onFunDecl call for the same function)
+            val existing = currentClass.members.filterIsInstance<MiniMemberFunDecl>().find { it.name == attach.name && it.nameStart == attach.nameStart }
+            if (existing != null) {
+                val members = currentClass.members.map { if (it === existing) member else it }
+                classStack.removeLast()
+                classStack.addLast(currentClass.copy(members = members))
+            } else {
+                classStack.removeLast()
+                classStack.addLast(currentClass.copy(members = currentClass.members + member))
+            }
         } else {
-            currentScript?.declarations?.add(attach)
+            // Check if already in declarations to avoid duplication
+            val existing = currentScript?.declarations?.find { it.name == attach.name && it.nameStart == attach.nameStart }
+            if (existing != null) {
+                val idx = currentScript?.declarations?.indexOf(existing) ?: -1
+                if (idx >= 0) currentScript?.declarations?.set(idx, attach)
+            } else {
+                currentScript?.declarations?.add(attach)
+            }
         }
         lastDoc = null
     }
@@ -322,21 +350,36 @@ class MiniAstBuilder : MiniAstSink {
     override fun onValDecl(node: MiniValDecl) {
         val attach = node.copy(doc = node.doc ?: lastDoc)
         val currentClass = classStack.lastOrNull()
-        if (currentClass != null) {
+        if (currentClass != null && functionDepth == 0) {
             val member = MiniMemberValDecl(
                 range = attach.range,
                 name = attach.name,
                 mutable = attach.mutable,
                 type = attach.type,
+                initRange = attach.initRange,
                 doc = attach.doc,
                 nameStart = attach.nameStart,
                 isStatic = false, // TODO: track static if needed
                 isExtern = attach.isExtern
             )
-            classStack.removeLast()
-            classStack.addLast(currentClass.copy(members = currentClass.members + member))
+            // Duplicates for vals are rare but possible if Compiler calls it twice
+            val existing = currentClass.members.filterIsInstance<MiniMemberValDecl>().find { it.name == attach.name && it.nameStart == attach.nameStart }
+            if (existing != null) {
+                val members = currentClass.members.map { if (it === existing) member else it }
+                classStack.removeLast()
+                classStack.addLast(currentClass.copy(members = members))
+            } else {
+                classStack.removeLast()
+                classStack.addLast(currentClass.copy(members = currentClass.members + member))
+            }
         } else {
-            currentScript?.declarations?.add(attach)
+            val existing = currentScript?.declarations?.find { it.name == attach.name && it.nameStart == attach.nameStart }
+            if (existing != null) {
+                val idx = currentScript?.declarations?.indexOf(existing) ?: -1
+                if (idx >= 0) currentScript?.declarations?.set(idx, attach)
+            } else {
+                currentScript?.declarations?.add(attach)
+            }
         }
         lastDoc = null
     }

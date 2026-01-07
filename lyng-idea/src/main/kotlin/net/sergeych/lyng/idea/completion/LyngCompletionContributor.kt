@@ -102,7 +102,7 @@ class LyngCompletionContributor : CompletionContributor() {
 
             // Delegate computation to the shared engine to keep behavior in sync with tests
             val engineItems = try {
-                runBlocking { CompletionEngineLight.completeSuspend(text, caret, mini) }
+                runBlocking { CompletionEngineLight.completeSuspend(text, caret, mini, binding) }
             } catch (t: Throwable) {
                 if (DEBUG_COMPLETION) log.warn("[LYNG_DEBUG] Engine completion failed: ${t.message}")
                 emptyList()
@@ -185,33 +185,51 @@ class LyngCompletionContributor : CompletionContributor() {
                         ?: DocLookupUtils.guessReturnClassAcrossKnownCallees(text, memberDotPos, imported, mini)
                         ?: DocLookupUtils.guessReceiverClass(text, memberDotPos, imported, mini)
                 if (!inferredClass.isNullOrBlank()) {
-                    val ext = BuiltinDocRegistry.extensionMemberNamesFor(inferredClass)
-                    if (DEBUG_COMPLETION) log.info("[LYNG_DEBUG] Post-engine extension check for $inferredClass: ${'$'}{ext}")
+                    val ext = DocLookupUtils.collectExtensionMemberNames(imported, inferredClass, mini)
+                    if (DEBUG_COMPLETION) log.info("[LYNG_DEBUG] Post-engine extension check for $inferredClass: ${ext}")
                     for (name in ext) {
                         if (existing.contains(name)) continue
                         val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, inferredClass, name, mini)
                         if (resolved != null) {
-                            when (val member = resolved.second) {
+                            val m = resolved.second
+                            val builder = when (m) {
                                 is MiniMemberFunDecl -> {
-                                    val params = member.params.joinToString(", ") { it.name }
-                                    val ret = typeOf(member.returnType)
-                                    val builder = LookupElementBuilder.create(name)
+                                    val params = m.params.joinToString(", ") { it.name }
+                                    val ret = typeOf(m.returnType)
+                                    LookupElementBuilder.create(name)
                                         .withIcon(AllIcons.Nodes.Method)
-                                        .withTailText("(${ '$' }params)", true)
+                                        .withTailText("($params)", true)
                                         .withTypeText(ret, true)
                                         .withInsertHandler(ParenInsertHandler)
-                                    emit(builder)
-                                    existing.add(name)
+                                }
+                                is MiniFunDecl -> {
+                                    val params = m.params.joinToString(", ") { it.name }
+                                    val ret = typeOf(m.returnType)
+                                    LookupElementBuilder.create(name)
+                                        .withIcon(AllIcons.Nodes.Method)
+                                        .withTailText("($params)", true)
+                                        .withTypeText(ret, true)
+                                        .withInsertHandler(ParenInsertHandler)
                                 }
                                 is MiniMemberValDecl -> {
-                                    val builder = LookupElementBuilder.create(name)
-                                        .withIcon(if (member.mutable) AllIcons.Nodes.Variable else AllIcons.Nodes.Field)
-                                        .withTypeText(typeOf(member.type), true)
-                                    emit(builder)
-                                    existing.add(name)
+                                    LookupElementBuilder.create(name)
+                                        .withIcon(if (m.mutable) AllIcons.Nodes.Variable else AllIcons.Nodes.Field)
+                                        .withTypeText(typeOf(m.type), true)
                                 }
-                                is MiniInitDecl -> {}
+                                is MiniValDecl -> {
+                                    LookupElementBuilder.create(name)
+                                        .withIcon(if (m.mutable) AllIcons.Nodes.Variable else AllIcons.Nodes.Field)
+                                        .withTypeText(typeOf(m.type), true)
+                                }
+                                else -> {
+                                    LookupElementBuilder.create(name)
+                                        .withIcon(AllIcons.Nodes.Method)
+                                        .withTailText("()", true)
+                                        .withInsertHandler(ParenInsertHandler)
+                                }
                             }
+                            emit(builder)
+                            existing.add(name)
                         } else {
                             // Fallback: emit simple method name without detailed types
                             val builder = LookupElementBuilder.create(name)
@@ -455,27 +473,44 @@ class LyngCompletionContributor : CompletionContributor() {
                     val resolved = DocLookupUtils.findMemberAcrossClasses(imported, name, mini)
                     if (resolved != null) {
                         val member = resolved.second
-                        when (member) {
+                        val builder = when (member) {
                             is MiniMemberFunDecl -> {
                                 val params = member.params.joinToString(", ") { it.name }
                                 val ret = typeOf(member.returnType)
-                                val builder = LookupElementBuilder.create(name)
+                                LookupElementBuilder.create(name)
                                     .withIcon(AllIcons.Nodes.Method)
-                                    .withTailText("(${params})", true)
+                                    .withTailText("($params)", true)
                                     .withTypeText(ret, true)
                                     .withInsertHandler(ParenInsertHandler)
-                                emit(builder)
-                                already.add(name)
+                            }
+                            is MiniFunDecl -> {
+                                val params = member.params.joinToString(", ") { it.name }
+                                val ret = typeOf(member.returnType)
+                                LookupElementBuilder.create(name)
+                                    .withIcon(AllIcons.Nodes.Method)
+                                    .withTailText("($params)", true)
+                                    .withTypeText(ret, true)
+                                    .withInsertHandler(ParenInsertHandler)
                             }
                             is MiniMemberValDecl -> {
-                                val builder = LookupElementBuilder.create(name)
-                                    .withIcon(AllIcons.Nodes.Field)
+                                LookupElementBuilder.create(name)
+                                    .withIcon(if (member.mutable) AllIcons.Nodes.Variable else AllIcons.Nodes.Field)
                                     .withTypeText(typeOf(member.type), true)
-                                emit(builder)
-                                already.add(name)
                             }
-                            is MiniInitDecl -> {}
+                            is MiniValDecl -> {
+                                LookupElementBuilder.create(name)
+                                    .withIcon(if (member.mutable) AllIcons.Nodes.Variable else AllIcons.Nodes.Field)
+                                    .withTypeText(typeOf(member.type), true)
+                            }
+                            else -> {
+                                LookupElementBuilder.create(name)
+                                    .withIcon(AllIcons.Nodes.Method)
+                                    .withTailText("()", true)
+                                    .withInsertHandler(ParenInsertHandler)
+                            }
                         }
+                        emit(builder)
+                        already.add(name)
                     } else {
                         // Synthetic fallback: method without detailed params/types to improve UX in absence of docs
                         val isProperty = name in setOf("size", "length")
@@ -504,29 +539,46 @@ class LyngCompletionContributor : CompletionContributor() {
                     // Try to resolve full signature via registry first to get params and return type
                     val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, className, name, mini)
                     if (resolved != null) {
-                        when (val member = resolved.second) {
+                        val m = resolved.second
+                        val builder = when (m) {
                             is MiniMemberFunDecl -> {
-                                val params = member.params.joinToString(", ") { it.name }
-                                val ret = typeOf(member.returnType)
-                                val builder = LookupElementBuilder.create(name)
+                                val params = m.params.joinToString(", ") { it.name }
+                                val ret = typeOf(m.returnType)
+                                LookupElementBuilder.create(name)
                                     .withIcon(AllIcons.Nodes.Method)
-                                    .withTailText("(${params})", true)
+                                    .withTailText("($params)", true)
                                     .withTypeText(ret, true)
                                     .withInsertHandler(ParenInsertHandler)
-                                emit(builder)
-                                already.add(name)
-                                continue
+                            }
+                            is MiniFunDecl -> {
+                                val params = m.params.joinToString(", ") { it.name }
+                                val ret = typeOf(m.returnType)
+                                LookupElementBuilder.create(name)
+                                    .withIcon(AllIcons.Nodes.Method)
+                                    .withTailText("($params)", true)
+                                    .withTypeText(ret, true)
+                                    .withInsertHandler(ParenInsertHandler)
                             }
                             is MiniMemberValDecl -> {
-                                val builder = LookupElementBuilder.create(name)
-                                    .withIcon(if (member.mutable) AllIcons.Nodes.Variable else AllIcons.Nodes.Field)
-                                    .withTypeText(typeOf(member.type), true)
-                                emit(builder)
-                                already.add(name)
-                                continue
+                                LookupElementBuilder.create(name)
+                                    .withIcon(if (m.mutable) AllIcons.Nodes.Variable else AllIcons.Nodes.Field)
+                                    .withTypeText(typeOf(m.type), true)
                             }
-                            is MiniInitDecl -> {}
+                            is MiniValDecl -> {
+                                LookupElementBuilder.create(name)
+                                    .withIcon(if (m.mutable) AllIcons.Nodes.Variable else AllIcons.Nodes.Field)
+                                    .withTypeText(typeOf(m.type), true)
+                            }
+                            else -> {
+                                LookupElementBuilder.create(name)
+                                    .withIcon(AllIcons.Nodes.Method)
+                                    .withTailText("()", true)
+                                    .withInsertHandler(ParenInsertHandler)
+                            }
                         }
+                        emit(builder)
+                        already.add(name)
+                        continue
                     }
                     // Fallback: emit without detailed types if we couldn't resolve
                     val builder = LookupElementBuilder.create(name)

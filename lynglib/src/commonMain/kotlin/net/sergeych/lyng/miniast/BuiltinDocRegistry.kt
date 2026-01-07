@@ -236,6 +236,7 @@ class ClassDocsBuilder internal constructor(private val className: String) {
             name = name,
             mutable = mutable,
             type = type?.toMiniTypeRef(),
+            initRange = null,
             doc = md,
             nameStart = Pos.builtIn,
             isStatic = isStatic,
@@ -534,6 +535,9 @@ private fun buildStdlibDocs(): List<MiniDecl> {
     )
 
     // Concurrency helpers
+    mod.classDoc(name = "Deferred", doc = "Represents a value that will be available in the future.", bases = listOf(type("Obj"))) {
+        method(name = "await", doc = "Suspend until the value is available and return it.")
+    }
     mod.funDoc(
         name = "launch",
         doc = StdlibInlineDocIndex.topFunDoc("launch") ?: "Launch an asynchronous task and return a `Deferred`.",
@@ -551,8 +555,17 @@ private fun buildStdlibDocs(): List<MiniDecl> {
         returns = type("lyng.Iterable")
     )
 
+    // Common types
+    mod.classDoc(name = "Int", doc = "64-bit signed integer.", bases = listOf(type("Obj")))
+    mod.classDoc(name = "Real", doc = "64-bit floating point number.", bases = listOf(type("Obj")))
+    mod.classDoc(name = "Bool", doc = "Boolean value (true or false).", bases = listOf(type("Obj")))
+    mod.classDoc(name = "Char", doc = "Single character (UTF-16 code unit).", bases = listOf(type("Obj")))
+    mod.classDoc(name = "Buffer", doc = "Mutable byte array.", bases = listOf(type("Obj")))
+    mod.classDoc(name = "Regex", doc = "Regular expression.", bases = listOf(type("Obj")))
+    mod.classDoc(name = "Range", doc = "Arithmetic progression.", bases = listOf(type("Obj")))
+
     // Common Iterable helpers (document top-level extension-like APIs as class members)
-    mod.classDoc(name = "Iterable", doc = StdlibInlineDocIndex.classDoc("Iterable") ?: "Helper operations for iterable collections.") {
+    mod.classDoc(name = "Iterable", doc = StdlibInlineDocIndex.classDoc("Iterable") ?: "Helper operations for iterable collections.", bases = listOf(type("Obj"))) {
         fun md(name: String, fallback: String) = StdlibInlineDocIndex.methodDoc("Iterable", name) ?: fallback
         method(name = "filter", doc = md("filter", "Filter elements by predicate."), params = listOf(ParamDoc("predicate")), returns = type("lyng.Iterable"))
         method(name = "drop", doc = md("drop", "Skip the first N elements."), params = listOf(ParamDoc("n", type("lyng.Int"))), returns = type("lyng.Iterable"))
@@ -591,7 +604,7 @@ private fun buildStdlibDocs(): List<MiniDecl> {
     }
 
     // Iterator helpers
-    mod.classDoc(name = "Iterator", doc = StdlibInlineDocIndex.classDoc("Iterator") ?: "Iterator protocol for sequential access.") {
+    mod.classDoc(name = "Iterator", doc = StdlibInlineDocIndex.classDoc("Iterator") ?: "Iterator protocol for sequential access.", bases = listOf(type("Obj"))) {
         fun md(name: String, fallback: String) = StdlibInlineDocIndex.methodDoc("Iterator", name) ?: fallback
         method(name = "hasNext", doc = md("hasNext", "Whether another element is available."), returns = type("lyng.Bool"))
         method(name = "next", doc = md("next", "Return the next element."))
@@ -600,22 +613,22 @@ private fun buildStdlibDocs(): List<MiniDecl> {
     }
 
     // Exceptions and utilities
-    mod.classDoc(name = "Exception", doc = StdlibInlineDocIndex.classDoc("Exception") ?: "Exception helpers.") {
+    mod.classDoc(name = "Exception", doc = StdlibInlineDocIndex.classDoc("Exception") ?: "Exception helpers.", bases = listOf(type("Obj"))) {
         method(name = "printStackTrace", doc = StdlibInlineDocIndex.methodDoc("Exception", "printStackTrace") ?: "Print this exception and its stack trace to standard output.")
     }
 
-    mod.classDoc(name = "Enum", doc = StdlibInlineDocIndex.classDoc("Enum") ?: "Base class for all enums.") {
+    mod.classDoc(name = "Enum", doc = StdlibInlineDocIndex.classDoc("Enum") ?: "Base class for all enums.", bases = listOf(type("Obj"))) {
         method(name = "name", doc = "Returns the name of this enum constant.", returns = type("lyng.String"))
         method(name = "ordinal", doc = "Returns the ordinal of this enum constant.", returns = type("lyng.Int"))
     }
 
-    mod.classDoc(name = "String", doc = StdlibInlineDocIndex.classDoc("String") ?: "String helpers.") {
+    mod.classDoc(name = "String", doc = StdlibInlineDocIndex.classDoc("String") ?: "String helpers.", bases = listOf(type("Obj"))) {
         // Only include inline-source method here; Kotlin-embedded methods are now documented via DocHelpers near definitions.
         method(name = "re", doc = StdlibInlineDocIndex.methodDoc("String", "re") ?: "Compile this string into a regular expression.", returns = type("lyng.Regex"))
     }
 
     // StackTraceEntry structure
-    mod.classDoc(name = "StackTraceEntry", doc = StdlibInlineDocIndex.classDoc("StackTraceEntry") ?: "Represents a single stack trace element.") {
+    mod.classDoc(name = "StackTraceEntry", doc = StdlibInlineDocIndex.classDoc("StackTraceEntry") ?: "Represents a single stack trace element.", bases = listOf(type("Obj"))) {
         // Fields are not present as declarations in root.lyng's class header docs. Keep seeded defaults.
         field(name = "sourceName", doc = "Source (file) name.", type = type("lyng.String"))
         field(name = "line", doc = "Line number (1-based).", type = type("lyng.Int"))

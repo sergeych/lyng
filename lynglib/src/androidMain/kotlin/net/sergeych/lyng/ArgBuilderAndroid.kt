@@ -23,7 +23,7 @@ actual object ArgBuilderProvider {
     private val tl = object : ThreadLocal<AndroidArgsBuilder>() {
         override fun initialValue(): AndroidArgsBuilder = AndroidArgsBuilder()
     }
-    actual fun acquire(): ArgsBuilder = tl.get()
+    actual fun acquire(): ArgsBuilder = tl.get()!!
 }
 
 private class AndroidArgsBuilder : ArgsBuilder {

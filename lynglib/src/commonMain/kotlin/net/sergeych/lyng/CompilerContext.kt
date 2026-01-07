@@ -34,18 +34,34 @@ class CompilerContext(val tokens: List<Token>) {
     }
 
     var currentIndex = 0
+    private var pendingGT = 0
 
-    fun hasNext() = currentIndex < tokens.size
+    fun hasNext() = currentIndex < tokens.size || pendingGT > 0
     fun hasPrevious() = currentIndex > 0
-    fun next() =
-        if (currentIndex < tokens.size) tokens[currentIndex++]
+    fun next(): Token {
+        if (pendingGT > 0) {
+            pendingGT--
+            val last = tokens[currentIndex - 1]
+            return Token(">", last.pos.copy(column = last.pos.column + 1), Token.Type.GT)
+        }
+        return if (currentIndex < tokens.size) tokens[currentIndex++]
         else Token("", tokens.last().pos, Token.Type.EOF)
+    }
 
-    fun previous() = if (!hasPrevious()) throw IllegalStateException("No previous token") else tokens[--currentIndex]
+    fun pushPendingGT() {
+        pendingGT++
+    }
 
-    fun savePos() = currentIndex
+    fun previous() = if (pendingGT > 0) {
+        pendingGT-- // This is wrong, previous should go back. 
+        // But we don't really use previous() in generics parser after splitting.
+        throw IllegalStateException("previous() not supported after pushPendingGT")
+    } else if (!hasPrevious()) throw IllegalStateException("No previous token") else tokens[--currentIndex]
+
+    fun savePos() = (currentIndex shl 2) or (pendingGT and 3)
     fun restorePos(pos: Int) {
-        currentIndex = pos
+        currentIndex = pos shr 2
+        pendingGT = pos and 3
     }
 
     fun ensureLabelIsValid(pos: Pos, label: String) {
@@ -106,12 +122,13 @@ class CompilerContext(val tokens: List<Token>) {
         errorMessage: String = "expected ${tokenType.name}",
         isOptional: Boolean = false
     ): Boolean {
+        val pos = savePos()
         val t = next()
         return if (t.type != tokenType) {
             if (!isOptional) {
                 throw ScriptError(t.pos, errorMessage)
             } else {
-                previous()
+                restorePos(pos)
                 false
             }
         } else true
@@ -122,20 +139,25 @@ class CompilerContext(val tokens: List<Token>) {
      * @return true if token was found and skipped
      */
     fun skipNextIf(vararg types: Token.Type): Boolean {
+        val pos = savePos()
         val t = next()
         return if (t.type in types)
             true
         else {
-            previous()
+            restorePos(pos)
             false
         }
     }
 
     @Suppress("unused")
     fun skipTokens(vararg tokenTypes: Token.Type) {
-        while (next().type in tokenTypes) { /**/
+        while (hasNext()) {
+            val pos = savePos()
+            if (next().type !in tokenTypes) {
+                restorePos(pos)
+                break
+            }
         }
-        previous()
     }
 
     fun nextNonWhitespace(): Token {
@@ -163,12 +185,13 @@ class CompilerContext(val tokens: List<Token>) {
 
 
     inline fun ifNextIs(typeId: Token.Type, f: (Token) -> Unit): Boolean {
+        val pos = savePos()
         val t = next()
         return if (t.type == typeId) {
             f(t)
             true
         } else {
-            previous()
+            restorePos(pos)
             false
         }
     }

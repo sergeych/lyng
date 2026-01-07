@@ -63,6 +63,10 @@ class LyngPsiReference(element: PsiElement) : PsiPolyVariantReferenceBase<PsiEle
                                 is MiniMemberFunDecl -> "Function"
                                 is MiniMemberValDecl -> if (member.mutable) "Variable" else "Value"
                                 is MiniInitDecl -> "Initializer"
+                                is MiniFunDecl -> "Function"
+                                is MiniValDecl -> if (member.mutable) "Variable" else "Value"
+                                is MiniClassDecl -> "Class"
+                                is MiniEnumDecl -> "Enum"
                             }
                             results.add(PsiElementResolveResult(LyngDeclarationElement(it, member.name, kind)))
                         }

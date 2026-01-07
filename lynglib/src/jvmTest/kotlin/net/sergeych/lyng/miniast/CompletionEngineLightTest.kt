@@ -174,4 +174,308 @@ class CompletionEngineLightTest {
         val ns = names(items)
         assertTrue(ns.contains("myField"), "Class field 'myField' should be proposed, but got: $ns")
     }
+
+    @Test
+    fun inferredTypeFromFunctionCall() = runBlocking {
+        val code = """
+            extern fun test(a: Int): List<Int>
+            val x = test(1)
+            val y = x.<caret>
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("size"), "List member 'size' should be suggested for inferred List type, but got: $ns")
+    }
+
+    @Test
+    fun inferredTypeFromMemberCall() = runBlocking {
+        val code = """
+            extern class MyClass {
+                fun getList(): List<String>
+            }
+            extern val c: MyClass
+            val x = c.getList()
+            val y = x.<caret>
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("size"), "List member 'size' should be suggested for inferred List type from member call, but got: $ns")
+    }
+
+    @Test
+    fun inferredTypeFromListLiteral() = runBlocking {
+        val code = """
+            val x = [1, 2, 3]
+            val y = x.<caret>
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("size"), "List member 'size' should be suggested for inferred List type from literal, but got: $ns")
+    }
+
+    @Test
+    fun inferredTypeAfterIndexing() = runBlocking {
+        val code = """
+            extern fun test(): List<String>
+            val x = test()
+            val y = x[0].<caret>
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        // Should contain String members, e.g., 'length' or 're'
+        assertTrue(ns.contains("length"), "String member 'length' should be suggested after indexing List<String>, but got: $ns")
+        assertTrue(ns.contains("re"), "String member 're' should be suggested after indexing List<String>, but got: $ns")
+    }
+
+    @Test
+    fun inferredTypeFromAssignmentWithoutVal() = runBlocking {
+        val code = """
+            extern fun test(): List<String>
+            x = test()
+            x.<caret>
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("size"), "List member 'size' should be suggested for variable assigned without 'val', but got: $ns")
+        assertTrue(ns.contains("add"), "List member 'add' should be suggested for variable assigned without 'val', but got: $ns")
+    }
+
+    @Test
+    fun inferredTypeAfterIndexingWithoutVal() = runBlocking {
+        val code = """
+            extern fun test(): List<String>
+            x = test()
+            x[0].<caret>
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        // String members include 'trim', 'lower', etc.
+        assertTrue(ns.contains("trim"), "String member 'trim' should be suggested for x[0] where x assigned without val, but got: $ns")
+        assertFalse(ns.contains("add"), "List member 'add' should NOT be suggested for x[0], but got: $ns")
+    }
+
+    @Test
+    fun transitiveInferenceWithoutVal() = runBlocking {
+        val code = """
+            extern fun test(): List<String>
+            x = test()
+            y = x
+            y.<caret>
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("size"), "List member 'size' should be suggested for transitive inference, but got: $ns")
+    }
+
+    @Test
+    fun objectMemberReturnInference() = runBlocking {
+        val code = """
+            object O {
+                fun getList(): List<String> = []
+            }
+            O.getList().<caret>
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("size"), "List member 'size' should be suggested for object member call, but got: $ns")
+    }
+
+    @Test
+    fun directFunctionCallCompletion() = runBlocking {
+        val code = """
+            extern fun test(value: Int): List<String>
+            test(1).<caret>
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("size"), "List member 'size' should be suggested for direct function call, but got: $ns")
+        assertTrue(ns.contains("map"), "Inherited member 'map' should be suggested for List, but got: $ns")
+    }
+
+    @Test
+    fun completionWithTrailingDotError() = runBlocking {
+        // This simulates typing mid-expression where the script is technically invalid
+        val code = """
+            extern fun test(): List<String>
+            test().<caret>
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("size"), "List member 'size' should be suggested even if script ends with a dot, but got: $ns")
+    }
+
+    @Test
+    fun listLiteralCompletion() = runBlocking {
+        val code = "[].<caret>"
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("size"), "List member 'size' should be suggested for [], but got: $ns")
+        assertTrue(ns.contains("map"), "Inherited member 'map' should be suggested for [], but got: $ns")
+    }
+
+    @Test
+    fun userReportedSample() = runBlocking {
+        val code = """
+            extern fun test(value: Int): List<String>
+            x = test(1)
+            x.<caret>
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("size"), "List member 'size' should be suggested for x, but got: $ns")
+    }
+
+    @Test
+    fun userReportedSampleIndexed() = runBlocking {
+        val code = """
+            extern fun test(value: Int): List<String>
+            x = test(1)
+            x[0].<caret>
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("size"), "String member 'size' should be suggested for x[0], but got: $ns")
+        assertTrue(ns.contains("trim"), "String member 'trim' should be suggested for x[0], but got: $ns")
+    }
+
+    @Test
+    fun userReportedSampleImplicitVariable() = runBlocking {
+        val code = """
+            extern fun test(): List<String>
+            x = test()
+            x.<caret>
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("size"), "List member 'size' should be suggested for implicit variable x, but got: $ns")
+    }
+
+    @Test
+    fun userReportedSampleNoDot() = runBlocking {
+        val code = """
+            extern fun test(value: Int): List<String>
+            x = test(1)
+            x[0]<caret>
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("x"), "Implicit variable 'x' should be suggested as global, but got: $ns")
+    }
+
+    @Test
+    fun userReportedIssue_X_equals_test2() = runBlocking {
+        val code = """
+            extern fun test2(): List<String>
+            x = test2
+            x.<caret>
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        // Since test2 is a function, x = test2 (without parens) should probably be the function itself,
+        // but current DocLookupUtils returns returnType.
+        // If it returns List<String>, then size should be there.
+        assertTrue(ns.contains("size"), "List member 'size' should be suggested for x = test2, but got: $ns")
+    }
+
+    @Test
+    fun anyMembersOnInferred() = runBlocking {
+        val code = """
+            x = 42
+            x.<caret>
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("toString"), "Any member 'toString' should be suggested for x=42, but got: $ns")
+        assertTrue(ns.contains("let"), "Any member 'let' should be suggested for x=42, but got: $ns")
+    }
+
+    @Test
+    fun charMembersOnIndexedString() = runBlocking {
+        val code = """
+            x = "hello"
+            x[0].<caret>
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("code"), "Char member 'code' should be suggested for indexed string x[0], but got: $ns")
+        assertTrue(ns.contains("toString"), "Any member 'toString' should be suggested for x[0], but got: $ns")
+    }
+
+    @Test
+    fun extensionMemberOnInferredList() = runBlocking {
+        val code = """
+            extern fun getNames(): List<String>
+            ns = getNames()
+            ns.<caret>
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("map"), "Extension member 'map' should be suggested for List, but got: $ns")
+        assertTrue(ns.contains("filter"), "Extension member 'filter' should be suggested for List, but got: $ns")
+    }
+
+    @Test
+    fun inferredTypeFromExternFunWithVal() = runBlocking {
+        val code = """
+            extern fun test(a: Int): List<Int>
+            val x = test(1)
+            x.<caret>
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("size"), "List member 'size' should be suggested for val x = test(1), but got: $ns")
+    }
+
+    @Test
+    fun userReportedNestedSample() = runBlocking {
+        val code = """
+            extern fun test(value: Int): List<String>
+            class X(fld1, fld2) {
+                var prop 
+                    get() { 12 }
+                    set(value) {
+                        val x = test(2)
+                        x.<caret>
+                    }
+            }
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("size"), "List member 'size' should be suggested for local val x inside set(), but got: $ns")
+    }
+
+    @Test
+    fun userReportedNestedSampleIndexed() = runBlocking {
+        val code = """
+            extern fun test(value: Int): List<String>
+            class X(fld1, fld2) {
+                var prop 
+                    get() { 12 }
+                    set(value) {
+                        val x = test(2)
+                        x[0].<caret>
+                    }
+            }
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("size"), "String member 'size' should be suggested for local x[0] inside set(), but got: $ns")
+    }
+
+    @Test
+    fun nestedShadowingCompletion() = runBlocking {
+        val code = """
+            val x = 42
+            class X {
+                fun test() {
+                    val x = "hello"
+                    x.<caret>
+                }
+            }
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        // Should contain String members (like trim)
+        assertTrue(ns.contains("trim"), "String member 'trim' should be suggested for shadowed x, but got: $ns")
+    }
 }

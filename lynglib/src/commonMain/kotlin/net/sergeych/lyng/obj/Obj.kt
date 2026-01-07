@@ -25,6 +25,9 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.serializer
 import net.sergeych.lyng.*
+import net.sergeych.lyng.miniast.ParamDoc
+import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.type
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
@@ -524,20 +527,46 @@ open class Obj {
     companion object {
 
         val rootObjectType = ObjClass("Obj").apply {
-            addFn("toString", true) {
+            addFnDoc(
+                name = "toString",
+                doc = "Returns a string representation of the object.",
+                returns = type("lyng.String"),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisObj.toString(this, true)
             }
-            addFn("inspect", true) {
+            addFnDoc(
+                name = "inspect",
+                doc = "Returns a detailed string representation for debugging.",
+                returns = type("lyng.String"),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisObj.inspect(this).toObj()
             }
-            addFn("contains") {
+            addFnDoc(
+                name = "contains",
+                doc = "Returns true if the object contains the given element.",
+                params = listOf(ParamDoc("element")),
+                returns = type("lyng.Bool"),
+                moduleName = "lyng.stdlib"
+            ) {
                 ObjBool(thisObj.contains(this, args.firstAndOnly()))
             }
             // utilities
-            addFn("let") {
+            addFnDoc(
+                name = "let",
+                doc = "Calls the specified function block with `this` value as its argument and returns its result.",
+                params = listOf(ParamDoc("block")),
+                moduleName = "lyng.stdlib"
+            ) {
                 args.firstAndOnly().callOn(createChildScope(Arguments(thisObj)))
             }
-            addFn("apply") {
+            addFnDoc(
+                name = "apply",
+                doc = "Calls the specified function block with `this` value as its receiver and returns `this` value.",
+                params = listOf(ParamDoc("block")),
+                moduleName = "lyng.stdlib"
+            ) {
                 val body = args.firstAndOnly()
                 (thisObj as? ObjInstance)?.let {
                     body.callOn(ApplyScope(this, it.instanceScope))
@@ -546,11 +575,21 @@ open class Obj {
                 }
                 thisObj
             }
-            addFn("also") {
+            addFnDoc(
+                name = "also",
+                doc = "Calls the specified function block with `this` value as its argument and returns `this` value.",
+                params = listOf(ParamDoc("block")),
+                moduleName = "lyng.stdlib"
+            ) {
                 args.firstAndOnly().callOn(createChildScope(Arguments(thisObj)))
                 thisObj
             }
-            addFn("run") {
+            addFnDoc(
+                name = "run",
+                doc = "Calls the specified function block with `this` value as its receiver and returns its result.",
+                params = listOf(ParamDoc("block")),
+                moduleName = "lyng.stdlib"
+            ) {
                 args.firstAndOnly().callOn(this)
             }
             addFn("getAt") {
@@ -563,7 +602,12 @@ open class Obj {
                 thisObj.putAt(this, requiredArg<Obj>(0), newValue)
                 newValue
             }
-            addFn("toJsonString") {
+            addFnDoc(
+                name = "toJsonString",
+                doc = "Encodes this object to a JSON string.",
+                returns = type("lyng.String"),
+                moduleName = "lyng.stdlib"
+            ) {
                 thisObj.toJson(this).toString().toObj()
             }
         }

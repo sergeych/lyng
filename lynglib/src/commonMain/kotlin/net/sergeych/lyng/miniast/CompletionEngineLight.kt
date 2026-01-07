@@ -23,6 +23,7 @@ package net.sergeych.lyng.miniast
 import net.sergeych.lyng.Compiler
 import net.sergeych.lyng.Script
 import net.sergeych.lyng.Source
+import net.sergeych.lyng.binding.BindingSnapshot
 import net.sergeych.lyng.highlight.offsetOf
 import net.sergeych.lyng.pacman.ImportProvider
 
@@ -58,7 +59,7 @@ object CompletionEngineLight {
         return completeSuspend(text, idx)
     }
 
-    suspend fun completeSuspend(text: String, caret: Int, providedMini: MiniScript? = null): List<CompletionItem> {
+    suspend fun completeSuspend(text: String, caret: Int, providedMini: MiniScript? = null, binding: BindingSnapshot? = null): List<CompletionItem> {
         // Ensure stdlib Obj*-defined docs (e.g., String methods) are initialized before registry lookup
         StdlibDocsBootstrap.ensure()
         val prefix = prefixAt(text, caret)
@@ -73,6 +74,10 @@ object CompletionEngineLight {
         val memberDot = DocLookupUtils.findDotLeft(text, word?.first ?: caret)
         if (memberDot != null) {
             // 0) Try chained member call return type inference
+            DocLookupUtils.guessReturnClassFromMemberCallBeforeMini(mini, text, memberDot, imported, binding)?.let { cls ->
+                offerMembersAdd(out, prefix, imported, cls, mini)
+                return out
+            }
             DocLookupUtils.guessReturnClassFromMemberCallBefore(text, memberDot, imported, mini)?.let { cls ->
                 offerMembersAdd(out, prefix, imported, cls, mini)
                 return out
@@ -88,7 +93,7 @@ object CompletionEngineLight {
                 return out
             }
             // 1) Receiver inference fallback
-            (DocLookupUtils.guessReceiverClassViaMini(mini, text, memberDot, imported) ?: DocLookupUtils.guessReceiverClass(text, memberDot, imported, mini))?.let { cls ->
+            (DocLookupUtils.guessReceiverClassViaMini(mini, text, memberDot, imported, binding) ?: DocLookupUtils.guessReceiverClass(text, memberDot, imported, mini))?.let { cls ->
                 offerMembersAdd(out, prefix, imported, cls, mini)
                 return out
             }
@@ -97,11 +102,16 @@ object CompletionEngineLight {
         }
 
         // Global identifiers: params > local decls > imported > stdlib; Functions > Classes > Values; alphabetical
-        if (mini != null) {
-            offerParamsInScope(out, prefix, mini, text, caret)
+        offerParamsInScope(out, prefix, mini, text, caret)
+
+        val locals = DocLookupUtils.extractLocalsAt(text, caret)
+        for (name in locals) {
+            if (name.startsWith(prefix, true)) {
+                out.add(CompletionItem(name, Kind.Value))
+            }
         }
 
-        val decls = mini?.declarations ?: emptyList()
+        val decls = mini.declarations
         val funs = decls.filterIsInstance<MiniFunDecl>().sortedBy { it.name.lowercase() }
         val classes = decls.filterIsInstance<MiniClassDecl>().sortedBy { it.name.lowercase() }
         val enums = decls.filterIsInstance<MiniEnumDecl>().sortedBy { it.name.lowercase() }
@@ -274,33 +284,38 @@ object CompletionEngineLight {
         emitGroup(directMap)
         emitGroup(inheritedMap)
 
-        // Supplement with stdlib extension members defined in root.lyng (e.g., fun String.re(...))
+        // Supplement with extension members (both stdlib and local)
         run {
             val already = (directMap.keys + inheritedMap.keys).toMutableSet()
-            val ext = BuiltinDocRegistry.extensionMemberNamesFor(className)
-            for (name in ext) {
+            val extensions = DocLookupUtils.collectExtensionMemberNames(imported, className, mini)
+            for (name in extensions) {
                 if (already.contains(name)) continue
-                val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, className, name)
+                val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, className, name, mini)
                 if (resolved != null) {
-                    when (val member = resolved.second) {
+                    val m = resolved.second
+                    val ci = when (m) {
                         is MiniMemberFunDecl -> {
-                            val params = member.params.joinToString(", ") { it.name }
-                            val ci = CompletionItem(name, Kind.Method, tailText = "(${params})", typeText = typeOf(member.returnType))
-                            if (ci.name.startsWith(prefix, true)) out += ci
-                            already.add(name)
+                            val params = m.params.joinToString(", ") { it.name }
+                            CompletionItem(name, Kind.Method, tailText = "(${params})", typeText = typeOf(m.returnType))
                         }
-                        is MiniMemberValDecl -> {
-                            val ci = CompletionItem(name, Kind.Field, typeText = typeOf(member.type))
-                            if (ci.name.startsWith(prefix, true)) out += ci
-                            already.add(name)
+                        is MiniFunDecl -> {
+                            val params = m.params.joinToString(", ") { it.name }
+                            CompletionItem(name, Kind.Method, tailText = "(${params})", typeText = typeOf(m.returnType))
                         }
-                        is MiniInitDecl -> {}
+                        is MiniMemberValDecl -> CompletionItem(name, Kind.Field, typeText = typeOf(m.type))
+                        is MiniValDecl -> CompletionItem(name, Kind.Field, typeText = typeOf(m.type))
+                        else -> CompletionItem(name, Kind.Method, tailText = "()", typeText = null)
+                    }
+                    if (ci.name.startsWith(prefix, true)) {
+                        out += ci
+                        already.add(name)
                     }
                 } else {
-                    // Fallback: emit simple method name without detailed types
                     val ci = CompletionItem(name, Kind.Method, tailText = "()", typeText = null)
-                    if (ci.name.startsWith(prefix, true)) out += ci
-                    already.add(name)
+                    if (ci.name.startsWith(prefix, true)) {
+                        out += ci
+                        already.add(name)
+                    }
                 }
             }
         }

@@ -45,6 +45,8 @@ dependencies {
     // Tests for IntelliJ Platform fixtures rely on JUnit 3/4 API (junit.framework.TestCase)
     // Add JUnit 4 which contains the JUnit 3 compatibility classes used by BasePlatformTestCase/UsefulTestCase
     testImplementation("junit:junit:4.13.2")
+    testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.10.2")
+    testImplementation("org.opentest4j:opentest4j:1.3.0")
 }
 
 intellij {

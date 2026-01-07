@@ -21,6 +21,7 @@
 package net.sergeych.lyng
 
 import kotlinx.coroutines.test.runTest
+import net.sergeych.lyng.highlight.offsetOf
 import net.sergeych.lyng.miniast.*
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -275,6 +276,89 @@ class MiniAstTest {
     }
 
     @Test
+    fun resolve_inferred_member_type() = runTest {
+        val code = """
+            object O3 {
+                val name = "ozone"
+            }
+            val x = O3.name
+        """.trimIndent()
+        val (_, sink) = compileWithMini(code)
+        val mini = sink.build()
+        val type = DocLookupUtils.findTypeByRange(mini, "x", code.indexOf("val x") + 4, code, emptyList())
+        assertEquals("String", DocLookupUtils.simpleClassNameOf(type))
+    }
+
+    @Test
+    fun resolve_inferred_val_type_from_extern_fun() = runTest {
+        val code = """
+            extern fun test(a: Int): List<Int>
+            val x = test(1)
+        """.trimIndent()
+        val (_, sink) = compileWithMini(code)
+        val mini = sink.build()
+        assertNotNull(mini)
+        val vd = mini.declarations.filterIsInstance<MiniValDecl>().firstOrNull { it.name == "x" }
+        assertNotNull(vd)
+
+        val inferred = DocLookupUtils.inferTypeRefForVal(vd, code, emptyList(), mini)
+        assertNotNull(inferred)
+        assertTrue(inferred is MiniGenericType)
+        assertEquals("List", (inferred.base as MiniTypeName).segments.last().name)
+
+        val code2 = """
+            extern fun test2(a: Int): String
+            val y = test2(1)
+        """.trimIndent()
+        val (_, sink2) = compileWithMini(code2)
+        val mini2 = sink2.build()
+        val vd2 = mini2?.declarations?.filterIsInstance<MiniValDecl>()?.firstOrNull { it.name == "y" }
+        assertNotNull(vd2)
+        val inferred2 = DocLookupUtils.inferTypeRefForVal(vd2, code2, emptyList(), mini2)
+        assertNotNull(inferred2)
+        assertTrue(inferred2 is MiniTypeName)
+        assertEquals("String", inferred2.segments.last().name)
+
+        val code3 = """
+            extern object API {
+                fun getData(): List<String>
+            }
+            val x = API.getData()
+        """.trimIndent()
+        val (_, sink3) = compileWithMini(code3)
+        val mini3 = sink3.build()
+        val vd3 = mini3?.declarations?.filterIsInstance<MiniValDecl>()?.firstOrNull { it.name == "x" }
+        assertNotNull(vd3)
+        val inferred3 = DocLookupUtils.inferTypeRefForVal(vd3, code3, emptyList(), mini3)
+        assertNotNull(inferred3)
+        assertTrue(inferred3 is MiniGenericType)
+        assertEquals("List", (inferred3.base as MiniTypeName).segments.last().name)
+    }
+
+    @Test
+    fun resolve_inferred_val_type_cross_script() = runTest {
+        val dCode = "extern fun test(a: Int): List<Int>"
+        val mainCode = "val x = test(1)"
+
+        val (_, dSink) = compileWithMini(dCode)
+        val dMini = dSink.build()!!
+
+        val (_, mainSink) = compileWithMini(mainCode)
+        val mainMini = mainSink.build()!!
+
+        // Merge manually
+        val merged = mainMini.copy(declarations = (mainMini.declarations + dMini.declarations).toMutableList())
+
+        val vd = merged.declarations.filterIsInstance<MiniValDecl>().firstOrNull { it.name == "x" }
+        assertNotNull(vd)
+
+        val inferred = DocLookupUtils.inferTypeRefForVal(vd, mainCode, emptyList(), merged)
+        assertNotNull(inferred)
+        assertTrue(inferred is MiniGenericType)
+        assertEquals("List", (inferred.base as MiniTypeName).segments.last().name)
+    }
+
+    @Test
     fun miniAst_captures_user_sample_extern_doc() = runTest {
         val code = """
             /*
@@ -310,5 +394,49 @@ class MiniAstTest {
         assertNotNull(resolved)
         assertEquals("O3", resolved.first)
         assertEquals("doc for name", resolved.second.doc?.summary)
+    }
+    @Test
+    fun miniAst_captures_nested_generics() = runTest {
+        val code = """
+            val x: Map<String, List<Int>> = {}
+        """
+        val (_, sink) = compileWithMini(code)
+        val mini = sink.build()
+        assertNotNull(mini)
+        val vd = mini.declarations.filterIsInstance<MiniValDecl>().firstOrNull { it.name == "x" }
+        assertNotNull(vd)
+        val ty = vd.type as MiniGenericType
+        assertEquals("Map", (ty.base as MiniTypeName).segments.last().name)
+        assertEquals(2, ty.args.size)
+        
+        val arg1 = ty.args[0] as MiniTypeName
+        assertEquals("String", arg1.segments.last().name)
+        
+        val arg2 = ty.args[1] as MiniGenericType
+        assertEquals("List", (arg2.base as MiniTypeName).segments.last().name)
+        assertEquals(1, arg2.args.size)
+        val innerArg = arg2.args[0] as MiniTypeName
+        assertEquals("Int", innerArg.segments.last().name)
+    }
+
+    @Test
+    fun inferTypeForValWithInference() = runTest {
+        val code = """
+            extern fun test(): List<Int>
+            val x = test()
+        """.trimIndent()
+        val (_, sink) = compileWithMini(code)
+        val mini = sink.build()
+        assertNotNull(mini)
+        
+        val vd = mini.declarations.filterIsInstance<MiniValDecl>().firstOrNull { it.name == "x" }
+        assertNotNull(vd)
+        
+        val imported = listOf("lyng.stdlib")
+        val src = mini.range.start.source
+        val type = DocLookupUtils.findTypeByRange(mini, "x", src.offsetOf(vd.nameStart), code, imported)
+        assertNotNull(type)
+        val className = DocLookupUtils.simpleClassNameOf(type)
+        assertEquals("List", className)
     }
 }

@@ -91,14 +91,15 @@ object DocLookupUtils {
         return null
     }
 
-    fun findTypeByRange(mini: MiniScript?, name: String, startOffset: Int): MiniTypeRef? {
+    fun findTypeByRange(mini: MiniScript?, name: String, startOffset: Int, text: String? = null, imported: List<String>? = null): MiniTypeRef? {
         if (mini == null) return null
         val src = mini.range.start.source
+        fun matches(p: net.sergeych.lyng.Pos, len: Int) = src.offsetOf(p).let { s -> startOffset >= s && startOffset < s + len }
 
         for (d in mini.declarations) {
-            if (d.name == name && src.offsetOf(d.nameStart) == startOffset) {
+            if (d.name == name && matches(d.nameStart, d.name.length)) {
                 return when (d) {
-                    is MiniValDecl -> d.type
+                    is MiniValDecl -> d.type ?: if (text != null && imported != null) inferTypeRefForVal(d, text, imported, mini) else null
                     is MiniFunDecl -> d.returnType
                     else -> null
                 }
@@ -106,25 +107,27 @@ object DocLookupUtils {
 
             if (d is MiniFunDecl) {
                 for (p in d.params) {
-                    if (p.name == name && src.offsetOf(p.nameStart) == startOffset) return p.type
+                    if (p.name == name && matches(p.nameStart, p.name.length)) return p.type
                 }
             }
 
             if (d is MiniClassDecl) {
                 for (m in d.members) {
-                    if (m.name == name && src.offsetOf(m.nameStart) == startOffset) {
+                    if (m.name == name && matches(m.nameStart, m.name.length)) {
                         return when (m) {
                             is MiniMemberFunDecl -> m.returnType
-                            is MiniMemberValDecl -> m.type
+                            is MiniMemberValDecl -> m.type ?: if (text != null && imported != null) {
+                                inferTypeRefFromInitRange(m.initRange, m.nameStart, text, imported, mini)
+                            } else null
                             else -> null
                         }
                     }
                 }
                 for (cf in d.ctorFields) {
-                    if (cf.name == name && src.offsetOf(cf.nameStart) == startOffset) return cf.type
+                    if (cf.name == name && matches(cf.nameStart, cf.name.length)) return cf.type
                 }
                 for (cf in d.classFields) {
-                    if (cf.name == name && src.offsetOf(cf.nameStart) == startOffset) return cf.type
+                    if (cf.name == name && matches(cf.nameStart, cf.name.length)) return cf.type
                 }
             }
         }
@@ -155,6 +158,21 @@ object DocLookupUtils {
         // even when there are no explicit imports in the file
         result.add("lyng.stdlib")
         return result.toList()
+    }
+
+    fun extractLocalsAt(text: String, offset: Int): Set<String> {
+        val res = mutableSetOf<String>()
+        // 1) find val/var declarations
+        val re = Regex("(?:^|[\\n;])\\s*(?:val|var)\\s+([A-Za-z_][A-Za-z0-9_]*)")
+        re.findAll(text).forEach { m ->
+            if (m.range.first < offset) res.add(m.groupValues[1])
+        }
+        // 2) find implicit assignments
+        val re2 = Regex("(?:^|[\\n;])\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*=[^=]")
+        re2.findAll(text).forEach { m ->
+            if (m.range.first < offset) res.add(m.groupValues[1])
+        }
+        return res
     }
 
     fun extractImportsFromText(text: String): List<String> {
@@ -232,24 +250,65 @@ object DocLookupUtils {
         for ((name, list) in buckets) {
             result[name] = mergeClassDecls(name, list)
         }
+        // Root object alias
+        if (result.containsKey("Obj") && !result.containsKey("Any")) {
+            result["Any"] = result["Obj"]!!
+        }
         return result
     }
 
-    fun resolveMemberWithInheritance(importedModules: List<String>, className: String, member: String, localMini: MiniScript? = null): Pair<String, MiniMemberDecl>? {
+    fun resolveMemberWithInheritance(importedModules: List<String>, className: String, member: String, localMini: MiniScript? = null): Pair<String, MiniNamedDecl>? {
         val classes = aggregateClasses(importedModules, localMini)
-        fun dfs(name: String, visited: MutableSet<String>): Pair<String, MiniMemberDecl>? {
-            val cls = classes[name] ?: return null
-            cls.members.firstOrNull { it.name == member }?.let { return name to it }
+        fun dfs(name: String, visited: MutableSet<String>): Pair<String, MiniNamedDecl>? {
             if (!visited.add(name)) return null
-            for (baseName in cls.bases) {
-                dfs(baseName, visited)?.let { return it }
+            val cls = classes[name]
+            if (cls != null) {
+                cls.members.firstOrNull { it.name == member }?.let { return name to it }
+                for (baseName in cls.bases) {
+                    dfs(baseName, visited)?.let { return it }
+                }
             }
+            // Check for local extensions in this class or bases
+            localMini?.declarations?.firstOrNull { d ->
+                (d is MiniFunDecl && d.receiver != null && simpleClassNameOf(d.receiver) == name && d.name == member) ||
+                (d is MiniValDecl && d.receiver != null && simpleClassNameOf(d.receiver) == name && d.name == member)
+            }?.let { return name to it }
+
             return null
         }
         return dfs(className, mutableSetOf())
     }
 
-    fun findMemberAcrossClasses(importedModules: List<String>, member: String, localMini: MiniScript? = null): Pair<String, MiniMemberDecl>? {
+    fun collectExtensionMemberNames(importedModules: List<String>, className: String, localMini: MiniScript? = null): Set<String> {
+        val classes = aggregateClasses(importedModules, localMini)
+        val visited = mutableSetOf<String>()
+        val result = mutableSetOf<String>()
+
+        fun dfs(name: String) {
+            if (!visited.add(name)) return
+            // 1) stdlib extensions from BuiltinDocRegistry
+            result.addAll(BuiltinDocRegistry.extensionMemberNamesFor(name))
+            // 2) local extensions from mini
+            localMini?.declarations?.forEach { d ->
+                if (d is MiniFunDecl && d.receiver != null && simpleClassNameOf(d.receiver) == name) result.add(d.name)
+                if (d is MiniValDecl && d.receiver != null && simpleClassNameOf(d.receiver) == name) result.add(d.name)
+            }
+            // 3) bases
+            classes[name]?.bases?.forEach { dfs(it) }
+        }
+
+        dfs(className)
+        // Hardcoded supplements for common containers if not explicitly in bases
+        if (className == "List" || className == "Array") {
+            dfs("Collection")
+            dfs("Iterable")
+        }
+        dfs("Any")
+        dfs("Obj")
+        return result
+    }
+
+    fun findMemberAcrossClasses(importedModules: List<String>, member: String, localMini: MiniScript? = null): Pair<String, MiniNamedDecl>? {
         val classes = aggregateClasses(importedModules, localMini)
         // Preferred order for ambiguous common ops
         val preference = listOf("Iterable", "Iterator", "List")
@@ -301,6 +360,12 @@ object DocLookupUtils {
         if (mini == null) return null
         val i = prevNonWs(text, dotPos - 1)
         if (i < 0) return null
+        
+        // Handle indexing x[0]. or literal [1].
+        if (text[i] == ']') {
+            return guessReceiverClass(text, dotPos, imported, mini)
+        }
+
         val wordRange = wordRangeAt(text, i + 1) ?: return null
         val ident = text.substring(wordRange.first, wordRange.second)
 
@@ -310,14 +375,14 @@ object DocLookupUtils {
             if (ref != null) {
                 val sym = binding.symbols.firstOrNull { it.id == ref.symbolId }
                 if (sym != null) {
-                    val type = findTypeByRange(mini, sym.name, sym.declStart)
+                    val type = findTypeByRange(mini, sym.name, sym.declStart, text, imported)
                     simpleClassNameOf(type)?.let { return it }
                 }
             } else {
                 // Check if it's a declaration (e.g. static access to a class)
                 val sym = binding.symbols.firstOrNull { it.declStart == wordRange.first && it.name == ident }
                 if (sym != null) {
-                    val type = findTypeByRange(mini, sym.name, sym.declStart)
+                    val type = findTypeByRange(mini, sym.name, sym.declStart, text, imported)
                     simpleClassNameOf(type)?.let { return it }
                     // if it's a class/enum, return its name directly
                     if (sym.kind == net.sergeych.lyng.binding.SymbolKind.Class || sym.kind == net.sergeych.lyng.binding.SymbolKind.Enum) return sym.name
@@ -325,13 +390,17 @@ object DocLookupUtils {
             }
         }
 
-        // 1) Global declarations in current file (val/var/fun/class/enum)
-        val d = mini.declarations.firstOrNull { it.name == ident }
+        // 1) Declarations in current file (val/var/fun/class/enum), prioritized by proximity
+        val src = mini.range.start.source
+        val d = mini.declarations
+            .filter { it.name == ident && src.offsetOf(it.nameStart) < dotPos }
+            .maxByOrNull { src.offsetOf(it.nameStart) }
+
         if (d != null) {
             return when (d) {
                 is MiniClassDecl -> d.name
                 is MiniEnumDecl -> d.name
-                is MiniValDecl -> simpleClassNameOf(d.type)
+                is MiniValDecl -> simpleClassNameOf(d.type ?: inferTypeRefForVal(d, text, imported, mini))
                 is MiniFunDecl -> simpleClassNameOf(d.returnType)
             }
         }
@@ -343,6 +412,9 @@ object DocLookupUtils {
             }
         }
 
+        // 2a) Try to find plain assignment in text if not found in declarations: x = test()
+        inferTypeFromAssignmentInText(ident, text, imported, mini, beforeOffset = dotPos)?.let { return simpleClassNameOf(it) }
+
         // 3) Recursive chaining: Base.ident.
         val dotBefore = findDotLeft(text, wordRange.first)
         if (dotBefore != null) {
@@ -353,7 +425,7 @@ object DocLookupUtils {
                 if (resolved != null) {
                     val rt = when (val m = resolved.second) {
                         is MiniMemberFunDecl -> m.returnType
-                        is MiniMemberValDecl -> m.type
+                        is MiniMemberValDecl -> m.type ?: inferTypeRefFromInitRange(m.initRange, m.nameStart, text, imported, mini)
                         else -> null
                     }
                     return simpleClassNameOf(rt)
@@ -366,6 +438,43 @@ object DocLookupUtils {
         if (classes.containsKey(ident)) return ident
 
         return null
+    }
+
+    private fun inferTypeFromAssignmentInText(ident: String, text: String, imported: List<String>, mini: MiniScript?, beforeOffset: Int = Int.MAX_VALUE): MiniTypeRef? {
+        // Heuristic: search for "val ident =" or "ident =" in text
+        val re = Regex("(?:^|[\\n;])\\s*(?:val|var)?\\s*${ident}\\s*(?::\\s*([A-Za-z_][A-Za-z0-9_]*))?\\s*(?:=|by)\\s*([^\\n;]+)")
+        val match = re.findAll(text)
+            .filter { it.range.first < beforeOffset }
+            .lastOrNull() ?: return null
+        val explicitType = match.groupValues.getOrNull(1)?.takeIf { it.isNotBlank() }
+        if (explicitType != null) return syntheticTypeRef(explicitType)
+        val expr = match.groupValues.getOrNull(2)?.let { stripComments(it) } ?: return null
+        return inferTypeRefFromExpression(expr, imported, mini, contextText = text, beforeOffset = beforeOffset)
+    }
+
+    private fun stripComments(text: String): String {
+        var result = ""
+        var i = 0
+        var inString = false
+        while (i < text.length) {
+            val ch = text[i]
+            if (ch == '"' && (i == 0 || text[i - 1] != '\\')) {
+                inString = !inString
+            }
+            if (!inString && ch == '/' && i + 1 < text.length) {
+                if (text[i + 1] == '/') break // single line comment
+                if (text[i + 1] == '*') {
+                    // Skip block comment
+                    i += 2
+                    while (i + 1 < text.length && !(text[i] == '*' && text[i + 1] == '/')) i++
+                    i += 2 // Skip '*/'
+                    continue
+                }
+            }
+            result += ch
+            i++
+        }
+        return result.trim()
     }
 
     fun guessReturnClassFromMemberCallBeforeMini(mini: MiniScript?, text: String, dotPos: Int, imported: List<String>, binding: BindingSnapshot? = null): String? {
@@ -420,7 +529,9 @@ object DocLookupUtils {
             val rt = when (m) {
                 is MiniMemberFunDecl -> m.returnType
                 is MiniMemberValDecl -> m.type
-                is MiniInitDecl -> null
+                is MiniFunDecl -> m.returnType
+                is MiniValDecl -> m.type
+                else -> null
             }
             simpleClassNameOf(rt)
         }
@@ -455,13 +566,25 @@ object DocLookupUtils {
         return map
     }
 
-    fun guessReceiverClass(text: String, dotPos: Int, imported: List<String>, mini: MiniScript? = null): String? {
+    fun guessReceiverClass(text: String, dotPos: Int, imported: List<String>, mini: MiniScript? = null, beforeOffset: Int = dotPos): String? {
         guessClassFromCallBefore(text, dotPos, imported, mini)?.let { return it }
         var i = prevNonWs(text, dotPos - 1)
         if (i >= 0) {
             when (text[i]) {
                 '"' -> return "String"
-                ']' -> return "List"
+                ']' -> {
+                    // Check if literal or indexing
+                    val matchingOpen = findMatchingOpenBracket(text, i)
+                    if (matchingOpen != null && matchingOpen > 0) {
+                        val beforeOpen = prevNonWs(text, matchingOpen - 1)
+                        if (beforeOpen >= 0 && (isIdentChar(text[beforeOpen]) || text[beforeOpen] == ')' || text[beforeOpen] == ']')) {
+                            // Likely indexing: infer type of full expression
+                            val exprText = text.substring(0, i + 1)
+                            return simpleClassNameOf(inferTypeRefFromExpression(exprText, imported, mini, beforeOffset = beforeOffset))
+                        }
+                    }
+                    return "List"
+                }
                 '}' -> return "Dict"
                 ')' -> {
                     // Parenthesized expression: walk back to matching '(' and inspect the inner expression
@@ -564,7 +687,9 @@ object DocLookupUtils {
         val ret = when (member) {
             is MiniMemberFunDecl -> member.returnType
             is MiniMemberValDecl -> member.type
-            is MiniInitDecl -> null
+            is MiniFunDecl -> member.returnType
+            is MiniValDecl -> member.type
+            else -> null
         }
         return simpleClassNameOf(ret)
     }
@@ -627,9 +752,214 @@ object DocLookupUtils {
         val ret = when (member) {
             is MiniMemberFunDecl -> member.returnType
             is MiniMemberValDecl -> member.type
-            is MiniInitDecl -> null
+            is MiniFunDecl -> member.returnType
+            is MiniValDecl -> member.type
+            else -> null
         }
         return simpleClassNameOf(ret)
+    }
+
+    fun inferTypeRefFromExpression(text: String, imported: List<String>, mini: MiniScript? = null, contextText: String? = null, beforeOffset: Int = Int.MAX_VALUE): MiniTypeRef? {
+        val trimmed = stripComments(text)
+        if (trimmed.isEmpty()) return null
+        val fullText = contextText ?: text
+
+        // 1) Literals
+        if (trimmed.startsWith("\"")) return syntheticTypeRef("String")
+        if (trimmed.startsWith("[")) return syntheticTypeRef("List")
+        if (trimmed.startsWith("{")) return syntheticTypeRef("Dict")
+        if (trimmed == "true" || trimmed == "false") return syntheticTypeRef("Boolean")
+        if (trimmed.all { it.isDigit() || it == '.' || it == '_' || it == 'e' || it == 'E' }) {
+            val hasDigits = trimmed.any { it.isDigit() }
+            if (hasDigits)
+                return if (trimmed.contains('.') || trimmed.contains('e', ignoreCase = true)) syntheticTypeRef("Real") else syntheticTypeRef("Int")
+        }
+
+        // 2) Function/Constructor calls or Indexing
+        if (trimmed.endsWith(")")) {
+            val openParen = findMatchingOpenParen(trimmed, trimmed.length - 1)
+            if (openParen != null && openParen > 0) {
+                var j = openParen - 1
+                while (j >= 0 && trimmed[j].isWhitespace()) j--
+                val end = j + 1
+                while (j >= 0 && isIdentChar(trimmed[j])) j--
+                val start = j + 1
+                if (start < end) {
+                    val callee = trimmed.substring(start, end)
+
+                    // Check if it's a member call (dot before callee)
+                    var k = start - 1
+                    while (k >= 0 && trimmed[k].isWhitespace()) k--
+                    if (k >= 0 && trimmed[k] == '.') {
+                        val prevDot = k
+                        // Recursive: try to infer type of what's before the dot
+                        val receiverText = trimmed.substring(0, prevDot)
+                        val receiverType = inferTypeRefFromExpression(receiverText, imported, mini, contextText = fullText, beforeOffset = beforeOffset)
+                        val receiverClass = simpleClassNameOf(receiverType)
+                        if (receiverClass != null) {
+                            val resolved = resolveMemberWithInheritance(imported, receiverClass, callee, mini)
+                            if (resolved != null) {
+                                return when (val m = resolved.second) {
+                                    is MiniMemberFunDecl -> m.returnType
+                                    is MiniMemberValDecl -> m.type ?: inferTypeRefFromInitRange(m.initRange, m.nameStart, fullText, imported, mini)
+                                    else -> null
+                                }
+                            }
+                        }
+                    } else {
+                        // Top-level call or constructor
+                        val classes = aggregateClasses(imported, mini)
+                        if (classes.containsKey(callee)) return syntheticTypeRef(callee)
+
+                        for (mod in imported) {
+                            val decls = BuiltinDocRegistry.docsForModule(mod)
+                            val fn = decls.asSequence().filterIsInstance<MiniFunDecl>().firstOrNull { it.name == callee }
+                            if (fn != null) return fn.returnType
+                        }
+                        mini?.declarations?.filterIsInstance<MiniFunDecl>()?.firstOrNull { it.name == callee }?.let { return it.returnType }
+                    }
+                }
+            }
+        }
+
+        if (trimmed.endsWith("]")) {
+            val openBracket = findMatchingOpenBracket(trimmed, trimmed.length - 1)
+            if (openBracket != null && openBracket > 0) {
+                val receiverText = trimmed.substring(0, openBracket).trim()
+                if (receiverText.isNotEmpty()) {
+                    val receiverType = inferTypeRefFromExpression(receiverText, imported, mini, contextText = fullText, beforeOffset = beforeOffset)
+                    if (receiverType is MiniGenericType) {
+                        val baseName = simpleClassNameOf(receiverType.base)
+                        if (baseName == "List" && receiverType.args.isNotEmpty()) {
+                            return receiverType.args[0]
+                        }
+                        if (baseName == "Map" && receiverType.args.size >= 2) {
+                            return receiverType.args[1]
+                        }
+                    }
+                    // Fallback for non-generic collections or if base name matches
+                    val baseName = simpleClassNameOf(receiverType)
+                    if (baseName == "List" || baseName == "Array" || baseName == "String") {
+                        if (baseName == "String") return syntheticTypeRef("Char") 
+                        return syntheticTypeRef("Any")
+                    }
+                }
+            }
+        }
+
+        // 3) Member field or simple identifier at the end
+        val lastWord = wordRangeAt(trimmed, trimmed.length)
+        if (lastWord != null && lastWord.second == trimmed.length) {
+            val ident = trimmed.substring(lastWord.first, lastWord.second)
+            var k = lastWord.first - 1
+            while (k >= 0 && trimmed[k].isWhitespace()) k--
+            if (k >= 0 && trimmed[k] == '.') {
+                // Member field: receiver.ident
+                val receiverText = trimmed.substring(0, k).trim()
+                val receiverType = inferTypeRefFromExpression(receiverText, imported, mini, contextText = fullText, beforeOffset = beforeOffset)
+                val receiverClass = simpleClassNameOf(receiverType)
+                if (receiverClass != null) {
+                    val resolved = resolveMemberWithInheritance(imported, receiverClass, ident, mini)
+                    if (resolved != null) {
+                        return when (val m = resolved.second) {
+                            is MiniMemberFunDecl -> m.returnType
+                            is MiniMemberValDecl -> m.type ?: inferTypeRefFromInitRange(m.initRange, m.nameStart, fullText, imported, mini)
+                            else -> null
+                        }
+                    }
+                }
+            } else {
+                // Simple identifier
+                // 1) Declarations in current file (val/var/fun/class/enum), prioritized by proximity
+                val src = mini?.range?.start?.source
+                val d = if (src != null) {
+                    mini.declarations
+                        .filter { it.name == ident && src.offsetOf(it.nameStart) < beforeOffset }
+                        .maxByOrNull { src.offsetOf(it.nameStart) }
+                } else {
+                    mini?.declarations?.firstOrNull { it.name == ident }
+                }
+
+                if (d != null) {
+                    return when (d) {
+                        is MiniClassDecl -> syntheticTypeRef(d.name)
+                        is MiniEnumDecl -> syntheticTypeRef(d.name)
+                        is MiniValDecl -> d.type ?: inferTypeRefForVal(d, fullText, imported, mini)
+                        is MiniFunDecl -> d.returnType
+                    }
+                }
+
+                // 2) Parameters in any function
+                for (fd in mini?.declarations?.filterIsInstance<MiniFunDecl>() ?: emptyList()) {
+                    for (p in fd.params) {
+                        if (p.name == ident) return p.type
+                    }
+                }
+
+                // 3) Try to find plain assignment in text: ident = expr
+                inferTypeFromAssignmentInText(ident, fullText, imported, mini, beforeOffset = beforeOffset)?.let { return it }
+
+                // 4) Check if it's a known class (static access)
+                val classes = aggregateClasses(imported, mini)
+                if (classes.containsKey(ident)) return syntheticTypeRef(ident)
+            }
+        }
+
+        return null
+    }
+
+    private fun findMatchingOpenBracket(text: String, closeBracketPos: Int): Int? {
+        if (closeBracketPos < 0 || closeBracketPos >= text.length || text[closeBracketPos] != ']') return null
+        var depth = 0
+        var i = closeBracketPos - 1
+        while (i >= 0) {
+            when (text[i]) {
+                ']' -> depth++
+                '[' -> if (depth == 0) return i else depth--
+            }
+            i--
+        }
+        return null
+    }
+
+    private fun findMatchingOpenParen(text: String, closeParenPos: Int): Int? {
+        if (closeParenPos < 0 || closeParenPos >= text.length || text[closeParenPos] != ')') return null
+        var depth = 0
+        var i = closeParenPos - 1
+        while (i >= 0) {
+            when (text[i]) {
+                ')' -> depth++
+                '(' -> if (depth == 0) return i else depth--
+            }
+            i--
+        }
+        return null
+    }
+
+    private fun syntheticTypeRef(name: String): MiniTypeRef =
+        MiniTypeName(MiniRange(net.sergeych.lyng.Pos.builtIn, net.sergeych.lyng.Pos.builtIn),
+            listOf(MiniTypeName.Segment(name, MiniRange(net.sergeych.lyng.Pos.builtIn, net.sergeych.lyng.Pos.builtIn))), false)
+
+    fun inferTypeRefForVal(vd: MiniValDecl, text: String, imported: List<String>, mini: MiniScript?): MiniTypeRef? {
+        return inferTypeRefFromInitRange(vd.initRange, vd.nameStart, text, imported, mini)
+    }
+
+    fun inferTypeRefFromInitRange(initRange: MiniRange?, nameStart: net.sergeych.lyng.Pos, text: String, imported: List<String>, mini: MiniScript?): MiniTypeRef? {
+        val range = initRange ?: return null
+        val src = mini?.range?.start?.source ?: return null
+        val start = src.offsetOf(range.start)
+        val end = src.offsetOf(range.end)
+        if (start < 0 || start >= end || end > text.length) return null
+
+        var exprText = text.substring(start, end).trim()
+        if (exprText.startsWith("=")) {
+            exprText = exprText.substring(1).trim()
+        }
+        if (exprText.startsWith("by")) {
+            exprText = exprText.substring(2).trim()
+        }
+        val beforeOffset = src.offsetOf(nameStart)
+        return inferTypeRefFromExpression(exprText, imported, mini, contextText = text, beforeOffset = beforeOffset)
     }
 
     fun simpleClassNameOf(t: MiniTypeRef?): String? = when (t) {
@@ -667,13 +997,13 @@ object DocLookupUtils {
     fun enumToSyntheticClass(en: MiniEnumDecl): MiniClassDecl {
         val staticMembers = mutableListOf<MiniMemberDecl>()
         // entries: List
-        staticMembers.add(MiniMemberValDecl(en.range, "entries", false, null, null, en.nameStart, isStatic = true))
+        staticMembers.add(MiniMemberValDecl(en.range, "entries", false, null, null, null, en.nameStart, isStatic = true))
         // valueOf(name: String): Enum
         staticMembers.add(MiniMemberFunDecl(en.range, "valueOf", listOf(MiniParam("name", null, en.nameStart)), null, null, en.nameStart, isStatic = true))
 
         // Also add each entry as a static member (const)
         for (entry in en.entries) {
-            staticMembers.add(MiniMemberValDecl(en.range, entry, false, MiniTypeName(en.range, listOf(MiniTypeName.Segment(en.name, en.range)), false), null, en.nameStart, isStatic = true))
+            staticMembers.add(MiniMemberValDecl(en.range, entry, false, MiniTypeName(en.range, listOf(MiniTypeName.Segment(en.name, en.range)), false), null, null, en.nameStart, isStatic = true))
         }
 
         return MiniClassDecl(
