@@ -173,6 +173,7 @@ Ready features:
 - [x] ranges, lists, strings, interfaces: Iterable, Iterator, Collection, Array
 - [x] when(value), if-then-else
 - [x] exception handling: throw, try-catch-finally, exception classes.
+- [x] user-defined exception classes
 - [x] multiplatform maven publication
 - [x] documentation for the current state
 - [x] maps, sets and sequences (flows?)
@@ -196,6 +197,7 @@ Ready features:
 - [x] late-init vals in classes
 - [x] properties with getters and setters
 - [x] assign-if-null operator `?=`
+- [x] user-defined exception classes
 
 All of this is documented in the [language site](https://lynglang.com) and locally [docs/language.md](docs/tutorial.md). the current nightly builds published on the site and in the private maven repository.  
 

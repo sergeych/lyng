@@ -4552,22 +4552,22 @@ class ScriptTest {
         """.trimIndent())
     }
 
-//    @Test
-//    fun testUserClassExceptions() = runTest {
-//        eval("""
-//            val x = try { throw IllegalAccessException("test1") } catch { it }
-//            assertEquals("test1", x.message)
-//            assert( x is IllegalAccessException)
-//            assertThrows(IllegalAccessException) {   throw IllegalAccessException("test2") }
-//
-//            class X : Exception("test3")
-//            val y = try { throw X() } catch { it }
-//            println(y)
-//            assertEquals("test3", y.message)
-//            assert( y is X)
-//
-//        """.trimIndent())
-//    }
+    @Test
+    fun testUserClassExceptions() = runTest {
+        eval("""
+            val x = try { throw IllegalAccessException("test1") } catch { it }
+            assertEquals("test1", x.message)
+            assert( x is IllegalAccessException)
+            assertThrows(IllegalAccessException) {   throw IllegalAccessException("test2") }
+
+            class X : Exception("test3")
+            val y = try { throw X() } catch { it }
+            println(y)
+            assertEquals("test3", y.message)
+            assert( y is X)
+
+        """.trimIndent())
+    }
 
     @Test
     fun testTodo() = runTest {
@@ -4592,4 +4592,47 @@ class ScriptTest {
         """.trimIndent())
     }
 
+    @Test
+    fun testUserExceptionClass() = runTest {
+        eval("""
+            class UserException : Exception("user exception")
+            val x = try { throw UserException() } catch { it }
+            assertEquals("user exception", x.message)
+            assert( x is UserException)
+            val y = try { throw IllegalStateException() } catch { it }
+            assert( y is IllegalStateException)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testExceptionToString() = runTest {
+        eval("""
+            class MyEx(m) : Exception(m)
+            val e = MyEx("custom error")
+            val s = e.toString()
+            assert( s.startsWith("MyEx: custom error at ") )
+            
+            val e2 = try { throw e } catch { it }
+            assert( e2 === e )
+            assertEquals("custom error", e2.message)
+        """.trimIndent())
+    }
+    @Test
+    fun testAssertThrowsUserException() = runTest {
+        eval("""
+            class MyEx : Exception
+            class DerivedEx : MyEx
+            
+            assertThrows(MyEx) { throw MyEx() }
+            assertThrows(Exception) { throw MyEx() }
+            assertThrows(MyEx) { throw DerivedEx() }
+            
+            val caught = try { 
+                assertThrows(DerivedEx) { throw MyEx() } 
+                null
+            } catch { it }
+            assert(caught != null)
+            assert(caught.message.contains("Expected DerivedEx, got MyEx"))
+        """.trimIndent())
+    }
 }

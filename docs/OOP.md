@@ -720,6 +720,23 @@ Notes and limitations (current version):
 - `name` and `ordinal` are read‑only properties of an entry.
 - `entries` is a read‑only list owned by the enum type.
 
+## Exception Classes
+
+You can define your own exception classes by inheriting from the built-in `Exception` class. User-defined exceptions are regular classes and can have their own properties and methods.
+
+```lyng
+class MyError(val code, m) : Exception(m)
+
+try {
+    throw MyError(500, "Internal Server Error")
+}
+catch(e: MyError) {
+    println("Error " + e.code + ": " + e.message)
+}
+```
+
+For more details on error handling, see the [Exceptions Handling Guide](exceptions_handling.md).
+
 ## fields and visibility
 
 It is possible to add non-constructor fields:

@@ -139,6 +139,20 @@ var name by Observable("initial") { n, old, new ->
 
 The system features a unified interface (`getValue`, `setValue`, `invoke`) and a `bind` hook for initialization-time validation and configuration. See the [Delegation Guide](delegation.md) for more.
 
+### User-Defined Exception Classes
+You can now create custom exception types by inheriting from the built-in `Exception` class. Custom exceptions are real classes that can have their own fields and methods, and they work seamlessly with `throw` and `try-catch` blocks.
+
+```lyng
+class ValidationException(val field, m) : Exception(m)
+
+try {
+    throw ValidationException("email", "Invalid format")
+}
+catch(e: ValidationException) {
+    println("Error in " + e.field + ": " + e.message)
+}
+```
+
 ### Assign-if-null Operator (`?=`)
 The new `?=` operator provides a concise way to assign a value only if the target is `null`. It is especially useful for setting default values or lazy initialization.
 

@@ -41,7 +41,7 @@ open class ObjException(
     val exceptionClass: ExceptionClass,
     val scope: Scope,
     val message: ObjString,
-    @Suppress("unused") val extraData: Obj = ObjNull,
+    val extraData: Obj = ObjNull,
     val useStackTrace: ObjList? = null
 ) : Obj() {
     constructor(name: String, scope: Scope, message: String) : this(
@@ -54,37 +54,14 @@ open class ObjException(
 
     suspend fun getStackTrace(): ObjList {
         return cachedStackTrace.get {
-            val result = ObjList()
-            val maybeCls = scope.get("StackTraceEntry")?.value as? ObjClass
-            var s: Scope? = scope
-            var lastPos: Pos? = null
-            while (s != null) {
-                val pos = s.pos
-                if (pos != lastPos && !pos.currentLine.isEmpty()) {
-                    if (maybeCls != null) {
-                        result.list += maybeCls.callWithArgs(
-                            scope,
-                            pos.source.objSourceName,
-                            ObjInt(pos.line.toLong()),
-                            ObjInt(pos.column.toLong()),
-                            ObjString(pos.currentLine)
-                        )
-                    } else {
-                        // Fallback textual entry if StackTraceEntry class is not available in this scope
-                        result.list += ObjString("${pos.source.objSourceName}:${pos.line}:${pos.column}: ${pos.currentLine}")
-                    }
-                }
-                s = s.parent
-                lastPos = pos
-            }
-            result
+            captureStackTrace(scope)
         }
     }
 
     constructor(scope: Scope, message: String) : this(Root, scope, ObjString(message))
 
     fun raise(): Nothing {
-        throw ExecutionError(this)
+        throw ExecutionError(this, scope.pos, message.value)
     }
 
     override val objClass: ObjClass = exceptionClass
@@ -116,7 +93,41 @@ open class ObjException(
 
     companion object {
 
+        suspend fun captureStackTrace(scope: Scope): ObjList {
+            val result = ObjList()
+            val maybeCls = scope.get("StackTraceEntry")?.value as? ObjClass
+            var s: Scope? = scope
+            var lastPos: Pos? = null
+            while (s != null) {
+                val pos = s.pos
+                if (pos != lastPos && !pos.currentLine.isEmpty()) {
+                    if (maybeCls != null) {
+                        result.list += maybeCls.callWithArgs(
+                            scope,
+                            pos.source.objSourceName,
+                            ObjInt(pos.line.toLong()),
+                            ObjInt(pos.column.toLong()),
+                            ObjString(pos.currentLine)
+                        )
+                    } else {
+                        // Fallback textual entry if StackTraceEntry class is not available in this scope
+                        result.list += ObjString("${pos.source.objSourceName}:${pos.line}:${pos.column}: ${pos.currentLine}")
+                    }
+                }
+                s = s.parent
+                lastPos = pos
+            }
+            return result
+        }
+
         class ExceptionClass(val name: String, vararg parents: ObjClass) : ObjClass(name, *parents) {
+            init {
+                constructorMeta = ArgsDeclaration(
+                    listOf(ArgsDeclaration.Item("message", defaultValue = statement { ObjString(name) })),
+                    Token.Type.RPAREN
+                )
+            }
+
             override suspend fun callOn(scope: Scope): Obj {
                 val message = scope.args.getOrNull(0)?.toString(scope) ?: ObjString(name)
                 return ObjException(this, scope, message)
@@ -148,13 +159,43 @@ open class ObjException(
         }
 
         val Root = ExceptionClass("Exception").apply {
+            instanceConstructor = statement {
+                val msg = args.getOrNull(0) ?: ObjString("Exception")
+                if (thisObj is ObjInstance) {
+                    (thisObj as ObjInstance).instanceScope.addItem("Exception::message", false, msg)
+                }
+                ObjVoid
+            }
+            instanceInitializers.add(statement {
+                if (thisObj is ObjInstance) {
+                    val stack = captureStackTrace(this)
+                    (thisObj as ObjInstance).instanceScope.addItem("Exception::stackTrace", false, stack)
+                }
+                ObjVoid
+            })
             addConstDoc(
                 name = "message",
                 value = statement {
-                    (thisObj as ObjException).message.toObj()
+                    when (val t = thisObj) {
+                        is ObjException -> t.message
+                        is ObjInstance -> t.instanceScope.get("Exception::message")?.value ?: ObjNull
+                        else -> ObjNull
+                    }
                 },
                 doc = "Human‑readable error message.",
                 type = type("lyng.String"),
+                moduleName = "lyng.stdlib"
+            )
+            addConstDoc(
+                name = "extraData",
+                value = statement {
+                    when (val t = thisObj) {
+                        is ObjException -> t.extraData
+                        else -> ObjNull
+                    }
+                },
+                doc = "Extra data associated with the exception.",
+                type = type("lyng.Any", nullable = true),
                 moduleName = "lyng.stdlib"
             )
             addFnDoc(
@@ -163,7 +204,32 @@ open class ObjException(
                 returns = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.StackTraceEntry"))),
                 moduleName = "lyng.stdlib"
             ) {
-                (thisObj as ObjException).getStackTrace()
+                when (val t = thisObj) {
+                    is ObjException -> t.getStackTrace()
+                    is ObjInstance -> t.instanceScope.get("Exception::stackTrace")?.value as? ObjList ?: ObjList()
+                    else -> ObjList()
+                }
+            }
+            addFnDoc(
+                name = "toString",
+                doc = "Human‑readable string representation of the error.",
+                returns = type("lyng.String"),
+                moduleName = "lyng.stdlib"
+            ) {
+                val msg = when (val t = thisObj) {
+                    is ObjException -> t.message.value
+                    is ObjInstance -> (t.instanceScope.get("Exception::message")?.value as? ObjString)?.value
+                        ?: t.objClass.className
+
+                    else -> t.objClass.className
+                }
+                val stack = when (val t = thisObj) {
+                    is ObjException -> t.getStackTrace()
+                    is ObjInstance -> t.instanceScope.get("Exception::stackTrace")?.value as? ObjList ?: ObjList()
+                    else -> ObjList()
+                }
+                val at = stack.list.firstOrNull()?.toString(this) ?: ObjString("(unknown)")
+                ObjString("${thisObj.objClass.className}: $msg at $at")
             }
         }
 

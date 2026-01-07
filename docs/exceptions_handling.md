@@ -128,9 +128,9 @@ Serializable class that conveys information about the exception. Important membe
 
 | name              | description                                            |
 |-------------------|--------------------------------------------------------|
-| message           | String message                                         |
-| stackTrace        | lyng stack trace, list of `StackTraceEntry`, see below |
-| printStackTrace() | format and print stack trace using println()           |
+| message           | String message                                           |
+| stackTrace()      | lyng stack trace, list of `StackTraceEntry`, see below   |
+| printStackTrace() | format and print stack trace using println()             |
 
 ## StackTraceEntry
 
@@ -150,24 +150,103 @@ class StackTraceEntry(
 
 # Custom error classes
 
-_this functionality is not yet released_
+You can define your own exception classes by inheriting from the built-in `Exception` class. This allows you to create specific error types for your application logic and catch them specifically.
+
+## Defining a custom exception
+
+To define a custom exception, create a class that inherits from `Exception`:
+
+```lyng
+class MyUserException : Exception("something went wrong")
+```
+
+You can also pass the message dynamically:
+
+```lyng
+class MyUserException(m) : Exception(m)
+
+throw MyUserException("custom error message")
+```
+
+If you don't provide a message to the `Exception` constructor, the class name will be used as the default message:
+
+```lyng
+class SimpleException : Exception
+
+val e = SimpleException()
+assertEquals("SimpleException", e.message)
+```
+
+## Throwing and catching custom exceptions
+
+Custom exceptions are thrown using the `throw` keyword and can be caught using `catch` blocks, just like standard exceptions:
+
+```lyng
+class ValidationException(m) : Exception(m)
+
+try {
+    throw ValidationException("Invalid input")
+}
+catch(e: ValidationException) {
+    println("Caught validation error: " + e.message)
+}
+catch(e: Exception) {
+    println("Caught other exception: " + e.message)
+}
+```
+
+Since user exceptions are real classes, inheritance works as expected:
+
+```lyng
+class BaseError : Exception
+class DerivedError : BaseError
+
+try {
+    throw DerivedError()
+}
+catch(e: BaseError) {
+    // This will catch DerivedError as well
+    assert(e is DerivedError)
+}
+```
+
+## Accessing extra data
+
+You can add your own fields to custom exception classes to carry additional information:
+
+```lyng
+class NetworkException(m, val statusCode) : Exception(m)
+
+try {
+    throw NetworkException("Not Found", 404)
+}
+catch(e: NetworkException) {
+    println("Error " + e.statusCode + ": " + e.message)
+}
+```
 
 # Standard exception classes
 
 | class                      | notes                                                 |
 |----------------------------|-------------------------------------------------------|
-| Exception                  | root of al throwable objects                          |
+| Exception                  | root of all throwable objects                         |
 | NullReferenceException     |                                                       |
 | AssertionFailedException   |                                                       | 
 | ClassCastException         |                                                       |
 | IndexOutOfBoundsException  |                                                       |
 | IllegalArgumentException   |                                                       | 
+| IllegalStateException      |                                                       |
+| NoSuchElementException     |                                                       |
 | IllegalAssignmentException | assigning to val, etc.                                |
 | SymbolNotDefinedException  |                                                       |
 | IterationEndException      | attempt to read iterator past end, `hasNext == false` |
 | IllegalAccessException     | attempt to access private members or like             |
-| UnknownException           | unexpected kotlin exception caught                    |
-|                            |                                                       |
+| UnknownException           | unexpected internal exception caught                  |
+| NotFoundException          |                                                       |
+| IllegalOperationException  |                                                       |
+| UnsetException             | access to uninitialized late-init val                 |
+| NotImplementedException    | used by `TODO()`                                      |
+| SyntaxError                |                                                       |
 
 
 ### Symbol resolution errors

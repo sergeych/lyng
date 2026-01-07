@@ -1719,19 +1719,25 @@ class Compiler(
             var errorObject = throwStatement.execute(sc)
             // Rebind error scope to the throw-site position so ScriptError.pos is accurate
             val throwScope = sc.createChildScope(pos = start)
-            errorObject = when (errorObject) {
-                is ObjString -> ObjException(throwScope, errorObject.value)
-                is ObjException -> ObjException(
+            if (errorObject is ObjString) {
+                errorObject = ObjException(throwScope, errorObject.value)
+            }
+            if (!errorObject.isInstanceOf(ObjException.Root)) {
+                throwScope.raiseError("this is not an exception object: $errorObject")
+            }
+            if (errorObject is ObjException) {
+                errorObject = ObjException(
                     errorObject.exceptionClass,
                     throwScope,
                     errorObject.message,
                     errorObject.extraData,
                     errorObject.useStackTrace
                 )
-
-                else -> throwScope.raiseError("this is not an exception object: $errorObject")
+                throwScope.raiseError(errorObject)
+            } else {
+                val msg = errorObject.invokeInstanceMethod(sc, "message").toString(sc).value
+                throwScope.raiseError(errorObject, start, msg)
             }
-            throwScope.raiseError(errorObject)
         }
     }
 
@@ -1814,25 +1820,25 @@ class Compiler(
                 throw e
             } catch (e: Exception) {
                 // convert to appropriate exception
-                val objException = when (e) {
+                val caughtObj = when (e) {
                     is ExecutionError -> e.errorObject
                     else -> ObjUnknownException(this, e.message ?: e.toString())
                 }
                 // let's see if we should catch it:
                 var isCaught = false
                 for (cdata in catches) {
-                    var exceptionObject: ObjException? = null
+                    var match: Obj? = null
                     for (exceptionClassName in cdata.classNames) {
-                        val exObj = ObjException.getErrorClass(exceptionClassName)
-                            ?: raiseSymbolNotFound("error clas not exists: $exceptionClassName")
-                        if (objException.isInstanceOf(exObj)) {
-                            exceptionObject = objException
+                        val exObj = this[exceptionClassName]?.value as? ObjClass
+                            ?: raiseSymbolNotFound("error class does not exist or is not a class: $exceptionClassName")
+                        if (caughtObj.isInstanceOf(exObj)) {
+                            match = caughtObj
                             break
                         }
                     }
-                    if (exceptionObject != null) {
+                    if (match != null) {
                         val catchContext = this.createChildScope(pos = cdata.catchVar.pos)
-                        catchContext.addItem(cdata.catchVar.value, false, objException)
+                        catchContext.addItem(cdata.catchVar.value, false, caughtObj)
                         result = cdata.block.execute(catchContext)
                         isCaught = true
                         break

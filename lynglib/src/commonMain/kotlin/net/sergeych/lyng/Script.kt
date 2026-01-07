@@ -248,10 +248,9 @@ class Script(
                     )
                 )
                 expectedClass?.let {
-                    if (result !is ObjException)
-                        raiseError("Expected $expectedClass, got non-lyng exception $result")
-                    if (result.exceptionClass != expectedClass) {
-                        raiseError("Expected $expectedClass, got ${result.exceptionClass}")
+                    if (!result.isInstanceOf(it)) {
+                        val actual = if (result is ObjException) result.exceptionClass else result.objClass
+                        raiseError("Expected $it, got $actual")
                     }
                 }
                 result

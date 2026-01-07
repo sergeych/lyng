@@ -277,16 +277,22 @@ open class Scope(
         raiseError(ObjSymbolNotDefinedException(this, "symbol is not defined: $name"))
 
     fun raiseError(message: String): Nothing {
-        throw ExecutionError(ObjException(this, message))
+        val ex = ObjException(this, message)
+        throw ExecutionError(ex, pos, ex.message.value)
     }
 
     fun raiseError(obj: ObjException): Nothing {
-        throw ExecutionError(obj)
+        throw ExecutionError(obj, obj.scope.pos, obj.message.value)
+    }
+
+    fun raiseError(obj: Obj, pos: Pos, message: String): Nothing {
+        throw ExecutionError(obj, pos, message)
     }
 
     @Suppress("unused")
     fun raiseNotFound(message: String = "not found"): Nothing {
-        throw ExecutionError(ObjNotFoundException(this, message))
+        val ex = ObjNotFoundException(this, message)
+        throw ExecutionError(ex, ex.scope.pos, ex.message.value)
     }
 
     inline fun <reified T : Obj> requiredArg(index: Int): T {

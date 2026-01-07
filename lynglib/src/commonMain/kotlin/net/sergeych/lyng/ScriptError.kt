@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@
 
 package net.sergeych.lyng
 
-import net.sergeych.lyng.obj.ObjException
+import net.sergeych.lyng.obj.Obj
 
 open class ScriptError(val pos: Pos, val errorMessage: String, cause: Throwable? = null) : Exception(
     """
@@ -33,6 +33,6 @@ open class ScriptError(val pos: Pos, val errorMessage: String, cause: Throwable?
 
 class ScriptFlowIsNoMoreCollected: Exception()
 
-class ExecutionError(val errorObject: ObjException) : ScriptError(errorObject.scope.pos, errorObject.message.value)
+class ExecutionError(val errorObject: Obj, pos: Pos, message: String) : ScriptError(pos, message)
 
 class ImportException(pos: Pos, message: String) : ScriptError(pos, message)
