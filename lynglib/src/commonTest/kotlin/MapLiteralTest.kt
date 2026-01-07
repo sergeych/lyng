@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import net.sergeych.lyng.ExecutionError
 import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.eval
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class MapLiteralTest {
@@ -40,6 +41,29 @@ class MapLiteralTest {
             assertEquals(2, m["y"])
             """.trimIndent()
         )
+    }
+
+    @Test
+    fun testSimpleLiteral() = runTest {
+        assertEquals("""{"a":1,"b":2}""", eval("{ a: 1, b: 2 }").toJson().toString())
+        assertEquals("""{"a":1,"b":2}""", eval("""
+            { 
+                a: 1, 
+                b: 2 
+            }
+            """.trimIndent()).toJson().toString())
+        assertEquals("""{"a":1,"b":2}""", eval("""
+            object Contracts {
+                val POR = object {
+                    fun f1() = 1
+                    fun f2() = 2
+                }
+            }
+            { 
+                a: Contracts.POR.f1(), 
+                b: Contracts.POR.f2() 
+            }
+            """.trimIndent()).toJson().toString())
     }
 
     @Test

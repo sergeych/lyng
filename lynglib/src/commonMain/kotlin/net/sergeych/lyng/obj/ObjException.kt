@@ -89,6 +89,17 @@ open class ObjException(
 
     override val objClass: ObjClass = exceptionClass
 
+    /**
+     * Tool to get kotlin string with error report including the Lyng stack trace.
+     */
+    suspend fun toStringWithStackTrace(): String {
+        val l = getStackTrace().list
+        return buildString {
+            append(message.value)
+            for( t in l)
+                append("\n\tat ${t.toString(scope)}")
+        }
+    }
     override suspend fun defaultToString(scope: Scope): ObjString {
         val at = getStackTrace().list.firstOrNull()?.toString(scope)
             ?: ObjString("(unknown)")
