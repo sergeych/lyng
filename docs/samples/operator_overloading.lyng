@@ -1,0 +1,63 @@
+// Sample: Operator Overloading in Lyng
+
+class Vector(val x, val y) {
+    // Overload +
+    fun plus(other) = Vector(x + other.x, y + other.y)
+    
+    // Overload -
+    fun minus(other) = Vector(x - other.x, y - other.y)
+    
+    // Overload unary -
+    fun negate() = Vector(-x, -y)
+    
+    // Overload ==
+    fun equals(other) {
+        if (other is Vector) x == other.x && y == other.y
+        else false
+    }
+    
+    // Overload * (scalar multiplication)
+    fun mul(scalar) = Vector(x * scalar, y * scalar)
+    
+    override fun toString() = "Vector(${x}, ${y})"
+}
+
+val v1 = Vector(10, 20)
+val v2 = Vector(5, 5)
+
+println("v1: " + v1)
+println("v2: " + v2)
+
+// Test binary +
+val v3 = v1 + v2
+println("v1 + v2 = " + v3)
+assertEquals(Vector(15, 25), v3)
+
+// Test unary -
+val v4 = -v1
+println("-v1 = " + v4)
+assertEquals(Vector(-10, -20), v4)
+
+// Test scalar multiplication
+val v5 = v1 * 2
+println("v1 * 2 = " + v5)
+assertEquals(Vector(20, 40), v5)
+
+// Test += (falls back to plus)
+var v6 = Vector(1, 1)
+v6 += Vector(2, 2)
+println("v6 += (2,2) -> " + v6)
+assertEquals(Vector(3, 3), v6)
+
+// Test in-place mutation with plusAssign
+class Counter(var count) {
+    fun plusAssign(n) {
+        count = count + n
+    }
+}
+
+val c = Counter(0)
+c += 10
+c += 5
+println("Counter: " + c.count)
+assertEquals(15, c.count)
