@@ -159,20 +159,17 @@ open class ObjException(
         }
 
         val Root = ExceptionClass("Exception").apply {
-            instanceConstructor = statement {
-                val msg = args.getOrNull(0) ?: ObjString("Exception")
-                if (thisObj is ObjInstance) {
-                    (thisObj as ObjInstance).instanceScope.addItem("Exception::message", false, msg)
-                }
-                ObjVoid
-            }
             instanceInitializers.add(statement {
                 if (thisObj is ObjInstance) {
+                    val msg = get("message")?.value ?: ObjString("Exception")
+                    (thisObj as ObjInstance).instanceScope.addItem("Exception::message", false, msg)
+
                     val stack = captureStackTrace(this)
                     (thisObj as ObjInstance).instanceScope.addItem("Exception::stackTrace", false, stack)
                 }
                 ObjVoid
             })
+            instanceConstructor = statement { ObjVoid }
             addConstDoc(
                 name = "message",
                 value = statement {
@@ -331,3 +328,43 @@ class ObjUnsetException(scope: Scope, message: String = "property is unset (not 
 
 class ObjNotImplementedException(scope: Scope, message: String = "not implemented") :
     ObjException("NotImplementedException", scope, message)
+
+/**
+ * Check if the object is an instance of Lyng Exception class.
+ */
+fun Obj.isLyngException(): Boolean = isInstanceOf("Exception")
+
+/**
+ * Get the exception message.
+ */
+suspend fun Obj.getLyngExceptionMessage(scope: Scope): String =
+    invokeInstanceMethod(scope, "message").toString(scope).value
+
+/**
+ * Get the exception stack trace.
+ */
+suspend fun Obj.getLyngExceptionStackTrace(scope: Scope): ObjList =
+    invokeInstanceMethod(scope, "stackTrace").cast(scope)
+
+/**
+ * Get the exception extra data.
+ */
+suspend fun Obj.getLyngExceptionExtraData(scope: Scope): Obj =
+    invokeInstanceMethod(scope, "extraData")
+
+/**
+ * Get the exception as a formatted string with the primary throw site.
+ */
+suspend fun Obj.getLyngExceptionString(scope: Scope): String =
+    invokeInstanceMethod(scope, "toString").toString(scope).value
+
+/**
+ * Rethrow this object as a Kotlin [ExecutionError] if it's an exception.
+ */
+suspend fun Obj.raiseAsExecutionError(scope: Scope?=null): Nothing {
+    if (this is ObjException) raise()
+    val sc = scope ?: Script.newScope()
+    val msg = getLyngExceptionMessage(sc)
+    val pos = (this as? ObjInstance)?.instanceScope?.pos ?: Pos.builtIn
+    throw ExecutionError(this, pos, msg)
+}

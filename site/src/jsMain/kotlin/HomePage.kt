@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -100,6 +100,14 @@ val worker = object : Runnable {
     override fun run() = println("Working...")
 }
 worker.run()
+
+// User-defined exceptions: real classes with custom fields
+class MyError(val code, m) : Exception(m)
+try {
+    throw MyError(500, "Something failed")
+} catch (e: MyError) {
+    println("Error " + e.code + ": " + e.message)
+}
 >>> void
 """.trimIndent()
     val mapHtml = "<pre><code>" + htmlEscape(code) + "</code></pre>"

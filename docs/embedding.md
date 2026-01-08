@@ -286,6 +286,45 @@ val isolated = net.sergeych.lyng.Scope.new()
 - When registering packages, names must be unique. Register before you compile/evaluate scripts that import them.
 - To debug scope content, `scope.toString()` and `scope.trace()` can help during development.
 
+### 12) Handling and serializing exceptions
+
+When Lyng code throws an exception, it is caught in Kotlin as an `ExecutionError`. This error wraps the actual Lyng `Obj` that was thrown (which could be a built-in `ObjException` or a user-defined `ObjInstance`).
+
+To simplify handling these objects from Kotlin, several extension methods are provided on the `Obj` class. These methods work uniformly regardless of whether the exception is built-in or user-defined.
+
+#### Uniform Exception API
+
+| Method | Description |
+| :--- | :--- |
+| `obj.isLyngException()` | Returns `true` if the object is an instance of `Exception`. |
+| `obj.isInstanceOf("ClassName")` | Returns `true` if the object is an instance of the named Lyng class or its ancestors. |
+| `obj.getLyngExceptionMessage(scope)` | Returns the exception message as a Kotlin `String`. |
+| `obj.getLyngExceptionString(scope)` | Returns a formatted string including the class name, message, and primary throw site. |
+| `obj.getLyngExceptionStackTrace(scope)` | Returns the stack trace as an `ObjList` of `StackTraceEntry`. |
+| `obj.getLyngExceptionExtraData(scope)` | Returns the extra data associated with the exception. |
+| `obj.raiseAsExecutionError(scope)` | Rethrows the object as a Kotlin `ExecutionError`. |
+
+#### Example: Serialization and Rethrowing
+
+You can serialize Lyng exception objects using `Lynon` to transmit them across boundaries and then rethrow them.
+
+```kotlin
+try {
+    scope.eval("throw MyUserException(404, \"Not Found\")")
+} catch (e: ExecutionError) {
+    // 1. Serialize the Lyng exception object
+    val encoded: UByteArray = lynonEncodeAny(scope, e.errorObject)
+
+    // ... (transmit 'encoded' byte array) ...
+
+    // 2. Deserialize it back to an Obj in a different context
+    val decoded: Obj = lynonDecodeAny(scope, encoded)
+
+    // 3. Properly rethrow it on the Kotlin side using the uniform API
+    decoded.raiseAsExecutionError(scope)
+}
+```
+
 ---
 
 That’s it. You now have Lyng embedded in your Kotlin app: you can expose your app’s API, evaluate user scripts, and organize your own packages to import from Lyng code.

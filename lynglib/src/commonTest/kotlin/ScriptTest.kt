@@ -4558,6 +4558,7 @@ class ScriptTest {
             val x = try { throw IllegalAccessException("test1") } catch { it }
             assertEquals("test1", x.message)
             assert( x is IllegalAccessException)
+            assert( x is Exception )
             assertThrows(IllegalAccessException) {   throw IllegalAccessException("test2") }
 
             class X : Exception("test3")
@@ -4565,6 +4566,7 @@ class ScriptTest {
             println(y)
             assertEquals("test3", y.message)
             assert( y is X)
+            assert( y is Exception )
 
         """.trimIndent())
     }
@@ -4601,6 +4603,17 @@ class ScriptTest {
             assert( x is UserException)
             val y = try { throw IllegalStateException() } catch { it }
             assert( y is IllegalStateException)
+            
+            // creating exceptions as usual objects:
+            val z = IllegalArgumentException()
+            assert( z is Exception )
+            assert( z is IllegalArgumentException )
+            
+            class X : Exception
+            val t = X()
+            assert( t is X )
+            assert( t is Exception )
+            
         """.trimIndent())
     }
 
@@ -4635,4 +4648,28 @@ class ScriptTest {
             assert(caught.message.contains("Expected DerivedEx, got MyEx"))
         """.trimIndent())
     }
+
+    @Test
+    fun testRaiseAsError() = runTest {
+        var x = evalNamed( "tc1","""
+            IllegalArgumentException("test3")
+        """.trimIndent())
+        var x1 = try { x.raiseAsExecutionError() } catch(e: ExecutionError) { e }
+        println(x1.message)
+        assertTrue { "tc1:1" in x1.message!! }
+        assertTrue { "test3" in x1.message!! }
+
+        // With user exception classes it should be the same at top level:
+        x = evalNamed("tc2","""
+            class E: Exception("test4")
+            E()
+        """.trimIndent())
+        x1 = try { x.raiseAsExecutionError() } catch(e: ExecutionError) { e }
+        println(x1.message)
+        assertContains(x1.message!!, "test4")
+        // the reported error message should include proper trace, which must include
+        // source name, in our case, is is "tc2":
+        assertContains(x1.message!!, "tc2")
+    }
 }
+

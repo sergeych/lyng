@@ -67,6 +67,10 @@ open class Obj {
             someClass == rootObjectType ||
             (someClass is ObjClass && objClass.allImplementingNames.contains(someClass.className))
 
+    fun isInstanceOf(className: String) = 
+        objClass.mro.any { it.className == className } ||
+            objClass.allImplementingNames.contains(className)
+
 
     suspend fun invokeInstanceMethod(scope: Scope, name: String, vararg args: Obj): Obj =
         invokeInstanceMethod(scope, name, Arguments(args.toList()))

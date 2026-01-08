@@ -294,10 +294,12 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
 //    }
 
     val serializingVars: Map<String, ObjRecord> by lazy {
+        val metaParams = objClass.constructorMeta?.params?.map { it.name }?.toSet() ?: emptySet()
         instanceScope.objects.filter {
             it.value.type.serializable &&
                     it.value.type == ObjRecord.Type.Field &&
-                    it.value.isMutable
+                    it.value.isMutable &&
+                    !metaParams.contains(it.key)
         }
     }
 

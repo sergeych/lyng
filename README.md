@@ -76,7 +76,7 @@ Now you can import lyng and use it:
 ### Execute script:
 
 ```kotlin
-import net.sergeyh.lyng.*
+import net.sergeych.lyng.*
 
 // we need a coroutine to start, as Lyng
 // is a coroutine based language, async topdown
@@ -92,9 +92,7 @@ Script is executed over some `Scope`. Create instance,
 add your specific vars and functions to it, and call:
 
 ```kotlin
-
-import com.sun.source.tree.Scope
-import new.sergeych.lyng.*
+import net.sergeych.lyng.*
 
 // simple function
 val scope = Script.newScope().apply {

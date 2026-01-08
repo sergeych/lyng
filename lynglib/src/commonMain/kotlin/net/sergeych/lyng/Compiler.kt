@@ -20,6 +20,7 @@ package net.sergeych.lyng
 import net.sergeych.lyng.Compiler.Companion.compile
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
+import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.pacman.ImportProvider
 
 /**
@@ -3840,4 +3841,6 @@ class Compiler(
 }
 
 suspend fun eval(code: String) = compile(code).execute()
+suspend fun evalNamed(name: String, code: String, importManager: ImportManager = Script.defaultImportManager) =
+    compile(Source(name,code), importManager).execute()
 
