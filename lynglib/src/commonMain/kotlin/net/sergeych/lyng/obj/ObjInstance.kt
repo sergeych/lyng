@@ -308,7 +308,10 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         if (localVars.isNotEmpty()) {
             val vars = decoder.decodeAnyList(scope)
             if (vars.size > serializingVars.size)
-                scope.raiseIllegalArgument("serialized vars has bigger size than instance vars")
+                scope.raiseIllegalArgument(
+                    "serialized vars has bigger size ${vars.size} than instance vars (${serializingVars.size}): "+
+                    vars.joinToString(",")
+                )
             for ((i, v) in vars.withIndex()) {
                 localVars[i].value = v
             }
