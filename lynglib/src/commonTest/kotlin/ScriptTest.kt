@@ -4671,5 +4671,17 @@ class ScriptTest {
         // source name, in our case, is is "tc2":
         assertContains(x1.message!!, "tc2")
     }
+    @Test
+    fun testLyngToKotlinExceptionHelpers() = runTest {
+        var x = evalNamed( "tc1","""
+            IllegalArgumentException("test3")
+        """.trimIndent())
+        assertEquals("""
+            tc1:1:1: test3
+                at tc1:1:1: IllegalArgumentException("test3")
+            """.trimIndent(),
+            x.getLyngExceptionMessageWithStackTrace()
+        )
+    }
 }
 

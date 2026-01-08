@@ -298,11 +298,12 @@ To simplify handling these objects from Kotlin, several extension methods are pr
 | :--- | :--- |
 | `obj.isLyngException()` | Returns `true` if the object is an instance of `Exception`. |
 | `obj.isInstanceOf("ClassName")` | Returns `true` if the object is an instance of the named Lyng class or its ancestors. |
-| `obj.getLyngExceptionMessage(scope)` | Returns the exception message as a Kotlin `String`. |
+| `obj.getLyngExceptionMessage(scope?=null)` | Returns the exception message as a Kotlin `String`. |
+| `obj.getLyngExceptionMessageWithStackTrace(scope?=null)` | Returns a detailed message with a formatted stack trace. |
 | `obj.getLyngExceptionString(scope)` | Returns a formatted string including the class name, message, and primary throw site. |
 | `obj.getLyngExceptionStackTrace(scope)` | Returns the stack trace as an `ObjList` of `StackTraceEntry`. |
 | `obj.getLyngExceptionExtraData(scope)` | Returns the extra data associated with the exception. |
-| `obj.raiseAsExecutionError(scope)` | Rethrows the object as a Kotlin `ExecutionError`. |
+| `obj.raiseAsExecutionError(scope?=null)` | Rethrows the object as a Kotlin `ExecutionError`. |
 
 #### Example: Serialization and Rethrowing
 

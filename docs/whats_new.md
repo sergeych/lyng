@@ -183,3 +183,6 @@ lyng fmt --check MyFile.lyng     # Check if file needs formatting
 Experimental lightweight autocompletion is now available in the IntelliJ plugin. It features type-aware member suggestions and inheritance-aware completion.
 
 You can enable it in **Settings | Lyng Formatter | Enable Lyng autocompletion**.
+
+### Kotlin API: Exception Handling
+The `Obj.getLyngExceptionMessageWithStackTrace()` extension method has been added to simplify retrieving detailed error information from Lyng exception objects in Kotlin. Additionally, `getLyngExceptionMessage()` and `raiseAsExecutionError()` now accept an optional `Scope`, making it easier to use them when a scope is not immediately available.

@@ -256,9 +256,10 @@ class StackTraceEntry(
         val column: Int,
         val sourceString: String
 ) {
+    val at by lazy { "%s:%s:%s"(sourceName,line+1,column+1) }
     /* Formatted representation: source:line:column: text. */
     override fun toString() {
-        "%s:%d:%d: %s"(sourceName, line, column, sourceString.trim())
+        "%s: %s"(at, sourceString.trim())
     }
 }
 

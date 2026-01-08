@@ -337,8 +337,37 @@ fun Obj.isLyngException(): Boolean = isInstanceOf("Exception")
 /**
  * Get the exception message.
  */
-suspend fun Obj.getLyngExceptionMessage(scope: Scope): String =
-    invokeInstanceMethod(scope, "message").toString(scope).value
+suspend fun Obj.getLyngExceptionMessage(scope: Scope?=null): String {
+    require( this.isLyngException() )
+    val s = scope ?: Script.newScope()
+    return invokeInstanceMethod(s, "message").toString(s).value
+}
+
+/**
+ * Retrieves a detailed exception message including the stack trace for a Lyng exception.
+ * This function is designed to handle objects identified as Lyng exceptions.
+ *
+ * @param scope the scope to be used for fetching the exception message and stack trace.
+ *              If null, a new scope will be created.
+ * @return a string combining the exception message, the location ("at"),
+ *         and the formatted stack trace information.
+ *         The stack trace details each frame using indentation for clarity.
+ * @throws IllegalArgumentException if the object is not a Lyng exception.
+ */
+suspend fun Obj.getLyngExceptionMessageWithStackTrace(scope: Scope?=null): String {
+    require( this.isLyngException() )
+    val s = scope ?: Script.newScope()
+    val msg = getLyngExceptionMessage(s)
+    val trace = getLyngExceptionStackTrace(s)
+    var at = "unknown"
+    val stack = if( !trace.list.isEmpty() ) {
+        val first = trace.list[0]
+        at = (first.readField(s, "at").value as ObjString).value
+        "\n" + trace.list.map { "    at " + it.toString(s).value }.joinToString("\n")
+    }
+    else ""
+    return "$at: $msg$stack"
+}
 
 /**
  * Get the exception stack trace.

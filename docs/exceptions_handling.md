@@ -132,6 +132,8 @@ Serializable class that conveys information about the exception. Important membe
 | stackTrace()      | lyng stack trace, list of `StackTraceEntry`, see below   |
 | printStackTrace() | format and print stack trace using println()             |
 
+> **Note for Kotlin users**: When working with Lyng exceptions from Kotlin, you can use extension methods like `getLyngExceptionMessageWithStackTrace()`. See [Embedding Lyng](embedding.md#12-handling-and-serializing-exceptions) for the full API.
+
 ## StackTraceEntry
 
 A simple structire that stores single entry in Lyng stack, it is created automatically on exception creation:
