@@ -120,14 +120,14 @@ open class Scope(
         return null
     }
 
-    internal fun chainLookupIgnoreClosure(name: String): ObjRecord? {
+    internal fun chainLookupIgnoreClosure(name: String, followClosure: Boolean = false): ObjRecord? {
         var s: Scope? = this
         // use frameId to detect unexpected structural cycles in the parent chain
         val visited = HashSet<Long>(4)
         while (s != null) {
             if (!visited.add(s.frameId)) return null
             tryGetLocalRecord(s, name, currentClassCtx)?.let { return it }
-            s = s.parent
+            s = if (followClosure && s is ClosureScope) s.closureScope else s.parent
         }
         return null
     }
@@ -169,7 +169,7 @@ open class Scope(
      * This completely avoids invoking overridden `get` implementations, preventing
      * ping-pong recursion between `ClosureScope` frames.
      */
-    internal fun chainLookupWithMembers(name: String, caller: net.sergeych.lyng.obj.ObjClass? = currentClassCtx): ObjRecord? {
+    internal fun chainLookupWithMembers(name: String, caller: net.sergeych.lyng.obj.ObjClass? = currentClassCtx, followClosure: Boolean = false): ObjRecord? {
         var s: Scope? = this
         val visited = HashSet<Long>(4)
         while (s != null) {
@@ -185,7 +185,7 @@ open class Scope(
                     } else return rec
                 }
             }
-            s = s.parent
+            s = if (followClosure && s is ClosureScope) s.closureScope else s.parent
         }
         return null
     }

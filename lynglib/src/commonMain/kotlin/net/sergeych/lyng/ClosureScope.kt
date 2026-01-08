@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -66,6 +66,11 @@ class ClosureScope(val callScope: Scope, val closureScope: Scope) :
             }
         }
 
+        // 1b) Captured locals from the entire closure ancestry. This ensures that parameters
+        // and local variables shadow members of captured receivers, matching standard
+        // lexical scoping rules.
+        closureScope.chainLookupIgnoreClosure(name, followClosure = true)?.let { return it }
+
         // 2) Members on the captured receiver instance
         (closureScope.thisObj as? net.sergeych.lyng.obj.ObjInstance)?.let { inst ->
             // Check direct locals in instance scope (unmangled)
@@ -94,7 +99,7 @@ class ClosureScope(val callScope: Scope, val closureScope: Scope) :
         }
 
         // 3) Closure scope chain (locals/parents + members), ignore ClosureScope overrides to prevent recursion
-        closureScope.chainLookupWithMembers(name, currentClassCtx)?.let { return it }
+        closureScope.chainLookupWithMembers(name, currentClassCtx, followClosure = true)?.let { return it }
 
         // 4) Caller `this` members
         (callScope.thisObj as? net.sergeych.lyng.obj.ObjInstance)?.let { inst ->

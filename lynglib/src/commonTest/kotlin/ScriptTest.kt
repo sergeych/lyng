@@ -4683,5 +4683,42 @@ class ScriptTest {
             x.getLyngExceptionMessageWithStackTrace()
         )
     }
+
+    @Test
+    fun testMapIteralAmbiguity() = runTest {
+        eval("""
+            val m = { a: 1, b: { foo: "bar" } }
+            assertEquals(1, m["a"])
+            assertEquals("bar", m["b"]["foo"])
+            val bar = "foobar"
+            val m2 = { a: 1, b: { bar: } }
+            assert( m2["b"] is Map )
+            assertEquals("foobar", m2["b"]["bar"])
+        """.trimIndent())
+    }
+
+    @Test
+    fun realWorldCaptureProblem() = runTest {
+        eval("""
+            // 61755f07-630c-4181-8d50-1b044d96e1f4
+            class T {
+                static var f1 = null
+                static fun t(name=null) {
+                    run {
+                        // I expect it will catch the 'name' from
+                        // param? 
+                        f1 = name
+                    }
+                }
+            }
+            assert(T.f1 == null)
+            println("-- "+T.f1::class)
+            println("-- "+T.f1)
+            T.t("foo")
+            println("2- "+T.f1::class)
+            println("2- "+T.f1)
+            assert(T.f1 == "foo")
+        """.trimIndent())
+    }
 }
 
