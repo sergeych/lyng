@@ -76,6 +76,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
     }
 
     override suspend fun resolveRecord(scope: Scope, obj: ObjRecord, name: String, decl: ObjClass?): ObjRecord {
+        if (obj.type.isArgument) return super.resolveRecord(scope, obj, name, decl)
         if (obj.type == ObjRecord.Type.Delegated) {
             val d = decl ?: obj.declaringClass
             val storageName = "${d?.className}::$name"

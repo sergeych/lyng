@@ -20,6 +20,7 @@ import net.sergeych.lyng.Script
 import net.sergeych.lyng.eval
 import net.sergeych.lyng.obj.ObjInstance
 import net.sergeych.lyng.obj.ObjList
+import net.sergeych.lyng.toSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFails
@@ -731,4 +732,48 @@ class OOTest {
             """.trimIndent())
     }
 
+    @Test
+    fun testArgsPriority() = runTest {
+        eval("""
+            class A(id) {
+                var stored = null
+                // Arguments should have priority on
+                // instance fields
+                fun setStored(id) { stored = id }
+            }
+            val a = A(1)
+            assertEquals(1, a.id)
+            assertEquals(null, a.stored)
+            
+            // Check that arguments of the call have the priority:
+            a.setStored(2)
+            assertEquals(1, a.id)
+            assertEquals(2, a.stored)
+        """.trimIndent())
+    }
+
+    /**
+     * Demonstrates that function parameters are shadowed by class methods of the same name
+     * when accessed within a block, but not in a single expression.
+     */
+    @Test
+    fun testParameterShadowingConflict() = runTest {
+        val scope = Script.newScope()
+        val result = scope.eval("""
+            class Tester() {
+                fun id() { "method" }
+                // This correctly returns "success"
+                fun checkOk(id) = id
+                // This incorrectly returns the 'id' method (a Callable) instead of "success"
+                fun checkFail(id) {
+                    id
+                }
+            }
+            val t = Tester()
+            if (t.checkOk("success") != "success") throw "checkOk failed"
+            t.checkFail("success")
+        """.trimIndent().toSource("repro"))
+
+        assertEquals("success", result.toString(), "Parameter 'id' should shadow method 'id' in block")
+    }
 }

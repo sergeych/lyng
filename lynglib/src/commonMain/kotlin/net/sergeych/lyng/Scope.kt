@@ -347,7 +347,16 @@ open class Scope(
         // 1. Prefer direct locals/bindings declared in this frame
         tryGetLocalRecord(this, name, currentClassCtx)?.let { return it }
 
-        // 2. Then, check members of thisObj
+        val p = parent
+
+        // 2. If we share thisObj with parent, delegate to parent to maintain
+        // "locals shadow members" priority across the this-context.
+        if (p != null && p.thisObj === thisObj) {
+            return p.get(name)
+        }
+
+        // 3. Otherwise, we are the "primary" scope for this thisObj (or have no parent),
+        // so check members of thisObj before walking up to a different this-context.
         val receiver = thisObj
         val effectiveClass = receiver as? ObjClass ?: receiver.objClass
         for (cls in effectiveClass.mro) {
@@ -365,8 +374,8 @@ open class Scope(
             }
         }
 
-        // 3. Finally, walk up ancestry
-        return parent?.get(name)
+        // 4. Finally, walk up ancestry to a scope with a different thisObj context
+        return p?.get(name)
     }
 
     // Slot fast-path API
