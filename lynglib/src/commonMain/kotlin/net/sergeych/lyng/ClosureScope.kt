@@ -46,7 +46,7 @@ class ClosureScope(val callScope: Scope, val closureScope: Scope) :
         tryGetLocalRecord(this, name, currentClassCtx)?.let { return it }
 
         // 2. Lexical environment (captured locals from entire ancestry)
-        closureScope.chainLookupIgnoreClosure(name, followClosure = true)?.let { return it }
+        closureScope.chainLookupIgnoreClosure(name, followClosure = true, caller = currentClassCtx)?.let { return it }
 
         // 3. Lexical this members (captured receiver)
         val receiver = thisObj

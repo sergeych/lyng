@@ -107,8 +107,18 @@ open class Scope(
      * and bindings of each frame. Instance/class member fallback must be decided by the caller.
      */
     internal fun tryGetLocalRecord(s: Scope, name: String, caller: net.sergeych.lyng.obj.ObjClass?): ObjRecord? {
+        caller?.let { ctx ->
+            s.objects["${ctx.className}::$name"]?.let { rec ->
+                if (rec.visibility == Visibility.Private) return rec
+            }
+        }
         s.objects[name]?.let { rec ->
             if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, caller)) return rec
+        }
+        caller?.let { ctx ->
+            s.localBindings["${ctx.className}::$name"]?.let { rec ->
+                if (rec.visibility == Visibility.Private) return rec
+            }
         }
         s.localBindings[name]?.let { rec ->
             if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, caller)) return rec
@@ -120,13 +130,14 @@ open class Scope(
         return null
     }
 
-    internal fun chainLookupIgnoreClosure(name: String, followClosure: Boolean = false): ObjRecord? {
+    internal fun chainLookupIgnoreClosure(name: String, followClosure: Boolean = false, caller: net.sergeych.lyng.obj.ObjClass? = null): ObjRecord? {
         var s: Scope? = this
         // use frameId to detect unexpected structural cycles in the parent chain
         val visited = HashSet<Long>(4)
+        val effectiveCaller = caller ?: currentClassCtx
         while (s != null) {
             if (!visited.add(s.frameId)) return null
-            tryGetLocalRecord(s, name, currentClassCtx)?.let { return it }
+            tryGetLocalRecord(s, name, effectiveCaller)?.let { return it }
             s = if (followClosure && s is ClosureScope) s.closureScope else s.parent
         }
         return null
@@ -334,12 +345,7 @@ open class Scope(
         if (name == "this") return thisObj.asReadonly
 
         // 1. Prefer direct locals/bindings declared in this frame
-        objects[name]?.let { rec ->
-            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) return rec
-        }
-        localBindings[name]?.let { rec ->
-            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) return rec
-        }
+        tryGetLocalRecord(this, name, currentClassCtx)?.let { return it }
 
         // 2. Then, check members of thisObj
         val receiver = thisObj

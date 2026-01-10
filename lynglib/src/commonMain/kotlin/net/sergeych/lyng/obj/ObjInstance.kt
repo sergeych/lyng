@@ -36,6 +36,13 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         
         // 0. Private mangled of current class context
         caller?.let { c ->
+            // Check for private methods/properties
+            c.members[name]?.let { rec ->
+                if (rec.visibility == Visibility.Private) {
+                    return resolveRecord(scope, rec, name, c)
+                }
+            }
+            // Check for private fields (stored in instanceScope)
             val mangled = "${c.className}::$name"
             instanceScope.objects[mangled]?.let { rec ->
                 if (rec.visibility == Visibility.Private) {
@@ -59,8 +66,9 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         instanceScope.objects[name]?.let { rec ->
             val decl = rec.declaringClass
             // Unmangled access is only allowed if it's public OR we are inside the same instance's method
-            if ((scope.thisObj === this && caller != null) || canAccessMember(rec.visibility, decl, caller))
+            if ((scope.thisObj === this && caller != null) || canAccessMember(rec.visibility, decl, caller)) {
                 return resolveRecord(scope, rec, name, decl)
+            }
         }
 
         // 3. Fall back to super (handles class members and extensions)
@@ -113,6 +121,14 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
 
         // 0. Private mangled of current class context
         caller?.let { c ->
+            // Check for private methods/properties
+            c.members[name]?.let { rec ->
+                if (rec.visibility == Visibility.Private) {
+                    updateRecord(scope, resolveRecord(scope, rec, name, c), name, newValue, c)
+                    return
+                }
+            }
+            // Check for private fields (stored in instanceScope)
             val mangled = "${c.className}::$name"
             instanceScope.objects[mangled]?.let { rec ->
                 if (rec.visibility == Visibility.Private) {
@@ -343,7 +359,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         if (other.objClass != objClass) return -1
         for (f in comparableVars) {
             val a = f.value.value
-            val b = other.instanceScope[f.key]!!.value
+            val b = other.instanceScope.objects[f.key]?.value ?: scope.raiseError("Internal error: field ${f.key} not found in other instance")
             val d = a.compareTo(scope, b)
             if (d != 0) return d
         }
@@ -370,7 +386,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
             val caller = scope.currentClassCtx
             if (!canAccessMember(rec.visibility, decl, caller))
                 scope.raiseError(ObjIllegalAccessException(scope, "can't access field $name (declared in ${decl.className})"))
-            return resolveRecord(scope, rec, name, decl)
+            return instance.resolveRecord(scope, rec, name, decl)
         }
         // Then try instance locals (unmangled) only if startClass is the dynamic class itself
         if (startClass === instance.objClass) {
@@ -384,7 +400,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
                             "can't access field $name (declared in ${decl?.className ?: "?"})"
                         )
                     )
-                return resolveRecord(scope, rec, name, decl)
+                return instance.resolveRecord(scope, rec, name, decl)
             }
         }
         // Finally try methods/properties starting from ancestor
@@ -394,7 +410,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
         if (!canAccessMember(r.visibility, decl, caller))
             scope.raiseError(ObjIllegalAccessException(scope, "can't access field $name (declared in ${decl.className})"))
         
-        return resolveRecord(scope, r, name, decl)
+        return instance.resolveRecord(scope, r, name, decl)
     }
 
     override suspend fun writeField(scope: Scope, name: String, newValue: Obj) {

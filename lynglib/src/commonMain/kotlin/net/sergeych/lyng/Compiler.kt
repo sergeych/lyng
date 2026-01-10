@@ -1482,7 +1482,14 @@ class Compiler(
                     miniSink?.onInitDecl(MiniInitDecl(MiniRange(id.pos, range.end), id.pos))
                 }
                 val initStmt = statement(id.pos) { scp ->
-                    block.execute(scp)
+                    val cls = scp.thisObj.objClass
+                    val saved = scp.currentClassCtx
+                    scp.currentClassCtx = cls
+                    try {
+                        block.execute(scp)
+                    } finally {
+                        scp.currentClassCtx = saved
+                    }
                     ObjVoid
                 }
                 statement {
@@ -3313,9 +3320,11 @@ class Compiler(
                             val setArg = cc.requireToken(Token.Type.ID, "Expected setter argument name")
                             cc.requireToken(Token.Type.RPAREN)
                             miniSink?.onEnterFunction(null)
-                            setter = if (cc.peekNextNonWhitespace().type == Token.Type.LBRACE) {
+                            val finalSetter = if (cc.peekNextNonWhitespace().type == Token.Type.LBRACE) {
                                 cc.skipWsTokens()
-                                val body = parseBlock()
+                                val body = inCodeContext(CodeContext.Function("<setter>")) {
+                                    parseBlock()
+                                }
                                 statement(body.pos) { scope ->
                                     val value = scope.args.list.firstOrNull() ?: ObjNull
                                     scope.addItem(setArg.value, true, value, recordType = ObjRecord.Type.Argument)
@@ -3324,11 +3333,12 @@ class Compiler(
                             } else if (cc.peekNextNonWhitespace().type == Token.Type.ASSIGN) {
                                 cc.skipWsTokens()
                                 cc.next() // consume '='
-                                val expr = parseExpression() ?: throw ScriptError(
-                                    cc.current().pos,
-                                    "Expected setter expression"
-                                )
-                                val st = expr
+                                val st = inCodeContext(CodeContext.Function("<setter>")) {
+                                    parseExpression() ?: throw ScriptError(
+                                        cc.current().pos,
+                                        "Expected setter expression"
+                                    )
+                                }
                                 statement(st.pos) { scope ->
                                     val value = scope.args.list.firstOrNull() ?: ObjNull
                                     scope.addItem(setArg.value, true, value, recordType = ObjRecord.Type.Argument)
@@ -3337,6 +3347,7 @@ class Compiler(
                             } else {
                                 throw ScriptError(cc.current().pos, "Expected { or = after set(...)")
                             }
+                            setter = finalSetter
                             miniSink?.onExitFunction(cc.currentPos())
                         } else {
                             // private set without body: setter remains null, visibility is restricted
@@ -3383,6 +3394,7 @@ class Compiler(
             // In true class bodies (not inside a function), store fields under a class-qualified key to support MI collisions
             // Do NOT infer declaring class from runtime thisObj here; only the compile-time captured
             // ClassBody qualifies for class-field storage. Otherwise, this is a plain local.
+            isProperty = getter != null || setter != null
             val declaringClassName = declaringClassNameCaptured
             if (declaringClassName == null) {
                 if (context.containsLocal(name))
@@ -3488,7 +3500,8 @@ class Compiler(
                             isAbstract = isAbstract,
                             isClosed = isClosed,
                             isOverride = isOverride,
-                            pos = start
+                            pos = start,
+                            prop = prop
                         )
                     } else {
                         cls.createField(

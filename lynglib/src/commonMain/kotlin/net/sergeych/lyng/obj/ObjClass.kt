@@ -253,28 +253,29 @@ open class ObjClass(
         // remains stable even when call frames are pooled and reused.
         val stableParent = classScope ?: scope.parent
         instance.instanceScope = Scope(stableParent, scope.args, scope.pos, instance)
-        // println("[DEBUG_LOG] createInstance: created $instance scope@${instance.instanceScope.hashCode()}")
         instance.instanceScope.currentClassCtx = null
         // Expose instance methods (and other callable members) directly in the instance scope for fast lookup
         // This mirrors Obj.autoInstanceScope behavior for ad-hoc scopes and makes fb.method() resolution robust
         
         for (cls in mro) {
-            // 1) members-defined methods
+            // 1) members-defined methods and fields
             for ((k, v) in cls.members) {
-                if (v.value is Statement || v.type == ObjRecord.Type.Delegated) {
-                    val key = if (v.visibility == Visibility.Private) "${cls.className}::$k" else k
+                if (!v.isAbstract && (v.value is Statement || v.type == ObjRecord.Type.Delegated || v.type == ObjRecord.Type.Field)) {
+                    val key = if (v.visibility == Visibility.Private || v.type == ObjRecord.Type.Field || v.type == ObjRecord.Type.Delegated) "${cls.className}::$k" else k
                     if (!instance.instanceScope.objects.containsKey(key)) {
-                        instance.instanceScope.objects[key] = if (v.type == ObjRecord.Type.Delegated) v.copy() else v
+                        instance.instanceScope.objects[key] = if (v.type == ObjRecord.Type.Fun) v else v.copy()
                     }
                 }
             }
-            // 2) class-scope methods registered during class-body execution
+            // 2) class-scope members registered during class-body execution
             cls.classScope?.objects?.forEach { (k, rec) ->
-                if (rec.value is Statement || rec.type == ObjRecord.Type.Delegated) {
-                    val key = if (rec.visibility == Visibility.Private) "${cls.className}::$k" else k
+                // ONLY copy methods and delegated members from class scope to instance scope.
+                // Fields in class scope are static fields and must NOT be per-instance.
+                if (!rec.isAbstract && (rec.value is Statement || rec.type == ObjRecord.Type.Delegated)) {
+                    val key = if (rec.visibility == Visibility.Private || rec.type == ObjRecord.Type.Delegated) "${cls.className}::$k" else k
                     // if not already present, copy reference for dispatch
                     if (!instance.instanceScope.objects.containsKey(key)) {
-                        instance.instanceScope.objects[key] = if (rec.type == ObjRecord.Type.Delegated) rec.copy() else rec
+                        instance.instanceScope.objects[key] = if (rec.type == ObjRecord.Type.Fun) rec else rec.copy()
                     }
                 }
             }
@@ -512,12 +513,13 @@ open class ObjClass(
         isClosed: Boolean = false,
         isOverride: Boolean = false,
         pos: Pos = Pos.builtIn,
+        prop: ObjProperty? = null
     ) {
         val g = getter?.let { statement { it() } }
         val s = setter?.let { statement { it(requiredArg(0)); ObjVoid } }
-        val prop = if (isAbstract) ObjNull else ObjProperty(name, g, s)
+        val finalProp = prop ?: if (isAbstract) ObjNull else ObjProperty(name, g, s)
         createField(
-            name, prop, false, visibility, writeVisibility, pos, declaringClass,
+            name, finalProp, false, visibility, writeVisibility, pos, declaringClass,
             isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride,
             type = ObjRecord.Type.Property
         )
