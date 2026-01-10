@@ -1494,7 +1494,7 @@ Typical set of String functions includes:
 | s1 += s2             | self-modifying concatenation                               |
 | toReal()             | attempts to parse string as a Real value                   |
 | toInt()              | parse string to Int value                                  |
-| characters()         | create [List] of characters (1)                            |
+| characters           | create [List] of characters (1)                            |
 | encodeUtf8()         | returns [Buffer] with characters encoded to utf8           |
 | matches(re)          | matches the regular expression (2)                         |
 |                      |                                                            |

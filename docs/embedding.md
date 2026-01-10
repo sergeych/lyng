@@ -103,6 +103,11 @@ scope.addVoidFn("log") {
     println(items.joinToString(" ") { it.toString(this).value })
 }
 
+// When adding a member function to a class, you can use isOverride = true
+// myClass.addFn("toString", isOverride = true) {
+//     ObjString("Custom string representation")
+// }
+
 // Call them from Lyng
 scope.eval("val y = inc(41); log('Answer:', y)")
 ```
@@ -121,6 +126,9 @@ myClass.createField("version", ObjString("1.0.0"), isMutable = false)
 
 // Add a mutable field with an initial value
 myClass.createField("count", ObjInt(0), isMutable = true)
+
+// If you are overriding a field from a base class, use isOverride = true
+// myClass.createField("someBaseField", ObjInt(42), isOverride = true)
 
 scope.addConst("MyClass", myClass)
 ```
@@ -152,6 +160,16 @@ myClass.addProperty(
         internalValue = (newValue as ObjInt).value
     }
 )
+
+// You can also create an ObjProperty explicitly
+val explicitProp = ObjProperty(
+    name = "hexValue",
+    getter = statement { ObjString(internalValue.toString(16)) }
+)
+myClass.addProperty("hexValue", prop = explicitProp)
+
+// Use isOverride = true when overriding a property from a base class
+// myClass.addProperty("baseProp", getter = { ... }, isOverride = true)
 
 scope.addConst("MyClass", myClass)
 ```

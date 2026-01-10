@@ -8,16 +8,13 @@ Name lookup across nested scopes and closures can accidentally form recursive re
 ## Resolution order in ClosureScope
 When evaluating an identifier `name` inside a closure, `ClosureScope.get(name)` resolves in this order:
 
-1. Closure frame locals and arguments
-2. Captured receiver (`closureScope.thisObj`) instance/class members
-3. Closure ancestry locals + each frame’s `thisObj` members (cycle‑safe)
-4. Caller `this` members
-5. Caller ancestry locals + each frame’s `thisObj` members (cycle‑safe)
-6. Module pseudo‑symbols (e.g., `__PACKAGE__`) from the nearest `ModuleScope`
-7. Direct module/global fallback (nearest `ModuleScope` and its parent/root scope)
-8. Final fallback: base local/parent lookup for the current frame
+1. **Current frame locals and arguments**: Variables defined within the current closure execution.
+2. **Captured lexical ancestry**: Outer local variables captured at the site where the closure was defined (the "lexical environment").
+3. **Captured receiver members**: If the closure was defined within a class or explicitly bound to an object, it checks members of that object (`this`). This includes both instance fields/methods and class-level static members, following the MRO (C3) and respecting visibility rules (private members are only visible if the closure was defined in their class).
+4. **Caller environment**: If not found lexically, it falls back to the calling context (e.g., the DSL's `this` or the caller's local variables).
+5. **Global/Module fallbacks**: Final check for module-level constants and global functions.
 
-This preserves intuitive visibility (locals → captured receiver → closure chain → caller members → caller chain → module/root) while preventing infinite recursion between scope types.
+This ensures that closures primarily interact with their defining environment (lexical capture) while still being able to participate in DSL-style calling contexts.
 
 ## Use raw‑chain helpers for ancestry walks
 When authoring new scope types or advanced lookups, avoid calling virtual `get` while walking parents. Instead, use the non‑dispatch helpers on `Scope`:

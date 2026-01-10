@@ -119,8 +119,9 @@ Properties allow you to define member accessors that look like fields but execut
 
 ### Basic Syntax
 
-Properties are declared using `val` (read-only) or `var` (read-write) followed by a name and `get()`/`set()` blocks:
+Properties are declared using `val` (read-only) or `var` (read-write) followed by a name and a `get` (and optionally `set`) accessor. Unlike fields, properties do not have automatic storage and must compute their values or delegate to other members.
 
+The standard syntax uses parentheses:
 ```lyng
 class Person(private var _age: Int) {
     // Read-only property
@@ -136,21 +137,17 @@ class Person(private var _age: Int) {
             if (value >= 0) _age = value
         }
 }
-
-val p = Person(15)
-assertEquals("Minor", p.ageCategory)
-p.age = 20
-assertEquals("Adult", p.ageCategory)
 ```
 
-### Laconic Expression Shorthand
+### Laconic Syntax (Optional Parentheses)
 
-For simple accessors and methods, you can use the `=` shorthand for a more elegant and laconic form:
+For even cleaner code, you can omit the parentheses for `get` and `set`. This is especially useful for simple expression shorthand:
 
 ```lyng
 class Circle(val radius: Real) {
-    val area get() = π * radius * radius
-    val circumference get() = 2 * π * radius
+    // Laconic expression shorthand
+    val area get = π * radius * radius
+    val circumference get = 2 * π * radius
     
     fun diameter() = radius * 2
 }
@@ -159,15 +156,16 @@ fun median(a, b) = (a + b) / 2
 
 class Counter {
     private var _count = 0
-    var count get() = _count set(v) = _count = v
+    var count get = _count set(v) = _count = v
 }
 ```
 
 ### Key Rules
 
-- **`val` properties** must have a `get()` accessor and cannot have a `set()`.
-- **`var` properties** must have both `get()` and `set()` accessors.
+- **`val` properties** must have a `get` accessor (with or without parentheses) and cannot have a `set`.
+- **`var` properties** must have both `get` and `set` accessors.
 - **Functions and methods** can use the `=` shorthand to return the result of a single expression.
+- **`override` is mandatory**: If you are overriding a member from a base class, you MUST use the `override` keyword.
 - **No Backing Fields**: There is no magic `field` identifier. If you need to store state, you must declare a separate (usually `private`) field.
 - **Type Inference**: You can omit the type declaration if it can be inferred or if you don't need strict typing.
 

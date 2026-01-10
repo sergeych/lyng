@@ -226,13 +226,11 @@ Future work: introduce thread‑safe pooling (e.g., per‑thread pools or confin
 
 Closures executed by `launch { ... }` and `flow { ... }` resolve names using the `ClosureScope` rules:
 
-1. Closure frame locals/arguments
-2. Captured receiver instance/class members
-3. Closure ancestry locals + each frame’s `this` members (cycle‑safe)
-4. Caller `this` members
-5. Caller ancestry locals + each frame’s `this` members (cycle‑safe)
-6. Module pseudo‑symbols (e.g., `__PACKAGE__`)
-7. Direct module/global fallback (nearest `ModuleScope` and its parent/root)
+1. **Current frame locals and arguments**: Variables defined within the current closure execution.
+2. **Captured lexical ancestry**: Outer local variables captured at the site where the closure was defined (the "lexical environment").
+3. **Captured receiver members**: If the closure was defined within a class or explicitly bound to an object, it checks members of that object (`this`), following MRO and respecting visibility.
+4. **Caller environment**: Falls back to the calling context (e.g., the caller's `this` or local variables).
+5. **Global/Module fallbacks**: Final check for module-level constants and global functions.
 
 Implications:
 - Outer locals (e.g., `counter`) stay visible across suspension points.

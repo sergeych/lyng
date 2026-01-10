@@ -23,11 +23,11 @@ There are a lo of ways to construct a buffer:
     assertEquals( 5, Buffer("hello").size )
 
     // from bytes, e.g. integers in range 0..255
-    assertEquals( 255, Buffer(1,2,3,255).last() )
+    assertEquals( 255, Buffer(1,2,3,255).last )
 
     // from whatever iterable that produces bytes, e.g.
     // integers in 0..255 range:
-    assertEquals( 129, Buffer([1,2,129]).last() )
+    assertEquals( 129, Buffer([1,2,129]).last )
 
     // Empty buffer of fixed size:
     assertEquals(100, Buffer(100).size)
