@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -141,6 +141,23 @@ fun ObjClass.addClassFnDoc(
     BuiltinDocRegistry.module(moduleName ?: ownerModuleNameFromClassOrUnknown()) {
         classDoc(this@addClassFnDoc.className, doc = "") {
             method(name = name, doc = doc, params = params, returns = returns, isStatic = true, tags = tags)
+        }
+    }
+}
+
+fun ObjClass.addPropertyDoc(
+    name: String,
+    doc: String,
+    type: TypeDoc? = null,
+    visibility: Visibility = Visibility.Public,
+    moduleName: String? = null,
+    getter: (suspend Scope.() -> Obj)? = null,
+    setter: (suspend Scope.(Obj) -> Unit)? = null
+) {
+    addProperty(name, getter, setter, visibility)
+    BuiltinDocRegistry.module(moduleName ?: ownerModuleNameFromClassOrUnknown()) {
+        classDoc(this@addPropertyDoc.className, doc = "") {
+            field(name = name, doc = doc, type = type, mutable = setter != null)
         }
     }
 }

@@ -93,23 +93,45 @@ open class Obj {
         args: Arguments = Arguments.EMPTY,
         onNotFoundResult: (suspend () -> Obj?)? = null
     ): Obj {
+        // 0. Prefer private member of current class context
+        scope.currentClassCtx?.let { caller ->
+            caller.members[name]?.let { rec ->
+                if (rec.visibility == Visibility.Private && !rec.isAbstract) {
+                    if (rec.type == ObjRecord.Type.Property) {
+                        if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, caller)
+                    } else if (rec.type != ObjRecord.Type.Delegated) {
+                        return rec.value.invoke(scope, this, args, caller)
+                    }
+                }
+            }
+        }
+
         // 1. Hierarchy members (excluding root fallback)
         for (cls in objClass.mro) {
             if (cls.className == "Obj") break
             val rec = cls.members[name] ?: cls.classScope?.objects?.get(name)
-            if (rec != null && !rec.isAbstract && rec.type != ObjRecord.Type.Property) {
+            if (rec != null && !rec.isAbstract) {
                 val decl = rec.declaringClass ?: cls
                 val caller = scope.currentClassCtx
                 if (!canAccessMember(rec.visibility, decl, caller))
                     scope.raiseError(ObjIllegalAccessException(scope, "can't invoke ${name}: not visible (declared in ${decl.className}, caller ${caller?.className ?: "?"})"))
-                return rec.value.invoke(scope, this, args, decl)
+                
+                if (rec.type == ObjRecord.Type.Property) {
+                    if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, decl)
+                } else if (rec.type != ObjRecord.Type.Delegated) {
+                    return rec.value.invoke(scope, this, args, decl)
+                }
             }
         }
 
         // 2. Extensions in scope
         val extension = scope.findExtension(objClass, name)
         if (extension != null) {
-            return extension.value.invoke(scope, this, args)
+            if (extension.type == ObjRecord.Type.Property) {
+                if (args.isEmpty()) return (extension.value as ObjProperty).callGetter(scope, this, extension.declaringClass)
+            } else if (extension.type != ObjRecord.Type.Delegated) {
+                return extension.value.invoke(scope, this, args)
+            }
         }
 
         // 3. Root object fallback
@@ -120,7 +142,12 @@ open class Obj {
                     val caller = scope.currentClassCtx
                     if (!canAccessMember(rec.visibility, decl, caller))
                         scope.raiseError(ObjIllegalAccessException(scope, "can't invoke ${name}: not visible (declared in ${decl.className}, caller ${caller?.className ?: "?"})"))
-                    return rec.value.invoke(scope, this, args, decl)
+                    
+                    if (rec.type == ObjRecord.Type.Property) {
+                        if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, decl)
+                    } else if (rec.type != ObjRecord.Type.Delegated) {
+                        return rec.value.invoke(scope, this, args, decl)
+                    }
                 }
             }
         }
@@ -415,29 +442,52 @@ open class Obj {
 //    suspend fun <T> sync(block: () -> T): T = monitor.withLock { block() }
 
     open suspend fun readField(scope: Scope, name: String): ObjRecord {
+        // 0. Prefer private member of current class context
+        scope.currentClassCtx?.let { caller ->
+            caller.members[name]?.let { rec ->
+                if (rec.visibility == Visibility.Private && !rec.isAbstract) {
+                    val resolved = resolveRecord(scope, rec, name, caller)
+                    if (resolved.type == ObjRecord.Type.Fun && resolved.value is Statement)
+                        return resolved.copy(value = resolved.value.invoke(scope, this, Arguments.EMPTY, caller))
+                    return resolved
+                }
+            }
+        }
+
         // 1. Hierarchy members (excluding root fallback)
         for (cls in objClass.mro) {
             if (cls.className == "Obj") break
             val rec = cls.members[name] ?: cls.classScope?.objects?.get(name)
-            if (rec != null) {
-                if (!rec.isAbstract) {
-                    return resolveRecord(scope, rec, name, rec.declaringClass)
-                }
+            if (rec != null && !rec.isAbstract) {
+                val decl = rec.declaringClass ?: cls
+                val resolved = resolveRecord(scope, rec, name, decl)
+                if (resolved.type == ObjRecord.Type.Fun && resolved.value is Statement)
+                    return resolved.copy(value = resolved.value.invoke(scope, this, Arguments.EMPTY, decl))
+                return resolved
             }
         }
 
         // 2. Extensions
         val extension = scope.findExtension(objClass, name)
         if (extension != null) {
-            return resolveRecord(scope, extension, name, extension.declaringClass)
+            val resolved = resolveRecord(scope, extension, name, extension.declaringClass)
+            if (resolved.type == ObjRecord.Type.Fun && resolved.value is Statement)
+                return resolved.copy(value = resolved.value.invoke(scope, this, Arguments.EMPTY, extension.declaringClass))
+            return resolved
         }
 
         // 3. Root fallback
         for (cls in objClass.mro) {
             if (cls.className == "Obj") {
-                cls.members[name]?.let {
-                    val decl = it.declaringClass ?: cls
-                    return resolveRecord(scope, it, name, decl)
+                cls.members[name]?.let { rec ->
+                    val decl = rec.declaringClass ?: cls
+                    val caller = scope.currentClassCtx
+                    if (!canAccessMember(rec.visibility, decl, caller))
+                        scope.raiseError(ObjIllegalAccessException(scope, "can't access field ${name}: not visible (declared in ${decl.className}, caller ${caller?.className ?: "?"})"))
+                    val resolved = resolveRecord(scope, rec, name, decl)
+                    if (resolved.type == ObjRecord.Type.Fun && resolved.value is Statement)
+                        return resolved.copy(value = resolved.value.invoke(scope, this, Arguments.EMPTY, decl))
+                    return resolved
                 }
             }
         }
@@ -450,17 +500,29 @@ open class Obj {
     open suspend fun resolveRecord(scope: Scope, obj: ObjRecord, name: String, decl: ObjClass?): ObjRecord {
         if (obj.type == ObjRecord.Type.Delegated) {
             val del = obj.delegate ?: scope.raiseError("Internal error: delegated property $name has no delegate")
+            val th = if (this === ObjVoid) ObjNull else this
+            val res = del.invokeInstanceMethod(scope, "getValue", Arguments(th, ObjString(name)), onNotFoundResult = {
+                // If getValue not found, return a wrapper that calls invoke
+                object : Statement() {
+                    override val pos: Pos = Pos.builtIn
+                    override suspend fun execute(s: Scope): Obj {
+                        val th2 = if (s.thisObj === ObjVoid) ObjNull else s.thisObj
+                        val allArgs = (listOf(th2, ObjString(name)) + s.args.list).toTypedArray()
+                        return del.invokeInstanceMethod(s, "invoke", Arguments(*allArgs))
+                    }
+                }
+            })
             return obj.copy(
-                value = del.invokeInstanceMethod(scope, "getValue", Arguments(this, ObjString(name))),
+                value = res,
                 type = ObjRecord.Type.Other
             )
         }
         val value = obj.value
-        if (value is ObjProperty) {
-            return ObjRecord(value.callGetter(scope, this, decl), obj.isMutable)
-        }
-        if (value is Statement && decl != null) {
-            return ObjRecord(value.execute(scope.createChildScope(scope.pos, newThisObj = this)), obj.isMutable)
+        if (value is ObjProperty || obj.type == ObjRecord.Type.Property) {
+            val prop = if (value is ObjProperty) value else (value as? Statement)?.execute(scope.createChildScope(scope.pos, newThisObj = this)) as? ObjProperty
+                ?: scope.raiseError("Expected ObjProperty for property member $name, got ${value::class}")
+            val res = prop.callGetter(scope, this, decl)
+            return ObjRecord(res, obj.isMutable)
         }
         val caller = scope.currentClassCtx
         // Check visibility for non-property members here if they weren't checked before
@@ -472,13 +534,24 @@ open class Obj {
     open suspend fun writeField(scope: Scope, name: String, newValue: Obj) {
         willMutate(scope)
         var field: ObjRecord? = null
+        // 0. Prefer private member of current class context
+        scope.currentClassCtx?.let { caller ->
+            caller.members[name]?.let { rec ->
+                if (rec.visibility == Visibility.Private && !rec.isAbstract) {
+                    field = rec
+                }
+            }
+        }
+
         // 1. Hierarchy members (excluding root fallback)
-        for (cls in objClass.mro) {
-            if (cls.className == "Obj") break
-            val rec = cls.members[name] ?: cls.classScope?.objects?.get(name)
-            if (rec != null && !rec.isAbstract) {
-                field = rec
-                break
+        if (field == null) {
+            for (cls in objClass.mro) {
+                if (cls.className == "Obj") break
+                val rec = cls.members[name] ?: cls.classScope?.objects?.get(name)
+                if (rec != null && !rec.isAbstract) {
+                    field = rec
+                    break
+                }
             }
         }
         // 2. Extensions
@@ -512,12 +585,19 @@ open class Obj {
     }
 
     open suspend fun getAt(scope: Scope, index: Obj): Obj {
+        if (index is ObjString) {
+            return readField(scope, index.value).value
+        }
         scope.raiseNotImplemented("indexing")
     }
 
     suspend fun getAt(scope: Scope, index: Int): Obj = getAt(scope, ObjInt(index.toLong()))
 
     open suspend fun putAt(scope: Scope, index: Obj, newValue: Obj) {
+        if (index is ObjString) {
+            writeField(scope, index.value, newValue)
+            return
+        }
         scope.raiseNotImplemented("indexing")
     }
 
@@ -683,9 +763,7 @@ open class Obj {
         }
 
 
-        @Suppress("NOTHING_TO_INLINE")
-        inline fun from(obj: Any?): Obj {
-            @Suppress("UNCHECKED_CAST")
+        fun from(obj: Any?): Obj {
             return when (obj) {
                 is Obj -> obj
                 is Double -> ObjReal(obj)
@@ -694,16 +772,16 @@ open class Obj {
                 is Long -> ObjInt.of(obj)
                 is String -> ObjString(obj)
                 is CharSequence -> ObjString(obj.toString())
+                is Char -> ObjChar(obj)
                 is Boolean -> ObjBool(obj)
-                is Set<*> -> ObjSet((obj as Set<Obj>).toMutableSet())
+                is Set<*> -> ObjSet(obj.map { from(it) }.toMutableSet())
+                is List<*> -> ObjList(obj.map { from(it) }.toMutableList())
+                is Map<*, *> -> ObjMap(obj.entries.associate { from(it.key) to from(it.value) }.toMutableMap())
+                is Map.Entry<*, *> -> ObjMapEntry(from(obj.key), from(obj.value))
+                is Enum<*> -> ObjString(obj.name)
                 Unit -> ObjVoid
                 null -> ObjNull
-                is Iterator<*> -> ObjKotlinIterator(obj)
-                is Map.Entry<*, *> -> {
-                    obj as MutableMap.MutableEntry<Obj, Obj>
-                    ObjMapEntry(obj.key, obj.value)
-                }
-
+                is Iterator<*> -> ObjKotlinIterator(obj as Iterator<Any?>)
                 else -> throw IllegalArgumentException("cannot convert to Obj: $obj")
             }
         }

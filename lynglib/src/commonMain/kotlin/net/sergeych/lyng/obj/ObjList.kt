@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,15 +22,29 @@ import kotlinx.serialization.json.JsonElement
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Statement
 import net.sergeych.lyng.miniast.ParamDoc
-import net.sergeych.lyng.miniast.addConstDoc
 import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.addPropertyDoc
 import net.sergeych.lyng.miniast.type
-import net.sergeych.lyng.statement
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
 
 class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
+
+    override suspend fun equals(scope: Scope, other: Obj): Boolean {
+        if (this === other) return true
+        if (other !is ObjList) {
+            if (other.isInstanceOf(ObjIterable)) {
+                return compareTo(scope, other) == 0
+            }
+            return false
+        }
+        if (list.size != other.list.size) return false
+        for (i in 0..<list.size) {
+            if (!list[i].equals(scope, other.list[i])) return false
+        }
+        return true
+    }
 
     override suspend fun getAt(scope: Scope, index: Obj): Obj {
         return when (index) {
@@ -77,21 +91,35 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
     }
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
-        if (other !is ObjList) return -2
-        val mySize = list.size
-        val otherSize = other.list.size
-        val commonSize = minOf(mySize, otherSize)
-        for (i in 0..<commonSize) {
-            if (list[i].compareTo(scope, other.list[i]) != 0) {
-                return list[i].compareTo(scope, other.list[i])
+        if (other is ObjList) {
+            val mySize = list.size
+            val otherSize = other.list.size
+            val commonSize = minOf(mySize, otherSize)
+            for (i in 0..<commonSize) {
+                val d = list[i].compareTo(scope, other.list[i])
+                if (d != 0) {
+                    return d
+                }
             }
+            val res = mySize.compareTo(otherSize)
+            return res
         }
-        // equal so far, longer is greater:
-        return when {
-            mySize < otherSize -> -1
-            mySize > otherSize -> 1
-            else -> 0
+        if (other.isInstanceOf(ObjIterable)) {
+            val it1 = this.list.iterator()
+            val it2 = other.invokeInstanceMethod(scope, "iterator")
+            val hasNext2 = it2.getInstanceMethod(scope, "hasNext")
+            val next2 = it2.getInstanceMethod(scope, "next")
+            
+            while (it1.hasNext()) {
+                if (!hasNext2.invoke(scope, it2).toBool()) return 1 // I'm longer
+                val v1 = it1.next()
+                val v2 = next2.invoke(scope, it2)
+                val d = v1.compareTo(scope, v2)
+                if (d != 0) return d
+            }
+            return if (hasNext2.invoke(scope, it2).toBool()) -1 else 0
         }
+        return -2
     }
 
     override suspend fun plus(scope: Scope, other: Obj): Obj =
@@ -99,27 +127,28 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
             other is ObjList ->
                 ObjList((list + other.list).toMutableList())
 
-            other.isInstanceOf(ObjIterable) -> {
+            other.isInstanceOf(ObjIterable) && other !is ObjString && other !is ObjBuffer -> {
                 val l = other.callMethod<ObjList>(scope, "toList")
                 ObjList((list + l.list).toMutableList())
             }
 
-            else ->
-                scope.raiseError("'+': can't concatenate ${this.toString(scope)} with ${other.toString(scope)}")
+            else -> {
+                val newList = list.toMutableList()
+                newList.add(other)
+                ObjList(newList)
+            }
         }
 
 
     override suspend fun plusAssign(scope: Scope, other: Obj): Obj {
-        // optimization
         if (other is ObjList) {
-            list += other.list
-            return this
+            list.addAll(other.list)
+        } else if (other.isInstanceOf(ObjIterable) && other !is ObjString && other !is ObjBuffer) {
+            val otherList = (other.invokeInstanceMethod(scope, "toList") as ObjList).list
+            list.addAll(otherList)
+        } else {
+            list.add(other)
         }
-        if (other.isInstanceOf(ObjIterable)) {
-            val otherList = other.invokeInstanceMethod(scope, "toList") as ObjList
-            list += otherList.list
-        } else
-            list += other
         return this
     }
 
@@ -222,26 +251,25 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 return ObjList(decoder.decodeAnyList(scope))
             }
         }.apply {
-            addConstDoc(
+            addPropertyDoc(
                 name = "size",
-                value = statement {
-                    (thisObj as ObjList).list.size.toObj()
-                },
                 doc = "Number of elements in this list.",
                 type = type("lyng.Int"),
-                moduleName = "lyng.stdlib"
+                moduleName = "lyng.stdlib",
+                getter = { 
+                    val s = (this.thisObj as ObjList).list.size
+                    s.toObj()
+                }
             )
-            addConstDoc(
+            addFnDoc(
                 name = "add",
-                value = statement {
-                    val l = thisAs<ObjList>().list
-                    for (a in args) l.add(a)
-                    ObjVoid
-                },
                 doc = "Append one or more elements to the end of this list.",
-                type = type("lyng.Callable"),
                 moduleName = "lyng.stdlib"
-            )
+            ) {
+                val l = thisAs<ObjList>().list
+                for (a in args) l.add(a)
+                ObjVoid
+            }
             addFnDoc(
                 name = "insertAt",
                 doc = "Insert elements starting at the given index.",

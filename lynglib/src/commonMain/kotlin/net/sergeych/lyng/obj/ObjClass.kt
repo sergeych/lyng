@@ -18,10 +18,7 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.*
-import net.sergeych.lyng.miniast.ParamDoc
-import net.sergeych.lyng.miniast.TypeGenericDoc
-import net.sergeych.lyng.miniast.addFnDoc
-import net.sergeych.lyng.miniast.type
+import net.sergeych.lyng.miniast.*
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonType
 
@@ -30,47 +27,56 @@ private object ClassIdGen { var c: Long = 1L; fun nextId(): Long = c++ }
 
 val ObjClassType by lazy {
     ObjClass("Class").apply {
-        addProperty("className", getter = { thisAs<ObjClass>().classNameObj })
-        addFnDoc(
+        addPropertyDoc(
+            name = "className",
+            doc = "Full name of this class including package if available.",
+            type = type("lyng.String"),
+            moduleName = "lyng.stdlib",
+            getter = { (this.thisObj as ObjClass).classNameObj }
+        )
+        addPropertyDoc(
             name = "name",
             doc = "Simple name of this class (without package).",
-            returns = type("lyng.String"),
-            moduleName = "lyng.stdlib"
-        ) { thisAs<ObjClass>().classNameObj }
+            type = type("lyng.String"),
+            moduleName = "lyng.stdlib",
+            getter = { (this.thisObj as ObjClass).classNameObj }
+        )
 
-        addFnDoc(
+        addPropertyDoc(
             name = "fields",
             doc = "Declared instance fields of this class and its ancestors (C3 order), without duplicates.",
-            returns = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.String"))),
-            moduleName = "lyng.stdlib"
-        ) {
-            val cls = thisAs<ObjClass>()
-            val seen = hashSetOf<String>()
-            val names = mutableListOf<Obj>()
-            for (c in cls.mro) {
-                for ((n, rec) in c.members) {
-                    if (rec.value !is Statement && seen.add(n)) names += ObjString(n)
+            type = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.String"))),
+            moduleName = "lyng.stdlib",
+            getter = {
+                val cls = this.thisObj as ObjClass
+                val seen = hashSetOf<String>()
+                val names = mutableListOf<Obj>()
+                for (c in cls.mro) {
+                    for ((n, rec) in c.members) {
+                        if (rec.value !is Statement && seen.add(n)) names += ObjString(n)
+                    }
                 }
+                ObjList(names.toMutableList())
             }
-            ObjList(names.toMutableList())
-        }
+        )
 
-        addFnDoc(
+        addPropertyDoc(
             name = "methods",
             doc = "Declared instance methods of this class and its ancestors (C3 order), without duplicates.",
-            returns = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.String"))),
-            moduleName = "lyng.stdlib"
-        ) {
-            val cls = thisAs<ObjClass>()
-            val seen = hashSetOf<String>()
-            val names = mutableListOf<Obj>()
-            for (c in cls.mro) {
-                for ((n, rec) in c.members) {
-                    if (rec.value is Statement && seen.add(n)) names += ObjString(n)
+            type = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.String"))),
+            moduleName = "lyng.stdlib",
+            getter = {
+                val cls = this.thisObj as ObjClass
+                val seen = hashSetOf<String>()
+                val names = mutableListOf<Obj>()
+                for (c in cls.mro) {
+                    for ((n, rec) in c.members) {
+                        if (rec.value is Statement && seen.add(n)) names += ObjString(n)
+                    }
                 }
+                ObjList(names.toMutableList())
             }
-            ObjList(names.toMutableList())
-        }
+        )
 
         addFnDoc(
             name = "get",
@@ -247,21 +253,29 @@ open class ObjClass(
         // remains stable even when call frames are pooled and reused.
         val stableParent = classScope ?: scope.parent
         instance.instanceScope = Scope(stableParent, scope.args, scope.pos, instance)
+        // println("[DEBUG_LOG] createInstance: created $instance scope@${instance.instanceScope.hashCode()}")
         instance.instanceScope.currentClassCtx = null
         // Expose instance methods (and other callable members) directly in the instance scope for fast lookup
         // This mirrors Obj.autoInstanceScope behavior for ad-hoc scopes and makes fb.method() resolution robust
-        // 1) members-defined methods
-        for ((k, v) in members) {
-            if (v.value is Statement || v.type == ObjRecord.Type.Delegated) {
-                instance.instanceScope.objects[k] = if (v.type == ObjRecord.Type.Delegated) v.copy() else v
+        
+        for (cls in mro) {
+            // 1) members-defined methods
+            for ((k, v) in cls.members) {
+                if (v.value is Statement || v.type == ObjRecord.Type.Delegated) {
+                    val key = if (v.visibility == Visibility.Private) "${cls.className}::$k" else k
+                    if (!instance.instanceScope.objects.containsKey(key)) {
+                        instance.instanceScope.objects[key] = if (v.type == ObjRecord.Type.Delegated) v.copy() else v
+                    }
+                }
             }
-        }
-        // 2) class-scope methods registered during class-body execution
-        classScope?.objects?.forEach { (k, rec) ->
-            if (rec.value is Statement || rec.type == ObjRecord.Type.Delegated) {
-                // if not already present, copy reference for dispatch
-                if (!instance.instanceScope.objects.containsKey(k)) {
-                    instance.instanceScope.objects[k] = if (rec.type == ObjRecord.Type.Delegated) rec.copy() else rec
+            // 2) class-scope methods registered during class-body execution
+            cls.classScope?.objects?.forEach { (k, rec) ->
+                if (rec.value is Statement || rec.type == ObjRecord.Type.Delegated) {
+                    val key = if (rec.visibility == Visibility.Private) "${cls.className}::$k" else k
+                    // if not already present, copy reference for dispatch
+                    if (!instance.instanceScope.objects.containsKey(key)) {
+                        instance.instanceScope.objects[key] = if (rec.type == ObjRecord.Type.Delegated) rec.copy() else rec
+                    }
                 }
             }
         }
@@ -300,7 +314,13 @@ open class ObjClass(
         c.constructorMeta?.let { meta ->
             val argsHere = argsForThis ?: Arguments.EMPTY
             // Assign constructor params into instance scope (unmangled)
-            meta.assignToContext(instance.instanceScope, argsHere, declaringClass = c)
+            val savedCtx = instance.instanceScope.currentClassCtx
+            instance.instanceScope.currentClassCtx = c
+            try {
+                meta.assignToContext(instance.instanceScope, argsHere, declaringClass = c)
+            } finally {
+                instance.instanceScope.currentClassCtx = savedCtx
+            }
             // Also expose them under MI-mangled storage keys `${Class}::name` so qualified views can access them
             // and so that base-class casts like `(obj as Base).field` work.
             for (p in meta.params) {
@@ -329,7 +349,13 @@ open class ObjClass(
         // parameters even if they were shadowed/overwritten by parent class initialization.
         c.constructorMeta?.let { meta ->
             val argsHere = argsForThis ?: Arguments.EMPTY
-            meta.assignToContext(instance.instanceScope, argsHere, declaringClass = c)
+            val savedCtx = instance.instanceScope.currentClassCtx
+            instance.instanceScope.currentClassCtx = c
+            try {
+                meta.assignToContext(instance.instanceScope, argsHere, declaringClass = c)
+            } finally {
+                instance.instanceScope.currentClassCtx = savedCtx
+            }
             // Re-sync mangled names to point to the fresh records to keep them consistent
             for (p in meta.params) {
                 val rec = instance.instanceScope.objects[p.name]
@@ -382,7 +408,8 @@ open class ObjClass(
     ): ObjRecord {
         // Validation of override rules: only for non-system declarations
         if (pos != Pos.builtIn) {
-            val existing = getInstanceMemberOrNull(name)
+            // Only consider TRUE instance members from ancestors for overrides
+            val existing = getInstanceMemberOrNull(name, includeAbstract = true, includeStatic = false)
             var actualOverride = false
             if (existing != null && existing.declaringClass != this) {
                 // If the existing member is private in the ancestor, it's not visible for overriding.
@@ -505,14 +532,21 @@ open class ObjClass(
     /**
      * Get instance member traversing the hierarchy if needed. Its meaning is different for different objects.
      */
-    fun getInstanceMemberOrNull(name: String): ObjRecord? {
+    fun getInstanceMemberOrNull(name: String, includeAbstract: Boolean = false, includeStatic: Boolean = true): ObjRecord? {
         // Unified traversal in strict C3 order: self, then each ancestor, checking members before classScope
         for (cls in mro) {
-            cls.members[name]?.let { return it }
-            cls.classScope?.objects?.get(name)?.let { return it }
+            cls.members[name]?.let { 
+                if (includeAbstract || !it.isAbstract) return it 
+            }
+            if (includeStatic) {
+                cls.classScope?.objects?.get(name)?.let { 
+                    if (includeAbstract || !it.isAbstract) return it 
+                }
+            }
         }
         // Finally, allow root object fallback (rare; mostly built-ins like toString)
-        return rootObjectType.members[name]
+        val rootRec = rootObjectType.members[name]
+        return if (rootRec != null && (includeAbstract || !rootRec.isAbstract)) rootRec else null
     }
 
     /** Find the declaring class where a member with [name] is defined, starting from this class along MRO. */

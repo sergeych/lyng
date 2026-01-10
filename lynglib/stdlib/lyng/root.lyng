@@ -211,7 +211,7 @@ fun Iterable.sortedBy(predicate) {
 
 /* Return a shuffled copy of the iterable as a list. */
 fun Iterable.shuffled() {
-    toList().apply { shuffle() }
+    toList.apply { shuffle() }
 }
 
 /*
@@ -267,7 +267,7 @@ class StackTraceEntry(
 fun Exception.printStackTrace() {
     println(this)
     var lastEntry = null
-    for( entry in stackTrace() ) {
+    for( entry in stackTrace ) {
         if( lastEntry == null || lastEntry !is StackTraceEntry || lastEntry.line != entry.line )
             println("\tat "+entry.toString())
         lastEntry = entry

@@ -36,6 +36,8 @@ data class ObjRecord(
     val isClosed: Boolean = false,
     val isOverride: Boolean = false,
     var delegate: Obj? = null,
+    /** The receiver object to resolve this member against (for instance fields/methods). */
+    var receiver: Obj? = null,
 ) {
     val effectiveWriteVisibility: Visibility get() = writeVisibility ?: visibility
     enum class Type(val comparable: Boolean = false,val serializable: Boolean = false) {

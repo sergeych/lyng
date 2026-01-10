@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,10 +21,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Statement
-import net.sergeych.lyng.miniast.ParamDoc
-import net.sergeych.lyng.miniast.TypeGenericDoc
-import net.sergeych.lyng.miniast.addFnDoc
-import net.sergeych.lyng.miniast.type
+import net.sergeych.lyng.miniast.*
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
@@ -76,24 +73,27 @@ class ObjMapEntry(val key: Obj, val value: Obj) : Obj() {
                 )
             }
         }.apply {
-            addFnDoc(
+            addPropertyDoc(
                 name = "key",
                 doc = "Key component of this map entry.",
-                returns = type("lyng.Any"),
-                moduleName = "lyng.stdlib"
-            ) { thisAs<ObjMapEntry>().key }
-            addFnDoc(
+                type = type("lyng.Any"),
+                moduleName = "lyng.stdlib",
+                getter = { thisAs<ObjMapEntry>().key }
+            )
+            addPropertyDoc(
                 name = "value",
                 doc = "Value component of this map entry.",
-                returns = type("lyng.Any"),
-                moduleName = "lyng.stdlib"
-            ) { thisAs<ObjMapEntry>().value }
-            addFnDoc(
+                type = type("lyng.Any"),
+                moduleName = "lyng.stdlib",
+                getter = { thisAs<ObjMapEntry>().value }
+            )
+            addPropertyDoc(
                 name = "size",
                 doc = "Number of components in this entry (always 2).",
-                returns = type("lyng.Int"),
-                moduleName = "lyng.stdlib"
-            ) { 2.toObj() }
+                type = type("lyng.Int"),
+                moduleName = "lyng.stdlib",
+                getter = { 2.toObj() }
+            )
         }
     }
 
@@ -105,6 +105,18 @@ class ObjMapEntry(val key: Obj, val value: Obj) : Obj() {
 }
 
 class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
+
+    override suspend fun equals(scope: Scope, other: Obj): Boolean {
+        if (this === other) return true
+        if (other !is ObjMap) return false
+        if (map.size != other.map.size) return false
+        for ((k, v) in map) {
+            val otherV = other.getAt(scope, k)
+            if (otherV === ObjNull && !other.contains(scope, k)) return false
+            if (!v.equals(scope, otherV)) return false
+        }
+        return true
+    }
 
     override val objClass get() = type
 
@@ -120,7 +132,13 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
     }
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
-        if( other is ObjMap && other.map == map) return 0
+        if (other is ObjMap) {
+            if (map == other.map) return 0
+            if (map.size != other.map.size) return map.size.compareTo(other.map.size)
+            // for same size, if they are not equal, we don't have a stable order
+            // but let's try to be consistent
+            return map.toString().compareTo(other.map.toString())
+        }
         return -1
     }
 
@@ -247,14 +265,13 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
                     lambda.execute(this)
                 }
             }
-            addFnDoc(
+            addPropertyDoc(
                 name = "size",
                 doc = "Number of entries in the map.",
-                returns = type("lyng.Int"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjMap>().map.size.toObj()
-            }
+                type = type("lyng.Int"),
+                moduleName = "lyng.stdlib",
+                getter = { (this.thisObj as ObjMap).map.size.toObj() }
+            )
             addFnDoc(
                 name = "remove",
                 doc = "Remove the entry by key and return the previous value or null if absent.",
@@ -273,22 +290,20 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
                 thisAs<ObjMap>().map.clear()
                 thisObj
             }
-            addFnDoc(
+            addPropertyDoc(
                 name = "keys",
                 doc = "List of keys in this map.",
-                returns = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.Any"))),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjMap>().map.keys.toObj()
-            }
-            addFnDoc(
+                type = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.Any"))),
+                moduleName = "lyng.stdlib",
+                getter = { thisAs<ObjMap>().map.keys.toObj() }
+            )
+            addPropertyDoc(
                 name = "values",
                 doc = "List of values in this map.",
-                returns = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.Any"))),
-                moduleName = "lyng.stdlib"
-            ) {
-                ObjList(thisAs<ObjMap>().map.values.toMutableList())
-            }
+                type = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.Any"))),
+                moduleName = "lyng.stdlib",
+                getter = { ObjList(thisAs<ObjMap>().map.values.toMutableList()) }
+            )
             addFnDoc(
                 name = "iterator",
                 doc = "Iterator over map entries as MapEntry objects.",
@@ -328,7 +343,14 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
                 for (e in other.list) {
                     val entry = when (e) {
                         is ObjMapEntry -> e
-                        else -> scope.raiseIllegalArgument("map can only be merged with MapEntry elements; got $e")
+                        else -> {
+                            if (e.isInstanceOf(ObjArray)) {
+                                if (e.invokeInstanceMethod(scope, "size").toInt() != 2)
+                                    scope.raiseIllegalArgument("Array element to merge into map must have 2 elements, got $e")
+                                ObjMapEntry(e.getAt(scope, 0), e.getAt(scope, 1))
+                            } else
+                                scope.raiseIllegalArgument("map can only be merged with MapEntry elements; got $e")
+                        }
                     }
                     map[entry.key] = entry.value
                 }

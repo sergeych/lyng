@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,10 +17,7 @@
 
 package net.sergeych.lyng.obj
 
-import net.sergeych.lyng.miniast.ParamDoc
-import net.sergeych.lyng.miniast.TypeGenericDoc
-import net.sergeych.lyng.miniast.addFnDoc
-import net.sergeych.lyng.miniast.type
+import net.sergeych.lyng.miniast.*
 
 val ObjArray by lazy {
 
@@ -52,32 +49,35 @@ val ObjArray by lazy {
             ObjFalse
         }
 
-        addFnDoc(
+        addPropertyDoc(
             name = "last",
             doc = "The last element of this array.",
-            returns = type("lyng.Any"),
-            moduleName = "lyng.stdlib"
-        ) {
-            thisObj.invokeInstanceMethod(
-                this,
-                "getAt",
-                (thisObj.invokeInstanceMethod(this, "size").toInt() - 1).toObj()
-            )
-        }
+            type = type("lyng.Any"),
+            moduleName = "lyng.stdlib",
+            getter = {
+                this.thisObj.invokeInstanceMethod(
+                    this,
+                    "getAt",
+                    (this.thisObj.invokeInstanceMethod(this, "size").toInt() - 1).toObj()
+                )
+            }
+        )
 
-        addFnDoc(
+        addPropertyDoc(
             name = "lastIndex",
             doc = "Index of the last element (size - 1).",
-            returns = type("lyng.Int"),
-            moduleName = "lyng.stdlib"
-        ) { (thisObj.invokeInstanceMethod(this, "size").toInt() - 1).toObj() }
+            type = type("lyng.Int"),
+            moduleName = "lyng.stdlib",
+            getter = { (this.thisObj.invokeInstanceMethod(this, "size").toInt() - 1).toObj() }
+        )
 
-        addFnDoc(
+        addPropertyDoc(
             name = "indices",
             doc = "Range of valid indices for this array.",
-            returns = type("lyng.Range"),
-            moduleName = "lyng.stdlib"
-        ) { ObjRange(0.toObj(), thisObj.invokeInstanceMethod(this, "size"), false) }
+            type = type("lyng.Range"),
+            moduleName = "lyng.stdlib",
+            getter = { ObjRange(0.toObj(), this.thisObj.invokeInstanceMethod(this, "size"), false) }
+        )
 
         addFnDoc(
             name = "binarySearch",

@@ -34,7 +34,15 @@ sealed interface ObjRef {
      */
     suspend fun evalValue(scope: Scope): Obj {
         val rec = get(scope)
-        if (rec.type == ObjRecord.Type.Delegated) return scope.resolve(rec, "unknown")
+        if (rec.type == ObjRecord.Type.Delegated) {
+            val receiver = rec.receiver ?: scope.thisObj
+            // Use resolve to handle delegated property logic
+            return scope.resolve(rec, "unknown")
+        }
+        // Template record: must map to instance storage
+        if (rec.receiver != null && rec.declaringClass != null) {
+            return rec.receiver!!.resolveRecord(scope, rec, "unknown", rec.declaringClass).value
+        }
         return rec.value
     }
     suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
@@ -383,7 +391,7 @@ class IncDecRef(
     override suspend fun get(scope: Scope): ObjRecord {
         val rec = target.get(scope)
         if (!rec.isMutable) scope.raiseError("Cannot ${if (isIncrement) "increment" else "decrement"} immutable value")
-        val v = scope.resolve(rec, "unknown")
+        val v = target.evalValue(scope)
         val one = ObjInt.One
         // We now treat numbers as immutable and always perform write-back via setAt.
         // This avoids issues where literals are shared and mutated in-place.
@@ -947,65 +955,63 @@ class IndexRef(
     }
 
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
-        val fastRval = PerfFlags.RVAL_FASTPATH
-        val base = if (fastRval) target.evalValue(scope) else target.get(scope).value
+        val base = target.evalValue(scope)
         if (base == ObjNull && isOptional) {
             // no-op on null receiver for optional chaining assignment
             return
         }
-        val idx = if (fastRval) index.evalValue(scope) else index.get(scope).value
-        if (fastRval) {
-            // Mirror read fast-path with direct write for ObjList + ObjInt index
-            if (base is ObjList && idx is ObjInt) {
-                val i = idx.toInt()
-                base.list[i] = newValue
-                return
+        val idx = index.evalValue(scope)
+        
+        // Mirror read fast-path with direct write for ObjList + ObjInt index
+        if (base is ObjList && idx is ObjInt) {
+            val i = idx.toInt()
+            base.list[i] = newValue
+            return
+        }
+        // Direct write fast path for ObjMap + ObjString
+        if (base is ObjMap && idx is ObjString) {
+            base.map[idx] = newValue
+            return
+        }
+        if (PerfFlags.RVAL_FASTPATH && PerfFlags.INDEX_PIC) {
+            // Polymorphic inline cache for index write
+            val (key, ver) = when (base) {
+                is ObjInstance -> base.objClass.classId to base.objClass.layoutVersion
+                is ObjClass -> base.classId to base.layoutVersion
+                else -> 0L to -1
             }
-            // Direct write fast path for ObjMap + ObjString
-            if (base is ObjMap && idx is ObjString) {
-                base.map[idx] = newValue
-                return
-            }
-            if (PerfFlags.INDEX_PIC) {
-                // Polymorphic inline cache for index write
-                val (key, ver) = when (base) {
-                    is ObjInstance -> base.objClass.classId to base.objClass.layoutVersion
-                    is ObjClass -> base.classId to base.layoutVersion
-                    else -> 0L to -1
-                }
-                if (key != 0L) {
-                    wSetter1?.let { s -> if (key == wKey1 && ver == wVer1) { s(base, scope, idx, newValue); return } }
-                    wSetter2?.let { s -> if (key == wKey2 && ver == wVer2) {
-                        val tk = wKey2; val tv = wVer2; val ts = wSetter2
-                        wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
-                        wKey1 = tk; wVer1 = tv; wSetter1 = ts
-                        s(base, scope, idx, newValue); return
-                    } }
-                    if (PerfFlags.INDEX_PIC_SIZE_4) wSetter3?.let { s -> if (key == wKey3 && ver == wVer3) {
-                        val tk = wKey3; val tv = wVer3; val ts = wSetter3
-                        wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
-                        wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
-                        wKey1 = tk; wVer1 = tv; wSetter1 = ts
-                        s(base, scope, idx, newValue); return
-                    } }
-                    if (PerfFlags.INDEX_PIC_SIZE_4) wSetter4?.let { s -> if (key == wKey4 && ver == wVer4) {
-                        val tk = wKey4; val tv = wVer4; val ts = wSetter4
-                        wKey4 = wKey3; wVer4 = wVer3; wSetter4 = wSetter3
-                        wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
-                        wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
-                        wKey1 = tk; wVer1 = tv; wSetter1 = ts
-                        s(base, scope, idx, newValue); return
-                    } }
-                    // Miss: perform write and install generic handler
-                    base.putAt(scope, idx, newValue)
-                    if (PerfFlags.INDEX_PIC_SIZE_4) {
-                        wKey4 = wKey3; wVer4 = wVer3; wSetter4 = wSetter3
-                        wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
-                    }
+            if (key != 0L) {
+                wSetter1?.let { s -> if (key == wKey1 && ver == wVer1) { s(base, scope, idx, newValue); return } }
+                wSetter2?.let { s -> if (key == wKey2 && ver == wVer2) {
+                    val tk = wKey2; val tv = wVer2; val ts = wSetter2
                     wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
-                    wKey1 = key; wVer1 = ver; wSetter1 = { obj, sc, ix, v -> obj.putAt(sc, ix, v) }
-                    return
+                    wKey1 = tk; wVer1 = tv; wSetter1 = ts
+                    s(base, scope, idx, newValue); return
+                } }
+                if (PerfFlags.INDEX_PIC_SIZE_4) wSetter3?.let { s -> if (key == wKey3 && ver == wVer3) {
+                    val tk = wKey3; val tv = wVer3; val ts = wSetter3
+                    wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
+                    wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
+                    wKey1 = tk; wVer1 = tv; wSetter1 = ts
+                    s(base, scope, idx, newValue); return
+                } }
+                if (PerfFlags.INDEX_PIC_SIZE_4) wSetter4?.let { s -> if (key == wKey4 && ver == wVer4) {
+                    val tk = wKey4; val tv = wVer4; val ts = wSetter4
+                    wKey4 = wKey3; wVer4 = wVer3; wSetter4 = wSetter3
+                    wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
+                    wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
+                    wKey1 = tk; wVer1 = tv; wSetter1 = ts
+                    s(base, scope, idx, newValue); return
+                } }
+                // Miss: perform write and install generic handler
+                base.putAt(scope, idx, newValue)
+                if (PerfFlags.INDEX_PIC_SIZE_4) {
+                    wKey4 = wKey3; wVer4 = wVer3; wSetter4 = wSetter3
+                    wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
                 }
+                wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
+                wKey1 = key; wVer1 = ver; wSetter1 = { obj, sc, ix, v -> obj.putAt(sc, ix, v) }
+                return
             }
         }
         base.putAt(scope, idx, newValue)
@@ -1266,20 +1272,6 @@ class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
             if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.localVarPicMiss++
             // 2) Fallback to current-scope object or field on `this`
             scope[name]?.let { return it }
-            // 2a) Try nearest ClosureScope's closure ancestry explicitly
-            run {
-                var s: Scope? = scope
-                val visited = HashSet<Long>(4)
-                while (s != null) {
-                    if (!visited.add(s.frameId)) break
-                    if (s is ClosureScope) {
-                        s.closureScope.chainLookupWithMembers(name)?.let { return it }
-                    }
-                    s = s.parent
-                }
-            }
-            // 2b) Try raw ancestry local/binding lookup (cycle-safe), including slots in parents
-            scope.chainLookupIgnoreClosure(name)?.let { return it }
             try {
                 return scope.thisObj.readField(scope, name)
             } catch (e: ExecutionError) {
@@ -1305,18 +1297,6 @@ class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
         if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.localVarPicMiss++
         // 2) Fallback name in scope or field on `this`
         scope[name]?.let { return it }
-        run {
-            var s: Scope? = scope
-            val visited = HashSet<Long>(4)
-            while (s != null) {
-                if (!visited.add(s.frameId)) break
-                if (s is ClosureScope) {
-                    s.closureScope.chainLookupWithMembers(name)?.let { return it }
-                }
-                s = s.parent
-            }
-        }
-        scope.chainLookupIgnoreClosure(name)?.let { return it }
         try {
             return scope.thisObj.readField(scope, name)
         } catch (e: ExecutionError) {
@@ -1327,56 +1307,11 @@ class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
 
     override suspend fun evalValue(scope: Scope): Obj {
         scope.pos = atPos
-        if (!PerfFlags.LOCAL_SLOT_PIC) {
-            scope.getSlotIndexOf(name)?.let { return scope.resolve(scope.getSlotRecord(it), name) }
-            // fallback to current-scope object or field on `this`
-            scope[name]?.let { return scope.resolve(it, name) }
-            run {
-                var s: Scope? = scope
-                val visited = HashSet<Long>(4)
-                while (s != null) {
-                    if (!visited.add(s.frameId)) break
-                    if (s is ClosureScope) {
-                        s.closureScope.chainLookupWithMembers(name)?.let { return s.resolve(it, name) }
-                    }
-                    s = s.parent
-                }
-            }
-            scope.chainLookupIgnoreClosure(name)?.let { return scope.resolve(it, name) }
-            return try {
-                scope.thisObj.readField(scope, name).value
-            } catch (e: ExecutionError) {
-                if ((e.message ?: "").contains("no such field: $name")) scope.raiseSymbolNotFound(name)
-                throw e
-            }
-        }
-        val hit = (cachedFrameId == scope.frameId && cachedSlot >= 0 && cachedSlot < scope.slotCount())
-        val slot = if (hit) cachedSlot else resolveSlot(scope)
-        if (slot >= 0) {
-            val rec = scope.getSlotRecord(slot)
-            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx)) {
-                return scope.resolve(rec, name)
-            }
-        }
-        // Fallback name in scope or field on `this`
-        scope[name]?.let { 
-            return scope.resolve(it, name) 
-        }
-        run {
-            var s: Scope? = scope
-            val visited = HashSet<Long>(4)
-            while (s != null) {
-                if (!visited.add(s.frameId)) break
-                if (s is ClosureScope) {
-                    s.closureScope.chainLookupWithMembers(name)?.let { return s.resolve(it, name) }
-                }
-                s = s.parent
-            }
-        }
-        scope.chainLookupIgnoreClosure(name)?.let { return scope.resolve(it, name) }
+        scope.getSlotIndexOf(name)?.let { return scope.resolve(scope.getSlotRecord(it), name) }
+        // fallback to current-scope object or field on `this`
+        scope[name]?.let { return scope.resolve(it, name) }
         return try {
-            val res = scope.thisObj.readField(scope, name).value
-            res
+            scope.thisObj.readField(scope, name).value
         } catch (e: ExecutionError) {
             if ((e.message ?: "").contains("no such field: $name")) scope.raiseSymbolNotFound(name)
             throw e
@@ -1395,24 +1330,6 @@ class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
                 scope.assign(stored, name, newValue)
                 return
             }
-            run {
-                var s: Scope? = scope
-                val visited = HashSet<Long>(4)
-                while (s != null) {
-                    if (!visited.add(s.frameId)) break
-                    if (s is ClosureScope) {
-                        s.closureScope.chainLookupWithMembers(name)?.let { stored ->
-                            s.assign(stored, name, newValue)
-                            return
-                        }
-                    }
-                    s = s.parent
-                }
-            }
-            scope.chainLookupIgnoreClosure(name)?.let { stored ->
-                scope.assign(stored, name, newValue)
-                return
-            }
             // Fallback: write to field on `this`
             scope.thisObj.writeField(scope, name, newValue)
             return
@@ -1426,24 +1343,6 @@ class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
             }
         }
         scope[name]?.let { stored ->
-            scope.assign(stored, name, newValue)
-            return
-        }
-        run {
-            var s: Scope? = scope
-            val visited = HashSet<Long>(4)
-            while (s != null) {
-                if (!visited.add(s.frameId)) break
-                if (s is ClosureScope) {
-                    s.closureScope.chainLookupWithMembers(name)?.let { stored ->
-                        s.assign(stored, name, newValue)
-                        return
-                    }
-                }
-                s = s.parent
-            }
-        }
-        scope.chainLookupIgnoreClosure(name)?.let { stored ->
             scope.assign(stored, name, newValue)
             return
         }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Scope
-import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.addPropertyDoc
 import net.sergeych.lyng.miniast.type
 
 class ObjChar(val value: Char): Obj() {
@@ -47,12 +47,13 @@ class ObjChar(val value: Char): Obj() {
 
     companion object {
         val type = ObjClass("Char").apply {
-            addFnDoc(
+            addPropertyDoc(
                 name = "code",
                 doc = "Unicode code point (UTF-16 code unit) of this character.",
-                returns = type("lyng.Int"),
-                moduleName = "lyng.stdlib"
-            ) { ObjInt(thisAs<ObjChar>().value.code.toLong()) }
+                type = type("lyng.Int"),
+                moduleName = "lyng.stdlib",
+                getter = { ObjInt((this.thisObj as ObjChar).value.code.toLong()) }
+            )
             addFn("isDigit") {
                 thisAs<ObjChar>().value.isDigit().toObj()
             }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,10 +18,7 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Scope
-import net.sergeych.lyng.miniast.ParamDoc
-import net.sergeych.lyng.miniast.TypeGenericDoc
-import net.sergeych.lyng.miniast.addFnDoc
-import net.sergeych.lyng.miniast.type
+import net.sergeych.lyng.miniast.*
 
 class RingBuffer<T>(val maxSize: Int) : Iterable<T> {
     private val data = arrayOfNulls<Any>(maxSize)
@@ -94,18 +91,20 @@ class ObjRingBuffer(val capacity: Int) : Obj() {
                 return ObjRingBuffer(scope.requireOnlyArg<ObjInt>().toInt())
             }
         }.apply {
-            addFnDoc(
+            addPropertyDoc(
                 name = "capacity",
                 doc = "Maximum number of elements the buffer can hold.",
-                returns = type("lyng.Int"),
-                moduleName = "lyng.stdlib"
-            ) { thisAs<ObjRingBuffer>().capacity.toObj() }
-            addFnDoc(
+                type = type("lyng.Int"),
+                moduleName = "lyng.stdlib",
+                getter = { thisAs<ObjRingBuffer>().capacity.toObj() }
+            )
+            addPropertyDoc(
                 name = "size",
                 doc = "Current number of elements in the buffer.",
-                returns = type("lyng.Int"),
-                moduleName = "lyng.stdlib"
-            ) { thisAs<ObjRingBuffer>().buffer.size.toObj() }
+                type = type("lyng.Int"),
+                moduleName = "lyng.stdlib",
+                getter = { thisAs<ObjRingBuffer>().buffer.size.toObj() }
+            )
             addFnDoc(
                 name = "iterator",
                 doc = "Iterator over elements in insertion order (oldest to newest).",
@@ -122,12 +121,16 @@ class ObjRingBuffer(val capacity: Int) : Obj() {
                 returns = type("lyng.Void"),
                 moduleName = "lyng.stdlib"
             ) { thisAs<ObjRingBuffer>().apply { buffer.add(requireOnlyArg<Obj>()) } }
-            addFnDoc(
+            addPropertyDoc(
                 name = "first",
                 doc = "Return the oldest element in the buffer.",
-                returns = type("lyng.Any"),
-                moduleName = "lyng.stdlib"
-            ) { thisAs<ObjRingBuffer>().buffer.first() }
+                type = type("lyng.Any"),
+                moduleName = "lyng.stdlib",
+                getter = {
+                    val buffer = (this.thisObj as ObjRingBuffer).buffer
+                    if (buffer.size == 0) ObjNull else buffer.first()
+                }
+            )
         }
     }
 }

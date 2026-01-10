@@ -17,11 +17,10 @@
 
 package net.sergeych.lyng.obj
 
-import net.sergeych.bintools.encodeToHex
 import net.sergeych.lyng.*
 import net.sergeych.lyng.miniast.TypeGenericDoc
-import net.sergeych.lyng.miniast.addConstDoc
 import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.addPropertyDoc
 import net.sergeych.lyng.miniast.type
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
@@ -133,7 +132,7 @@ open class ObjException(
                 return ObjException(this, scope, message)
             }
 
-            override fun toString(): String = "ExceptionClass[$name]@${hashCode().encodeToHex()}"
+            override fun toString(): String = name
 
             override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj {
                 return try {
@@ -170,43 +169,44 @@ open class ObjException(
                 ObjVoid
             })
             instanceConstructor = statement { ObjVoid }
-            addConstDoc(
+            addPropertyDoc(
                 name = "message",
-                value = statement {
-                    when (val t = thisObj) {
+                doc = "Human‑readable error message.",
+                type = type("lyng.String"),
+                moduleName = "lyng.stdlib",
+                getter = {
+                    when (val t = this.thisObj) {
                         is ObjException -> t.message
                         is ObjInstance -> t.instanceScope.get("Exception::message")?.value ?: ObjNull
                         else -> ObjNull
                     }
-                },
-                doc = "Human‑readable error message.",
-                type = type("lyng.String"),
-                moduleName = "lyng.stdlib"
+                }
             )
-            addConstDoc(
+            addPropertyDoc(
                 name = "extraData",
-                value = statement {
-                    when (val t = thisObj) {
+                doc = "Extra data associated with the exception.",
+                type = type("lyng.Any", nullable = true),
+                moduleName = "lyng.stdlib",
+                getter = {
+                    when (val t = this.thisObj) {
                         is ObjException -> t.extraData
                         else -> ObjNull
                     }
-                },
-                doc = "Extra data associated with the exception.",
-                type = type("lyng.Any", nullable = true),
-                moduleName = "lyng.stdlib"
+                }
             )
-            addFnDoc(
+            addPropertyDoc(
                 name = "stackTrace",
                 doc = "Stack trace captured at throw site as a list of `StackTraceEntry`.",
-                returns = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.StackTraceEntry"))),
-                moduleName = "lyng.stdlib"
-            ) {
-                when (val t = thisObj) {
-                    is ObjException -> t.getStackTrace()
-                    is ObjInstance -> t.instanceScope.get("Exception::stackTrace")?.value as? ObjList ?: ObjList()
-                    else -> ObjList()
+                type = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.StackTraceEntry"))),
+                moduleName = "lyng.stdlib",
+                getter = {
+                    when (val t = this.thisObj) {
+                        is ObjException -> t.getStackTrace()
+                        is ObjInstance -> t.instanceScope.get("Exception::stackTrace")?.value as? ObjList ?: ObjList()
+                        else -> ObjList()
+                    }
                 }
-            }
+            )
             addFnDoc(
                 name = "toString",
                 doc = "Human‑readable string representation of the error.",

@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,10 +20,7 @@ package net.sergeych.lyng.obj
 import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.RegexCache
 import net.sergeych.lyng.Scope
-import net.sergeych.lyng.miniast.ParamDoc
-import net.sergeych.lyng.miniast.TypeGenericDoc
-import net.sergeych.lyng.miniast.addFnDoc
-import net.sergeych.lyng.miniast.type
+import net.sergeych.lyng.miniast.*
 
 class ObjRegex(val regex: Regex) : Obj() {
     override val objClass get() = type
@@ -123,30 +120,27 @@ class ObjRegexMatch(val match: MatchResult) : Obj() {
                     scope.raiseError("RegexMatch can't be constructed directly")
                 }
             }.apply {
-                addFnDoc(
+                addPropertyDoc(
                     name = "groups",
                     doc = "List of captured groups with index 0 as the whole match.",
-                    returns = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.String"))),
-                    moduleName = "lyng.stdlib"
-                ) {
-                    thisAs<ObjRegexMatch>().objGroups
-                }
-                addFnDoc(
+                    type = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.String"))),
+                    moduleName = "lyng.stdlib",
+                    getter = { thisAs<ObjRegexMatch>().objGroups }
+                )
+                addPropertyDoc(
                     name = "value",
                     doc = "The matched substring.",
-                    returns = type("lyng.String"),
-                    moduleName = "lyng.stdlib"
-                ) {
-                    thisAs<ObjRegexMatch>().objValue
-                }
-                addFnDoc(
+                    type = type("lyng.String"),
+                    moduleName = "lyng.stdlib",
+                    getter = { thisAs<ObjRegexMatch>().objValue }
+                )
+                addPropertyDoc(
                     name = "range",
                     doc = "Range of the match in the input (end-exclusive).",
-                    returns = type("lyng.Range"),
-                    moduleName = "lyng.stdlib"
-                ) {
-                    thisAs<ObjRegexMatch>().objRange
-                }
+                    type = type("lyng.Range"),
+                    moduleName = "lyng.stdlib",
+                    getter = { thisAs<ObjRegexMatch>().objRange }
+                )
             }
         }
     }

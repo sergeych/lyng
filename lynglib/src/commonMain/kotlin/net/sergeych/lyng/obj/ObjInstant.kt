@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,9 @@ package net.sergeych.lyng.obj
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.addPropertyDoc
+import net.sergeych.lyng.miniast.type
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonSettings
@@ -148,34 +151,71 @@ class ObjInstant(val instant: Instant,val truncateMode: LynonSettings.InstantTru
             }
 
         }.apply {
-            addFn("epochSeconds") {
-                val instant = thisAs<ObjInstant>().instant
-                ObjReal(instant.epochSeconds + instant.nanosecondsOfSecond * 1e-9)
-            }
-            addFn("isDistantFuture") {
-                thisAs<ObjInstant>().instant.isDistantFuture.toObj()
-            }
-            addFn("isDistantPast") {
-                thisAs<ObjInstant>().instant.isDistantPast.toObj()
-            }
-            addFn("epochWholeSeconds") {
-                ObjInt(thisAs<ObjInstant>().instant.epochSeconds)
-            }
-            addFn("nanosecondsOfSecond") {
-                ObjInt(thisAs<ObjInstant>().instant.nanosecondsOfSecond.toLong())
-            }
-            addFn("truncateToSecond") {
+            addPropertyDoc(
+                name = "epochSeconds",
+                doc = "Return the number of seconds since the Unix epoch as a real number (including fractions).",
+                type = type("lyng.Real"),
+                moduleName = "lyng.time",
+                getter = {
+                    val instant = thisAs<ObjInstant>().instant
+                    ObjReal(instant.epochSeconds + instant.nanosecondsOfSecond * 1e-9)
+                }
+            )
+            addPropertyDoc(
+                name = "isDistantFuture",
+                doc = "Whether this instant represents the distant future.",
+                type = type("lyng.Bool"),
+                moduleName = "lyng.time",
+                getter = { thisAs<ObjInstant>().instant.isDistantFuture.toObj() }
+            )
+            addPropertyDoc(
+                name = "isDistantPast",
+                doc = "Whether this instant represents the distant past.",
+                type = type("lyng.Bool"),
+                moduleName = "lyng.time",
+                getter = { thisAs<ObjInstant>().instant.isDistantPast.toObj() }
+            )
+            addPropertyDoc(
+                name = "epochWholeSeconds",
+                doc = "Return the number of full seconds since the Unix epoch.",
+                type = type("lyng.Int"),
+                moduleName = "lyng.time",
+                getter = { ObjInt(thisAs<ObjInstant>().instant.epochSeconds) }
+            )
+            addPropertyDoc(
+                name = "nanosecondsOfSecond",
+                doc = "The number of nanoseconds within the current second.",
+                type = type("lyng.Int"),
+                moduleName = "lyng.time",
+                getter = { ObjInt(thisAs<ObjInstant>().instant.nanosecondsOfSecond.toLong()) }
+            )
+            addFnDoc(
+                name = "truncateToSecond",
+                doc = "Truncate this instant to the nearest second.",
+                returns = type("lyng.Instant"),
+                moduleName = "lyng.time"
+            ) {
                 val t = thisAs<ObjInstant>().instant
                 ObjInstant(Instant.fromEpochSeconds(t.epochSeconds), LynonSettings.InstantTruncateMode.Second)
             }
-            addFn("truncateToMillisecond") {
+            addFnDoc(
+                name = "truncateToMillisecond",
+                doc = "Truncate this instant to the nearest millisecond.",
+                returns = type("lyng.Instant"),
+                moduleName = "lyng.time"
+            ) {
                 val t = thisAs<ObjInstant>().instant
                 ObjInstant(
                     Instant.fromEpochSeconds(t.epochSeconds, t.nanosecondsOfSecond / 1_000_000 * 1_000_000),
                     LynonSettings.InstantTruncateMode.Millisecond
                 )
             }
-            addFn("truncateToMicrosecond") {
+            addFnDoc(
+                name = "truncateToMicrosecond",
+                doc = "Truncate this instant to the nearest microsecond.",
+                returns = type("lyng.Instant"),
+                moduleName = "lyng.time"
+            ) {
                 val t = thisAs<ObjInstant>().instant
                 ObjInstant(
                     Instant.fromEpochSeconds(t.epochSeconds, t.nanosecondsOfSecond / 1_000 * 1_000),

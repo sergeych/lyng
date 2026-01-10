@@ -667,19 +667,25 @@ class Compiler(
                 "lambda must have either valid arguments declaration with '->' or no arguments"
             )
 
+        val paramNames = argsDeclaration?.params?.map { it.name } ?: emptyList()
+
         label?.let { cc.labels.add(it) }
-        val body = parseBlock(skipLeadingBrace = true)
+        val body = inCodeContext(CodeContext.Function("<lambda>")) {
+            withLocalNames(paramNames.toSet()) {
+                parseBlock(skipLeadingBrace = true)
+            }
+        }
         label?.let { cc.labels.remove(it) }
 
         return ValueFnRef { closureScope ->
-            statement {
+            statement(body.pos) { scope ->
                 // and the source closure of the lambda which might have other thisObj.
-                val context = this.applyClosure(closureScope)
+                val context = scope.applyClosure(closureScope)
                 // Execute lambda body in a closure-aware context. Blocks inside the lambda
                 // will create child scopes as usual, so re-declarations inside loops work.
                 if (argsDeclaration == null) {
                     // no args: automatic var 'it'
-                    val l = args.list
+                    val l = scope.args.list
                     val itValue: Obj = when (l.size) {
                         // no args: it == void
                         0 -> ObjVoid
@@ -2192,20 +2198,6 @@ class Compiler(
                     for (s in initScope)
                         s.execute(classScope)
                 }
-                // Fallback: ensure any functions declared in class scope are also present as instance methods
-                // (defensive in case some paths skipped cls.addFn during parsing/execution ordering)
-                for ((k, rec) in classScope.objects) {
-                    val v = rec.value
-                    if (v is Statement) {
-                        if (newClass.members[k] == null) {
-                            newClass.addFn(k, isMutable = true, pos = rec.importedFrom?.pos ?: nameToken.pos) {
-                                (thisObj as? ObjInstance)?.let { i ->
-                                    v.execute(ClosureScope(this, i.instanceScope))
-                                } ?: v.execute(thisObj.autoInstanceScope(this))
-                            }
-                        }
-                    }
-                }
                 newClass.checkAbstractSatisfaction(nameToken.pos)
                 // Debug summary: list registered instance methods and class-scope functions for this class
                 newClass
@@ -2292,7 +2284,7 @@ class Compiler(
                 } else if (sourceObj.isInstanceOf(ObjIterable)) {
                     loopIterable(forContext, sourceObj, loopSO, body, elseStatement, label, canBreak)
                 } else {
-                    val size = runCatching { sourceObj.invokeInstanceMethod(forContext, "size").toInt() }
+                    val size = runCatching { sourceObj.readField(forContext, "size").value.toInt() }
                         .getOrElse {
                             throw ScriptError(
                                 tOp.pos,
@@ -3079,31 +3071,88 @@ class Compiler(
             val mark = cc.savePos()
             cc.restorePos(markBeforeEq)
             cc.skipWsTokens()
-            val next = cc.peekNextNonWhitespace()
-            if (next.isId("get") || next.isId("set") || next.isId("private") || next.isId("protected")) {
+            
+            // Heuristic: if we see 'get(' or 'set(' or 'private set(' or 'protected set(', 
+            // look ahead for a body.
+            fun hasAccessorWithBody(): Boolean {
+                val t = cc.peekNextNonWhitespace()
+                if (t.isId("get") || t.isId("set")) {
+                    val saved = cc.savePos()
+                    cc.next() // consume get/set
+                    val nextToken = cc.peekNextNonWhitespace()
+                    if (nextToken.type == Token.Type.LPAREN) {
+                        cc.next() // consume (
+                        var depth = 1
+                        while (cc.hasNext() && depth > 0) {
+                            val tt = cc.next()
+                            if (tt.type == Token.Type.LPAREN) depth++
+                            else if (tt.type == Token.Type.RPAREN) depth--
+                        }
+                        val next = cc.peekNextNonWhitespace()
+                        if (next.type == Token.Type.LBRACE || next.type == Token.Type.ASSIGN) {
+                            cc.restorePos(saved)
+                            return true
+                        }
+                    } else if (nextToken.type == Token.Type.LBRACE || nextToken.type == Token.Type.ASSIGN) {
+                        cc.restorePos(saved)
+                        return true
+                    }
+                    cc.restorePos(saved)
+                } else if (t.isId("private") || t.isId("protected")) {
+                    val saved = cc.savePos()
+                    cc.next() // consume modifier
+                    if (cc.skipWsTokens().isId("set")) {
+                        cc.next() // consume set
+                        val nextToken = cc.peekNextNonWhitespace()
+                        if (nextToken.type == Token.Type.LPAREN) {
+                            cc.next() // consume (
+                            var depth = 1
+                            while (cc.hasNext() && depth > 0) {
+                                val tt = cc.next()
+                                if (tt.type == Token.Type.LPAREN) depth++
+                                else if (tt.type == Token.Type.RPAREN) depth--
+                            }
+                            val next = cc.peekNextNonWhitespace()
+                            if (next.type == Token.Type.LBRACE || next.type == Token.Type.ASSIGN) {
+                                cc.restorePos(saved)
+                                return true
+                            }
+                        } else if (nextToken.type == Token.Type.LBRACE || nextToken.type == Token.Type.ASSIGN) {
+                            cc.restorePos(saved)
+                            return true
+                        }
+                    }
+                    cc.restorePos(saved)
+                }
+                return false
+            }
+            
+            if (hasAccessorWithBody()) {
                 isProperty = true
                 cc.restorePos(markBeforeEq)
-                cc.skipWsTokens()
+                // Do not consume eqToken if it's an accessor keyword
             } else {
                 cc.restorePos(mark)
             }
         }
 
+        val effectiveEqToken = if (isProperty) null else eqToken
+
         // Register the local name at compile time so that subsequent identifiers can be emitted as fast locals
         if (!isStatic) declareLocalName(name)
 
         val isDelegate = if (isAbstract || actualExtern) {
-            if (!isProperty && (eqToken.type == Token.Type.ASSIGN || eqToken.type == Token.Type.BY))
-                throw ScriptError(eqToken.pos, "${if (isAbstract) "abstract" else "extern"} variable $name cannot have an initializer or delegate")
+            if (!isProperty && (effectiveEqToken?.type == Token.Type.ASSIGN || effectiveEqToken?.type == Token.Type.BY))
+                throw ScriptError(effectiveEqToken.pos, "${if (isAbstract) "abstract" else "extern"} variable $name cannot have an initializer or delegate")
             // Abstract or extern variables don't have initializers
             cc.restorePos(markBeforeEq)
             cc.skipWsTokens()
             setNull = true
             false
-        } else if (!isProperty && eqToken.type == Token.Type.BY) {
+        } else if (!isProperty && effectiveEqToken?.type == Token.Type.BY) {
             true
         } else {
-            if (!isProperty && eqToken.type != Token.Type.ASSIGN) {
+            if (!isProperty && effectiveEqToken?.type != Token.Type.ASSIGN) {
                 if (!isMutable && (declaringClassNameCaptured == null) && (extTypeName == null))
                     throw ScriptError(start, "val must be initialized")
                 else if (!isMutable && declaringClassNameCaptured != null && extTypeName == null) {
@@ -3123,12 +3172,12 @@ class Compiler(
 
         val initialExpression = if (setNull || isProperty) null
         else parseStatement(true)
-            ?: throw ScriptError(eqToken.pos, "Expected initializer expression")
+            ?: throw ScriptError(effectiveEqToken!!.pos, "Expected initializer expression")
 
         // Emit MiniValDecl for this declaration (before execution wiring), attach doc if any
         run {
             val declRange = MiniRange(pendingDeclStart ?: start, cc.currentPos())
-            val initR = if (setNull || isProperty) null else MiniRange(eqToken.pos, cc.currentPos())
+            val initR = if (setNull || isProperty) null else MiniRange(effectiveEqToken!!.pos, cc.currentPos())
             val node = MiniValDecl(
                 range = declRange,
                 name = name,
@@ -3193,17 +3242,24 @@ class Compiler(
                 if (t.isId("get")) {
                     val getStart = cc.currentPos()
                     cc.next() // consume 'get'
-                    cc.requireToken(Token.Type.LPAREN)
-                    cc.requireToken(Token.Type.RPAREN)
+                    if (cc.peekNextNonWhitespace().type == Token.Type.LPAREN) {
+                        cc.next() // consume (
+                        cc.requireToken(Token.Type.RPAREN)
+                    }
                     miniSink?.onEnterFunction(null)
                     getter = if (cc.peekNextNonWhitespace().type == Token.Type.LBRACE) {
                         cc.skipWsTokens()
-                        parseBlock()
+                        inCodeContext(CodeContext.Function("<getter>")) {
+                            parseBlock()
+                        }
                     } else if (cc.peekNextNonWhitespace().type == Token.Type.ASSIGN) {
                         cc.skipWsTokens()
                         cc.next() // consume '='
-                        val expr = parseExpression() ?: throw ScriptError(cc.current().pos, "Expected getter expression")
-                        expr
+                        inCodeContext(CodeContext.Function("<getter>")) {
+                            val expr = parseExpression()
+                                ?: throw ScriptError(cc.current().pos, "Expected getter expression")
+                            expr
+                        }
                     } else {
                         throw ScriptError(cc.current().pos, "Expected { or = after get()")
                     }
@@ -3211,26 +3267,34 @@ class Compiler(
                 } else if (t.isId("set")) {
                     val setStart = cc.currentPos()
                     cc.next() // consume 'set'
-                    cc.requireToken(Token.Type.LPAREN)
-                    val setArg = cc.requireToken(Token.Type.ID, "Expected setter argument name")
-                    cc.requireToken(Token.Type.RPAREN)
+                    var setArgName = "it"
+                    if (cc.peekNextNonWhitespace().type == Token.Type.LPAREN) {
+                        cc.next() // consume (
+                        setArgName = cc.requireToken(Token.Type.ID, "Expected setter argument name").value
+                        cc.requireToken(Token.Type.RPAREN)
+                    }
                     miniSink?.onEnterFunction(null)
                     setter = if (cc.peekNextNonWhitespace().type == Token.Type.LBRACE) {
                         cc.skipWsTokens()
-                        val body = parseBlock()
+                        val body = inCodeContext(CodeContext.Function("<setter>")) {
+                            parseBlock()
+                        }
                         statement(body.pos) { scope ->
                             val value = scope.args.list.firstOrNull() ?: ObjNull
-                            scope.addItem(setArg.value, true, value, recordType = ObjRecord.Type.Argument)
+                            scope.addItem(setArgName, true, value, recordType = ObjRecord.Type.Argument)
                             body.execute(scope)
                         }
                     } else if (cc.peekNextNonWhitespace().type == Token.Type.ASSIGN) {
                         cc.skipWsTokens()
                         cc.next() // consume '='
-                        val expr = parseExpression() ?: throw ScriptError(cc.current().pos, "Expected setter expression")
+                        val expr = inCodeContext(CodeContext.Function("<setter>")) {
+                            parseExpression()
+                                ?: throw ScriptError(cc.current().pos, "Expected setter expression")
+                        }
                         val st = expr
                         statement(st.pos) { scope ->
                             val value = scope.args.list.firstOrNull() ?: ObjNull
-                            scope.addItem(setArg.value, true, value, recordType = ObjRecord.Type.Argument)
+                            scope.addItem(setArgName, true, value, recordType = ObjRecord.Type.Argument)
                             st.execute(scope)
                         }
                     } else {
@@ -3274,6 +3338,8 @@ class Compiler(
                                 throw ScriptError(cc.current().pos, "Expected { or = after set(...)")
                             }
                             miniSink?.onExitFunction(cc.currentPos())
+                        } else {
+                            // private set without body: setter remains null, visibility is restricted
                         }
                     } else {
                         cc.restorePos(mark)
@@ -3525,7 +3591,7 @@ class Compiler(
                     } else {
                         // Not in class body: regular local/var declaration
                         val initValue = initialExpression?.execute(context)?.byValueCopy() ?: ObjNull
-                        context.addItem(name, isMutable, initValue, visibility, recordType = ObjRecord.Type.Field)
+                        context.addItem(name, isMutable, initValue, visibility, recordType = ObjRecord.Type.Other)
                         initValue
                     }
             }

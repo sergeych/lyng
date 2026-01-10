@@ -293,10 +293,14 @@ class Script(
                 ObjVoid
             }
 
-            // Delay in milliseconds (plain numeric). For time-aware variants use lyng.time.Duration API.
             addVoidFn("delay") {
-                val ms = (this.args.firstAndOnly().toDouble()).roundToLong()
-                delay(ms)
+                val a = args.firstAndOnly()
+                when (a) {
+                    is ObjInt -> delay(a.value)
+                    is ObjReal -> delay((a.value * 1000).roundToLong())
+                    is ObjDuration -> delay(a.duration)
+                    else -> raiseIllegalArgument("Expected Int, Real or Duration, got ${a.inspect(this)}")
+                }
             }
 
             addConst("Object", rootObjectType)

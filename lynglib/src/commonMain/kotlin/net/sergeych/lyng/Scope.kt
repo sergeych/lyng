@@ -106,7 +106,7 @@ open class Scope(
      * intertwined closure frames. They traverse the plain parent chain and consult only locals
      * and bindings of each frame. Instance/class member fallback must be decided by the caller.
      */
-    private fun tryGetLocalRecord(s: Scope, name: String, caller: net.sergeych.lyng.obj.ObjClass?): ObjRecord? {
+    internal fun tryGetLocalRecord(s: Scope, name: String, caller: net.sergeych.lyng.obj.ObjClass?): ObjRecord? {
         s.objects[name]?.let { rec ->
             if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, caller)) return rec
         }
@@ -330,28 +330,38 @@ open class Scope(
 
     internal val objects = mutableMapOf<String, ObjRecord>()
 
-    open operator fun get(name: String): ObjRecord? =
-        if (name == "this") thisObj.asReadonly
-        else {
-            // Prefer direct locals/bindings declared in this frame
-            (objects[name]?.let { rec ->
-                if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) rec else null
-            }
-                // Then, check known local bindings in this frame (helps after suspension)
-                ?: localBindings[name]?.let { rec ->
-                    if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) rec else null
-                }
-                // Walk up ancestry
-                ?: parent?.get(name)
-                // Finally, fallback to class members on thisObj
-                ?: thisObj.objClass.getInstanceMemberOrNull(name)?.let { rec ->
-                    if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) {
-                        if (rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.Property || rec.isAbstract) null
-                        else rec
-                    } else null
-                }
-                )
+    open operator fun get(name: String): ObjRecord? {
+        if (name == "this") return thisObj.asReadonly
+
+        // 1. Prefer direct locals/bindings declared in this frame
+        objects[name]?.let { rec ->
+            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) return rec
         }
+        localBindings[name]?.let { rec ->
+            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) return rec
+        }
+
+        // 2. Then, check members of thisObj
+        val receiver = thisObj
+        val effectiveClass = receiver as? ObjClass ?: receiver.objClass
+        for (cls in effectiveClass.mro) {
+            val rec = cls.members[name] ?: cls.classScope?.objects?.get(name)
+            if (rec != null && !rec.isAbstract) {
+                if (canAccessMember(rec.visibility, rec.declaringClass ?: cls, currentClassCtx)) {
+                    return rec.copy(receiver = receiver)
+                }
+            }
+        }
+        // Finally, root object fallback
+        Obj.rootObjectType.members[name]?.let { rec ->
+            if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) {
+                return rec.copy(receiver = receiver)
+            }
+        }
+
+        // 3. Finally, walk up ancestry
+        return parent?.get(name)
+    }
 
     // Slot fast-path API
     fun getSlotRecord(index: Int): ObjRecord = slots[index]
@@ -380,6 +390,7 @@ open class Scope(
         // that could interact badly with the new parent and produce a cycle.
         this.parent = null
         this.skipScopeCreation = false
+        this.currentClassCtx = parent?.currentClassCtx
         // fresh identity for PIC caches
         this.frameId = nextFrameId()
         // clear locals and slot maps
@@ -388,6 +399,7 @@ open class Scope(
         nameToSlot.clear()
         localBindings.clear()
         extensions.clear()
+        this.currentClassCtx = parent?.currentClassCtx
         // Now safe to validate and re-parent
         ensureNoCycle(parent)
         this.parent = parent
@@ -628,44 +640,32 @@ open class Scope(
     }
 
     suspend fun resolve(rec: ObjRecord, name: String): Obj {
-        if (rec.type == ObjRecord.Type.Delegated) {
-            val del = rec.delegate ?: run {
-                if (thisObj is ObjInstance) {
-                    val res = (thisObj as ObjInstance).resolveRecord(this, rec, name, rec.declaringClass).value
-                    rec.value = res
-                    return res
-                }
-                raiseError("Internal error: delegated property $name has no delegate")
-            }
-            val th = if (thisObj === ObjVoid) ObjNull else thisObj
-            val res = del.invokeInstanceMethod(this, "getValue", Arguments(th, ObjString(name)), onNotFoundResult = {
-                // If getValue not found, return a wrapper that calls invoke
-                object : Statement() {
-                    override val pos: Pos = Pos.builtIn
-                    override suspend fun execute(scope: Scope): Obj {
-                        val th2 = if (scope.thisObj === ObjVoid) ObjNull else scope.thisObj
-                        val allArgs = (listOf(th2, ObjString(name)) + scope.args.list).toTypedArray()
-                        return del.invokeInstanceMethod(scope, "invoke", Arguments(*allArgs))
-                    }
-                }
-            })
-            rec.value = res
-            return res
-        }
-        return rec.value
+        val receiver = rec.receiver ?: thisObj
+        return receiver.resolveRecord(this, rec, name, rec.declaringClass).value
     }
 
     suspend fun assign(rec: ObjRecord, name: String, newValue: Obj) {
         if (rec.type == ObjRecord.Type.Delegated) {
+            val receiver = rec.receiver ?: thisObj
             val del = rec.delegate ?: run {
-                if (thisObj is ObjInstance) {
-                    (thisObj as ObjInstance).writeField(this, name, newValue)
+                if (receiver is ObjInstance) {
+                    (receiver as ObjInstance).writeField(this, name, newValue)
                     return
                 }
                 raiseError("Internal error: delegated property $name has no delegate")
             }
-            val th = if (thisObj === ObjVoid) ObjNull else thisObj
+            val th = if (receiver === ObjVoid) ObjNull else receiver
             del.invokeInstanceMethod(this, "setValue", Arguments(th, ObjString(name), newValue))
+            return
+        }
+        if (rec.value is ObjProperty) {
+            (rec.value as ObjProperty).callSetter(this, rec.receiver ?: thisObj, newValue, rec.declaringClass)
+            return
+        }
+        // If it's a member (explicitly tracked by receiver or declaringClass), use writeField.
+        // Important: locals have receiver == null and declaringClass == null (enforced in addItem).
+        if (rec.receiver != null || (rec.declaringClass != null && (rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.Property))) {
+            (rec.receiver ?: thisObj).writeField(this, name, newValue)
             return
         }
         if (!rec.isMutable && rec.value !== ObjUnset) raiseIllegalAssignment("can't reassign val $name")

@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,18 @@ import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
 
 class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
+
+    override suspend fun equals(scope: Scope, other: Obj): Boolean {
+        if (this === other) return true
+        if (other !is ObjSet) return false
+        if (set.size != other.set.size) return false
+        // Sets are equal if all my elements are in other and vice versa
+        // contains() in ObjSet uses equals(scope, ...), so we need to be careful
+        for (e in set) {
+            if (!other.contains(scope, e)) return false
+        }
+        return true
+    }
 
     override val objClass get() = type
 
@@ -113,11 +125,12 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
     }
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
-        return if (other !is ObjSet) -1
-        else {
-            if (set == other.set) 0
-            else -1
+        if (other is ObjSet) {
+            if (set == other.set) return 0
+            if (set.size != other.set.size) return set.size.compareTo(other.set.size)
+            return set.toString().compareTo(other.set.toString())
         }
+        return -2
     }
 
     override fun hashCode(): Int {
@@ -126,10 +139,7 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
-        if (other == null || this::class != other::class) return false
-
-        other as ObjSet
-
+        if (other !is ObjSet) return false
         return set == other.set
     }
 

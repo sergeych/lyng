@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import net.sergeych.lyng.Arguments
 import net.sergeych.lyng.Statement
 import net.sergeych.lyng.miniast.ParamDoc
 import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.addPropertyDoc
 import net.sergeych.lyng.miniast.type
 
 /**
@@ -29,19 +30,20 @@ import net.sergeych.lyng.miniast.type
 val ObjIterable by lazy {
     ObjClass("Iterable").apply {
 
-        addFnDoc(
+        addPropertyDoc(
             name = "toList",
             doc = "Collect elements of this iterable into a new list.",
-            returns = type("lyng.List"),
-            moduleName = "lyng.stdlib"
-        ) {
-            val result = mutableListOf<Obj>()
-            val iterator = thisObj.invokeInstanceMethod(this, "iterator")
-
-            while (iterator.invokeInstanceMethod(this, "hasNext").toBool())
-                result += iterator.invokeInstanceMethod(this, "next")
-            ObjList(result)
-        }
+            type = type("lyng.List"),
+            moduleName = "lyng.stdlib",
+            getter = {
+                val result = mutableListOf<Obj>()
+                val it = this.thisObj.invokeInstanceMethod(this, "iterator")
+                while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
+                    result.add(it.invokeInstanceMethod(this, "next"))
+                }
+                ObjList(result)
+            }
+        )
 
         // it is not effective, but it is open:
         addFnDoc(
@@ -55,7 +57,7 @@ val ObjIterable by lazy {
             val obj = args.firstAndOnly()
             val it = thisObj.invokeInstanceMethod(this, "iterator")
             while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
-                if (obj.compareTo(this, it.invokeInstanceMethod(this, "next")) == 0)
+                if (obj.equals(this, it.invokeInstanceMethod(this, "next")))
                     return@addFnDoc ObjTrue
             }
             ObjFalse
@@ -73,46 +75,49 @@ val ObjIterable by lazy {
             var index = 0
             val it = thisObj.invokeInstanceMethod(this, "iterator")
             while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
-                if (obj.compareTo(this, it.invokeInstanceMethod(this, "next")) == 0)
+                if (obj.equals(this, it.invokeInstanceMethod(this, "next")))
                     return@addFnDoc ObjInt(index.toLong())
                 index++
             }
             ObjInt(-1L)
         }
 
-        addFnDoc(
+        addPropertyDoc(
             name = "toSet",
             doc = "Collect elements of this iterable into a new set.",
-            returns = type("lyng.Set"),
-            moduleName = "lyng.stdlib"
-        ) {
-            if( thisObj.isInstanceOf(ObjSet.type) )
-                thisObj
-            else {
-                val result = mutableSetOf<Obj>()
-                val it = thisObj.invokeInstanceMethod(this, "iterator")
-                while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
-                    result += it.invokeInstanceMethod(this, "next")
+            type = type("lyng.Set"),
+            moduleName = "lyng.stdlib",
+            getter = {
+                if( this.thisObj.isInstanceOf(ObjSet.type) )
+                    this.thisObj
+                else {
+                    val result = mutableSetOf<Obj>()
+                    val it = this.thisObj.invokeInstanceMethod(this, "iterator")
+                    while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
+                        result.add(it.invokeInstanceMethod(this, "next"))
+                    }
+                    ObjSet(result)
                 }
-                ObjSet(result)
             }
-        }
+        )
 
-        addFnDoc(
+        addPropertyDoc(
             name = "toMap",
             doc = "Collect pairs into a map using [0] as key and [1] as value for each element.",
-            returns = type("lyng.Map"),
-            moduleName = "lyng.stdlib"
-        ) {
-            val result = mutableMapOf<Obj, Obj>()
-            thisObj.toFlow(this).collect { pair ->
-                when (pair) {
-                    is ObjMapEntry -> result[pair.key] = pair.value
-                    else -> result[pair.getAt(this, 0)] = pair.getAt(this, 1)
+            type = type("lyng.Map"),
+            moduleName = "lyng.stdlib",
+            getter = {
+                val result = mutableMapOf<Obj, Obj>()
+                this.thisObj.enumerate(this) { pair ->
+                    when (pair) {
+                        is ObjMapEntry -> result[pair.key] = pair.value
+                        else -> result[pair.getAt(this, 0)] = pair.getAt(this, 1)
+                    }
+                    true
                 }
+                ObjMap(result)
             }
-            ObjMap(result)
-        }
+        )
 
         addFnDoc(
             name = "associateBy",
@@ -156,7 +161,7 @@ val ObjIterable by lazy {
             val fn = requiredArg<Statement>(0)
             val result = mutableListOf<Obj>()
             thisObj.toFlow(this).collect {
-                result += fn.call(this, it)
+                result.add(fn.call(this, it))
             }
             ObjList(result)
         }
@@ -173,7 +178,7 @@ val ObjIterable by lazy {
             val result = mutableListOf<Obj>()
             thisObj.toFlow(this).collect {
                 val transformed = fn.call(this, it)
-                if( transformed != ObjNull) result += transformed
+                if( transformed != ObjNull) result.add(transformed)
             }
             ObjList(result)
         }
@@ -189,25 +194,26 @@ val ObjIterable by lazy {
             val result = mutableListOf<Obj>()
             if (n > 0) {
                 thisObj.enumerate(this) {
-                    result += it
+                    result.add(it)
                     --n > 0
                 }
             }
             ObjList(result)
         }
 
-        addFnDoc(
+        addPropertyDoc(
             name = "isEmpty",
             doc = "Whether the iterable has no elements.",
-            returns = type("lyng.Bool"),
-            moduleName = "lyng.stdlib"
-        ) {
-            ObjBool(
-                thisObj.invokeInstanceMethod(this, "iterator")
-                    .invokeInstanceMethod(this, "hasNext").toBool()
-                    .not()
-            )
-        }
+            type = type("lyng.Bool"),
+            moduleName = "lyng.stdlib",
+            getter = {
+                ObjBool(
+                    this.thisObj.invokeInstanceMethod(this, "iterator")
+                        .invokeInstanceMethod(this, "hasNext").toBool()
+                        .not()
+                )
+            }
+        )
 
         addFnDoc(
             name = "sortedWith",

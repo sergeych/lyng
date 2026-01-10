@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,6 @@ import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.RegexCache
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.miniast.*
-import net.sergeych.lyng.statement
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
@@ -124,10 +123,16 @@ data class ObjString(val value: String) : Obj() {
     }
 
     companion object {
-        val type = object : ObjClass("String") {
+        val type = object : ObjClass("String", ObjCollection) {
             override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj =
                 ObjString(decoder.unpackBinaryData().decodeToString())
         }.apply {
+            addFnDoc(
+                name = "iterator",
+                doc = "Iterator over characters of this string.",
+                returns = TypeGenericDoc(type("lyng.Iterator"), listOf(type("lyng.Char"))),
+                moduleName = "lyng.stdlib"
+            ) { ObjKotlinIterator(thisAs<ObjString>().value.iterator()) }
             addFnDoc(
                 name = "toInt",
                 doc = "Parse this string as an integer or throw if it is not a valid integer.",
@@ -157,12 +162,12 @@ data class ObjString(val value: String) : Obj() {
             ) {
                 ObjBool(thisAs<ObjString>().value.endsWith(requiredArg<ObjString>(0).value))
             }
-            addConstDoc(
+            addPropertyDoc(
                 name = "length",
-                value = statement { ObjInt.of(thisAs<ObjString>().value.length.toLong()) },
                 doc = "Number of UTF-16 code units in this string.",
                 type = type("lyng.Int"),
-                moduleName = "lyng.stdlib"
+                moduleName = "lyng.stdlib",
+                getter = { ObjInt.of((this.thisObj as ObjString).value.length.toLong()) }
             )
             addFnDoc(
                 name = "takeLast",
@@ -240,16 +245,17 @@ data class ObjString(val value: String) : Obj() {
             ) {
                 thisAs<ObjString>().value.uppercase().let(::ObjString)
             }
-            addFnDoc(
+            addPropertyDoc(
                 name = "characters",
                 doc = "List of characters of this string.",
-                returns = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.Char"))),
-                moduleName = "lyng.stdlib"
-            ) {
-                ObjList(
-                    thisAs<ObjString>().value.map { ObjChar(it) }.toMutableList()
-                )
-            }
+                type = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.Char"))),
+                moduleName = "lyng.stdlib",
+                getter = {
+                    ObjList(
+                        (this.thisObj as ObjString).value.map { ObjChar(it) }.toMutableList()
+                    )
+                }
+            )
             addFnDoc(
                 name = "last",
                 doc = "The last character of this string or throw if the string is empty.",
@@ -264,12 +270,13 @@ data class ObjString(val value: String) : Obj() {
                 returns = type("lyng.Buffer"),
                 moduleName = "lyng.stdlib"
             ) { ObjBuffer(thisAs<ObjString>().value.encodeToByteArray().asUByteArray()) }
-            addFnDoc(
+            addPropertyDoc(
                 name = "size",
                 doc = "Alias for length: the number of characters (code units) in this string.",
-                returns = type("lyng.Int"),
-                moduleName = "lyng.stdlib"
-            ) { ObjInt.of(thisAs<ObjString>().value.length.toLong()) }
+                type = type("lyng.Int"),
+                moduleName = "lyng.stdlib",
+                getter = { ObjInt.of((this.thisObj as ObjString).value.length.toLong()) }
+            )
             addFnDoc(
                 name = "toReal",
                 doc = "Parse this string as a real number (floating point).",

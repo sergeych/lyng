@@ -1994,12 +1994,12 @@ class ScriptTest {
             """
             class Foo {
                 // this means last is lambda:
-                fun f(e=1, f) {
-                    "e="+e+"f="+f()
+                fun test_f(e=1, f_param) {
+                    "e="+e+"f="+f_param()
                 }
             }
-            val f = Foo()
-            assertEquals("e=1f=xx", f.f { "xx" })
+            val f_obj = Foo()
+            assertEquals("e=1f=xx", f_obj.test_f { "xx" })
         """.trimIndent()
         )
 
@@ -2011,13 +2011,13 @@ class ScriptTest {
             """
             class Foo {
                 // this means last is lambda:
-                fun f(e..., f) {
-                    "e="+e+"f="+f()
+                fun test_f_ellipsis(e..., f_param) {
+                    "e="+e+"f="+f_param()
                 }
             }
-            val f = Foo()
-            assertEquals("e=[]f=xx", f.f { "xx" })
-            assertEquals("e=[1,2]f=xx", f.f(1,2) { "xx" })
+            val f_obj = Foo()
+            assertEquals("e=[]f=xx", f_obj.test_f_ellipsis { "xx" })
+            assertEquals("e=[1,2]f=xx", f_obj.test_f_ellipsis(1,2) { "xx" })
         """.trimIndent()
         )
 
@@ -4645,7 +4645,8 @@ class ScriptTest {
                 null
             } catch { it }
             assert(caught != null)
-            assert(caught.message.contains("Expected DerivedEx, got MyEx"))
+            assertEquals("Expected DerivedEx, got MyEx", caught.message)
+            assert(caught.message == "Expected DerivedEx, got MyEx")
         """.trimIndent())
     }
 
@@ -4703,7 +4704,7 @@ class ScriptTest {
             // 61755f07-630c-4181-8d50-1b044d96e1f4
             class T {
                 static var f1 = null
-                static fun t(name=null) {
+                static fun testCapture(name=null) {
                     run {
                         // I expect it will catch the 'name' from
                         // param? 
@@ -4714,10 +4715,85 @@ class ScriptTest {
             assert(T.f1 == null)
             println("-- "+T.f1::class)
             println("-- "+T.f1)
-            T.t("foo")
+            T.testCapture("foo")
             println("2- "+T.f1::class)
             println("2- "+T.f1)
             assert(T.f1 == "foo")
+        """.trimIndent())
+    }
+
+    @Test
+    fun testLazyLocals() = runTest() {
+        eval("""
+            class T {
+                val x by lazy {
+                    val c = "c"
+                    c + "!"
+                }
+            }
+            val t = T()
+            assertEquals("c!", t.x)
+            assertEquals("c!", t.x)
+        """.trimIndent())
+    }
+    @Test
+    fun testGetterLocals() = runTest() {
+        eval("""
+            class T {
+                val x get() {
+                    val c = "c"
+                    c + "!"
+                }
+            }
+            val t = T()
+            assertEquals("c!", t.x)
+            assertEquals("c!", t.x)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testMethodLocals() = runTest() {
+        eval("""
+            class T {
+                fun x() {
+                    val c = "c"
+                    c + "!"
+                }
+            }
+            val t = T()
+            assertEquals("c!", t.x())
+            assertEquals("c!", t.x())
+        """.trimIndent())
+    }
+
+    @Test
+    fun testContrcuctorMagicIdBug() = runTest() {
+        eval("""
+            interface SomeI {
+                abstract fun x()
+            }
+            class T(id): SomeI {
+                override fun x() {
+                    val c = id
+                    c + "!"
+                }
+            }
+            val t = T("c")
+            assertEquals("c!", t.x())
+            assertEquals("c!", t.x())
+        """.trimIndent())
+    }
+
+    @Test
+    fun testLambdaLocals() = runTest() {
+        eval("""
+            class T {
+                val l = { x ->
+                    val c = x + ":"
+                    c + x
+                }
+            }
+            assertEquals("r:r", T().l("r"))
         """.trimIndent())
     }
 }

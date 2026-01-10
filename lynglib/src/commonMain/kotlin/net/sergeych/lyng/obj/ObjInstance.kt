@@ -21,6 +21,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import net.sergeych.lyng.Arguments
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.Visibility
 import net.sergeych.lyng.canAccessMember
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
@@ -31,50 +32,35 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
     internal lateinit var instanceScope: Scope
 
     override suspend fun readField(scope: Scope, name: String): ObjRecord {
-        // 1. Direct (unmangled) lookup first
-        instanceScope[name]?.let { rec ->
+        val caller = scope.currentClassCtx
+        
+        // 0. Private mangled of current class context
+        caller?.let { c ->
+            val mangled = "${c.className}::$name"
+            instanceScope.objects[mangled]?.let { rec ->
+                if (rec.visibility == Visibility.Private) {
+                    return resolveRecord(scope, rec, name, c)
+                }
+            }
+        }
+
+        // 1. MRO mangled storage
+        for (cls in objClass.mro) {
+            if (cls.className == "Obj") break
+            val mangled = "${cls.className}::$name"
+            instanceScope.objects[mangled]?.let { rec ->
+                if ((scope.thisObj === this && caller != null) || canAccessMember(rec.visibility, cls, caller)) {
+                    return resolveRecord(scope, rec, name, cls)
+                }
+            }
+        }
+
+        // 2. Unmangled storage
+        instanceScope.objects[name]?.let { rec ->
             val decl = rec.declaringClass
-            // Allow unconditional access when accessing through `this` of the same instance
-            // BUT only if we are in the class context (not extension)
-            if (scope.thisObj !== this || scope.currentClassCtx == null) {
-                val caller = scope.currentClassCtx
-                if (!canAccessMember(rec.visibility, decl, caller))
-                    scope.raiseError(
-                        ObjIllegalAccessException(
-                            scope,
-                            "can't access field $name (declared in ${decl?.className ?: "?"})"
-                        )
-                    )
-            }
-            return resolveRecord(scope, rec, name, decl)
-        }
-
-        // 2. MI-mangled instance scope lookup
-        val cls = objClass
-        fun findMangledInRead(): ObjRecord? {
-            instanceScope.objects["${cls.className}::$name"]?.let { return it }
-            for (p in cls.mroParents) {
-                instanceScope.objects["${p.className}::$name"]?.let { return it }
-            }
-            return null
-        }
-
-        findMangledInRead()?.let { rec ->
-            val declaring = when {
-                instanceScope.objects.containsKey("${cls.className}::$name") -> cls
-                else -> cls.mroParents.firstOrNull { instanceScope.objects.containsKey("${it.className}::$name") }
-            }
-            if (scope.thisObj !== this || scope.currentClassCtx == null) {
-                val caller = scope.currentClassCtx
-                if (!canAccessMember(rec.visibility, declaring, caller))
-                    scope.raiseError(
-                        ObjIllegalAccessException(
-                            scope,
-                            "can't access field $name (declared in ${declaring?.className ?: "?"})"
-                        )
-                    )
-            }
-            return resolveRecord(scope, rec, name, declaring)
+            // Unmangled access is only allowed if it's public OR we are inside the same instance's method
+            if ((scope.thisObj === this && caller != null) || canAccessMember(rec.visibility, decl, caller))
+                return resolveRecord(scope, rec, name, decl)
         }
 
         // 3. Fall back to super (handles class members and extensions)
@@ -83,6 +69,90 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
 
     override suspend fun resolveRecord(scope: Scope, obj: ObjRecord, name: String, decl: ObjClass?): ObjRecord {
         if (obj.type == ObjRecord.Type.Delegated) {
+            val d = decl ?: obj.declaringClass
+            val storageName = "${d?.className}::$name"
+            var del = instanceScope[storageName]?.delegate ?: obj.delegate
+            if (del == null) {
+                for (c in objClass.mro) {
+                    del = instanceScope["${c.className}::$name"]?.delegate
+                    if (del != null) break
+                }
+            }
+            del = del ?: scope.raiseError("Internal error: delegated property $name has no delegate")
+            val res = del.invokeInstanceMethod(scope, "getValue", Arguments(this, ObjString(name)))
+            obj.value = res
+            return obj
+        }
+
+        // Map member template to instance storage if applicable
+        var targetRec = obj
+        val d = decl ?: obj.declaringClass
+        if (d != null) {
+            val mangled = "${d.className}::$name"
+            instanceScope.objects[mangled]?.let { 
+                targetRec = it 
+            }
+        }
+        if (targetRec === obj) {
+            instanceScope.objects[name]?.let { rec ->
+                // Check if this record in instanceScope is the one we want.
+                // For members, it must match the declaring class.
+                // Arguments are also preferred.
+                if (rec.type == ObjRecord.Type.Argument || rec.declaringClass == d || rec.declaringClass == null) {
+                    targetRec = rec
+                }
+            }
+        }
+
+        return super.resolveRecord(scope, targetRec, name, d)
+    }
+
+    override suspend fun writeField(scope: Scope, name: String, newValue: Obj) {
+        willMutate(scope)
+        val caller = scope.currentClassCtx
+
+        // 0. Private mangled of current class context
+        caller?.let { c ->
+            val mangled = "${c.className}::$name"
+            instanceScope.objects[mangled]?.let { rec ->
+                if (rec.visibility == Visibility.Private) {
+                    updateRecord(scope, rec, name, newValue, c)
+                    return
+                }
+            }
+        }
+
+        // 1. MRO mangled storage
+        for (cls in objClass.mro) {
+            if (cls.className == "Obj") break
+            val mangled = "${cls.className}::$name"
+            instanceScope.objects[mangled]?.let { rec ->
+                if ((scope.thisObj === this && caller != null) || canAccessMember(rec.effectiveWriteVisibility, cls, caller)) {
+                    updateRecord(scope, rec, name, newValue, cls)
+                    return
+                }
+            }
+        }
+
+        // 2. Unmangled storage
+        instanceScope.objects[name]?.let { rec ->
+            val decl = rec.declaringClass
+            if ((scope.thisObj === this && caller != null) || canAccessMember(rec.effectiveWriteVisibility, decl, caller)) {
+                updateRecord(scope, rec, name, newValue, decl)
+                return
+            }
+        }
+
+        super.writeField(scope, name, newValue)
+    }
+
+    private suspend fun updateRecord(scope: Scope, rec: ObjRecord, name: String, newValue: Obj, decl: ObjClass?) {
+        if (rec.type == ObjRecord.Type.Property) {
+            val prop = rec.value as ObjProperty
+            prop.callSetter(scope, this, newValue, decl)
+            return
+        }
+        if (rec.type == ObjRecord.Type.Delegated) {
             val storageName = "${decl?.className}::$name"
             var del = instanceScope[storageName]?.delegate
             if (del == null) {
@@ -91,136 +161,80 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                     if (del != null) break
                 }
             }
-            del = del ?: obj.delegate ?: scope.raiseError("Internal error: delegated property $name has no delegate (tried $storageName)")
-            val res = del.invokeInstanceMethod(scope, "getValue", Arguments(this, ObjString(name)))
-            obj.value = res
-            return obj
-        }
-        return super.resolveRecord(scope, obj, name, decl)
-    }
-
-    override suspend fun writeField(scope: Scope, name: String, newValue: Obj) {
-        // Direct (unmangled) first
-        instanceScope[name]?.let { f ->
-            val decl = f.declaringClass
-            if (scope.thisObj !== this || scope.currentClassCtx == null) {
-                val caller = scope.currentClassCtx
-                if (!canAccessMember(f.effectiveWriteVisibility, decl, caller))
-                    ObjIllegalAccessException(
-                        scope,
-                        "can't assign to field $name (declared in ${decl?.className ?: "?"})"
-                    ).raise()
-            }
-            if (f.type == ObjRecord.Type.Property) {
-                val prop = f.value as ObjProperty
-                prop.callSetter(scope, this, newValue, decl)
-                return
-            }
-            if (f.type == ObjRecord.Type.Delegated) {
-                val storageName = "${decl?.className}::$name"
-                var del = instanceScope[storageName]?.delegate
-                if (del == null) {
-                    for (c in objClass.mro) {
-                        del = instanceScope["${c.className}::$name"]?.delegate
-                        if (del != null) break
-                    }
-                }
-                del = del ?: f.delegate ?: scope.raiseError("Internal error: delegated property $name has no delegate (tried $storageName)")
-                del.invokeInstanceMethod(scope, "setValue", Arguments(this, ObjString(name), newValue))
-                return
-            }
-            if (!f.isMutable && f.value !== ObjUnset) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
-            if (f.value.assign(scope, newValue) == null)
-                f.value = newValue
+            del = del ?: rec.delegate ?: scope.raiseError("Internal error: delegated property $name has no delegate (tried $storageName)")
+            del.invokeInstanceMethod(scope, "setValue", Arguments(this, ObjString(name), newValue))
             return
         }
-        // Try MI-mangled resolution along linearization (C3 MRO)
-        val cls = objClass
-        fun findMangled(): ObjRecord? {
-            instanceScope.objects["${cls.className}::$name"]?.let { return it }
-            for (p in cls.mroParents) {
-                instanceScope.objects["${p.className}::$name"]?.let { return it }
-            }
-            return null
-        }
-
-        val rec = findMangled()
-        if (rec != null) {
-            val declaring = when {
-                instanceScope.objects.containsKey("${cls.className}::$name") -> cls
-                else -> cls.mroParents.firstOrNull { instanceScope.objects.containsKey("${it.className}::$name") }
-            }
-            if (scope.thisObj !== this || scope.currentClassCtx == null) {
-                val caller = scope.currentClassCtx
-                if (!canAccessMember(rec.effectiveWriteVisibility, declaring, caller))
-                    ObjIllegalAccessException(
-                        scope,
-                        "can't assign to field $name (declared in ${declaring?.className ?: "?"})"
-                    ).raise()
-            }
-            if (rec.type == ObjRecord.Type.Property) {
-                val prop = rec.value as ObjProperty
-                prop.callSetter(scope, this, newValue, declaring)
-                return
-            }
-            if (rec.type == ObjRecord.Type.Delegated) {
-                val storageName = "${declaring?.className}::$name"
-                var del = instanceScope[storageName]?.delegate
-                if (del == null) {
-                    for (c in objClass.mro) {
-                        del = instanceScope["${c.className}::$name"]?.delegate
-                        if (del != null) break
-                    }
-                }
-                del = del ?: rec.delegate ?: scope.raiseError("Internal error: delegated property $name has no delegate (tried $storageName)")
-                del.invokeInstanceMethod(scope, "setValue", Arguments(this, ObjString(name), newValue))
-                return
-            }
-            if (!rec.isMutable && rec.value !== ObjUnset) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
-            if (rec.value.assign(scope, newValue) == null)
-                rec.value = newValue
-            return
-        }
-        super.writeField(scope, name, newValue)
+        if (!rec.isMutable && rec.value !== ObjUnset) ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
+        if (rec.value.assign(scope, newValue) == null)
+            rec.value = newValue
     }
 
     override suspend fun invokeInstanceMethod(
         scope: Scope, name: String, args: Arguments,
         onNotFoundResult: (suspend () -> Obj?)?
     ): Obj {
+        // 0. Prefer private member of current class context
+        scope.currentClassCtx?.let { caller ->
+            val mangled = "${caller.className}::$name"
+            instanceScope.objects[mangled]?.let { rec ->
+                if (rec.visibility == Visibility.Private && !rec.isAbstract) {
+                    if (rec.type == ObjRecord.Type.Property) {
+                        if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, caller)
+                    } else if (rec.type == ObjRecord.Type.Fun) {
+                        return rec.value.invoke(instanceScope, this, args, caller)
+                    }
+                }
+            }
+            caller.members[name]?.let { rec ->
+                if (rec.visibility == Visibility.Private && !rec.isAbstract) {
+                    if (rec.type == ObjRecord.Type.Property) {
+                        if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, caller)
+                    } else if (rec.type == ObjRecord.Type.Fun) {
+                        return rec.value.invoke(instanceScope, this, args, caller)
+                    }
+                }
+            }
+        }
+
         // 1. Walk MRO to find member, handling delegation
         for (cls in objClass.mro) {
             if (cls.className == "Obj") break
             val rec = cls.members[name] ?: cls.classScope?.objects?.get(name)
-            if (rec != null) {
+            if (rec != null && !rec.isAbstract) {
                 if (rec.type == ObjRecord.Type.Delegated) {
                     val storageName = "${cls.className}::$name"
                     val del = instanceScope[storageName]?.delegate ?: rec.delegate
                     ?: scope.raiseError("Internal error: delegated member $name has no delegate (tried $storageName)")
+                    
+                    // For delegated member, try 'invoke' first if it's a function-like call
                     val allArgs = (listOf(this, ObjString(name)) + args.list).toTypedArray()
                     return del.invokeInstanceMethod(scope, "invoke", Arguments(*allArgs), onNotFoundResult = {
-                        // Fallback: property delegation
+                        // Fallback: property delegation (getValue then call result)
                         val propVal = del.invokeInstanceMethod(scope, "getValue", Arguments(this, ObjString(name)))
                         propVal.invoke(scope, this, args, rec.declaringClass ?: cls)
                     })
                 }
-                if (rec.type == ObjRecord.Type.Fun && !rec.isAbstract) {
-                    val decl = rec.declaringClass ?: cls
-                    val caller = scope.currentClassCtx ?: if (scope.thisObj === this) objClass else null
-                    if (!canAccessMember(rec.visibility, decl, caller))
-                        scope.raiseError(
-                            ObjIllegalAccessException(
-                                scope,
-                                "can't invoke method $name (declared in ${decl.className})"
-                            )
+                val decl = rec.declaringClass ?: cls
+                val caller = scope.currentClassCtx ?: if (scope.thisObj === this) objClass else null
+                if (!canAccessMember(rec.visibility, decl, caller))
+                    scope.raiseError(
+                        ObjIllegalAccessException(
+                            scope,
+                            "can't invoke method $name (declared in ${decl.className})"
                         )
+                    )
+                
+                if (rec.type == ObjRecord.Type.Property) {
+                    if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, decl)
+                } else if (rec.type == ObjRecord.Type.Fun) {
                     return rec.value.invoke(
                         instanceScope,
                         this,
                         args,
                         decl
                     )
-                } else if ((rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.Property) && !rec.isAbstract) {
+                } else if (rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.ConstructorField || rec.type == ObjRecord.Type.Argument) {
                     val resolved = readField(scope, name)
                     return resolved.value.invoke(scope, this, args, resolved.declaringClass)
                 }

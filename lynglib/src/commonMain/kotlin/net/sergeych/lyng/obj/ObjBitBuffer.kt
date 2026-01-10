@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ package net.sergeych.lyng.obj
 
 import net.sergeych.bintools.toDump
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.miniast.addPropertyDoc
+import net.sergeych.lyng.miniast.type
 import net.sergeych.lynon.BitArray
 
 class ObjBitBuffer(val bitArray: BitArray) : Obj() {
@@ -43,12 +45,20 @@ class ObjBitBuffer(val bitArray: BitArray) : Obj() {
                     thisAs<ObjBitBuffer>().bitArray.asUByteArray().toDump()
                 )
             }
-            addFn("size") {
-                thisAs<ObjBitBuffer>().bitArray.size.toObj()
-            }
-            addFn("sizeInBytes") {
-                ObjInt((thisAs<ObjBitBuffer>().bitArray.size + 7) shr 3)
-            }
+            addPropertyDoc(
+                name = "size",
+                doc = "Size of the bit buffer in bits.",
+                type = type("lyng.Int"),
+                moduleName = "lyng.stdlib",
+                getter = { thisAs<ObjBitBuffer>().bitArray.size.toObj() }
+            )
+            addPropertyDoc(
+                name = "sizeInBytes",
+                doc = "Size of the bit buffer in full bytes (rounded up).",
+                type = type("lyng.Int"),
+                moduleName = "lyng.stdlib",
+                getter = { ObjInt((thisAs<ObjBitBuffer>().bitArray.size + 7) shr 3) }
+            )
         }
     }
 }

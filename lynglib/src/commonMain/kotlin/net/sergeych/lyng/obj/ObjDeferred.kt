@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ package net.sergeych.lyng.obj
 import kotlinx.coroutines.Deferred
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.addPropertyDoc
 import net.sergeych.lyng.miniast.type
 
 open class ObjDeferred(val deferred: Deferred<Obj>): Obj() {
@@ -38,28 +39,30 @@ open class ObjDeferred(val deferred: Deferred<Obj>): Obj() {
                 returns = type("lyng.Any"),
                 moduleName = "lyng.stdlib"
             ) { thisAs<ObjDeferred>().deferred.await() }
-            addFnDoc(
+            addPropertyDoc(
                 name = "isCompleted",
                 doc = "Whether this deferred has completed (successfully or with an error).",
-                returns = type("lyng.Bool"),
-                moduleName = "lyng.stdlib"
-            ) { thisAs<ObjDeferred>().deferred.isCompleted.toObj() }
-            addFnDoc(
+                type = type("lyng.Bool"),
+                moduleName = "lyng.stdlib",
+                getter = { thisAs<ObjDeferred>().deferred.isCompleted.toObj() }
+            )
+            addPropertyDoc(
                 name = "isActive",
                 doc = "Whether this deferred is currently active (not completed and not cancelled).",
-                returns = type("lyng.Bool"),
-                moduleName = "lyng.stdlib"
-            ) {
-                val d = thisAs<ObjDeferred>().deferred
-                (d.isActive || (!d.isCompleted && !d.isCancelled)).toObj()
-            }
-            addFnDoc(
+                type = type("lyng.Bool"),
+                moduleName = "lyng.stdlib",
+                getter = {
+                    val d = thisAs<ObjDeferred>().deferred
+                    (d.isActive || (!d.isCompleted && !d.isCancelled)).toObj()
+                }
+            )
+            addPropertyDoc(
                 name = "isCancelled",
                 doc = "Whether this deferred was cancelled.",
-                returns = type("lyng.Bool"),
-                moduleName = "lyng.stdlib"
-            ) { thisAs<ObjDeferred>().deferred.isCancelled.toObj() }
-
+                type = type("lyng.Bool"),
+                moduleName = "lyng.stdlib",
+                getter = { thisAs<ObjDeferred>().deferred.isCancelled.toObj() }
+            )
         }
     }
 }

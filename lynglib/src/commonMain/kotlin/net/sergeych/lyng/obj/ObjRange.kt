@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ package net.sergeych.lyng.obj
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.miniast.TypeGenericDoc
 import net.sergeych.lyng.miniast.addFnDoc
+import net.sergeych.lyng.miniast.addPropertyDoc
 import net.sergeych.lyng.miniast.type
 
 class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Obj() {
@@ -174,54 +175,48 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
 
     companion object {
         val type = ObjClass("Range", ObjIterable).apply {
-            addFnDoc(
+            addPropertyDoc(
                 name = "start",
                 doc = "Start bound of the range or null if open.",
-                returns = type("lyng.Any", nullable = true),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjRange>().start ?: ObjNull
-            }
-            addFnDoc(
+                type = type("lyng.Any", nullable = true),
+                moduleName = "lyng.stdlib",
+                getter = { thisAs<ObjRange>().start ?: ObjNull }
+            )
+            addPropertyDoc(
                 name = "end",
                 doc = "End bound of the range or null if open.",
-                returns = type("lyng.Any", nullable = true),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjRange>().end ?: ObjNull
-            }
-            addFnDoc(
+                type = type("lyng.Any", nullable = true),
+                moduleName = "lyng.stdlib",
+                getter = { thisAs<ObjRange>().end ?: ObjNull }
+            )
+            addPropertyDoc(
                 name = "isOpen",
                 doc = "Whether the range is open on either side (no start or no end).",
-                returns = type("lyng.Bool"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjRange>().let { it.start == null || it.end == null }.toObj()
-            }
-            addFnDoc(
+                type = type("lyng.Bool"),
+                moduleName = "lyng.stdlib",
+                getter = { thisAs<ObjRange>().let { it.start == null || it.end == null }.toObj() }
+            )
+            addPropertyDoc(
                 name = "isIntRange",
                 doc = "True if both bounds are Int values.",
-                returns = type("lyng.Bool"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjRange>().isIntRange.toObj()
-            }
-            addFnDoc(
+                type = type("lyng.Bool"),
+                moduleName = "lyng.stdlib",
+                getter = { thisAs<ObjRange>().isIntRange.toObj() }
+            )
+            addPropertyDoc(
                 name = "isCharRange",
                 doc = "True if both bounds are Char values.",
-                returns = type("lyng.Bool"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjRange>().isCharRange.toObj()
-            }
-            addFnDoc(
+                type = type("lyng.Bool"),
+                moduleName = "lyng.stdlib",
+                getter = { thisAs<ObjRange>().isCharRange.toObj() }
+            )
+            addPropertyDoc(
                 name = "isEndInclusive",
                 doc = "Whether the end bound is inclusive.",
-                returns = type("lyng.Bool"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjRange>().isEndInclusive.toObj()
-            }
+                type = type("lyng.Bool"),
+                moduleName = "lyng.stdlib",
+                getter = { thisAs<ObjRange>().isEndInclusive.toObj() }
+            )
             addFnDoc(
                 name = "iterator",
                 doc = "Iterator over elements in this range (optimized for Int ranges).",

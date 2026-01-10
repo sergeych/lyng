@@ -26,3 +26,4 @@ debug.log
 /check_output.txt
 /compile_jvm_output.txt
 /compile_metadata_output.txt
+test_output*.txt

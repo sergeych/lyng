@@ -35,6 +35,8 @@ package net.sergeych.lyng.obj/*
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.miniast.addPropertyDoc
+import net.sergeych.lyng.miniast.type
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
@@ -76,8 +78,8 @@ class ObjEnumClass(val name: String) : ObjClass(name, EnumBase) {
             val name = requireOnlyArg<ObjString>()
             byName[name] ?: raiseSymbolNotFound("does not exists: enum ${className}.$name")
         }
-        addFn("name") { thisAs<ObjEnumEntry>().name }
-        addFn("ordinal") { thisAs<ObjEnumEntry>().ordinal }
+        addPropertyDoc("name", doc = "Entry name as string", type = type("lyng.String"), getter = { thisAs<ObjEnumEntry>().name })
+        addPropertyDoc("ordinal", doc = "Entry ordinal position", type = type("lyng.Int"), getter = { thisAs<ObjEnumEntry>().ordinal })
 
     }
 
