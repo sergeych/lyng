@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -54,6 +54,8 @@ class LyngSpellcheckingStrategy : SpellcheckingStrategy() {
     } catch (_: Throwable) { false }
 
     override fun getTokenizer(element: PsiElement): Tokenizer<*> {
+        if (element is com.intellij.psi.PsiFile) return EMPTY_TOKENIZER
+
         val hasGrazie = grazieInstalled()
         val hasGrazieApi = grazieApiAvailable()
         val settings = LyngFormatterSettings.getInstance(element.project)
@@ -63,27 +65,40 @@ class LyngSpellcheckingStrategy : SpellcheckingStrategy() {
         }
 
         val file = element.containingFile ?: return EMPTY_TOKENIZER
-        val index = LyngSpellIndex.getUpToDate(file) ?: run {
-            // Suspend legacy spellcheck until MiniAst-based index is ready
-            return EMPTY_TOKENIZER
-        }
-        val elRange = element.textRange ?: return EMPTY_TOKENIZER
-
-        fun overlaps(list: List<TextRange>) = list.any { it.intersects(elRange) }
+        val et = element.node?.elementType
+        val index = LyngSpellIndex.getUpToDate(file)
 
         // Decide responsibility per settings
         // If Grazie is present but its public API is not available (IC-243), do NOT delegate to it.
         val preferGrazie = hasGrazie && hasGrazieApi && settings.preferGrazieForCommentsAndLiterals
         val grazieIds = hasGrazie && hasGrazieApi && settings.grazieChecksIdentifiers
 
+        if (index == null) {
+            // Index not ready: fall back to Lexer-based token types.
+            // Identifiers are safe because LyngLexer separates keywords from identifiers.
+            if (et == net.sergeych.lyng.idea.highlight.LyngTokenTypes.IDENTIFIER) {
+                return if (grazieIds) EMPTY_TOKENIZER else IDENTIFIER_TOKENIZER
+            }
+            if (et == net.sergeych.lyng.idea.highlight.LyngTokenTypes.LINE_COMMENT || et == net.sergeych.lyng.idea.highlight.LyngTokenTypes.BLOCK_COMMENT) {
+                return if (preferGrazie) EMPTY_TOKENIZER else COMMENT_TEXT_TOKENIZER
+            }
+            if (et == net.sergeych.lyng.idea.highlight.LyngTokenTypes.STRING && settings.spellCheckStringLiterals) {
+                return if (preferGrazie) EMPTY_TOKENIZER else STRING_WITH_PRINTF_EXCLUDES
+            }
+            return EMPTY_TOKENIZER
+        }
+
+        val elRange = element.textRange ?: return EMPTY_TOKENIZER
+        fun overlaps(list: List<TextRange>) = list.any { it.intersects(elRange) }
+
         // Identifiers: only if range is within identifiers index and not delegated to Grazie
-        if (overlaps(index.identifiers) && !grazieIds) return IDENTIFIER_TOKENIZER
+        if (et == net.sergeych.lyng.idea.highlight.LyngTokenTypes.IDENTIFIER && overlaps(index.identifiers) && !grazieIds) return IDENTIFIER_TOKENIZER
 
         // Comments: only if not delegated to Grazie and overlapping indexed comments
-        if (!preferGrazie && overlaps(index.comments)) return COMMENT_TEXT_TOKENIZER
+        if ((et == net.sergeych.lyng.idea.highlight.LyngTokenTypes.LINE_COMMENT || et == net.sergeych.lyng.idea.highlight.LyngTokenTypes.BLOCK_COMMENT) && overlaps(index.comments) && !preferGrazie) return COMMENT_TEXT_TOKENIZER
 
         // Strings: only if not delegated to Grazie, literals checking enabled, and overlapping indexed strings
-        if (!preferGrazie && settings.spellCheckStringLiterals && overlaps(index.strings)) return STRING_WITH_PRINTF_EXCLUDES
+        if (et == net.sergeych.lyng.idea.highlight.LyngTokenTypes.STRING && settings.spellCheckStringLiterals && overlaps(index.strings) && !preferGrazie) return STRING_WITH_PRINTF_EXCLUDES
 
         return EMPTY_TOKENIZER
     }
@@ -93,7 +108,7 @@ class LyngSpellcheckingStrategy : SpellcheckingStrategy() {
     }
 
     private object IDENTIFIER_TOKENIZER : Tokenizer<PsiElement>() {
-        private val splitter = PlainTextSplitter.getInstance()
+        private val splitter = com.intellij.spellchecker.inspections.IdentifierSplitter.getInstance()
         override fun tokenize(element: PsiElement, consumer: TokenConsumer) {
             val text = element.text
             if (text.isNullOrEmpty()) return

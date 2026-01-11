@@ -16,8 +16,8 @@
   -->
 
 <idea-plugin>
-    <!-- Open-ended compatibility: 2024.3+ (build 243 and newer) -->
-    <idea-version since-build="243"/>
+    <!-- Open-ended compatibility: 2024.1+ (build 241 and newer) -->
+    <idea-version since-build="241"/>
     <id>net.sergeych.lyng.idea</id>
     <name>Lyng</name>
     <vendor email="real.sergeych@gmail.com">Sergey Chernov</vendor>

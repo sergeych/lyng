@@ -87,6 +87,7 @@ sealed interface MiniNamedDecl : MiniNode {
     // Start position of the declaration name identifier in source; end can be derived as start + name.length
     val nameStart: Pos
     val isExtern: Boolean
+    val isStatic: Boolean
 }
 
 sealed interface MiniDecl : MiniNamedDecl
@@ -114,7 +115,8 @@ data class MiniFunDecl(
     override val doc: MiniDoc?,
     override val nameStart: Pos,
     val receiver: MiniTypeRef? = null,
-    override val isExtern: Boolean = false
+    override val isExtern: Boolean = false,
+    override val isStatic: Boolean = false,
 ) : MiniDecl
 
 data class MiniValDecl(
@@ -126,7 +128,8 @@ data class MiniValDecl(
     override val doc: MiniDoc?,
     override val nameStart: Pos,
     val receiver: MiniTypeRef? = null,
-    override val isExtern: Boolean = false
+    override val isExtern: Boolean = false,
+    override val isStatic: Boolean = false,
 ) : MiniDecl
 
 data class MiniClassDecl(
@@ -141,6 +144,7 @@ data class MiniClassDecl(
     // Built-in extension: list of member declarations (functions and fields)
     val members: List<MiniMemberDecl> = emptyList(),
     override val isExtern: Boolean = false,
+    override val isStatic: Boolean = false,
     val isObject: Boolean = false
 ) : MiniDecl
 
@@ -150,7 +154,8 @@ data class MiniEnumDecl(
     val entries: List<String>,
     override val doc: MiniDoc?,
     override val nameStart: Pos,
-    override val isExtern: Boolean = false
+    override val isExtern: Boolean = false,
+    override val isStatic: Boolean = false,
 ) : MiniDecl
 
 data class MiniCtorField(
@@ -175,7 +180,7 @@ data class MiniIdentifier(
 
 // --- Class member declarations (for built-in/registry docs) ---
 sealed interface MiniMemberDecl : MiniNamedDecl {
-    val isStatic: Boolean
+    override val isStatic: Boolean
 }
 
 data class MiniMemberFunDecl(
@@ -319,7 +324,7 @@ class MiniAstBuilder : MiniAstSink {
                 returnType = attach.returnType,
                 doc = attach.doc,
                 nameStart = attach.nameStart,
-                isStatic = false, // TODO: track static if needed
+                isStatic = attach.isStatic,
                 isExtern = attach.isExtern,
                 body = attach.body
             )
@@ -359,7 +364,7 @@ class MiniAstBuilder : MiniAstSink {
                 initRange = attach.initRange,
                 doc = attach.doc,
                 nameStart = attach.nameStart,
-                isStatic = false, // TODO: track static if needed
+                isStatic = attach.isStatic,
                 isExtern = attach.isExtern
             )
             // Duplicates for vals are rare but possible if Compiler calls it twice

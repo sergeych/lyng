@@ -17,7 +17,7 @@
 
 plugins {
     kotlin("jvm")
-    id("org.jetbrains.intellij") version "1.17.3"
+    id("org.jetbrains.intellij") version "1.17.4"
 }
 
 group = "net.sergeych.lyng"
@@ -52,7 +52,7 @@ dependencies {
 intellij {
     type.set("IC")
     // Build against a modern baseline. Install range is controlled by since/until below.
-    version.set("2024.3.1")
+    version.set("2024.1.6")
     // We manage <idea-version> ourselves in plugin.xml to keep it open-ended (no upper cap)
     updateSinceUntilBuild.set(false)
     // Include only available bundled plugins for this IDE build

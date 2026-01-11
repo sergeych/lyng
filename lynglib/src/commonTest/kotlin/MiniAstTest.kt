@@ -420,6 +420,25 @@ class MiniAstTest {
     }
 
     @Test
+    fun verify_class_member_structure() = runTest {
+        val code = """
+            class A {
+                fun member() {}
+                val field = 1
+            }
+        """.trimIndent()
+        val (_, sink) = compileWithMini(code)
+        val mini = sink.build()!!
+        println("[DEBUG_LOG] Mini declarations: ${mini.declarations.map { it.name }}")
+        assertEquals(1, mini.declarations.size, "Should only have one top-level declaration (class A)")
+        val cls = mini.declarations[0] as MiniClassDecl
+        assertEquals("A", cls.name)
+        assertEquals(2, cls.members.size, "Class A should have 2 members (member() and field)")
+        assertTrue(cls.members.any { it.name == "member" && it is MiniMemberFunDecl })
+        assertTrue(cls.members.any { it.name == "field" && it is MiniMemberValDecl })
+    }
+
+    @Test
     fun inferTypeForValWithInference() = runTest {
         val code = """
             extern fun test(): List<Int>

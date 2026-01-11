@@ -131,7 +131,7 @@ private class Parser(fromPos: Pos) {
                     pos.advance()
                     val body = loadToEndOfLine()
                     // Include the leading '//' and do not trim; keep exact lexeme (excluding preceding codepoint)
-                    Token("//" + body, from, Token.Type.SINLGE_LINE_COMMENT)
+                    Token("//" + body, from, Token.Type.SINGLE_LINE_COMMENT)
                 }
 
                 '*' -> {

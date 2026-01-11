@@ -148,6 +148,8 @@ class ModuleDocsBuilder internal constructor(private val moduleName: String) {
             body = null,
             doc = md,
             nameStart = Pos.builtIn,
+            isExtern = false,
+            isStatic = false
         )
     }
 
@@ -167,6 +169,8 @@ class ModuleDocsBuilder internal constructor(private val moduleName: String) {
             initRange = null,
             doc = md,
             nameStart = Pos.builtIn,
+            isExtern = false,
+            isStatic = false
         )
     }
 

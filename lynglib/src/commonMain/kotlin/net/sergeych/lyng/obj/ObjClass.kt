@@ -106,6 +106,34 @@ open class ObjClass(
     val classId: Long = ClassIdGen.nextId()
     var layoutVersion: Int = 0
 
+    private val mangledNameCache = mutableMapOf<String, String>()
+    fun mangledName(name: String): String = mangledNameCache.getOrPut(name) { "$className::$name" }
+
+    /**
+     * Map of public member names to their effective storage keys in instanceScope.objects.
+     * This is pre-calculated to avoid MRO traversal and string concatenation during common access.
+     */
+    val publicMemberResolution: Map<String, String> by lazy {
+        val res = mutableMapOf<String, String>()
+        // Traverse MRO in REVERSED order so that child classes override parent classes in the map.
+        for (cls in mro.reversed()) {
+            if (cls.className == "Obj") continue
+            for ((name, rec) in cls.members) {
+                if (rec.visibility == Visibility.Public) {
+                    val key = if (rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.Delegated) cls.mangledName(name) else name
+                    res[name] = key
+                }
+            }
+            cls.classScope?.objects?.forEach { (name, rec) ->
+                if (rec.visibility == Visibility.Public && (rec.value is Statement || rec.type == ObjRecord.Type.Delegated)) {
+                    val key = if (rec.type == ObjRecord.Type.Delegated) cls.mangledName(name) else name
+                    res[name] = key
+                }
+            }
+        }
+        res
+    }
+
     val classNameObj by lazy { ObjString(className) }
 
     var constructorMeta: ArgsDeclaration? = null
@@ -242,6 +270,43 @@ open class ObjClass(
         return instance
     }
 
+    /** Pre-calculated template for instanceScope.objects. */
+    private val instanceObjectsTemplate: Map<String, ObjRecord> by lazy {
+        val res = mutableMapOf<String, ObjRecord>()
+        for (cls in mro) {
+            // 1) members-defined methods and fields
+            for ((k, v) in cls.members) {
+                if (!v.isAbstract && (v.value is Statement || v.type == ObjRecord.Type.Delegated || v.type == ObjRecord.Type.Field)) {
+                    val key = if (v.visibility == Visibility.Private || v.type == ObjRecord.Type.Field || v.type == ObjRecord.Type.Delegated) cls.mangledName(k) else k
+                    if (!res.containsKey(key)) {
+                        res[key] = v
+                    }
+                }
+            }
+            // 2) class-scope members registered during class-body execution
+            cls.classScope?.objects?.forEach { (k, rec) ->
+                // ONLY copy methods and delegated members from class scope to instance scope.
+                // Fields in class scope are static fields and must NOT be per-instance.
+                if (!rec.isAbstract && (rec.value is Statement || rec.type == ObjRecord.Type.Delegated)) {
+                    val key = if (rec.visibility == Visibility.Private || rec.type == ObjRecord.Type.Delegated) cls.mangledName(k) else k
+                    // if not already present, copy reference for dispatch
+                    if (!res.containsKey(key)) {
+                        res[key] = rec
+                    }
+                }
+            }
+        }
+        res
+    }
+
+    private val templateMethods: Map<String, ObjRecord> by lazy {
+        instanceObjectsTemplate.filter { it.value.type == ObjRecord.Type.Fun }
+    }
+
+    private val templateOthers: List<Pair<String, ObjRecord>> by lazy {
+        instanceObjectsTemplate.filter { it.value.type != ObjRecord.Type.Fun }.toList()
+    }
+
     /**
      * Create an instance of this class and initialize its [ObjInstance.instanceScope] with
      * methods. Does NOT run initializers or constructors.
@@ -257,28 +322,9 @@ open class ObjClass(
         // Expose instance methods (and other callable members) directly in the instance scope for fast lookup
         // This mirrors Obj.autoInstanceScope behavior for ad-hoc scopes and makes fb.method() resolution robust
         
-        for (cls in mro) {
-            // 1) members-defined methods and fields
-            for ((k, v) in cls.members) {
-                if (!v.isAbstract && (v.value is Statement || v.type == ObjRecord.Type.Delegated || v.type == ObjRecord.Type.Field)) {
-                    val key = if (v.visibility == Visibility.Private || v.type == ObjRecord.Type.Field || v.type == ObjRecord.Type.Delegated) "${cls.className}::$k" else k
-                    if (!instance.instanceScope.objects.containsKey(key)) {
-                        instance.instanceScope.objects[key] = if (v.type == ObjRecord.Type.Fun) v else v.copy()
-                    }
-                }
-            }
-            // 2) class-scope members registered during class-body execution
-            cls.classScope?.objects?.forEach { (k, rec) ->
-                // ONLY copy methods and delegated members from class scope to instance scope.
-                // Fields in class scope are static fields and must NOT be per-instance.
-                if (!rec.isAbstract && (rec.value is Statement || rec.type == ObjRecord.Type.Delegated)) {
-                    val key = if (rec.visibility == Visibility.Private || rec.type == ObjRecord.Type.Delegated) "${cls.className}::$k" else k
-                    // if not already present, copy reference for dispatch
-                    if (!instance.instanceScope.objects.containsKey(key)) {
-                        instance.instanceScope.objects[key] = if (rec.type == ObjRecord.Type.Fun) rec else rec.copy()
-                    }
-                }
-            }
+        instance.instanceScope.objects.putAll(templateMethods)
+        for (p in templateOthers) {
+            instance.instanceScope.objects[p.first] = p.second.copy()
         }
         return instance
     }
@@ -327,7 +373,7 @@ open class ObjClass(
             for (p in meta.params) {
                 val rec = instance.instanceScope.objects[p.name]
                 if (rec != null) {
-                    val mangled = "${c.className}::${p.name}"
+                    val mangled = c.mangledName(p.name)
                     // Always point the mangled name to the current record to keep writes consistent
                     // across re-bindings
                     instance.instanceScope.objects[mangled] = rec
@@ -361,7 +407,7 @@ open class ObjClass(
             for (p in meta.params) {
                 val rec = instance.instanceScope.objects[p.name]
                 if (rec != null) {
-                    val mangled = "${c.className}::${p.name}"
+                    val mangled = c.mangledName(p.name)
                     instance.instanceScope.objects[mangled] = rec
                 }
             }

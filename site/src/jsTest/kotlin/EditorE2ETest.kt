@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,17 +41,23 @@ class EditorE2ETest {
     // Programmatically type text into the textarea at current selection and dispatch an input event
     private fun typeText(ta: HTMLTextAreaElement, s: String) {
         for (ch in s) {
-            val start = ta.selectionStart ?: 0
-            val end = ta.selectionEnd ?: start
-            val before = ta.value.substring(0, start)
-            val after = ta.value.substring(end)
-            ta.value = before + ch + after
-            val newPos = start + 1
-            ta.selectionStart = newPos
-            ta.selectionEnd = newPos
-            // Fire input so EditorWithOverlay updates its state
-            val ev = js("new Event('input', {bubbles:true})")
-            ta.dispatchEvent(ev.unsafeCast<org.w3c.dom.events.Event>())
+            val key = ch.toString()
+            val ev = js("new KeyboardEvent('keydown', {key: key, bubbles: true, cancelable: true})")
+            val wasPrevented = !ta.dispatchEvent(ev.unsafeCast<org.w3c.dom.events.Event>())
+
+            if (!wasPrevented) {
+                val start = ta.selectionStart ?: 0
+                val end = ta.selectionEnd ?: start
+                val before = ta.value.substring(0, start)
+                val after = ta.value.substring(end)
+                ta.value = before + ch + after
+                val newPos = start + 1
+                ta.selectionStart = newPos
+                ta.selectionEnd = newPos
+                // Fire input so EditorWithOverlay updates its state
+                val inputEv = js("new Event('input', {bubbles:true})")
+                ta.dispatchEvent(inputEv.unsafeCast<org.w3c.dom.events.Event>())
+            }
         }
     }
 
@@ -243,10 +249,10 @@ class EditorE2ETest {
         typeText(ta, "4"); nextFrame()
         dispatchKey(ta, key = "Enter"); nextFrame(); nextFrame()
 
-        typeText(ta, "}"); nextFrame()
+        typeText(ta, "}"); nextFrame(); nextFrame(); nextFrame()
         dispatchKey(ta, key = "Enter"); nextFrame(); nextFrame()
 
-        typeText(ta, "5"); nextFrame(); nextFrame()
+        typeText(ta, "5"); nextFrame(); nextFrame(); nextFrame()
 
         val expected = (
             """

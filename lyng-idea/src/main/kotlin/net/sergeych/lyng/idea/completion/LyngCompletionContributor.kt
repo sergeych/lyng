@@ -167,7 +167,11 @@ class LyngCompletionContributor : CompletionContributor() {
                         .withIcon(AllIcons.Nodes.Field)
                         .let { b -> if (!ci.typeText.isNullOrBlank()) b.withTypeText(ci.typeText, true) else b }
                 }
-                emit(builder)
+                if (ci.priority != 0.0) {
+                    emit(PrioritizedLookupElement.withPriority(builder, ci.priority))
+                } else {
+                    emit(builder)
+                }
             }
             // In member context, ensure stdlib extension-like methods (e.g., String.re) are present
             if (memberDotPos != null) {
@@ -401,7 +405,7 @@ class LyngCompletionContributor : CompletionContributor() {
             }
             supplementPreferredBases(className)
 
-            fun emitGroup(map: LinkedHashMap<String, MutableList<MiniMemberDecl>>) {
+            fun emitGroup(map: LinkedHashMap<String, MutableList<MiniMemberDecl>>, groupPriority: Double) {
                 val keys = map.keys.sortedBy { it.lowercase() }
                 for (name in keys) {
                     val list = map[name] ?: continue
@@ -428,7 +432,11 @@ class LyngCompletionContributor : CompletionContributor() {
                                 .withTailText(tail, true)
                                 .withTypeText(ret, true)
                                 .withInsertHandler(ParenInsertHandler)
-                            emit(builder)
+                            if (groupPriority != 0.0) {
+                                emit(PrioritizedLookupElement.withPriority(builder, groupPriority))
+                            } else {
+                                emit(builder)
+                            }
                         }
                         is MiniMemberValDecl -> {
                             val icon = if (rep.mutable) AllIcons.Nodes.Variable else AllIcons.Nodes.Field
@@ -439,7 +447,11 @@ class LyngCompletionContributor : CompletionContributor() {
                             val builder = LookupElementBuilder.create(name)
                                 .withIcon(icon)
                                 .withTypeText(typeOf(chosen.type), true)
-                            emit(builder)
+                            if (groupPriority != 0.0) {
+                                emit(PrioritizedLookupElement.withPriority(builder, groupPriority))
+                            } else {
+                                emit(builder)
+                            }
                         }
                         is MiniInitDecl -> {}
                     }
@@ -447,8 +459,8 @@ class LyngCompletionContributor : CompletionContributor() {
             }
 
             // Emit what we have first
-            emitGroup(directMap)
-            emitGroup(inheritedMap)
+            emitGroup(directMap, 100.0)
+            emitGroup(inheritedMap, 0.0)
 
             // If suggestions are suspiciously sparse for known container classes,
             // try to conservatively supplement using a curated list resolved via docs registry.
@@ -509,7 +521,7 @@ class LyngCompletionContributor : CompletionContributor() {
                                     .withInsertHandler(ParenInsertHandler)
                             }
                         }
-                        emit(builder)
+                        emit(PrioritizedLookupElement.withPriority(builder, 50.0))
                         already.add(name)
                     } else {
                         // Synthetic fallback: method without detailed params/types to improve UX in absence of docs
@@ -523,7 +535,7 @@ class LyngCompletionContributor : CompletionContributor() {
                                 .withTailText("()", true)
                                 .withInsertHandler(ParenInsertHandler)
                         }
-                        emit(builder)
+                        emit(PrioritizedLookupElement.withPriority(builder, 50.0))
                         already.add(name)
                     }
                 }
@@ -576,7 +588,7 @@ class LyngCompletionContributor : CompletionContributor() {
                                     .withInsertHandler(ParenInsertHandler)
                             }
                         }
-                        emit(builder)
+                        emit(PrioritizedLookupElement.withPriority(builder, 50.0))
                         already.add(name)
                         continue
                     }
@@ -585,7 +597,7 @@ class LyngCompletionContributor : CompletionContributor() {
                         .withIcon(AllIcons.Nodes.Method)
                         .withTailText("()", true)
                         .withInsertHandler(ParenInsertHandler)
-                    emit(builder)
+                    emit(PrioritizedLookupElement.withPriority(builder, 50.0))
                     already.add(name)
                 }
             }

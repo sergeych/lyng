@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -238,7 +238,7 @@ class CompilerContext(val tokens: List<Token>) {
                     }
                 }
 
-                Token.Type.MULTILINE_COMMENT, Token.Type.SINLGE_LINE_COMMENT, Token.Type.NEWLINE -> {}
+                Token.Type.MULTILINE_COMMENT, Token.Type.SINGLE_LINE_COMMENT, Token.Type.NEWLINE -> {}
                 else -> {
                     restorePos(pos); return false
                 }
@@ -265,6 +265,6 @@ class CompilerContext(val tokens: List<Token>) {
     }
 
     companion object {
-        val wstokens = setOf(Token.Type.NEWLINE, Token.Type.MULTILINE_COMMENT, Token.Type.SINLGE_LINE_COMMENT)
+        val wstokens = setOf(Token.Type.NEWLINE, Token.Type.MULTILINE_COMMENT, Token.Type.SINGLE_LINE_COMMENT)
     }
 }

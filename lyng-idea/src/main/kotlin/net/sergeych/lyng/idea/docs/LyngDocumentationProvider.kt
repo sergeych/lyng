@@ -461,25 +461,39 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
     private fun ensureExternalDocsRegistered() { @Suppress("UNUSED_EXPRESSION") externalDocsLoaded }
 
     private fun tryLoadExternalDocs(): Boolean {
-        return try {
+        var anyLoaded = false
+        try {
             // Try known registrars; ignore failures if module is absent
             val cls = Class.forName("net.sergeych.lyngio.docs.FsBuiltinDocs")
             val m = cls.getMethod("ensure")
             m.invoke(null)
             log.info("[LYNG_DEBUG] QuickDoc: external docs loaded: net.sergeych.lyngio.docs.FsBuiltinDocs.ensure() OK")
-            true
-        } catch (_: Throwable) {
+            anyLoaded = true
+        } catch (_: Throwable) {}
+
+        try {
+            val cls = Class.forName("net.sergeych.lyngio.docs.ProcessBuiltinDocs")
+            val m = cls.getMethod("ensure")
+            m.invoke(null)
+            log.info("[LYNG_DEBUG] QuickDoc: external docs loaded: net.sergeych.lyngio.docs.ProcessBuiltinDocs.ensure() OK")
+            anyLoaded = true
+        } catch (_: Throwable) {}
+
+        if (!anyLoaded) {
             // Seed a minimal plugin-local fallback so Path docs still work without lyngio
             val seeded = try {
                 FsDocsFallback.ensureOnce()
+                ProcessDocsFallback.ensureOnce()
+                true
             } catch (_: Throwable) { false }
             if (seeded) {
-                log.info("[LYNG_DEBUG] QuickDoc: external docs NOT found; seeded plugin fallback for lyng.io.fs")
+                log.info("[LYNG_DEBUG] QuickDoc: external docs NOT found; seeded plugin fallbacks")
             } else {
                 log.info("[LYNG_DEBUG] QuickDoc: external docs NOT found (lyngio absent on classpath)")
             }
-            seeded
+            return seeded
         }
+        return true
     }
 
     override fun getCustomDocumentationElement(

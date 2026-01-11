@@ -33,6 +33,7 @@ data class CompletionItem(
     val kind: Kind,
     val tailText: String? = null,
     val typeText: String? = null,
+    val priority: Double = 0.0,
 )
 
 enum class Kind { Function, Class_, Enum, Value, Method, Field }
@@ -107,7 +108,7 @@ object CompletionEngineLight {
         val locals = DocLookupUtils.extractLocalsAt(text, caret)
         for (name in locals) {
             if (name.startsWith(prefix, true)) {
-                out.add(CompletionItem(name, Kind.Value))
+                out.add(CompletionItem(name, Kind.Value, priority = 150.0))
             }
         }
 
@@ -168,17 +169,17 @@ object CompletionEngineLight {
                 when (node) {
                     is MiniFunDecl -> {
                         for (p in node.params) {
-                            add(CompletionItem(p.name, Kind.Value, typeText = typeOf(p.type)))
+                            add(CompletionItem(p.name, Kind.Value, typeText = typeOf(p.type), priority = 200.0))
                         }
                     }
                     is MiniClassDecl -> {
                         // Propose constructor parameters (ctorFields)
                         for (p in node.ctorFields) {
-                            add(CompletionItem(p.name, if (p.mutable) Kind.Value else Kind.Field, typeText = typeOf(p.type)))
+                            add(CompletionItem(p.name, if (p.mutable) Kind.Value else Kind.Field, typeText = typeOf(p.type), priority = 200.0))
                         }
                         // Propose class-level fields
                         for (p in node.classFields) {
-                            add(CompletionItem(p.name, if (p.mutable) Kind.Value else Kind.Field, typeText = typeOf(p.type)))
+                            add(CompletionItem(p.name, if (p.mutable) Kind.Value else Kind.Field, typeText = typeOf(p.type), priority = 100.0))
                         }
                         // Process members (methods/fields)
                         for (m in node.members) {
@@ -189,10 +190,10 @@ object CompletionEngineLight {
                             when (m) {
                                 is MiniMemberFunDecl -> {
                                     val params = m.params.joinToString(", ") { it.name }
-                                    add(CompletionItem(m.name, Kind.Method, tailText = "(${params})", typeText = typeOf(m.returnType)))
+                                    add(CompletionItem(m.name, Kind.Method, tailText = "(${params})", typeText = typeOf(m.returnType), priority = 100.0))
                                 }
                                 is MiniMemberValDecl -> {
-                                    add(CompletionItem(m.name, if (m.mutable) Kind.Value else Kind.Field, typeText = typeOf(m.type)))
+                                    add(CompletionItem(m.name, if (m.mutable) Kind.Value else Kind.Field, typeText = typeOf(m.type), priority = 100.0))
                                 }
                                 is MiniInitDecl -> {}
                             }
@@ -200,7 +201,7 @@ object CompletionEngineLight {
                     }
                     is MiniMemberFunDecl -> {
                         for (p in node.params) {
-                            add(CompletionItem(p.name, Kind.Value, typeText = typeOf(p.type)))
+                            add(CompletionItem(p.name, Kind.Value, typeText = typeOf(p.type), priority = 200.0))
                         }
                     }
                     else -> {}
@@ -250,7 +251,7 @@ object CompletionEngineLight {
             "Array" -> listOf("Collection", "Iterable").forEach { if (visited.add(it)) addMembersOf(it, false) }
         }
 
-        fun emitGroup(map: LinkedHashMap<String, MutableList<MiniMemberDecl>>) {
+        fun emitGroup(map: LinkedHashMap<String, MutableList<MiniMemberDecl>>, groupPriority: Double) {
             for (name in map.keys.sortedBy { it.lowercase() }) {
                 val variants = map[name] ?: continue
                 // Prefer a method with a known return type; else any method; else first variant
@@ -265,7 +266,7 @@ object CompletionEngineLight {
                         val params = rep.params.joinToString(", ") { it.name }
                         val extra = variants.count { it is MiniMemberFunDecl } - 1
                         val ov = if (extra > 0) " (+$extra overloads)" else ""
-                        val ci = CompletionItem(name, Kind.Method, tailText = "(${params})$ov", typeText = typeOf(rep.returnType))
+                        val ci = CompletionItem(name, Kind.Method, tailText = "(${params})$ov", typeText = typeOf(rep.returnType), priority = groupPriority)
                         if (ci.name.startsWith(prefix, true)) out += ci
                     }
                     is MiniMemberValDecl -> {
@@ -273,7 +274,7 @@ object CompletionEngineLight {
                         val chosen = variants.asSequence()
                             .filterIsInstance<MiniMemberValDecl>()
                             .firstOrNull { it.type != null } ?: rep
-                        val ci = CompletionItem(name, Kind.Field, typeText = typeOf(chosen.type))
+                        val ci = CompletionItem(name, Kind.Field, typeText = typeOf(chosen.type), priority = groupPriority)
                         if (ci.name.startsWith(prefix, true)) out += ci
                     }
                     is MiniInitDecl -> {}
@@ -281,8 +282,8 @@ object CompletionEngineLight {
             }
         }
 
-        emitGroup(directMap)
-        emitGroup(inheritedMap)
+        emitGroup(directMap, 100.0)
+        emitGroup(inheritedMap, 0.0)
 
         // Supplement with extension members (both stdlib and local)
         run {
@@ -296,22 +297,22 @@ object CompletionEngineLight {
                     val ci = when (m) {
                         is MiniMemberFunDecl -> {
                             val params = m.params.joinToString(", ") { it.name }
-                            CompletionItem(name, Kind.Method, tailText = "(${params})", typeText = typeOf(m.returnType))
+                            CompletionItem(name, Kind.Method, tailText = "(${params})", typeText = typeOf(m.returnType), priority = 50.0)
                         }
                         is MiniFunDecl -> {
                             val params = m.params.joinToString(", ") { it.name }
-                            CompletionItem(name, Kind.Method, tailText = "(${params})", typeText = typeOf(m.returnType))
+                            CompletionItem(name, Kind.Method, tailText = "(${params})", typeText = typeOf(m.returnType), priority = 50.0)
                         }
-                        is MiniMemberValDecl -> CompletionItem(name, Kind.Field, typeText = typeOf(m.type))
-                        is MiniValDecl -> CompletionItem(name, Kind.Field, typeText = typeOf(m.type))
-                        else -> CompletionItem(name, Kind.Method, tailText = "()", typeText = null)
+                        is MiniMemberValDecl -> CompletionItem(name, Kind.Field, typeText = typeOf(m.type), priority = 50.0)
+                        is MiniValDecl -> CompletionItem(name, Kind.Field, typeText = typeOf(m.type), priority = 50.0)
+                        else -> CompletionItem(name, Kind.Method, tailText = "()", typeText = null, priority = 50.0)
                     }
                     if (ci.name.startsWith(prefix, true)) {
                         out += ci
                         already.add(name)
                     }
                 } else {
-                    val ci = CompletionItem(name, Kind.Method, tailText = "()", typeText = null)
+                    val ci = CompletionItem(name, Kind.Method, tailText = "()", typeText = null, priority = 50.0)
                     if (ci.name.startsWith(prefix, true)) {
                         out += ci
                         already.add(name)

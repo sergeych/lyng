@@ -98,6 +98,7 @@ fun applyEnter(text: String, selStart: Int, selEnd: Int, tabSize: Int): EditResu
     val lineStart = lineStartAt(text, start)
     val lineEnd = lineEndAt(text, start)
     val indent = countIndentSpaces(text, lineStart, lineEnd)
+    val lineTrimmed = text.substring(lineStart, lineEnd).trim()
 
     // Compute neighborhood characters early so rule precedence can use them
     val prevIdx = prevNonWs(text, start)
@@ -107,7 +108,7 @@ fun applyEnter(text: String, selStart: Int, selEnd: Int, tabSize: Int): EditResu
     val before = text.substring(0, start)
     val after = text.substring(start)
 
-    // 1) Between braces { | } -> two lines, inner indented
+    // Rule 4: Between braces on the same line {|}
     if (prevCh == '{' && nextCh == '}') {
         val innerIndent = indent + tabSize
         val insertion = "\n" + " ".repeat(innerIndent) + "\n" + " ".repeat(indent)
@@ -115,22 +116,51 @@ fun applyEnter(text: String, selStart: Int, selEnd: Int, tabSize: Int): EditResu
         val caret = start + 1 + innerIndent
         return EditResult(out, caret, caret)
     }
-    // 2) After '{'
+
+    // Rule 2: On a brace-only line '}'
+    if (lineTrimmed == "}") {
+        val newIndent = (indent - tabSize).coerceAtLeast(0)
+        val newCurrentLine = " ".repeat(newIndent) + "}"
+        val insertion = "\n" + " ".repeat(newIndent)
+        val out = safeSubstring(text, 0, lineStart) + newCurrentLine + insertion + safeSubstring(text, lineEnd, text.length)
+        val caret = lineStart + newCurrentLine.length + insertion.length
+        return EditResult(out, caret, caret)
+    }
+
+    // Rule 1: After '{'
     if (prevCh == '{') {
         val insertion = "\n" + " ".repeat(indent + tabSize)
         val out = before + insertion + after
         val caret = start + insertion.length
         return EditResult(out, caret, caret)
     }
-    // 3) Before '}'
-    if (nextCh == '}') {
-        val insertion = "\n" + " ".repeat(indent)
+
+    // Rule 3: End of a line before a brace-only next line
+    if (start == lineEnd && lineEnd < text.length) {
+        val nextLineStart = lineEnd + 1
+        val nextLineEnd = lineEndAt(text, nextLineStart)
+        val nextLineTrimmed = text.substring(nextLineStart, nextLineEnd).trim()
+        if (nextLineTrimmed == "}") {
+            val nextLineIndent = countIndentSpaces(text, nextLineStart, nextLineEnd)
+            val newNextLineIndent = (nextLineIndent - tabSize).coerceAtLeast(0)
+            val newNextLine = " ".repeat(newNextLineIndent) + "}"
+            val out = text.substring(0, nextLineStart) + newNextLine + text.substring(nextLineEnd)
+            val caret = nextLineStart + newNextLineIndent
+            return EditResult(out, caret, caret)
+        }
+    }
+
+    // Rule 5: After '}' with only spaces until end-of-line
+    val afterCaretOnLine = text.substring(start, lineEnd)
+    if (prevCh == '}' && afterCaretOnLine.trim().isEmpty()) {
+        val newIndent = (indent - tabSize).coerceAtLeast(0)
+        val insertion = "\n" + " ".repeat(newIndent)
         val out = before + insertion + after
         val caret = start + insertion.length
         return EditResult(out, caret, caret)
     }
 
-    // default keep same indent
+    // Rule 6: Default smart indent
     val insertion = "\n" + " ".repeat(indent)
     val out = before + insertion + after
     val caret = start + insertion.length

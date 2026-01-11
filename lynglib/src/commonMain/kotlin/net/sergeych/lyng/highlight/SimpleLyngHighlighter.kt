@@ -67,7 +67,7 @@ private fun kindOf(type: Type, value: String): HighlightKind? = when (type) {
     Type.REGEX -> HighlightKind.Regex
 
     // comments
-    Type.SINLGE_LINE_COMMENT, Type.MULTILINE_COMMENT -> HighlightKind.Comment
+    Type.SINGLE_LINE_COMMENT, Type.MULTILINE_COMMENT -> HighlightKind.Comment
 
     // punctuation
     Type.LPAREN, Type.RPAREN, Type.LBRACE, Type.RBRACE, Type.LBRACKET, Type.RBRACKET,

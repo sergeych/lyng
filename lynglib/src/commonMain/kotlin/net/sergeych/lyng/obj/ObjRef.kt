@@ -114,11 +114,39 @@ class UnaryOpRef(private val op: UnaryOp, private val a: ObjRef) : ObjRef {
         }
         return r.asReadonly
     }
+
+    override suspend fun evalValue(scope: Scope): Obj {
+        val v = a.evalValue(scope)
+        if (PerfFlags.PRIMITIVE_FASTOPS) {
+            val rFast: Obj? = when (op) {
+                UnaryOp.NOT -> if (v is ObjBool) if (!v.value) ObjTrue else ObjFalse else null
+                UnaryOp.NEGATE -> when (v) {
+                    is ObjInt -> ObjInt(-v.value)
+                    is ObjReal -> ObjReal(-v.value)
+                    else -> null
+                }
+                UnaryOp.BITNOT -> if (v is ObjInt) ObjInt(v.value.inv()) else null
+            }
+            if (rFast != null) {
+                if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.primitiveFastOpsHit++
+                return rFast
+            }
+        }
+        return when (op) {
+            UnaryOp.NOT -> v.logicalNot(scope)
+            UnaryOp.NEGATE -> v.negate(scope)
+            UnaryOp.BITNOT -> v.bitNot(scope)
+        }
+    }
 }
 
 /** R-value reference for binary operations. */
 class BinaryOpRef(private val op: BinOp, private val left: ObjRef, private val right: ObjRef) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
+        return evalValue(scope).asReadonly
+    }
+
+    override suspend fun evalValue(scope: Scope): Obj {
         val a = left.evalValue(scope)
         val b = right.evalValue(scope)
 
@@ -135,7 +163,7 @@ class BinaryOpRef(private val op: BinOp, private val left: ObjRef, private val r
                 }
                 if (r != null) {
                     if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.primitiveFastOpsHit++
-                    return r.asReadonly
+                    return r
                 }
             }
             // Fast integer ops when both operands are ObjInt
@@ -163,7 +191,7 @@ class BinaryOpRef(private val op: BinOp, private val left: ObjRef, private val r
                 }
                 if (r != null) {
                     if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.primitiveFastOpsHit++
-                    return r.asReadonly
+                    return r
                 }
             }
             // Fast string operations when both are strings
@@ -180,7 +208,7 @@ class BinaryOpRef(private val op: BinOp, private val left: ObjRef, private val r
                 }
                 if (r != null) {
                     if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.primitiveFastOpsHit++
-                    return r.asReadonly
+                    return r
                 }
             }
             // Fast char vs char comparisons
@@ -198,7 +226,7 @@ class BinaryOpRef(private val op: BinOp, private val left: ObjRef, private val r
                 }
                 if (r != null) {
                     if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.primitiveFastOpsHit++
-                    return r.asReadonly
+                    return r
                 }
             }
             // Fast concatenation for String with Int/Char on either side
@@ -206,19 +234,19 @@ class BinaryOpRef(private val op: BinOp, private val left: ObjRef, private val r
                 when {
                     a is ObjString && b is ObjInt -> {
                         if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.primitiveFastOpsHit++
-                        return ObjString(a.value + b.value.toString()).asReadonly
+                        return ObjString(a.value + b.value.toString())
                     }
                     a is ObjString && b is ObjChar -> {
                         if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.primitiveFastOpsHit++
-                        return ObjString(a.value + b.value).asReadonly
+                        return ObjString(a.value + b.value)
                     }
                     b is ObjString && a is ObjInt -> {
                         if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.primitiveFastOpsHit++
-                        return ObjString(a.value.toString() + b.value).asReadonly
+                        return ObjString(a.value.toString() + b.value)
                     }
                     b is ObjString && a is ObjChar -> {
                         if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.primitiveFastOpsHit++
-                        return ObjString(a.value.toString() + b.value).asReadonly
+                        return ObjString(a.value.toString() + b.value)
                     }
                 }
             }
@@ -242,7 +270,7 @@ class BinaryOpRef(private val op: BinOp, private val left: ObjRef, private val r
                 }
                 if (rNum != null) {
                     if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.primitiveFastOpsHit++
-                    return rNum.asReadonly
+                    return rNum
                 }
             }
         }
@@ -277,7 +305,7 @@ class BinaryOpRef(private val op: BinOp, private val left: ObjRef, private val r
             BinOp.SLASH -> a.div(scope, b)
             BinOp.PERCENT -> a.mod(scope, b)
         }
-        return r.asReadonly
+        return r
     }
 }
 
@@ -288,14 +316,21 @@ class ConditionalRef(
     private val ifFalse: ObjRef
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
+        return evalCondition(scope).get(scope)
+    }
+
+    override suspend fun evalValue(scope: Scope): Obj {
+        return evalCondition(scope).evalValue(scope)
+    }
+
+    private suspend fun evalCondition(scope: Scope): ObjRef {
         val condVal = condition.evalValue(scope)
         val condTrue = when (condVal) {
             is ObjBool -> condVal.value
             is ObjInt -> condVal.value != 0L
             else -> condVal.toBool()
         }
-        val branch = if (condTrue) ifTrue else ifFalse
-        return branch.get(scope)
+        return if (condTrue) ifTrue else ifFalse
     }
 }
 
@@ -309,7 +344,7 @@ class CastRef(
     override suspend fun get(scope: Scope): ObjRecord {
         val v0 = valueRef.evalValue(scope)
         val t = typeRef.evalValue(scope)
-        val target = (t as? ObjClass) ?: scope.raiseClassCastError("${'$'}t is not the class instance")
+        val target = (t as? ObjClass) ?: scope.raiseClassCastError("${t} is not the class instance")
         // unwrap qualified views
         val v = when (v0) {
             is ObjQualifiedView -> v0.instance
@@ -320,7 +355,26 @@ class CastRef(
             if (v is ObjInstance) ObjQualifiedView(v, target).asReadonly else v.asReadonly
         } else {
             if (isNullable) ObjNull.asReadonly else scope.raiseClassCastError(
-                "Cannot cast ${'$'}{(v as? Obj)?.objClass?.className ?: v::class.simpleName} to ${'$'}{target.className}"
+                "Cannot cast ${(v as? Obj)?.objClass?.className ?: v::class.simpleName} to ${target.className}"
+            )
+        }
+    }
+
+    override suspend fun evalValue(scope: Scope): Obj {
+        val v0 = valueRef.evalValue(scope)
+        val t = typeRef.evalValue(scope)
+        val target = (t as? ObjClass) ?: scope.raiseClassCastError("${t} is not the class instance")
+        // unwrap qualified views
+        val v = when (v0) {
+            is ObjQualifiedView -> v0.instance
+            else -> v0
+        }
+        return if (v.isInstanceOf(target)) {
+            // For instances, return a qualified view to enforce ancestor-start dispatch
+            if (v is ObjInstance) ObjQualifiedView(v, target) else v
+        } else {
+            if (isNullable) ObjNull else scope.raiseClassCastError(
+                "Cannot cast ${(v as? Obj)?.objClass?.className ?: v::class.simpleName} to ${target.className}"
             )
         }
     }
@@ -414,30 +468,38 @@ class ElvisRef(private val left: ObjRef, private val right: ObjRef) : ObjRef {
 /** Logical OR with short-circuit: a || b */
 class LogicalOrRef(private val left: ObjRef, private val right: ObjRef) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
+        return evalValue(scope).asReadonly
+    }
+
+    override suspend fun evalValue(scope: Scope): Obj {
         val a = left.evalValue(scope)
-        if ((a as? ObjBool)?.value == true) return ObjTrue.asReadonly
+        if ((a as? ObjBool)?.value == true) return ObjTrue
         val b = right.evalValue(scope)
         if (PerfFlags.PRIMITIVE_FASTOPS) {
             if (a is ObjBool && b is ObjBool) {
-                return if (a.value || b.value) ObjTrue.asReadonly else ObjFalse.asReadonly
+                return if (a.value || b.value) ObjTrue else ObjFalse
             }
         }
-        return a.logicalOr(scope, b).asReadonly
+        return a.logicalOr(scope, b)
     }
 }
 
 /** Logical AND with short-circuit: a && b */
 class LogicalAndRef(private val left: ObjRef, private val right: ObjRef) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
+        return evalValue(scope).asReadonly
+    }
+
+    override suspend fun evalValue(scope: Scope): Obj {
         val a = left.evalValue(scope)
-        if ((a as? ObjBool)?.value == false) return ObjFalse.asReadonly
+        if ((a as? ObjBool)?.value == false) return ObjFalse
         val b = right.evalValue(scope)
         if (PerfFlags.PRIMITIVE_FASTOPS) {
             if (a is ObjBool && b is ObjBool) {
-                return if (a.value && b.value) ObjTrue.asReadonly else ObjFalse.asReadonly
+                return if (a.value && b.value) ObjTrue else ObjFalse
             }
         }
-        return a.logicalAnd(scope, b).asReadonly
+        return a.logicalAnd(scope, b)
     }
 }
 
@@ -446,6 +508,7 @@ class LogicalAndRef(private val left: ObjRef, private val right: ObjRef) : ObjRe
  */
 class ConstRef(private val record: ObjRecord) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord = record
+    override suspend fun evalValue(scope: Scope): Obj = record.value
     // Expose constant value for compiler constant folding (pure, read-only)
     val constValue: Obj get() = record.value
 }
@@ -524,103 +587,126 @@ class FieldRef(
         val base = target.evalValue(scope)
         if (base == ObjNull && isOptional) return ObjNull.asMutable
         if (fieldPic) {
-            val (key, ver) = receiverKeyAndVersion(base)
-            rGetter1?.let { g -> if (key == rKey1 && ver == rVer1) {
-                if (picCounters) PerfStats.fieldPicHit++
-                noteReadHit()
-                val rec0 = g(base, scope)
-                if (base is ObjClass) {
-                    val idx0 = base.classScope?.getSlotIndexOf(name)
-                    if (idx0 != null) { tKey = key; tVer = ver; tFrameId = scope.frameId; tRecord = rec0 } else { tRecord = null }
-                } else { tRecord = null }
-                return rec0
-            } }
-            rGetter2?.let { g -> if (key == rKey2 && ver == rVer2) {
-                if (picCounters) PerfStats.fieldPicHit++
-                noteReadHit()
-                // move-to-front: promote 2→1
-                val tK = rKey2; val tV = rVer2; val tG = rGetter2
-                rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
-                rKey1 = tK; rVer1 = tV; rGetter1 = tG
-                val rec0 = g(base, scope)
-                if (base is ObjClass) {
-                    val idx0 = base.classScope?.getSlotIndexOf(name)
-                    if (idx0 != null) { tKey = key; tVer = ver; tFrameId = scope.frameId; tRecord = rec0 } else { tRecord = null }
-                } else { tRecord = null }
-                return rec0
-            } }
-            if (size4ReadsEnabled()) rGetter3?.let { g -> if (key == rKey3 && ver == rVer3) {
-                if (picCounters) PerfStats.fieldPicHit++
-                noteReadHit()
-                // move-to-front: promote 3→1
-                val tK = rKey3; val tV = rVer3; val tG = rGetter3
-                rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
-                rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
-                rKey1 = tK; rVer1 = tV; rGetter1 = tG
-                val rec0 = g(base, scope)
-                if (base is ObjClass) {
-                    val idx0 = base.classScope?.getSlotIndexOf(name)
-                    if (idx0 != null) { tKey = key; tVer = ver; tFrameId = scope.frameId; tRecord = rec0 } else { tRecord = null }
-                } else { tRecord = null }
-                return rec0
-            } }
-            if (size4ReadsEnabled()) rGetter4?.let { g -> if (key == rKey4 && ver == rVer4) {
-                if (picCounters) PerfStats.fieldPicHit++
-                noteReadHit()
-                // move-to-front: promote 4→1
-                val tK = rKey4; val tV = rVer4; val tG = rGetter4
-                rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
-                rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
-                rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
-                rKey1 = tK; rVer1 = tV; rGetter1 = tG
-                val rec0 = g(base, scope)
-                if (base is ObjClass) {
-                    val idx0 = base.classScope?.getSlotIndexOf(name)
-                    if (idx0 != null) { tKey = key; tVer = ver; tFrameId = scope.frameId; tRecord = rec0 } else { tRecord = null }
-                } else { tRecord = null }
-                return rec0
-            } }
-            // Slow path
-            if (picCounters) PerfStats.fieldPicMiss++
-            noteReadMiss()
-            val rec = try {
-                base.readField(scope, name)
-            } catch (e: ExecutionError) {
-                // Cache-after-miss negative entry: rethrow the same error quickly for this shape
-                rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
-                rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
-                rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
-                rKey1 = key; rVer1 = ver; rGetter1 = { _, sc -> sc.raiseError(e.message ?: "no such field: $name") }
-                throw e
-            }
-            // Install move-to-front with a handle-aware getter; honor PIC size flag
-            if (size4ReadsEnabled()) {
-                rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
-                rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
-            }
-            rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+            val key: Long
+            val ver: Int
             when (base) {
-                is ObjClass -> {
-                    val clsScope = base.classScope
-                    val capturedIdx = clsScope?.getSlotIndexOf(name)
-                    if (clsScope != null && capturedIdx != null) {
-                        rKey1 = key; rVer1 = ver; rGetter1 = { obj, sc ->
-                            val scope0 = (obj as ObjClass).classScope!!
-                            val r0 = scope0.getSlotRecord(capturedIdx)
-                            if (!r0.visibility.isPublic)
-                                sc.raiseError(ObjIllegalAccessException(sc, "can't access non-public field $name"))
-                            r0
+                is ObjInstance -> { key = base.objClass.classId; ver = base.objClass.layoutVersion }
+                is ObjClass -> { key = base.classId; ver = base.layoutVersion }
+                else -> { key = 0L; ver = -1 }
+            }
+            if (key != 0L) {
+                rGetter1?.let { g -> if (key == rKey1 && ver == rVer1) {
+                    if (picCounters) PerfStats.fieldPicHit++
+                    noteReadHit()
+                    val rec0 = g(base, scope)
+                    if (base is ObjClass) {
+                        val idx0 = base.classScope?.getSlotIndexOf(name)
+                        if (idx0 != null) { tKey = key; tVer = ver; tFrameId = scope.frameId; tRecord = rec0 } else { tRecord = null }
+                    } else { tRecord = null }
+                    return rec0
+                } }
+                rGetter2?.let { g -> if (key == rKey2 && ver == rVer2) {
+                    if (picCounters) PerfStats.fieldPicHit++
+                    noteReadHit()
+                    // move-to-front: promote 2→1
+                    val tK = rKey2; val tV = rVer2; val tG = rGetter2
+                    rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                    rKey1 = tK; rVer1 = tV; rGetter1 = tG
+                    val rec0 = g(base, scope)
+                    if (base is ObjClass) {
+                        val idx0 = base.classScope?.getSlotIndexOf(name)
+                        if (idx0 != null) { tKey = key; tVer = ver; tFrameId = scope.frameId; tRecord = rec0 } else { tRecord = null }
+                    } else { tRecord = null }
+                    return rec0
+                } }
+                if (size4ReadsEnabled()) rGetter3?.let { g -> if (key == rKey3 && ver == rVer3) {
+                    if (picCounters) PerfStats.fieldPicHit++
+                    noteReadHit()
+                    // move-to-front: promote 3→1
+                    val tK = rKey3; val tV = rVer3; val tG = rGetter3
+                    rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
+                    rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                    rKey1 = tK; rVer1 = tV; rGetter1 = tG
+                    val rec0 = g(base, scope)
+                    if (base is ObjClass) {
+                        val idx0 = base.classScope?.getSlotIndexOf(name)
+                        if (idx0 != null) { tKey = key; tVer = ver; tFrameId = scope.frameId; tRecord = rec0 } else { tRecord = null }
+                    } else { tRecord = null }
+                    return rec0
+                } }
+                if (size4ReadsEnabled()) rGetter4?.let { g -> if (key == rKey4 && ver == rVer4) {
+                    if (picCounters) PerfStats.fieldPicHit++
+                    noteReadHit()
+                    // move-to-front: promote 4→1
+                    val tK = rKey4; val tV = rVer4; val tG = rGetter4
+                    rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
+                    rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
+                    rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                    rKey1 = tK; rVer1 = tV; rGetter1 = tG
+                    val rec0 = g(base, scope)
+                    if (base is ObjClass) {
+                        val idx0 = base.classScope?.getSlotIndexOf(name)
+                        if (idx0 != null) { tKey = key; tVer = ver; tFrameId = scope.frameId; tRecord = rec0 } else { tRecord = null }
+                    } else { tRecord = null }
+                    return rec0
+                } }
+                // Slow path
+                if (picCounters) PerfStats.fieldPicMiss++
+                noteReadMiss()
+                val rec = try {
+                    base.readField(scope, name)
+                } catch (e: ExecutionError) {
+                    // Cache-after-miss negative entry: rethrow the same error quickly for this shape
+                    rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
+                    rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
+                    rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                    rKey1 = key; rVer1 = ver; rGetter1 = { _, sc -> sc.raiseError(e.message ?: "no such field: $name") }
+                    throw e
+                }
+                // Install move-to-front with a handle-aware getter; honor PIC size flag
+                if (size4ReadsEnabled()) {
+                    rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
+                    rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
+                }
+                rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                when (base) {
+                    is ObjClass -> {
+                        val clsScope = base.classScope
+                        val capturedIdx = clsScope?.getSlotIndexOf(name)
+                        if (clsScope != null && capturedIdx != null) {
+                            rKey1 = key; rVer1 = ver; rGetter1 = { obj, sc ->
+                                val scope0 = (obj as ObjClass).classScope!!
+                                val r0 = scope0.getSlotRecord(capturedIdx)
+                                if (!r0.visibility.isPublic)
+                                    sc.raiseError(ObjIllegalAccessException(sc, "can't access non-public field $name"))
+                                r0
+                            }
+                        } else {
+                            rKey1 = key; rVer1 = ver; rGetter1 = { obj, sc -> obj.readField(sc, name) }
                         }
-                    } else {
+                    }
+                    is ObjInstance -> {
+                        val cls = base.objClass
+                        val effectiveKey = cls.publicMemberResolution[name]
+                        if (effectiveKey != null) {
+                            rKey1 = key; rVer1 = ver; rGetter1 = { obj, sc ->
+                                if (obj is ObjInstance && obj.objClass === cls) {
+                                    val rec = obj.instanceScope.objects[effectiveKey]
+                                    if (rec != null && rec.type != ObjRecord.Type.Delegated) rec
+                                    else obj.readField(sc, name)
+                                } else obj.readField(sc, name)
+                            }
+                        } else {
+                            rKey1 = key; rVer1 = ver; rGetter1 = { obj, sc -> obj.readField(sc, name) }
+                        }
+                    }
+                    else -> {
+                        // For instances and other types, fall back to name-based lookup per access (slot index may differ per instance)
                         rKey1 = key; rVer1 = ver; rGetter1 = { obj, sc -> obj.readField(sc, name) }
                     }
                 }
-                else -> {
-                    // For instances and other types, fall back to name-based lookup per access (slot index may differ per instance)
-                    rKey1 = key; rVer1 = ver; rGetter1 = { obj, sc -> obj.readField(sc, name) }
-                }
+                return rec
             }
-            return rec
         }
         return base.readField(scope, name)
     }
@@ -635,9 +721,15 @@ class FieldRef(
         }
         // Read→write micro fast-path: reuse transient record captured by get()
         if (fieldPic) {
-            val (k, v) = receiverKeyAndVersion(base)
+            val key: Long
+            val ver: Int
+            when (base) {
+                is ObjInstance -> { key = base.objClass.classId; ver = base.objClass.layoutVersion }
+                is ObjClass -> { key = base.classId; ver = base.layoutVersion }
+                else -> { key = 0L; ver = -1 }
+            }
             val rec = tRecord
-            if (rec != null && tKey == k && tVer == v && tFrameId == scope.frameId) {
+            if (rec != null && tKey == key && tVer == ver && tFrameId == scope.frameId) {
                 // If it is a property, we must go through writeField (slow path for now)
                 // or handle it here.
                 if (rec.type != ObjRecord.Type.Property) {
@@ -649,76 +741,91 @@ class FieldRef(
                     return
                 }
             }
-        }
-        if (fieldPic) {
-            val (key, ver) = receiverKeyAndVersion(base)
-            wSetter1?.let { s -> if (key == wKey1 && ver == wVer1) {
-                if (picCounters) PerfStats.fieldPicSetHit++
-                noteWriteHit()
-                return s(base, scope, newValue)
-            } }
-            wSetter2?.let { s -> if (key == wKey2 && ver == wVer2) {
-                if (picCounters) PerfStats.fieldPicSetHit++
-                noteWriteHit()
-                // move-to-front: promote 2→1
-                val tK = wKey2; val tV = wVer2; val tS = wSetter2
+            if (key != 0L) {
+                wSetter1?.let { s -> if (key == wKey1 && ver == wVer1) {
+                    if (picCounters) PerfStats.fieldPicSetHit++
+                    noteWriteHit()
+                    return s(base, scope, newValue)
+                } }
+                wSetter2?.let { s -> if (key == wKey2 && ver == wVer2) {
+                    if (picCounters) PerfStats.fieldPicSetHit++
+                    noteWriteHit()
+                    // move-to-front: promote 2→1
+                    val tK = wKey2; val tV = wVer2; val tS = wSetter2
+                    wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
+                    wKey1 = tK; wVer1 = tV; wSetter1 = tS
+                    return s(base, scope, newValue)
+                } }
+                if (size4WritesEnabled()) wSetter3?.let { s -> if (key == wKey3 && ver == wVer3) {
+                    if (picCounters) PerfStats.fieldPicSetHit++
+                    noteWriteHit()
+                    // move-to-front: promote 3→1
+                    val tK = wKey3; val tV = wVer3; val tS = wSetter3
+                    wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
+                    wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
+                    wKey1 = tK; wVer1 = tV; wSetter1 = tS
+                    return s(base, scope, newValue)
+                } }
+                if (size4WritesEnabled()) wSetter4?.let { s -> if (key == wKey4 && ver == wVer4) {
+                    if (picCounters) PerfStats.fieldPicSetHit++
+                    noteWriteHit()
+                    // move-to-front: promote 4→1
+                    val tK = wKey4; val tV = wVer4; val tS = wSetter4
+                    wKey4 = wKey3; wVer4 = wVer3; wSetter4 = wSetter3
+                    wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
+                    wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
+                    wKey1 = tK; wVer1 = tV; wSetter1 = tS
+                    return s(base, scope, newValue)
+                } }
+                // Slow path
+                if (picCounters) PerfStats.fieldPicSetMiss++
+                noteWriteMiss()
+                base.writeField(scope, name, newValue)
+                // Install move-to-front with a handle-aware setter; honor PIC size flag
+                if (size4WritesEnabled()) {
+                    wKey4 = wKey3; wVer4 = wVer3; wSetter4 = wSetter3
+                    wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
+                }
                 wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
-                wKey1 = tK; wVer1 = tV; wSetter1 = tS
-                return s(base, scope, newValue)
-            } }
-            if (size4WritesEnabled()) wSetter3?.let { s -> if (key == wKey3 && ver == wVer3) {
-                if (picCounters) PerfStats.fieldPicSetHit++
-                noteWriteHit()
-                // move-to-front: promote 3→1
-                val tK = wKey3; val tV = wVer3; val tS = wSetter3
-                wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
-                wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
-                wKey1 = tK; wVer1 = tV; wSetter1 = tS
-                return s(base, scope, newValue)
-            } }
-            if (size4WritesEnabled()) wSetter4?.let { s -> if (key == wKey4 && ver == wVer4) {
-                if (picCounters) PerfStats.fieldPicSetHit++
-                noteWriteHit()
-                // move-to-front: promote 4→1
-                val tK = wKey4; val tV = wVer4; val tS = wSetter4
-                wKey4 = wKey3; wVer4 = wVer3; wSetter4 = wSetter3
-                wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
-                wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
-                wKey1 = tK; wVer1 = tV; wSetter1 = tS
-                return s(base, scope, newValue)
-            } }
-            // Slow path
-            if (picCounters) PerfStats.fieldPicSetMiss++
-            noteWriteMiss()
-            base.writeField(scope, name, newValue)
-            // Install move-to-front with a handle-aware setter; honor PIC size flag
-            if (size4WritesEnabled()) {
-                wKey4 = wKey3; wVer4 = wVer3; wSetter4 = wSetter3
-                wKey3 = wKey2; wVer3 = wVer2; wSetter3 = wSetter2
-            }
-            wKey2 = wKey1; wVer2 = wVer1; wSetter2 = wSetter1
-            when (base) {
-                is ObjClass -> {
-                    val clsScope = base.classScope
-                    val capturedIdx = clsScope?.getSlotIndexOf(name)
-                    if (clsScope != null && capturedIdx != null) {
-                        wKey1 = key; wVer1 = ver; wSetter1 = { obj, sc, v ->
-                            val scope0 = (obj as ObjClass).classScope!!
-                            val r0 = scope0.getSlotRecord(capturedIdx)
-                            if (!r0.isMutable)
-                                sc.raiseError(ObjIllegalAssignmentException(sc, "can't reassign val $name"))
-                            if (r0.value.assign(sc, v) == null) r0.value = v
+                when (base) {
+                    is ObjClass -> {
+                        val clsScope = base.classScope
+                        val capturedIdx = clsScope?.getSlotIndexOf(name)
+                        if (clsScope != null && capturedIdx != null) {
+                            wKey1 = key; wVer1 = ver; wSetter1 = { obj, sc, v ->
+                                val scope0 = (obj as ObjClass).classScope!!
+                                val r0 = scope0.getSlotRecord(capturedIdx)
+                                if (!r0.isMutable)
+                                    sc.raiseError(ObjIllegalAssignmentException(sc, "can't reassign val $name"))
+                                if (r0.value.assign(sc, v) == null) r0.value = v
+                            }
+                        } else {
+                            wKey1 = key; wVer1 = ver; wSetter1 = { obj, sc, v -> obj.writeField(sc, name, v) }
                         }
-                    } else {
+                    }
+                    is ObjInstance -> {
+                        val cls = base.objClass
+                        val effectiveKey = cls.publicMemberResolution[name]
+                        if (effectiveKey != null) {
+                            wKey1 = key; wVer1 = ver; wSetter1 = { obj, sc, nv ->
+                                if (obj is ObjInstance && obj.objClass === cls) {
+                                    val rec = obj.instanceScope.objects[effectiveKey]
+                                    if (rec != null && rec.effectiveWriteVisibility == Visibility.Public && rec.isMutable && rec.type == ObjRecord.Type.Field) {
+                                        if (rec.value.assign(sc, nv) == null) rec.value = nv
+                                    } else obj.writeField(sc, name, nv)
+                                } else obj.writeField(sc, name, nv)
+                            }
+                        } else {
+                            wKey1 = key; wVer1 = ver; wSetter1 = { obj, sc, v -> obj.writeField(sc, name, v) }
+                        }
+                    }
+                    else -> {
+                        // For instances and other types, fall back to generic write (instance slot indices may differ per instance)
                         wKey1 = key; wVer1 = ver; wSetter1 = { obj, sc, v -> obj.writeField(sc, name, v) }
                     }
                 }
-                else -> {
-                    // For instances and other types, fall back to generic write (instance slot indices may differ per instance)
-                    wKey1 = key; wVer1 = ver; wSetter1 = { obj, sc, v -> obj.writeField(sc, name, v) }
-                }
+                return
             }
-            return
         }
         base.writeField(scope, name, newValue)
     }
@@ -736,51 +843,48 @@ class FieldRef(
         val base = target.evalValue(scope)
         if (base == ObjNull && isOptional) return ObjNull
         if (fieldPic) {
-            val (key, ver) = receiverKeyAndVersion(base)
-            rGetter1?.let { g -> if (key == rKey1 && ver == rVer1) {
-                if (picCounters) PerfStats.fieldPicHit++
-                return g(base, scope).value
-            } }
-            rGetter2?.let { g -> if (key == rKey2 && ver == rVer2) {
-                if (picCounters) PerfStats.fieldPicHit++
-                val tK = rKey2; val tV = rVer2; val tG = rGetter2
-                rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
-                rKey1 = tK; rVer1 = tV; rGetter1 = tG
-                return g(base, scope).value
-            } }
-            if (size4ReadsEnabled()) rGetter3?.let { g -> if (key == rKey3 && ver == rVer3) {
-                if (picCounters) PerfStats.fieldPicHit++
-                val tK = rKey3; val tV = rVer3; val tG = rGetter3
-                rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
-                rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
-                rKey1 = tK; rVer1 = tV; rGetter1 = tG
-                return g(base, scope).value
-            } }
-            if (size4ReadsEnabled()) rGetter4?.let { g -> if (key == rKey4 && ver == rVer4) {
-                if (picCounters) PerfStats.fieldPicHit++
-                val tK = rKey4; val tV = rVer4; val tG = rGetter4
-                rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
-                rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
-                rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
-                rKey1 = tK; rVer1 = tV; rGetter1 = tG
-                return g(base, scope).value
-            } }
-            if (picCounters) PerfStats.fieldPicMiss++
-            val rec = base.readField(scope, name)
-            // install primary generic getter for this shape
+            val key: Long
+            val ver: Int
             when (base) {
-                is ObjClass -> {
-                    rKey1 = base.classId; rVer1 = base.layoutVersion; rGetter1 = { obj, sc -> obj.readField(sc, name) }
-                }
-                is ObjInstance -> {
-                    val cls = base.objClass
-                    rKey1 = cls.classId; rVer1 = cls.layoutVersion; rGetter1 = { obj, sc -> obj.readField(sc, name) }
-                }
-                else -> {
-                    rKey1 = 0L; rVer1 = -1; rGetter1 = null
-                }
+                is ObjInstance -> { key = base.objClass.classId; ver = base.objClass.layoutVersion }
+                is ObjClass -> { key = base.classId; ver = base.layoutVersion }
+                else -> { key = 0L; ver = -1 }
             }
-            return rec.value
+            if (key != 0L) {
+                rGetter1?.let { g -> if (key == rKey1 && ver == rVer1) {
+                    if (picCounters) PerfStats.fieldPicHit++
+                    return g(base, scope).value
+                } }
+                rGetter2?.let { g -> if (key == rKey2 && ver == rVer2) {
+                    if (picCounters) PerfStats.fieldPicHit++
+                    val tK = rKey2; val tV = rVer2; val tG = rGetter2
+                    rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                    rKey1 = tK; rVer1 = tV; rGetter1 = tG
+                    return g(base, scope).value
+                } }
+                if (size4ReadsEnabled()) rGetter3?.let { g -> if (key == rKey3 && ver == rVer3) {
+                    if (picCounters) PerfStats.fieldPicHit++
+                    val tK = rKey3; val tV = rVer3; val tG = rGetter3
+                    rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
+                    rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                    rKey1 = tK; rVer1 = tV; rGetter1 = tG
+                    return g(base, scope).value
+                } }
+                if (size4ReadsEnabled()) rGetter4?.let { g -> if (key == rKey4 && ver == rVer4) {
+                    if (picCounters) PerfStats.fieldPicHit++
+                    val tK = rKey4; val tV = rVer4; val tG = rGetter4
+                    rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
+                    rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
+                    rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
+                    rKey1 = tK; rVer1 = tV; rGetter1 = tG
+                    return g(base, scope).value
+                } }
+                if (picCounters) PerfStats.fieldPicMiss++
+                val rec = base.readField(scope, name)
+                // install primary generic getter for this shape
+                rKey1 = key; rVer1 = ver; rGetter1 = { obj, sc -> obj.readField(sc, name) }
+                return rec.value
+            }
         }
         return base.readField(scope, name).value
     }
@@ -815,6 +919,7 @@ class IndexRef(
         val base = target.evalValue(scope)
         if (base == ObjNull && isOptional) return ObjNull.asMutable
         val idx = index.evalValue(scope)
+        val picCounters = PerfFlags.PIC_DEBUG_COUNTERS
         if (PerfFlags.RVAL_FASTPATH) {
             // Primitive list index fast path: avoid virtual dispatch to getAt when shapes match
             if (base is ObjList && idx is ObjInt) {
@@ -834,25 +939,27 @@ class IndexRef(
             }
             if (PerfFlags.INDEX_PIC) {
                 // Polymorphic inline cache for other common shapes
-                val (key, ver) = when (base) {
-                    is ObjInstance -> base.objClass.classId to base.objClass.layoutVersion
-                    is ObjClass -> base.classId to base.layoutVersion
-                    else -> 0L to -1
+                val key: Long
+                val ver: Int
+                when (base) {
+                    is ObjInstance -> { key = base.objClass.classId; ver = base.objClass.layoutVersion }
+                    is ObjClass -> { key = base.classId; ver = base.layoutVersion }
+                    else -> { key = 0L; ver = -1 }
                 }
                 if (key != 0L) {
                     rGetter1?.let { g -> if (key == rKey1 && ver == rVer1) {
-                        if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.indexPicHit++
+                        if (picCounters) PerfStats.indexPicHit++
                         return g(base, scope, idx).asMutable
                     } }
                     rGetter2?.let { g -> if (key == rKey2 && ver == rVer2) {
-                        if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.indexPicHit++
+                        if (picCounters) PerfStats.indexPicHit++
                         val tk = rKey2; val tv = rVer2; val tg = rGetter2
                         rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
                         rKey1 = tk; rVer1 = tv; rGetter1 = tg
                         return g(base, scope, idx).asMutable
                     } }
                     if (PerfFlags.INDEX_PIC_SIZE_4) rGetter3?.let { g -> if (key == rKey3 && ver == rVer3) {
-                        if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.indexPicHit++
+                        if (picCounters) PerfStats.indexPicHit++
                         val tk = rKey3; val tv = rVer3; val tg = rGetter3
                         rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
                         rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
@@ -860,7 +967,7 @@ class IndexRef(
                         return g(base, scope, idx).asMutable
                     } }
                     if (PerfFlags.INDEX_PIC_SIZE_4) rGetter4?.let { g -> if (key == rKey4 && ver == rVer4) {
-                        if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.indexPicHit++
+                        if (picCounters) PerfStats.indexPicHit++
                         val tk = rKey4; val tv = rVer4; val tg = rGetter4
                         rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
                         rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
@@ -869,7 +976,7 @@ class IndexRef(
                         return g(base, scope, idx).asMutable
                     } }
                     // Miss: resolve and install generic handler
-                    if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.indexPicMiss++
+                    if (picCounters) PerfStats.indexPicMiss++
                     val v = base.getAt(scope, idx)
                     if (PerfFlags.INDEX_PIC_SIZE_4) {
                         rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
@@ -888,6 +995,7 @@ class IndexRef(
         val base = target.evalValue(scope)
         if (base == ObjNull && isOptional) return ObjNull
         val idx = index.evalValue(scope)
+        val picCounters = PerfFlags.PIC_DEBUG_COUNTERS
         if (PerfFlags.RVAL_FASTPATH) {
             // Fast list[int] path
             if (base is ObjList && idx is ObjInt) {
@@ -905,25 +1013,27 @@ class IndexRef(
             }
             if (PerfFlags.INDEX_PIC) {
                 // PIC path analogous to get(), but returning raw Obj
-                val (key, ver) = when (base) {
-                    is ObjInstance -> base.objClass.classId to base.objClass.layoutVersion
-                    is ObjClass -> base.classId to base.layoutVersion
-                    else -> 0L to -1
+                val key: Long
+                val ver: Int
+                when (base) {
+                    is ObjInstance -> { key = base.objClass.classId; ver = base.objClass.layoutVersion }
+                    is ObjClass -> { key = base.classId; ver = base.layoutVersion }
+                    else -> { key = 0L; ver = -1 }
                 }
                 if (key != 0L) {
                     rGetter1?.let { g -> if (key == rKey1 && ver == rVer1) {
-                        if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.indexPicHit++
+                        if (picCounters) PerfStats.indexPicHit++
                         return g(base, scope, idx)
                     } }
                     rGetter2?.let { g -> if (key == rKey2 && ver == rVer2) {
-                        if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.indexPicHit++
+                        if (picCounters) PerfStats.indexPicHit++
                         val tk = rKey2; val tv = rVer2; val tg = rGetter2
                         rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
                         rKey1 = tk; rVer1 = tv; rGetter1 = tg
                         return g(base, scope, idx)
                     } }
                     if (PerfFlags.INDEX_PIC_SIZE_4) rGetter3?.let { g -> if (key == rKey3 && ver == rVer3) {
-                        if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.indexPicHit++
+                        if (picCounters) PerfStats.indexPicHit++
                         val tk = rKey3; val tv = rVer3; val tg = rGetter3
                         rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
                         rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
@@ -931,7 +1041,7 @@ class IndexRef(
                         return g(base, scope, idx)
                     } }
                     if (PerfFlags.INDEX_PIC_SIZE_4) rGetter4?.let { g -> if (key == rKey4 && ver == rVer4) {
-                        if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.indexPicHit++
+                        if (picCounters) PerfStats.indexPicHit++
                         val tk = rKey4; val tv = rVer4; val tg = rGetter4
                         rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
                         rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
@@ -939,7 +1049,7 @@ class IndexRef(
                         rKey1 = tk; rVer1 = tv; rGetter1 = tg
                         return g(base, scope, idx)
                     } }
-                    if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.indexPicMiss++
+                    if (picCounters) PerfStats.indexPicMiss++
                     val v = base.getAt(scope, idx)
                     if (PerfFlags.INDEX_PIC_SIZE_4) {
                         rKey4 = rKey3; rVer4 = rVer3; rGetter4 = rGetter3
@@ -975,10 +1085,12 @@ class IndexRef(
         }
         if (PerfFlags.RVAL_FASTPATH && PerfFlags.INDEX_PIC) {
             // Polymorphic inline cache for index write
-            val (key, ver) = when (base) {
-                is ObjInstance -> base.objClass.classId to base.objClass.layoutVersion
-                is ObjClass -> base.classId to base.layoutVersion
-                else -> 0L to -1
+            val key: Long
+            val ver: Int
+            when (base) {
+                is ObjInstance -> { key = base.objClass.classId; ver = base.objClass.layoutVersion }
+                is ObjClass -> { key = base.classId; ver = base.layoutVersion }
+                else -> { key = 0L; ver = -1 }
             }
             if (key != 0L) {
                 wSetter1?.let { s -> if (key == wKey1 && ver == wVer1) { s(base, scope, idx, newValue); return } }
@@ -1130,104 +1242,154 @@ class MethodCallRef(
         val base = receiver.evalValue(scope)
         if (base == ObjNull && isOptional) return ObjNull.asReadonly
         val callArgs = args.toArguments(scope, tailBlock)
-        if (methodPic) {
-            val (key, ver) = receiverKeyAndVersion(base)
-            mInvoker1?.let { inv -> if (key == mKey1 && ver == mVer1) {
-                if (picCounters) PerfStats.methodPicHit++
-                noteMethodHit()
-                return inv(base, scope, callArgs).asReadonly
-            } }
-            mInvoker2?.let { inv -> if (key == mKey2 && ver == mVer2) {
-                if (picCounters) PerfStats.methodPicHit++
-                noteMethodHit()
-                return inv(base, scope, callArgs).asReadonly
-            } }
-            if (size4MethodsEnabled()) mInvoker3?.let { inv -> if (key == mKey3 && ver == mVer3) {
-                if (picCounters) PerfStats.methodPicHit++
-                noteMethodHit()
-                // move-to-front: promote 3→1
-                val tK = mKey3; val tV = mVer3; val tI = mInvoker3
-                mKey3 = mKey2; mVer3 = mVer2; mInvoker3 = mInvoker2
-                mKey2 = mKey1; mVer2 = mVer1; mInvoker2 = mInvoker1
-                mKey1 = tK; mVer1 = tV; mInvoker1 = tI
-                return inv(base, scope, callArgs).asReadonly
-            } }
-            if (size4MethodsEnabled()) mInvoker4?.let { inv -> if (key == mKey4 && ver == mVer4) {
-                if (picCounters) PerfStats.methodPicHit++
-                noteMethodHit()
-                // move-to-front: promote 4→1
-                val tK = mKey4; val tV = mVer4; val tI = mInvoker4
-                mKey4 = mKey3; mVer4 = mVer3; mInvoker4 = mInvoker3
-                mKey3 = mKey2; mVer3 = mVer2; mInvoker3 = mInvoker2
-                mKey2 = mKey1; mVer2 = mVer1; mInvoker2 = mInvoker1
-                mKey1 = tK; mVer1 = tV; mInvoker1 = tI
-                return inv(base, scope, callArgs).asReadonly
-            } }
-            // Slow path
-            if (picCounters) PerfStats.methodPicMiss++
-            noteMethodMiss()
-            val result = try {
-                base.invokeInstanceMethod(scope, name, callArgs)
-            } catch (e: ExecutionError) {
-                // Cache-after-miss negative entry for this shape
-                mKey4 = mKey3; mVer4 = mVer3; mInvoker4 = mInvoker3
-                mKey3 = mKey2; mVer3 = mVer2; mInvoker3 = mInvoker2
-                mKey2 = mKey1; mVer2 = mVer1; mInvoker2 = mInvoker1
-                mKey1 = key; mVer1 = ver; mInvoker1 = { _, sc, _ -> sc.raiseError(e.message ?: "method not found: $name") }
-                throw e
-            }
-            // Install move-to-front with a handle-aware invoker; honor PIC size flag
-            if (size4MethodsEnabled()) {
-                mKey4 = mKey3; mVer4 = mVer3; mInvoker4 = mInvoker3
-                mKey3 = mKey2; mVer3 = mVer2; mInvoker3 = mInvoker2
-            }
-            mKey2 = mKey1; mVer2 = mVer1; mInvoker2 = mInvoker1
-            when (base) {
-                is ObjInstance -> {
-                    // Prefer resolved class member to avoid per-call lookup on hit
-                    // BUT only if it's NOT a root object member (which can be shadowed by extensions)
-                    var hierarchyMember: ObjRecord? = null
-                    for (cls in base.objClass.mro) {
-                        if (cls.className == "Obj") break
-                        val rec = cls.members[name] ?: cls.classScope?.objects?.get(name)
-                        if (rec != null && !rec.isAbstract && rec.type != ObjRecord.Type.Field) {
-                            hierarchyMember = rec
-                            break
-                        }
-                    }
+        return performInvoke(scope, base, callArgs, methodPic, picCounters).asReadonly
+    }
 
-                    if (hierarchyMember != null) {
-                        val visibility = hierarchyMember.visibility
-                        val callable = hierarchyMember.value
-                        mKey1 = key; mVer1 = ver; mInvoker1 = { obj, sc, a ->
-                            val inst = obj as ObjInstance
-                            if (!visibility.isPublic && !canAccessMember(visibility, hierarchyMember.declaringClass ?: inst.objClass, sc.currentClassCtx))
-                                sc.raiseError(ObjIllegalAccessException(sc, "can't invoke non-public method $name"))
-                            callable.invoke(inst.instanceScope, inst, a)
-                        }
-                    } else {
-                        // Fallback to name-based lookup per call (handles extensions and root members)
-                        mKey1 = key; mVer1 = ver; mInvoker1 = { obj, sc, a -> obj.invokeInstanceMethod(sc, name, a) }
-                    }
-                }
-                is ObjClass -> {
-                    val clsScope = base.classScope
-                    val rec = clsScope?.get(name)
-                    if (rec != null) {
-                        val callable = rec.value
-                        mKey1 = key; mVer1 = ver; mInvoker1 = { obj, sc, a -> callable.invoke(sc, obj, a) }
-                    } else {
-                        mKey1 = key; mVer1 = ver; mInvoker1 = { obj, sc, a -> obj.invokeInstanceMethod(sc, name, a) }
-                    }
-                }
-                else -> {
-                    mKey1 = key; mVer1 = ver; mInvoker1 = { obj, sc, a -> obj.invokeInstanceMethod(sc, name, a) }
-                }
+    override suspend fun evalValue(scope: Scope): Obj {
+        val methodPic = PerfFlags.METHOD_PIC
+        val picCounters = PerfFlags.PIC_DEBUG_COUNTERS
+        val base = receiver.evalValue(scope)
+        if (base == ObjNull && isOptional) return ObjNull
+        val callArgs = args.toArguments(scope, tailBlock)
+        return performInvoke(scope, base, callArgs, methodPic, picCounters)
+    }
+
+    private suspend fun performInvoke(
+        scope: Scope,
+        base: Obj,
+        callArgs: Arguments,
+        methodPic: Boolean,
+        picCounters: Boolean
+    ): Obj {
+        if (methodPic) {
+            val key: Long
+            val ver: Int
+            when (base) {
+                is ObjInstance -> { key = base.objClass.classId; ver = base.objClass.layoutVersion }
+                is ObjClass -> { key = base.classId; ver = base.layoutVersion }
+                else -> { key = 0L; ver = -1 }
             }
-            return result.asReadonly
+            if (key != 0L) {
+                mInvoker1?.let { inv ->
+                    if (key == mKey1 && ver == mVer1) {
+                        if (picCounters) PerfStats.methodPicHit++
+                        noteMethodHit()
+                        return inv(base, scope, callArgs)
+                    }
+                }
+                mInvoker2?.let { inv ->
+                    if (key == mKey2 && ver == mVer2) {
+                        if (picCounters) PerfStats.methodPicHit++
+                        noteMethodHit()
+                        // move-to-front: promote 2→1
+                        val tK = mKey2; val tV = mVer2; val tI = mInvoker2
+                        mKey2 = mKey1; mVer2 = mVer1; mInvoker2 = mInvoker1
+                        mKey1 = tK; mVer1 = tV; mInvoker1 = tI
+                        return inv(base, scope, callArgs)
+                    }
+                }
+                if (size4MethodsEnabled()) mInvoker3?.let { inv ->
+                    if (key == mKey3 && ver == mVer3) {
+                        if (picCounters) PerfStats.methodPicHit++
+                        noteMethodHit()
+                        // move-to-front: promote 3→1
+                        val tK = mKey3; val tV = mVer3; val tI = mInvoker3
+                        mKey3 = mKey2; mVer3 = mVer2; mInvoker3 = mInvoker2
+                        mKey2 = mKey1; mVer2 = mVer1; mInvoker2 = mInvoker1
+                        mKey1 = tK; mVer1 = tV; mInvoker1 = tI
+                        return inv(base, scope, callArgs)
+                    }
+                }
+                if (size4MethodsEnabled()) mInvoker4?.let { inv ->
+                    if (key == mKey4 && ver == mVer4) {
+                        if (picCounters) PerfStats.methodPicHit++
+                        noteMethodHit()
+                        // move-to-front: promote 4→1
+                        val tK = mKey4; val tV = mVer4; val tI = mInvoker4
+                        mKey4 = mKey3; mVer4 = mVer3; mInvoker4 = mInvoker3
+                        mKey3 = mKey2; mVer3 = mVer2; mInvoker3 = mInvoker2
+                        mKey2 = mKey1; mVer2 = mVer1; mInvoker2 = mInvoker1
+                        mKey1 = tK; mVer1 = tV; mInvoker1 = tI
+                        return inv(base, scope, callArgs)
+                    }
+                }
+                // Slow path
+                if (picCounters) PerfStats.methodPicMiss++
+                noteMethodMiss()
+                val result = try {
+                    base.invokeInstanceMethod(scope, name, callArgs)
+                } catch (e: ExecutionError) {
+                    // Cache-after-miss negative entry for this shape
+                    mKey4 = mKey3; mVer4 = mVer3; mInvoker4 = mInvoker3
+                    mKey3 = mKey2; mVer3 = mVer2; mInvoker3 = mInvoker2
+                    mKey2 = mKey1; mVer2 = mVer1; mInvoker2 = mInvoker1
+                    mKey1 = key; mVer1 = ver; mInvoker1 = { _, sc, _ -> sc.raiseError(e.message ?: "method not found: $name") }
+                    throw e
+                }
+                // Install move-to-front with a handle-aware invoker; honor PIC size flag
+                if (size4MethodsEnabled()) {
+                    mKey4 = mKey3; mVer4 = mVer3; mInvoker4 = mInvoker3
+                    mKey3 = mKey2; mVer3 = mVer2; mInvoker3 = mInvoker2
+                }
+                mKey2 = mKey1; mVer2 = mVer1; mInvoker2 = mInvoker1
+                when (base) {
+                    is ObjInstance -> {
+                        // Prefer resolved class member to avoid per-call lookup on hit
+                        // BUT only if it's NOT a root object member (which can be shadowed by extensions)
+                        var hierarchyMember: ObjRecord? = null
+                        val cls0 = base.objClass
+                        val keyInScope = cls0.publicMemberResolution[name]
+                        if (keyInScope != null) {
+                            val rec = base.instanceScope.objects[keyInScope]
+                            if (rec != null && rec.type == ObjRecord.Type.Fun) {
+                                hierarchyMember = rec
+                            }
+                        }
+
+                        if (hierarchyMember == null) {
+                            for (cls in base.objClass.mro) {
+                                if (cls.className == "Obj") break
+                                val rec = cls.members[name] ?: cls.classScope?.objects?.get(name)
+                                if (rec != null && !rec.isAbstract && rec.type != ObjRecord.Type.Field) {
+                                    hierarchyMember = rec
+                                    break
+                                }
+                            }
+                        }
+
+                        if (hierarchyMember != null) {
+                            val visibility = hierarchyMember.visibility
+                            val callable = hierarchyMember.value
+                            val decl = hierarchyMember.declaringClass ?: base.objClass
+                            mKey1 = key; mVer1 = ver; mInvoker1 = { obj, sc, a ->
+                                val inst = obj as ObjInstance
+                                if (!visibility.isPublic && !canAccessMember(visibility, decl, sc.currentClassCtx))
+                                    sc.raiseError(ObjIllegalAccessException(sc, "can't invoke non-public method $name"))
+                                callable.invoke(inst.instanceScope, inst, a)
+                            }
+                        } else {
+                            // Fallback to name-based lookup per call (handles extensions and root members)
+                            mKey1 = key; mVer1 = ver; mInvoker1 = { obj, sc, a -> obj.invokeInstanceMethod(sc, name, a) }
+                        }
+                    }
+                    is ObjClass -> {
+                        val clsScope = base.classScope
+                        val rec = clsScope?.get(name)
+                        if (rec != null) {
+                            val callable = rec.value
+                            mKey1 = key; mVer1 = ver; mInvoker1 = { obj, sc, a -> callable.invoke(sc, obj, a) }
+                        } else {
+                            mKey1 = key; mVer1 = ver; mInvoker1 = { obj, sc, a -> obj.invokeInstanceMethod(sc, name, a) }
+                        }
+                    }
+                    else -> {
+                        mKey1 = key; mVer1 = ver; mInvoker1 = { obj, sc, a -> obj.invokeInstanceMethod(sc, name, a) }
+                    }
+                }
+                return result
+            }
         }
-        val result = base.invokeInstanceMethod(scope, name, callArgs)
-        return result.asReadonly
+        return base.invokeInstanceMethod(scope, name, callArgs)
     }
 
     private fun receiverKeyAndVersion(obj: Obj): Pair<Long, Int> = when (obj) {
@@ -1587,14 +1749,17 @@ class ListLiteralRef(private val entries: List<ListEntry>) : ObjRef {
     }
 
     override suspend fun get(scope: Scope): ObjRecord {
+        return evalValue(scope).asMutable
+    }
+
+    override suspend fun evalValue(scope: Scope): Obj {
         // Heuristic capacity hint: count element entries; spreads handled opportunistically
         val elemCount = entries.count { it is ListEntry.Element }
         val list = ArrayList<Obj>(elemCount)
         for (e in entries) {
             when (e) {
                 is ListEntry.Element -> {
-                    val v = if (PerfFlags.RVAL_FASTPATH) e.ref.evalValue(scope) else e.ref.evalValue(scope)
-                    list += v
+                    list += e.ref.evalValue(scope)
                 }
                 is ListEntry.Spread -> {
                     val elements = e.ref.evalValue(scope)
@@ -1609,7 +1774,7 @@ class ListLiteralRef(private val entries: List<ListEntry>) : ObjRef {
                 }
             }
         }
-        return ObjList(list).asMutable
+        return ObjList(list)
     }
 
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
@@ -1669,6 +1834,10 @@ sealed class MapLiteralEntry {
 
 class MapLiteralRef(private val entries: List<MapLiteralEntry>) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
+        return evalValue(scope).asReadonly
+    }
+
+    override suspend fun evalValue(scope: Scope): Obj {
         val result = ObjMap(mutableMapOf())
         for (e in entries) {
             when (e) {
@@ -1685,7 +1854,7 @@ class MapLiteralRef(private val entries: List<MapLiteralEntry>) : ObjRef {
                 }
             }
         }
-        return result.asReadonly
+        return result
     }
 }
 
@@ -1698,9 +1867,13 @@ class RangeRef(
     private val isEndInclusive: Boolean
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
+        return evalValue(scope).asReadonly
+    }
+
+    override suspend fun evalValue(scope: Scope): Obj {
         val l = left?.evalValue(scope) ?: ObjNull
         val r = right?.evalValue(scope) ?: ObjNull
-        return ObjRange(l, r, isEndInclusive = isEndInclusive).asReadonly
+        return ObjRange(l, r, isEndInclusive = isEndInclusive)
     }
 }
 
@@ -1711,11 +1884,15 @@ class AssignIfNullRef(
     private val atPos: Pos,
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
+        return evalValue(scope).asReadonly
+    }
+
+    override suspend fun evalValue(scope: Scope): Obj {
         val current = target.evalValue(scope)
-        if (current != ObjNull) return current.asReadonly
+        if (current != ObjNull) return current
         val newValue = value.evalValue(scope)
         target.setAt(atPos, scope, newValue)
-        return newValue.asReadonly
+        return newValue
     }
 }
 
@@ -1726,6 +1903,10 @@ class AssignRef(
     private val atPos: Pos,
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
+        return evalValue(scope).asReadonly
+    }
+
+    override suspend fun evalValue(scope: Scope): Obj {
         val v = value.evalValue(scope)
         // For properties, we should not call get() on target because it invokes the getter.
         // Instead, we call setAt directly.
@@ -1738,7 +1919,7 @@ class AssignRef(
                 target.setAt(atPos, scope, v)
             }
         }
-        return v.asReadonly
+        return v
     }
 }
 

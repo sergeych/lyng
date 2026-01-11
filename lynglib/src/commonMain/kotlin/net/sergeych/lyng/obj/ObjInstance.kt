@@ -34,6 +34,18 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
     override suspend fun readField(scope: Scope, name: String): ObjRecord {
         val caller = scope.currentClassCtx
         
+        // Fast path for public members when outside any class context
+        if (caller == null) {
+            objClass.publicMemberResolution[name]?.let { key ->
+                instanceScope.objects[key]?.let { rec ->
+                    // Directly return fields to bypass resolveRecord overhead
+                    if ((rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.ConstructorField) && !rec.isAbstract) 
+                        return rec
+                    return resolveRecord(scope, rec, name, rec.declaringClass)
+                }
+            }
+        }
+
         // 0. Private mangled of current class context
         caller?.let { c ->
             // Check for private methods/properties
@@ -43,7 +55,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 }
             }
             // Check for private fields (stored in instanceScope)
-            val mangled = "${c.className}::$name"
+            val mangled = c.mangledName(name)
             instanceScope.objects[mangled]?.let { rec ->
                 if (rec.visibility == Visibility.Private) {
                     return resolveRecord(scope, rec, name, c)
@@ -54,7 +66,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         // 1. MRO mangled storage
         for (cls in objClass.mro) {
             if (cls.className == "Obj") break
-            val mangled = "${cls.className}::$name"
+            val mangled = cls.mangledName(name)
             instanceScope.objects[mangled]?.let { rec ->
                 if ((scope.thisObj === this && caller != null) || canAccessMember(rec.visibility, cls, caller)) {
                     return resolveRecord(scope, rec, name, cls)
@@ -79,11 +91,11 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         if (obj.type.isArgument) return super.resolveRecord(scope, obj, name, decl)
         if (obj.type == ObjRecord.Type.Delegated) {
             val d = decl ?: obj.declaringClass
-            val storageName = "${d?.className}::$name"
+            val storageName = d?.mangledName(name) ?: name
             var del = instanceScope[storageName]?.delegate ?: obj.delegate
             if (del == null) {
                 for (c in objClass.mro) {
-                    del = instanceScope["${c.className}::$name"]?.delegate
+                    del = instanceScope[c.mangledName(name)]?.delegate
                     if (del != null) break
                 }
             }
@@ -97,7 +109,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         var targetRec = obj
         val d = decl ?: obj.declaringClass
         if (d != null) {
-            val mangled = "${d.className}::$name"
+            val mangled = d.mangledName(name)
             instanceScope.objects[mangled]?.let { 
                 targetRec = it 
             }
@@ -120,6 +132,24 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         willMutate(scope)
         val caller = scope.currentClassCtx
 
+        // Fast path for public members when outside any class context
+        if (caller == null) {
+            objClass.publicMemberResolution[name]?.let { key ->
+                instanceScope.objects[key]?.let { rec ->
+                    if (rec.effectiveWriteVisibility == Visibility.Public) {
+                        // Skip property/delegated overhead if it's a plain mutable field
+                        if (rec.type == ObjRecord.Type.Field && rec.isMutable && !rec.isAbstract) {
+                            if (rec.value.assign(scope, newValue) == null)
+                                rec.value = newValue
+                            return
+                        }
+                        updateRecord(scope, rec, name, newValue, rec.declaringClass)
+                        return
+                    }
+                }
+            }
+        }
+
         // 0. Private mangled of current class context
         caller?.let { c ->
             // Check for private methods/properties
@@ -130,7 +160,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 }
             }
             // Check for private fields (stored in instanceScope)
-            val mangled = "${c.className}::$name"
+            val mangled = c.mangledName(name)
             instanceScope.objects[mangled]?.let { rec ->
                 if (rec.visibility == Visibility.Private) {
                     updateRecord(scope, rec, name, newValue, c)
@@ -142,7 +172,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         // 1. MRO mangled storage
         for (cls in objClass.mro) {
             if (cls.className == "Obj") break
-            val mangled = "${cls.className}::$name"
+            val mangled = cls.mangledName(name)
             instanceScope.objects[mangled]?.let { rec ->
                 if ((scope.thisObj === this && caller != null) || canAccessMember(rec.effectiveWriteVisibility, cls, caller)) {
                     updateRecord(scope, rec, name, newValue, cls)
@@ -191,24 +221,42 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         scope: Scope, name: String, args: Arguments,
         onNotFoundResult: (suspend () -> Obj?)?
     ): Obj {
-        // 0. Prefer private member of current class context
-        scope.currentClassCtx?.let { caller ->
-            val mangled = "${caller.className}::$name"
-            instanceScope.objects[mangled]?.let { rec ->
-                if (rec.visibility == Visibility.Private && !rec.isAbstract) {
-                    if (rec.type == ObjRecord.Type.Property) {
-                        if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, caller)
-                    } else if (rec.type == ObjRecord.Type.Fun) {
-                        return rec.value.invoke(instanceScope, this, args, caller)
+        val caller = scope.currentClassCtx
+        
+        // Fast path for public members when outside any class context
+        if (caller == null) {
+            objClass.publicMemberResolution[name]?.let { key ->
+                instanceScope.objects[key]?.let { rec ->
+                    if (rec.visibility == Visibility.Public && !rec.isAbstract) {
+                        val decl = rec.declaringClass
+                        if (rec.type == ObjRecord.Type.Property) {
+                            if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, decl)
+                        } else if (rec.type == ObjRecord.Type.Fun) {
+                            return rec.value.invoke(instanceScope, this, args, decl)
+                        }
                     }
                 }
             }
-            caller.members[name]?.let { rec ->
+        }
+
+        // 0. Prefer private member of current class context
+        caller?.let { c ->
+            val mangled = c.mangledName(name)
+            instanceScope.objects[mangled]?.let { rec ->
                 if (rec.visibility == Visibility.Private && !rec.isAbstract) {
                     if (rec.type == ObjRecord.Type.Property) {
-                        if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, caller)
+                        if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, c)
                     } else if (rec.type == ObjRecord.Type.Fun) {
-                        return rec.value.invoke(instanceScope, this, args, caller)
+                        return rec.value.invoke(instanceScope, this, args, c)
+                    }
+                }
+            }
+            c.members[name]?.let { rec ->
+                if (rec.visibility == Visibility.Private && !rec.isAbstract) {
+                    if (rec.type == ObjRecord.Type.Property) {
+                        if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, c)
+                    } else if (rec.type == ObjRecord.Type.Fun) {
+                        return rec.value.invoke(instanceScope, this, args, c)
                     }
                 }
             }
@@ -220,7 +268,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             val rec = cls.members[name] ?: cls.classScope?.objects?.get(name)
             if (rec != null && !rec.isAbstract) {
                 if (rec.type == ObjRecord.Type.Delegated) {
-                    val storageName = "${cls.className}::$name"
+                    val storageName = cls.mangledName(name)
                     val del = instanceScope[storageName]?.delegate ?: rec.delegate
                     ?: scope.raiseError("Internal error: delegated member $name has no delegate (tried $storageName)")
                     
@@ -233,8 +281,8 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                     })
                 }
                 val decl = rec.declaringClass ?: cls
-                val caller = scope.currentClassCtx ?: if (scope.thisObj === this) objClass else null
-                if (!canAccessMember(rec.visibility, decl, caller))
+                val effectiveCaller = caller ?: if (scope.thisObj === this) objClass else null
+                if (!canAccessMember(rec.visibility, decl, effectiveCaller))
                     scope.raiseError(
                         ObjIllegalAccessException(
                             scope,

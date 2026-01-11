@@ -169,9 +169,9 @@ class Compiler(
             miniSink?.onScriptStart(start)
             do {
                 val t = cc.current()
-                if (t.type == Token.Type.NEWLINE || t.type == Token.Type.SINLGE_LINE_COMMENT || t.type == Token.Type.MULTILINE_COMMENT) {
+                if (t.type == Token.Type.NEWLINE || t.type == Token.Type.SINGLE_LINE_COMMENT || t.type == Token.Type.MULTILINE_COMMENT) {
                     when (t.type) {
-                        Token.Type.SINLGE_LINE_COMMENT, Token.Type.MULTILINE_COMMENT -> pushPendingDocToken(t)
+                        Token.Type.SINGLE_LINE_COMMENT, Token.Type.MULTILINE_COMMENT -> pushPendingDocToken(t)
                         Token.Type.NEWLINE -> {
                             // A standalone newline not immediately following a comment resets doc buffer
                             if (!prevWasComment) clearPendingDoc() else prevWasComment = false
@@ -316,7 +316,7 @@ class Compiler(
                 }
 
                 Token.Type.LABEL -> continue
-                Token.Type.SINLGE_LINE_COMMENT, Token.Type.MULTILINE_COMMENT -> continue
+                Token.Type.SINGLE_LINE_COMMENT, Token.Type.MULTILINE_COMMENT -> continue
 
                 Token.Type.NEWLINE -> continue
 
@@ -407,7 +407,7 @@ class Compiler(
             val t = cc.next()
             val startPos = t.pos
             when (t.type) {
-//                Token.Type.NEWLINE, Token.Type.SINLGE_LINE_COMMENT, Token.Type.MULTILINE_COMMENT-> {
+//                Token.Type.NEWLINE, Token.Type.SINGLE_LINE_COMMENT, Token.Type.MULTILINE_COMMENT-> {
 //                    continue
 //                }
 
@@ -606,7 +606,7 @@ class Compiler(
                     // to skip in parseExpression:
                     val current = cc.current()
                     val right =
-                        if (current.type == Token.Type.NEWLINE || current.type == Token.Type.SINLGE_LINE_COMMENT)
+                        if (current.type == Token.Type.NEWLINE || current.type == Token.Type.SINGLE_LINE_COMMENT)
                             null
                         else
                             parseExpression()
@@ -887,7 +887,7 @@ class Compiler(
                 }
 
                 Token.Type.NEWLINE -> {}
-                Token.Type.MULTILINE_COMMENT, Token.Type.SINLGE_LINE_COMMENT -> {}
+                Token.Type.MULTILINE_COMMENT, Token.Type.SINGLE_LINE_COMMENT -> {}
 
                 Token.Type.ID -> {
                     // visibility
@@ -2734,7 +2734,8 @@ class Compiler(
                 doc = declDocLocal,
                 nameStart = nameStartPos,
                 receiver = receiverMini,
-                isExtern = actualExtern
+                isExtern = actualExtern,
+                isStatic = isStatic
             )
             miniSink?.onFunDecl(node)
             pendingDeclDoc = null
@@ -2941,10 +2942,11 @@ class Compiler(
                 doc = declDocLocal,
                 nameStart = nameStartPos,
                 receiver = receiverMini,
-                isExtern = actualExtern
+                isExtern = actualExtern,
+                isStatic = isStatic
             )
-            miniSink?.onFunDecl(node)
             miniSink?.onExitFunction(cc.currentPos())
+            miniSink?.onFunDecl(node)
         }
     }
 
@@ -3002,7 +3004,8 @@ class Compiler(
                     initRange = null,
                     doc = pendingDeclDoc,
                     nameStart = namePos,
-                    isExtern = actualExtern
+                    isExtern = actualExtern,
+                    isStatic = false
                 )
                 miniSink?.onValDecl(node)
             }
@@ -3194,7 +3197,8 @@ class Compiler(
                 doc = pendingDeclDoc,
                 nameStart = nameStartPos,
                 receiver = receiverMini,
-                isExtern = actualExtern
+                isExtern = actualExtern,
+                isStatic = isStatic
             )
             miniSink?.onValDecl(node)
             pendingDeclDoc = null

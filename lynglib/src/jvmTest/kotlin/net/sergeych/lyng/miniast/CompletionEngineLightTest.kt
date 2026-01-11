@@ -1,3 +1,20 @@
+/*
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
 package net.sergeych.lyng.miniast
 
 import kotlinx.coroutines.runBlocking
@@ -460,6 +477,34 @@ class CompletionEngineLightTest {
         val items = CompletionEngineLight.completeAtMarkerSuspend(code)
         val ns = names(items)
         assertTrue(ns.contains("size"), "String member 'size' should be suggested for local x[0] inside set(), but got: $ns")
+    }
+
+    @Test
+    fun functionArgumentsInBody() = runBlocking {
+        val code = """
+            fun test(myArg1, myArg2) {
+                myA<caret>
+            }
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("myArg1"), "Function argument 'myArg1' should be proposed, but got: $ns")
+        assertTrue(ns.contains("myArg2"), "Function argument 'myArg2' should be proposed, but got: $ns")
+    }
+
+    @Test
+    fun methodArgumentsInBody() = runBlocking {
+        val code = """
+            class MyClass {
+                fun test(myArg1, myArg2) {
+                    myA<caret>
+                }
+            }
+        """.trimIndent()
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val ns = names(items)
+        assertTrue(ns.contains("myArg1"), "Method argument 'myArg1' should be proposed, but got: $ns")
+        assertTrue(ns.contains("myArg2"), "Method argument 'myArg2' should be proposed, but got: $ns")
     }
 
     @Test

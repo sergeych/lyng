@@ -22,7 +22,7 @@ data class Token(val value: String, val pos: Pos, val type: Type) {
         throw ScriptError(pos, text)
     }
 
-    val isComment: Boolean by lazy { type == Type.SINLGE_LINE_COMMENT || type == Type.MULTILINE_COMMENT }
+    val isComment: Boolean by lazy { type == Type.SINGLE_LINE_COMMENT || type == Type.MULTILINE_COMMENT }
 
     fun isId(text: String) =
         type == Type.ID && value == text
@@ -41,7 +41,7 @@ data class Token(val value: String, val pos: Pos, val type: Type) {
         SHUTTLE,
         AND, BITAND, OR, BITOR, BITXOR, NOT, BITNOT, DOT, ARROW, EQARROW, QUESTION, COLONCOLON,
         SHL, SHR,
-        SINLGE_LINE_COMMENT, MULTILINE_COMMENT,
+        SINGLE_LINE_COMMENT, MULTILINE_COMMENT,
         LABEL, ATLABEL, // label@ at@label
         // type-checking/casting
         AS, ASNULL, OBJECT,

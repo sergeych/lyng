@@ -32,6 +32,7 @@ group = "net.sergeych"
 version = "0.0.1-SNAPSHOT"
 
 kotlin {
+    jvmToolchain(17)
     jvm()
     androidTarget {
         publishLibraryVariants("release")
