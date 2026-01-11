@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,25 +18,25 @@
 package net.sergeych.lyng
 
 actual object PerfDefaults {
-    actual val LOCAL_SLOT_PIC: Boolean = false
-    actual val EMIT_FAST_LOCAL_REFS: Boolean = false
+    actual val LOCAL_SLOT_PIC: Boolean = true
+    actual val EMIT_FAST_LOCAL_REFS: Boolean = true
 
-    actual val ARG_BUILDER: Boolean = false
-    actual val SKIP_ARGS_ON_NULL_RECEIVER: Boolean = false
+    actual val ARG_BUILDER: Boolean = true
+    actual val SKIP_ARGS_ON_NULL_RECEIVER: Boolean = true
     actual val SCOPE_POOL: Boolean = false
 
-    actual val FIELD_PIC: Boolean = false
-    actual val METHOD_PIC: Boolean = false
-    actual val FIELD_PIC_SIZE_4: Boolean = false
-    actual val METHOD_PIC_SIZE_4: Boolean = false
-    actual val PIC_ADAPTIVE_2_TO_4: Boolean = false
-    actual val PIC_ADAPTIVE_METHODS_ONLY: Boolean = false
-    actual val PIC_ADAPTIVE_HEURISTIC: Boolean = false
+    actual val FIELD_PIC: Boolean = true
+    actual val METHOD_PIC: Boolean = true
+    actual val FIELD_PIC_SIZE_4: Boolean = true
+    actual val METHOD_PIC_SIZE_4: Boolean = true
+    actual val PIC_ADAPTIVE_2_TO_4: Boolean = true
+    actual val PIC_ADAPTIVE_METHODS_ONLY: Boolean = true
+    actual val PIC_ADAPTIVE_HEURISTIC: Boolean = true
 
     actual val PIC_DEBUG_COUNTERS: Boolean = false
 
-    actual val PRIMITIVE_FASTOPS: Boolean = false
-    actual val RVAL_FASTPATH: Boolean = false
+    actual val PRIMITIVE_FASTOPS: Boolean = true
+    actual val RVAL_FASTPATH: Boolean = true
 
     // Regex caching (JVM-first): enabled by default on JVM
     actual val REGEX_CACHE: Boolean = true

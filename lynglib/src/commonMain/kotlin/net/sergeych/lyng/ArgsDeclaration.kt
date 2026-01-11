@@ -51,6 +51,32 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
         defaultVisibility: Visibility = Visibility.Public,
         declaringClass: net.sergeych.lyng.obj.ObjClass? = scope.currentClassCtx
     ) {
+        // Fast path for simple positional-only calls with no ellipsis and no defaults
+        if (arguments.named.isEmpty() && !arguments.tailBlockMode) {
+            var hasComplex = false
+            for (p in params) {
+                if (p.isEllipsis || p.defaultValue != null) {
+                    hasComplex = true
+                    break
+                }
+            }
+            if (!hasComplex) {
+                if (arguments.list.size != params.size)
+                    scope.raiseIllegalArgument("expected ${params.size} arguments, got ${arguments.list.size}")
+                
+                for (i in params.indices) {
+                    val a = params[i]
+                    val value = arguments.list[i]
+                    scope.addItem(a.name, (a.accessType ?: defaultAccessType).isMutable,
+                        value.byValueCopy(),
+                        a.visibility ?: defaultVisibility,
+                        recordType = ObjRecord.Type.Argument,
+                        declaringClass = declaringClass)
+                }
+                return
+            }
+        }
+
         fun assign(a: Item, value: Obj) {
             scope.addItem(a.name, (a.accessType ?: defaultAccessType).isMutable,
                 value.byValueCopy(),

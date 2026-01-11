@@ -70,9 +70,8 @@ open class Scope(
 
     internal fun findExtension(receiverClass: ObjClass, name: String): ObjRecord? {
         var s: Scope? = this
-        val visited = HashSet<Long>(4)
-        while (s != null) {
-            if (!visited.add(s.frameId)) break
+        var hops = 0
+        while (s != null && hops++ < 1024) {
             // Proximity rule: check all extensions in the current scope before going to parent.
             // Priority within scope: more specific class in MRO wins.
             for (cls in receiverClass.mro) {
@@ -108,7 +107,7 @@ open class Scope(
      */
     internal fun tryGetLocalRecord(s: Scope, name: String, caller: net.sergeych.lyng.obj.ObjClass?): ObjRecord? {
         caller?.let { ctx ->
-            s.objects["${ctx.className}::$name"]?.let { rec ->
+            s.objects[ctx.mangledName(name)]?.let { rec ->
                 if (rec.visibility == Visibility.Private) return rec
             }
         }
@@ -116,7 +115,7 @@ open class Scope(
             if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, caller)) return rec
         }
         caller?.let { ctx ->
-            s.localBindings["${ctx.className}::$name"]?.let { rec ->
+            s.localBindings[ctx.mangledName(name)]?.let { rec ->
                 if (rec.visibility == Visibility.Private) return rec
             }
         }
@@ -132,11 +131,10 @@ open class Scope(
 
     internal fun chainLookupIgnoreClosure(name: String, followClosure: Boolean = false, caller: net.sergeych.lyng.obj.ObjClass? = null): ObjRecord? {
         var s: Scope? = this
-        // use frameId to detect unexpected structural cycles in the parent chain
-        val visited = HashSet<Long>(4)
+        // use hop counter to detect unexpected structural cycles in the parent chain
+        var hops = 0
         val effectiveCaller = caller ?: currentClassCtx
-        while (s != null) {
-            if (!visited.add(s.frameId)) return null
+        while (s != null && hops++ < 1024) {
             tryGetLocalRecord(s, name, effectiveCaller)?.let { return it }
             s = if (followClosure && s is ClosureScope) s.closureScope else s.parent
         }
@@ -155,9 +153,8 @@ open class Scope(
         tryGetLocalRecord(this, name, currentClassCtx)?.let { return it }
         // 2) walk parents for plain locals/bindings only
         var s = parent
-        val visited = HashSet<Long>(4)
-        while (s != null) {
-            if (!visited.add(s.frameId)) return null
+        var hops = 0
+        while (s != null && hops++ < 1024) {
             tryGetLocalRecord(s, name, currentClassCtx)?.let { return it }
             s = s.parent
         }
@@ -182,9 +179,8 @@ open class Scope(
      */
     internal fun chainLookupWithMembers(name: String, caller: net.sergeych.lyng.obj.ObjClass? = currentClassCtx, followClosure: Boolean = false): ObjRecord? {
         var s: Scope? = this
-        val visited = HashSet<Long>(4)
-        while (s != null) {
-            if (!visited.add(s.frameId)) return null
+        var hops = 0
+        while (s != null && hops++ < 1024) {
             tryGetLocalRecord(s, name, caller)?.let { return it }
             for (cls in s.thisObj.objClass.mro) {
                 s.extensions[cls]?.get(name)?.let { return it }
@@ -397,6 +393,20 @@ open class Scope(
     }
 
     /**
+     * Clear all references and maps to prevent memory leaks when pooled.
+     */
+    fun scrub() {
+        this.parent = null
+        this.skipScopeCreation = false
+        this.currentClassCtx = null
+        objects.clear()
+        slots.clear()
+        nameToSlot.clear()
+        localBindings.clear()
+        extensions.clear()
+    }
+
+    /**
      * Reset this scope instance so it can be safely reused as a fresh child frame.
      * Clears locals and slots, assigns new frameId, and sets parent/args/pos/thisObj.
      */
@@ -414,7 +424,6 @@ open class Scope(
         nameToSlot.clear()
         localBindings.clear()
         extensions.clear()
-        this.currentClassCtx = parent?.currentClassCtx
         // Now safe to validate and re-parent
         ensureNoCycle(parent)
         this.parent = parent
@@ -534,11 +543,15 @@ open class Scope(
             }
         }
         // Map to a slot for fast local access (ensure consistency)
-        val idx = getSlotIndexOf(name)
-        if (idx == null) {
+        if (nameToSlot.isEmpty()) {
             allocateSlotFor(name, rec)
         } else {
-            slots[idx] = rec
+            val idx = nameToSlot[name]
+            if (idx == null) {
+                allocateSlotFor(name, rec)
+            } else {
+                slots[idx] = rec
+            }
         }
         return rec
     }

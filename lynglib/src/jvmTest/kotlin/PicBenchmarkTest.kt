@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -88,20 +88,57 @@ class PicBenchmarkTest {
 
         // PIC OFF
         PerfFlags.METHOD_PIC = false
+        PerfFlags.SCOPE_POOL = false
         val scope1 = Scope()
         val t0 = System.nanoTime()
         val r1 = (scope1.eval(script) as ObjInt).value
         val t1 = System.nanoTime()
-        println("[DEBUG_LOG] [BENCH] Method PIC=OFF: ${(t1 - t0) / 1_000_000.0} ms")
+        println("[DEBUG_LOG] [BENCH] Method PIC=OFF, POOL=OFF: ${(t1 - t0) / 1_000_000.0} ms")
         assertEquals(iterations.toLong(), r1)
 
         // PIC ON
         PerfFlags.METHOD_PIC = true
+        PerfFlags.SCOPE_POOL = true
         val scope2 = Scope()
         val t2 = System.nanoTime()
         val r2 = (scope2.eval(script) as ObjInt).value
         val t3 = System.nanoTime()
-        println("[DEBUG_LOG] [BENCH] Method PIC=ON: ${(t3 - t2) / 1_000_000.0} ms")
+        println("[DEBUG_LOG] [BENCH] Method PIC=ON, POOL=ON: ${(t3 - t2) / 1_000_000.0} ms")
+        assertEquals(iterations.toLong(), r2)
+    }
+
+    @Test
+    fun benchmarkLoopScopePooling() = runBlocking {
+        val iterations = 500_000
+        val script = """
+            var x = 0
+            var i = 0
+            while(i < $iterations) {
+                if(true) {
+                   var y = 1
+                   x = x + y
+                }
+                i = i + 1
+            }
+            x
+        """.trimIndent()
+
+        // POOL OFF
+        PerfFlags.SCOPE_POOL = false
+        val scope1 = Scope()
+        val t0 = System.nanoTime()
+        val r1 = (scope1.eval(script) as ObjInt).value
+        val t1 = System.nanoTime()
+        println("[DEBUG_LOG] [BENCH] Loop Pool=OFF: ${(t1 - t0) / 1_000_000.0} ms")
+        assertEquals(iterations.toLong(), r1)
+
+        // POOL ON
+        PerfFlags.SCOPE_POOL = true
+        val scope2 = Scope()
+        val t2 = System.nanoTime()
+        val r2 = (scope2.eval(script) as ObjInt).value
+        val t3 = System.nanoTime()
+        println("[DEBUG_LOG] [BENCH] Loop Pool=ON: ${(t3 - t2) / 1_000_000.0} ms")
         assertEquals(iterations.toLong(), r2)
     }
 }
