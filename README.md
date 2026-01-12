@@ -140,6 +140,12 @@ Tips:
 - After a dot, globals are intentionally suppressed (e.g., `lines().Path` is not valid), only the receiver’s members are suggested.
 - If completion seems sparse, make sure related modules are imported (e.g., `import lyng.io.fs` so that `Path` and its methods are known).
 
+## AI Assistant Support
+
+To help AI assistants (like Cursor, Windsurf, or GitHub Copilot) understand Lyng with minimal effort, we provide a high-density language specification:
+
+- **[LYNG_AI_SPEC.md](LYNG_AI_SPEC.md)**: A concise guide for AI models to learn Lyng syntax, idioms, and core philosophy. We recommend pointing your AI tool to this file or including it in your project's custom instructions.
+
 ## Why? 
 
 Designed to add scripting to kotlin multiplatform application in easy and efficient way. This is attempt to achieve what Lua is for C/++.

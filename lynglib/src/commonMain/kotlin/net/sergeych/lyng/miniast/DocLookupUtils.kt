@@ -96,6 +96,19 @@ object DocLookupUtils {
         return null
     }
 
+    fun findEnclosingClass(mini: MiniScript, offset: Int): MiniClassDecl? {
+        val src = mini.range.start.source
+        return mini.declarations.filterIsInstance<MiniClassDecl>()
+            .filter {
+                val start = src.offsetOf(it.range.start)
+                val end = src.offsetOf(it.range.end)
+                offset in start..end
+            }
+            .minByOrNull {
+                src.offsetOf(it.range.end) - src.offsetOf(it.range.start)
+            }
+    }
+
     fun findTypeByRange(mini: MiniScript?, name: String, startOffset: Int, text: String? = null, imported: List<String>? = null): MiniTypeRef? {
         if (mini == null) return null
         val src = mini.range.start.source
@@ -233,10 +246,14 @@ object DocLookupUtils {
             val rep = list.first()
             val bases = LinkedHashSet<String>()
             val members = LinkedHashMap<String, MutableList<MiniMemberDecl>>()
+            val ctorFields = LinkedHashMap<String, MiniCtorField>()
+            val classFields = LinkedHashMap<String, MiniCtorField>()
             var doc: MiniDoc? = null
             for (c in list) {
                 bases.addAll(c.bases)
                 if (doc == null && c.doc != null && c.doc.raw.isNotBlank()) doc = c.doc
+                for (cf in c.ctorFields) ctorFields[cf.name] = cf
+                for (cf in c.classFields) classFields[cf.name] = cf
                 for (m in c.members) {
                     // Group by name to keep overloads together
                     members.getOrPut(m.name) { mutableListOf() }.add(m)
@@ -249,8 +266,8 @@ object DocLookupUtils {
                 name = rep.name,
                 bases = bases.toList(),
                 bodyRange = rep.bodyRange,
-                ctorFields = rep.ctorFields,
-                classFields = rep.classFields,
+                ctorFields = ctorFields.values.toList(),
+                classFields = classFields.values.toList(),
                 doc = doc,
                 nameStart = rep.nameStart,
                 members = mergedMembers
@@ -268,6 +285,18 @@ object DocLookupUtils {
         return result
     }
 
+    internal fun toMemberVal(cf: MiniCtorField): MiniMemberValDecl = MiniMemberValDecl(
+        range = MiniRange(cf.nameStart, cf.nameStart),
+        name = cf.name,
+        mutable = cf.mutable,
+        type = cf.type,
+        initRange = null,
+        doc = null,
+        nameStart = cf.nameStart,
+        isStatic = false,
+        isExtern = false
+    )
+
     fun resolveMemberWithInheritance(importedModules: List<String>, className: String, member: String, localMini: MiniScript? = null): Pair<String, MiniNamedDecl>? {
         val classes = aggregateClasses(importedModules, localMini)
         fun dfs(name: String, visited: MutableSet<String>): Pair<String, MiniNamedDecl>? {
@@ -275,6 +304,8 @@ object DocLookupUtils {
             val cls = classes[name]
             if (cls != null) {
                 cls.members.firstOrNull { it.name == member }?.let { return name to it }
+                cls.ctorFields.firstOrNull { it.name == member }?.let { return name to toMemberVal(it) }
+                cls.classFields.firstOrNull { it.name == member }?.let { return name to toMemberVal(it) }
                 for (baseName in cls.bases) {
                     dfs(baseName, visited)?.let { return it }
                 }
@@ -656,6 +687,12 @@ object DocLookupUtils {
             val identRange = wordRangeAt(text, i + 1)
             if (identRange != null) {
                 val ident = text.substring(identRange.first, identRange.second)
+
+                // 3a) Handle plain "this"
+                if (ident == "this" && mini != null) {
+                    findEnclosingClass(mini, identRange.first)?.let { return it.name }
+                }
+
                 // if it's "as Type", we want Type
                 var k = prevNonWs(text, identRange.first - 1)
                 if (k >= 1 && text[k] == 's' && text[k - 1] == 'a' && (k - 1 == 0 || !text[k - 2].isLetterOrDigit())) {

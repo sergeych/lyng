@@ -239,6 +239,9 @@ object CompletionEngineLight {
         fun addMembersOf(name: String, direct: Boolean) {
             val cls = classes[name] ?: return
             val target = if (direct) directMap else inheritedMap
+            for (cf in cls.ctorFields + cls.classFields) {
+                target.getOrPut(cf.name) { mutableListOf() }.add(DocLookupUtils.toMemberVal(cf))
+            }
             for (m in cls.members) target.getOrPut(m.name) { mutableListOf() }.add(m)
             for (b in cls.bases) if (visited.add(b)) addMembersOf(b, false)
         }
