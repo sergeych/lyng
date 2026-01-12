@@ -117,9 +117,18 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
         }
 
         // Parameters
-        mini.declarations.filterIsInstance<MiniFunDecl>().forEach { fn ->
-            if (fn.nameStart.source != source) return@forEach
-            fn.params.forEach { p -> putName(p.nameStart, p.name, LyngHighlighterColors.PARAMETER) }
+        fun addParams(params: List<MiniParam>) {
+            params.forEach { p ->
+                if (p.nameStart.source == source)
+                    putName(p.nameStart, p.name, LyngHighlighterColors.PARAMETER)
+            }
+        }
+        mini.declarations.forEach { d ->
+            when (d) {
+                is MiniFunDecl -> addParams(d.params)
+                is MiniClassDecl -> d.members.filterIsInstance<MiniMemberFunDecl>().forEach { addParams(it.params) }
+                else -> {}
+            }
         }
 
         // Type name segments (including generics base & args)
@@ -146,8 +155,8 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
                 null -> {}
             }
         }
-        mini.declarations.forEach { d ->
-            if (d.nameStart.source != source) return@forEach
+        fun addDeclTypeSegments(d: MiniDecl) {
+            if (d.nameStart.source != source) return
             when (d) {
                 is MiniFunDecl -> {
                     addTypeSegments(d.returnType)
@@ -161,10 +170,23 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
                 is MiniClassDecl -> {
                     d.ctorFields.forEach { addTypeSegments(it.type) }
                     d.classFields.forEach { addTypeSegments(it.type) }
+                    for (m in d.members) {
+                        when (m) {
+                            is MiniMemberFunDecl -> {
+                                addTypeSegments(m.returnType)
+                                m.params.forEach { addTypeSegments(it.type) }
+                            }
+                            is MiniMemberValDecl -> {
+                                addTypeSegments(m.type)
+                            }
+                            else -> {}
+                        }
+                    }
                 }
                 is MiniEnumDecl -> {}
             }
         }
+        mini.declarations.forEach { d -> addDeclTypeSegments(d) }
 
         ProgressManager.checkCanceled()
 
@@ -212,6 +234,13 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
                         if (d.mutable) LyngHighlighterColors.VARIABLE else LyngHighlighterColors.VALUE
 
                     is MiniFunDecl -> d.params.forEach { p -> nameRole[p.name] = LyngHighlighterColors.PARAMETER }
+                    is MiniClassDecl -> {
+                        d.members.forEach { m ->
+                            if (m is MiniMemberFunDecl) {
+                                m.params.forEach { p -> nameRole[p.name] = LyngHighlighterColors.PARAMETER }
+                            }
+                        }
+                    }
                     else -> {}
                 }
             }

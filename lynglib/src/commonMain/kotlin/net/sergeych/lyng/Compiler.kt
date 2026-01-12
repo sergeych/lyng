@@ -917,12 +917,13 @@ class Compiler(
                         else -> null
                     }
 
+                    // type information (semantic + mini syntax)
+                    val (typeInfo, miniType) = parseTypeDeclarationWithMini()
+
                     var defaultValue: Statement? = null
                     cc.ifNextIs(Token.Type.ASSIGN) {
                         defaultValue = parseExpression()
                     }
-                    // type information (semantic + mini syntax)
-                    val (typeInfo, miniType) = parseTypeDeclarationWithMini()
                     val isEllipsis = cc.skipTokenOfType(Token.Type.ELLIPSIS, isOptional = true)
                     result += ArgsDeclaration.Item(
                         t.value,

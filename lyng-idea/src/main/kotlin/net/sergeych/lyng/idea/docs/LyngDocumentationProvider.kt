@@ -561,16 +561,9 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         return sb.toString()
     }
 
-    private fun typeOf(t: MiniTypeRef?): String = when (t) {
-        is MiniTypeName -> ": ${t.segments.joinToString(".") { it.name }}${if (t.nullable) "?" else ""}"
-        is MiniGenericType -> {
-            val base = typeOf(t.base).removePrefix(": ")
-            val args = t.args.joinToString(", ") { typeOf(it).removePrefix(": ") }
-            ": ${base}<${args}>${if (t.nullable) "?" else ""}"
-        }
-        is MiniFunctionType -> ": (..) -> ..${if (t.nullable) "?" else ""}"
-        is MiniTypeVar -> ": ${t.name}${if (t.nullable) "?" else ""}"
-        null -> ": Object?"
+    private fun typeOf(t: MiniTypeRef?): String {
+        val s = DocLookupUtils.typeOf(t)
+        return if (s.isEmpty()) (if (t == null) ": Object?" else "") else ": $s"
     }
 
     private fun signatureOf(fn: MiniFunDecl): String {

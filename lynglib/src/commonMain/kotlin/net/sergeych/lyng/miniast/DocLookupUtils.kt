@@ -78,6 +78,11 @@ object DocLookupUtils {
             }
 
             for (m in members) {
+                if (m is MiniMemberFunDecl) {
+                    for (p in m.params) {
+                        if (matches(p.nameStart, p.name.length)) return p.name to "Parameter"
+                    }
+                }
                 if (matches(m.nameStart, m.name.length)) {
                     val kind = when (m) {
                         is MiniMemberFunDecl -> "Function"
@@ -113,12 +118,18 @@ object DocLookupUtils {
 
             if (d is MiniClassDecl) {
                 for (m in d.members) {
+                    if (m is MiniMemberFunDecl) {
+                        for (p in m.params) {
+                            if (p.name == name && matches(p.nameStart, p.name.length)) return p.type
+                        }
+                    }
                     if (m.name == name && matches(m.nameStart, m.name.length)) {
                         return when (m) {
                             is MiniMemberFunDecl -> m.returnType
                             is MiniMemberValDecl -> m.type ?: if (text != null && imported != null) {
                                 inferTypeRefFromInitRange(m.initRange, m.nameStart, text, imported, mini)
                             } else null
+
                             else -> null
                         }
                     }
@@ -268,11 +279,20 @@ object DocLookupUtils {
                     dfs(baseName, visited)?.let { return it }
                 }
             }
-            // Check for local extensions in this class or bases
+            // 1) local extensions in this class or bases
             localMini?.declarations?.firstOrNull { d ->
                 (d is MiniFunDecl && d.receiver != null && simpleClassNameOf(d.receiver) == name && d.name == member) ||
-                (d is MiniValDecl && d.receiver != null && simpleClassNameOf(d.receiver) == name && d.name == member)
-            }?.let { return name to it }
+                        (d is MiniValDecl && d.receiver != null && simpleClassNameOf(d.receiver) == name && d.name == member)
+            }?.let { return name to it as MiniNamedDecl }
+
+            // 2) built-in extensions from BuiltinDocRegistry
+            for (mod in importedModules) {
+                val decls = BuiltinDocRegistry.docsForModule(mod)
+                decls.firstOrNull { d ->
+                    (d is MiniFunDecl && d.receiver != null && simpleClassNameOf(d.receiver) == name && d.name == member) ||
+                            (d is MiniValDecl && d.receiver != null && simpleClassNameOf(d.receiver) == name && d.name == member)
+                }?.let { return name to it as MiniNamedDecl }
+            }
 
             return null
         }
@@ -968,6 +988,17 @@ object DocLookupUtils {
         is MiniGenericType -> simpleClassNameOf(t.base)
         is MiniFunctionType -> null
         is MiniTypeVar -> null
+    }
+
+    fun typeOf(t: MiniTypeRef?): String = when (t) {
+        is MiniTypeName -> t.segments.joinToString(".") { it.name } + (if (t.nullable) "?" else "")
+        is MiniGenericType -> typeOf(t.base) + "<" + t.args.joinToString(", ") { typeOf(it) } + ">" + (if (t.nullable) "?" else "")
+        is MiniFunctionType -> {
+            val r = t.receiver?.let { typeOf(it) + "." } ?: ""
+            r + "(" + t.params.joinToString(", ") { typeOf(it) } + ") -> " + typeOf(t.returnType) + (if (t.nullable) "?" else "")
+        }
+        is MiniTypeVar -> t.name + (if (t.nullable) "?" else "")
+        null -> ""
     }
 
     fun findDotLeft(text: String, offset: Int): Int? {

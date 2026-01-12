@@ -572,14 +572,20 @@ private fun buildStdlibDocs(): List<MiniDecl> {
     mod.classDoc(name = "Iterable", doc = StdlibInlineDocIndex.classDoc("Iterable") ?: "Helper operations for iterable collections.", bases = listOf(type("Obj"))) {
         fun md(name: String, fallback: String) = StdlibInlineDocIndex.methodDoc("Iterable", name) ?: fallback
         method(name = "filter", doc = md("filter", "Filter elements by predicate."), params = listOf(ParamDoc("predicate")), returns = type("lyng.Iterable"))
+        method(name = "filterFlow", doc = md("filterFlow", "Filter elements by predicate and return a Flow."), params = listOf(ParamDoc("predicate")), returns = type("lyng.Flow"))
+        method(name = "filterNotNull", doc = md("filterNotNull", "Filter non-null elements."), returns = type("lyng.List"))
         method(name = "drop", doc = md("drop", "Skip the first N elements."), params = listOf(ParamDoc("n", type("lyng.Int"))), returns = type("lyng.Iterable"))
-        method(name = "first", doc = md("first", "Return the first element or throw if empty."))
-        method(name = "last", doc = md("last", "Return the last element or throw if empty."))
+        field(name = "first", doc = md("first", "Return the first element or throw if empty."))
+        field(name = "last", doc = md("last", "Return the last element or throw if empty."))
+        method(name = "findFirst", doc = md("findFirst", "Return the first matching element or throw."), params = listOf(ParamDoc("predicate")))
+        method(name = "findFirstOrNull", doc = md("findFirstOrNull", "Return the first matching element or null."), params = listOf(ParamDoc("predicate")))
         method(name = "dropLast", doc = md("dropLast", "Drop the last N elements."), params = listOf(ParamDoc("n", type("lyng.Int"))), returns = type("lyng.Iterable"))
         method(name = "takeLast", doc = md("takeLast", "Take the last N elements."), params = listOf(ParamDoc("n", type("lyng.Int"))), returns = type("lyng.List"))
-        method(name = "joinToString", doc = md("joinToString", "Join elements into a string with an optional separator and transformer."), params = listOf(ParamDoc("prefix", type("lyng.String")), ParamDoc("transformer")), returns = type("lyng.String"))
+        method(name = "joinToString", doc = md("joinToString", "Join elements into a string with an optional separator and transformer."), params = listOf(ParamDoc("separator", type("lyng.String")), ParamDoc("transformer")), returns = type("lyng.String"))
         method(name = "any", doc = md("any", "Return true if any element matches the predicate."), params = listOf(ParamDoc("predicate")), returns = type("lyng.Bool"))
         method(name = "all", doc = md("all", "Return true if all elements match the predicate."), params = listOf(ParamDoc("predicate")), returns = type("lyng.Bool"))
+        method(name = "forEach", doc = md("forEach", "Execute `action` for each element."), params = listOf(ParamDoc("action")))
+        method(name = "count", doc = md("count", "Count elements matching the predicate."), params = listOf(ParamDoc("predicate")), returns = type("lyng.Int"))
         method(name = "sum", doc = md("sum", "Sum all elements; returns null for empty collections."), returns = type("lyng.Number", nullable = true))
         method(name = "sumOf", doc = md("sumOf", "Sum mapped values of elements; returns null for empty collections."), params = listOf(ParamDoc("f")))
         method(name = "minOf", doc = md("minOf", "Minimum of mapped values."), params = listOf(ParamDoc("lambda")))
@@ -628,7 +634,7 @@ private fun buildStdlibDocs(): List<MiniDecl> {
 
     mod.classDoc(name = "String", doc = StdlibInlineDocIndex.classDoc("String") ?: "String helpers.", bases = listOf(type("Obj"))) {
         // Only include inline-source method here; Kotlin-embedded methods are now documented via DocHelpers near definitions.
-        method(name = "re", doc = StdlibInlineDocIndex.methodDoc("String", "re") ?: "Compile this string into a regular expression.", returns = type("lyng.Regex"))
+        method(name = "re", doc = StdlibInlineDocIndex.methodDoc("String", "re") ?: "Compile this string into a regular expression.", params = listOf(ParamDoc("flags", type("lyng.String"))), returns = type("lyng.Regex"))
     }
 
     // StackTraceEntry structure

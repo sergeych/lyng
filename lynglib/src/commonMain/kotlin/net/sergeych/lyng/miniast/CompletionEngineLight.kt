@@ -74,6 +74,7 @@ object CompletionEngineLight {
         val word = DocLookupUtils.wordRangeAt(text, caret)
         val memberDot = DocLookupUtils.findDotLeft(text, word?.first ?: caret)
         if (memberDot != null) {
+            val inferredCls = (DocLookupUtils.guessReturnClassFromMemberCallBeforeMini(mini, text, memberDot, imported, binding) ?: DocLookupUtils.guessReceiverClass(text, memberDot, imported, mini))
             // 0) Try chained member call return type inference
             DocLookupUtils.guessReturnClassFromMemberCallBeforeMini(mini, text, memberDot, imported, binding)?.let { cls ->
                 offerMembersAdd(out, prefix, imported, cls, mini)
@@ -254,11 +255,19 @@ object CompletionEngineLight {
         fun emitGroup(map: LinkedHashMap<String, MutableList<MiniMemberDecl>>, groupPriority: Double) {
             for (name in map.keys.sortedBy { it.lowercase() }) {
                 val variants = map[name] ?: continue
-                // Prefer a method with a known return type; else any method; else first variant
+                // Choose a representative for display:
+                // 1) Prefer a method with return type AND parameters
+                // 2) Prefer a method with parameters
+                // 3) Prefer a method with return type
+                // 4) Else any method
+                // 5) Else the first variant
                 val rep =
-                    variants.asSequence()
-                        .filterIsInstance<MiniMemberFunDecl>()
-                        .firstOrNull { it.returnType != null }
+                    variants.asSequence().filterIsInstance<MiniMemberFunDecl>()
+                        .firstOrNull { it.returnType != null && it.params.isNotEmpty() }
+                        ?: variants.asSequence().filterIsInstance<MiniMemberFunDecl>()
+                            .firstOrNull { it.params.isNotEmpty() }
+                        ?: variants.asSequence().filterIsInstance<MiniMemberFunDecl>()
+                            .firstOrNull { it.returnType != null }
                         ?: variants.firstOrNull { it is MiniMemberFunDecl }
                         ?: variants.first()
                 when (rep) {
@@ -336,16 +345,9 @@ object CompletionEngineLight {
         }
     }
 
-    private fun typeOf(t: MiniTypeRef?): String = when (t) {
-        null -> ""
-        is MiniTypeName -> t.segments.lastOrNull()?.name?.let { ": $it" } ?: ""
-        is MiniGenericType -> {
-            val base = typeOf(t.base).removePrefix(": ")
-            val args = t.args.joinToString(",") { typeOf(it).removePrefix(": ") }
-            ": ${base}<${args}>"
-        }
-        is MiniFunctionType -> ": (fn)"
-        is MiniTypeVar -> ": ${t.name}"
+    private fun typeOf(t: MiniTypeRef?): String {
+        val s = DocLookupUtils.typeOf(t)
+        return if (s.isEmpty()) "" else ": $s"
     }
 
     // Note: we intentionally skip "params in scope" in the isolated engine to avoid PSI/offset mapping.

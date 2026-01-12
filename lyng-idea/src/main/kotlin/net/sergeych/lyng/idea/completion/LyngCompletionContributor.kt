@@ -116,7 +116,7 @@ class LyngCompletionContributor : CompletionContributor() {
             if (memberDotPos != null && engineItems.isEmpty()) {
                 if (DEBUG_COMPLETION) log.info("[LYNG_DEBUG] Fallback: engine returned 0 in member context; trying local inference")
                 // Build imported modules from text (lenient) + stdlib; avoid heavy MiniAst here
-                val fromText = extractImportsFromText(text)
+                val fromText = DocLookupUtils.extractImportsFromText(text)
                 val imported = LinkedHashSet<String>().apply {
                     fromText.forEach { add(it) }
                     add("lyng.stdlib")
@@ -176,7 +176,7 @@ class LyngCompletionContributor : CompletionContributor() {
             // In member context, ensure stdlib extension-like methods (e.g., String.re) are present
             if (memberDotPos != null) {
                 val existing = engineItems.map { it.name }.toMutableSet()
-                val fromText = extractImportsFromText(text)
+                val fromText = DocLookupUtils.extractImportsFromText(text)
                 val imported = LinkedHashSet<String>().apply {
                     fromText.forEach { add(it) }
                     add("lyng.stdlib")
@@ -249,7 +249,7 @@ class LyngCompletionContributor : CompletionContributor() {
             // If in member context and engine items are suspiciously sparse, try to enrich via local inference + offerMembers
             if (memberDotPos != null && engineItems.size < 3) {
                 if (DEBUG_COMPLETION) log.info("[LYNG_DEBUG] Engine produced only ${engineItems.size} items in member context — trying enrichment")
-                val fromText = extractImportsFromText(text)
+                val fromText = DocLookupUtils.extractImportsFromText(text)
                 val imported = LinkedHashSet<String>().apply {
                     fromText.forEach { add(it) }
                     add("lyng.stdlib")
@@ -410,13 +410,18 @@ class LyngCompletionContributor : CompletionContributor() {
                 for (name in keys) {
                     val list = map[name] ?: continue
                     // Choose a representative for display:
-                    // 1) Prefer a method with a known return type
-                    // 2) Else any method
-                    // 3) Else the first variant
+                    // 1) Prefer a method with return type AND parameters
+                    // 2) Prefer a method with parameters
+                    // 3) Prefer a method with return type
+                    // 4) Else any method
+                    // 5) Else the first variant
                     val rep =
-                        list.asSequence()
-                            .filterIsInstance<MiniMemberFunDecl>()
-                            .firstOrNull { it.returnType != null }
+                        list.asSequence().filterIsInstance<MiniMemberFunDecl>()
+                            .firstOrNull { it.returnType != null && it.params.isNotEmpty() }
+                            ?: list.asSequence().filterIsInstance<MiniMemberFunDecl>()
+                                .firstOrNull { it.params.isNotEmpty() }
+                            ?: list.asSequence().filterIsInstance<MiniMemberFunDecl>()
+                                .firstOrNull { it.returnType != null }
                             ?: list.firstOrNull { it is MiniMemberFunDecl }
                             ?: list.first()
                     when (rep) {
@@ -603,32 +608,10 @@ class LyngCompletionContributor : CompletionContributor() {
             }
         }
 
-        // Lenient textual import extractor (duplicated from QuickDoc privately)
-        private fun extractImportsFromText(text: String): List<String> {
-            val result = LinkedHashSet<String>()
-            val re = Regex("^\\s*import\\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)*)", RegexOption.MULTILINE)
-            re.findAll(text).forEach { m ->
-                val raw = m.groupValues.getOrNull(1)?.trim().orEmpty()
-                if (raw.isNotEmpty()) {
-                    val canon = if (raw.startsWith("lyng.")) raw else "lyng.$raw"
-                    result.add(canon)
-                }
-            }
-            return result.toList()
-        }
 
         private fun typeOf(t: MiniTypeRef?): String {
-            return when (t) {
-                null -> ""
-                is MiniTypeName -> t.segments.lastOrNull()?.name?.let { ": $it" } ?: ""
-                is MiniGenericType -> {
-                    val base = typeOf(t.base).removePrefix(": ")
-                    val args = t.args.joinToString(",") { typeOf(it).removePrefix(": ") }
-                    ": ${base}<${args}>"
-                }
-                is MiniFunctionType -> ": (fn)"
-                is MiniTypeVar -> ": ${t.name}"
-            }
+            val s = DocLookupUtils.typeOf(t)
+            return if (s.isEmpty()) "" else ": $s"
         }
     }
 }

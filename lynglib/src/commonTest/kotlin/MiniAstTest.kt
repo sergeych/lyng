@@ -458,4 +458,19 @@ class MiniAstTest {
         val className = DocLookupUtils.simpleClassNameOf(type)
         assertEquals("List", className)
     }
+
+    @Test
+    fun miniAst_captures_fun_with_type_and_default() = runTest {
+        val code = """
+            fun foo(a: Int, b: String = "ok"): Bool { true }
+        """.trimIndent()
+        val (_, sink) = compileWithMini(code)
+        val mini = sink.build()
+        assertNotNull(mini)
+        val fn = mini.declarations.filterIsInstance<MiniFunDecl>().firstOrNull { it.name == "foo" }
+        assertNotNull(fn)
+        assertEquals(2, fn.params.size)
+        assertEquals("a", fn.params[0].name)
+        assertEquals("b", fn.params[1].name)
+    }
 }

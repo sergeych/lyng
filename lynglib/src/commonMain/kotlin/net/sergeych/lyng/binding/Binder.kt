@@ -35,7 +35,8 @@ data class Symbol(
     val kind: SymbolKind,
     val declStart: Int,
     val declEnd: Int,
-    val containerId: Int?
+    val containerId: Int?,
+    val type: String? = null
 )
 
 data class Reference(val symbolId: Int, val start: Int, val end: Int)
@@ -97,59 +98,83 @@ object Binder {
         // First pass (classes only): register classes so we can attach methods/fields
         for (d in mini.declarations) if (d is MiniClassDecl) {
             val (s, e) = nameOffsets(d.nameStart, d.name)
-            val sym = Symbol(nextId++, d.name, SymbolKind.Class, s, e, containerId = null)
+            val sym = Symbol(nextId++, d.name, SymbolKind.Class, s, e, containerId = null, type = d.name)
             symbols += sym
             topLevelByName.getOrPut(d.name) { mutableListOf() }.add(sym.id)
             // Prefer explicit body range; otherwise use the whole class declaration range
             val bodyStart = d.bodyRange?.start?.let { source.offsetOf(it) } ?: source.offsetOf(d.range.start)
             val bodyEnd = d.bodyRange?.end?.let { source.offsetOf(it) } ?: source.offsetOf(d.range.end)
-            classes += ClassScope(sym.id, bodyStart, bodyEnd, mutableListOf())
+            val classScope = ClassScope(sym.id, bodyStart, bodyEnd, mutableListOf())
+            classes += classScope
             // Constructor fields (val/var in primary ctor)
             for (cf in d.ctorFields) {
                 val fs = source.offsetOf(cf.nameStart)
                 val fe = fs + cf.name.length
                 val kind = if (cf.mutable) SymbolKind.Variable else SymbolKind.Value
-                val fieldSym = Symbol(nextId++, cf.name, kind, fs, fe, containerId = sym.id)
+                val fieldSym = Symbol(nextId++, cf.name, kind, fs, fe, containerId = sym.id, type = DocLookupUtils.typeOf(cf.type))
                 symbols += fieldSym
-                classes.last().fields += fieldSym.id
+                classScope.fields += fieldSym.id
             }
             // Class fields (val/var in class body, if any are reported here)
             for (cf in d.classFields) {
                 val fs = source.offsetOf(cf.nameStart)
                 val fe = fs + cf.name.length
                 val kind = if (cf.mutable) SymbolKind.Variable else SymbolKind.Value
-                val fieldSym = Symbol(nextId++, cf.name, kind, fs, fe, containerId = sym.id)
+                val fieldSym = Symbol(nextId++, cf.name, kind, fs, fe, containerId = sym.id, type = DocLookupUtils.typeOf(cf.type))
                 symbols += fieldSym
-                classes.last().fields += fieldSym.id
+                classScope.fields += fieldSym.id
             }
+            // Members (including fields and methods)
+            for (m in d.members) {
+                if (m is MiniMemberValDecl) {
+                    val fs = source.offsetOf(m.nameStart)
+                    val fe = fs + m.name.length
+                    val kind = if (m.mutable) SymbolKind.Variable else SymbolKind.Value
+                    val fieldSym = Symbol(nextId++, m.name, kind, fs, fe, containerId = sym.id, type = DocLookupUtils.typeOf(m.type))
+                    symbols += fieldSym
+                    classScope.fields += fieldSym.id
+                }
+            }
+        }
+
+        fun registerFun(name: String, nameStart: net.sergeych.lyng.Pos, params: List<MiniParam>, returnType: MiniTypeRef?, bodyRange: MiniRange?, isTopLevel: Boolean) {
+            val (s, e) = nameOffsets(nameStart, name)
+            val ownerClass = classContaining(s)
+            val sym = Symbol(nextId++, name, SymbolKind.Function, s, e, containerId = ownerClass?.symId, type = DocLookupUtils.typeOf(returnType))
+            symbols += sym
+            if (isTopLevel) {
+                topLevelByName.getOrPut(name) { mutableListOf() }.add(sym.id)
+            }
+
+            // Determine body range if present; otherwise, derive a conservative end at decl range end
+            val bodyStart = bodyRange?.start?.let { source.offsetOf(it) } ?: e
+            val bodyEnd = bodyRange?.end?.let { source.offsetOf(it) } ?: e
+            val fnScope = FnScope(sym.id, bodyStart, bodyEnd, mutableListOf(), ownerClass?.symId)
+
+            // Params
+            for (p in params) {
+                val ps = source.offsetOf(p.nameStart)
+                val pe = ps + p.name.length
+                val pk = SymbolKind.Parameter
+                val paramSym = Symbol(nextId++, p.name, pk, ps, pe, containerId = sym.id, type = DocLookupUtils.typeOf(p.type))
+                fnScope.locals += paramSym.id
+                symbols += paramSym
+            }
+            functions += fnScope
         }
 
         // Second pass: functions and top-level/class vals/vars
         for (d in mini.declarations) {
             when (d) {
-                is MiniClassDecl -> { /* already processed in first pass */ }
-                is MiniFunDecl -> {
-                    val (s, e) = nameOffsets(d.nameStart, d.name)
-                    val ownerClass = classContaining(s)
-                    val sym = Symbol(nextId++, d.name, SymbolKind.Function, s, e, containerId = ownerClass?.symId)
-                    symbols += sym
-                    topLevelByName.getOrPut(d.name) { mutableListOf() }.add(sym.id)
-
-                    // Determine body range if present; otherwise, derive a conservative end at decl range end
-                    val bodyStart = d.body?.range?.start?.let { source.offsetOf(it) } ?: e
-                    val bodyEnd = d.body?.range?.end?.let { source.offsetOf(it) } ?: e
-                    val fnScope = FnScope(sym.id, bodyStart, bodyEnd, mutableListOf(), ownerClass?.symId)
-
-                    // Params
-                    for (p in d.params) {
-                        val ps = source.offsetOf(p.nameStart)
-                        val pe = ps + p.name.length
-                        val pk = SymbolKind.Parameter
-                        val paramSym = Symbol(nextId++, p.name, pk, ps, pe, containerId = sym.id)
-                        fnScope.locals += paramSym.id
-                        symbols += paramSym
+                is MiniClassDecl -> {
+                    for (m in d.members) {
+                        if (m is MiniMemberFunDecl) {
+                            registerFun(m.name, m.nameStart, m.params, m.returnType, m.body?.range, false)
+                        }
                     }
-                    functions += fnScope
+                }
+                is MiniFunDecl -> {
+                    registerFun(d.name, d.nameStart, d.params, d.returnType, d.body?.range, true)
                 }
                 is MiniValDecl -> {
                     val (s, e) = nameOffsets(d.nameStart, d.name)
@@ -157,18 +182,18 @@ object Binder {
                     val ownerClass = classContaining(s)
                     if (ownerClass != null) {
                         // class field
-                        val fieldSym = Symbol(nextId++, d.name, kind, s, e, containerId = ownerClass.symId)
+                        val fieldSym = Symbol(nextId++, d.name, kind, s, e, containerId = ownerClass.symId, type = DocLookupUtils.typeOf(d.type))
                         symbols += fieldSym
                         ownerClass.fields += fieldSym.id
                     } else {
-                        val sym = Symbol(nextId++, d.name, kind, s, e, containerId = null)
+                        val sym = Symbol(nextId++, d.name, kind, s, e, containerId = null, type = DocLookupUtils.typeOf(d.type))
                         symbols += sym
                         topLevelByName.getOrPut(d.name) { mutableListOf() }.add(sym.id)
                     }
                 }
                 is MiniEnumDecl -> {
                     val (s, e) = nameOffsets(d.nameStart, d.name)
-                    val sym = Symbol(nextId++, d.name, SymbolKind.Enum, s, e, containerId = null)
+                    val sym = Symbol(nextId++, d.name, SymbolKind.Enum, s, e, containerId = null, type = d.name)
                     symbols += sym
                     topLevelByName.getOrPut(d.name) { mutableListOf() }.add(sym.id)
                 }
@@ -187,7 +212,7 @@ object Binder {
                     "iterator", "hasNext", "next"
                 )
                 for (name in stdFns) {
-                    val sym = Symbol(nextId++, name, SymbolKind.Function, 0, name.length, containerId = null)
+                    val sym = Symbol(nextId++, name, SymbolKind.Function, 0, name.length, containerId = null, type = null)
                     symbols += sym
                     topLevelByName.getOrPut(name) { mutableListOf() }.add(sym.id)
                 }
@@ -204,7 +229,7 @@ object Binder {
             if (containerFn != null) {
                 val fnSymId = containerFn.id
                 val kind = if (d.mutable) SymbolKind.Variable else SymbolKind.Value
-                val localSym = Symbol(nextId++, d.name, kind, s, e, containerId = fnSymId)
+                val localSym = Symbol(nextId++, d.name, kind, s, e, containerId = fnSymId, type = DocLookupUtils.typeOf(d.type))
                 symbols += localSym
                 containerFn.locals += localSym.id
             }
@@ -245,11 +270,11 @@ object Binder {
                                     .maxByOrNull { it.rangeEnd - it.rangeStart }
                                 val kind = if (kw.equals("var", true)) SymbolKind.Variable else SymbolKind.Value
                                 if (inFn != null) {
-                                    val localSym = Symbol(nextId++, text.substring(nameStart, nameEnd), kind, nameStart, nameEnd, containerId = inFn.id)
+                                    val localSym = Symbol(nextId++, text.substring(nameStart, nameEnd), kind, nameStart, nameEnd, containerId = inFn.id, type = null)
                                     symbols += localSym
                                     inFn.locals += localSym.id
                                 } else {
-                                    val localSym = Symbol(nextId++, text.substring(nameStart, nameEnd), kind, nameStart, nameEnd, containerId = null)
+                                    val localSym = Symbol(nextId++, text.substring(nameStart, nameEnd), kind, nameStart, nameEnd, containerId = null, type = null)
                                     symbols += localSym
                                     topLevelByName.getOrPut(localSym.name) { mutableListOf() }.add(localSym.id)
                                 }
