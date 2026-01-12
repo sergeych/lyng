@@ -473,4 +473,58 @@ class MiniAstTest {
         assertEquals("a", fn.params[0].name)
         assertEquals("b", fn.params[1].name)
     }
+
+    @Test
+    fun miniAst_captures_dokka_tags() = runTest {
+        val code = """
+            /**
+             * Testing tags.
+             * @param x the x value
+             * @param y the y value
+             * @return some string
+             * @throws Exception if failed
+             */
+            fun tagged(x: Int, y: Int): String { "" }
+        """.trimIndent()
+        val (_, sink) = compileWithMini(code)
+        val mini = sink.build()
+        assertNotNull(mini)
+        val fn = mini.declarations.filterIsInstance<MiniFunDecl>().firstOrNull { it.name == "tagged" }
+        assertNotNull(fn)
+        val doc = fn.doc
+        assertNotNull(doc)
+        assertEquals("Testing tags.", doc.summary)
+        
+        val tags = doc.tags
+        assertTrue(tags.containsKey("param"), "should have @param tags")
+        assertEquals(listOf("x the x value", "y the y value"), tags["param"])
+        assertEquals(listOf("some string"), tags["return"])
+        assertEquals(listOf("Exception if failed"), tags["throws"])
+    }
+
+    @Test
+    fun miniAst_captures_multiline_tags() = runTest {
+        val code = """
+            /**
+             * Multi line tag.
+             * @param x first line of x
+             *          second line of x
+             * @return return value
+             */
+            fun multiline(x: Int): Int { 0 }
+        """.trimIndent()
+        val (_, sink) = compileWithMini(code)
+        val mini = sink.build()
+        assertNotNull(mini)
+        val fn = mini.declarations.filterIsInstance<MiniFunDecl>().firstOrNull { it.name == "multiline" }
+        assertNotNull(fn)
+        val doc = fn.doc
+        assertNotNull(doc)
+        
+        val tags = doc.tags
+        assertTrue(tags.containsKey("param"), "should have @param tags")
+        val xParam = tags["param"]?.first() ?: ""
+        assertTrue(xParam.contains("first line of x"), "should contain first line")
+        assertTrue(xParam.contains("second line of x"), "should contain second line")
+    }
 }

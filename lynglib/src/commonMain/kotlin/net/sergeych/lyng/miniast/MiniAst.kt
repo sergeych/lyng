@@ -39,7 +39,56 @@ data class MiniDoc(
     val raw: String,
     val summary: String?,
     val tags: Map<String, List<String>> = emptyMap()
-)
+) {
+    companion object {
+        fun parse(range: MiniRange, lines: Iterable<String>, extraTags: Map<String, List<String>> = emptyMap()): MiniDoc {
+            val parsedTags = mutableMapOf<String, MutableList<String>>()
+            var currentTag: String? = null
+            val currentContent = StringBuilder()
+
+            fun flush() {
+                currentTag?.let { tag ->
+                    parsedTags.getOrPut(tag) { mutableListOf() }.add(currentContent.toString().trim())
+                }
+                currentContent.setLength(0)
+            }
+
+            val descriptionLines = mutableListOf<String>()
+            var inTags = false
+
+            for (rawLine in lines) {
+                for (line in rawLine.lines()) {
+                    val trimmed = line.trim()
+                    if (trimmed.startsWith("@")) {
+                        inTags = true
+                        flush()
+                        val parts = trimmed.substring(1).split(Regex("\\s+"), 2)
+                        currentTag = parts[0]
+                        currentContent.append(parts.getOrNull(1) ?: "")
+                    } else {
+                        if (inTags) {
+                            if (currentContent.isNotEmpty()) currentContent.append("\n")
+                            currentContent.append(line)
+                        } else {
+                            descriptionLines.add(line)
+                        }
+                    }
+                }
+            }
+            flush()
+
+            val raw = descriptionLines.joinToString("\n").trimEnd()
+            val summary = raw.lines().firstOrNull { it.isNotBlank() }?.trim()
+            
+            val finalTags = parsedTags.toMutableMap()
+            extraTags.forEach { (k, v) ->
+                finalTags.getOrPut(k) { mutableListOf() }.addAll(v)
+            }
+            
+            return MiniDoc(range, raw, summary, finalTags)
+        }
+    }
+}
 
 sealed interface MiniNode { val range: MiniRange }
 

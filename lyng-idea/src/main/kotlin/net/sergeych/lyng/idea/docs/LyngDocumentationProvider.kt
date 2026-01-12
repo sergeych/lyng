@@ -518,18 +518,26 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                 if (d.mutable) "var ${d.name}${typeStr}" else "val ${d.name}${typeStr}"
             }
         }
-        // Show full detailed documentation, not just the summary
-        val raw = d.doc?.raw
-        val doc: String? = if (raw.isNullOrBlank()) null else MarkdownRenderer.render(raw)
         val sb = StringBuilder()
         sb.append("<div class='doc-title'>").append(htmlEscape(title)).append("</div>")
-        if (!doc.isNullOrBlank()) sb.append(styledMarkdown(doc))
+        sb.append(renderDocBody(d.doc))
         return sb.toString()
     }
 
     private fun renderParamDoc(fn: MiniFunDecl, p: MiniParam): String {
         val title = "parameter ${p.name}${typeOf(p.type)} in ${fn.name}${signatureOf(fn)}"
-        return "<div class='doc-title'>${htmlEscape(title)}</div>"
+        val sb = StringBuilder()
+        sb.append("<div class='doc-title'>").append(htmlEscape(title)).append("</div>")
+
+        // Find matching @param tag
+        fn.doc?.tags?.get("param")?.forEach { tag ->
+            val parts = tag.split(Regex("\\s+"), 2)
+            if (parts.getOrNull(0) == p.name && parts.size > 1) {
+                sb.append(styledMarkdown(MarkdownRenderer.render(parts[1])))
+            }
+        }
+
+        return sb.toString()
     }
 
     private fun renderMemberFunDoc(className: String, m: MiniMemberFunDecl): String {
@@ -540,11 +548,9 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         val ret = typeOf(m.returnType)
         val staticStr = if (m.isStatic) "static " else ""
         val title = "${staticStr}method $className.${m.name}(${params})${ret}"
-        val raw = m.doc?.raw
-        val doc: String? = if (raw.isNullOrBlank()) null else MarkdownRenderer.render(raw)
         val sb = StringBuilder()
         sb.append("<div class='doc-title'>").append(htmlEscape(title)).append("</div>")
-        if (!doc.isNullOrBlank()) sb.append(styledMarkdown(doc))
+        sb.append(renderDocBody(m.doc))
         return sb.toString()
     }
 
@@ -553,11 +559,9 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         val kind = if (m.mutable) "var" else "val"
         val staticStr = if (m.isStatic) "static " else ""
         val title = "${staticStr}${kind} $className.${m.name}${ts}"
-        val raw = m.doc?.raw
-        val doc: String? = if (raw.isNullOrBlank()) null else MarkdownRenderer.render(raw)
         val sb = StringBuilder()
         sb.append("<div class='doc-title'>").append(htmlEscape(title)).append("</div>")
-        if (!doc.isNullOrBlank()) sb.append(styledMarkdown(doc))
+        sb.append(renderDocBody(m.doc))
         return sb.toString()
     }
 
@@ -661,6 +665,55 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         while (s > 0 && isIdentChar(text[s - 1])) s--
         while (e < text.length && isIdentChar(text[e])) e++
         return if (e > s) TextRange(s, e) else null
+    }
+
+    private fun renderDocBody(doc: MiniDoc?): String {
+        if (doc == null) return ""
+        val sb = StringBuilder()
+        if (doc.raw.isNotBlank()) {
+            sb.append(styledMarkdown(MarkdownRenderer.render(doc.raw)))
+        }
+        if (doc.tags.isNotEmpty()) {
+            sb.append(renderTags(doc.tags))
+        }
+        return sb.toString()
+    }
+
+    private fun renderTags(tags: Map<String, List<String>>): String {
+        if (tags.isEmpty()) return ""
+        val sb = StringBuilder()
+        sb.append("<table class='sections'>")
+
+        fun section(title: String, list: List<String>, isKeyValue: Boolean = false) {
+            if (list.isEmpty()) return
+            sb.append("<tr><td valign='top' class='section'><p>").append(htmlEscape(title)).append(":</p></td><td valign='top'>")
+            list.forEachIndexed { index, item ->
+                if (index > 0) sb.append("<p>")
+                if (isKeyValue) {
+                    val parts = item.split(Regex("\\s+"), 2)
+                    sb.append("<code>").append(htmlEscape(parts[0])).append("</code>")
+                    if (parts.size > 1) {
+                        sb.append(" — ").append(MarkdownRenderer.render(parts[1]).removePrefix("<p>").removeSuffix("</p>"))
+                    }
+                } else {
+                    sb.append(MarkdownRenderer.render(item).removePrefix("<p>").removeSuffix("</p>"))
+                }
+            }
+            sb.append("</td></tr>")
+        }
+
+        section("Parameters", tags["param"] ?: emptyList(), isKeyValue = true)
+        section("Returns", tags["return"] ?: emptyList())
+        section("Throws", tags["throws"] ?: emptyList(), isKeyValue = true)
+
+        tags.forEach { (name, list) ->
+            if (name !in listOf("param", "return", "throws")) {
+                section(name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }, list)
+            }
+        }
+
+        sb.append("</table>")
+        return sb.toString()
     }
 
     private fun previousWordBefore(text: String, offset: Int): TextRange? {

@@ -255,8 +255,7 @@ class ClassDocsBuilder internal constructor(private val className: String) {
 private fun builtinRange() = MiniRange(Pos.builtIn, Pos.builtIn)
 
 private fun miniDoc(text: String, tags: Map<String, List<String>>): MiniDoc {
-    val summary = text.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }
-    return MiniDoc(range = builtinRange(), raw = text, summary = summary, tags = tags)
+    return MiniDoc.parse(builtinRange(), listOf(text), tags)
 }
 
 private fun TypeDoc.toDisplayName(): String = when (this) {

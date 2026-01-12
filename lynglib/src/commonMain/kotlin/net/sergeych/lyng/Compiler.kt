@@ -116,10 +116,8 @@ class Compiler(
 
     private fun consumePendingDoc(): MiniDoc? {
         if (pendingDocLines.isEmpty()) return null
-        val raw = pendingDocLines.joinToString("\n").trimEnd()
-        val summary = raw.lines().firstOrNull { it.isNotBlank() }?.trim()
         val start = pendingDocStart ?: cc.currentPos()
-        val doc = MiniDoc(MiniRange(start, start), raw = raw, summary = summary)
+        val doc = MiniDoc.parse(MiniRange(start, start), pendingDocLines)
         clearPendingDoc()
         return doc
     }
