@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import net.sergeych.lyng.obj.Obj
 
 /**
  * Expect/actual portable scope frame pool. Used only when [PerfFlags.SCOPE_POOL] is true.
- * JVM actual provides a ThreadLocal-backed pool; other targets may use a simple global deque.
+ * Provides per-thread pooling on JVM, Android, and Native; global pooling on JS and Wasm.
  */
 expect object ScopePool {
     fun borrow(parent: Scope, args: Arguments, pos: Pos, thisObj: Obj): Scope

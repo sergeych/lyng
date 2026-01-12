@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ actual object PerfDefaults {
 
     actual val ARG_BUILDER: Boolean = true
     actual val SKIP_ARGS_ON_NULL_RECEIVER: Boolean = true
-    actual val SCOPE_POOL: Boolean = false
+    actual val SCOPE_POOL: Boolean = true
 
     actual val FIELD_PIC: Boolean = true
     actual val METHOD_PIC: Boolean = true

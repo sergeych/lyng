@@ -129,7 +129,9 @@ open class ObjException(
 
             override suspend fun callOn(scope: Scope): Obj {
                 val message = scope.args.getOrNull(0)?.toString(scope) ?: ObjString(name)
-                return ObjException(this, scope, message)
+                val ex = ObjException(this, scope, message)
+                ex.getStackTrace()
+                return ex
             }
 
             override fun toString(): String = name

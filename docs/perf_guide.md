@@ -33,7 +33,7 @@ PerfProfiles.restore(snap)  // restore previous flags
 - `ARG_BUILDER` — Efficient argument building: small‑arity no‑alloc and pooled builder on JVM (ON JVM default).
 - `ARG_SMALL_ARITY_12` — Extends small‑arity no‑alloc call paths from 0–8 to 0–12 arguments (JVM‑first exploration; OFF by default). Use for codebases with many 9–12 arg calls; A/B before enabling.
 - `SKIP_ARGS_ON_NULL_RECEIVER` — Early return on optional‑null receivers before building args (semantics‑compatible). A/B only.
-- `SCOPE_POOL` — Scope frame pooling for calls (JVM, per‑thread ThreadLocal pool). ON by default on JVM; togglable at runtime.
+- `SCOPE_POOL` — Scope frame pooling for calls (per‑thread ThreadLocal pool on JVM/Android/Native; global deque on JS/Wasm). ON by default on all platforms; togglable at runtime.
 - `FIELD_PIC` — 2‑entry polymorphic inline cache for field reads/writes keyed by `(classId, layoutVersion)` (ON JVM default).
 - `METHOD_PIC` — 2‑entry PIC for instance method calls keyed by `(classId, layoutVersion)` (ON JVM default).
 - `FIELD_PIC_SIZE_4` — Increases Field PIC size from 2 to 4 entries (JVM-first tuning; OFF by default). Use for sites with >2 receiver shapes.

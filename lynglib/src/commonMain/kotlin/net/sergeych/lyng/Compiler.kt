@@ -1734,7 +1734,7 @@ class Compiler(
             // Rebind error scope to the throw-site position so ScriptError.pos is accurate
             val throwScope = sc.createChildScope(pos = start)
             if (errorObject is ObjString) {
-                errorObject = ObjException(throwScope, errorObject.value)
+                errorObject = ObjException(throwScope, errorObject.value).apply { getStackTrace() }
             }
             if (!errorObject.isInstanceOf(ObjException.Root)) {
                 throwScope.raiseError("this is not an exception object: $errorObject")
@@ -1746,7 +1746,7 @@ class Compiler(
                     errorObject.message,
                     errorObject.extraData,
                     errorObject.useStackTrace
-                )
+                ).apply { getStackTrace() }
                 throwScope.raiseError(errorObject)
             } else {
                 val msg = errorObject.invokeInstanceMethod(sc, "message").toString(sc).value

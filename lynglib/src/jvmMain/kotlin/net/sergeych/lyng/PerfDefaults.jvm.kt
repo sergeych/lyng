@@ -23,7 +23,7 @@ actual object PerfDefaults {
 
     actual val ARG_BUILDER: Boolean = true
     actual val SKIP_ARGS_ON_NULL_RECEIVER: Boolean = true
-    actual val SCOPE_POOL: Boolean = false
+    actual val SCOPE_POOL: Boolean = true
 
     actual val FIELD_PIC: Boolean = true
     actual val METHOD_PIC: Boolean = true
@@ -42,11 +42,11 @@ actual object PerfDefaults {
     actual val REGEX_CACHE: Boolean = true
 
     // Extended small-arity calls 9..12 (experimental; keep OFF by default)
-    actual val ARG_SMALL_ARITY_12: Boolean = false
+    actual val ARG_SMALL_ARITY_12: Boolean = true
 
     // Index PIC size (beneficial on JVM in A/B): enable size=4 by default
     actual val INDEX_PIC_SIZE_4: Boolean = true
 
     // Range fast-iteration (experimental; OFF by default)
-    actual val RANGE_FAST_ITER: Boolean = false
+    actual val RANGE_FAST_ITER: Boolean = true
 }
