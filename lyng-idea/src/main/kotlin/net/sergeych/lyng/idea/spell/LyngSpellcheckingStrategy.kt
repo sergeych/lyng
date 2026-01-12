@@ -17,9 +17,6 @@
 package net.sergeych.lyng.idea.spell
 
 // Avoid Tokenizers helper to keep compatibility; implement our own tokenizers
-import com.intellij.ide.plugins.PluginManagerCore
-import com.intellij.openapi.diagnostic.Logger
-import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import com.intellij.spellchecker.inspections.PlainTextSplitter
@@ -38,67 +35,21 @@ import net.sergeych.lyng.idea.settings.LyngFormatterSettings
  */
 class LyngSpellcheckingStrategy : SpellcheckingStrategy() {
 
-    private val log = Logger.getInstance(LyngSpellcheckingStrategy::class.java)
-    @Volatile private var loggedOnce = false
-
-    private fun grazieInstalled(): Boolean {
-        // Support both historical and bundled IDs
-        return PluginManagerCore.isPluginInstalled(PluginId.getId("com.intellij.grazie")) ||
-                PluginManagerCore.isPluginInstalled(PluginId.getId("tanvd.grazi"))
-    }
-
-    private fun grazieApiAvailable(): Boolean = try {
-        // If this class is absent (as in IC-243), third-party plugins can't run Grazie programmatically
-        Class.forName("com.intellij.grazie.grammar.GrammarChecker")
-        true
-    } catch (_: Throwable) { false }
-
     override fun getTokenizer(element: PsiElement): Tokenizer<*> {
         if (element is com.intellij.psi.PsiFile) return EMPTY_TOKENIZER
 
-        val hasGrazie = grazieInstalled()
-        val hasGrazieApi = grazieApiAvailable()
         val settings = LyngFormatterSettings.getInstance(element.project)
-        if (!loggedOnce) {
-            loggedOnce = true
-            log.info("LyngSpellcheckingStrategy activated: hasGrazie=$hasGrazie, grazieApi=$hasGrazieApi, preferGrazieForCommentsAndLiterals=${settings.preferGrazieForCommentsAndLiterals}, spellCheckStringLiterals=${settings.spellCheckStringLiterals}, grazieChecksIdentifiers=${settings.grazieChecksIdentifiers}")
-        }
-
-        val file = element.containingFile ?: return EMPTY_TOKENIZER
         val et = element.node?.elementType
-        val index = LyngSpellIndex.getUpToDate(file)
 
-        // Decide responsibility per settings
-        // If Grazie is present but its public API is not available (IC-243), do NOT delegate to it.
-        val preferGrazie = hasGrazie && hasGrazieApi && settings.preferGrazieForCommentsAndLiterals
-        val grazieIds = hasGrazie && hasGrazieApi && settings.grazieChecksIdentifiers
-
-        if (index == null) {
-            // Index not ready: fall back to Lexer-based token types.
-            // Identifiers are safe because LyngLexer separates keywords from identifiers.
-            if (et == net.sergeych.lyng.idea.highlight.LyngTokenTypes.IDENTIFIER) {
-                return if (grazieIds) EMPTY_TOKENIZER else IDENTIFIER_TOKENIZER
-            }
-            if (et == net.sergeych.lyng.idea.highlight.LyngTokenTypes.LINE_COMMENT || et == net.sergeych.lyng.idea.highlight.LyngTokenTypes.BLOCK_COMMENT) {
-                return if (preferGrazie) EMPTY_TOKENIZER else COMMENT_TEXT_TOKENIZER
-            }
-            if (et == net.sergeych.lyng.idea.highlight.LyngTokenTypes.STRING && settings.spellCheckStringLiterals) {
-                return if (preferGrazie) EMPTY_TOKENIZER else STRING_WITH_PRINTF_EXCLUDES
-            }
-            return EMPTY_TOKENIZER
+        if (et == net.sergeych.lyng.idea.highlight.LyngTokenTypes.IDENTIFIER || et == net.sergeych.lyng.idea.highlight.LyngTokenTypes.LABEL) {
+            return IDENTIFIER_TOKENIZER
         }
-
-        val elRange = element.textRange ?: return EMPTY_TOKENIZER
-        fun overlaps(list: List<TextRange>) = list.any { it.intersects(elRange) }
-
-        // Identifiers: only if range is within identifiers index and not delegated to Grazie
-        if (et == net.sergeych.lyng.idea.highlight.LyngTokenTypes.IDENTIFIER && overlaps(index.identifiers) && !grazieIds) return IDENTIFIER_TOKENIZER
-
-        // Comments: only if not delegated to Grazie and overlapping indexed comments
-        if ((et == net.sergeych.lyng.idea.highlight.LyngTokenTypes.LINE_COMMENT || et == net.sergeych.lyng.idea.highlight.LyngTokenTypes.BLOCK_COMMENT) && overlaps(index.comments) && !preferGrazie) return COMMENT_TEXT_TOKENIZER
-
-        // Strings: only if not delegated to Grazie, literals checking enabled, and overlapping indexed strings
-        if (et == net.sergeych.lyng.idea.highlight.LyngTokenTypes.STRING && settings.spellCheckStringLiterals && overlaps(index.strings) && !preferGrazie) return STRING_WITH_PRINTF_EXCLUDES
+        if (et == net.sergeych.lyng.idea.highlight.LyngTokenTypes.LINE_COMMENT || et == net.sergeych.lyng.idea.highlight.LyngTokenTypes.BLOCK_COMMENT) {
+            return COMMENT_TEXT_TOKENIZER
+        }
+        if (et == net.sergeych.lyng.idea.highlight.LyngTokenTypes.STRING && settings.spellCheckStringLiterals) {
+            return STRING_WITH_PRINTF_EXCLUDES
+        }
 
         return EMPTY_TOKENIZER
     }

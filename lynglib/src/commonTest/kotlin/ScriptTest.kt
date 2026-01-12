@@ -4796,5 +4796,20 @@ class ScriptTest {
             assertEquals("r:r", T().l("r"))
         """.trimIndent())
     }
+
+    @Test
+    fun testTypedArgsWithInitializers() = runTest {
+        eval("""
+            fun f(a: String = "foo") = a + "!"
+            fun g(a: String? = null) = a ?: "!!"
+            assertEquals(f(), "foo!")
+            assertEquals(f(), "!!")
+            assertEquals(f("bar"), "bar!")
+            class T(b: Int=42,c: String?=null) 
+            assertEquals(42, T().b)
+            assertEquals(null, T().c)
+        """.trimIndent())
+    }
+
 }
 

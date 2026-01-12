@@ -1,9 +1,17 @@
-# Lyng Language AI Specification (V1.2)
+# Lyng Language AI Specification (V1.3)
 
 High-density specification for LLMs. Reference this for all Lyng code generation.
 
 ## 1. Core Philosophy & Syntax
-- **Everything is an Expression**: Blocks, `if`, `when`, `for`, `while` return their last expression (or `void`).
+- **Everything is an Expression**: Blocks, `if`, `when`, `for`, `while`, `do-while` return their last expression (or `void`).
+- **Loops with `else`**: `for`, `while`, and `do-while` support an optional `else` block.
+    - `else` executes **only if** the loop finishes normally (without a `break`).
+    - `break <value>` exits the loop and sets its return value.
+    - Loop Return Value:
+        1. Value from `break <value>`.
+        2. Result of `else` block (if loop finished normally and `else` exists).
+        3. Result of the last iteration (if loop finished normally and no `else`).
+        4. `void` (if loop body never executed and no `else`).
 - **Implicit Coroutines**: All functions are coroutines. No `async/await`. Use `launch { ... }` (returns `Deferred`) or `flow { ... }`.
 - **Variables**: `val` (read-only), `var` (mutable). Supports late-init `val` in classes (must be assigned in `init` or body).
 - **Null Safety**: `?` (nullable type), `?.` (safe access), `?( )` (safe invoke), `?{ }` (safe block invoke), `?[ ]` (safe index), `?:` or `??` (elvis), `?=` (assign-if-null).
@@ -87,3 +95,11 @@ val [first, middle..., last] = [1, 2, 3, 4, 5]
 // Safe Navigation and Elvis
 val companyName = person?.job?.company?.name ?? "Freelancer"
 ```
+
+## 8. Standard Library Discovery
+To collect data on the standard library and available APIs, AI should inspect:
+- **Global Symbols**: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Script.kt` (root functions like `println`, `sqrt`, `assert`).
+- **Core Type Members**: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/*.kt` (e.g., `ObjList.kt`, `ObjString.kt`, `ObjMap.kt`) for methods on built-in types.
+- **Lyng-side Extensions**: `lynglib/stdlib/lyng/root.lyng` for high-level functional APIs (e.g., `map`, `filter`, `any`, `lazy`).
+- **I/O & Processes**: `lyngio/src/commonMain/kotlin/net/sergeych/lyng/io/` for `fs` and `process` modules.
+- **Documentation**: `docs/*.md` (e.g., `tutorial.md`, `lyngio.md`) for high-level usage and module overviews.

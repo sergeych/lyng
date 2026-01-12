@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -150,15 +150,17 @@ class LyngGrazieAnnotator : ExternalAnnotator<LyngGrazieAnnotator.Input, LyngGra
         }
         log.info("LyngGrazieAnnotator.apply: used=${chosenEntry ?: "<none>"}, totalFindings=$totalReturned, painting=${findings.size}")
 
-        // IMPORTANT: Do NOT fallback to the tiny bundled vocabulary on modern IDEs.
-        // If Grazie/Natural Languages processing returned nothing, we simply exit here
-        // to avoid low‑quality results from the legacy dictionary.
-        if (findings.isEmpty()) return
-
         for (f in findings) {
             val ab = holder.newAnnotation(HighlightSeverity.INFORMATION, f.message).range(f.range)
             applyTypoStyleIfRequested(file, ab)
             ab.create()
+        }
+
+        // SUPPLEMENT: Always run the fallback spellchecker to ensure spelling errors are not ignored.
+        // It will avoid duplicating findings already reported by Grazie.
+        val painted = fallbackWithLegacySpellcheckerIfAvailable(file, fragments, holder, findings)
+        if (painted > 0) {
+            log.info("LyngGrazieAnnotator.apply: supplemented with $painted typos from legacy engine")
         }
     }
 
@@ -381,7 +383,8 @@ class LyngGrazieAnnotator : ExternalAnnotator<LyngGrazieAnnotator.Input, LyngGra
     private fun fallbackWithLegacySpellcheckerIfAvailable(
         file: PsiFile,
         fragments: List<Pair<TextContent, TextRange>>,
-        holder: AnnotationHolder
+        holder: AnnotationHolder,
+        existingFindings: List<Finding>
     ): Int {
         return try {
             val mgrCls = Class.forName("com.intellij.spellchecker.SpellCheckerManager")
@@ -389,12 +392,12 @@ class LyngGrazieAnnotator : ExternalAnnotator<LyngGrazieAnnotator.Input, LyngGra
             val isCorrect = mgrCls.methods.firstOrNull { it.name == "isCorrect" && it.parameterCount == 1 && it.parameterTypes[0] == String::class.java }
             if (getInstance == null || isCorrect == null) {
                 // No legacy spellchecker API available — fall back to naive painter
-                return naiveFallbackPaint(file, fragments, holder)
+                return naiveFallbackPaint(file, fragments, holder, existingFindings)
             }
             val mgr = getInstance.invoke(null, file.project)
             if (mgr == null) {
                 // Legacy manager not present for this project — use naive fallback
-                return naiveFallbackPaint(file, fragments, holder)
+                return naiveFallbackPaint(file, fragments, holder, existingFindings)
             }
             var painted = 0
             val docText = file.viewProvider.document?.text ?: return 0
@@ -411,13 +414,18 @@ class LyngGrazieAnnotator : ExternalAnnotator<LyngGrazieAnnotator.Input, LyngGra
                     for (part in parts) {
                         if (part.length <= 2) continue
                         if (isAllowedWord(part)) continue
+
+                        // Map part back to original token occurrence within this hostRange
+                        val localStart = m.range.first + token.indexOf(part)
+                        val localEnd = localStart + part.length
+                        val abs = TextRange(hostRange.startOffset + localStart, hostRange.startOffset + localEnd)
+
+                        // Avoid duplicating findings from Grazie
+                        if (existingFindings.any { it.range.intersects(abs) }) continue
+
                         // Quick allowlist for very common words to reduce noise if dictionaries differ
                         val ok = try { isCorrect.invoke(mgr, part) as? Boolean } catch (_: Throwable) { null }
                         if (ok == false) {
-                            // Map part back to original token occurrence within this hostRange
-                            val localStart = m.range.first + token.indexOf(part)
-                            val localEnd = localStart + part.length
-                            val abs = TextRange(hostRange.startOffset + localStart, hostRange.startOffset + localEnd)
                             paintTypoAnnotation(file, holder, abs, part)
                             painted++
                             flagged++
@@ -430,14 +438,15 @@ class LyngGrazieAnnotator : ExternalAnnotator<LyngGrazieAnnotator.Input, LyngGra
             painted
         } catch (_: Throwable) {
             // If legacy manager is not available, fall back to a very naive heuristic (no external deps)
-            return naiveFallbackPaint(file, fragments, holder)
+            return naiveFallbackPaint(file, fragments, holder, existingFindings)
         }
     }
 
     private fun naiveFallbackPaint(
         file: PsiFile,
         fragments: List<Pair<TextContent, TextRange>>,
-        holder: AnnotationHolder
+        holder: AnnotationHolder,
+        existingFindings: List<Finding>
     ): Int {
         var painted = 0
         val docText = file.viewProvider.document?.text
@@ -461,6 +470,14 @@ class LyngGrazieAnnotator : ExternalAnnotator<LyngGrazieAnnotator.Input, LyngGra
                     seen++
                     val lower = part.lowercase()
                     if (lower.length <= 2 || isAllowedWord(part)) continue
+
+                    val localStart = m.range.first + token.indexOf(part)
+                    val localEnd = localStart + part.length
+                    val abs = TextRange(hostRange.startOffset + localStart, hostRange.startOffset + localEnd)
+
+                    // Avoid duplicating findings from Grazie
+                    if (existingFindings.any { it.range.intersects(abs) }) continue
+
                     // Heuristic: no vowels OR 3 repeated chars OR ends with unlikely double consonants
                     val noVowel = lower.none { it in "aeiouy" }
                     val triple = Regex("(.)\\1\\1").containsMatchIn(lower)
@@ -480,9 +497,6 @@ class LyngGrazieAnnotator : ExternalAnnotator<LyngGrazieAnnotator.Input, LyngGra
                         }
                     }
                     if (looksWrong) {
-                        val localStart = m.range.first + token.indexOf(part)
-                        val localEnd = localStart + part.length
-                        val abs = TextRange(hostRange.startOffset + localStart, hostRange.startOffset + localEnd)
                         paintTypoAnnotation(file, holder, abs, part)
                         painted++
                         flagged++

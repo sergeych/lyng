@@ -62,6 +62,7 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
         if (collectedInfo == null) return null
         ProgressManager.checkCanceled()
         val text = collectedInfo.text
+        val tokens = try { SimpleLyngHighlighter().highlight(text) } catch (_: Throwable) { emptyList() }
         
         // Use LyngAstManager to get the (potentially merged) Mini-AST
         val mini = LyngAstManager.getMiniAst(collectedInfo.file) 
@@ -224,8 +225,6 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
             // Heuristics on top of binder: function call-sites and simple name-based roles
             ProgressManager.checkCanceled()
 
-            val tokens = try { SimpleLyngHighlighter().highlight(text) } catch (_: Throwable) { emptyList() }
-
             // Build simple name -> role map for top-level vals/vars and parameters
             val nameRole = HashMap<String, com.intellij.openapi.editor.colors.TextAttributesKey>(8)
             mini.declarations.forEach { d ->
@@ -280,7 +279,6 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
 
         // Add annotation/label coloring using token highlighter
         run {
-            val tokens = try { SimpleLyngHighlighter().highlight(text) } catch (_: Throwable) { emptyList() }
             tokens.forEach { s ->
                 if (s.kind == HighlightKind.Label) {
                     val start = s.range.start
@@ -322,7 +320,6 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
 
         // Map Enum constants from token highlighter to IDEA enum constant color
         run {
-            val tokens = try { SimpleLyngHighlighter().highlight(text) } catch (_: Throwable) { emptyList() }
             tokens.forEach { s ->
                 if (s.kind == HighlightKind.EnumConstant) {
                     val start = s.range.start
@@ -334,24 +331,10 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
             }
         }
 
-        // Build spell index payload: identifiers from symbols + references; comments/strings from simple highlighter
-        val idRanges = mutableSetOf<IntRange>()
-        try {
-            val binding = Binder.bind(text, mini)
-            binding.symbols.forEach { sym ->
-                val s = sym.declStart
-                val e = sym.declEnd
-                if (s in 0..e && e <= text.length && s < e) idRanges += (s until e)
-            }
-            binding.references.forEach { ref ->
-                val s = ref.start
-                val e = ref.end
-                if (s in 0..e && e <= text.length && s < e) idRanges += (s until e)
-            }
-        } catch (_: Throwable) {
-            // Best-effort; no identifiers if binder fails
-        }
-        val tokens = try { SimpleLyngHighlighter().highlight(text) } catch (_: Throwable) { emptyList() }
+        // Build spell index payload: identifiers + comments/strings from simple highlighter.
+        // We use the highlighter as the source of truth for all "words" to check, including
+        // identifiers that might not be bound by the Binder.
+        val idRanges = tokens.filter { it.kind == HighlightKind.Identifier }.map { it.range.start until it.range.endExclusive }
         val commentRanges = tokens.filter { it.kind == HighlightKind.Comment }.map { it.range.start until it.range.endExclusive }
         val stringRanges = tokens.filter { it.kind == HighlightKind.String }.map { it.range.start until it.range.endExclusive }
 

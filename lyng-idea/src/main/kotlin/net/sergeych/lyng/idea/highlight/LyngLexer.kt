@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -101,8 +101,9 @@ class LyngLexer : LexerBase() {
             return
         }
 
-        // String "..." with simple escape handling
-        if (ch == '"') {
+        // String "..." or '...' with simple escape handling
+        if (ch == '"' || ch == '\'') {
+            val quote = ch
             i++
             while (i < endOffset) {
                 val c = buffer[i]
@@ -110,7 +111,7 @@ class LyngLexer : LexerBase() {
                     i += 2
                     continue
                 }
-                if (c == '"') { i++; break }
+                if (c == quote) { i++; break }
                 i++
             }
             myTokenEnd = i
