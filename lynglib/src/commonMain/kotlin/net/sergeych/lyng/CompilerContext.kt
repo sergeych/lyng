@@ -35,14 +35,20 @@ class CompilerContext(val tokens: List<Token>) {
 
     var currentIndex = 0
     private var pendingGT = 0
+    private var pendingAssign = false
 
-    fun hasNext() = currentIndex < tokens.size || pendingGT > 0
+    fun hasNext() = currentIndex < tokens.size || pendingGT > 0 || pendingAssign
     fun hasPrevious() = currentIndex > 0
     fun next(): Token {
         if (pendingGT > 0) {
             pendingGT--
             val last = tokens[currentIndex - 1]
             return Token(">", last.pos.copy(column = last.pos.column + 1), Token.Type.GT)
+        }
+        if (pendingAssign) {
+            pendingAssign = false
+            val last = tokens[currentIndex - 1]
+            return Token("=", last.pos.copy(column = last.pos.column + 1), Token.Type.ASSIGN)
         }
         return if (currentIndex < tokens.size) tokens[currentIndex++]
         else Token("", tokens.last().pos, Token.Type.EOF)
@@ -52,16 +58,19 @@ class CompilerContext(val tokens: List<Token>) {
         pendingGT++
     }
 
-    fun previous() = if (pendingGT > 0) {
-        pendingGT-- // This is wrong, previous should go back. 
-        // But we don't really use previous() in generics parser after splitting.
-        throw IllegalStateException("previous() not supported after pushPendingGT")
+    fun pushPendingAssign() {
+        pendingAssign = true
+    }
+
+    fun previous() = if (pendingGT > 0 || pendingAssign) {
+        throw IllegalStateException("previous() not supported after pushPending tokens")
     } else if (!hasPrevious()) throw IllegalStateException("No previous token") else tokens[--currentIndex]
 
-    fun savePos() = (currentIndex shl 2) or (pendingGT and 3)
+    fun savePos() = (currentIndex shl 3) or (pendingGT and 3) or (if (pendingAssign) 4 else 0)
     fun restorePos(pos: Int) {
-        currentIndex = pos shr 2
+        currentIndex = pos shr 3
         pendingGT = pos and 3
+        pendingAssign = (pos and 4) != 0
     }
 
     fun ensureLabelIsValid(pos: Pos, label: String) {

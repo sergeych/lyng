@@ -4803,7 +4803,7 @@ class ScriptTest {
             fun f(a: String = "foo") = a + "!"
             fun g(a: String? = null) = a ?: "!!"
             assertEquals(f(), "foo!")
-            assertEquals(f(), "!!")
+            assertEquals(g(), "!!")
             assertEquals(f("bar"), "bar!")
             class T(b: Int=42,c: String?=null) 
             assertEquals(42, T().b)

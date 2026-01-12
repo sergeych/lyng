@@ -1048,7 +1048,12 @@ class Compiler(
         }
 
         // Nullable suffix after base or generic
-        val isNullable = cc.skipTokenOfType(Token.Type.QUESTION, isOptional = true)
+        val isNullable = if (cc.skipTokenOfType(Token.Type.QUESTION, isOptional = true)) {
+            true
+        } else if (cc.skipTokenOfType(Token.Type.IFNULLASSIGN, isOptional = true)) {
+            cc.pushPendingAssign()
+            true
+        } else false
         val endPos = cc.currentPos()
 
         val miniRef = buildBaseRef(if (miniArgs != null) endPos else lastEnd, miniArgs, isNullable)
