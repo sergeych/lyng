@@ -100,11 +100,16 @@ object LyngFormatter {
         fun isControlHeaderNoBrace(s: String): Boolean {
             val t = s.trim()
             if (t.isEmpty()) return false
-            // match: if (...) | else if (...) | else
-            val isIf = Regex("^if\\s*\\(.*\\)\\s*$").matches(t)
-            val isElseIf = Regex("^else\\s+if\\s*\\(.*\\)\\s*$").matches(t)
-            val isElse = t == "else"
-            if (isIf || isElseIf || isElse) return true
+            // match: if (...) | else if (...) | else | catch (...) | finally
+            if (Regex("^if\\s*\\(.*\\)$").matches(t)) return true
+            if (Regex("^else\\s+if\\s*\\(.*\\)$").matches(t)) return true
+            if (t == "else") return true
+            if (Regex("^catch\\s*\\(.*\\)$").matches(t)) return true
+            if (t == "finally") return true
+
+            // Short definition form: fun x() = or val x =
+            if (Regex("^(override\\s+)?(fun|fn)\\b.*=\\s*$").matches(t)) return true
+            if (Regex("^(private\\s+|protected\\s+|public\\s+|override\\s+)?(val|var)\\b.*=\\s*$").matches(t)) return true
 
             // property accessors ending with ) or =
             if (isAccessorRelated(t)) {
@@ -113,11 +118,23 @@ object LyngFormatter {
             return false
         }
 
+        fun isDoubleIndentHeader(s: String): Boolean {
+            val t = s.trim()
+            if (!t.endsWith("=")) return false
+            // Is it a function or property definition?
+            if (Regex("\\b(fun|fn|val|var)\\b").containsMatchIn(t)) return true
+            // Is it an accessor?
+            if (isPropertyAccessor(t)) return true
+            return false
+        }
+
         for ((i, rawLine) in lines.withIndex()) {
             val (parts, nextInBlockComment) = splitIntoParts(rawLine, inBlockComment)
             val code = parts.filter { it.type == PartType.Code }.joinToString("") { it.text }
+            val codeAndStrings = parts.filter { it.type != PartType.BlockComment && it.type != PartType.LineComment }.joinToString("") { it.text }
             val trimmedStart = code.dropWhile { it == ' ' || it == '\t' }
             val trimmedLine = rawLine.trim()
+            val trimmedCodeAndStrings = codeAndStrings.trim()
 
             // Compute effective indent level for this line
             val currentExtraIndent = extraIndents.sum()
@@ -138,9 +155,15 @@ object LyngFormatter {
 
             // Single-line control header (if/else/else if) without braces: indent the next
             // non-empty, non-'}', non-'else' line by one extra level
+            val isContinuation = trimmedStart.startsWith("else") || trimmedStart.startsWith("catch") || trimmedStart.startsWith("finally")
             val applyAwaiting = awaitingExtraIndent > 0 && trimmedStart.isNotEmpty() &&
-                    !trimmedStart.startsWith("else") && !trimmedStart.startsWith("}")
-            if (applyAwaiting) effectiveLevel += awaitingExtraIndent
+                    !trimmedStart.startsWith("}")
+            var actualAwaiting = 0
+            if (applyAwaiting) {
+                actualAwaiting = awaitingExtraIndent
+                if (isContinuation) actualAwaiting = (actualAwaiting - 1).coerceAtLeast(0)
+                effectiveLevel += actualAwaiting
+            }
 
             val firstChar = trimmedStart.firstOrNull()
             // While inside parentheses, continuation applies scaled by nesting level
@@ -194,7 +217,7 @@ object LyngFormatter {
             val newBlockLevel = blockLevel
             if (newBlockLevel > oldBlockLevel) {
                 val isAccessorRelatedLine = isAccessor || (!inBlockComment && isAccessorRelated(code))
-                val addedThisLine = (if (applyAwaiting) awaitingExtraIndent else 0) + (if (isAccessorRelatedLine) 1 else 0)
+                val addedThisLine = actualAwaiting + (if (isAccessorRelatedLine) 1 else 0)
                 repeat(newBlockLevel - oldBlockLevel) {
                     extraIndents.add(addedThisLine)
                 }
@@ -207,23 +230,29 @@ object LyngFormatter {
             inBlockComment = nextInBlockComment
 
             // Update awaitingExtraIndent based on current line
+            val nextLineTrimmed = lines.getOrNull(i + 1)?.trim() ?: ""
+            val nextIsContinuation = nextLineTrimmed.startsWith("else") ||
+                    nextLineTrimmed.startsWith("catch") ||
+                    nextLineTrimmed.startsWith("finally")
+
             if (applyAwaiting && trimmedStart.isNotEmpty()) {
                 // we have just applied it.
                 val endsWithBrace = code.trimEnd().endsWith("{")
-                if (!endsWithBrace && isControlHeaderNoBrace(code)) {
+                if (!endsWithBrace && isControlHeaderNoBrace(trimmedCodeAndStrings)) {
                     // It's another header, increment
-                    val isAccessorRelatedLine = isAccessor || (!inBlockComment && isAccessorRelated(code))
-                    awaitingExtraIndent += if (isAccessorRelatedLine) 2 else 1
-                } else {
-                    // It's the body, reset
+                    val isAccessorOrDouble = isAccessor || (!inBlockComment && isAccessorRelated(code)) || isDoubleIndentHeader(trimmedCodeAndStrings)
+                    val increment = if (isAccessorOrDouble) 2 else 1
+                    awaitingExtraIndent = actualAwaiting + increment
+                } else if (!nextIsContinuation) {
+                    // It's the body, and no continuation follows, so reset
                     awaitingExtraIndent = 0
                 }
             } else {
                 // start awaiting if current line is a control header without '{'
                 val endsWithBrace = code.trimEnd().endsWith("{")
-                if (!endsWithBrace && isControlHeaderNoBrace(code)) {
-                    val isAccessorRelatedLine = isAccessor || (!inBlockComment && isAccessorRelated(code))
-                    awaitingExtraIndent = if (isAccessorRelatedLine) 2 else 1
+                if (!endsWithBrace && isControlHeaderNoBrace(trimmedCodeAndStrings)) {
+                    val isAccessorOrDouble = isAccessor || (!inBlockComment && isAccessorRelated(code)) || isDoubleIndentHeader(trimmedCodeAndStrings)
+                    awaitingExtraIndent = if (isAccessorOrDouble) 2 else 1
                 }
             }
 

@@ -402,6 +402,8 @@ class LyngGrazieAnnotator : ExternalAnnotator<LyngGrazieAnnotator.Input, LyngGra
             var painted = 0
             val docText = file.viewProvider.document?.text ?: return 0
             val tokenRegex = Regex("[A-Za-z][A-Za-z0-9_']{2,}")
+            val settings = LyngFormatterSettings.getInstance(file.project)
+            val learned = settings.learnedWords
             for ((content, hostRange) in fragments) {
                 val text = try { docText.substring(hostRange.startOffset, hostRange.endOffset) } catch (_: Throwable) { null } ?: continue
                 var seen = 0
@@ -413,7 +415,7 @@ class LyngGrazieAnnotator : ExternalAnnotator<LyngGrazieAnnotator.Input, LyngGra
                     val parts = splitIdentifier(token)
                     for (part in parts) {
                         if (part.length <= 2) continue
-                        if (isAllowedWord(part)) continue
+                        if (isAllowedWord(part, learned)) continue
 
                         // Map part back to original token occurrence within this hostRange
                         val localStart = m.range.first + token.indexOf(part)
@@ -451,6 +453,8 @@ class LyngGrazieAnnotator : ExternalAnnotator<LyngGrazieAnnotator.Input, LyngGra
         var painted = 0
         val docText = file.viewProvider.document?.text
         val tokenRegex = Regex("[A-Za-z][A-Za-z0-9_']{2,}")
+        val settings = LyngFormatterSettings.getInstance(file.project)
+        val learned = settings.learnedWords
         val baseWords = setOf(
             // small, common vocabulary to catch near-miss typos in typical code/comments
             "comment","comments","error","errors","found","file","not","word","words","count","value","name","class","function","string"
@@ -469,7 +473,7 @@ class LyngGrazieAnnotator : ExternalAnnotator<LyngGrazieAnnotator.Input, LyngGra
                 for (part in parts) {
                     seen++
                     val lower = part.lowercase()
-                    if (lower.length <= 2 || isAllowedWord(part)) continue
+                    if (lower.length <= 2 || isAllowedWord(part, learned)) continue
 
                     val localStart = m.range.first + token.indexOf(part)
                     val localEnd = localStart + part.length
@@ -540,29 +544,32 @@ class LyngGrazieAnnotator : ExternalAnnotator<LyngGrazieAnnotator.Input, LyngGra
     private fun suggestReplacements(file: PsiFile, word: String): List<String> {
         val lower = word.lowercase()
         val fromProject = collectProjectWords(file)
-        val fromTech = TechDictionary.allWords()
-        val fromEnglish = EnglishDictionary.allWords()
-        // Merge with priority: project (p=0), tech (p=1), english (p=2)
+
+        val fromSpellChecker = try {
+            val mgrCls = Class.forName("com.intellij.spellchecker.SpellCheckerManager")
+            val getInstance = mgrCls.methods.firstOrNull { it.name == "getInstance" && it.parameterCount == 1 }
+            val getSuggestions = mgrCls.methods.firstOrNull { it.name == "getSuggestions" && it.parameterCount == 1 && it.parameterTypes[0] == String::class.java }
+            val mgr = getInstance?.invoke(null, file.project)
+            if (mgr != null && getSuggestions != null) {
+                @Suppress("UNCHECKED_CAST")
+                getSuggestions.invoke(mgr, word) as? List<String>
+            } else null
+        } catch (_: Throwable) {
+            null
+        } ?: emptyList()
+
+        // Merge with priority: project (p=0), spellchecker (p=1)
         val all = LinkedHashSet<String>()
-        all.addAll(fromProject)
-        all.addAll(fromTech)
-        all.addAll(fromEnglish)
-        data class Cand(val w: String, val d: Int, val p: Int)
-        val cands = ArrayList<Cand>(32)
-        for (w in all) {
+        // Add project words that are close enough
+        for (w in fromProject) {
             if (w == lower) continue
-            if (kotlin.math.abs(w.length - lower.length) > 2) continue
-            val d = editDistance(lower, w)
-            val p = when {
-                w in fromProject -> 0
-                w in fromTech -> 1
-                else -> 2
+            if (kotlin.math.abs(w.length - lower.length) <= 2 && editDistance(lower, w) <= 2) {
+                all.add(w)
             }
-            cands += Cand(w, d, p)
         }
-        cands.sortWith(compareBy<Cand> { it.d }.thenBy { it.p }.thenBy { it.w })
-        // Return a larger pool so callers can choose desired display count
-        return cands.take(16).map { it.w }
+        all.addAll(fromSpellChecker)
+
+        return all.take(16).toList()
     }
 
     private fun collectProjectWords(file: PsiFile): Set<String> {
@@ -589,14 +596,19 @@ class LyngGrazieAnnotator : ExternalAnnotator<LyngGrazieAnnotator.Input, LyngGra
         return out
     }
 
-    private fun isAllowedWord(w: String): Boolean {
+    private fun isAllowedWord(w: String, learnedWords: Set<String> = emptySet()): Boolean {
         val s = w.lowercase()
+        if (s in learnedWords) return true
         return s in setOf(
             // common code words / language keywords to avoid noise
             "val","var","fun","class","interface","enum","type","import","package","return","if","else","when","while","for","try","catch","finally","true","false","null",
             "abstract","closed","override",
             // very common English words
-            "the","and","or","not","with","from","into","this","that","file","found","count","name","value","object"
+            "the","and","or","not","with","from","into","this","that","file","found","count","name","value","object",
+            // Lyng technical/vocabulary words formerly in TechDictionary
+            "lyng","miniast","binder","printf","specifier","specifiers","regex","token","tokens",
+            "identifier","identifiers","keyword","keywords","comment","comments","string","strings",
+            "literal","literals","formatting","formatter","grazie","typo","typos","dictionary","dictionaries"
         )
     }
 

@@ -38,16 +38,18 @@ class LyngPsiReference(element: PsiElement) : PsiPolyVariantReferenceBase<PsiEle
 
         val mini = LyngAstManager.getMiniAst(file) ?: return emptyArray()
         val binding = LyngAstManager.getBinding(file)
+        val imported = DocLookupUtils.canonicalImportedModules(mini, text).toSet()
+        val currentPackage = getPackageName(file)
+        val allowedPackages = if (currentPackage != null) imported + currentPackage else imported
 
         // 1. Member resolution (obj.member)
         val dotPos = TextCtx.findDotLeft(text, offset)
         if (dotPos != null) {
-            val imported = DocLookupUtils.canonicalImportedModules(mini, text)
-            val receiverClass = DocLookupUtils.guessReceiverClassViaMini(mini, text, dotPos, imported, binding)
-                ?: DocLookupUtils.guessReceiverClass(text, dotPos, imported, mini)
+            val receiverClass = DocLookupUtils.guessReceiverClassViaMini(mini, text, dotPos, imported.toList(), binding)
+                ?: DocLookupUtils.guessReceiverClass(text, dotPos, imported.toList(), mini)
             
             if (receiverClass != null) {
-                val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, receiverClass, name, mini)
+                val resolved = DocLookupUtils.resolveMemberWithInheritance(imported.toList(), receiverClass, name, mini)
                 if (resolved != null) {
                     val owner = resolved.first
                     val member = resolved.second
@@ -75,7 +77,7 @@ class LyngPsiReference(element: PsiElement) : PsiPolyVariantReferenceBase<PsiEle
             }
             // If we couldn't resolve exactly, we might still want to search globally but ONLY for members
             if (results.isEmpty()) {
-                results.addAll(resolveGlobally(file.project, name, membersOnly = true))
+                results.addAll(resolveGlobally(file.project, name, membersOnly = true, allowedPackages = allowedPackages))
             }
         } else {
             // 2. Local resolution via Binder
@@ -94,7 +96,7 @@ class LyngPsiReference(element: PsiElement) : PsiPolyVariantReferenceBase<PsiEle
             // 3. Global project scan
             // Only search globally if we haven't found a strong local match
             if (results.isEmpty()) {
-                results.addAll(resolveGlobally(file.project, name))
+                results.addAll(resolveGlobally(file.project, name, allowedPackages = allowedPackages))
             }
         }
 
@@ -141,6 +143,16 @@ class LyngPsiReference(element: PsiElement) : PsiPolyVariantReferenceBase<PsiEle
         return null
     }
 
+    private fun getPackageName(file: PsiFile): String? {
+        val mini = LyngAstManager.getMiniAst(file) ?: return null
+        return try {
+            val pkg = mini.range.start.source.extractPackageName()
+            if (pkg.startsWith("lyng.")) pkg else "lyng.$pkg"
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     override fun resolve(): PsiElement? {
         val results = multiResolve(false)
         if (results.isEmpty()) return null
@@ -154,13 +166,20 @@ class LyngPsiReference(element: PsiElement) : PsiPolyVariantReferenceBase<PsiEle
         return target
     }
 
-    private fun resolveGlobally(project: Project, name: String, membersOnly: Boolean = false): List<ResolveResult> {
+    private fun resolveGlobally(project: Project, name: String, membersOnly: Boolean = false, allowedPackages: Set<String>? = null): List<ResolveResult> {
         val results = mutableListOf<ResolveResult>()
         val files = FilenameIndex.getAllFilesByExt(project, "lyng", GlobalSearchScope.projectScope(project))
         val psiManager = PsiManager.getInstance(project)
 
         for (vFile in files) {
             val file = psiManager.findFile(vFile) ?: continue
+            
+            // Filter by package if requested
+            if (allowedPackages != null) {
+                val pkg = getPackageName(file)
+                if (pkg == null || pkg !in allowedPackages) continue
+            }
+
             val mini = LyngAstManager.getMiniAst(file) ?: continue
             val src = mini.range.start.source
 

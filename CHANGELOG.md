@@ -21,6 +21,12 @@
   - MI Satisfaction: Abstract requirements are automatically satisfied by matching concrete members found later in the C3 MRO chain without requiring explicit proxy methods.
   - Integration: Updated highlighters (lynglib, lyngweb, IDEA plugin), IDEA completion, and Grazie grammar checking.
   - Documentation: Updated `docs/OOP.md` with sections on "Abstract Classes and Members", "Interfaces", and "Overriding and Virtual Dispatch".
+- IDEA plugin: Improved natural language support and spellchecking
+  - Disabled the limited built-in English and Technical dictionaries.
+  - Enforced usage of the platform's standard Natural Languages (Grazie) and Spellchecker components.
+  - Integrated `SpellCheckerManager` for word suggestions and validation, respecting users' personal and project dictionaries.
+  - Added project-specific "learned words" support via `Lyng Formatter` settings and quick-fixes.
+  - Enhanced fallback spellchecker for technical terms and Lyng-specific vocabulary.
 
 - Language: Class properties with accessors
   - Support for `val` (read-only) and `var` (read-write) properties in classes.

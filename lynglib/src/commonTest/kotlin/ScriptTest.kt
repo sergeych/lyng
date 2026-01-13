@@ -4811,5 +4811,18 @@ class ScriptTest {
         """.trimIndent())
     }
 
+    @Test
+    fun testArgsPriorityWithSplash() = runTest {
+        eval("""
+            class A {
+                val tags get() = ["foo"]
+                
+                fun f1(tags...) = tags
+                
+                fun f2(tags...) = f1(...tags)
+            }
+            assertEquals(["bar"], A().f2("bar"))   
+        """)
+    }
 }
 

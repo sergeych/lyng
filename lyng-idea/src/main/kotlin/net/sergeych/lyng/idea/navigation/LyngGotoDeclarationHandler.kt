@@ -20,13 +20,14 @@ package net.sergeych.lyng.idea.navigation
 import com.intellij.codeInsight.navigation.actions.GotoDeclarationHandler
 import com.intellij.openapi.editor.Editor
 import com.intellij.psi.PsiElement
+import net.sergeych.lyng.idea.LyngLanguage
 
 /**
  * Ensures Ctrl+B (Go to Definition) works on Lyng identifiers by resolving through LyngPsiReference.
  */
 class LyngGotoDeclarationHandler : GotoDeclarationHandler {
     override fun getGotoDeclarationTargets(sourceElement: PsiElement?, offset: Int, editor: Editor?): Array<PsiElement>? {
-        if (sourceElement == null) return null
+        if (sourceElement == null || sourceElement.language != LyngLanguage) return null
         
         val allTargets = mutableListOf<PsiElement>()
 
