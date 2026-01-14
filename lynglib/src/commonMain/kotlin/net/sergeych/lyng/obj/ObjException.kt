@@ -112,7 +112,7 @@ open class ObjException(
                             )
                         } else {
                             // Fallback textual entry if StackTraceEntry class is not available in this scope
-                            result.list += ObjString("?${pos.source.objSourceName}:${pos.line+1}:${pos.column+1}: ${pos.currentLine}")
+                            result.list += ObjString("#${pos.source.objSourceName}:${pos.line+1}:${pos.column+1}: ${pos.currentLine}")
                         }
                         lastPos = pos
                     }
