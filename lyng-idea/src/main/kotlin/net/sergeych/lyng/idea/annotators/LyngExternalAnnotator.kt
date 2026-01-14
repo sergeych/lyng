@@ -44,10 +44,7 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
 
     data class Span(val start: Int, val end: Int, val key: com.intellij.openapi.editor.colors.TextAttributesKey)
     data class Error(val start: Int, val end: Int, val message: String)
-    data class Result(val modStamp: Long, val spans: List<Span>, val error: Error? = null,
-                      val spellIdentifiers: List<IntRange> = emptyList(),
-                      val spellComments: List<IntRange> = emptyList(),
-                      val spellStrings: List<IntRange> = emptyList())
+    data class Result(val modStamp: Long, val spans: List<Span>, val error: Error? = null)
 
     override fun collectInformation(file: PsiFile): Input? {
         val doc: Document = file.viewProvider.document ?: return null
@@ -318,62 +315,6 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
             }
         }
 
-        // Build spell index payload: identifiers + comments/strings from simple highlighter.
-        // We limit identifier checks to declarations (val, var, fun, class, enum) and enum constants.
-        val spellIds = ArrayList<IntRange>()
-        fun addSpellId(pos: net.sergeych.lyng.Pos, name: String) {
-            if (pos.source == source) {
-                val s = source.offsetOf(pos)
-                val e = (s + name.length).coerceAtMost(text.length)
-                if (s < e) spellIds.add(s until e)
-            }
-        }
-
-        // Add declarations from MiniAst
-        mini.declarations.forEach { d ->
-            addSpellId(d.nameStart, d.name)
-            when (d) {
-                is MiniFunDecl -> {
-                    d.params.forEach { addSpellId(it.nameStart, it.name) }
-                    addTypeNames(d.returnType, ::addSpellId)
-                    addTypeNames(d.receiver, ::addSpellId)
-                }
-                is MiniValDecl -> {
-                    addTypeNames(d.type, ::addSpellId)
-                    addTypeNames(d.receiver, ::addSpellId)
-                }
-                is MiniEnumDecl -> {
-                    if (d.entries.size == d.entryPositions.size) {
-                        for (i in d.entries.indices) {
-                            addSpellId(d.entryPositions[i], d.entries[i])
-                        }
-                    }
-                }
-                is MiniClassDecl -> {
-                    d.ctorFields.forEach { addSpellId(it.nameStart, it.name) }
-                    d.classFields.forEach { addSpellId(it.nameStart, it.name) }
-                    d.members.forEach { m ->
-                        when (m) {
-                            is MiniMemberFunDecl -> {
-                                addSpellId(m.nameStart, m.name)
-                                m.params.forEach { addSpellId(it.nameStart, it.name) }
-                                addTypeNames(m.returnType, ::addSpellId)
-                            }
-                            is MiniMemberValDecl -> {
-                                addSpellId(m.nameStart, m.name)
-                                addTypeNames(m.type, ::addSpellId)
-                            }
-                            else -> {}
-                        }
-                    }
-                }
-                else -> {}
-            }
-        }
-
-        // Map Enum constants from token highlighter for highlighting only.
-        // We do NOT add them to spellIds here because they might be usages, 
-        // and declarations are already handled via MiniEnumDecl above.
         tokens.forEach { s ->
             if (s.kind == HighlightKind.EnumConstant) {
                 val start = s.range.start
@@ -384,40 +325,9 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
             }
         }
 
-        val commentRanges = tokens.filter { it.kind == HighlightKind.Comment }.map { it.range.start until it.range.endExclusive }
-        val stringRanges = tokens.filter { it.kind == HighlightKind.String }.map { it.range.start until it.range.endExclusive }
-
-        return Result(collectedInfo.modStamp, out, null,
-            spellIdentifiers = spellIds,
-            spellComments = commentRanges,
-            spellStrings = stringRanges)
+        return Result(collectedInfo.modStamp, out, null)
     }
 
-    /**
-     * Helper to add all segments of a type name to the spell index.
-     */
-    private fun addTypeNames(t: MiniTypeRef?, add: (net.sergeych.lyng.Pos, String) -> Unit) {
-        when (t) {
-            is MiniTypeName -> t.segments.forEach { add(it.range.start, it.name) }
-            is MiniGenericType -> {
-                addTypeNames(t.base, add)
-                t.args.forEach { addTypeNames(it, add) }
-            }
-
-            is MiniFunctionType -> {
-                addTypeNames(t.receiver, add)
-                t.params.forEach { addTypeNames(it, add) }
-                addTypeNames(t.returnType, add)
-            }
-
-            is MiniTypeVar -> {
-                // Type variables are declarations too
-                add(t.range.start, t.name)
-            }
-
-            null -> {}
-        }
-    }
 
     override fun apply(file: PsiFile, annotationResult: Result?, holder: AnnotationHolder) {
         if (annotationResult == null) return
@@ -428,32 +338,6 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
         file.putUserData(CACHE_KEY, result)
 
         val doc = file.viewProvider.document
-
-        // Store spell index for spell/grammar engines to consume (suspend until ready)
-        val ids = result.spellIdentifiers.map { TextRange(it.first, it.last + 1) }
-        val coms = result.spellComments.map { TextRange(it.first, it.last + 1) }
-        val strs = result.spellStrings.map { TextRange(it.first, it.last + 1) }
-        net.sergeych.lyng.idea.spell.LyngSpellIndex.store(file,
-            net.sergeych.lyng.idea.spell.LyngSpellIndex.Data(
-                modStamp = result.modStamp,
-                identifiers = ids,
-                comments = coms,
-                strings = strs
-            )
-        )
-
-        // Optional diagnostic overlay: visualize the ranges we will feed to spellcheckers
-        val settings = net.sergeych.lyng.idea.settings.LyngFormatterSettings.getInstance(file.project)
-        if (settings.debugShowSpellFeed) {
-            fun paint(r: TextRange, label: String) {
-                holder.newAnnotation(HighlightSeverity.WEAK_WARNING, "spell-feed: $label")
-                    .range(r)
-                    .create()
-            }
-            ids.forEach { paint(it, "id") }
-            coms.forEach { paint(it, "comment") }
-            if (settings.spellCheckStringLiterals) strs.forEach { paint(it, "string") }
-        }
 
         for (s in result.spans) {
             holder.newSilentAnnotation(HighlightSeverity.INFORMATION)

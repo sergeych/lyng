@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,14 +30,6 @@ class LyngFormatterSettingsConfigurable(private val project: Project) : Configur
     private var reindentClosedBlockCb: JCheckBox? = null
     private var reindentPasteCb: JCheckBox? = null
     private var normalizeBlockCommentIndentCb: JCheckBox? = null
-    private var spellCheckLiteralsCb: JCheckBox? = null
-    private var preferGrazieCommentsLiteralsCb: JCheckBox? = null
-    private var grazieChecksIdentifiersCb: JCheckBox? = null
-    private var grazieIdsAsCommentsCb: JCheckBox? = null
-    private var grazieLiteralsAsCommentsCb: JCheckBox? = null
-    private var debugShowSpellFeedCb: JCheckBox? = null
-    private var showTyposGreenCb: JCheckBox? = null
-    private var offerQuickFixesCb: JCheckBox? = null
     private var enableCompletionCb: JCheckBox? = null
 
     override fun getDisplayName(): String = "Lyng Formatter"
@@ -50,14 +42,6 @@ class LyngFormatterSettingsConfigurable(private val project: Project) : Configur
         reindentClosedBlockCb = JCheckBox("Reindent enclosed block on Enter after '}'")
         reindentPasteCb = JCheckBox("Reindent pasted blocks (align pasted code to current indent)")
         normalizeBlockCommentIndentCb = JCheckBox("Normalize block comment indentation [experimental]")
-        spellCheckLiteralsCb = JCheckBox("Spell check string literals (skip % specifiers like %s, %d, %-12s)")
-        preferGrazieCommentsLiteralsCb = JCheckBox("Prefer Natural Languages/Grazie for comments and string literals (avoid duplicates)")
-        grazieChecksIdentifiersCb = JCheckBox("Check identifiers via Natural Languages/Grazie when available")
-        grazieIdsAsCommentsCb = JCheckBox("Natural Languages/Grazie: treat identifiers as comments (forces spelling checks in 2024.3)")
-        grazieLiteralsAsCommentsCb = JCheckBox("Natural Languages/Grazie: treat string literals as comments when literals are not processed")
-        debugShowSpellFeedCb = JCheckBox("Debug: show spell-feed ranges (weak warnings)")
-        showTyposGreenCb = JCheckBox("Show Lyng typos with green underline (TYPO styling)")
-        offerQuickFixesCb = JCheckBox("Offer Lyng typo quick fixes (Replace…, Add to dictionary) without Spell Checker")
         enableCompletionCb = JCheckBox("Enable Lyng autocompletion (experimental)")
 
         // Tooltips / short help
@@ -66,27 +50,12 @@ class LyngFormatterSettingsConfigurable(private val project: Project) : Configur
         reindentClosedBlockCb?.toolTipText = "On Enter after a closing '}', reindent the just-closed {…} block using formatter rules."
         reindentPasteCb?.toolTipText = "When caret is in leading whitespace, reindent the pasted text and align it to the caret's indent."
         normalizeBlockCommentIndentCb?.toolTipText = "Experimental: normalize indentation inside /* … */ comments (code is not modified)."
-        preferGrazieCommentsLiteralsCb?.toolTipText = "When ON and Natural Languages/Grazie is installed, comments and string literals are checked by Grazie. Turn OFF to force legacy Spellchecker to check them."
-        grazieChecksIdentifiersCb?.toolTipText = "When ON and Natural Languages/Grazie is installed, identifiers (non-keywords) are checked by Grazie too."
-        grazieIdsAsCommentsCb?.toolTipText = "Grazie-only fallback: route identifiers as COMMENTS domain so Grazie applies spelling in 2024.3."
-        grazieLiteralsAsCommentsCb?.toolTipText = "Grazie-only fallback: when Grammar doesn't process literals, route strings as COMMENTS so they are checked."
-        debugShowSpellFeedCb?.toolTipText = "Show the exact ranges we feed to spellcheckers (ids/comments/strings) as weak warnings."
-        showTyposGreenCb?.toolTipText = "Render Lyng typos using the platform's green TYPO underline instead of generic warnings."
-        offerQuickFixesCb?.toolTipText = "Provide lightweight Replace… and Add to dictionary quick-fixes without requiring the legacy Spell Checker."
         enableCompletionCb?.toolTipText = "Turn on/off the lightweight Lyng code completion (BASIC)."
         p.add(spacingCb)
         p.add(wrappingCb)
         p.add(reindentClosedBlockCb)
         p.add(reindentPasteCb)
         p.add(normalizeBlockCommentIndentCb)
-        p.add(spellCheckLiteralsCb)
-        p.add(preferGrazieCommentsLiteralsCb)
-        p.add(grazieChecksIdentifiersCb)
-        p.add(grazieIdsAsCommentsCb)
-        p.add(grazieLiteralsAsCommentsCb)
-        p.add(debugShowSpellFeedCb)
-        p.add(showTyposGreenCb)
-        p.add(offerQuickFixesCb)
         p.add(enableCompletionCb)
         panel = p
         reset()
@@ -100,14 +69,6 @@ class LyngFormatterSettingsConfigurable(private val project: Project) : Configur
                 reindentClosedBlockCb?.isSelected != s.reindentClosedBlockOnEnter ||
                 reindentPasteCb?.isSelected != s.reindentPastedBlocks ||
                 normalizeBlockCommentIndentCb?.isSelected != s.normalizeBlockCommentIndent ||
-                spellCheckLiteralsCb?.isSelected != s.spellCheckStringLiterals ||
-                preferGrazieCommentsLiteralsCb?.isSelected != s.preferGrazieForCommentsAndLiterals ||
-                grazieChecksIdentifiersCb?.isSelected != s.grazieChecksIdentifiers ||
-                grazieIdsAsCommentsCb?.isSelected != s.grazieTreatIdentifiersAsComments ||
-                grazieLiteralsAsCommentsCb?.isSelected != s.grazieTreatLiteralsAsComments ||
-                debugShowSpellFeedCb?.isSelected != s.debugShowSpellFeed ||
-                showTyposGreenCb?.isSelected != s.showTyposWithGreenUnderline ||
-                offerQuickFixesCb?.isSelected != s.offerLyngTypoQuickFixes ||
                 enableCompletionCb?.isSelected != s.enableLyngCompletionExperimental
     }
 
@@ -118,14 +79,6 @@ class LyngFormatterSettingsConfigurable(private val project: Project) : Configur
         s.reindentClosedBlockOnEnter = reindentClosedBlockCb?.isSelected == true
         s.reindentPastedBlocks = reindentPasteCb?.isSelected == true
         s.normalizeBlockCommentIndent = normalizeBlockCommentIndentCb?.isSelected == true
-        s.spellCheckStringLiterals = spellCheckLiteralsCb?.isSelected == true
-        s.preferGrazieForCommentsAndLiterals = preferGrazieCommentsLiteralsCb?.isSelected == true
-        s.grazieChecksIdentifiers = grazieChecksIdentifiersCb?.isSelected == true
-        s.grazieTreatIdentifiersAsComments = grazieIdsAsCommentsCb?.isSelected == true
-        s.grazieTreatLiteralsAsComments = grazieLiteralsAsCommentsCb?.isSelected == true
-        s.debugShowSpellFeed = debugShowSpellFeedCb?.isSelected == true
-        s.showTyposWithGreenUnderline = showTyposGreenCb?.isSelected == true
-        s.offerLyngTypoQuickFixes = offerQuickFixesCb?.isSelected == true
         s.enableLyngCompletionExperimental = enableCompletionCb?.isSelected == true
     }
 
@@ -136,14 +89,6 @@ class LyngFormatterSettingsConfigurable(private val project: Project) : Configur
         reindentClosedBlockCb?.isSelected = s.reindentClosedBlockOnEnter
         reindentPasteCb?.isSelected = s.reindentPastedBlocks
         normalizeBlockCommentIndentCb?.isSelected = s.normalizeBlockCommentIndent
-        spellCheckLiteralsCb?.isSelected = s.spellCheckStringLiterals
-        preferGrazieCommentsLiteralsCb?.isSelected = s.preferGrazieForCommentsAndLiterals
-        grazieChecksIdentifiersCb?.isSelected = s.grazieChecksIdentifiers
-        grazieIdsAsCommentsCb?.isSelected = s.grazieTreatIdentifiersAsComments
-        grazieLiteralsAsCommentsCb?.isSelected = s.grazieTreatLiteralsAsComments
-        debugShowSpellFeedCb?.isSelected = s.debugShowSpellFeed
-        showTyposGreenCb?.isSelected = s.showTyposWithGreenUnderline
-        offerQuickFixesCb?.isSelected = s.offerLyngTypoQuickFixes
         enableCompletionCb?.isSelected = s.enableLyngCompletionExperimental
     }
 }

@@ -20,10 +20,11 @@ import com.intellij.psi.PsiElement
 import com.intellij.spellchecker.tokenizer.SpellcheckingStrategy
 import com.intellij.spellchecker.tokenizer.Tokenizer
 import net.sergeych.lyng.idea.highlight.LyngTokenTypes
+import net.sergeych.lyng.idea.psi.LyngElementTypes
 
 /**
  * Standard IntelliJ spellchecking strategy for Lyng.
- * It uses the MiniAst-driven [LyngSpellIndex] to limit identifier checks to declarations only.
+ * Uses the simplified PSI structure to identify declarations.
  */
 class LyngSpellcheckingStrategy : SpellcheckingStrategy() {
     override fun getTokenizer(element: PsiElement?): Tokenizer<*> {
@@ -31,21 +32,9 @@ class LyngSpellcheckingStrategy : SpellcheckingStrategy() {
         return when (type) {
             LyngTokenTypes.LINE_COMMENT, LyngTokenTypes.BLOCK_COMMENT -> TEXT_TOKENIZER
             LyngTokenTypes.STRING -> TEXT_TOKENIZER
-            LyngTokenTypes.IDENTIFIER -> {
-                // We use standard NameIdentifierOwner/PsiNamedElement-based logic
-                // if it's a declaration. Argument names, class names, etc. are PSI-based.
-                // However, our PSI is currently very minimal (ASTWrapperPsiElement).
-                // So we stick to the index but ensure it is robustly filled.
-                val file = element.containingFile
-                val index = LyngSpellIndex.getUpToDate(file)
-                if (index != null) {
-                    val range = element.textRange
-                    if (index.identifiers.any { it.contains(range) }) {
-                        return TEXT_TOKENIZER
-                    }
-                }
-                EMPTY_TOKENIZER
-            }
+            LyngElementTypes.NAME_IDENTIFIER,
+            LyngElementTypes.PARAMETER_NAME,
+            LyngElementTypes.ENUM_CONSTANT_NAME -> TEXT_TOKENIZER
             else -> super.getTokenizer(element)
         }
     }

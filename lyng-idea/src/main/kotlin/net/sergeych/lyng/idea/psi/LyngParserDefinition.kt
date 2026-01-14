@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,7 +45,68 @@ class LyngParserDefinition : ParserDefinition {
 
     override fun createParser(project: Project?): PsiParser = PsiParser { root, builder ->
         val mark: PsiBuilder.Marker = builder.mark()
-        while (!builder.eof()) builder.advanceLexer()
+        var lastKeyword: String? = null
+        var inEnum = false
+        var inParams = false
+        var parenDepth = 0
+        var braceDepth = 0
+
+        while (!builder.eof()) {
+            val type = builder.tokenType
+            val text = builder.tokenText
+
+            when (type) {
+                LyngTokenTypes.KEYWORD -> {
+                    lastKeyword = text
+                    if (text == "enum") inEnum = true
+                }
+                LyngTokenTypes.PUNCT -> {
+                    if (text == "(") {
+                        parenDepth++
+                        if (lastKeyword == "fun" || lastKeyword == "constructor" || lastKeyword == "init") inParams = true
+                    } else if (text == ")") {
+                        parenDepth--
+                        if (parenDepth == 0) inParams = false
+                    } else if (text == "{") {
+                        braceDepth++
+                    } else if (text == "}") {
+                        braceDepth--
+                        if (braceDepth == 0) inEnum = false
+                    }
+                    if (text != ".") lastKeyword = null
+                }
+                LyngTokenTypes.IDENTIFIER -> {
+                    val m = builder.mark()
+                    builder.advanceLexer()
+                    val nextType = builder.tokenType
+                    val isQualified = nextType == LyngTokenTypes.PUNCT && builder.tokenText == "."
+                    
+                    if (!isQualified) {
+                        when {
+                            lastKeyword in setOf("fun", "val", "var", "class", "enum", "object", "interface", "type", "property") -> {
+                                m.done(LyngElementTypes.NAME_IDENTIFIER)
+                            }
+                            inParams && parenDepth > 0 -> {
+                                m.done(LyngElementTypes.PARAMETER_NAME)
+                            }
+                            inEnum && braceDepth > 0 && parenDepth == 0 -> {
+                                m.done(LyngElementTypes.ENUM_CONSTANT_NAME)
+                            }
+                            else -> m.drop()
+                        }
+                    } else {
+                        m.drop()
+                    }
+                    lastKeyword = null
+                    continue
+                }
+                LyngTokenTypes.WHITESPACE, LyngTokenTypes.LINE_COMMENT, LyngTokenTypes.BLOCK_COMMENT -> {
+                    // keep lastKeyword
+                }
+                else -> lastKeyword = null
+            }
+            builder.advanceLexer()
+        }
         mark.done(root)
         builder.treeBuilt
     }
