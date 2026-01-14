@@ -4161,6 +4161,14 @@ class ScriptTest {
     }
 
     @Test
+    fun testStringMul() = runTest {
+        eval("""
+            assertEquals("hellohello", "hello"*2)
+            assertEquals("", "hello"*0)
+        """.trimIndent())
+    }
+
+    @Test
     fun testLogicalNot() = runTest {
         eval(
             """
@@ -4672,6 +4680,29 @@ class ScriptTest {
         // source name, in our case, is is "tc2":
         assertContains(x1.message!!, "tc2")
     }
+
+    @Test
+    fun testFilterStackTrace() = runTest {
+        var x = try {
+            evalNamed( "tc1","""
+            fun f2() = throw IllegalArgumentException("test3")
+            fun f1() = f2()
+            f1()
+        """.trimIndent())
+            fail("this should throw")
+        }
+        catch(x: ExecutionError) {
+            x
+        }
+        assertEquals("""
+            tc1:1:12: test3
+                at tc1:1:12: fun f2() = throw IllegalArgumentException("test3")
+                at tc1:2:12: fun f1() = f2()
+                at tc1:3:1: f1()
+        """.trimIndent(),x.errorObject.getLyngExceptionMessageWithStackTrace())
+    }
+
+
     @Test
     fun testLyngToKotlinExceptionHelpers() = runTest {
         var x = evalNamed( "tc1","""

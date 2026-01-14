@@ -79,6 +79,14 @@ data class ObjString(val value: String) : Obj() {
         }
     }
 
+    override suspend fun mul(scope: Scope, other: Obj): Obj {
+        var times = other.toInt()
+        if( times < 0 ) scope.raiseIllegalArgument("negative string repetitions")
+        return ObjString( buildString {
+            while( times-- > 0 ) append(value)
+        })
+    }
+
     override fun hashCode(): Int {
         return value.hashCode()
     }

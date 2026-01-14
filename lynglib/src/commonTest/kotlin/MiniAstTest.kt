@@ -168,6 +168,7 @@ class MiniAstTest {
         assertNotNull(ed.doc)
         assertTrue(ed.doc.raw.contains("Enum E docs"))
         assertEquals(listOf("A", "B", "C"), ed.entries)
+        assertEquals(3, ed.entryPositions.size)
         assertEquals("E", ed.name)
     }
 

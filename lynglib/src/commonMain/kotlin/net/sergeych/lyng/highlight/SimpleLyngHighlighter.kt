@@ -42,7 +42,7 @@ private val fallbackKeywordIds = setOf(
     "and", "or", "not",
     // declarations & modifiers
     "fun", "fn", "class", "interface", "enum", "val", "var", "import", "package",
-    "abstract", "closed", "override",
+    "abstract", "closed", "override", "public", "lazy", "dynamic",
     "private", "protected", "static", "open", "extern", "init", "get", "set", "by",
     // control flow and misc
     "if", "else", "when", "while", "do", "for", "try", "catch", "finally",

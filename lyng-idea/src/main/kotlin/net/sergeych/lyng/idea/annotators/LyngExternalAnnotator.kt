@@ -318,30 +318,105 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
             }
         }
 
-        // Map Enum constants from token highlighter to IDEA enum constant color
-        run {
-            tokens.forEach { s ->
-                if (s.kind == HighlightKind.EnumConstant) {
-                    val start = s.range.start
-                    val end = s.range.endExclusive
-                    if (start in 0..end && end <= text.length && start < end) {
-                        putRange(start, end, LyngHighlighterColors.ENUM_CONSTANT)
+        // Build spell index payload: identifiers + comments/strings from simple highlighter.
+        // We limit identifier checks to declarations (val, var, fun, class, enum) and enum constants.
+        val spellIds = ArrayList<IntRange>()
+        fun addSpellId(pos: net.sergeych.lyng.Pos, name: String) {
+            if (pos.source == source) {
+                val s = source.offsetOf(pos)
+                val e = (s + name.length).coerceAtMost(text.length)
+                if (s < e) spellIds.add(s until e)
+            }
+        }
+
+        // Add declarations from MiniAst
+        mini.declarations.forEach { d ->
+            addSpellId(d.nameStart, d.name)
+            when (d) {
+                is MiniFunDecl -> {
+                    d.params.forEach { addSpellId(it.nameStart, it.name) }
+                    addTypeNames(d.returnType, ::addSpellId)
+                    addTypeNames(d.receiver, ::addSpellId)
+                }
+                is MiniValDecl -> {
+                    addTypeNames(d.type, ::addSpellId)
+                    addTypeNames(d.receiver, ::addSpellId)
+                }
+                is MiniEnumDecl -> {
+                    if (d.entries.size == d.entryPositions.size) {
+                        for (i in d.entries.indices) {
+                            addSpellId(d.entryPositions[i], d.entries[i])
+                        }
                     }
+                }
+                is MiniClassDecl -> {
+                    d.ctorFields.forEach { addSpellId(it.nameStart, it.name) }
+                    d.classFields.forEach { addSpellId(it.nameStart, it.name) }
+                    d.members.forEach { m ->
+                        when (m) {
+                            is MiniMemberFunDecl -> {
+                                addSpellId(m.nameStart, m.name)
+                                m.params.forEach { addSpellId(it.nameStart, it.name) }
+                                addTypeNames(m.returnType, ::addSpellId)
+                            }
+                            is MiniMemberValDecl -> {
+                                addSpellId(m.nameStart, m.name)
+                                addTypeNames(m.type, ::addSpellId)
+                            }
+                            else -> {}
+                        }
+                    }
+                }
+                else -> {}
+            }
+        }
+
+        // Map Enum constants from token highlighter for highlighting only.
+        // We do NOT add them to spellIds here because they might be usages, 
+        // and declarations are already handled via MiniEnumDecl above.
+        tokens.forEach { s ->
+            if (s.kind == HighlightKind.EnumConstant) {
+                val start = s.range.start
+                val end = s.range.endExclusive
+                if (start in 0..end && end <= text.length && start < end) {
+                    putRange(start, end, LyngHighlighterColors.ENUM_CONSTANT)
                 }
             }
         }
 
-        // Build spell index payload: identifiers + comments/strings from simple highlighter.
-        // We use the highlighter as the source of truth for all "words" to check, including
-        // identifiers that might not be bound by the Binder.
-        val idRanges = tokens.filter { it.kind == HighlightKind.Identifier }.map { it.range.start until it.range.endExclusive }
         val commentRanges = tokens.filter { it.kind == HighlightKind.Comment }.map { it.range.start until it.range.endExclusive }
         val stringRanges = tokens.filter { it.kind == HighlightKind.String }.map { it.range.start until it.range.endExclusive }
 
         return Result(collectedInfo.modStamp, out, null,
-            spellIdentifiers = idRanges.toList(),
+            spellIdentifiers = spellIds,
             spellComments = commentRanges,
             spellStrings = stringRanges)
+    }
+
+    /**
+     * Helper to add all segments of a type name to the spell index.
+     */
+    private fun addTypeNames(t: MiniTypeRef?, add: (net.sergeych.lyng.Pos, String) -> Unit) {
+        when (t) {
+            is MiniTypeName -> t.segments.forEach { add(it.range.start, it.name) }
+            is MiniGenericType -> {
+                addTypeNames(t.base, add)
+                t.args.forEach { addTypeNames(it, add) }
+            }
+
+            is MiniFunctionType -> {
+                addTypeNames(t.receiver, add)
+                t.params.forEach { addTypeNames(it, add) }
+                addTypeNames(t.returnType, add)
+            }
+
+            is MiniTypeVar -> {
+                // Type variables are declarations too
+                add(t.range.start, t.name)
+            }
+
+            null -> {}
+        }
     }
 
     override fun apply(file: PsiFile, annotationResult: Result?, holder: AnnotationHolder) {

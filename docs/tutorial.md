@@ -1252,7 +1252,7 @@ The same with `--`:
     sum
     >>> 5050
 
-There are self-assigning version for operators too:
+There is a self-assigning version for operators too:
 
     var count = 100
     var sum = 0
@@ -1471,7 +1471,13 @@ Part match:
     assert( "foo" == $~.value )
     >>> void
 
-Typical set of String functions includes:
+Repeating the fragment:
+
+    assertEquals("hellohello", "hello"*2)
+    assertEquals("", "hello"*0)
+    >>> void
+
+A typical set of String functions includes:
 
 | fun/prop             | description / notes                                        |
 |----------------------|------------------------------------------------------------|

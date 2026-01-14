@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,14 +46,12 @@ class LyngTextExtractor : TextExtractor() {
         val index = if (file != null) LyngSpellIndex.getUpToDate(file) else null
         val r = element.textRange
 
-        fun overlaps(list: List<com.intellij.openapi.util.TextRange>): Boolean = r != null && list.any { it.intersects(r) }
-
         // Decide target domain by intersection with our MiniAst-driven index; prefer comments > strings > identifiers
         var domain: TextDomain? = null
         if (index != null && r != null) {
-            if (overlaps(index.comments)) domain = TextDomain.COMMENTS
-            else if (overlaps(index.strings) && settings.spellCheckStringLiterals) domain = TextDomain.LITERALS
-            else if (overlaps(index.identifiers)) domain = if (settings.grazieTreatIdentifiersAsComments) TextDomain.COMMENTS else TextDomain.DOCUMENTATION
+            if (index.comments.any { it.intersects(r) }) domain = TextDomain.COMMENTS
+            else if (index.strings.any { it.intersects(r) } && settings.spellCheckStringLiterals) domain = TextDomain.LITERALS
+            else if (index.identifiers.any { it.contains(r) }) domain = if (settings.grazieTreatIdentifiersAsComments) TextDomain.COMMENTS else TextDomain.DOCUMENTATION
         } else {
             // Fallback to token type if index is not ready (rare timing), mostly for comments
             domain = when (type) {

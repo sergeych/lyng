@@ -57,9 +57,6 @@
         <!-- External annotator for semantic highlighting -->
         <externalAnnotator language="Lyng" implementationClass="net.sergeych.lyng.idea.annotators.LyngExternalAnnotator"/>
 
-        <!-- Grazie-backed spell/grammar annotator (runs only when Grazie is installed) -->
-        <externalAnnotator language="Lyng" implementationClass="net.sergeych.lyng.idea.grazie.LyngGrazieAnnotator"/>
-
         <!-- Quick documentation provider bound to Lyng language -->
         <lang.documentationProvider language="Lyng" implementationClass="net.sergeych.lyng.idea.docs.LyngDocumentationProvider"/>
 
@@ -105,5 +102,15 @@
 
     </extensions>
 
-    <actions/>
+    <actions>
+        <action id="net.sergeych.lyng.idea.actions.RunLyngScriptAction"
+                class="net.sergeych.lyng.idea.actions.RunLyngScriptAction"
+                text="Run Lyng Script"
+                description="Run the current Lyng script and show output in console">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+            <add-to-group group-id="RunMenu" anchor="last"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="control shift F10"/>
+        </action>
+    </actions>
 </idea-plugin>

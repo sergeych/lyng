@@ -205,6 +205,7 @@ data class MiniEnumDecl(
     override val nameStart: Pos,
     override val isExtern: Boolean = false,
     override val isStatic: Boolean = false,
+    val entryPositions: List<Pos> = emptyList()
 ) : MiniDecl
 
 data class MiniCtorField(

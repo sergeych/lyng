@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ import com.intellij.grazie.grammar.strategy.GrammarCheckingStrategy.TextDomain
 import com.intellij.ide.plugins.PluginManagerCore
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.extensions.PluginId
-import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import net.sergeych.lyng.idea.highlight.LyngTokenTypes
 import net.sergeych.lyng.idea.settings.LyngFormatterSettings
@@ -81,17 +80,16 @@ class LyngGrazieStrategy : GrammarCheckingStrategy {
         val index = if (file != null) LyngSpellIndex.getUpToDate(file) else null
         val r = root.textRange
 
-        fun overlaps(list: List<TextRange>): Boolean = r != null && list.any { it.intersects(r) }
-
         return when (type) {
             LyngTokenTypes.LINE_COMMENT, LyngTokenTypes.BLOCK_COMMENT -> TextDomain.COMMENTS
             LyngTokenTypes.STRING -> if (settings.grazieTreatLiteralsAsComments) TextDomain.COMMENTS else TextDomain.LITERALS
             LyngTokenTypes.IDENTIFIER -> {
-                // For Grazie-only reliability in 243, route identifiers via COMMENTS when configured
-                if (settings.grazieTreatIdentifiersAsComments && index != null && r != null && overlaps(index.identifiers))
+                // For Grazie-only reliability in 243+, route identifiers via COMMENTS when configured
+                if (settings.grazieTreatIdentifiersAsComments && index != null && r != null && index.identifiers.any { it.contains(r) })
                     TextDomain.COMMENTS
                 else TextDomain.PLAIN_TEXT
             }
+
             else -> TextDomain.PLAIN_TEXT
         }
     }

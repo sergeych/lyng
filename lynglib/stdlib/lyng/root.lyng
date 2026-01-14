@@ -39,7 +39,7 @@ fun Iterable.filter(predicate) {
 }
 
 /*
-    Count all items in this iterable for which predicate return true
+    Count all items in this iterable for which predicate returns true
 */
 fun Iterable.count(predicate): Int {
     var hits = 0

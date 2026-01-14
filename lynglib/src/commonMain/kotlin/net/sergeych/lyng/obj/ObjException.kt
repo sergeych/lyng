@@ -72,10 +72,11 @@ open class ObjException(
         val l = getStackTrace().list
         return buildString {
             append(message.value)
-            for( t in l)
+            for (t in l)
                 append("\n\tat ${t.toString(scope)}")
         }
     }
+
     override suspend fun defaultToString(scope: Scope): ObjString {
         val at = getStackTrace().list.firstOrNull()?.toString(scope)
             ?: ObjString("(unknown)")
@@ -100,21 +101,23 @@ open class ObjException(
             while (s != null) {
                 val pos = s.pos
                 if (pos != lastPos && !pos.currentLine.isEmpty()) {
-                    if (maybeCls != null) {
-                        result.list += maybeCls.callWithArgs(
-                            scope,
-                            pos.source.objSourceName,
-                            ObjInt(pos.line.toLong()),
-                            ObjInt(pos.column.toLong()),
-                            ObjString(pos.currentLine)
-                        )
-                    } else {
-                        // Fallback textual entry if StackTraceEntry class is not available in this scope
-                        result.list += ObjString("${pos.source.objSourceName}:${pos.line}:${pos.column}: ${pos.currentLine}")
+                    if( (lastPos == null || (lastPos.source != pos.source || lastPos.line != pos.line)) ) {
+                        if (maybeCls != null) {
+                            result.list += maybeCls.callWithArgs(
+                                scope,
+                                pos.source.objSourceName,
+                                ObjInt(pos.line.toLong()),
+                                ObjInt(pos.column.toLong()),
+                                ObjString(pos.currentLine)
+                            )
+                        } else {
+                            // Fallback textual entry if StackTraceEntry class is not available in this scope
+                            result.list += ObjString("?${pos.source.objSourceName}:${pos.line+1}:${pos.column+1}: ${pos.currentLine}")
+                        }
+                        lastPos = pos
                     }
                 }
                 s = s.parent
-                lastPos = pos
             }
             return result
         }
@@ -339,8 +342,8 @@ fun Obj.isLyngException(): Boolean = isInstanceOf("Exception")
 /**
  * Get the exception message.
  */
-suspend fun Obj.getLyngExceptionMessage(scope: Scope?=null): String {
-    require( this.isLyngException() )
+suspend fun Obj.getLyngExceptionMessage(scope: Scope? = null): String {
+    require(this.isLyngException())
     val s = scope ?: Script.newScope()
     return invokeInstanceMethod(s, "message").toString(s).value
 }
@@ -356,18 +359,18 @@ suspend fun Obj.getLyngExceptionMessage(scope: Scope?=null): String {
  *         The stack trace details each frame using indentation for clarity.
  * @throws IllegalArgumentException if the object is not a Lyng exception.
  */
-suspend fun Obj.getLyngExceptionMessageWithStackTrace(scope: Scope?=null): String {
-    require( this.isLyngException() )
+suspend fun Obj.getLyngExceptionMessageWithStackTrace(scope: Scope? = null,showDetails:Boolean=true): String {
+    require(this.isLyngException())
     val s = scope ?: Script.newScope()
     val msg = getLyngExceptionMessage(s)
     val trace = getLyngExceptionStackTrace(s)
     var at = "unknown"
-    val stack = if( !trace.list.isEmpty() ) {
+//    var firstLine = true
+    val stack = if (!trace.list.isEmpty()) {
         val first = trace.list[0]
         at = (first.readField(s, "at").value as ObjString).value
         "\n" + trace.list.map { "    at " + it.toString(s).value }.joinToString("\n")
-    }
-    else ""
+    } else ""
     return "$at: $msg$stack"
 }
 
@@ -392,7 +395,7 @@ suspend fun Obj.getLyngExceptionString(scope: Scope): String =
 /**
  * Rethrow this object as a Kotlin [ExecutionError] if it's an exception.
  */
-suspend fun Obj.raiseAsExecutionError(scope: Scope?=null): Nothing {
+suspend fun Obj.raiseAsExecutionError(scope: Scope? = null): Nothing {
     if (this is ObjException) raise()
     val sc = scope ?: Script.newScope()
     val msg = getLyngExceptionMessage(sc)

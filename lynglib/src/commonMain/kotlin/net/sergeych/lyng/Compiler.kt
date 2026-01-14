@@ -1881,6 +1881,7 @@ class Compiler(
         pendingDeclStart = null
         // so far only simplest enums:
         val names = mutableListOf<String>()
+        val positions = mutableListOf<Pos>()
         // skip '{'
         cc.skipTokenOfType(Token.Type.LBRACE)
 
@@ -1889,6 +1890,7 @@ class Compiler(
             when (t.type) {
                 Token.Type.ID -> {
                     names += t.value
+                    positions += t.pos
                     val t1 = cc.nextNonWhitespace()
                     when (t1.type) {
                         Token.Type.COMMA ->
@@ -1912,7 +1914,8 @@ class Compiler(
                 entries = names,
                 doc = doc,
                 nameStart = nameToken.pos,
-                isExtern = isExtern
+                isExtern = isExtern,
+                entryPositions = positions
             )
         )
 
