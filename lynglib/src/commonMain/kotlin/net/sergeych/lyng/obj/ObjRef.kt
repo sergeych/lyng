@@ -1363,7 +1363,7 @@ class MethodCallRef(
                             val decl = hierarchyMember.declaringClass ?: base.objClass
                             mKey1 = key; mVer1 = ver; mInvoker1 = { obj, sc, a ->
                                 val inst = obj as ObjInstance
-                                if (!visibility.isPublic && !canAccessMember(visibility, decl, sc.currentClassCtx))
+                                if (!visibility.isPublic && !canAccessMember(visibility, decl, sc.currentClassCtx, name))
                                     sc.raiseError(ObjIllegalAccessException(sc, "can't invoke non-public method $name"))
                                 callable.invoke(inst.instanceScope, inst, a)
                             }
@@ -1447,7 +1447,7 @@ class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
         val slot = if (hit) cachedSlot else resolveSlot(scope)
         if (slot >= 0) {
             val rec = scope.getSlotRecord(slot)
-            if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx)) {
+            if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)) {
                 // Not visible via slot, fallback to other lookups
             } else {
                 if (PerfFlags.PIC_DEBUG_COUNTERS) {
@@ -1499,7 +1499,7 @@ class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
         val slot = if (cachedFrameId == scope.frameId && cachedSlot >= 0 && cachedSlot < scope.slotCount()) cachedSlot else resolveSlot(scope)
         if (slot >= 0) {
             val rec = scope.getSlotRecord(slot)
-            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx)) {
+            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)) {
                 scope.assign(rec, name, newValue)
                 return
             }
@@ -1608,7 +1608,7 @@ class FastLocalVarRef(
         val actualOwner = cachedOwnerScope
         if (slot >= 0 && actualOwner != null) {
             val rec = actualOwner.getSlotRecord(slot)
-            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx)) {
+            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)) {
                 if (PerfFlags.PIC_DEBUG_COUNTERS) {
                     if (ownerValid) PerfStats.fastLocalHit++ else PerfStats.fastLocalMiss++
                 }
@@ -1652,7 +1652,7 @@ class FastLocalVarRef(
         val actualOwner = cachedOwnerScope
         if (slot >= 0 && actualOwner != null) {
             val rec = actualOwner.getSlotRecord(slot)
-            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx)) {
+            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)) {
                 return scope.resolve(rec, name)
             }
         }
@@ -1698,7 +1698,7 @@ class FastLocalVarRef(
         val actualOwner = cachedOwnerScope
         if (slot >= 0 && actualOwner != null) {
             val rec = actualOwner.getSlotRecord(slot)
-            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx)) {
+            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)) {
                 scope.assign(rec, name, newValue)
                 return
             }

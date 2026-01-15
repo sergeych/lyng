@@ -425,7 +425,7 @@ Key rules and features:
 
 - Visibility
   - `private`: accessible only inside the declaring class body; not visible in subclasses and cannot be accessed via `this@Type` or casts.
-  - `protected`: accessible in the declaring class and in any of its transitive subclasses (including MI), but not from unrelated contexts; qualification/casts do not bypass it.
+  - `protected`: accessible in the declaring class and in any of its transitive subclasses (including MI). Additionally, ancestor classes can access protected members of their descendants if it's an override of a member known to the ancestor. Protected members are not visible from unrelated contexts; qualification/casts do not bypass it.
 
 ## Abstract Classes and Members
 
@@ -859,21 +859,29 @@ Private fields are visible only _inside the class instance_:
 
 ### Protected members
 
-Protected members are available to the declaring class and all of its transitive subclasses (including via MI), but not from unrelated contexts:
+Protected members are available to the declaring class and all of its transitive subclasses (including via MI). Additionally, an ancestor class can access a `protected` member of its descendant if the ancestor also defines or inherits a member with the same name (i.e., it is an override of something the ancestor knows about). 
 
-```
-class A() {
-    protected fun ping() { "pong" }
-}
-class B() : A() {
-    fun call() { this@A.ping() }
+Protected members are not available from unrelated contexts:
+
+```lyng
+class Base {
+    abstract protected fun foo()
+    
+    fun bar() {
+        // Ancestor can see foo() because it's an override 
+        // of a member it defines (even as abstract):
+        foo()
+    }
 }
 
-val b = B()
-assertEquals("pong", b.call())
+class Derived : Base {
+    override protected fun foo() { "ok" }
+}
+
+assertEquals("ok", Derived().bar())
 
 // Unrelated access is forbidden, even via cast
-assertThrows { (b as A).ping() }
+assertThrows { (Derived() as Base).foo() }
 ```
 
 It is possible to provide private constructor parameters so they can be

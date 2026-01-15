@@ -68,7 +68,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             if (cls.className == "Obj") break
             val mangled = cls.mangledName(name)
             instanceScope.objects[mangled]?.let { rec ->
-                if ((scope.thisObj === this && caller != null) || canAccessMember(rec.visibility, cls, caller)) {
+                if (canAccessMember(rec.visibility, cls, caller, name)) {
                     return resolveRecord(scope, rec, name, cls)
                 }
             }
@@ -77,8 +77,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         // 2. Unmangled storage
         instanceScope.objects[name]?.let { rec ->
             val decl = rec.declaringClass
-            // Unmangled access is only allowed if it's public OR we are inside the same instance's method
-            if ((scope.thisObj === this && caller != null) || canAccessMember(rec.visibility, decl, caller)) {
+            if (canAccessMember(rec.visibility, decl, caller, name)) {
                 return resolveRecord(scope, rec, name, decl)
             }
         }
@@ -174,7 +173,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             if (cls.className == "Obj") break
             val mangled = cls.mangledName(name)
             instanceScope.objects[mangled]?.let { rec ->
-                if ((scope.thisObj === this && caller != null) || canAccessMember(rec.effectiveWriteVisibility, cls, caller)) {
+                if (canAccessMember(rec.effectiveWriteVisibility, cls, caller, name)) {
                     updateRecord(scope, rec, name, newValue, cls)
                     return
                 }
@@ -184,7 +183,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         // 2. Unmangled storage
         instanceScope.objects[name]?.let { rec ->
             val decl = rec.declaringClass
-            if ((scope.thisObj === this && caller != null) || canAccessMember(rec.effectiveWriteVisibility, decl, caller)) {
+            if (canAccessMember(rec.effectiveWriteVisibility, decl, caller, name)) {
                 updateRecord(scope, rec, name, newValue, decl)
                 return
             }
@@ -282,7 +281,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 }
                 val decl = rec.declaringClass ?: cls
                 val effectiveCaller = caller ?: if (scope.thisObj === this) objClass else null
-                if (!canAccessMember(rec.visibility, decl, effectiveCaller))
+                if (!canAccessMember(rec.visibility, decl, effectiveCaller, name))
                     scope.raiseError(
                         ObjIllegalAccessException(
                             scope,
@@ -433,7 +432,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
             // Visibility: declaring class is the qualified ancestor for mangled storage
             val decl = rec.declaringClass ?: startClass
             val caller = scope.currentClassCtx
-            if (!canAccessMember(rec.visibility, decl, caller))
+            if (!canAccessMember(rec.visibility, decl, caller, name))
                 scope.raiseError(ObjIllegalAccessException(scope, "can't access field $name (declared in ${decl.className})"))
             return instance.resolveRecord(scope, rec, name, decl)
         }
@@ -442,7 +441,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
             instance.instanceScope[name]?.let { rec ->
                 val decl = rec.declaringClass ?: instance.objClass.findDeclaringClassOf(name)
                 val caller = scope.currentClassCtx
-                if (!canAccessMember(rec.visibility, decl, caller))
+                if (!canAccessMember(rec.visibility, decl, caller, name))
                     scope.raiseError(
                         ObjIllegalAccessException(
                             scope,
@@ -456,7 +455,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
         val r = memberFromAncestor(name) ?: scope.raiseError("no such field: $name")
         val decl = r.declaringClass ?: startClass
         val caller = scope.currentClassCtx
-        if (!canAccessMember(r.visibility, decl, caller))
+        if (!canAccessMember(r.visibility, decl, caller, name))
             scope.raiseError(ObjIllegalAccessException(scope, "can't access field $name (declared in ${decl.className})"))
         
         return instance.resolveRecord(scope, r, name, decl)
@@ -468,7 +467,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
         instance.instanceScope.objects[mangled]?.let { f ->
             val decl = f.declaringClass ?: startClass
             val caller = scope.currentClassCtx
-            if (!canAccessMember(f.effectiveWriteVisibility, decl, caller))
+            if (!canAccessMember(f.effectiveWriteVisibility, decl, caller, name))
                 ObjIllegalAccessException(
                     scope,
                     "can't assign to field $name (declared in ${decl.className})"
@@ -482,7 +481,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
             instance.instanceScope[name]?.let { f ->
                 val decl = f.declaringClass ?: instance.objClass.findDeclaringClassOf(name)
                 val caller = scope.currentClassCtx
-                if (!canAccessMember(f.effectiveWriteVisibility, decl, caller))
+                if (!canAccessMember(f.effectiveWriteVisibility, decl, caller, name))
                     ObjIllegalAccessException(
                         scope,
                         "can't assign to field $name (declared in ${decl?.className ?: "?"})"
@@ -495,7 +494,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
         val r = memberFromAncestor(name) ?: scope.raiseError("no such field: $name")
         val decl = r.declaringClass ?: startClass
         val caller = scope.currentClassCtx
-        if (!canAccessMember(r.effectiveWriteVisibility, decl, caller))
+        if (!canAccessMember(r.effectiveWriteVisibility, decl, caller, name))
             ObjIllegalAccessException(scope, "can't assign to field $name (declared in ${decl.className})").raise()
         if (!r.isMutable) scope.raiseError("can't assign to read-only field: $name")
         if (r.value.assign(scope, newValue) == null) r.value = newValue
@@ -511,7 +510,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
         memberFromAncestor(name)?.let { rec ->
             val decl = rec.declaringClass ?: startClass
             val caller = scope.currentClassCtx
-            if (!canAccessMember(rec.visibility, decl, caller))
+            if (!canAccessMember(rec.visibility, decl, caller, name))
                 scope.raiseError(ObjIllegalAccessException(scope, "can't invoke method $name (declared in ${decl.className})"))
             val saved = instance.instanceScope.currentClassCtx
             instance.instanceScope.currentClassCtx = decl
@@ -526,7 +525,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
             instance.instanceScope[name]?.let { rec ->
                 val decl = rec.declaringClass ?: instance.objClass.findDeclaringClassOf(name)
                 val caller = scope.currentClassCtx
-                if (!canAccessMember(rec.visibility, decl, caller))
+                if (!canAccessMember(rec.visibility, decl, caller, name))
                     scope.raiseError(
                         ObjIllegalAccessException(
                             scope,

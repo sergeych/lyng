@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,12 @@ enum class Visibility {
 }
 
 /** MI-aware visibility check: whether [caller] can access a member declared in [decl] with [visibility]. */
-fun canAccessMember(visibility: Visibility, decl: net.sergeych.lyng.obj.ObjClass?, caller: net.sergeych.lyng.obj.ObjClass?): Boolean {
+fun canAccessMember(
+    visibility: Visibility,
+    decl: net.sergeych.lyng.obj.ObjClass?,
+    caller: net.sergeych.lyng.obj.ObjClass?,
+    name: String? = null
+): Boolean {
     val res = when (visibility) {
         Visibility.Public -> true
         Visibility.Private -> (decl != null && caller === decl)
@@ -33,7 +38,14 @@ fun canAccessMember(visibility: Visibility, decl: net.sergeych.lyng.obj.ObjClass
             decl == null -> false
             caller == null -> false
             caller === decl -> true
-            else -> (caller.allParentsSet.contains(decl))
+            caller.allParentsSet.contains(decl) -> true
+            name != null && decl.allParentsSet.contains(caller) -> {
+                // Ancestor can access protected member of its descendant if it also has this member
+                // (i.e. it's an override of something the ancestor knows about)
+                val existing = caller.getInstanceMemberOrNull(name, includeAbstract = true)
+                existing != null && (existing.visibility == Visibility.Protected || existing.visibility == Visibility.Public)
+            }
+            else -> false
         }
     }
     return res

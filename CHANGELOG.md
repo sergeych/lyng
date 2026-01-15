@@ -2,6 +2,11 @@
 
 ### Unreleased
 
+- Language: Refined `protected` visibility rules
+  - Ancestor classes can now access `protected` members of their descendants, provided the ancestor also defines or inherits a member with the same name (indicating an override of a member known to the ancestor).
+  - This allows patterns where a base class calls a `protected` method that is implemented in a subclass.
+  - Fixed a regression where self-calls to unmangled members sometimes bypassed visibility checks incorrectly; these are now handled by the refined logic.
+
 - Language: Added `return` statement
   - `return [expression]` exits the innermost enclosing callable (function or lambda).
   - Supports non-local returns using `@label` syntax (e.g., `return@outer 42`).
@@ -96,7 +101,7 @@
     - Header-specified constructor arguments are passed to direct bases.
   - Visibility enforcement under MI:
     - `private` visible only inside the declaring class body.
-    - `protected` visible inside the declaring class and any of its transitive subclasses; unrelated contexts cannot access it (qualification/casts do not bypass).
+    - `protected` visible inside the declaring class and its transitive subclasses. Additionally, ancestor classes can access protected members of their descendants if it's an override of a member known to the ancestor. Unrelated contexts cannot access it (qualification/casts do not bypass).
   - Diagnostics improvements:
     - Missing member/field messages include receiver class and linearization order; hints for `this@Type` or casts when helpful.
     - Invalid `this@Type` reports that the qualifier is not an ancestor and shows the receiver lineage.

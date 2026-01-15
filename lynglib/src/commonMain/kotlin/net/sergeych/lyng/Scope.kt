@@ -112,7 +112,7 @@ open class Scope(
             }
         }
         s.objects[name]?.let { rec ->
-            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, caller)) return rec
+            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, caller, name)) return rec
         }
         caller?.let { ctx ->
             s.localBindings[ctx.mangledName(name)]?.let { rec ->
@@ -120,11 +120,11 @@ open class Scope(
             }
         }
         s.localBindings[name]?.let { rec ->
-            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, caller)) return rec
+            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, caller, name)) return rec
         }
         s.getSlotIndexOf(name)?.let { idx ->
             val rec = s.getSlotRecord(idx)
-            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, caller)) return rec
+            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, caller, name)) return rec
         }
         return null
     }
@@ -163,7 +163,7 @@ open class Scope(
             this.extensions[cls]?.get(name)?.let { return it }
         }
         return thisObj.objClass.getInstanceMemberOrNull(name)?.let { rec ->
-            if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) {
+            if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx, name)) {
                 if (rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.Property || rec.isAbstract) null
                 else rec
             } else null
@@ -186,7 +186,7 @@ open class Scope(
                 s.extensions[cls]?.get(name)?.let { return it }
             }
             s.thisObj.objClass.getInstanceMemberOrNull(name)?.let { rec ->
-                if (canAccessMember(rec.visibility, rec.declaringClass, caller)) {
+                if (canAccessMember(rec.visibility, rec.declaringClass, caller, name)) {
                     if (rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.Property || rec.isAbstract) {
                         // ignore fields, properties and abstracts here, they will be handled by the caller via readField
                     } else return rec
@@ -358,14 +358,14 @@ open class Scope(
         for (cls in effectiveClass.mro) {
             val rec = cls.members[name] ?: cls.classScope?.objects?.get(name)
             if (rec != null && !rec.isAbstract) {
-                if (canAccessMember(rec.visibility, rec.declaringClass ?: cls, currentClassCtx)) {
+                if (canAccessMember(rec.visibility, rec.declaringClass ?: cls, currentClassCtx, name)) {
                     return rec.copy(receiver = receiver)
                 }
             }
         }
         // Finally, root object fallback
         Obj.rootObjectType.members[name]?.let { rec ->
-            if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) {
+            if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx, name)) {
                 return rec.copy(receiver = receiver)
             }
         }

@@ -32,7 +32,7 @@ High-density specification for LLMs. Reference this for all Lyng code generation
     val area get = π * r * r
     ```
 - **Mandatory `override`**: Required for all members existing in the ancestor chain.
-- **Visibility**: `public` (default), `protected` (subclasses), `private` (this class instance only). `private set` / `protected set` allowed on properties.
+- **Visibility**: `public` (default), `protected` (subclasses and ancestors for overrides), `private` (this class instance only). `private set` / `protected set` allowed on properties.
 - **Disambiguation**: `this@Base.member()` or `(obj as Base).member()`. `as` returns a qualified view.
 - **Abstract/Interface**: `interface` is a synonym for `abstract class`. Both support state and constructors.
 - **Extensions**: `fun Class.ext()` or `val Class.ext get = ...`. Scope-isolated.

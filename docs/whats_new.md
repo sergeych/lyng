@@ -24,6 +24,9 @@ class Person(private var _age: Int) {
 ### Private and Protected Setters
 You can now restrict the visibility of a property's or field's setter using `private set` or `protected set`. This allows members to be publicly readable but only writable from within the declaring class or its subclasses.
 
+### Refined Protected Visibility
+Ancestor classes can now access `protected` members of their descendants if it is an override of a member known to the ancestor. This enables base classes to call protected methods that are implemented or overridden in subclasses.
+
 ```lyng
 class Counter {
     var count = 0

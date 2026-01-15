@@ -54,14 +54,14 @@ class ClosureScope(val callScope: Scope, val closureScope: Scope) :
         for (cls in effectiveClass.mro) {
             val rec = cls.members[name] ?: cls.classScope?.objects?.get(name)
             if (rec != null && !rec.isAbstract) {
-                if (canAccessMember(rec.visibility, rec.declaringClass ?: cls, currentClassCtx)) {
+                if (canAccessMember(rec.visibility, rec.declaringClass ?: cls, currentClassCtx, name)) {
                     return rec.copy(receiver = receiver)
                 }
             }
         }
         // Finally, root object fallback
         Obj.rootObjectType.members[name]?.let { rec ->
-            if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx)) {
+            if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx, name)) {
                 return rec.copy(receiver = receiver)
             }
         }

@@ -113,7 +113,7 @@ open class Obj {
             if (rec != null && !rec.isAbstract) {
                 val decl = rec.declaringClass ?: cls
                 val caller = scope.currentClassCtx
-                if (!canAccessMember(rec.visibility, decl, caller))
+                if (!canAccessMember(rec.visibility, decl, caller, name))
                     scope.raiseError(ObjIllegalAccessException(scope, "can't invoke ${name}: not visible (declared in ${decl.className}, caller ${caller?.className ?: "?"})"))
                 
                 if (rec.type == ObjRecord.Type.Property) {
@@ -140,7 +140,7 @@ open class Obj {
                 cls.members[name]?.let { rec ->
                     val decl = rec.declaringClass ?: cls
                     val caller = scope.currentClassCtx
-                    if (!canAccessMember(rec.visibility, decl, caller))
+                    if (!canAccessMember(rec.visibility, decl, caller, name))
                         scope.raiseError(ObjIllegalAccessException(scope, "can't invoke ${name}: not visible (declared in ${decl.className}, caller ${caller?.className ?: "?"})"))
                     
                     if (rec.type == ObjRecord.Type.Property) {
@@ -482,7 +482,7 @@ open class Obj {
                 cls.members[name]?.let { rec ->
                     val decl = rec.declaringClass ?: cls
                     val caller = scope.currentClassCtx
-                    if (!canAccessMember(rec.visibility, decl, caller))
+                    if (!canAccessMember(rec.visibility, decl, caller, name))
                         scope.raiseError(ObjIllegalAccessException(scope, "can't access field ${name}: not visible (declared in ${decl.className}, caller ${caller?.className ?: "?"})"))
                     val resolved = resolveRecord(scope, rec, name, decl)
                     if (resolved.type == ObjRecord.Type.Fun && resolved.value is Statement)
@@ -526,7 +526,7 @@ open class Obj {
         }
         val caller = scope.currentClassCtx
         // Check visibility for non-property members here if they weren't checked before
-        if (!canAccessMember(obj.visibility, decl, caller))
+        if (!canAccessMember(obj.visibility, decl, caller, name))
             scope.raiseError(ObjIllegalAccessException(scope, "can't access field ${name}: not visible (declared in ${decl?.className ?: "?"}, caller ${caller?.className ?: "?"})"))
         return obj
     }
@@ -574,7 +574,7 @@ open class Obj {
 
         val decl = field.declaringClass
         val caller = scope.currentClassCtx
-        if (!canAccessMember(field.effectiveWriteVisibility, decl, caller))
+        if (!canAccessMember(field.effectiveWriteVisibility, decl, caller, name))
             scope.raiseError(ObjIllegalAccessException(scope, "can't assign field ${name}: not visible (declared in ${decl?.className ?: "?"}, caller ${caller?.className ?: "?"})"))
         if (field.type == ObjRecord.Type.Delegated) {
             val del = field.delegate ?: scope.raiseError("Internal error: delegated property $name has no delegate")

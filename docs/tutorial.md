@@ -1701,7 +1701,7 @@ assertEquals(null, (buzz as? Foo)?.runA())
 
 Notes:
 - Resolution order uses C3 MRO (active): deterministic, monotonic order suitable for diamonds and complex hierarchies. Example: for `class D() : B(), C()` where both `B()` and `C()` derive from `A()`, the C3 order is `D → B → C → A`. The first visible match wins.
-- `private` is visible only inside the declaring class; `protected` is visible from the declaring class and any of its transitive subclasses. Qualialsofication (`this@Type`) or casts do not bypass visibility.
+- `private` is visible only inside the declaring class; `protected` is visible from the declaring class and its subclasses. Additionally, ancestors can access protected members of descendants if they override a member known to the ancestor. Qualification (`this@Type`) or casts do not bypass visibility.
 - Safe‑call `?.` works with `as?` for optional dispatch.
 
 ## Extension members

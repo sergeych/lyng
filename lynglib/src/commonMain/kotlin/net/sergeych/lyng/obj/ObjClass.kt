@@ -461,7 +461,7 @@ open class ObjClass(
             if (existing != null && existing.declaringClass != this) {
                 // If the existing member is private in the ancestor, it's not visible for overriding.
                 // It should be treated as a new member in this class.
-                if (!existing.visibility.isPublic && !canAccessMember(existing.visibility, existing.declaringClass, this)) {
+                if (!existing.visibility.isPublic && !canAccessMember(existing.visibility, existing.declaringClass, this, name)) {
                     // It's effectively not there for us, so actualOverride remains false
                 } else {
                     actualOverride = true

@@ -776,4 +776,38 @@ class OOTest {
 
         assertEquals("success", result.toString(), "Parameter 'id' should shadow method 'id' in block")
     }
+
+    @Test
+    fun testOverrideVisibilityRules1() = runTest {
+        eval("""
+            interface Base {
+                abstract protected fun foo()
+                
+                fun bar() {
+                    // it must see foo() as it is protected and 
+                    // is declared here (even as abstract):
+                    foo()
+                }
+            }
+            class Derived : Base {
+                protected val suffix = "!"
+                
+                private fun fooPrivateImpl() = "bar"
+            
+                override protected fun foo() { 
+                    // it should access own private and all protected memberes here: 
+                    fooPrivateImpl() + suffix  
+                }
+            }
+            class Derived2: Base {
+                private var value = 42
+                
+                override protected fun foo() {
+                    if( value < 10 ) 10 else value
+                }
+            }
+            assertEquals("bar!", Derived().bar())
+            assertEquals(42, Derived2().bar())
+        """.trimIndent())
+    }
 }
