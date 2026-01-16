@@ -171,6 +171,21 @@ settings["theme"] ?= "dark"
 
 The operator returns the final value of the receiver (the original value if it was not `null`, or the new value if the assignment occurred).
 
+### Transient Attribute (`@Transient`)
+The `@Transient` attribute can now be applied to class fields, constructor parameters, and static fields to exclude them from serialization.
+
+```lyng
+class MyData(@Transient val tempSecret, val publicData) {
+    @Transient var cachedValue = 0
+    var persistentValue = 42
+}
+```
+
+Key features:
+- **Serialization**: Transient members are omitted from both Lynon binary streams and JSON output.
+- **Structural Equality**: Transient fields are automatically ignored during `==` equality checks.
+- **Deserialization**: Transient constructor parameters with default values are correctly restored to those defaults upon restoration.
+
 ## Tooling and Infrastructure
 
 ### CLI: Formatting Command

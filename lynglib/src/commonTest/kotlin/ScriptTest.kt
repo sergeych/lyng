@@ -3210,6 +3210,23 @@ class ScriptTest {
     }
 
     @Test
+    fun testInstantComponents() = runTest {
+        // This is a proposal
+        """
+            val t1 = Instant.fromRFC3339("1970-05-06T07:11:56Z")
+            // components use default system calendar or modern 
+            assertEquals(t1.year, 1970)
+            assertEquals(t1.month, 5)
+            assertEquals(t1.dayOfMonth, 6)
+            assertEquals(t1.hour, 7)
+            assertEquals(t1.minute, 11)
+            assertEquals(t1.second, 56)
+            assertEquals("1970-05-06T07:11:56Z", t1.toRFC3339())
+            assertEquals("1970-05-06T07:11:56Z", t1.toSortableString())
+            """.trimIndent()
+    }
+
+    @Test
     fun testDoubleImports() = runTest {
         val s = Scope.new()
         println(Script.defaultImportManager.packageNames)

@@ -14,6 +14,7 @@ High-density specification for LLMs. Reference this for all Lyng code generation
         4. `void` (if loop body never executed and no `else`).
 - **Implicit Coroutines**: All functions are coroutines. No `async/await`. Use `launch { ... }` (returns `Deferred`) or `flow { ... }`.
 - **Variables**: `val` (read-only), `var` (mutable). Supports late-init `val` in classes (must be assigned in `init` or body).
+- **Serialization**: Use `@Transient` attribute before `val`/`var` or constructor parameters to exclude them from Lynon/JSON serialization. Transient fields are also ignored during `==` structural equality checks.
 - **Null Safety**: `?` (nullable type), `?.` (safe access), `?( )` (safe invoke), `?{ }` (safe block invoke), `?[ ]` (safe index), `?:` or `??` (elvis), `?=` (assign-if-null).
 - **Equality**: `==` (equals), `!=` (not equals), `===` (ref identity), `!==` (ref not identity).
 - **Comparison**: `<`, `>`, `<=`, `>=`, `<=>` (shuttle/spaceship, returns -1, 0, 1).

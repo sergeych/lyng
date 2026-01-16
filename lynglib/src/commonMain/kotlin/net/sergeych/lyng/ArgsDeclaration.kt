@@ -71,7 +71,8 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
                         value.byValueCopy(),
                         a.visibility ?: defaultVisibility,
                         recordType = ObjRecord.Type.Argument,
-                        declaringClass = declaringClass)
+                        declaringClass = declaringClass,
+                        isTransient = a.isTransient)
                 }
                 return
             }
@@ -82,7 +83,8 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
                 value.byValueCopy(),
                 a.visibility ?: defaultVisibility,
                 recordType = ObjRecord.Type.Argument,
-                declaringClass = declaringClass)
+                declaringClass = declaringClass,
+                isTransient = a.isTransient)
         }
 
         // Prepare positional args and parameter count, handle tail-block binding
@@ -239,5 +241,6 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
         val defaultValue: Statement? = null,
         val accessType: AccessType? = null,
         val visibility: Visibility? = null,
+        val isTransient: Boolean = false,
     )
 }

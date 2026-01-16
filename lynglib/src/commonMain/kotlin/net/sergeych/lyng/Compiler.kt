@@ -283,11 +283,13 @@ class Compiler(
     }
 
     private var lastAnnotation: (suspend (Scope, ObjString, Statement) -> Statement)? = null
+    private var isTransientFlag: Boolean = false
     private var lastLabel: String? = null
 
     private suspend fun parseStatement(braceMeansLambda: Boolean = false): Statement? {
         lastAnnotation = null
         lastLabel = null
+        isTransientFlag = false
         while (true) {
             val t = cc.next()
             return when (t.type) {
@@ -306,6 +308,10 @@ class Compiler(
 
                 Token.Type.ATLABEL -> {
                     val label = t.value
+                    if (label == "Transient") {
+                        isTransientFlag = true
+                        continue
+                    }
                     if (cc.peekNextNonWhitespace().type == Token.Type.LBRACE) {
                         lastLabel = label
                     }
@@ -887,7 +893,15 @@ class Compiler(
                 Token.Type.NEWLINE -> {}
                 Token.Type.MULTILINE_COMMENT, Token.Type.SINGLE_LINE_COMMENT -> {}
 
-                Token.Type.ID -> {
+                Token.Type.ID, Token.Type.ATLABEL -> {
+                    var isTransient = false
+                    if (t.type == Token.Type.ATLABEL) {
+                        if (t.value == "Transient") {
+                            isTransient = true
+                            t = cc.next()
+                        } else throw ScriptError(t.pos, "Unexpected label in argument list")
+                    }
+
                     // visibility
                     val visibility = if (isClassDeclaration && t.value == "private") {
                         t = cc.next()
@@ -931,7 +945,8 @@ class Compiler(
                         isEllipsis,
                         defaultValue,
                         access,
-                        visibility
+                        visibility,
+                        isTransient
                     )
 
                     // important: valid argument list continues with ',' and ends with '->' or ')'
@@ -2015,6 +2030,7 @@ class Compiler(
 
             val newClass = ObjInstanceClass(className, *parentClasses.toTypedArray())
             newClass.isAnonymous = nameToken == null
+            newClass.constructorMeta = ArgsDeclaration(emptyList(), Token.Type.RPAREN)
             for (i in parentClasses.indices) {
                 val argsList = baseSpecs[i].args
                 // In object, we evaluate parent args once at creation time
@@ -2194,6 +2210,7 @@ class Compiler(
                                 // but we should pass Pos.builtIn to skip validation for now if needed,
                                 // or p.pos to allow it.
                                 pos = Pos.builtIn,
+                                isTransient = p.isTransient,
                                 type = ObjRecord.Type.ConstructorField
                             )
                         }
@@ -2663,7 +2680,9 @@ class Compiler(
         isOverride: Boolean = false,
         isExtern: Boolean = false,
         isStatic: Boolean = false,
+        isTransient: Boolean = isTransientFlag
     ): Statement {
+        isTransientFlag = false
         val actualExtern = isExtern || (codeContexts.lastOrNull() as? CodeContext.ClassBody)?.isExtern == true
         var t = cc.next()
         val start = t.pos
@@ -2833,16 +2852,16 @@ class Compiler(
 
                     val th = context.thisObj
                     if (isStatic) {
-                        (th as ObjClass).createClassField(name, ObjUnset, false, visibility, null, start, type = ObjRecord.Type.Delegated).apply {
+                        (th as ObjClass).createClassField(name, ObjUnset, false, visibility, null, start, isTransient = isTransient, type = ObjRecord.Type.Delegated).apply {
                             delegate = finalDelegate
                         }
-                        context.addItem(name, false, ObjUnset, visibility, recordType = ObjRecord.Type.Delegated).apply {
+                        context.addItem(name, false, ObjUnset, visibility, recordType = ObjRecord.Type.Delegated, isTransient = isTransient).apply {
                             delegate = finalDelegate
                         }
                     } else if (th is ObjClass) {
                         val cls: ObjClass = th
                         val storageName = "${cls.className}::$name"
-                        cls.createField(name, ObjUnset, false, visibility, null, start, declaringClass = cls, isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride, type = ObjRecord.Type.Delegated)
+                        cls.createField(name, ObjUnset, false, visibility, null, start, declaringClass = cls, isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride, isTransient = isTransient, type = ObjRecord.Type.Delegated)
                         cls.instanceInitializers += statement(start) { scp ->
                             val accessType2 = scp.resolveQualifiedIdentifier("DelegateAccess.Callable")
                             val initValue2 = delegateExpression.execute(scp)
@@ -2851,13 +2870,13 @@ class Compiler(
                             } catch (e: Exception) {
                                 initValue2
                             }
-                            scp.addItem(storageName, false, ObjUnset, visibility, null, recordType = ObjRecord.Type.Delegated, isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride).apply {
+                            scp.addItem(storageName, false, ObjUnset, visibility, null, recordType = ObjRecord.Type.Delegated, isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride, isTransient = isTransient).apply {
                                 delegate = finalDelegate2
                             }
                             ObjVoid
                         }
                     } else {
-                        context.addItem(name, false, ObjUnset, visibility, recordType = ObjRecord.Type.Delegated).apply {
+                        context.addItem(name, false, ObjUnset, visibility, recordType = ObjRecord.Type.Delegated, isTransient = isTransient).apply {
                             delegate = finalDelegate
                         }
                     }
@@ -2986,8 +3005,10 @@ class Compiler(
         isClosed: Boolean = false,
         isOverride: Boolean = false,
         isStatic: Boolean = false,
-        isExtern: Boolean = false
+        isExtern: Boolean = false,
+        isTransient: Boolean = isTransientFlag
     ): Statement {
+        isTransientFlag = false
         val actualExtern = isExtern || (codeContexts.lastOrNull() as? CodeContext.ClassBody)?.isExtern == true
         val nextToken = cc.next()
         val start = nextToken.pos
@@ -3031,7 +3052,7 @@ class Compiler(
             return statement(start) { context ->
                 val value = initialExpression.execute(context)
                 for (name in names) {
-                    context.addItem(name, true, ObjVoid, visibility)
+                    context.addItem(name, true, ObjVoid, visibility, isTransient = isTransient)
                 }
                 pattern.setAt(start, context, value)
                 if (!isMutable) {
@@ -3233,17 +3254,18 @@ class Compiler(
                         visibility,
                         null,
                         start,
+                        isTransient = isTransient,
                         type = ObjRecord.Type.Delegated
                     ).apply {
                         delegate = finalDelegate
                     }
                     // Also expose in current init scope
-                    addItem(name, isMutable, ObjUnset, visibility, null, ObjRecord.Type.Delegated).apply {
+                    addItem(name, isMutable, ObjUnset, visibility, null, ObjRecord.Type.Delegated, isTransient = isTransient).apply {
                         delegate = finalDelegate
                     }
                 } else {
-                    (thisObj as ObjClass).createClassField(name, initValue, isMutable, visibility, null, start)
-                    addItem(name, isMutable, initValue, visibility, null, ObjRecord.Type.Field)
+                    (thisObj as ObjClass).createClassField(name, initValue, isMutable, visibility, null, start, isTransient = isTransient)
+                    addItem(name, isMutable, initValue, visibility, null, ObjRecord.Type.Field, isTransient = isTransient)
                 }
                 ObjVoid
             }
@@ -3429,6 +3451,7 @@ class Compiler(
                             visibility,
                             setterVisibility,
                             start,
+                            isTransient = isTransient,
                             type = ObjRecord.Type.Delegated,
                             isAbstract = isAbstract,
                             isClosed = isClosed,
@@ -3448,7 +3471,8 @@ class Compiler(
                                 recordType = ObjRecord.Type.Delegated,
                                 isAbstract = isAbstract,
                                 isClosed = isClosed,
-                                isOverride = isOverride
+                                isOverride = isOverride,
+                                isTransient = isTransient
                             ).apply {
                                 delegate = finalDelegate
                             }
@@ -3469,7 +3493,8 @@ class Compiler(
                             recordType = ObjRecord.Type.Delegated,
                             isAbstract = isAbstract,
                             isClosed = isClosed,
-                            isOverride = isOverride
+                            isOverride = isOverride,
+                            isTransient = isTransient
                         )
                         rec.delegate = finalDelegate
                         return@statement finalDelegate
@@ -3488,7 +3513,8 @@ class Compiler(
                         recordType = ObjRecord.Type.Delegated,
                         isAbstract = isAbstract,
                         isClosed = isClosed,
-                        isOverride = isOverride
+                        isOverride = isOverride,
+                        isTransient = isTransient
                     )
                     rec.delegate = finalDelegate
                     return@statement finalDelegate
@@ -3524,6 +3550,7 @@ class Compiler(
                             isAbstract = isAbstract,
                             isClosed = isClosed,
                             isOverride = isOverride,
+                            isTransient = isTransient,
                             type = ObjRecord.Type.Field
                         )
                     }
@@ -3553,7 +3580,8 @@ class Compiler(
                         recordType = ObjRecord.Type.Property,
                         isAbstract = isAbstract,
                         isClosed = isClosed,
-                        isOverride = isOverride
+                        isOverride = isOverride,
+                        isTransient = isTransient
                     )
                     prop
                 }
@@ -3576,6 +3604,7 @@ class Compiler(
                                 isClosed = isClosed,
                                 isOverride = isOverride,
                                 pos = start,
+                                isTransient = isTransient,
                                 type = ObjRecord.Type.Field
                             )
 
@@ -3591,7 +3620,8 @@ class Compiler(
                                         recordType = ObjRecord.Type.Field,
                                         isAbstract = isAbstract,
                                         isClosed = isClosed,
-                                        isOverride = isOverride
+                                        isOverride = isOverride,
+                                        isTransient = isTransient
                                     )
                                     ObjVoid
                                 }
@@ -3608,14 +3638,15 @@ class Compiler(
                                 recordType = ObjRecord.Type.Field,
                                 isAbstract = isAbstract,
                                 isClosed = isClosed,
-                                isOverride = isOverride
+                                isOverride = isOverride,
+                                isTransient = isTransient
                             )
                             initValue
                         }
                     } else {
                         // Not in class body: regular local/var declaration
                         val initValue = initialExpression?.execute(context)?.byValueCopy() ?: ObjNull
-                        context.addItem(name, isMutable, initValue, visibility, recordType = ObjRecord.Type.Other)
+                        context.addItem(name, isMutable, initValue, visibility, recordType = ObjRecord.Type.Other, isTransient = isTransient)
                         initValue
                     }
             }

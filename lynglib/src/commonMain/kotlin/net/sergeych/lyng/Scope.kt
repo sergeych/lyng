@@ -516,7 +516,8 @@ open class Scope(
         declaringClass: net.sergeych.lyng.obj.ObjClass? = currentClassCtx,
         isAbstract: Boolean = false,
         isClosed: Boolean = false,
-        isOverride: Boolean = false
+        isOverride: Boolean = false,
+        isTransient: Boolean = false
     ): ObjRecord {
         val rec = ObjRecord(
             value, isMutable, visibility, writeVisibility,
@@ -524,7 +525,8 @@ open class Scope(
             type = recordType,
             isAbstract = isAbstract,
             isClosed = isClosed,
-            isOverride = isOverride
+            isOverride = isOverride,
+            isTransient = isTransient
         )
         objects[name] = rec
         // Index this binding within the current frame to help resolve locals across suspension

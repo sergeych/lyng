@@ -338,7 +338,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         // values, so we save size of the construction:
 
         // using objlist allow for some optimizations:
-        val params = meta.params.map { readField(scope, it.name).value }
+        val params = meta.params.filter { !it.isTransient }.map { readField(scope, it.name).value }
         encoder.encodeAnyList(scope, params)
         val vars = serializingVars.values.map { it.value }
         if (vars.isNotEmpty()) {
@@ -357,8 +357,10 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         val result = mutableMapOf<String, JsonElement>()
         val meta = objClass.constructorMeta
             ?: scope.raiseError("can't serialize non-serializable object (no constructor meta)")
-        for (entry in meta.params)
-            result[entry.name] = readField(scope, entry.name).value.toJson(scope)
+        for (entry in meta.params) {
+            if (!entry.isTransient)
+                result[entry.name] = readField(scope, entry.name).value.toJson(scope)
+        }
         for (i in serializingVars) {
             // remove T:: prefix from the field name for JSON
             val parts = i.key.split("::")
@@ -377,7 +379,8 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             it.value.type.serializable &&
                     it.value.type == ObjRecord.Type.Field &&
                     it.value.isMutable &&
-                    !metaParams.contains(it.key)
+                    !metaParams.contains(it.key) &&
+                    !it.value.isTransient
         }
     }
 
@@ -398,7 +401,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
 
     protected val comparableVars: Map<String, ObjRecord> by lazy {
         instanceScope.objects.filter {
-            it.value.type.comparable && (it.value.type != ObjRecord.Type.Field || it.value.isMutable)
+            it.value.type.comparable && (it.value.type != ObjRecord.Type.Field || it.value.isMutable) && !it.value.isTransient
         }
     }
 

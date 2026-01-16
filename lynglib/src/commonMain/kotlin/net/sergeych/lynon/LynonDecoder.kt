@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ package net.sergeych.lynon
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjClass
+import net.sergeych.lyng.obj.ObjInstance
 import net.sergeych.lyng.obj.ObjString
 
 open class LynonDecoder(val bin: BitInput, val settings: LynonSettings = LynonSettings.default) {
@@ -79,15 +80,16 @@ open class LynonDecoder(val bin: BitInput, val settings: LynonSettings = LynonSe
     private suspend fun decodeClassObj(scope: Scope): ObjClass {
         val className = decodeObject(scope, ObjString.type, null) as ObjString
         return scope.get(className.value)?.value?.let {
-            if (it !is ObjClass)
-                scope.raiseClassCastError("Expected obj class but got ${it::class.simpleName}")
-            it
+            if (it is ObjClass) return it
+            if (it is ObjInstance && it.objClass.className == className.value) return it.objClass
+            scope.raiseClassCastError("Expected obj class but got ${it::class.simpleName}")
         } ?: run {
             // Use Scope API that mirrors compiler-emitted ObjRef chain for qualified identifiers
             val evaluated = scope.resolveQualifiedIdentifier(className.value)
-            if (evaluated !is ObjClass)
-                scope.raiseClassCastError("Expected obj class but got ${evaluated::class.simpleName}")
-            evaluated
+            if (evaluated is ObjClass) return evaluated
+            if (evaluated is ObjInstance && evaluated.objClass.className == className.value) return evaluated.objClass
+            scope.raiseClassCastError("Expected obj class but got ${evaluated::class.simpleName}")
+            evaluated as ObjClass // unreachable but for compiler
         }
     }
 

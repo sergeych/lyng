@@ -857,6 +857,19 @@ Private fields are visible only _inside the class instance_:
     void
     >>> void
 
+### Transient fields
+
+You can mark a field or a constructor parameter as transient using the `@Transient` attribute. Transient members are ignored during serialization (Lynon and JSON) and are also excluded from structural equality (`==`) checks.
+
+```lyng
+class Session(@Transient val token, val userId) {
+    @Transient var lastAccess = time.now()
+    var data = Map()
+}
+```
+
+For more details on how transient fields behave during restoration, see the [Serialization Guide](serialization.md).
+
 ### Protected members
 
 Protected members are available to the declaring class and all of its transitive subclasses (including via MI). Additionally, an ancestor class can access a `protected` member of its descendant if the ancestor also defines or inherits a member with the same name (i.e., it is an override of something the ancestor knows about). 

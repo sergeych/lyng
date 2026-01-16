@@ -17,16 +17,24 @@
 
 package net.sergeych.lyng.obj
 
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import net.sergeych.lyng.*
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lynon.LynonDecoder
+import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
 
 // Simple id generator for class identities (not thread-safe; fine for scripts)
 private object ClassIdGen { var c: Long = 1L; fun nextId(): Long = c++ }
 
 val ObjClassType by lazy {
-    ObjClass("Class").apply {
+    object : ObjClass("Class") {
+        override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj {
+            val name = decoder.decodeObject(scope, ObjString.type, null) as ObjString
+            return scope.resolveQualifiedIdentifier(name.value)
+        }
+    }.apply {
         addPropertyDoc(
             name = "className",
             doc = "Full name of this class including package if available.",
@@ -451,6 +459,7 @@ open class ObjClass(
         isAbstract: Boolean = false,
         isClosed: Boolean = false,
         isOverride: Boolean = false,
+        isTransient: Boolean = false,
         type: ObjRecord.Type = ObjRecord.Type.Field,
     ): ObjRecord {
         // Validation of override rules: only for non-system declarations
@@ -494,6 +503,7 @@ open class ObjClass(
             isAbstract = isAbstract,
             isClosed = isClosed,
             isOverride = isOverride,
+            isTransient = isTransient,
             type = type
         )
         members[name] = rec
@@ -514,13 +524,14 @@ open class ObjClass(
         visibility: Visibility = Visibility.Public,
         writeVisibility: Visibility? = null,
         pos: Pos = Pos.builtIn,
+        isTransient: Boolean = false,
         type: ObjRecord.Type = ObjRecord.Type.Field
     ): ObjRecord {
         initClassScope()
         val existing = classScope!!.objects[name]
         if (existing != null)
             throw ScriptError(pos, "$name is already defined in $objClass or one of its supertypes")
-        val rec = classScope!!.addItem(name, isMutable, initialValue, visibility, writeVisibility, recordType = type)
+        val rec = classScope!!.addItem(name, isMutable, initialValue, visibility, writeVisibility, recordType = type, isTransient = isTransient)
         // Structural change: bump layout version for PIC invalidation
         layoutVersion += 1
         return rec
@@ -705,6 +716,22 @@ open class ObjClass(
             }
         }
         return super.invokeInstanceMethod(scope, name, args, onNotFoundResult)
+    }
+
+    override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
+        if (isAnonymous) scope.raiseError("Cannot serialize anonymous class")
+        encoder.encodeObject(scope, classNameObj, ObjString.type.lynonType())
+    }
+
+    override suspend fun toJson(scope: Scope): JsonElement {
+        val result = mutableMapOf<String, JsonElement>()
+        result["__class_name"] = classNameObj.toJson(scope)
+        classScope?.objects?.forEach { (name, rec) ->
+            if (rec.type.serializable && rec.visibility.isPublic && !rec.isTransient) {
+                result[name] = rec.value.toJson(scope)
+            }
+        }
+        return JsonObject(result)
     }
 
     open suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj =

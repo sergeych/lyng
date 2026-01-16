@@ -20,7 +20,18 @@ Simple classes serialization is supported:
     assertEquals( "{\"foo\":1,\"bar\":2}", Point(1,2).toJsonString() )
     >>> void
 
-Note that mutable members are serialized:
+Note that mutable members are serialized by default. You can exclude any member (including constructor parameters) from JSON serialization using the `@Transient` attribute:
+
+    import lyng.serialization
+    
+    class Point2(@Transient val foo, val bar) {
+        @Transient var reason = 42
+        var visible = 100
+    }
+    assertEquals( "{\"bar\":2,\"visible\":100}", Point2(1,2).toJsonString() )
+    >>> void
+
+Note that if you override json serialization:
 
     import lyng.serialization
     
