@@ -429,10 +429,10 @@ open class Obj {
     }
 
     /**
-     * Convert Lyng object to its Kotlin counterpart
+     * Convert a Lyng object to its Kotlin counterpart
      */
     open suspend fun toKotlin(scope: Scope): Any? {
-        return toString()
+        return toString(scope).value
     }
 
     fun willMutate(scope: Scope) {
