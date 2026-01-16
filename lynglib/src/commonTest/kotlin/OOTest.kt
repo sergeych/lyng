@@ -17,6 +17,7 @@
 
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.Script
+import net.sergeych.lyng.Statement
 import net.sergeych.lyng.eval
 import net.sergeych.lyng.obj.ObjInstance
 import net.sergeych.lyng.obj.ObjList
@@ -823,7 +824,7 @@ class OOTest {
     @Test
     fun testOverrideVisibilityRules2() = runTest {
         val scope = Script.newScope()
-        scope.eval("""
+        val fn = scope.eval("""
             interface Base {
                 abstract fun foo()
                 
@@ -855,18 +856,16 @@ class OOTest {
             }
             assertEquals("bar!", Derived().bar())
             val d = Derived2()
-            assertEquals(42, d.bar())
-            assertEquals(43, d.bar())
-        """.trimIndent())
-        scope.createChildScope().eval("""            
-            assertEquals("bar!", Derived().bar())
-            assertEquals(42, Derived2().bar())
-            import lyng.serialization
-            for( i in 1..100 ) {
-                val d2 = Lynon.decode(Lynon.encode(Derived2()))
-                assertEquals(42, d2.bar())
-                assertEquals(43, d2.bar())
-            }
-        """.trimIndent())
+            
+            fun callBar() = d.bar()
+            
+            assertEquals(42, callBar())
+            assertEquals(43, callBar())
+            
+            callBar
+        """.trimIndent()) as Statement
+        val s2 = Script.newScope()
+        assertEquals(44L, fn.invoke(scope, fn).toKotlin(s2))
+        assertEquals(45L, fn.invoke(s2, fn).toKotlin(s2))
     }
 }
