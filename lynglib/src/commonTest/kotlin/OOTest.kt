@@ -779,7 +779,8 @@ class OOTest {
 
     @Test
     fun testOverrideVisibilityRules1() = runTest {
-        eval("""
+        val scope = Script.newScope()
+        scope.eval("""
             interface Base {
                 abstract protected fun foo()
                 
@@ -802,12 +803,70 @@ class OOTest {
             class Derived2: Base {
                 private var value = 42
                 
+                private fun fooPrivateImpl() = value
+                
                 override protected fun foo() {
-                    if( value < 10 ) 10 else value
+                    fooPrivateImpl()
+                    value++
                 }
             }
             assertEquals("bar!", Derived().bar())
+            val d = Derived2()
+            assertEquals(42, d.bar())
+            assertEquals(43, d.bar())
+        """.trimIndent())
+        scope.createChildScope().eval("""            
+            assertEquals("bar!", Derived().bar())
             assertEquals(42, Derived2().bar())
+        """.trimIndent())
+    }
+    @Test
+    fun testOverrideVisibilityRules2() = runTest {
+        val scope = Script.newScope()
+        scope.eval("""
+            interface Base {
+                abstract fun foo()
+                
+                fun bar() {
+                    // it must see foo() as it is protected and 
+                    // is declared here (even as abstract):
+                    foo()
+                }
+            }
+            class Derived : Base {
+                protected val suffix = "!"
+                
+                private fun fooPrivateImpl() = "bar"
+            
+                override fun foo() { 
+                    // it should access own private and all protected memberes here: 
+                    fooPrivateImpl() + suffix  
+                }
+            }
+            class Derived2: Base {
+                private var value = 42
+                
+                private fun fooPrivateImpl() = value
+                
+                override fun foo() {
+                    fooPrivateImpl()
+                    value++
+                }
+            }
+            assertEquals("bar!", Derived().bar())
+            val d = Derived2()
+            assertEquals(42, d.bar())
+            assertEquals(43, d.bar())
+        """.trimIndent())
+        scope.createChildScope().eval("""            
+            assertEquals("bar!", Derived().bar())
+            assertEquals(42, Derived2().bar())
+            import lyng.serialization
+            for( i in 1..100 ) {
+                val d2 = Lynon.decode(Lynon.encode(Derived2()))
+                assertEquals(42, d2.bar())
+                assertEquals(43, d2.bar())
+            }
         """.trimIndent())
     }
 }

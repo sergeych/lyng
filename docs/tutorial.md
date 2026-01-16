@@ -1484,6 +1484,9 @@ A typical set of String functions includes:
 | lower(), lowercase() | change case to unicode upper                               |
 | upper(), uppercase() | change case to unicode lower                               |
 | trim()               | trim space chars from both ends                            |
+| isEmpty()            | true if string is empty                                    |
+| isNotEmpty()         | true if string is not empty                                |
+| isBlank()            | true if empty or contains only whitespace                  |
 | startsWith(prefix)   | true if starts with a prefix                               |
 | endsWith(prefix)     | true if ends with a prefix                                 |
 | last()               | get last character of a string or throw                    |

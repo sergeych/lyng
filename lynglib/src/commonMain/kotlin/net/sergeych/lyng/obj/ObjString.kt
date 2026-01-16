@@ -301,6 +301,18 @@ data class ObjString(val value: String) : Obj() {
             ) {
                 thisAs<ObjString>().value.trim().let(::ObjString)
             }
+            addFnDoc("isBlank", "Whether this string is empty or contains only whitespace characters.",
+                returns = type("lyng.Bool"), moduleName = "lyng.stdlib") {
+                ObjBool(thisAs<ObjString>().value.isBlank())
+            }
+            addFnDoc("isEmpty", "Whether this string is empty.",
+                returns = type("lyng.Bool"), moduleName = "lyng.stdlib") {
+                ObjBool(thisAs<ObjString>().value.isEmpty())
+            }
+            addFnDoc("isNotEmpty", "Whether this string is not empty.",
+                returns = type("lyng.Bool"), moduleName = "lyng.stdlib") {
+                ObjBool(thisAs<ObjString>().value.isNotEmpty())
+            }
             addFnDoc(
                 name = "matches",
                 doc = "Whether this string matches the given regular expression or pattern string.",
