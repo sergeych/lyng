@@ -400,6 +400,12 @@ class Script(
                         type = type("lyng.Class")
                     )
                     it.addConstDoc(
+                        name = "DateTime",
+                        value = ObjDateTime.type,
+                        doc = "Point in time in a specific time zone.",
+                        type = type("lyng.Class")
+                    )
+                    it.addConstDoc(
                         name = "Duration",
                         value = ObjDuration.type,
                         doc = "Time duration with millisecond precision.",

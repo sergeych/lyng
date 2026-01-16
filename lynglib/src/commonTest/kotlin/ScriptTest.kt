@@ -3210,20 +3210,134 @@ class ScriptTest {
     }
 
     @Test
+    fun testDateTimeComprehensive() = runTest {
+        eval("""
+            import lyng.time
+            import lyng.serialization
+            
+            // 1. Timezone variations
+            val t1 = Instant("2024-01-01T12:00:00Z")
+            
+            val dtZ = t1.toDateTime("Z")
+            assertEquals(dtZ.timeZone, "Z")
+            assertEquals(dtZ.hour, 12)
+            
+            val dtP2 = t1.toDateTime("+02:00")
+            assertEquals(dtP2.timeZone, "+02:00")
+            assertEquals(dtP2.hour, 14)
+            
+            val dtM330 = t1.toDateTime("-03:30")
+            assertEquals(dtM330.timeZone, "-03:30")
+            assertEquals(dtM330.hour, 8)
+            assertEquals(dtM330.minute, 30)
+            
+            // 2. RFC3339 representations
+            // Note: ObjDateTime.toString() currently uses localDateTime.toString() + timeZone.toString()
+            // We should verify what it actually produces.
+            val s1 = dtP2.toRFC3339()
+            // kotlinx-datetime LocalDateTime.toString() is ISO8601
+            // TimeZone.toString() for offsets is usually the offset string itself
+            println("dtP2 RFC3339: " + s1)
+            
+            // 3. Parsing
+            val t2 = Instant("2024-02-29T10:00:00+01:00")
+            assertEquals(t2.toDateTime("Z").hour, 9)
+            
+            // val dt3 = DateTime(t1, "Europe/Prague")
+            // assertEquals(dt3.timeZone, "Europe/Prague")
+            
+            // 4. Serialization (Lynon)
+            val bin = Lynon.encode(dtP2)
+            val dtP2_dec = Lynon.decode(bin)
+            assertEquals(dtP2, dtP2_dec)
+            assertEquals(dtP2_dec.hour, 14)
+            assertEquals(dtP2_dec.timeZone, "+02:00")
+            
+            // 5. Serialization (JSON)
+            // val json = Lynon.toJson(dtM330) // toJson is not on Lynon yet
+            // println("JSON: " + json)
+            
+            // 6. Arithmetic edge cases
+            val leapDay = Instant("2024-02-29T12:00:00Z").toDateTime("Z")
+            val nextYear = leapDay.addYears(1)
+            assertEquals(nextYear.year, 2025)
+            assertEquals(nextYear.month, 2)
+            assertEquals(nextYear.day, 28) // Normalized
+            
+            val monthEnd = Instant("2024-01-31T12:00:00Z").toDateTime("Z")
+            val nextMonth = monthEnd.addMonths(1)
+            assertEquals(nextMonth.month, 2)
+            assertEquals(nextMonth.day, 29) // 2024 is leap year
+            
+            // 7. Day of week
+            assertEquals(Instant("2024-01-01T12:00:00Z").toDateTime("Z").dayOfWeek, 1) // Monday
+            assertEquals(Instant("2024-01-07T12:00:00Z").toDateTime("Z").dayOfWeek, 7) // Sunday
+            
+            // 8. DateTime to/from Instant
+            val inst = dtP2.toInstant()
+            assertEquals(inst, t1)
+            assertEquals(dtP2.toEpochSeconds(), t1.epochWholeSeconds)
+            
+            // 9. toUTC and toTimeZone
+            val dtUTC = dtP2.toUTC()
+            assertEquals(dtUTC.timeZone, "UTC")
+            assertEquals(dtUTC.hour, 12)
+            
+            val dtPrague = dtUTC.toTimeZone("+01:00")
+            // Equivalent to Prague winter
+            assertEquals(dtPrague.hour, 13)
+            
+            // 10. Component-based constructor
+            val dtComp = DateTime(2024, 5, 20, 15, 30, 45, "+02:00")
+            assertEquals(dtComp.year, 2024)
+            assertEquals(dtComp.month, 5)
+            assertEquals(dtComp.day, 20)
+            assertEquals(dtComp.hour, 15)
+            assertEquals(dtComp.minute, 30)
+            assertEquals(dtComp.second, 45)
+            assertEquals(dtComp.timeZone, "+02:00")
+            
+            // 11. parseRFC3339
+            val dtParsed = DateTime.parseRFC3339("2024-05-20T15:30:45+02:00")
+            assertEquals(dtParsed.year, 2024)
+            assertEquals(dtParsed.hour, 15)
+            assertEquals(dtParsed.timeZone, "+02:00")
+            
+            val dtParsedZ = DateTime.parseRFC3339("2024-05-20T15:30:45Z")
+            assertEquals(dtParsedZ.timeZone, "Z")
+            assertEquals(dtParsedZ.hour, 15)
+            """.trimIndent())
+    }
+
+    @Test
     fun testInstantComponents() = runTest {
-        // This is a proposal
-        """
-            val t1 = Instant.fromRFC3339("1970-05-06T07:11:56Z")
-            // components use default system calendar or modern 
-            assertEquals(t1.year, 1970)
-            assertEquals(t1.month, 5)
-            assertEquals(t1.dayOfMonth, 6)
-            assertEquals(t1.hour, 7)
-            assertEquals(t1.minute, 11)
-            assertEquals(t1.second, 56)
+        eval("""
+            import lyng.time
+            val t1 = Instant("1970-05-06T07:11:56Z")
+            val dt = t1.toDateTime("Z")
+            assertEquals(dt.year, 1970)
+            assertEquals(dt.month, 5)
+            assertEquals(dt.day, 6)
+            assertEquals(dt.hour, 7)
+            assertEquals(dt.minute, 11)
+            assertEquals(dt.second, 56)
+            assertEquals(dt.dayOfWeek, 3) // 1970-05-06 was Wednesday
             assertEquals("1970-05-06T07:11:56Z", t1.toRFC3339())
             assertEquals("1970-05-06T07:11:56Z", t1.toSortableString())
-            """.trimIndent()
+            
+            val dt2 = dt.toTimeZone("+02:00")
+            assertEquals(dt2.hour, 9)
+            assertEquals(dt2.timeZone, "+02:00")
+            
+            val dt3 = dt.addMonths(1)
+            assertEquals(dt3.month, 6)
+            assertEquals(dt3.day, 6)
+            
+            val dt4 = dt.addYears(1)
+            assertEquals(dt4.year, 1971)
+            
+            assertEquals(dt.toInstant(), t1)
+            """.trimIndent())
     }
 
     @Test

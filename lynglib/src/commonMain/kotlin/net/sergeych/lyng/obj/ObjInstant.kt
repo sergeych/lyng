@@ -17,6 +17,10 @@
 
 package net.sergeych.lyng.obj
 
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.UtcOffset
+import kotlinx.datetime.asTimeZone
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.Scope
@@ -28,7 +32,6 @@ import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonSettings
 import net.sergeych.lynon.LynonType
 import kotlin.time.Clock
-import kotlin.time.Instant
 import kotlin.time.isDistantFuture
 import kotlin.time.isDistantPast
 
@@ -122,6 +125,7 @@ class ObjInstant(val instant: Instant,val truncateMode: LynonSettings.InstantTru
                             val nanos = (a0.value - seconds) * 1e9
                             Instant.fromEpochSeconds(seconds, nanos.toLong())
                         }
+                        is ObjString -> Instant.parse(a0.value)
                         is ObjInstant -> a0.instant
 
                         else -> {
@@ -222,6 +226,43 @@ class ObjInstant(val instant: Instant,val truncateMode: LynonSettings.InstantTru
                     LynonSettings.InstantTruncateMode.Microsecond
                 )
             }
+
+            addFnDoc(
+                name = "toRFC3339",
+                doc = "Return the RFC3339 string representation of this instant in UTC (e.g., '1970-01-01T00:00:00Z').",
+                returns = type("lyng.String"),
+                moduleName = "lyng.time"
+            ) {
+                thisAs<ObjInstant>().instant.toString().toObj()
+            }
+
+            addFnDoc(
+                name = "toSortableString",
+                doc = "Alias to toRFC3339.",
+                returns = type("lyng.String"),
+                moduleName = "lyng.time"
+            ) {
+                thisAs<ObjInstant>().instant.toString().toObj()
+            }
+
+            addFnDoc(
+                name = "toDateTime",
+                doc = "Convert this absolute instant to a localized DateTime object in the specified time zone. " +
+                        "Accepts a timezone ID string (e.g., 'UTC', '+02:00') or an integer offset in seconds. " +
+                        "If no argument is provided, the system's current default time zone is used.",
+                params = listOf(net.sergeych.lyng.miniast.ParamDoc("tz", type = type("lyng.Any", true))),
+                returns = type("lyng.DateTime"),
+                moduleName = "lyng.time"
+            ) {
+                val tz = when (val a = args.list.getOrNull(0)) {
+                    null -> TimeZone.currentSystemDefault()
+                    is ObjString -> TimeZone.of(a.value)
+                    is ObjInt -> UtcOffset(seconds = a.value.toInt()).asTimeZone()
+                    else -> raiseIllegalArgument("invalid timezone: $a")
+                }
+                ObjDateTime(thisAs<ObjInstant>().instant, tz)
+            }
+
             // class members
 
             addClassConst("distantFuture", distantFuture)

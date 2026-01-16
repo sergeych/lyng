@@ -2,166 +2,99 @@
 
 Lyng date and time support requires importing `lyng.time` packages. Lyng uses simple yet modern time object models:
 
-- `Instant` class for time stamps with platform-dependent resolution
-- `Duration` to represent amount of time not depending on the calendar, e.g. in absolute units (milliseconds, seconds,
-  hours, days)
+- `Instant` class for absolute time stamps with platform-dependent resolution.
+- `DateTime` class for calendar-aware points in time within a specific time zone.
+- `Duration` to represent amount of time not depending on the calendar (e.g., milliseconds, seconds).
 
 ## Time instant: `Instant`
 
-Represent some moment of time not depending on the calendar (calendar for example may b e changed, daylight saving time
-can be for example introduced or dropped). It is similar to `TIMESTAMP` in SQL or `Instant` in Kotlin. Some moment of
-time; not the calendar date.
+Represent some moment of time not depending on the calendar. It is similar to `TIMESTAMP` in SQL or `Instant` in Kotlin.
 
-Instant is comparable to other Instant. Subtracting instants produce `Duration`, period in time that is not dependent on
-the calendar, e.g. absolute time period.
-
-It is possible to add or subtract `Duration` to and from `Instant`, that gives another `Instant`.
-
-Instants are converted to and from `Real` number of seconds before or after Unix Epoch, 01.01.1970. Constructor with
-single number parameter constructs from such number of seconds,
-and any instance provide `.epochSeconds` member:
+### Constructing and converting
 
     import lyng.time
 
     // default constructor returns time now:
     val t1 = Instant()
-    val t2 = Instant()
-    assert( t2 - t1 < 1.millisecond )
-    assert( t2.epochSeconds - t1.epochSeconds < 0.001 )
-    >>> void
-
-## Constructing
-
-    import lyng.time
-
-    // empty constructor gives current time instant using system clock:
-    val now = Instant()
-
-    // constructor with Instant instance makes a copy:
-    assertEquals( now, Instant(now) )
-
-    // constructing from a number is trated as seconds since unix epoch:
-    val copyOfNow = Instant( now.epochSeconds )
-
-    // note that instant resolution is higher that Real can hold
-    // so reconstructed from real slightly differs:
-    assert( abs( (copyOfNow - now).milliseconds ) < 0.01 )
-    >>> void
-
-The resolution of system clock could be more precise and double precision real number of `Real`, keep it in mind.
-
-## Comparing and calculating periods
-
-    import lyng.time
     
-    val now = Instant()
+    // constructing from a number is treated as seconds since unix epoch:
+    val t2 = Instant(1704110400) // 2024-01-01T12:00:00Z
     
-    // you cam add or subtract periods, and compare
-    assert( now - 5.minutes < now )
-    val oneHourAgo = now - 1.hour
-    assertEquals( now, oneHourAgo + 1.hour)
+    // from RFC3339 string:
+    val t3 = Instant("2024-01-01T12:00:00Z")
+    
+    // to localized DateTime (uses system default TZ if not specified):
+    val dt = t3.toDateTime("+02:00")
+    assertEquals(dt.hour, 14)
 
-    >>> void
-
-## Getting the max precision
-
-Normally, subtracting instants gives precision to microseconds, which is well inside the jitter
-the language VM adds. Still `Instant()` or `Instant.now()` capture most precise system timer at hand and provide inner
-value of 12 bytes, up to nanoseconds (hopefully). To access it use:
-
-    import lyng.time
-
-    // capture time
-    val now = Instant.now()
-
-    // this is Int value, number of whole epoch 
-    // milliseconds to the moment, it fits 8 bytes Int well
-    val seconds = now.epochWholeSeconds
-    assert(seconds is Int)
-
-    // and this is Int value of nanoseconds _since_ the epochMillis,
-    // it effectively add 4 more mytes int:
-    val nanos = now.nanosecondsOfSecond
-    assert(nanos is Int)
-    assert( nanos in 0..999_999_999 )
-
-    // we can construct epochSeconds from these parts:
-    assertEquals( now.epochSeconds, nanos * 1e-9 + seconds )
-    >>> void
-
-## Truncating to more realistic precision
-
-Full precision Instant is way too long and impractical to store, especially when serializing,
-so it is possible to truncate it to milliseconds, microseconds or seconds:
-
-    import lyng.time
-    import lyng.serialization
-
-    // max supported size (now microseconds for serialized value):
-    // note that encoding return _bit array_ and this is a _bit size_:
-    val s0 = Lynon.encode(Instant.now()).size
-
-    // shorter: milliseconds only
-    val s1 = Lynon.encode(Instant.now().truncateToMillisecond()).size
-
-    // truncated to seconds, good for file mtime, etc:
-    val s2 = Lynon.encode(Instant.now().truncateToSecond()).size 
-    assert( s1 < s0 )
-    assert( s2 < s1 )
-    >>> void
-
-## Formatting instants
-
-You can freely use `Instant` in string formatting. It supports usual sprintf-style formats:
-
-        import lyng.time
-        val now = Instant()
-
-        // will be something like "now: 12:10:05"
-        val currentTimeOnly24 =  "now: %tT"(now)
-
-        // we can extract epoch second with formatting too,
-        // this was since early C time
-
-        // get epoch while seconds from formatting
-        val unixEpoch = "Now is %ts since unix epoch"(now)
-        
-        // and it is the same as now.epochSeconds, int part:
-        assertEquals( unixEpoch, "Now is %d since unix epoch"(now.epochSeconds.toInt()) )
-        >>> void
-
-See
-the [complete list of available formats](https://github.com/sergeych/mp_stools?tab=readme-ov-file#datetime-formatting)
-and the [formatting reference](https://github.com/sergeych/mp_stools?tab=readme-ov-file#printf--sprintf): it all works
-in Lyng as `"format"(args...)`!
-
-## Instant members
+### Instant members
 
 | member                         | description                                             |
 |--------------------------------|---------------------------------------------------------|
 | epochSeconds: Real             | positive or negative offset in seconds since Unix epoch |
 | epochWholeSeconds: Int         | same, but in _whole seconds_. Slightly faster           |
-| nanosecondsOfSecond: Int       | offset from epochWholeSeconds in nanos (1)              |
+| nanosecondsOfSecond: Int       | offset from epochWholeSeconds in nanos                  |
 | isDistantFuture: Bool          | true if it `Instant.distantFuture`                      |
 | isDistantPast: Bool            | true if it `Instant.distantPast`                        |
-| truncateToSecond: Intant       | create new instnce truncated to second                  |  
-| truncateToMillisecond: Instant | truncate new instance with to millisecond               |
+| truncateToSecond: Instant      | create new instance truncated to second                  |  
+| truncateToMillisecond: Instant | truncate new instance to millisecond                     |
 | truncateToMicrosecond: Instant | truncate new instance to microsecond                    |
+| toRFC3339(): String            | format as RFC3339 string (UTC)                          |
+| toDateTime(tz?): DateTime      | localize to a TimeZone (ID string or offset seconds)    |
 
-(1)
-: The value of nanoseconds is to be added to `epochWholeSeconds` to get exact time point. It is in 0..999_999_999 range.
-The precise time instant value therefore needs as for now 12 bytes integer; we might use bigint later (it is planned to
-be added)
+## Calendar time: `DateTime`
 
-## Class members
+`DateTime` represents a point in time in a specific timezone. It provides access to calendar components like year, month, and day.
 
-| member                         | description                                  |
-|--------------------------------|----------------------------------------------|
-| Instant.now()                  | create new instance with current system time |
-| Instant.distantPast: Instant   | most distant instant in past                 |
-| Instant.distantFuture: Instant | most distant instant in future               |
+### Constructing
 
-# `Duraion` class
+    import lyng.time
+
+    // Current time in system default timezone
+    val now = DateTime.now()
+    
+    // Specific timezone
+    val offsetTime = DateTime.now("+02:00")
+    
+    // From Instant
+    val dt = Instant().toDateTime("Z")
+
+    // By components (year, month, day, hour=0, minute=0, second=0, timeZone="UTC")
+    val dt2 = DateTime(2024, 1, 1, 12, 0, 0, "Z")
+
+    // From RFC3339 string
+    val dt3 = DateTime.parseRFC3339("2024-01-01T12:00:00+02:00")
+
+### DateTime members
+
+| member            | description                                          |
+|-------------------|------------------------------------------------------|
+| year: Int         | year component                                       |
+| month: Int        | month component (1..12)                              |
+| day: Int          | day of month (alias `dayOfMonth`)                    |
+| hour: Int         | hour component (0..23)                               |
+| minute: Int       | minute component (0..59)                             |
+| second: Int       | second component (0..59)                             |
+| dayOfWeek: Int    | day of week (1=Monday, 7=Sunday)                     |
+| timeZone: String  | timezone ID string                                   |
+| toInstant(): Instant | convert back to absolute Instant                  |
+| toUTC(): DateTime | shortcut to convert to UTC                           |
+| toTimeZone(tz): DateTime | convert to another timezone                  |
+| addMonths(n): DateTime | add/subtract months (normalizes end of month)   |
+| addYears(n): DateTime | add/subtract years                              |
+| toRFC3339(): String | format with timezone offset                       |
+| static now(tz?): DateTime | create DateTime with current time           |
+| static parseRFC3339(s): DateTime | parse RFC3339 string                 |
+
+### Arithmetic and normalization
+
+`DateTime` handles calendar arithmetic correctly:
+
+    val leapDay = Instant("2024-02-29T12:00:00Z").toDateTime("Z")
+    val nextYear = leapDay.addYears(1)
+    assertEquals(nextYear.day, 28) // Feb 29, 2024 -> Feb 28, 2025
+
+# `Duration` class
 
 Represent absolute time distance between two `Instant`.
 

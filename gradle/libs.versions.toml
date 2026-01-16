@@ -5,6 +5,7 @@ kotlin = "2.3.0"
 android-minSdk = "24"
 android-compileSdk = "34"
 kotlinx-coroutines = "1.10.2"
+kotlinx-datetime = "0.6.1"
 mp_bintools = "0.3.2"
 firebaseCrashlyticsBuildtools = "3.0.3"
 okioVersion = "3.10.2"
@@ -16,6 +17,7 @@ clikt-markdown = { module = "com.github.ajalt.clikt:clikt-markdown", version.ref
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
 mp_bintools = { module = "net.sergeych:mp_bintools", version.ref = "mp_bintools" }
 firebase-crashlytics-buildtools = { group = "com.google.firebase", name = "firebase-crashlytics-buildtools", version.ref = "firebaseCrashlyticsBuildtools" }
 okio = { module = "com.squareup.okio:okio", version.ref = "okioVersion" }
