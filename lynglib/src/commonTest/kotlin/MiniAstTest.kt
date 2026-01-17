@@ -528,4 +528,52 @@ class MiniAstTest {
         assertTrue(xParam.contains("first line of x"), "should contain first line")
         assertTrue(xParam.contains("second line of x"), "should contain second line")
     }
+
+    @Test
+    fun enum_minidocs_and_semicolon_robustness() = runTest {
+        val code = """
+            /** Enum doc */
+            enum E { A };
+
+            /** Next doc */
+            class C {}
+        """.trimIndent()
+        val (_, sink) = compileWithMini(code)
+        val mini = sink.build()
+        assertNotNull(mini)
+
+        val en = mini.declarations.filterIsInstance<MiniEnumDecl>().firstOrNull { it.name == "E" }
+        assertNotNull(en)
+        assertNotNull(en.doc)
+        assertEquals("Enum doc", en.doc.summary)
+
+        val cl = mini.declarations.filterIsInstance<MiniClassDecl>().firstOrNull { it.name == "C" }
+        assertNotNull(cl)
+        assertNotNull(cl.doc)
+        assertEquals("Next doc", cl.doc.summary)
+    }
+
+    @Test
+    fun empty_enum_support() = runTest {
+        val code = "enum E {}"
+        val (_, sink) = compileWithMini(code)
+        val mini = sink.build()
+        assertNotNull(mini)
+        assertTrue(mini.declarations.any { it.name == "E" && it is MiniEnumDecl })
+    }
+
+    @Test
+    fun modifiers_with_comment_robustness() = runTest {
+        val code = """
+            class X {
+                static /** doc */ fun f() {}
+            }
+        """.trimIndent()
+        val (_, sink) = compileWithMini(code)
+        val mini = sink.build()
+        assertNotNull(mini)
+        val cls = mini.declarations.filterIsInstance<MiniClassDecl>().firstOrNull { it.name == "X" }
+        assertNotNull(cls)
+        assertTrue(cls.members.any { it.name == "f" })
+    }
 }

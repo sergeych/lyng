@@ -122,6 +122,24 @@ class Compiler(
         return doc
     }
 
+    private fun nextNonWhitespace(): Token {
+        while (true) {
+            val t = cc.next()
+            when (t.type) {
+                Token.Type.SINGLE_LINE_COMMENT, Token.Type.MULTILINE_COMMENT -> {
+                    pushPendingDocToken(t)
+                }
+
+                Token.Type.NEWLINE -> {
+                    if (!prevWasComment) clearPendingDoc() else prevWasComment = false
+                }
+
+                Token.Type.EOF -> return t
+                else -> return t
+            }
+        }
+    }
+
     // Set just before entering a declaration parse, taken from keyword token position
     private var pendingDeclStart: Pos? = null
     private var pendingDeclDoc: MiniDoc? = null
@@ -320,9 +338,15 @@ class Compiler(
                 }
 
                 Token.Type.LABEL -> continue
-                Token.Type.SINGLE_LINE_COMMENT, Token.Type.MULTILINE_COMMENT -> continue
+                Token.Type.SINGLE_LINE_COMMENT, Token.Type.MULTILINE_COMMENT -> {
+                    pushPendingDocToken(t)
+                    continue
+                }
 
-                Token.Type.NEWLINE -> continue
+                Token.Type.NEWLINE -> {
+                    if (!prevWasComment) clearPendingDoc() else prevWasComment = false
+                    continue
+                }
 
                 Token.Type.SEMICOLON -> continue
 
@@ -1345,7 +1369,7 @@ class Compiler(
                     modifiers.add(currentToken.value)
                     val next = cc.peekNextNonWhitespace()
                     if (next.type == Token.Type.ID || next.type == Token.Type.OBJECT) {
-                        currentToken = cc.next()
+                        currentToken = nextNonWhitespace()
                     } else {
                         break
                     }
@@ -1373,7 +1397,9 @@ class Compiler(
             throw ScriptError(currentToken.pos, "abstract members cannot be private")
 
         pendingDeclStart = firstId.pos
-        pendingDeclDoc = consumePendingDoc()
+        // pendingDeclDoc might be already set by an annotation
+        if (pendingDeclDoc == null)
+            pendingDeclDoc = consumePendingDoc()
 
         val isMember = (codeContexts.lastOrNull() is CodeContext.ClassBody)
 
@@ -1900,27 +1926,31 @@ class Compiler(
         // skip '{'
         cc.skipTokenOfType(Token.Type.LBRACE)
 
-        do {
-            val t = cc.nextNonWhitespace()
-            when (t.type) {
-                Token.Type.ID -> {
-                    names += t.value
-                    positions += t.pos
-                    val t1 = cc.nextNonWhitespace()
-                    when (t1.type) {
-                        Token.Type.COMMA ->
-                            continue
+        if (cc.peekNextNonWhitespace().type != Token.Type.RBRACE) {
+            do {
+                val t = cc.nextNonWhitespace()
+                when (t.type) {
+                    Token.Type.ID -> {
+                        names += t.value
+                        positions += t.pos
+                        val t1 = cc.nextNonWhitespace()
+                        when (t1.type) {
+                            Token.Type.COMMA ->
+                                continue
 
-                        Token.Type.RBRACE -> break
-                        else -> {
-                            t1.raiseSyntax("unexpected token")
+                            Token.Type.RBRACE -> break
+                            else -> {
+                                t1.raiseSyntax("unexpected token")
+                            }
                         }
                     }
-                }
 
-                else -> t.raiseSyntax("expected enum entry name")
-            }
-        } while (true)
+                    else -> t.raiseSyntax("expected enum entry name")
+                }
+            } while (true)
+        } else {
+            cc.nextNonWhitespace()
+        }
 
         miniSink?.onEnumDecl(
             MiniEnumDecl(

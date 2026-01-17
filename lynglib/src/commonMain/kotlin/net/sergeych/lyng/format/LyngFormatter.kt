@@ -108,8 +108,9 @@ object LyngFormatter {
             if (t == "finally") return true
 
             // Short definition form: fun x() = or val x =
-            if (Regex("^(override\\s+)?(fun|fn)\\b.*=\\s*$").matches(t)) return true
-            if (Regex("^(private\\s+|protected\\s+|public\\s+|override\\s+)?(val|var)\\b.*=\\s*$").matches(t)) return true
+            // We allow optional 'static' as well
+            if (Regex("^(static\\s+)?(override\\s+)?(fun|fn)\\b.*=\\s*$").matches(t)) return true
+            if (Regex("^(static\\s+)?(private\\s+|protected\\s+|public\\s+|override\\s+)?(val|var)\\b.*=\\s*$").matches(t)) return true
 
             // property accessors ending with ) or =
             if (isAccessorRelated(t)) {
@@ -122,7 +123,8 @@ object LyngFormatter {
             val t = s.trim()
             if (!t.endsWith("=")) return false
             // Is it a function or property definition?
-            if (Regex("\\b(fun|fn|val|var)\\b").containsMatchIn(t)) return true
+            // (Note: we exclude 'static' here to avoid double indent if it's already handled)
+            if (Regex("^(override\\s+)?(fun|fn|val|var)\\b").containsMatchIn(t)) return true
             // Is it an accessor?
             if (isPropertyAccessor(t)) return true
             return false

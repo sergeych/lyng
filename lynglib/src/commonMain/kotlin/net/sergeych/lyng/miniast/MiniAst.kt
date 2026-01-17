@@ -44,13 +44,22 @@ data class MiniDoc(
         fun parse(range: MiniRange, lines: Iterable<String>, extraTags: Map<String, List<String>> = emptyMap()): MiniDoc {
             val parsedTags = mutableMapOf<String, MutableList<String>>()
             var currentTag: String? = null
-            val currentContent = StringBuilder()
+            val currentContent = mutableListOf<String>()
 
             fun flush() {
                 currentTag?.let { tag ->
-                    parsedTags.getOrPut(tag) { mutableListOf() }.add(currentContent.toString().trim())
+                    val trimmedContent = if (currentContent.size > 1) {
+                        // First line is common content, we want to trim indent from subsequent lines
+                        // based on THEIR common indent.
+                        val firstLine = currentContent[0]
+                        val remaining = currentContent.drop(1).joinToString("\n").trimIndent()
+                        if (remaining.isEmpty()) firstLine else firstLine + "\n" + remaining
+                    } else {
+                        currentContent.joinToString("\n")
+                    }
+                    parsedTags.getOrPut(tag) { mutableListOf() }.add(trimmedContent.trim())
                 }
-                currentContent.setLength(0)
+                currentContent.clear()
             }
 
             val descriptionLines = mutableListOf<String>()
@@ -58,33 +67,45 @@ data class MiniDoc(
 
             for (rawLine in lines) {
                 for (line in rawLine.lines()) {
-                    val trimmed = line.trim()
+                    // Strip leading '*' and space if present (standard doc comment style)
+                    val cleanedLine = line.trim().let {
+                        if (it.startsWith("*")) it.substring(1).removePrefix(" ") else line
+                    }
+                    val trimmed = cleanedLine.trim()
                     if (trimmed.startsWith("@")) {
                         inTags = true
                         flush()
                         val parts = trimmed.substring(1).split(Regex("\\s+"), 2)
                         currentTag = parts[0]
-                        currentContent.append(parts.getOrNull(1) ?: "")
+                        val tagFirstLine = parts.getOrNull(1) ?: ""
+                        if (tagFirstLine.isNotEmpty()) {
+                            // Find where the content starts in the cleaned line to preserve relative indentation
+                            val contentIndex = cleanedLine.indexOf(tagFirstLine)
+                            if (contentIndex >= 0) {
+                                currentContent.add(cleanedLine.substring(contentIndex))
+                            } else {
+                                currentContent.add(tagFirstLine)
+                            }
+                        }
                     } else {
                         if (inTags) {
-                            if (currentContent.isNotEmpty()) currentContent.append("\n")
-                            currentContent.append(line)
+                            currentContent.add(cleanedLine)
                         } else {
-                            descriptionLines.add(line)
+                            descriptionLines.add(cleanedLine)
                         }
                     }
                 }
             }
             flush()
 
-            val raw = descriptionLines.joinToString("\n").trimEnd()
+            val raw = descriptionLines.joinToString("\n").trimIndent().trim()
             val summary = raw.lines().firstOrNull { it.isNotBlank() }?.trim()
-            
+
             val finalTags = parsedTags.toMutableMap()
             extraTags.forEach { (k, v) ->
                 finalTags.getOrPut(k) { mutableListOf() }.addAll(v)
             }
-            
+
             return MiniDoc(range, raw, summary, finalTags)
         }
     }

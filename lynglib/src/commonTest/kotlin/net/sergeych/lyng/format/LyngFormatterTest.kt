@@ -886,4 +886,20 @@ class LyngFormatterTest {
         val out = LyngFormatter.reindent(src, cfg)
         assertEquals(expected, out)
     }
+    @Test
+    fun multlinedShortFunIndentation() {
+        val src = """
+            static fun create(walletId, trId, amount) =
+            Cells.createNew(Commission(amount) => ["commission", "w:" + walletId, "tr:" + trId, createdTag(), "pending"])
+        """.trimIndent()
+
+        val expected = """
+            static fun create(walletId, trId, amount) =
+                Cells.createNew(Commission(amount) => ["commission", "w:" + walletId, "tr:" + trId, createdTag(), "pending"])
+        """.trimIndent()
+
+        val cfg = LyngFormatConfig(indentSize = 4, continuationIndentSize = 4)
+        val out = LyngFormatter.reindent(src, cfg)
+        assertEquals(expected, out)
+    }
 }
