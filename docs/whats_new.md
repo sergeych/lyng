@@ -186,6 +186,26 @@ Key features:
 - **Structural Equality**: Transient fields are automatically ignored during `==` equality checks.
 - **Deserialization**: Transient constructor parameters with default values are correctly restored to those defaults upon restoration.
 
+### Value Clamping (`clamp`)
+A new `clamp()` function has been added to the standard library to limit a value within a specified range. It is available as both a global function and an extension method on all objects.
+
+```lyng
+// Global function
+clamp(15, 0..10)    // returns 10
+clamp(-5, 0..10)   // returns 0
+
+// Extension method
+val x = 15
+x.clamp(0..10)      // returns 10
+
+// Exclusive and open-ended ranges
+15.clamp(0..<10)    // returns 9
+15.clamp(..10)      // returns 10
+-5.clamp(0..)       // returns 0
+```
+
+`clamp()` correctly handles inclusive (`..`) and exclusive (`..<`) ranges. For discrete types like `Int` and `Char`, clamping to an exclusive upper bound returns the previous value.
+
 ## Tooling and Infrastructure
 
 ### CLI: Formatting Command

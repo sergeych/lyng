@@ -139,7 +139,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                         val e: Int = miniSource.offsetOf(d.range.end)
                         if (offset >= s && offset <= e) {
                             // For enum constant, we don't have detailed docs in MiniAst yet, but we can render a title
-                            return "<div class='doc-title'>enum constant ${d.name}.${name}</div>"
+                            return renderTitle("enum constant ${d.name}.${name}")
                         }
                     }
                 }
@@ -361,7 +361,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                 "Print values to the standard output and append a newline. Accepts any number of arguments." else
                 "Print values to the standard output without a trailing newline. Accepts any number of arguments."
             val title = "function $ident(values)"
-            return "<div class='doc-title'>${htmlEscape(title)}</div>" + styledMarkdown(htmlEscape(fallback))
+            return renderTitle(title) + styledMarkdown(htmlEscape(fallback))
         }
         // 4b) try class members like ClassName.member with inheritance fallback
         val lhs = previousWordBefore(text, idRange.startOffset)
@@ -519,7 +519,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
             }
         }
         val sb = StringBuilder()
-        sb.append("<div class='doc-title'>").append(htmlEscape(title)).append("</div>")
+        sb.append(renderTitle(title))
         sb.append(renderDocBody(d.doc))
         return sb.toString()
     }
@@ -527,7 +527,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
     private fun renderParamDoc(fn: MiniFunDecl, p: MiniParam): String {
         val title = "parameter ${p.name}${typeOf(p.type)} in ${fn.name}${signatureOf(fn)}"
         val sb = StringBuilder()
-        sb.append("<div class='doc-title'>").append(htmlEscape(title)).append("</div>")
+        sb.append(renderTitle(title))
 
         // Find matching @param tag
         fn.doc?.tags?.get("param")?.forEach { tag ->
@@ -549,7 +549,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         val staticStr = if (m.isStatic) "static " else ""
         val title = "${staticStr}method $className.${m.name}(${params})${ret}"
         val sb = StringBuilder()
-        sb.append("<div class='doc-title'>").append(htmlEscape(title)).append("</div>")
+        sb.append(renderTitle(title))
         sb.append(renderDocBody(m.doc))
         return sb.toString()
     }
@@ -560,7 +560,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         val staticStr = if (m.isStatic) "static " else ""
         val title = "${staticStr}${kind} $className.${m.name}${ts}"
         val sb = StringBuilder()
-        sb.append("<div class='doc-title'>").append(htmlEscape(title)).append("</div>")
+        sb.append(renderTitle(title))
         sb.append(renderDocBody(m.doc))
         return sb.toString()
     }
@@ -577,6 +577,10 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         }
         val ret = typeOf(fn.returnType)
         return "(${params})${ret}"
+    }
+
+    private fun renderTitle(title: String): String {
+        return "<div class='doc-title' style='margin-bottom: 0.8em;'>${htmlEscape(title)}</div>"
     }
 
     private fun htmlEscape(s: String): String = buildString(s.length) {
@@ -645,7 +649,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
 
     private fun renderOverloads(name: String, overloads: List<MiniFunDecl>): String {
         val sb = StringBuilder()
-        sb.append("<div class='doc-title'>Overloads for ").append(htmlEscape(name)).append("</div>")
+        sb.append(renderTitle("Overloads for $name"))
         sb.append("<ul>")
         overloads.forEach { fn ->
             sb.append("<li><code>")

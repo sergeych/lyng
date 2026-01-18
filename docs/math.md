@@ -92,6 +92,7 @@ or transformed `Real` otherwise.
 | pow(x, y) | ${x^y}$                                              |
 | sqrt(x)   | $ \sqrt {x}$                                         |
 | abs(x)    | absolute value of x. Int if x is Int, Real otherwise |
+| clamp(x, range) | limit x to be inside range boundaries          |
 
 For example:
 
@@ -102,6 +103,11 @@ For example:
     // abs() keeps the argument type:
     assert( abs(-1) is Int)
     assert( abs(-2.21) == 2.21 )
+
+    // clamp() limits value to the range:
+    assert( clamp(15, 0..10) == 10 )
+    assert( clamp(-5, 0..10) == 0 )
+    assert( 5.clamp(0..10) == 5 )
     >>> void
 
 ## Scientific constant

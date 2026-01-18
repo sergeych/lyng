@@ -760,6 +760,38 @@ open class Obj {
             ) {
                 thisObj.toJson(this).toString().toObj()
             }
+            addFnDoc(
+                name = "clamp",
+                doc = "Clamps this value within the specified range. If the value is outside the range, it is set to the nearest boundary. Respects inclusive/exclusive range ends.",
+                params = listOf(ParamDoc("range")),
+                moduleName = "lyng.stdlib"
+            ) {
+                val range = requiredArg<ObjRange>(0)
+
+                var result = thisObj
+                if (range.start != null && !range.start.isNull) {
+                    if (result.compareTo(this, range.start) < 0) {
+                        result = range.start
+                    }
+                }
+                if (range.end != null && !range.end.isNull) {
+                    val cmp = range.end.compareTo(this, result)
+                    if (range.isEndInclusive) {
+                        if (cmp < 0) result = range.end
+                    } else {
+                        if (cmp <= 0) {
+                            if (range.end is ObjInt) {
+                                result = ObjInt.of(range.end.value - 1)
+                            } else if (range.end is ObjChar) {
+                                result = ObjChar((range.end.value.code - 1).toChar())
+                            } else {
+                                result = range.end
+                            }
+                        }
+                    }
+                }
+                result
+            }
         }
 
 

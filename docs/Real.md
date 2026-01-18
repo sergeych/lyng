@@ -19,6 +19,7 @@ you can use it's class to ensure type:
 |-----------------|-------------------------------------------------------------|------|
 | `.roundToInt()` | round to nearest int like round(x)                          | Int  |
 | `.toInt()`      | convert integer part of real to `Int` dropping decimal part | Int  |
+| `.clamp(range)` | clamp value within range boundaries                         | Real |
 |                 |                                                             |      |
 |                 |                                                             |      |
 |                 |                                                             |      |

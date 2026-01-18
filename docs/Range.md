@@ -98,10 +98,11 @@ Exclusive end char ranges are supported too:
 | isEndInclusive  | true for '..'                | Bool          |
 | isOpen          | at any end                   | Bool          |
 | isIntRange      | both start and end are Int   | Bool          |
-| start           |                              | Bool          |
-| end             |                              | Bool          |
+| start           |                              | Any?          |
+| end             |                              | Any?          |
 | size            | for finite ranges, see above | Long          |
 | []              | see above                    |               |
-|                 |                              |               |
+
+Ranges are also used with the `clamp(value, range)` function and the `value.clamp(range)` extension method to limit values within boundaries.
 
 [Iterable]: Iterable.md

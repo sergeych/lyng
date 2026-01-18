@@ -121,12 +121,39 @@ class LyngLexer : LexerBase() {
 
         // Number
         if (ch.isDigit()) {
+            // Check for hex: 0x...
+            if (ch == '0' && i + 1 < endOffset && buffer[i + 1] == 'x') {
+                i += 2
+                while (i < endOffset && (buffer[i].isDigit() || buffer[i] in 'a'..'f' || buffer[i] in 'A'..'F')) i++
+                myTokenEnd = i
+                myTokenType = LyngTokenTypes.NUMBER
+                return
+            }
+
+            // Decimal or integer
             i++
             var hasDot = false
+            var hasE = false
             while (i < endOffset) {
                 val c = buffer[i]
-                if (c.isDigit()) { i++; continue }
-                if (c == '.' && !hasDot) { hasDot = true; i++; continue }
+                if (c.isDigit() || c == '_') {
+                    i++
+                    continue
+                }
+                if (c == '.' && !hasDot && !hasE) {
+                    // Check if it's a fractional part (must be followed by a digit)
+                    if (i + 1 < endOffset && buffer[i + 1].isDigit()) {
+                        hasDot = true
+                        i++
+                        continue
+                    }
+                }
+                if ((c == 'e' || c == 'E') && !hasE) {
+                    hasE = true
+                    i++
+                    if (i < endOffset && (buffer[i] == '+' || buffer[i] == '-')) i++
+                    continue
+                }
                 break
             }
             myTokenEnd = i
@@ -161,6 +188,35 @@ class LyngLexer : LexerBase() {
         // Punctuation
         if (isPunct(ch)) {
             i++
+            // Handle common multi-char operators for better highlighting
+            when (ch) {
+                '.' -> {
+                    if (i < endOffset && buffer[i] == '.') {
+                        i++
+                        if (i < endOffset && (buffer[i] == '.' || buffer[i] == '<')) i++
+                    }
+                }
+                '=' -> {
+                    if (i < endOffset && (buffer[i] == '=' || buffer[i] == '>' || buffer[i] == '~')) {
+                        i++
+                        if (buffer[i - 1] == '=' && i < endOffset && buffer[i] == '=') i++
+                    }
+                }
+                '+', '-', '*', '/', '%', '!', '<', '>', '&', '|', '?', ':', '^' -> {
+                    if (i < endOffset) {
+                        val next = buffer[i]
+                        if (next == '=' || next == ch) {
+                            i++
+                            if (ch == '<' && next == '=' && i < endOffset && buffer[i] == '>') i++
+                            if (ch == '!' && next == '=' && i < endOffset && buffer[i] == '=') i++
+                        } else if (ch == '?' && (next == '.' || next == '[' || next == '(' || next == '{' || next == ':' || next == '?')) {
+                            i++
+                        } else if (ch == '-' && next == '>') {
+                            i++
+                        }
+                    }
+                }
+            }
             myTokenEnd = i
             myTokenType = LyngTokenTypes.PUNCT
             return

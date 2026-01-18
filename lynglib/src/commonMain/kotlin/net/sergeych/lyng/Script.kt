@@ -20,10 +20,7 @@ package net.sergeych.lyng
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
 import net.sergeych.lyng.Script.Companion.defaultImportManager
-import net.sergeych.lyng.miniast.addConstDoc
-import net.sergeych.lyng.miniast.addFnDoc
-import net.sergeych.lyng.miniast.addVoidFnDoc
-import net.sergeych.lyng.miniast.type
+import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.stdlib_included.rootLyng
@@ -160,6 +157,42 @@ class Script(
             addFn("abs") {
                 val x = args.firstAndOnly()
                 if (x is ObjInt) ObjInt(x.value.absoluteValue) else ObjReal(x.toDouble().absoluteValue)
+            }
+
+            addFnDoc(
+                "clamp",
+                doc = "Clamps the value within the specified range. If the value is outside the range, it is set to the nearest boundary. Respects inclusive/exclusive range ends.",
+                params = listOf(ParamDoc("value"), ParamDoc("range")),
+                moduleName = "lyng.stdlib"
+            ) {
+                val value = requiredArg<Obj>(0)
+                val range = requiredArg<ObjRange>(1)
+                
+                var result = value
+                if (range.start != null && !range.start.isNull) {
+                    if (result.compareTo(this, range.start) < 0) {
+                        result = range.start
+                    }
+                }
+                if (range.end != null && !range.end.isNull) {
+                    val cmp = range.end.compareTo(this, result)
+                    if (range.isEndInclusive) {
+                        if (cmp < 0) result = range.end
+                    } else {
+                        if (cmp <= 0) {
+                            if (range.end is ObjInt) {
+                                result = ObjInt.of(range.end.value - 1)
+                            } else if (range.end is ObjChar) {
+                                result = ObjChar((range.end.value.code - 1).toChar())
+                            } else {
+                                // For types where we can't easily find "previous" value (like Real),
+                                // we just return the exclusive boundary as a fallback.
+                                result = range.end
+                            }
+                        }
+                    }
+                }
+                result
             }
 
             addVoidFn("assert") {

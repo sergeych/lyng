@@ -4986,5 +4986,41 @@ class ScriptTest {
             assertEquals(["bar"], A().f2("bar"))   
         """)
     }
+
+    @Test
+    fun testClamp() = runTest {
+        eval("""
+            // Global clamp
+            assertEquals(5, clamp(5, 0..10))
+            assertEquals(0, clamp(-5, 0..10))
+            assertEquals(10, clamp(15, 0..10))
+            
+            // Extension clamp
+            assertEquals(5, 5.clamp(0..10))
+            assertEquals(0, (-5).clamp(0..10))
+            assertEquals(10, 15.clamp(0..10))
+            
+            // Exclusive range
+            assertEquals(9, 15.clamp(0..<10))
+            assertEquals(0, (-5).clamp(0..<10))
+            
+            // Open-ended range
+            assertEquals(10, 15.clamp(..10))
+            assertEquals(-5, (-5).clamp(..10))
+            assertEquals(5, 5.clamp(0..))
+            assertEquals(0, (-5).clamp(0..))
+            
+            // Character range
+            assertEquals('e', 'e'.clamp('a'..'z'))
+            assertEquals('a', ' '.clamp('a'..'z'))
+            assertEquals('z', '}'.clamp('a'..'z'))
+            assertEquals('y', '}'.clamp('a'..<'z'))
+            
+            // Real numbers (boundaries are inclusive in current impl for Real)
+            assertEquals(5.5, 5.5.clamp(0.0..10.0))
+            assertEquals(0.0, (-1.5).clamp(0.0..10.0))
+            assertEquals(10.0, 15.5.clamp(0.0..10.0))
+        """.trimIndent())
+    }
 }
 
