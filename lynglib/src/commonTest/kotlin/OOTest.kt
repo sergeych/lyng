@@ -887,7 +887,7 @@ class OOTest {
         """.trimIndent())
     }
     @Test
-    fun testToJsonString() = runTest {
+    fun testToStringWithTransient() = runTest {
         eval("""
             class C(amount,@Transient transient=0) {
                 val l by lazy { transient + amount }
@@ -901,6 +901,14 @@ class OOTest {
             println(C(1))
             println(C(1).lock().amount)
             println(C(1).lock().lock().amount)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testToJsonString() = runTest {
+        eval("""
+            class T(a,b,@Transient c=0)
+            assertEquals("{\"a\":\"foo\",\"b\":\"bar\"}",T("foo", "bar").toJsonString())
         """.trimIndent())
     }
 }
