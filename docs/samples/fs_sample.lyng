@@ -1,7 +1,6 @@
 #!/bin/env lyng
 
 import lyng.io.fs
-import lyng.stdlib
 
 val files = Path("../..").list().toList()
 // most long is longest?

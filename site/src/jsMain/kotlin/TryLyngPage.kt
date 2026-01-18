@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,20 +18,30 @@
 import androidx.compose.runtime.*
 import kotlinx.coroutines.launch
 import net.sergeych.lyng.LyngVersion
-import net.sergeych.lyng.Scope
+import net.sergeych.lyng.Script
 import net.sergeych.lyng.ScriptError
 import net.sergeych.lyngweb.EditorWithOverlay
 import org.jetbrains.compose.web.dom.*
 
 @Composable
-fun TryLyngPage() {
+fun TryLyngPage(route: String) {
     val scope = rememberCoroutineScope()
-    var code by remember {
+    val initialCode = remember(route) {
+        val params = route.substringAfter('?', "")
+        val codeParam = params.split('&').find { it.startsWith("code=") }?.substringAfter('=')
+        if (codeParam != null) {
+            try {
+                decodeURIComponent(codeParam)
+            } catch (_: Throwable) {
+                null
+            }
+        } else null
+    }
+    var code by remember(initialCode) {
         mutableStateOf(
-            """
+            initialCode ?: """
             // Welcome to Lyng! Edit and run.
             // Try changing the data and press Ctrl+Enter or click Run.
-            import lyng.stdlib
             
             val data = 1..5 // or [1, 2, 3, 4, 5]
             data.filter { it % 2 == 0 }.map { it * it }
@@ -54,16 +64,16 @@ fun TryLyngPage() {
             val printed = StringBuilder()
             try {
                 // Create a fresh module scope each run so imports and vars are clean
-                val s = Scope.new()
+                val s = Script.newScope()
                 // Capture printed output from Lyng `print`/`println` into the UI result window
                 s.addVoidFn("print") {
-                    for ((i, a) in args.withIndex()) {
+                    for ((i, a) in this.args.withIndex()) {
                         if (i > 0) printed.append(' ')
                         printed.append(a.toString(this).value)
                     }
                 }
                 s.addVoidFn("println") {
-                    for ((i, a) in args.withIndex()) {
+                    for ((i, a) in this.args.withIndex()) {
                         if (i > 0) printed.append(' ')
                         printed.append(a.toString(this).value)
                     }
@@ -118,9 +128,8 @@ fun TryLyngPage() {
     }
 
     fun resetCode() {
-        code = """
+        code = initialCode ?: """
             // Welcome to Lyng! Edit and run.
-            import lyng.stdlib
             [1,2,3].map { it * 10 }
         """.trimIndent()
         output = null

@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -118,7 +118,7 @@ fun App() {
             Div({ classes("col-12", if (isDocsRoute) "col-lg-9" else "col-lg-12") }) {
                 when {
                     route.isBlank() -> HomePage()
-                    route == "tryling" -> TryLyngPage()
+                    route.startsWith("tryling") -> TryLyngPage(route)
                     route.startsWith("search") -> SearchPage(route)
                     !isDocsRoute -> ReferencePage()
                     else -> DocsPage(
