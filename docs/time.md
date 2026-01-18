@@ -21,7 +21,11 @@ Represent some moment of time not depending on the calendar. It is similar to `T
     val t2 = Instant(1704110400) // 2024-01-01T12:00:00Z
     
     // from RFC3339 string:
-    val t3 = Instant("2024-01-01T12:00:00Z")
+    val t3 = Instant("2024-01-01T12:00:00.123456Z")
+    
+    // truncation:
+    val t4 = t3.truncateToMinute
+    assertEquals(t4.toRFC3339(), "2024-01-01T12:00:00Z")
     
     // to localized DateTime (uses system default TZ if not specified):
     val dt = t3.toDateTime("+02:00")
@@ -36,15 +40,17 @@ Represent some moment of time not depending on the calendar. It is similar to `T
 | nanosecondsOfSecond: Int       | offset from epochWholeSeconds in nanos                  |
 | isDistantFuture: Bool          | true if it `Instant.distantFuture`                      |
 | isDistantPast: Bool            | true if it `Instant.distantPast`                        |
-| truncateToSecond: Instant      | create new instance truncated to second                  |  
-| truncateToMillisecond: Instant | truncate new instance to millisecond                     |
+| truncateToMinute: Instant      | create new instance truncated to minute                 |
+| truncateToSecond: Instant      | create new instance truncated to second                 |  
+| truncateToMillisecond: Instant | truncate new instance to millisecond                    |
 | truncateToMicrosecond: Instant | truncate new instance to microsecond                    |
 | toRFC3339(): String            | format as RFC3339 string (UTC)                          |
 | toDateTime(tz?): DateTime      | localize to a TimeZone (ID string or offset seconds)    |
 
 ## Calendar time: `DateTime`
 
-`DateTime` represents a point in time in a specific timezone. It provides access to calendar components like year, month, and day.
+`DateTime` represents a point in time in a specific timezone. It provides access to calendar components like year,
+month, and day.
 
 ### Constructing
 
@@ -67,24 +73,24 @@ Represent some moment of time not depending on the calendar. It is similar to `T
 
 ### DateTime members
 
-| member            | description                                          |
-|-------------------|------------------------------------------------------|
-| year: Int         | year component                                       |
-| month: Int        | month component (1..12)                              |
-| day: Int          | day of month (alias `dayOfMonth`)                    |
-| hour: Int         | hour component (0..23)                               |
-| minute: Int       | minute component (0..59)                             |
-| second: Int       | second component (0..59)                             |
-| dayOfWeek: Int    | day of week (1=Monday, 7=Sunday)                     |
-| timeZone: String  | timezone ID string                                   |
-| toInstant(): Instant | convert back to absolute Instant                  |
-| toUTC(): DateTime | shortcut to convert to UTC                           |
-| toTimeZone(tz): DateTime | convert to another timezone                  |
-| addMonths(n): DateTime | add/subtract months (normalizes end of month)   |
-| addYears(n): DateTime | add/subtract years                              |
-| toRFC3339(): String | format with timezone offset                       |
-| static now(tz?): DateTime | create DateTime with current time           |
-| static parseRFC3339(s): DateTime | parse RFC3339 string                 |
+| member                           | description                                   |
+|----------------------------------|-----------------------------------------------|
+| year: Int                        | year component                                |
+| month: Int                       | month component (1..12)                       |
+| day: Int                         | day of month (alias `dayOfMonth`)             |
+| hour: Int                        | hour component (0..23)                        |
+| minute: Int                      | minute component (0..59)                      |
+| second: Int                      | second component (0..59)                      |
+| dayOfWeek: Int                   | day of week (1=Monday, 7=Sunday)              |
+| timeZone: String                 | timezone ID string                            |
+| toInstant(): Instant             | convert back to absolute Instant              |
+| toUTC(): DateTime                | shortcut to convert to UTC                    |
+| toTimeZone(tz): DateTime         | convert to another timezone                   |
+| addMonths(n): DateTime           | add/subtract months (normalizes end of month) |
+| addYears(n): DateTime            | add/subtract years                            |
+| toRFC3339(): String              | format with timezone offset                   |
+| static now(tz?): DateTime        | create DateTime with current time             |
+| static parseRFC3339(s): DateTime | parse RFC3339 string                          |
 
 ### Arithmetic and normalization
 

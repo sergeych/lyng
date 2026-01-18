@@ -17,10 +17,7 @@
 
 package net.sergeych.lyng.obj
 
-import kotlinx.datetime.Instant
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.UtcOffset
-import kotlinx.datetime.asTimeZone
+import kotlinx.datetime.*
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.Scope
@@ -193,6 +190,18 @@ class ObjInstant(val instant: Instant,val truncateMode: LynonSettings.InstantTru
                 moduleName = "lyng.time",
                 getter = { ObjInt(thisAs<ObjInstant>().instant.nanosecondsOfSecond.toLong()) }
             )
+            addFnDoc(
+                name = "truncateToMinute",
+                doc = "Truncate this instant to the nearest minute.",
+                returns = type("lyng.Instant"),
+                moduleName = "lyng.time"
+            ) {
+                val t = thisAs<ObjInstant>().instant
+                val tz = TimeZone.UTC
+                val dt = t.toLocalDateTime(tz)
+                val truncated = LocalDateTime(dt.year, dt.month, dt.dayOfMonth, dt.hour, dt.minute, 0, 0)
+                ObjInstant(truncated.toInstant(tz), LynonSettings.InstantTruncateMode.Second)
+            }
             addFnDoc(
                 name = "truncateToSecond",
                 doc = "Truncate this instant to the nearest second.",

@@ -3169,6 +3169,19 @@ class ScriptTest {
             assertEquals( n1 - now, 7.seconds )
             assertEquals( now - n1, -7.seconds )
             
+            val t3 = Instant("2024-01-01T12:00:00.123456Z")
+            val t4 = t3.truncateToMinute
+            assertEquals(t4.toRFC3339(), "2024-01-01T12:00:00Z")
+            assertEquals(
+                "2024-01-01T12:00:00Z",
+                Instant("2024-01-01T12:00:59.999Z").truncateToMinute().toRFC3339()
+            )
+             
+            val t5 = t3.truncateToSecond
+            assertEquals(t5.toRFC3339(), "2024-01-01T12:00:00Z")
+            
+            val t6 = t3.truncateToMillisecond
+            assertEquals(t6.toRFC3339(), "2024-01-01T12:00:00.123Z")
             """.trimIndent()
         )
         delay(1000)
