@@ -868,4 +868,39 @@ class OOTest {
         assertEquals(44L, fn.invoke(scope, fn).toKotlin(s2))
         assertEquals(45L, fn.invoke(s2, fn).toKotlin(s2))
     }
+
+    @Test
+    fun testToStringWithTransients() = runTest {
+        eval("""
+            class C(amount,@Transient transient=0) {
+                val l by lazy { transient + amount }
+                fun lock() {
+                    if( transient < 10 ) 
+                        C(amount).also { it.transient = transient + 10 }
+                    else
+                        this
+                }   
+            }
+            println(C(1))
+            println(C(1).lock().amount)
+            println(C(1).lock().lock().amount)
+        """.trimIndent())
+    }
+    @Test
+    fun testToJsonString() = runTest {
+        eval("""
+            class C(amount,@Transient transient=0) {
+                val l by lazy { transient + amount }
+                fun lock() {
+                    if( transient < 10 ) 
+                        C(amount).also { it.transient = transient + 10 }
+                    else
+                        this
+                }   
+            }
+            println(C(1))
+            println(C(1).lock().amount)
+            println(C(1).lock().lock().amount)
+        """.trimIndent())
+    }
 }

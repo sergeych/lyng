@@ -94,7 +94,7 @@ m += "c" => 3
 val [first, middle..., last] = [1, 2, 3, 4, 5]
 
 // Safe Navigation and Elvis
-val companyName = person?.job?.company?.name ?? "Freelancer"
+val companyName = person?.job?.company?.name ?: "Freelancer"
 ```
 
 ## 8. Standard Library Discovery

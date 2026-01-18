@@ -62,7 +62,7 @@ fun HomePage() {
             var config = null
             config ?= { timeout: 30 } // Assign only if null
 
-            val timeout = config?.timeout ?? 60
+            val timeout = config?.timeout ?: 60
             println("Timeout is: " + timeout)
             """.trimIndent(),
             """
