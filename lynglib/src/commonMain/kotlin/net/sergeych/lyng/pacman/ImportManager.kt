@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,10 @@ import net.sergeych.lyng.*
 import net.sergeych.synctools.ProtectedOp
 import net.sergeych.synctools.withLock
 
+interface ModuleBuilder {
+    suspend fun build(scope: ModuleScope)
+}
+
 /**
  * Import manager allow to register packages with builder lambdas and act as an
  * [ImportProvider]. Note that packages _must be registered_ first with [addPackage],
@@ -40,16 +44,16 @@ class ImportManager(
 
     private inner class Entry(
         val packageName: String,
-        val builder: suspend (ModuleScope) -> Unit,
+        val builder: ModuleBuilder,
         var cachedScope: ModuleScope? = null
     ) {
 
         suspend fun getScope(pos: Pos): ModuleScope {
             cachedScope?.let { return it }
-            return ModuleScope(inner, pos, packageName).apply {
-                cachedScope = this
-                builder(this)
-            }
+            val ms = ModuleScope(inner, pos, packageName)
+            cachedScope = ms
+            builder.build(ms)
+            return ms
         }
     }
 
@@ -90,7 +94,7 @@ class ImportManager(
      * @param name package name
      * @param builder lambda to create actual package using the given [ModuleScope]
      */
-    fun addPackage(name: String, builder: suspend (ModuleScope) -> Unit) {
+    fun addPackage(name: String, builder: ModuleBuilder) {
         op.withLock {
             if (name in imports)
                 throw IllegalArgumentException("Package $name already exists")
@@ -102,7 +106,7 @@ class ImportManager(
      * Bulk [addPackage] with slightly better performance
      */
     @Suppress("unused")
-    fun addPackages(registrationData: List<Pair<String, suspend (ModuleScope) -> Unit>>) {
+    fun addPackages(registrationData: List<Pair<String, ModuleBuilder>>) {
         op.withLock {
             for (pp in registrationData) {
                 if (pp.first in imports)
@@ -129,9 +133,11 @@ class ImportManager(
      */
     fun addSourcePackages(vararg sources: Source) {
         for (s in sources) {
-            addPackage(s.extractPackageName()) {
-                it.eval(s)
-            }
+            addPackage(s.extractPackageName(), object : ModuleBuilder {
+                override suspend fun build(scope: ModuleScope) {
+                    scope.eval(s)
+                }
+            })
 
         }
     }
@@ -144,7 +150,11 @@ class ImportManager(
             var source = Source("tmp", s)
             val packageName = source.extractPackageName()
             source = Source(packageName, s)
-            addPackage(packageName) { it.eval(source) }
+            addPackage(packageName, object : ModuleBuilder {
+                override suspend fun build(scope: ModuleScope) {
+                    scope.eval(source)
+                }
+            })
         }
     }
 

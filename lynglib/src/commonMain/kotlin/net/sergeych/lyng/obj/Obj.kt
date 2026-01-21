@@ -32,6 +32,14 @@ import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
 
+fun interface OnNotFound {
+    suspend fun call(): Obj?
+}
+
+fun interface EnumerateCallback {
+    suspend fun call(element: Obj): Boolean
+}
+
 open class Obj {
 
     open val isConst: Boolean = false
@@ -91,7 +99,7 @@ open class Obj {
         scope: Scope,
         name: String,
         args: Arguments = Arguments.EMPTY,
-        onNotFoundResult: (suspend () -> Obj?)? = null
+        onNotFoundResult: OnNotFound? = null
     ): Obj {
         // 0. Prefer private member of current class context
         scope.currentClassCtx?.let { caller ->
@@ -100,7 +108,7 @@ open class Obj {
                     if (rec.type == ObjRecord.Type.Property) {
                         if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, caller)
                     } else if (rec.type != ObjRecord.Type.Delegated) {
-                        return rec.value.invoke(scope, this, args, caller)
+                        return rec.value.invokeCallable(scope, this, args, caller)
                     }
                 }
             }
@@ -114,12 +122,12 @@ open class Obj {
                 val decl = rec.declaringClass ?: cls
                 val caller = scope.currentClassCtx
                 if (!canAccessMember(rec.visibility, decl, caller, name))
-                    scope.raiseError(ObjIllegalAccessException(scope, "can't invoke ${name}: not visible (declared in ${decl.className}, caller ${caller?.className ?: "?"})"))
+                    scope.raiseError(ObjIllegalAccessException(scope, "can't invokeCallable ${name}: not visible (declared in ${decl.className}, caller ${caller?.className ?: "?"})"))
                 
                 if (rec.type == ObjRecord.Type.Property) {
                     if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, decl)
                 } else if (rec.type != ObjRecord.Type.Delegated) {
-                    return rec.value.invoke(scope, this, args, decl)
+                    return rec.value.invokeCallable(scope, this, args, decl)
                 }
             }
         }
@@ -130,7 +138,7 @@ open class Obj {
             if (extension.type == ObjRecord.Type.Property) {
                 if (args.isEmpty()) return (extension.value as ObjProperty).callGetter(scope, this, extension.declaringClass)
             } else if (extension.type != ObjRecord.Type.Delegated) {
-                return extension.value.invoke(scope, this, args)
+                return extension.value.invokeCallable(scope, this, args)
             }
         }
 
@@ -141,18 +149,18 @@ open class Obj {
                     val decl = rec.declaringClass ?: cls
                     val caller = scope.currentClassCtx
                     if (!canAccessMember(rec.visibility, decl, caller, name))
-                        scope.raiseError(ObjIllegalAccessException(scope, "can't invoke ${name}: not visible (declared in ${decl.className}, caller ${caller?.className ?: "?"})"))
+                        scope.raiseError(ObjIllegalAccessException(scope, "can't invokeCallable ${name}: not visible (declared in ${decl.className}, caller ${caller?.className ?: "?"})"))
                     
                     if (rec.type == ObjRecord.Type.Property) {
                         if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, decl)
                     } else if (rec.type != ObjRecord.Type.Delegated) {
-                        return rec.value.invoke(scope, this, args, decl)
+                        return rec.value.invokeCallable(scope, this, args, decl)
                     }
                 }
             }
         }
 
-        return onNotFoundResult?.invoke()
+        return onNotFoundResult?.call()
             ?: scope.raiseError(
                 "no such member: $name on ${objClass.className}. Considered order: ${objClass.renderLinearization(true)}. " +
                         "Tip: try this@Base.$name(...) or (obj as Base).$name(...) if ambiguous"
@@ -174,9 +182,11 @@ open class Obj {
     open suspend fun compareTo(scope: Scope, other: Obj): Int {
         if (other === this) return 0
         if (other === ObjNull || other === ObjUnset || other === ObjVoid) return 2
-        return invokeInstanceMethod(scope, "compareTo", Arguments(other)) {
-            scope.raiseNotImplemented("compareTo for ${objClass.className}")
-        }.cast<ObjInt>(scope).toInt()
+        return invokeInstanceMethod(scope, "compareTo", Arguments(other), onNotFoundResult = object : OnNotFound {
+            override suspend fun call(): Obj? {
+                scope.raiseNotImplemented("compareTo for ${objClass.className}")
+            }
+        }).toInt()
     }
 
     open suspend fun equals(scope: Scope, other: Obj): Boolean {
@@ -202,16 +212,16 @@ open class Obj {
      *
      * IF callback returns false, iteration is stopped.
      */
-    open suspend fun enumerate(scope: Scope, callback: suspend (Obj) -> Boolean) {
+    open suspend fun enumerate(scope: Scope, callback: EnumerateCallback) {
         val iterator = invokeInstanceMethod(scope, "iterator")
         val hasNext = iterator.getInstanceMethod(scope, "hasNext")
         val next = iterator.getInstanceMethod(scope, "next")
         var closeIt = false
         try {
-            while (hasNext.invoke(scope, iterator).toBool()) {
-                val nextValue = next.invoke(scope, iterator)
+            while (hasNext.invokeCallable(scope, iterator).toBool()) {
+                val nextValue = next.invokeCallable(scope, iterator)
                 val shouldContinue = try {
-                    callback(nextValue)
+                    callback.call(nextValue)
                 } catch (e: Exception) {
                     // iteration aborted due to exception in callback
                     closeIt = true
@@ -448,7 +458,7 @@ open class Obj {
                 if (rec.visibility == Visibility.Private && !rec.isAbstract) {
                     val resolved = resolveRecord(scope, rec, name, caller)
                     if (resolved.type == ObjRecord.Type.Fun && resolved.value is Statement)
-                        return resolved.copy(value = resolved.value.invoke(scope, this, Arguments.EMPTY, caller))
+                        return resolved.copy(value = resolved.value.invokeCallable(scope, this, Arguments.EMPTY, caller))
                     return resolved
                 }
             }
@@ -462,7 +472,7 @@ open class Obj {
                 val decl = rec.declaringClass ?: cls
                 val resolved = resolveRecord(scope, rec, name, decl)
                 if (resolved.type == ObjRecord.Type.Fun && resolved.value is Statement)
-                    return resolved.copy(value = resolved.value.invoke(scope, this, Arguments.EMPTY, decl))
+                    return resolved.copy(value = resolved.value.invokeCallable(scope, this, Arguments.EMPTY, decl))
                 return resolved
             }
         }
@@ -472,7 +482,7 @@ open class Obj {
         if (extension != null) {
             val resolved = resolveRecord(scope, extension, name, extension.declaringClass)
             if (resolved.type == ObjRecord.Type.Fun && resolved.value is Statement)
-                return resolved.copy(value = resolved.value.invoke(scope, this, Arguments.EMPTY, extension.declaringClass))
+                return resolved.copy(value = resolved.value.invokeCallable(scope, this, Arguments.EMPTY, extension.declaringClass))
             return resolved
         }
 
@@ -486,7 +496,7 @@ open class Obj {
                         scope.raiseError(ObjIllegalAccessException(scope, "can't access field ${name}: not visible (declared in ${decl.className}, caller ${caller?.className ?: "?"})"))
                     val resolved = resolveRecord(scope, rec, name, decl)
                     if (resolved.type == ObjRecord.Type.Fun && resolved.value is Statement)
-                        return resolved.copy(value = resolved.value.invoke(scope, this, Arguments.EMPTY, decl))
+                        return resolved.copy(value = resolved.value.invokeCallable(scope, this, Arguments.EMPTY, decl))
                     return resolved
                 }
             }
@@ -502,13 +512,13 @@ open class Obj {
             val del = obj.delegate ?: scope.raiseError("Internal error: delegated property $name has no delegate")
             val th = if (this === ObjVoid) ObjNull else this
             val res = del.invokeInstanceMethod(scope, "getValue", Arguments(th, ObjString(name)), onNotFoundResult = {
-                // If getValue not found, return a wrapper that calls invoke
+                // If getValue not found, return a wrapper that calls invokeCallable
                 object : Statement() {
                     override val pos: Pos = Pos.builtIn
                     override suspend fun execute(s: Scope): Obj {
                         val th2 = if (s.thisObj === ObjVoid) ObjNull else s.thisObj
                         val allArgs = (listOf(th2, ObjString(name)) + s.args.list).toTypedArray()
-                        return del.invokeInstanceMethod(s, "invoke", Arguments(*allArgs))
+                        return del.invokeInstanceMethod(s, "invokeCallable", Arguments(*allArgs))
                     }
                 }
             })
@@ -605,18 +615,20 @@ open class Obj {
         scope.raiseNotImplemented()
     }
 
-    suspend fun invoke(scope: Scope, thisObj: Obj, args: Arguments, declaringClass: ObjClass? = null): Obj =
+    suspend fun invokeCallable(scope: Scope, thisObj: Obj, args: Arguments, declaringClass: ObjClass? = null): Obj =
         if (PerfFlags.SCOPE_POOL)
-            scope.withChildFrame(args, newThisObj = thisObj) { child ->
-                if (declaringClass != null) child.currentClassCtx = declaringClass
-                callOn(child)
-            }
+            scope.withChildFrame(args, newThisObj = thisObj, block = object : ScopeBlock<Obj> {
+                override suspend fun call(child: Scope): Obj {
+                    if (declaringClass != null) child.currentClassCtx = declaringClass
+                    return callOn(child)
+                }
+            })
         else
             callOn(scope.createChildScope(scope.pos, args = args, newThisObj = thisObj).also {
                 if (declaringClass != null) it.currentClassCtx = declaringClass
             })
 
-    suspend fun invoke(scope: Scope, thisObj: Obj, vararg args: Obj): Obj =
+    suspend fun invokeCallable(scope: Scope, thisObj: Obj, vararg args: Obj): Obj =
         callOn(
             scope.createChildScope(
                 scope.pos,
@@ -625,7 +637,7 @@ open class Obj {
             )
         )
 
-    suspend fun invoke(scope: Scope, thisObj: Obj): Obj =
+    suspend fun invokeCallable(scope: Scope, thisObj: Obj): Obj =
         callOn(
             scope.createChildScope(
                 scope.pos,
@@ -634,7 +646,7 @@ open class Obj {
             )
         )
 
-    suspend fun invoke(scope: Scope, atPos: Pos, thisObj: Obj, args: Arguments): Obj =
+    suspend fun invokeCallable(scope: Scope, atPos: Pos, thisObj: Obj, args: Arguments): Obj =
         callOn(scope.createChildScope(atPos, args = args, newThisObj = thisObj))
 
 
@@ -681,117 +693,138 @@ open class Obj {
                 name = "toString",
                 doc = "Returns a string representation of the object.",
                 returns = type("lyng.String"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisObj.toString(this, true)
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisObj.toString(scp, true)
+                }
+            )
             addFnDoc(
                 name = "inspect",
                 doc = "Returns a detailed string representation for debugging.",
                 returns = type("lyng.String"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisObj.inspect(this).toObj()
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisObj.inspect(scp).toObj()
+                }
+            )
             addFnDoc(
                 name = "contains",
                 doc = "Returns true if the object contains the given element.",
                 params = listOf(ParamDoc("element")),
                 returns = type("lyng.Bool"),
-                moduleName = "lyng.stdlib"
-            ) {
-                ObjBool(thisObj.contains(this, args.firstAndOnly()))
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjBool(scp.thisObj.contains(scp, scp.args.firstAndOnly()))
+                }
+            )
             // utilities
             addFnDoc(
                 name = "let",
                 doc = "Calls the specified function block with `this` value as its argument and returns its result.",
                 params = listOf(ParamDoc("block")),
-                moduleName = "lyng.stdlib"
-            ) {
-                args.firstAndOnly().callOn(createChildScope(Arguments(thisObj)))
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj =
+                        scp.args.firstAndOnly().callOn(scp.createChildScope(Arguments(scp.thisObj)))
+                }
+            )
             addFnDoc(
                 name = "apply",
                 doc = "Calls the specified function block with `this` value as its receiver and returns `this` value.",
                 params = listOf(ParamDoc("block")),
-                moduleName = "lyng.stdlib"
-            ) {
-                val body = args.firstAndOnly()
-                (thisObj as? ObjInstance)?.let {
-                    body.callOn(ApplyScope(this, it.instanceScope))
-                } ?: run {
-                    body.callOn(this)
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val body = scp.args.firstAndOnly()
+                        (scp.thisObj as? ObjInstance)?.let {
+                            body.callOn(ApplyScope(scp, it.instanceScope))
+                        } ?: run {
+                            body.callOn(scp)
+                        }
+                        return scp.thisObj
+                    }
                 }
-                thisObj
-            }
+            )
             addFnDoc(
                 name = "also",
                 doc = "Calls the specified function block with `this` value as its argument and returns `this` value.",
                 params = listOf(ParamDoc("block")),
-                moduleName = "lyng.stdlib"
-            ) {
-                args.firstAndOnly().callOn(createChildScope(Arguments(thisObj)))
-                thisObj
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        scp.args.firstAndOnly().callOn(scp.createChildScope(Arguments(scp.thisObj)))
+                        return scp.thisObj
+                    }
+                }
+            )
             addFnDoc(
                 name = "run",
                 doc = "Calls the specified function block with `this` value as its receiver and returns its result.",
                 params = listOf(ParamDoc("block")),
-                moduleName = "lyng.stdlib"
-            ) {
-                args.firstAndOnly().callOn(this)
-            }
-            addFn("getAt") {
-                requireExactCount(1)
-                thisObj.getAt(this, requiredArg<Obj>(0))
-            }
-            addFn("putAt") {
-                requireExactCount(2)
-                val newValue = args[1]
-                thisObj.putAt(this, requiredArg<Obj>(0), newValue)
-                newValue
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.args.firstAndOnly().callOn(scp)
+                }
+            )
+            addFn("getAt", code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    scp.requireExactCount(1)
+                    return scp.thisObj.getAt(scp, scp.requiredArg<Obj>(0))
+                }
+            })
+            addFn("putAt", code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    scp.requireExactCount(2)
+                    val newValue = scp.args[1]
+                    scp.thisObj.putAt(scp, scp.requiredArg<Obj>(0), newValue)
+                    return newValue
+                }
+            })
             addFnDoc(
                 name = "toJsonString",
                 doc = "Encodes this object to a JSON string.",
                 returns = type("lyng.String"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisObj.toJson(this).toString().toObj()
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj =
+                        scp.thisObj.toJson(scp).toString().toObj()
+                }
+            )
             addFnDoc(
                 name = "clamp",
                 doc = "Clamps this value within the specified range. If the value is outside the range, it is set to the nearest boundary. Respects inclusive/exclusive range ends.",
                 params = listOf(ParamDoc("range")),
-                moduleName = "lyng.stdlib"
-            ) {
-                val range = requiredArg<ObjRange>(0)
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val range = scp.requiredArg<ObjRange>(0)
 
-                var result = thisObj
-                if (range.start != null && !range.start.isNull) {
-                    if (result.compareTo(this, range.start) < 0) {
-                        result = range.start
-                    }
-                }
-                if (range.end != null && !range.end.isNull) {
-                    val cmp = range.end.compareTo(this, result)
-                    if (range.isEndInclusive) {
-                        if (cmp < 0) result = range.end
-                    } else {
-                        if (cmp <= 0) {
-                            if (range.end is ObjInt) {
-                                result = ObjInt.of(range.end.value - 1)
-                            } else if (range.end is ObjChar) {
-                                result = ObjChar((range.end.value.code - 1).toChar())
-                            } else {
-                                result = range.end
+                        var result = scp.thisObj
+                        if (range.start != null && !range.start.isNull) {
+                            if (result.compareTo(scp, range.start) < 0) {
+                                result = range.start
                             }
                         }
+                        if (range.end != null && !range.end.isNull) {
+                            val cmp = range.end.compareTo(scp, result)
+                            if (range.isEndInclusive) {
+                                if (cmp < 0) result = range.end
+                            } else {
+                                if (cmp <= 0) {
+                                    if (range.end is ObjInt) {
+                                        result = ObjInt.of(range.end.value - 1)
+                                    } else if (range.end is ObjChar) {
+                                        result = ObjChar((range.end.value.code - 1).toChar())
+                                    } else {
+                                        result = range.end
+                                    }
+                                }
+                            }
+                        }
+                        return result
                     }
                 }
-                result
-            }
+            )
         }
 
 
@@ -919,7 +952,7 @@ object ObjUnset : Obj() {
         scope: Scope,
         name: String,
         args: Arguments,
-        onNotFoundResult: (suspend () -> Obj?)?
+        onNotFoundResult: OnNotFound?
     ): Obj = scope.raiseUnset()
 
     override suspend fun getAt(scope: Scope, index: Obj): Obj = scope.raiseUnset()

@@ -90,7 +90,7 @@ class DelegationTest {
     fun testFunDelegation() = runTest {
         eval("""
             class ActionDelegate() {
-                fun invoke(thisRef, name, args...) {
+                fun invokeCallable(thisRef, name, args...) {
                     "Called %s with %d args: %s"(name, args.size, args.joinToString(","))
                 }
             }

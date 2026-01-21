@@ -19,6 +19,7 @@ package net.sergeych.lyng.obj
 
 import kotlinx.coroutines.Deferred
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
 import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lyng.miniast.addPropertyDoc
 import net.sergeych.lyng.miniast.type
@@ -37,23 +38,30 @@ open class ObjDeferred(val deferred: Deferred<Obj>): Obj() {
                 name = "await",
                 doc = "Suspend until completion and return the result value (or throw if failed).",
                 returns = type("lyng.Any"),
-                moduleName = "lyng.stdlib"
-            ) { thisAs<ObjDeferred>().deferred.await() }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjDeferred>().deferred.await()
+                }
+            )
             addPropertyDoc(
                 name = "isCompleted",
                 doc = "Whether this deferred has completed (successfully or with an error).",
                 type = type("lyng.Bool"),
                 moduleName = "lyng.stdlib",
-                getter = { thisAs<ObjDeferred>().deferred.isCompleted.toObj() }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjDeferred>().deferred.isCompleted.toObj()
+                }
             )
             addPropertyDoc(
                 name = "isActive",
                 doc = "Whether this deferred is currently active (not completed and not cancelled).",
                 type = type("lyng.Bool"),
                 moduleName = "lyng.stdlib",
-                getter = {
-                    val d = thisAs<ObjDeferred>().deferred
-                    (d.isActive || (!d.isCompleted && !d.isCancelled)).toObj()
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val d = scp.thisAs<ObjDeferred>().deferred
+                        return (d.isActive || (!d.isCompleted && !d.isCancelled)).toObj()
+                    }
                 }
             )
             addPropertyDoc(
@@ -61,7 +69,9 @@ open class ObjDeferred(val deferred: Deferred<Obj>): Obj() {
                 doc = "Whether this deferred was cancelled.",
                 type = type("lyng.Bool"),
                 moduleName = "lyng.stdlib",
-                getter = { thisAs<ObjDeferred>().deferred.isCancelled.toObj() }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjDeferred>().deferred.isCancelled.toObj()
+                }
             )
         }
     }

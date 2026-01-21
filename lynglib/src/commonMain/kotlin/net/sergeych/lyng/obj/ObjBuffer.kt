@@ -23,6 +23,8 @@ import net.sergeych.bintools.decodeHex
 import net.sergeych.bintools.encodeToHex
 import net.sergeych.bintools.toDump
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
+import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lyng.miniast.addPropertyDoc
 import net.sergeych.lyng.miniast.type
 import net.sergeych.lynon.BitArray
@@ -169,51 +171,85 @@ open class ObjBuffer(val byteArray: UByteArray) : Obj() {
                 })
 
         }.apply {
-            addClassFn("decodeBase64") {
-                ObjBuffer(requireOnlyArg<Obj>().toString().decodeBase64Url().asUByteArray())
-            }
-            addClassFn("decodeHex") {
-                ObjBuffer(requireOnlyArg<Obj>().toString().decodeHex().asUByteArray())
-            }
+            addClassFn("decodeBase64", code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj =
+                    ObjBuffer(scp.requireOnlyArg<Obj>().toString().decodeBase64Url().asUByteArray())
+            })
+            addClassFn("decodeHex", code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj =
+                    ObjBuffer(scp.requireOnlyArg<Obj>().toString().decodeHex().asUByteArray())
+            })
             addPropertyDoc(
                 name = "size",
                 doc = "Number of bytes in this buffer.",
                 type = type("lyng.Int"),
                 moduleName = "lyng.stdlib",
-                getter = { (this.thisObj as ObjBuffer).byteArray.size.toObj() }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = (scp.thisObj as ObjBuffer).byteArray.size.toObj()
+                }
             )
             addPropertyDoc(
                 name = "hex",
                 doc = "Hexadecimal string representation of the buffer.",
                 type = type("lyng.String"),
                 moduleName = "lyng.stdlib",
-                getter = { thisAs<ObjBuffer>().hex.toObj() }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjBuffer>().hex.toObj()
+                }
             )
             addPropertyDoc(
                 name = "base64",
                 doc = "Base64 (URL-safe) string representation of the buffer.",
                 type = type("lyng.String"),
                 moduleName = "lyng.stdlib",
-                getter = { thisAs<ObjBuffer>().base64.toObj() }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjBuffer>().base64.toObj()
+                }
             )
-            addFn("decodeUtf8") {
-                ObjString(
-                    thisAs<ObjBuffer>().byteArray.toByteArray().decodeToString()
-                )
-            }
-            addFn("toMutable") {
-                requireNoArgs()
-                ObjMutableBuffer(thisAs<ObjBuffer>().byteArray.copyOf())
-            }
-            addFn("toDump") {
-                requireNoArgs()
-                ObjString(
-                    thisAs<ObjBuffer>().byteArray.toByteArray().toDump()
-                )
-            }
-            addFn("toBitInput") {
-                ObjBitBuffer(BitArray(thisAs<ObjBuffer>().byteArray, 8))
-            }
+            addFnDoc(
+                name = "decodeUtf8",
+                doc = "Decode the buffer content as a UTF-8 string.",
+                returns = type("lyng.String"),
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj =
+                        ObjString(scp.thisAs<ObjBuffer>().byteArray.toByteArray().decodeToString())
+                }
+            )
+            addFnDoc(
+                name = "toMutable",
+                doc = "Return a mutable copy of this buffer.",
+                returns = type("lyng.MutableBuffer"),
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        scp.requireNoArgs()
+                        return ObjMutableBuffer(scp.thisAs<ObjBuffer>().byteArray.copyOf())
+                    }
+                }
+            )
+            addFnDoc(
+                name = "toDump",
+                doc = "Return a hexadecimal dump string of the buffer.",
+                returns = type("lyng.String"),
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        scp.requireNoArgs()
+                        return ObjString(scp.thisAs<ObjBuffer>().byteArray.toByteArray().toDump())
+                    }
+                }
+            )
+            addFnDoc(
+                name = "toBitInput",
+                doc = "Return a bit buffer for reading bits from this buffer.",
+                returns = type("lyng.BitBuffer"),
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj =
+                        ObjBitBuffer(BitArray(scp.thisAs<ObjBuffer>().byteArray, 8))
+                }
+            )
         }
     }
 }

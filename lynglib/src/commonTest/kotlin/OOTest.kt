@@ -865,8 +865,8 @@ class OOTest {
             callBar
         """.trimIndent()) as Statement
         val s2 = Script.newScope()
-        assertEquals(44L, fn.invoke(scope, fn).toKotlin(s2))
-        assertEquals(45L, fn.invoke(s2, fn).toKotlin(s2))
+        assertEquals(44L, fn.invokeCallable(scope, fn).toKotlin(s2))
+        assertEquals(45L, fn.invokeCallable(s2, fn).toKotlin(s2))
     }
 
     @Test

@@ -20,6 +20,7 @@ package net.sergeych.lyng.obj
 import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.RegexCache
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
 import net.sergeych.lyng.miniast.*
 
 class ObjRegex(val regex: Regex) : Obj() {
@@ -49,29 +50,36 @@ class ObjRegex(val regex: Regex) : Obj() {
                     doc = "Whether the entire string matches this regular expression.",
                     params = listOf(ParamDoc("text", type("lyng.String"))),
                     returns = type("lyng.Bool"),
-                    moduleName = "lyng.stdlib"
-                ) {
-                    ObjBool(args.firstAndOnly().toString().matches(thisAs<ObjRegex>().regex))
-                }
+                    moduleName = "lyng.stdlib",
+                    code = object : ScopeCallable {
+                        override suspend fun call(scp: Scope): Obj =
+                            ObjBool(scp.args.firstAndOnly().toString().matches(scp.thisAs<ObjRegex>().regex))
+                    }
+                )
                 addFnDoc(
                     name = "find",
                     doc = "Find the first match in the given string.",
                     params = listOf(ParamDoc("text", type("lyng.String"))),
                     returns = type("lyng.RegexMatch", nullable = true),
-                    moduleName = "lyng.stdlib"
-                ) {
-                    thisAs<ObjRegex>().find(requireOnlyArg<ObjString>())
-                }
+                    moduleName = "lyng.stdlib",
+                    code = object : ScopeCallable {
+                        override suspend fun call(scp: Scope): Obj =
+                            scp.thisAs<ObjRegex>().find(scp.requireOnlyArg<ObjString>())
+                    }
+                )
                 addFnDoc(
                     name = "findAll",
                     doc = "Find all matches in the given string.",
                     params = listOf(ParamDoc("text", type("lyng.String"))),
                     returns = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.RegexMatch"))),
-                    moduleName = "lyng.stdlib"
-                ) {
-                    val s = requireOnlyArg<ObjString>().value
-                    ObjList(thisAs<ObjRegex>().regex.findAll(s).map { ObjRegexMatch(it) }.toMutableList())
-                }
+                    moduleName = "lyng.stdlib",
+                    code = object : ScopeCallable {
+                        override suspend fun call(scp: Scope): Obj {
+                            val s = scp.requireOnlyArg<ObjString>().value
+                            return ObjList(scp.thisAs<ObjRegex>().regex.findAll(s).map { ObjRegexMatch(it) }.toMutableList())
+                        }
+                    }
+                )
             }
         }
     }
@@ -125,21 +133,27 @@ class ObjRegexMatch(val match: MatchResult) : Obj() {
                     doc = "List of captured groups with index 0 as the whole match.",
                     type = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.String"))),
                     moduleName = "lyng.stdlib",
-                    getter = { thisAs<ObjRegexMatch>().objGroups }
+                    getter = object : ScopeCallable {
+                        override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjRegexMatch>().objGroups
+                    }
                 )
                 addPropertyDoc(
                     name = "value",
                     doc = "The matched substring.",
                     type = type("lyng.String"),
                     moduleName = "lyng.stdlib",
-                    getter = { thisAs<ObjRegexMatch>().objValue }
+                    getter = object : ScopeCallable {
+                        override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjRegexMatch>().objValue
+                    }
                 )
                 addPropertyDoc(
                     name = "range",
                     doc = "Range of the match in the input (end-exclusive).",
                     type = type("lyng.Range"),
                     moduleName = "lyng.stdlib",
-                    getter = { thisAs<ObjRegexMatch>().objRange }
+                    getter = object : ScopeCallable {
+                        override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjRegexMatch>().objRange
+                    }
                 )
             }
         }

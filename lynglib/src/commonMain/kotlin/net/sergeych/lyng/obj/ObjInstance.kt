@@ -218,7 +218,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
 
     override suspend fun invokeInstanceMethod(
         scope: Scope, name: String, args: Arguments,
-        onNotFoundResult: (suspend () -> Obj?)?
+        onNotFoundResult: OnNotFound?
     ): Obj {
         val caller = scope.currentClassCtx
         
@@ -231,7 +231,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                         if (rec.type == ObjRecord.Type.Property) {
                             if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, decl)
                         } else if (rec.type == ObjRecord.Type.Fun) {
-                            return rec.value.invoke(instanceScope, this, args, decl)
+                            return rec.value.invokeCallable(instanceScope, this, args, decl)
                         }
                     }
                 }
@@ -246,7 +246,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                     if (rec.type == ObjRecord.Type.Property) {
                         if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, c)
                     } else if (rec.type == ObjRecord.Type.Fun) {
-                        return rec.value.invoke(instanceScope, this, args, c)
+                        return rec.value.invokeCallable(instanceScope, this, args, c)
                     }
                 }
             }
@@ -255,7 +255,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                     if (rec.type == ObjRecord.Type.Property) {
                         if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, c)
                     } else if (rec.type == ObjRecord.Type.Fun) {
-                        return rec.value.invoke(instanceScope, this, args, c)
+                        return rec.value.invokeCallable(instanceScope, this, args, c)
                     }
                 }
             }
@@ -271,12 +271,12 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                     val del = instanceScope[storageName]?.delegate ?: rec.delegate
                     ?: scope.raiseError("Internal error: delegated member $name has no delegate (tried $storageName)")
                     
-                    // For delegated member, try 'invoke' first if it's a function-like call
+                    // For delegated member, try 'invokeCallable' first if it's a function-like call
                     val allArgs = (listOf(this, ObjString(name)) + args.list).toTypedArray()
-                    return del.invokeInstanceMethod(scope, "invoke", Arguments(*allArgs), onNotFoundResult = {
+                    return del.invokeInstanceMethod(scope, "invokeCallable", Arguments(*allArgs), onNotFoundResult = {
                         // Fallback: property delegation (getValue then call result)
                         val propVal = del.invokeInstanceMethod(scope, "getValue", Arguments(this, ObjString(name)))
-                        propVal.invoke(scope, this, args, rec.declaringClass ?: cls)
+                        propVal.invokeCallable(scope, this, args, rec.declaringClass ?: cls)
                     })
                 }
                 val decl = rec.declaringClass ?: cls
@@ -285,14 +285,14 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                     scope.raiseError(
                         ObjIllegalAccessException(
                             scope,
-                            "can't invoke method $name (declared in ${decl.className})"
+                            "can't invokeCallable method $name (declared in ${decl.className})"
                         )
                     )
                 
                 if (rec.type == ObjRecord.Type.Property) {
                     if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, decl)
                 } else if (rec.type == ObjRecord.Type.Fun) {
-                    return rec.value.invoke(
+                    return rec.value.invokeCallable(
                         instanceScope,
                         this,
                         args,
@@ -300,7 +300,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                     )
                 } else if (rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.ConstructorField || rec.type == ObjRecord.Type.Argument) {
                     val resolved = readField(scope, name)
-                    return resolved.value.invoke(scope, this, args, resolved.declaringClass)
+                    return resolved.value.invokeCallable(scope, this, args, resolved.declaringClass)
                 }
             }
         }
@@ -507,18 +507,18 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
         scope: Scope,
         name: String,
         args: Arguments,
-        onNotFoundResult: (suspend () -> Obj?)?
+        onNotFoundResult: OnNotFound?
     ): Obj {
         // Qualified method dispatch must start from the specified ancestor, not from the instance scope.
         memberFromAncestor(name)?.let { rec ->
             val decl = rec.declaringClass ?: startClass
             val caller = scope.currentClassCtx
             if (!canAccessMember(rec.visibility, decl, caller, name))
-                scope.raiseError(ObjIllegalAccessException(scope, "can't invoke method $name (declared in ${decl.className})"))
+                scope.raiseError(ObjIllegalAccessException(scope, "can't invokeCallable method $name (declared in ${decl.className})"))
             val saved = instance.instanceScope.currentClassCtx
             instance.instanceScope.currentClassCtx = decl
             try {
-                return rec.value.invoke(instance.instanceScope, instance, args)
+                return rec.value.invokeCallable(instance.instanceScope, instance, args)
             } finally {
                 instance.instanceScope.currentClassCtx = saved
             }
@@ -532,19 +532,19 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
                     scope.raiseError(
                         ObjIllegalAccessException(
                             scope,
-                            "can't invoke method $name (declared in ${decl?.className ?: "?"})"
+                            "can't invokeCallable method $name (declared in ${decl?.className ?: "?"})"
                         )
                     )
                 val saved = instance.instanceScope.currentClassCtx
                 instance.instanceScope.currentClassCtx = decl
                 try {
-                    return rec.value.invoke(instance.instanceScope, instance, args)
+                    return rec.value.invokeCallable(instance.instanceScope, instance, args)
                 } finally {
                     instance.instanceScope.currentClassCtx = saved
                 }
             }
         }
-        return onNotFoundResult?.invoke() ?: scope.raiseSymbolNotFound(name)
+        return onNotFoundResult?.call() ?: scope.raiseSymbolNotFound(name)
     }
 
     override fun toString(): String = instance.toString()

@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ package net.sergeych.lyng.obj
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
 import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
@@ -183,10 +184,11 @@ class ObjInt(val value: Long, override val isConst: Boolean = false) : Obj(), Nu
                 name = "toInt",
                 doc = "Returns this integer (identity operation).",
                 returns = net.sergeych.lyng.miniast.type("lyng.Int"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisObj
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisObj
+                }
+            )
         }
     }
 }

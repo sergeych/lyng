@@ -18,6 +18,7 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
 import net.sergeych.lyng.miniast.*
 
 class RingBuffer<T>(val maxSize: Int) : Iterable<T> {
@@ -96,39 +97,55 @@ class ObjRingBuffer(val capacity: Int) : Obj() {
                 doc = "Maximum number of elements the buffer can hold.",
                 type = type("lyng.Int"),
                 moduleName = "lyng.stdlib",
-                getter = { thisAs<ObjRingBuffer>().capacity.toObj() }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjRingBuffer>().capacity.toObj()
+                }
             )
             addPropertyDoc(
                 name = "size",
                 doc = "Current number of elements in the buffer.",
                 type = type("lyng.Int"),
                 moduleName = "lyng.stdlib",
-                getter = { thisAs<ObjRingBuffer>().buffer.size.toObj() }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjRingBuffer>().buffer.size.toObj()
+                }
             )
             addFnDoc(
                 name = "iterator",
                 doc = "Iterator over elements in insertion order (oldest to newest).",
                 returns = TypeGenericDoc(type("lyng.Iterator"), listOf(type("lyng.Any"))),
-                moduleName = "lyng.stdlib"
-            ) {
-                val buffer = thisAs<ObjRingBuffer>().buffer
-                ObjKotlinObjIterator(buffer.iterator())
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val buffer = scp.thisAs<ObjRingBuffer>().buffer
+                        return ObjKotlinObjIterator(buffer.iterator())
+                    }
+                }
+            )
             addFnDoc(
                 name = "add",
                 doc = "Append an element; if full, the oldest element is dropped.",
                 params = listOf(ParamDoc("value", type("lyng.Any"))),
                 returns = type("lyng.Void"),
-                moduleName = "lyng.stdlib"
-            ) { thisAs<ObjRingBuffer>().apply { buffer.add(requireOnlyArg<Obj>()) } }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val self = scp.thisAs<ObjRingBuffer>()
+                        self.buffer.add(scp.requireOnlyArg<Obj>())
+                        return ObjVoid
+                    }
+                }
+            )
             addPropertyDoc(
                 name = "first",
                 doc = "Return the oldest element in the buffer.",
                 type = type("lyng.Any"),
                 moduleName = "lyng.stdlib",
-                getter = {
-                    val buffer = (this.thisObj as ObjRingBuffer).buffer
-                    if (buffer.size == 0) ObjNull else buffer.first()
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val buffer = (scp.thisObj as ObjRingBuffer).buffer
+                        return if (buffer.size == 0) ObjNull else buffer.iterator().next()
+                    }
                 }
             )
         }

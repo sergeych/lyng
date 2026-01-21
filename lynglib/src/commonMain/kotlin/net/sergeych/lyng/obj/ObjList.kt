@@ -20,6 +20,7 @@ package net.sergeych.lyng.obj
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
 import net.sergeych.lyng.Statement
 import net.sergeych.lyng.miniast.ParamDoc
 import net.sergeych.lyng.miniast.addFnDoc
@@ -111,13 +112,13 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
             val next2 = it2.getInstanceMethod(scope, "next")
             
             while (it1.hasNext()) {
-                if (!hasNext2.invoke(scope, it2).toBool()) return 1 // I'm longer
+                if (!hasNext2.invokeCallable(scope, it2).toBool()) return 1 // I'm longer
                 val v1 = it1.next()
-                val v2 = next2.invoke(scope, it2)
+                val v2 = next2.invokeCallable(scope, it2)
                 val d = v1.compareTo(scope, v2)
                 if (d != 0) return d
             }
-            return if (hasNext2.invoke(scope, it2).toBool()) -1 else 0
+            return if (hasNext2.invokeCallable(scope, it2).toBool()) -1 else 0
         }
         return -2
     }
@@ -169,9 +170,9 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
         return list.contains(other)
     }
 
-    override suspend fun enumerate(scope: Scope, callback: suspend (Obj) -> Boolean) {
+    override suspend fun enumerate(scope: Scope, callback: EnumerateCallback) {
         for (item in list) {
-            if (!callback(item)) break
+            if (!callback.call(item)) break
         }
     }
 
@@ -179,7 +180,9 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
         get() = type
 
     override suspend fun toKotlin(scope: Scope): Any {
-        return list.map { it.toKotlin(scope) }
+        val res = ArrayList<Any?>(list.size)
+        for (i in list) res.add(i.toKotlin(scope))
+        return res
     }
 
     suspend fun quicksort(compare: suspend (Obj, Obj) -> Int) = quicksort(compare, 0, list.size - 1)
@@ -230,7 +233,9 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
     override suspend fun lynonType(): LynonType = LynonType.List
 
     override suspend fun toJson(scope: Scope): JsonElement {
-        return JsonArray(list.map { it.toJson(scope) })
+        val res = ArrayList<JsonElement>(list.size)
+        for (i in list) res.add(i.toJson(scope))
+        return JsonArray(res)
     }
 
     override suspend fun defaultToString(scope: Scope): ObjString {
@@ -256,256 +261,290 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 doc = "Number of elements in this list.",
                 type = type("lyng.Int"),
                 moduleName = "lyng.stdlib",
-                getter = { 
-                    val s = (this.thisObj as ObjList).list.size
-                    s.toObj()
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        return (scp.thisObj as ObjList).list.size.toObj()
+                    }
                 }
             )
             addFnDoc(
                 name = "add",
                 doc = "Append one or more elements to the end of this list.",
-                moduleName = "lyng.stdlib"
-            ) {
-                val l = thisAs<ObjList>().list
-                for (a in args) l.add(a)
-                ObjVoid
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val l = scp.thisAs<ObjList>().list
+                        for (a in scp.args) l.add(a)
+                        return ObjVoid
+                    }
+                }
+            )
             addFnDoc(
                 name = "insertAt",
                 doc = "Insert elements starting at the given index.",
                 params = listOf(ParamDoc("index", type("lyng.Int"))),
-                moduleName = "lyng.stdlib"
-            ) {
-                if (args.size < 2) raiseError("addAt takes 2+ arguments")
-                val l = thisAs<ObjList>()
-                var index = requiredArg<ObjInt>(0).value.toInt()
-                for (i in 1..<args.size) l.list.add(index++, args[i])
-                ObjVoid
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        if (scp.args.size < 2) scp.raiseError("addAt takes 2+ arguments")
+                        val l = scp.thisAs<ObjList>()
+                        var index = scp.requiredArg<ObjInt>(0).value.toInt()
+                        for (i in 1..<scp.args.size) l.list.add(index++, scp.args[i])
+                        return ObjVoid
+                    }
+                }
+            )
 
             addFnDoc(
                 name = "removeAt",
                 doc = "Remove element at index, or a range [start,end) if two indices are provided. Returns the list.",
                 params = listOf(ParamDoc("start", type("lyng.Int")), ParamDoc("end", type("lyng.Int"))),
-                moduleName = "lyng.stdlib"
-            ) {
-                val self = thisAs<ObjList>()
-                val start = requiredArg<ObjInt>(0).value.toInt()
-                if (args.size == 2) {
-                    val end = requireOnlyArg<ObjInt>().value.toInt()
-                    self.list.subList(start, end).clear()
-                } else
-                    self.list.removeAt(start)
-                self
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val self = scp.thisAs<ObjList>()
+                        val start = scp.requiredArg<ObjInt>(0).value.toInt()
+                        if (scp.args.size == 2) {
+                            val end = scp.requireOnlyArg<ObjInt>().value.toInt()
+                            self.list.subList(start, end).clear()
+                        } else
+                            self.list.removeAt(start)
+                        return self
+                    }
+                }
+            )
 
             addFnDoc(
                 name = "removeLast",
                 doc = "Remove the last element or the last N elements if a count is provided. Returns the list.",
                 params = listOf(ParamDoc("count", type("lyng.Int"))),
-                moduleName = "lyng.stdlib"
-            ) {
-                val self = thisAs<ObjList>()
-                if (args.isNotEmpty()) {
-                    val count = requireOnlyArg<ObjInt>().value.toInt()
-                    val size = self.list.size
-                    if (count >= size) self.list.clear()
-                    else self.list.subList(size - count, size).clear()
-                } else self.list.removeLast()
-                self
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val self = scp.thisAs<ObjList>()
+                        if (scp.args.isNotEmpty()) {
+                            val count = scp.requireOnlyArg<ObjInt>().value.toInt()
+                            val size = self.list.size
+                            if (count >= size) self.list.clear()
+                            else self.list.subList(size - count, size).clear()
+                        } else self.list.removeLast()
+                        return self
+                    }
+                }
+            )
 
             addFnDoc(
                 name = "removeRange",
                 doc = "Remove a range of elements. Accepts a Range or (start, endInclusive). Returns the list.",
                 params = listOf(ParamDoc("range")),
-                moduleName = "lyng.stdlib"
-            ) {
-                val self = thisAs<ObjList>()
-                val list = self.list
-                val range = requiredArg<Obj>(0)
-                if (range is ObjRange) {
-                    val index = range
-                    when {
-                        index.start is ObjInt && index.end is ObjInt -> {
-                            if (index.isEndInclusive)
-                                list.subList(index.start.toInt(), index.end.toInt() + 1)
-                            else
-                                list.subList(index.start.toInt(), index.end.toInt())
-                        }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val self = scp.thisAs<ObjList>()
+                        val list = self.list
+                        val range = scp.requiredArg<Obj>(0)
+                        if (range is ObjRange) {
+                            val index = range
+                            when {
+                                index.start is ObjInt && index.end is ObjInt -> {
+                                    if (index.isEndInclusive)
+                                        list.subList(index.start.toInt(), index.end.toInt() + 1)
+                                    else
+                                        list.subList(index.start.toInt(), index.end.toInt())
+                                }
 
-                        index.isOpenStart && !index.isOpenEnd -> {
-                            if (index.isEndInclusive)
-                                list.subList(0, index.end!!.toInt() + 1)
-                            else
-                                list.subList(0, index.end!!.toInt())
-                        }
+                                index.isOpenStart && !index.isOpenEnd -> {
+                                    if (index.isEndInclusive)
+                                        list.subList(0, index.end!!.toInt() + 1)
+                                    else
+                                        list.subList(0, index.end!!.toInt())
+                                }
 
-                        index.isOpenEnd && !index.isOpenStart -> {
-                            list.subList(index.start!!.toInt(), list.size)
-                        }
+                                index.isOpenEnd && !index.isOpenStart -> {
+                                    list.subList(index.start!!.toInt(), list.size)
+                                }
 
-                        index.isOpenStart && index.isOpenEnd -> {
-                            list
-                        }
+                                index.isOpenStart && index.isOpenEnd -> {
+                                    list
+                                }
 
-                        else -> {
-                            throw RuntimeException("Can't apply range for index: $index")
+                                else -> {
+                                    throw RuntimeException("Can't apply range for index: $index")
+                                }
+                            }.clear()
+                        } else {
+                            val start = range.toInt()
+                            val end = scp.requiredArg<ObjInt>(1).value.toInt() + 1
+                            self.list.subList(start, end).clear()
                         }
-                    }.clear()
-                } else {
-                    val start = range.toInt()
-                    val end = requiredArg<ObjInt>(1).value.toInt() + 1
-                    self.list.subList(start, end).clear()
+                        return self
+                    }
                 }
-                self
-            }
+            )
 
             addFnDoc(
                 name = "sortWith",
                 doc = "Sort this list in-place using a comparator function (a, b) -> Int.",
                 params = listOf(ParamDoc("comparator")),
-                moduleName = "lyng.stdlib"
-            ) {
-                val comparator = requireOnlyArg<Statement>()
-                thisAs<ObjList>().quicksort { a, b -> comparator.call(this, a, b).toInt() }
-                ObjVoid
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val comparator = scp.requireOnlyArg<Statement>()
+                        scp.thisAs<ObjList>().quicksort { a, b -> comparator.invokeCallable(scp, scp.thisObj, a, b).toInt() }
+                        return ObjVoid
+                    }
+                }
+            )
             addFnDoc(
                 name = "shuffle",
                 doc = "Shuffle elements of this list in-place.",
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjList>().list.shuffle()
-                ObjVoid
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        scp.thisAs<ObjList>().list.shuffle()
+                        return ObjVoid
+                    }
+                }
+            )
             addFnDoc(
                 name = "sum",
                 doc = "Sum elements using dynamic '+' or optimized integer path. Returns null for empty lists.",
-                moduleName = "lyng.stdlib"
-            ) {
-                val self = thisAs<ObjList>()
-                val l = self.list
-                if (l.isEmpty()) return@addFnDoc ObjNull
-                if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
-                    // Fast path: all ints → accumulate as long
-                    var i = 0
-                    var acc: Long = 0
-                    while (i < l.size) {
-                        val v = l[i]
-                        if (v is ObjInt) {
-                            acc += v.value
-                            i++
-                        } else {
-                            // Fallback to generic dynamic '+' accumulation starting from current acc
-                            var res: Obj = ObjInt(acc)
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val self = scp.thisAs<ObjList>()
+                        val l = self.list
+                        if (l.isEmpty()) return ObjNull
+                        if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
+                            // Fast path: all ints → accumulate as long
+                            var i = 0
+                            var acc: Long = 0
                             while (i < l.size) {
-                                res = res.plus(this, l[i])
-                                i++
+                                val v = l[i]
+                                if (v is ObjInt) {
+                                    acc += v.value
+                                    i++
+                                } else {
+                                    // Fallback to generic dynamic '+' accumulation starting from current acc
+                                    var res: Obj = ObjInt(acc)
+                                    while (i < l.size) {
+                                        res = res.plus(scp, l[i])
+                                        i++
+                                    }
+                                    return res
+                                }
                             }
-                            return@addFnDoc res
+                            return ObjInt(acc)
                         }
+                        // Generic path: dynamic '+' starting from first element
+                        var res: Obj = l[0]
+                        var k = 1
+                        while (k < l.size) {
+                            res = res.plus(scp, l[k])
+                            k++
+                        }
+                        return res
                     }
-                    return@addFnDoc ObjInt(acc)
                 }
-                // Generic path: dynamic '+' starting from first element
-                var res: Obj = l[0]
-                var k = 1
-                while (k < l.size) {
-                    res = res.plus(this, l[k])
-                    k++
-                }
-                res
-            }
+            )
             addFnDoc(
                 name = "min",
                 doc = "Minimum element by natural order. Returns null for empty lists.",
-                moduleName = "lyng.stdlib"
-            ) {
-                val l = thisAs<ObjList>().list
-                if (l.isEmpty()) return@addFnDoc ObjNull
-                if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
-                    var i = 0
-                    var hasOnlyInts = true
-                    var minVal: Long = Long.MAX_VALUE
-                    while (i < l.size) {
-                        val v = l[i]
-                        if (v is ObjInt) {
-                            if (v.value < minVal) minVal = v.value
-                        } else {
-                            hasOnlyInts = false
-                            break
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val l = scp.thisAs<ObjList>().list
+                        if (l.isEmpty()) return ObjNull
+                        if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
+                            var i = 0
+                            var hasOnlyInts = true
+                            var minVal: Long = Long.MAX_VALUE
+                            while (i < l.size) {
+                                val v = l[i]
+                                if (v is ObjInt) {
+                                    if (v.value < minVal) minVal = v.value
+                                } else {
+                                    hasOnlyInts = false
+                                    break
+                                }
+                                i++
+                            }
+                            if (hasOnlyInts) return ObjInt(minVal)
                         }
-                        i++
+                        var res: Obj = l[0]
+                        var i = 1
+                        while (i < l.size) {
+                            val v = l[i]
+                            if (v.compareTo(scp, res) < 0) res = v
+                            i++
+                        }
+                        return res
                     }
-                    if (hasOnlyInts) return@addFnDoc ObjInt(minVal)
                 }
-                var res: Obj = l[0]
-                var i = 1
-                while (i < l.size) {
-                    val v = l[i]
-                    if (v.compareTo(this, res) < 0) res = v
-                    i++
-                }
-                res
-            }
+            )
             addFnDoc(
                 name = "max",
                 doc = "Maximum element by natural order. Returns null for empty lists.",
-                moduleName = "lyng.stdlib"
-            ) {
-                val l = thisAs<ObjList>().list
-                if (l.isEmpty()) return@addFnDoc ObjNull
-                if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
-                    var i = 0
-                    var hasOnlyInts = true
-                    var maxVal: Long = Long.MIN_VALUE
-                    while (i < l.size) {
-                        val v = l[i]
-                        if (v is ObjInt) {
-                            if (v.value > maxVal) maxVal = v.value
-                        } else {
-                            hasOnlyInts = false
-                            break
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val l = scp.thisAs<ObjList>().list
+                        if (l.isEmpty()) return ObjNull
+                        if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
+                            var i = 0
+                            var hasOnlyInts = true
+                            var maxVal: Long = Long.MIN_VALUE
+                            while (i < l.size) {
+                                val v = l[i]
+                                if (v is ObjInt) {
+                                    if (v.value > maxVal) maxVal = v.value
+                                } else {
+                                    hasOnlyInts = false
+                                    break
+                                }
+                                i++
+                            }
+                            if (hasOnlyInts) return ObjInt(maxVal)
                         }
-                        i++
+                        var res: Obj = l[0]
+                        var i = 1
+                        while (i < l.size) {
+                            val v = l[i]
+                            if (v.compareTo(scp, res) > 0) res = v
+                            i++
+                        }
+                        return res
                     }
-                    if (hasOnlyInts) return@addFnDoc ObjInt(maxVal)
                 }
-                var res: Obj = l[0]
-                var i = 1
-                while (i < l.size) {
-                    val v = l[i]
-                    if (v.compareTo(this, res) > 0) res = v
-                    i++
-                }
-                res
-            }
+            )
             addFnDoc(
                 name = "indexOf",
                 doc = "Index of the first occurrence of the given element, or -1 if not found.",
                 params = listOf(ParamDoc("element")),
                 returns = type("lyng.Int"),
-                moduleName = "lyng.stdlib"
-            ) {
-                val l = thisAs<ObjList>().list
-                val needle = args.firstAndOnly()
-                if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS && needle is ObjInt) {
-                    var i = 0
-                    while (i < l.size) {
-                        val v = l[i]
-                        if (v is ObjInt && v.value == needle.value) return@addFnDoc ObjInt(i.toLong())
-                        i++
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val l = scp.thisAs<ObjList>().list
+                        val needle = scp.args.firstAndOnly()
+                        if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS && needle is ObjInt) {
+                            var i = 0
+                            while (i < l.size) {
+                                val v = l[i]
+                                if (v is ObjInt && v.value == needle.value) return ObjInt(i.toLong())
+                                i++
+                            }
+                            return ObjInt((-1).toLong())
+                        }
+                        var i = 0
+                        while (i < l.size) {
+                            if (l[i].compareTo(scp, needle) == 0) return ObjInt(i.toLong())
+                            i++
+                        }
+                        return ObjInt((-1).toLong())
                     }
-                    return@addFnDoc ObjInt((-1).toLong())
                 }
-                var i = 0
-                while (i < l.size) {
-                    if (l[i].compareTo(this, needle) == 0) return@addFnDoc ObjInt(i.toLong())
-                    i++
-                }
-                ObjInt((-1).toLong())
-            }
+            )
         }
     }
 }

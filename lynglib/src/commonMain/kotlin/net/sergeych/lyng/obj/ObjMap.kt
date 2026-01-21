@@ -20,6 +20,7 @@ package net.sergeych.lyng.obj
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
 import net.sergeych.lyng.Statement
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lynon.LynonDecoder
@@ -78,21 +79,27 @@ class ObjMapEntry(val key: Obj, val value: Obj) : Obj() {
                 doc = "Key component of this map entry.",
                 type = type("lyng.Any"),
                 moduleName = "lyng.stdlib",
-                getter = { thisAs<ObjMapEntry>().key }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjMapEntry>().key
+                }
             )
             addPropertyDoc(
                 name = "value",
                 doc = "Value component of this map entry.",
                 type = type("lyng.Any"),
                 moduleName = "lyng.stdlib",
-                getter = { thisAs<ObjMapEntry>().value }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjMapEntry>().value
+                }
             )
             addPropertyDoc(
                 name = "size",
                 doc = "Number of components in this entry (always 2).",
                 type = type("lyng.Int"),
                 moduleName = "lyng.stdlib",
-                getter = { 2.toObj() }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = 2.toObj()
+                }
             )
         }
     }
@@ -181,9 +188,11 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
     }
 
     override suspend fun toJson(scope: Scope): JsonElement {
-        return JsonObject(
-            map.map { it.key.toString(scope).value to it.value.toJson(scope) }.toMap()
-        )
+        val res = mutableMapOf<String, JsonElement>()
+        for ((k, v) in map) {
+            res[k.toString(scope).value] = v.toJson(scope)
+        }
+        return JsonObject(res)
     }
 
     companion object {
@@ -224,94 +233,119 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
             }
         }.apply {
             implementingNames.add("Delegate")
-            addFn("getValue") {
-                val self = thisAs<ObjMap>()
-                val key = requiredArg<Obj>(1)
-                self.map[key] ?: ObjNull
-            }
-            addFn("setValue") {
-                val self = thisAs<ObjMap>()
-                val key = requiredArg<Obj>(1)
-                val value = requiredArg<Obj>(2)
-                self.map[key] = value
-                self
-            }
-            addFn("bind") {
-                val mode = requiredArg<ObjEnumEntry>(1)
-                if(  mode.ordinal.value > 1)
-                    raiseIllegalArgument("Map can be delegated only to val or var, got ${mode.name.value}")
-                thisObj
-            }
+            addFn("getValue", code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val self = scp.thisAs<ObjMap>()
+                    val key = scp.requiredArg<Obj>(1)
+                    return self.map[key] ?: ObjNull
+                }
+            })
+            addFn("setValue", code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val self = scp.thisAs<ObjMap>()
+                    val key = scp.requiredArg<Obj>(1)
+                    val value = scp.requiredArg<Obj>(2)
+                    self.map[key] = value
+                    return self
+                }
+            })
+            addFn("bind", code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val mode = scp.requiredArg<ObjEnumEntry>(1)
+                    if (mode.ordinal.value > 1)
+                        scp.raiseIllegalArgument("Map can be delegated only to val or var, got ${mode.name.value}")
+                    return scp.thisObj
+                }
+            })
             addFnDoc(
                 name = "getOrNull",
                 doc = "Get value by key or return null if the key is absent.",
                 params = listOf(ParamDoc("key")),
                 returns = type("lyng.Any", nullable = true),
-                moduleName = "lyng.stdlib"
-            ) {
-                val key = args.firstAndOnly(pos)
-                thisAs<ObjMap>().map.getOrElse(key) { ObjNull }
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val key = scp.args.firstAndOnly(scp.pos)
+                        return scp.thisAs<ObjMap>().map.getOrElse(key) { ObjNull }
+                    }
+                }
+            )
             addFnDoc(
                 name = "getOrPut",
                 doc = "Get value by key or compute, store, and return the default from a lambda.",
                 params = listOf(ParamDoc("key"), ParamDoc("default")),
                 returns = type("lyng.Any"),
-                moduleName = "lyng.stdlib"
-            ) {
-                val key = requiredArg<Obj>(0)
-                thisAs<ObjMap>().map.getOrPut(key) {
-                    val lambda = requiredArg<Statement>(1)
-                    lambda.execute(this)
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val key = scp.requiredArg<Obj>(0)
+                        return scp.thisAs<ObjMap>().map.getOrPut(key) {
+                            val lambda = scp.requiredArg<Statement>(1)
+                            lambda.execute(scp)
+                        }
+                    }
                 }
-            }
+            )
             addPropertyDoc(
                 name = "size",
                 doc = "Number of entries in the map.",
                 type = type("lyng.Int"),
                 moduleName = "lyng.stdlib",
-                getter = { (this.thisObj as ObjMap).map.size.toObj() }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = (scp.thisObj as ObjMap).map.size.toObj()
+                }
             )
             addFnDoc(
                 name = "remove",
                 doc = "Remove the entry by key and return the previous value or null if absent.",
                 params = listOf(ParamDoc("key")),
                 returns = type("lyng.Any", nullable = true),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjMap>().map.remove(requiredArg<Obj>(0))?.toObj() ?: ObjNull
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        return scp.thisAs<ObjMap>().map.remove(scp.requiredArg<Obj>(0))?.toObj() ?: ObjNull
+                    }
+                }
+            )
             addFnDoc(
                 name = "clear",
                 doc = "Remove all entries from this map. Returns the map.",
                 returns = type("lyng.Map"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjMap>().map.clear()
-                thisObj
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        scp.thisAs<ObjMap>().map.clear()
+                        return scp.thisObj
+                    }
+                }
+            )
             addPropertyDoc(
                 name = "keys",
                 doc = "List of keys in this map.",
                 type = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.Any"))),
                 moduleName = "lyng.stdlib",
-                getter = { thisAs<ObjMap>().map.keys.toObj() }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjMap>().map.keys.toObj()
+                }
             )
             addPropertyDoc(
                 name = "values",
                 doc = "List of values in this map.",
                 type = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.Any"))),
                 moduleName = "lyng.stdlib",
-                getter = { ObjList(thisAs<ObjMap>().map.values.toMutableList()) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjList(scp.thisAs<ObjMap>().map.values.toMutableList())
+                }
             )
             addFnDoc(
                 name = "iterator",
                 doc = "Iterator over map entries as MapEntry objects.",
                 returns = TypeGenericDoc(type("lyng.Iterator"), listOf(type("lyng.MapEntry"))),
-                moduleName = "lyng.stdlib"
-            ) {
-                ObjKotlinIterator(thisAs<ObjMap>().map.entries.iterator())
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjKotlinIterator(scp.thisAs<ObjMap>().map.entries.iterator())
+                }
+            )
         }
     }
 

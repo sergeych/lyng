@@ -18,6 +18,7 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
 import net.sergeych.lyng.miniast.TypeGenericDoc
 import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lyng.miniast.addPropertyDoc
@@ -115,17 +116,17 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
         start is ObjChar && end is ObjChar
     }
 
-    override suspend fun enumerate(scope: Scope, callback: suspend (Obj) -> Boolean) {
+    override suspend fun enumerate(scope: Scope, callback: EnumerateCallback) {
         if (start is ObjInt && end is ObjInt) {
             val s = start.value
             val e = end.value
             if (isEndInclusive) {
                 for (i in s..e) {
-                    if (!callback(ObjInt.of(i))) break
+                    if (!callback.call(ObjInt.of(i))) break
                 }
             } else {
                 for (i in s..<e) {
-                    if (!callback(ObjInt.of(i))) break
+                    if (!callback.call(ObjInt.of(i))) break
                 }
             }
         } else if (start is ObjChar && end is ObjChar) {
@@ -133,11 +134,11 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
             val e = end.value
             if (isEndInclusive) {
                 for (c in s..e) {
-                    if (!callback(ObjChar(c))) break
+                    if (!callback.call(ObjChar(c))) break
                 }
             } else {
                 for (c in s..<e) {
-                    if (!callback(ObjChar(c))) break
+                    if (!callback.call(ObjChar(c))) break
                 }
             }
         } else {
@@ -180,64 +181,79 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
                 doc = "Start bound of the range or null if open.",
                 type = type("lyng.Any", nullable = true),
                 moduleName = "lyng.stdlib",
-                getter = { thisAs<ObjRange>().start ?: ObjNull }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjRange>().start ?: ObjNull
+                }
             )
             addPropertyDoc(
                 name = "end",
                 doc = "End bound of the range or null if open.",
                 type = type("lyng.Any", nullable = true),
                 moduleName = "lyng.stdlib",
-                getter = { thisAs<ObjRange>().end ?: ObjNull }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjRange>().end ?: ObjNull
+                }
             )
             addPropertyDoc(
                 name = "isOpen",
                 doc = "Whether the range is open on either side (no start or no end).",
                 type = type("lyng.Bool"),
                 moduleName = "lyng.stdlib",
-                getter = { thisAs<ObjRange>().let { it.start == null || it.end == null }.toObj() }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjRange>().let { it.start == null || it.end == null }.toObj()
+                }
             )
             addPropertyDoc(
                 name = "isIntRange",
                 doc = "True if both bounds are Int values.",
                 type = type("lyng.Bool"),
                 moduleName = "lyng.stdlib",
-                getter = { thisAs<ObjRange>().isIntRange.toObj() }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjRange>().isIntRange.toObj()
+                }
             )
             addPropertyDoc(
                 name = "isCharRange",
                 doc = "True if both bounds are Char values.",
                 type = type("lyng.Bool"),
                 moduleName = "lyng.stdlib",
-                getter = { thisAs<ObjRange>().isCharRange.toObj() }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjRange>().isCharRange.toObj()
+                }
             )
             addPropertyDoc(
                 name = "isEndInclusive",
                 doc = "Whether the end bound is inclusive.",
                 type = type("lyng.Bool"),
                 moduleName = "lyng.stdlib",
-                getter = { thisAs<ObjRange>().isEndInclusive.toObj() }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjRange>().isEndInclusive.toObj()
+                }
             )
             addFnDoc(
                 name = "iterator",
                 doc = "Iterator over elements in this range (optimized for Int ranges).",
                 returns = TypeGenericDoc(type("lyng.Iterator"), listOf(type("lyng.Any"))),
-                moduleName = "lyng.stdlib"
-            ) {
-                val self = thisAs<ObjRange>()
-                if (net.sergeych.lyng.PerfFlags.RANGE_FAST_ITER) {
-                    val s = self.start
-                    val e = self.end
-                    if (s is ObjInt && e is ObjInt) {
-                        val start = s.value.toInt()
-                        val endExclusive = (if (self.isEndInclusive) e.value.toInt() + 1 else e.value.toInt())
-                        // Only for ascending simple ranges; fall back otherwise
-                        if (start <= endExclusive) {
-                            return@addFnDoc ObjFastIntRangeIterator(start, endExclusive)
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val self = scp.thisAs<ObjRange>()
+                        if (net.sergeych.lyng.PerfFlags.RANGE_FAST_ITER) {
+                            val s = self.start
+                            val e = self.end
+                            if (s is ObjInt && e is ObjInt) {
+                                val start = s.value.toInt()
+                                val endExclusive = (if (self.isEndInclusive) e.value.toInt() + 1 else e.value.toInt())
+                                // Only for ascending simple ranges; fall back otherwise
+                                if (start <= endExclusive) {
+                                    return ObjFastIntRangeIterator(start, endExclusive)
+                                }
+                            }
                         }
+                        return ObjRangeIterator(self).apply { init(scp) }
                     }
                 }
-                ObjRangeIterator(self).apply { init() }
-            }
+            )
         }
     }
 }

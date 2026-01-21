@@ -20,9 +20,11 @@ package net.sergeych.lyng.io.process
 import kotlinx.coroutines.flow.Flow
 import net.sergeych.lyng.ModuleScope
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
+import net.sergeych.lyng.pacman.ModuleBuilder
 import net.sergeych.lyng.statement
 import net.sergeych.lyngio.process.*
 import net.sergeych.lyngio.process.security.ProcessAccessDeniedException
@@ -39,9 +41,11 @@ fun createProcessModule(policy: ProcessAccessPolicy, manager: ImportManager): Bo
     val name = "lyng.io.process"
     if (manager.packageNames.contains(name)) return false
 
-    manager.addPackage(name) { module ->
-        buildProcessModule(module, policy)
-    }
+    manager.addPackage(name, object : ModuleBuilder {
+        override suspend fun build(module: ModuleScope) {
+            buildProcessModule(module, policy)
+        }
+    })
     return true
 }
 
@@ -59,59 +63,74 @@ private suspend fun buildProcessModule(module: ModuleScope, policy: ProcessAcces
             name = "stdout",
             doc = "Get standard output stream as a Flow of lines.",
             returns = type("lyng.Flow"),
-            moduleName = module.packageName
-        ) {
-            val self = thisAs<ObjRunningProcess>()
-            self.process.stdout.toLyngFlow(this)
-        }
+            moduleName = module.packageName,
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val self = scp.thisAs<ObjRunningProcess>()
+                    return self.process.stdout.toLyngFlow(scp)
+                }
+            }
+        )
         addFnDoc(
             name = "stderr",
             doc = "Get standard error stream as a Flow of lines.",
             returns = type("lyng.Flow"),
-            moduleName = module.packageName
-        ) {
-            val self = thisAs<ObjRunningProcess>()
-            self.process.stderr.toLyngFlow(this)
-        }
+            moduleName = module.packageName,
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val self = scp.thisAs<ObjRunningProcess>()
+                    return self.process.stderr.toLyngFlow(scp)
+                }
+            }
+        )
         addFnDoc(
             name = "signal",
             doc = "Send a signal to the process (e.g. 'SIGINT', 'SIGTERM', 'SIGKILL').",
             params = listOf(ParamDoc("signal", type("lyng.String"))),
-            moduleName = module.packageName
-        ) {
-            processGuard {
-                val sigStr = requireOnlyArg<ObjString>().value.uppercase()
-                val sig = try {
-                    ProcessSignal.valueOf(sigStr)
-                } catch (e: Exception) {
-                    try {
-                        ProcessSignal.valueOf("SIG$sigStr")
-                    } catch (e2: Exception) {
-                        raiseIllegalArgument("Unknown signal: $sigStr")
+            moduleName = module.packageName,
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    return scp.processGuard {
+                        val sigStr = scp.requireOnlyArg<ObjString>().value.uppercase()
+                        val sig = try {
+                            ProcessSignal.valueOf(sigStr)
+                        } catch (e: Exception) {
+                            try {
+                                ProcessSignal.valueOf("SIG$sigStr")
+                            } catch (e2: Exception) {
+                                scp.raiseIllegalArgument("Unknown signal: $sigStr")
+                            }
+                        }
+                        scp.thisAs<ObjRunningProcess>().process.sendSignal(sig)
+                        ObjVoid
                     }
                 }
-                thisAs<ObjRunningProcess>().process.sendSignal(sig)
-                ObjVoid
             }
-        }
+        )
         addFnDoc(
             name = "waitFor",
             doc = "Wait for the process to exit and return its exit code.",
             returns = type("lyng.Int"),
-            moduleName = module.packageName
-        ) {
-            processGuard {
-                thisAs<ObjRunningProcess>().process.waitFor().toObj()
+            moduleName = module.packageName,
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    return scp.processGuard {
+                        scp.thisAs<ObjRunningProcess>().process.waitFor().toObj()
+                    }
+                }
             }
-        }
+        )
         addFnDoc(
             name = "destroy",
             doc = "Forcefully terminate the process.",
-            moduleName = module.packageName
-        ) {
-            thisAs<ObjRunningProcess>().process.destroy()
-            ObjVoid
-        }
+            moduleName = module.packageName,
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    scp.thisAs<ObjRunningProcess>().process.destroy()
+                    return ObjVoid
+                }
+            }
+        )
     }
 
     val processType = object : ObjClass("Process") {}
@@ -122,30 +141,36 @@ private suspend fun buildProcessModule(module: ModuleScope, policy: ProcessAcces
             doc = "Execute a process with arguments.",
             params = listOf(ParamDoc("executable", type("lyng.String")), ParamDoc("args", type("lyng.List"))),
             returns = type("RunningProcess"),
-            moduleName = module.packageName
-        ) {
-            if (runner == null) raiseError("Processes are not supported on this platform")
-            processGuard {
-                val executable = requiredArg<ObjString>(0).value
-                val args = requiredArg<ObjList>(1).list.map { it.toString() }
-                val lp = runner.execute(executable, args)
-                ObjRunningProcess(runningProcessType, lp)
+            moduleName = module.packageName,
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    if (runner == null) scp.raiseError("Processes are not supported on this platform")
+                    return scp.processGuard {
+                        val executable = scp.requiredArg<ObjString>(0).value
+                        val args = scp.requiredArg<ObjList>(1).list.map { it.toString() }
+                        val lp = runner.execute(executable, args)
+                        ObjRunningProcess(runningProcessType, lp)
+                    }
+                }
             }
-        }
+        )
         addClassFnDoc(
             name = "shell",
             doc = "Execute a command via system shell.",
             params = listOf(ParamDoc("command", type("lyng.String"))),
             returns = type("RunningProcess"),
-            moduleName = module.packageName
-        ) {
-            if (runner == null) raiseError("Processes are not supported on this platform")
-            processGuard {
-                val command = requireOnlyArg<ObjString>().value
-                val lp = runner.shell(command)
-                ObjRunningProcess(runningProcessType, lp)
+            moduleName = module.packageName,
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    if (runner == null) scp.raiseError("Processes are not supported on this platform")
+                    return scp.processGuard {
+                        val command = scp.requireOnlyArg<ObjString>().value
+                        val lp = runner.shell(command)
+                        ObjRunningProcess(runningProcessType, lp)
+                    }
+                }
             }
-        }
+        )
     }
 
     val platformType = object : ObjClass("Platform") {}
@@ -155,24 +180,28 @@ private suspend fun buildProcessModule(module: ModuleScope, policy: ProcessAcces
             name = "details",
             doc = "Get platform core details.",
             returns = type("lyng.Map"),
-            moduleName = module.packageName
-        ) {
-            val d = getPlatformDetails()
-            ObjMap(mutableMapOf(
-                ObjString("name") to ObjString(d.name),
-                ObjString("version") to ObjString(d.version),
-                ObjString("arch") to ObjString(d.arch),
-                ObjString("kernelVersion") to (d.kernelVersion?.toObj() ?: ObjNull)
-            ))
-        }
+            moduleName = module.packageName,
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val d = getPlatformDetails()
+                    return ObjMap(mutableMapOf(
+                        ObjString("name") to ObjString(d.name),
+                        ObjString("version") to ObjString(d.version),
+                        ObjString("arch") to ObjString(d.arch),
+                        ObjString("kernelVersion") to (d.kernelVersion?.toObj() ?: ObjNull)
+                    ))
+                }
+            }
+        )
         addClassFnDoc(
             name = "isSupported",
             doc = "Check if processes are supported on this platform.",
             returns = type("lyng.Bool"),
-            moduleName = module.packageName
-        ) {
-            isProcessSupported().toObj()
-        }
+            moduleName = module.packageName,
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj = isProcessSupported().toObj()
+            }
+        )
     }
 
     module.addConstDoc(
@@ -216,19 +245,21 @@ private suspend inline fun Scope.processGuard(crossinline block: suspend () -> O
 }
 
 private fun Flow<String>.toLyngFlow(flowScope: Scope): ObjFlow {
-    val producer = statement {
-        val builder = (this as? net.sergeych.lyng.ClosureScope)?.callScope?.thisObj as? ObjFlowBuilder
-            ?: this.thisObj as? ObjFlowBuilder
+    val producer = statement(f = object : ScopeCallable {
+        override suspend fun call(scp: Scope): Obj {
+            val builder = (scp as? net.sergeych.lyng.ClosureScope)?.callScope?.thisObj as? ObjFlowBuilder
+                ?: scp.thisObj as? ObjFlowBuilder
 
-        this@toLyngFlow.collect {
-            try {
-                builder?.output?.send(ObjString(it))
-            } catch (e: Exception) {
-                // Channel closed or other error, stop collecting
-                return@collect
+            this@toLyngFlow.collect {
+                try {
+                    builder?.output?.send(ObjString(it))
+                } catch (e: Exception) {
+                    // Channel closed or other error, stop collecting
+                    return@collect
+                }
             }
+            return ObjVoid
         }
-        ObjVoid
-    }
+    })
     return ObjFlow(producer, flowScope)
 }

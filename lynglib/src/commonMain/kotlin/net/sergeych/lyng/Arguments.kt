@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -244,10 +244,16 @@ data class ParsedArgument(
       * Convert to list of kotlin objects, see [Obj.toKotlin].
       */
      suspend fun toKotlinList(scope: Scope): List<Any?> {
-         return list.map { it.toKotlin(scope) }
+         val res = ArrayList<Any?>(list.size)
+         for (i in list) res.add(i.toKotlin(scope))
+         return res
      }
- 
-     suspend fun inspect(scope: Scope): String = list.map{ it.inspect(scope)}.joinToString(",")
+
+     suspend fun inspect(scope: Scope): String {
+         val res = ArrayList<String>(list.size)
+         for (i in list) res.add(i.inspect(scope))
+         return res.joinToString(",")
+     }
  
      companion object {
          val EMPTY = Arguments(emptyList())

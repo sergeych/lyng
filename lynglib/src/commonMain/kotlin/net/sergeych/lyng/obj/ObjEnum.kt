@@ -35,6 +35,7 @@ package net.sergeych.lyng.obj/*
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
 import net.sergeych.lyng.miniast.addPropertyDoc
 import net.sergeych.lyng.miniast.type
 import net.sergeych.lynon.LynonDecoder
@@ -74,12 +75,18 @@ class ObjEnumClass(val name: String) : ObjClass(name, EnumBase) {
 
     init {
         addClassConst("entries", objEntries )
-        addClassFn("valueOf") {
-            val name = requireOnlyArg<ObjString>()
-            byName[name] ?: raiseSymbolNotFound("does not exists: enum ${className}.$name")
-        }
-        addPropertyDoc("name", doc = "Entry name as string", type = type("lyng.String"), getter = { thisAs<ObjEnumEntry>().name })
-        addPropertyDoc("ordinal", doc = "Entry ordinal position", type = type("lyng.Int"), getter = { thisAs<ObjEnumEntry>().ordinal })
+        addClassFn("valueOf", code = object : ScopeCallable {
+            override suspend fun call(scp: Scope): Obj {
+                val name = scp.requireOnlyArg<ObjString>()
+                return byName[name] ?: scp.raiseSymbolNotFound("does not exists: enum ${className}.$name")
+            }
+        })
+        addPropertyDoc("name", doc = "Entry name as string", type = type("lyng.String"), getter = object : ScopeCallable {
+            override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjEnumEntry>().name
+        })
+        addPropertyDoc("ordinal", doc = "Entry ordinal position", type = type("lyng.Int"), getter = object : ScopeCallable {
+            override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjEnumEntry>().ordinal
+        })
 
     }
 

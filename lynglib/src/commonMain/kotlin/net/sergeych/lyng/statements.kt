@@ -72,16 +72,16 @@ fun Statement.require(cond: Boolean, message: () -> String) {
     if (!cond) raise(message())
 }
 
-fun statement(pos: Pos, isStaticConst: Boolean = false, isConst: Boolean = false, f: suspend (Scope) -> Obj): Statement =
+fun statement(pos: Pos, isStaticConst: Boolean = false, isConst: Boolean = false, f: ScopeCallable): Statement =
     object : Statement(isStaticConst, isConst) {
         override val pos: Pos = pos
-        override suspend fun execute(scope: Scope): Obj = f(scope)
+        override suspend fun execute(scope: Scope): Obj = f.call(scope)
     }
 
-fun statement(isStaticConst: Boolean = false, isConst: Boolean = false, f: suspend Scope.() -> Obj): Statement =
+fun statement(isStaticConst: Boolean = false, isConst: Boolean = false, f: ScopeCallable): Statement =
     object : Statement(isStaticConst, isConst) {
         override val pos: Pos = Pos.builtIn
-        override suspend fun execute(scope: Scope): Obj = f(scope)
+        override suspend fun execute(scope: Scope): Obj = f.call(scope)
     }
 
 object NopStatement: Statement(true, true, ObjType.Void) {

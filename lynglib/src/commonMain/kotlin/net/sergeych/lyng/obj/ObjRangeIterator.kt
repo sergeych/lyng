@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
 
 class ObjRangeIterator(val self: ObjRange) : Obj() {
 
@@ -28,7 +29,7 @@ class ObjRangeIterator(val self: ObjRange) : Obj() {
 
     override val objClass: ObjClass get() = type
 
-    fun Scope.init() {
+    fun init(scope: Scope) {
         val s = self.start
         val e = self.end
         if (s is ObjInt && e is ObjInt) {
@@ -43,7 +44,7 @@ class ObjRangeIterator(val self: ObjRange) : Obj() {
             else
                 (e.value.code - s.value.code)
         } else {
-            raiseError("not implemented iterator for range of $this")
+            scope.raiseError("not implemented iterator for range of $this")
         }
     }
 
@@ -66,12 +67,14 @@ class ObjRangeIterator(val self: ObjRange) : Obj() {
 
     companion object {
         val type = ObjClass("RangeIterator", ObjIterator).apply {
-            addFn("hasNext") {
-                thisAs<ObjRangeIterator>().hasNext().toObj()
-            }
-            addFn("next") {
-                thisAs<ObjRangeIterator>().next(this)
-            }
+            addFn("hasNext", code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj =
+                    scp.thisAs<ObjRangeIterator>().hasNext().toObj()
+            })
+            addFn("next", code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj =
+                    scp.thisAs<ObjRangeIterator>().next(scp)
+            })
         }
     }
 }
@@ -94,8 +97,12 @@ class ObjFastIntRangeIterator(private val start: Int, private val endExclusive: 
 
     companion object {
         val type = ObjClass("FastIntRangeIterator", ObjIterator).apply {
-            addFn("hasNext") { thisAs<ObjFastIntRangeIterator>().hasNext().toObj() }
-            addFn("next") { thisAs<ObjFastIntRangeIterator>().next(this) }
+            addFn("hasNext", code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjFastIntRangeIterator>().hasNext().toObj()
+            })
+            addFn("next", code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjFastIntRangeIterator>().next(scp)
+            })
         }
     }
 }

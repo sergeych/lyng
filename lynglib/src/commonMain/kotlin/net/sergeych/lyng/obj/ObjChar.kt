@@ -18,6 +18,7 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
 import net.sergeych.lyng.miniast.addPropertyDoc
 import net.sergeych.lyng.miniast.type
 
@@ -52,14 +53,16 @@ class ObjChar(val value: Char): Obj() {
                 doc = "Unicode code point (UTF-16 code unit) of this character.",
                 type = type("lyng.Int"),
                 moduleName = "lyng.stdlib",
-                getter = { ObjInt((this.thisObj as ObjChar).value.code.toLong()) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjInt((scp.thisObj as ObjChar).value.code.toLong())
+                }
             )
-            addFn("isDigit") {
-                thisAs<ObjChar>().value.isDigit().toObj()
-            }
-            addFn("isSpace") {
-                thisAs<ObjChar>().value.isWhitespace().toObj()
-            }
+            addFn("isDigit", code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjChar>().value.isDigit().toObj()
+            })
+            addFn("isSpace", code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjChar>().value.isWhitespace().toObj()
+            })
         }
     }
 }

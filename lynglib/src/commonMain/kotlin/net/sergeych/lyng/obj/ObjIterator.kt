@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@
 
 package net.sergeych.lyng.obj
 
+import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
 import net.sergeych.lyng.miniast.TypeGenericDoc
 import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lyng.miniast.type
@@ -38,44 +40,50 @@ val ObjIterator by lazy {
             doc = "Optional hint to stop iteration early and free resources.",
             returns = type("lyng.Void"),
             isOpen = true,
-            moduleName = "lyng.stdlib"
-        ) {
-            ObjVoid
-        }
+            moduleName = "lyng.stdlib",
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj = ObjVoid
+            }
+        )
         addFnDoc(
             name = "hasNext",
             doc = "Whether another element is available.",
             returns = type("lyng.Bool"),
             isOpen = true,
-            moduleName = "lyng.stdlib"
-        ) {
-            raiseNotImplemented("hasNext() is not implemented")
-        }
+            moduleName = "lyng.stdlib",
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj = scp.raiseNotImplemented("hasNext() is not implemented")
+            }
+        )
         addFnDoc(
             name = "next",
             doc = "Return the next element.",
             returns = type("lyng.Any"),
             isOpen = true,
-            moduleName = "lyng.stdlib"
-        ) {
-            raiseNotImplemented("next() is not implemented")
-        }
+            moduleName = "lyng.stdlib",
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj = scp.raiseNotImplemented("next() is not implemented")
+            }
+        )
         // Helper to consume iterator into a list
         addFnDoc(
             name = "toList",
             doc = "Consume this iterator and collect elements into a list.",
             returns = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.Any"))),
-            moduleName = "lyng.stdlib"
-        ) {
-            val out = mutableListOf<Obj>()
-            while (true) {
-                val has = thisObj.invokeInstanceMethod(this, "hasNext").toBool()
-                if (!has) break
-                val v = thisObj.invokeInstanceMethod(this, "next")
-                out += v
+            moduleName = "lyng.stdlib",
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val out = mutableListOf<Obj>()
+                    while (true) {
+                        val has = scp.thisObj.invokeInstanceMethod(scp, "hasNext").toBool()
+                        if (!has) break
+                        val v = scp.thisObj.invokeInstanceMethod(scp, "next")
+                        out += v
+                    }
+                    return ObjList(out.toMutableList())
+                }
             }
-            ObjList(out.toMutableList())
-        }
+        )
     }
 }
 

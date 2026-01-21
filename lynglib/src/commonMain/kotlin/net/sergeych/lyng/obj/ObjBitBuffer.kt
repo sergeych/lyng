@@ -19,6 +19,7 @@ package net.sergeych.lyng.obj
 
 import net.sergeych.bintools.toDump
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
 import net.sergeych.lyng.miniast.addPropertyDoc
 import net.sergeych.lyng.miniast.type
 import net.sergeych.lynon.BitArray
@@ -35,29 +36,37 @@ class ObjBitBuffer(val bitArray: BitArray) : Obj() {
         val type = object: ObjClass("BitBuffer", ObjArray) {
 
         }.apply {
-            addFn("toBuffer") {
-                requireNoArgs()
-                ObjBuffer(thisAs<ObjBitBuffer>().bitArray.asUByteArray())
-            }
-            addFn("toDump") {
-                requireNoArgs()
-                ObjString(
-                    thisAs<ObjBitBuffer>().bitArray.asUByteArray().toDump()
-                )
-            }
+            addFn("toBuffer", code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    scp.requireNoArgs()
+                    return ObjBuffer(scp.thisAs<ObjBitBuffer>().bitArray.asUByteArray())
+                }
+            })
+            addFn("toDump", code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    scp.requireNoArgs()
+                    return ObjString(
+                        scp.thisAs<ObjBitBuffer>().bitArray.asUByteArray().toByteArray().toDump()
+                    )
+                }
+            })
             addPropertyDoc(
                 name = "size",
                 doc = "Size of the bit buffer in bits.",
                 type = type("lyng.Int"),
                 moduleName = "lyng.stdlib",
-                getter = { thisAs<ObjBitBuffer>().bitArray.size.toObj() }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjBitBuffer>().bitArray.size.toObj()
+                }
             )
             addPropertyDoc(
                 name = "sizeInBytes",
                 doc = "Size of the bit buffer in full bytes (rounded up).",
                 type = type("lyng.Int"),
                 moduleName = "lyng.stdlib",
-                getter = { ObjInt((thisAs<ObjBitBuffer>().bitArray.size + 7) shr 3) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjInt(((scp.thisAs<ObjBitBuffer>().bitArray.size + 7) shr 3).toLong())
+                }
             )
         }
     }

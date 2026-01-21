@@ -24,6 +24,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.RegexCache
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
@@ -139,205 +140,274 @@ data class ObjString(val value: String) : Obj() {
                 name = "iterator",
                 doc = "Iterator over characters of this string.",
                 returns = TypeGenericDoc(type("lyng.Iterator"), listOf(type("lyng.Char"))),
-                moduleName = "lyng.stdlib"
-            ) { ObjKotlinIterator(thisAs<ObjString>().value.iterator()) }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjKotlinIterator(scp.thisAs<ObjString>().value.iterator())
+                }
+            )
             addFnDoc(
                 name = "toInt",
                 doc = "Parse this string as an integer or throw if it is not a valid integer.",
                 returns = type("lyng.Int"),
-                moduleName = "lyng.stdlib"
-            ) {
-                ObjInt.of(
-                    thisAs<ObjString>().value.toLongOrNull()
-                        ?: raiseIllegalArgument("can't convert to int: $thisObj")
-                )
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        return ObjInt.of(
+                            scp.thisAs<ObjString>().value.toLongOrNull()
+                                ?: scp.raiseIllegalArgument("can't convert to int: ${scp.thisObj}")
+                        )
+                    }
+                }
+            )
             addFnDoc(
                 name = "startsWith",
                 doc = "Whether this string starts with the given prefix.",
                 params = listOf(ParamDoc("prefix", type("lyng.String"))),
                 returns = type("lyng.Bool"),
-                moduleName = "lyng.stdlib"
-            ) {
-                ObjBool(thisAs<ObjString>().value.startsWith(requiredArg<ObjString>(0).value))
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        return ObjBool(scp.thisAs<ObjString>().value.startsWith(scp.requiredArg<ObjString>(0).value))
+                    }
+                }
+            )
             addFnDoc(
                 name = "endsWith",
                 doc = "Whether this string ends with the given suffix.",
                 params = listOf(ParamDoc("suffix", type("lyng.String"))),
                 returns = type("lyng.Bool"),
-                moduleName = "lyng.stdlib"
-            ) {
-                ObjBool(thisAs<ObjString>().value.endsWith(requiredArg<ObjString>(0).value))
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        return ObjBool(scp.thisAs<ObjString>().value.endsWith(scp.requiredArg<ObjString>(0).value))
+                    }
+                }
+            )
             addPropertyDoc(
                 name = "length",
                 doc = "Number of UTF-16 code units in this string.",
                 type = type("lyng.Int"),
                 moduleName = "lyng.stdlib",
-                getter = { ObjInt.of((this.thisObj as ObjString).value.length.toLong()) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjInt.of((scp.thisObj as ObjString).value.length.toLong())
+                }
             )
             addFnDoc(
                 name = "takeLast",
                 doc = "Return a string with the last N characters.",
                 params = listOf(ParamDoc("n", type("lyng.Int"))),
                 returns = type("lyng.String"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjString>().value.takeLast(
-                    requiredArg<ObjInt>(0).toInt()
-                ).let(::ObjString)
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        return ObjString(
+                            scp.thisAs<ObjString>().value.takeLast(
+                                scp.requiredArg<ObjInt>(0).toInt()
+                            )
+                        )
+                    }
+                }
+            )
             addFnDoc(
                 name = "take",
                 doc = "Return a string with the first N characters.",
                 params = listOf(ParamDoc("n", type("lyng.Int"))),
                 returns = type("lyng.String"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjString>().value.take(
-                    requiredArg<ObjInt>(0).toInt()
-                ).let(::ObjString)
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        return ObjString(
+                            scp.thisAs<ObjString>().value.take(
+                                scp.requiredArg<ObjInt>(0).toInt()
+                            )
+                        )
+                    }
+                }
+            )
             addFnDoc(
                 name = "drop",
                 doc = "Drop the first N characters and return the remainder.",
                 params = listOf(ParamDoc("n", type("lyng.Int"))),
                 returns = type("lyng.String"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjString>().value.drop(
-                    requiredArg<ObjInt>(0).toInt()
-                ).let(::ObjString)
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        return ObjString(
+                            scp.thisAs<ObjString>().value.drop(
+                                scp.requiredArg<ObjInt>(0).toInt()
+                            )
+                        )
+                    }
+                }
+            )
             addFnDoc(
                 name = "dropLast",
                 doc = "Drop the last N characters and return the remainder.",
                 params = listOf(ParamDoc("n", type("lyng.Int"))),
                 returns = type("lyng.String"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjString>().value.dropLast(
-                    requiredArg<ObjInt>(0).toInt()
-                ).let(::ObjString)
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        return ObjString(
+                            scp.thisAs<ObjString>().value.dropLast(
+                                scp.requiredArg<ObjInt>(0).toInt()
+                            )
+                        )
+                    }
+                }
+            )
             addFnDoc(
                 name = "lower",
                 doc = "Lowercase version of this string (default locale).",
                 returns = type("lyng.String"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjString>().value.lowercase().let(::ObjString)
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjString(scp.thisAs<ObjString>().value.lowercase())
+                }
+            )
             addFnDoc(
                 name = "lowercase",
                 doc = "Lowercase version of this string (default locale).",
                 returns = type("lyng.String"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjString>().value.lowercase().let(::ObjString)
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjString(scp.thisAs<ObjString>().value.lowercase())
+                }
+            )
             addFnDoc(
                 name = "upper",
                 doc = "Uppercase version of this string (default locale).",
                 returns = type("lyng.String"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjString>().value.uppercase().let(::ObjString)
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjString(scp.thisAs<ObjString>().value.uppercase())
+                }
+            )
             addFnDoc(
                 name = "uppercase",
                 doc = "Uppercase version of this string (default locale).",
                 returns = type("lyng.String"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjString>().value.uppercase().let(::ObjString)
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjString(scp.thisAs<ObjString>().value.uppercase())
+                }
+            )
             addPropertyDoc(
                 name = "characters",
                 doc = "List of characters of this string.",
                 type = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.Char"))),
                 moduleName = "lyng.stdlib",
-                getter = {
-                    ObjList(
-                        (this.thisObj as ObjString).value.map { ObjChar(it) }.toMutableList()
-                    )
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        return ObjList(
+                            (scp.thisObj as ObjString).value.map { ObjChar(it) }.toMutableList()
+                        )
+                    }
                 }
             )
             addFnDoc(
                 name = "last",
                 doc = "The last character of this string or throw if the string is empty.",
                 returns = type("lyng.Char"),
-                moduleName = "lyng.stdlib"
-            ) {
-                ObjChar(thisAs<ObjString>().value.lastOrNull() ?: raiseNoSuchElement("empty string"))
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        return ObjChar(scp.thisAs<ObjString>().value.lastOrNull() ?: scp.raiseNoSuchElement("empty string"))
+                    }
+                }
+            )
             addFnDoc(
                 name = "encodeUtf8",
                 doc = "Encode this string as UTF-8 bytes.",
                 returns = type("lyng.Buffer"),
-                moduleName = "lyng.stdlib"
-            ) { ObjBuffer(thisAs<ObjString>().value.encodeToByteArray().asUByteArray()) }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj =
+                        ObjBuffer(scp.thisAs<ObjString>().value.encodeToByteArray().asUByteArray())
+                }
+            )
             addPropertyDoc(
                 name = "size",
                 doc = "Alias for length: the number of characters (code units) in this string.",
                 type = type("lyng.Int"),
                 moduleName = "lyng.stdlib",
-                getter = { ObjInt.of((this.thisObj as ObjString).value.length.toLong()) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjInt.of((scp.thisObj as ObjString).value.length.toLong())
+                }
             )
             addFnDoc(
                 name = "toReal",
                 doc = "Parse this string as a real number (floating point).",
                 returns = type("lyng.Real"),
-                moduleName = "lyng.stdlib"
-            ) {
-                ObjReal.of(thisAs<ObjString>().value.toDouble())
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjReal.of(scp.thisAs<ObjString>().value.toDouble())
+                }
+            )
             addFnDoc(
                 name = "trim",
                 doc = "Return a copy of this string with leading and trailing whitespace removed.",
                 returns = type("lyng.String"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjString>().value.trim().let(::ObjString)
-            }
-            addFnDoc("isBlank", "Whether this string is empty or contains only whitespace characters.",
-                returns = type("lyng.Bool"), moduleName = "lyng.stdlib") {
-                ObjBool(thisAs<ObjString>().value.isBlank())
-            }
-            addFnDoc("isEmpty", "Whether this string is empty.",
-                returns = type("lyng.Bool"), moduleName = "lyng.stdlib") {
-                ObjBool(thisAs<ObjString>().value.isEmpty())
-            }
-            addFnDoc("isNotEmpty", "Whether this string is not empty.",
-                returns = type("lyng.Bool"), moduleName = "lyng.stdlib") {
-                ObjBool(thisAs<ObjString>().value.isNotEmpty())
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjString(scp.thisAs<ObjString>().value.trim())
+                }
+            )
+            addFnDoc(
+                name = "isBlank",
+                doc = "Whether this string is empty or contains only whitespace characters.",
+                returns = type("lyng.Bool"),
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjBool(scp.thisAs<ObjString>().value.isBlank())
+                }
+            )
+            addFnDoc(
+                name = "isEmpty",
+                doc = "Whether this string is empty.",
+                returns = type("lyng.Bool"),
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjBool(scp.thisAs<ObjString>().value.isEmpty())
+                }
+            )
+            addFnDoc(
+                name = "isNotEmpty",
+                doc = "Whether this string is not empty.",
+                returns = type("lyng.Bool"),
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjBool(scp.thisAs<ObjString>().value.isNotEmpty())
+                }
+            )
             addFnDoc(
                 name = "matches",
                 doc = "Whether this string matches the given regular expression or pattern string.",
                 params = listOf(ParamDoc("pattern")),
                 returns = type("lyng.Bool"),
-                moduleName = "lyng.stdlib"
-            ) {
-                val s = requireOnlyArg<Obj>()
-                val self = thisAs<ObjString>().value
-                ObjBool(
-                    when (s) {
-                        is ObjRegex -> self.matches(s.regex)
-                        is ObjString -> {
-                            if (s.value == ".*") true
-                            else {
-                                val re = if (PerfFlags.REGEX_CACHE) RegexCache.get(s.value) else s.value.toRegex()
-                                self.matches(re)
-                            }
-                        }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val s = scp.requireOnlyArg<Obj>()
+                        val self = scp.thisAs<ObjString>().value
+                        return ObjBool(
+                            when (s) {
+                                is ObjRegex -> self.matches(s.regex)
+                                is ObjString -> {
+                                    if (s.value == ".*") true
+                                    else {
+                                        val re = if (PerfFlags.REGEX_CACHE) RegexCache.get(s.value) else s.value.toRegex()
+                                        self.matches(re)
+                                    }
+                                }
 
-                        else ->
-                            raiseIllegalArgument("can't match ${s.objClass.className}: required Regex or String")
+                                else ->
+                                    scp.raiseIllegalArgument("can't match ${s.objClass.className}: required Regex or String")
+                            }
+                        )
                     }
-                )
-            }
+                }
+            )
         }
     }
 }

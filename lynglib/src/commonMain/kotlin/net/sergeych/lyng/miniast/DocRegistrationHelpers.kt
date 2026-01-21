@@ -17,9 +17,7 @@
 
 package net.sergeych.lyng.miniast
 
-import net.sergeych.lyng.ModuleScope
-import net.sergeych.lyng.Scope
-import net.sergeych.lyng.Visibility
+import net.sergeych.lyng.*
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjClass
 import net.sergeych.lyng.obj.ObjVoid
@@ -39,10 +37,10 @@ inline fun <reified T : Obj> Scope.addFnDoc(
     returns: TypeDoc? = null,
     tags: Map<String, List<String>> = emptyMap(),
     moduleName: String? = null,
-    crossinline fn: suspend Scope.() -> T
+    fn: ScopeCallable
 ) {
     // Register runtime function(s)
-    addFn(*names) { fn() }
+    addFn(*names, fn = fn)
     // Determine module
     val mod = moduleName ?: findModuleNameOrUnknown()
     // Register docs once per name
@@ -56,7 +54,7 @@ inline fun Scope.addVoidFnDoc(
     doc: String,
     tags: Map<String, List<String>> = emptyMap(),
     moduleName: String? = null,
-    crossinline fn: suspend Scope.() -> Unit
+    fn: VoidScopeCallable
 ) {
     addFnDoc<ObjVoid>(
         *names,
@@ -64,11 +62,14 @@ inline fun Scope.addVoidFnDoc(
         params = emptyList(),
         returns = null,
         tags = tags,
-        moduleName = moduleName
-    ) {
-        fn(this)
-        ObjVoid
-    }
+        moduleName = moduleName,
+        fn = object : ScopeCallable {
+            override suspend fun call(sc: Scope): Obj {
+                fn.call(sc)
+                return ObjVoid
+            }
+        }
+    )
 }
 
 fun Scope.addConstDoc(
@@ -97,7 +98,7 @@ fun ObjClass.addFnDoc(
     visibility: Visibility = Visibility.Public,
     tags: Map<String, List<String>> = emptyMap(),
     moduleName: String? = null,
-    code: suspend Scope.() -> Obj
+    code: ScopeCallable
 ) {
     // Register runtime method
     addFn(name, isOpen, visibility, code = code)
@@ -135,7 +136,7 @@ fun ObjClass.addClassFnDoc(
     isOpen: Boolean = false,
     tags: Map<String, List<String>> = emptyMap(),
     moduleName: String? = null,
-    code: suspend Scope.() -> Obj
+    code: ScopeCallable
 ) {
     addClassFn(name, isOpen, code)
     BuiltinDocRegistry.module(moduleName ?: ownerModuleNameFromClassOrUnknown()) {
@@ -151,8 +152,8 @@ fun ObjClass.addPropertyDoc(
     type: TypeDoc? = null,
     visibility: Visibility = Visibility.Public,
     moduleName: String? = null,
-    getter: (suspend Scope.() -> Obj)? = null,
-    setter: (suspend Scope.(Obj) -> Unit)? = null
+    getter: ScopeCallable? = null,
+    setter: ScopeCallable? = null
 ) {
     addProperty(name, getter, setter, visibility)
     BuiltinDocRegistry.module(moduleName ?: ownerModuleNameFromClassOrUnknown()) {

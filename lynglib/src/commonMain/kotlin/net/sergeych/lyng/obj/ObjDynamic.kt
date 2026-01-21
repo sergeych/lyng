@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,31 +17,32 @@
 
 package net.sergeych.lyng.obj
 
-import net.sergeych.lyng.Arguments
-import net.sergeych.lyng.ClosureScope
-import net.sergeych.lyng.Scope
-import net.sergeych.lyng.Statement
+import net.sergeych.lyng.*
 
 class ObjDynamicContext(val delegate: ObjDynamic) : Obj() {
     override val objClass: ObjClass get() = type
 
     companion object {
         val type = ObjClass("DelegateContext").apply {
-            addFn("get") {
-                val d = thisAs<ObjDynamicContext>().delegate
-                if (d.readCallback != null)
-                    raiseIllegalState("get already defined")
-                d.readCallback = requireOnlyArg()
-                ObjVoid
-            }
+            addFn("get", code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val d = scp.thisAs<ObjDynamicContext>().delegate
+                    if (d.readCallback != null)
+                        scp.raiseIllegalState("get already defined")
+                    d.readCallback = scp.requireOnlyArg()
+                    return ObjVoid
+                }
+            })
 
-            addFn("set") {
-                val d = thisAs<ObjDynamicContext>().delegate
-                if (d.writeCallback != null)
-                    raiseIllegalState("set already defined")
-                d.writeCallback = requireOnlyArg()
-                ObjVoid
-            }
+            addFn("set", code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val d = scp.thisAs<ObjDynamicContext>().delegate
+                    if (d.writeCallback != null)
+                        scp.raiseIllegalState("set already defined")
+                    d.writeCallback = scp.requireOnlyArg()
+                    return ObjVoid
+                }
+            })
 
         }
 
@@ -81,11 +82,11 @@ open class ObjDynamic(var readCallback: Statement? = null, var writeCallback: St
         scope: Scope,
         name: String,
         args: Arguments,
-        onNotFoundResult: (suspend () -> Obj?)?
+        onNotFoundResult: OnNotFound?
     ): Obj {
         val execBase = builderScope?.let { ClosureScope(scope, it) } ?: scope
         val over = readCallback?.execute(execBase.createChildScope(Arguments(ObjString(name))))
-        return over?.invoke(scope, scope.thisObj, args)
+        return over?.invokeCallable(scope, scope.thisObj, args)
             ?: super.invokeInstanceMethod(scope, name, args, onNotFoundResult)
     }
 

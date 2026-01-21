@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
 import net.sergeych.lyng.miniast.addConstDoc
 import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lyng.miniast.type
@@ -126,9 +127,9 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
             // roundToInt: number rounded to the nearest integer
             addConstDoc(
                 name = "roundToInt",
-                value = statement(Pos.builtIn) {
-                    (it.thisObj as ObjReal).value.roundToLong().toObj()
-                },
+                value = statement(Pos.builtIn, f = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = (scp.thisObj as ObjReal).value.roundToLong().toObj()
+                }),
                 doc = "This real number rounded to the nearest integer.",
                 type = type("lyng.Int"),
                 moduleName = "lyng.stdlib"
@@ -137,10 +138,11 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
                 name = "toInt",
                 doc = "Truncate this real number toward zero to an integer.",
                 returns = type("lyng.Int"),
-                moduleName = "lyng.stdlib"
-            ) {
-                ObjInt.of(thisAs<ObjReal>().value.toLong())
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjInt.of(scp.thisAs<ObjReal>().value.toLong())
+                }
+            )
         }
     }
 }

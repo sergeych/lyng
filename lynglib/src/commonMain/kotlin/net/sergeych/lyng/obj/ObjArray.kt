@@ -17,6 +17,8 @@
 
 package net.sergeych.lyng.obj
 
+import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
 import net.sergeych.lyng.miniast.*
 
 val ObjArray by lazy {
@@ -31,8 +33,11 @@ val ObjArray by lazy {
             name = "iterator",
             doc = "Iterator over elements of this array using its indexer.",
             returns = TypeGenericDoc(type("lyng.Iterator"), listOf(type("lyng.Any"))),
-            moduleName = "lyng.stdlib"
-        ) { ObjArrayIterator(thisObj).also { it.init(this) } }
+            moduleName = "lyng.stdlib",
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj = ObjArrayIterator(scp.thisObj).also { it.init(scp) }
+            }
+        )
 
         addFnDoc(
             name = "contains",
@@ -40,26 +45,31 @@ val ObjArray by lazy {
             params = listOf(ParamDoc("element")),
             returns = type("lyng.Bool"),
             isOpen = true,
-            moduleName = "lyng.stdlib"
-        ) {
-            val obj = args.firstAndOnly()
-            for (i in 0..<thisObj.invokeInstanceMethod(this, "size").toInt()) {
-                if (thisObj.getAt(this, ObjInt(i.toLong())).compareTo(this, obj) == 0) return@addFnDoc ObjTrue
+            moduleName = "lyng.stdlib",
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val obj = scp.args.firstAndOnly()
+                    for (i in 0..<scp.thisObj.invokeInstanceMethod(scp, "size").toInt()) {
+                        if (scp.thisObj.getAt(scp, ObjInt(i.toLong())).compareTo(scp, obj) == 0) return ObjTrue
+                    }
+                    return ObjFalse
+                }
             }
-            ObjFalse
-        }
+        )
 
         addPropertyDoc(
             name = "last",
             doc = "The last element of this array.",
             type = type("lyng.Any"),
             moduleName = "lyng.stdlib",
-            getter = {
-                this.thisObj.invokeInstanceMethod(
-                    this,
-                    "getAt",
-                    (this.thisObj.invokeInstanceMethod(this, "size").toInt() - 1).toObj()
-                )
+            getter = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    return scp.thisObj.invokeInstanceMethod(
+                        scp,
+                        "getAt",
+                        (scp.thisObj.invokeInstanceMethod(scp, "size").toInt() - 1).toObj()
+                    )
+                }
             }
         )
 
@@ -68,7 +78,9 @@ val ObjArray by lazy {
             doc = "Index of the last element (size - 1).",
             type = type("lyng.Int"),
             moduleName = "lyng.stdlib",
-            getter = { (this.thisObj.invokeInstanceMethod(this, "size").toInt() - 1).toObj() }
+            getter = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj = (scp.thisObj.invokeInstanceMethod(scp, "size").toInt() - 1).toObj()
+            }
         )
 
         addPropertyDoc(
@@ -76,7 +88,9 @@ val ObjArray by lazy {
             doc = "Range of valid indices for this array.",
             type = type("lyng.Range"),
             moduleName = "lyng.stdlib",
-            getter = { ObjRange(0.toObj(), this.thisObj.invokeInstanceMethod(this, "size"), false) }
+            getter = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj = ObjRange(0.toObj(), scp.thisObj.invokeInstanceMethod(scp, "size"), false)
+            }
         )
 
         addFnDoc(
@@ -84,25 +98,28 @@ val ObjArray by lazy {
             doc = "Binary search for a target in a sorted array. Returns index or negative insertion point - 1.",
             params = listOf(ParamDoc("target")),
             returns = type("lyng.Int"),
-            moduleName = "lyng.stdlib"
-        ) {
-            val target = args.firstAndOnly()
-            var low = 0
-            var high = thisObj.invokeInstanceMethod(this, "size").toInt() - 1
+            moduleName = "lyng.stdlib",
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val target = scp.args.firstAndOnly()
+                    var low = 0
+                    var high = scp.thisObj.invokeInstanceMethod(scp, "size").toInt() - 1
 
-            while (low <= high) {
-                val mid = (low + high) / 2
-                val midVal = thisObj.getAt(this, ObjInt(mid.toLong()))
+                    while (low <= high) {
+                        val mid = (low + high) / 2
+                        val midVal = scp.thisObj.getAt(scp, ObjInt(mid.toLong()))
 
-                val cmp = midVal.compareTo(this, target)
-                when {
-                    cmp == 0 -> return@addFnDoc (mid).toObj()
-                    cmp > 0 -> high = mid - 1
-                    else -> low = mid + 1
+                        val cmp = midVal.compareTo(scp, target)
+                        when {
+                            cmp == 0 -> return (mid).toObj()
+                            cmp > 0 -> high = mid - 1
+                            else -> low = mid + 1
+                        }
+                    }
+
+                    return (-low - 1).toObj()
                 }
             }
-
-            (-low - 1).toObj()
-        }
+        )
     }
 }

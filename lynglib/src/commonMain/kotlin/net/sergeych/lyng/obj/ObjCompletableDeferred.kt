@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ package net.sergeych.lyng.obj
 
 import kotlinx.coroutines.CompletableDeferred
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
 import net.sergeych.lyng.miniast.ParamDoc
 import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lyng.miniast.type
@@ -38,11 +39,14 @@ class ObjCompletableDeferred(val completableDeferred: CompletableDeferred<Obj>):
                 doc = "Complete this deferred with the given value. Subsequent calls have no effect.",
                 params = listOf(ParamDoc("value")),
                 returns = type("lyng.Void"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjCompletableDeferred>().completableDeferred.complete(args.firstAndOnly())
-                ObjVoid
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        scp.thisAs<ObjCompletableDeferred>().completableDeferred.complete(scp.args.firstAndOnly())
+                        return ObjVoid
+                    }
+                }
+            )
         }
     }
 }

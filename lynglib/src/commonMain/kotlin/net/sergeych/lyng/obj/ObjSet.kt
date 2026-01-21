@@ -18,6 +18,7 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
 import net.sergeych.lyng.miniast.ParamDoc
 import net.sergeych.lyng.miniast.TypeGenericDoc
 import net.sergeych.lyng.miniast.addFnDoc
@@ -46,9 +47,9 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
         return set.contains(other)
     }
 
-    override suspend fun enumerate(scope: Scope, callback: suspend (Obj) -> Boolean) {
+    override suspend fun enumerate(scope: Scope, callback: EnumerateCallback) {
         for (item in set) {
-            if (!callback(item)) break
+            if (!callback.call(item)) break
         }
     }
 
@@ -164,56 +165,64 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
                 name = "size",
                 doc = "Number of elements in this set.",
                 returns = type("lyng.Int"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjSet>().set.size.toObj()
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjSet>().set.size.toObj()
+                }
+            )
             addFnDoc(
                 name = "intersect",
                 doc = "Intersection with another set. Returns a new set.",
                 params = listOf(ParamDoc("other", type("lyng.Set"))),
                 returns = type("lyng.Set"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjSet>().mul(this, args.firstAndOnly())
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjSet>().mul(scp, scp.args.firstAndOnly())
+                }
+            )
             addFnDoc(
                 name = "iterator",
                 doc = "Iterator over elements of this set.",
                 returns = TypeGenericDoc(type("lyng.Iterator"), listOf(type("lyng.Any"))),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjSet>().set.iterator().toObj()
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjKotlinIterator(scp.thisAs<ObjSet>().set.iterator())
+                }
+            )
             addFnDoc(
                 name = "union",
                 doc = "Union with another set or iterable. Returns a new set.",
                 params = listOf(ParamDoc("other")),
                 returns = type("lyng.Set"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjSet>().plus(this, args.firstAndOnly())
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjSet>().plus(scp, scp.args.firstAndOnly())
+                }
+            )
             addFnDoc(
                 name = "subtract",
                 doc = "Subtract another set or iterable from this set. Returns a new set.",
                 params = listOf(ParamDoc("other")),
                 returns = type("lyng.Set"),
-                moduleName = "lyng.stdlib"
-            ) {
-                thisAs<ObjSet>().minus(this, args.firstAndOnly())
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjSet>().minus(scp, scp.args.firstAndOnly())
+                }
+            )
             addFnDoc(
                 name = "remove",
                 doc = "Remove one or more elements. Returns true if the set changed.",
                 returns = type("lyng.Bool"),
-                moduleName = "lyng.stdlib"
-            ) {
-                val set = thisAs<ObjSet>().set
-                val n = set.size
-                for( x in args.list ) set -= x
-                if( n == set.size ) ObjFalse else ObjTrue
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val set = scp.thisAs<ObjSet>().set
+                        val n = set.size
+                        for( x in scp.args.list ) set -= x
+                        return if( n == set.size ) ObjFalse else ObjTrue
+                    }
+                }
+            )
         }
     }
 }

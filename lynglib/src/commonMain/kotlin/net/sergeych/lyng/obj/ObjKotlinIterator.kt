@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ package net.sergeych.lyng.obj
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
 
 /**
  * Iterator wrapper to allow Kotlin collections to be returned from Lyng objects;
@@ -33,8 +34,12 @@ class ObjKotlinIterator(val iterator: Iterator<Any?>) : Obj() {
 
     companion object {
         val type = ObjClass("KotlinIterator", ObjIterator).apply {
-            addFn("next") { thisAs<ObjKotlinIterator>().iterator.next().toObj() }
-            addFn("hasNext") { thisAs<ObjKotlinIterator>().iterator.hasNext().toObj() }
+            addFn("next", code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjKotlinIterator>().iterator.next().toObj()
+            })
+            addFn("hasNext", code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjKotlinIterator>().iterator.hasNext().toObj()
+            })
         }
 
     }
@@ -50,12 +55,14 @@ class ObjKotlinObjIterator(val iterator: Iterator<Obj>) : Obj() {
 
     companion object {
         val type = ObjClass("KotlinIterator", ObjIterator).apply {
-            addFn("next") {
-                thisAs<ObjKotlinObjIterator>().iterator.next()
-            }
-            addFn("hasNext") {
-                thisAs<ObjKotlinObjIterator>().iterator.hasNext().toObj()
-            }
+            addFn("next", code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj =
+                    scp.thisAs<ObjKotlinObjIterator>().iterator.next()
+            })
+            addFn("hasNext", code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj =
+                    scp.thisAs<ObjKotlinObjIterator>().iterator.hasNext().toObj()
+            })
         }
 
     }
@@ -71,8 +78,8 @@ fun Obj.toFlow(scope: Scope): Flow<Obj> = flow {
     val iterator = invokeInstanceMethod(scope, "iterator")
     val hasNext = iterator.getInstanceMethod(scope, "hasNext")
     val next = iterator.getInstanceMethod(scope, "next")
-    while (hasNext.invoke(scope, iterator).toBool()) {
-        emit(next.invoke(scope, iterator))
+    while (hasNext.invokeCallable(scope, iterator).toBool()) {
+        emit(next.invokeCallable(scope, iterator))
     }
 }
 

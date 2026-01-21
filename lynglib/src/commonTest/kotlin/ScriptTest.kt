@@ -138,10 +138,10 @@ class ScriptTest {
 
         companion object {
             val type = ObjClass("TestIterable", ObjIterable).apply {
-                addFn("iterator") {
-                    ObjTestIterator(thisAs<ObjTestIterable>())
+                addFn("iterator") { scp ->
+                    ObjTestIterator(scp.thisAs<ObjTestIterable>())
                 }
-                addFn("cancelCount") { thisAs<ObjTestIterable>().cancelCount.toObj() }
+                addFn("cancelCount") { scp -> scp.thisAs<ObjTestIterable>().cancelCount.toObj() }
             }
         }
     }
@@ -158,10 +158,10 @@ class ScriptTest {
 
         companion object {
             val type = ObjClass("TestIterator", ObjIterator).apply {
-                addFn("hasNext") { thisAs<ObjTestIterator>().hasNext().toObj() }
-                addFn("next") { thisAs<ObjTestIterator>().next() }
-                addFn("cancelIteration") {
-                    thisAs<ObjTestIterator>().cancelIteration()
+                addFn("hasNext") { scp -> scp.thisAs<ObjTestIterator>().hasNext().toObj() }
+                addFn("next") { scp -> scp.thisAs<ObjTestIterator>().next() }
+                addFn("cancelIteration") { scp ->
+                    scp.thisAs<ObjTestIterator>().cancelIteration()
                     ObjVoid
                 }
             }
@@ -2229,8 +2229,8 @@ class ScriptTest {
     @Test
     fun testThrowFromKotlin() = runTest {
         val c = Script.newScope()
-        c.addFn("callThrow") {
-            raiseIllegalArgument("fromKotlin")
+        c.addFn("callThrow") { scp ->
+            scp.raiseIllegalArgument("fromKotlin")
         }
         c.eval(
             """
@@ -2738,8 +2738,8 @@ class ScriptTest {
         companion object {
 
             val klass = ObjClass("TestFoo").apply {
-                addFn("test") {
-                    thisAs<ObjTestFoo>().value
+                addFn("test") { scp ->
+                    scp.thisAs<ObjTestFoo>().value
                 }
             }
         }
@@ -4480,7 +4480,7 @@ class ScriptTest {
         val dummyThis = Obj()
         // but we should be able to call it directly
         val otherScope = baseScope.createChildScope()
-        val r = (exports["exportedFunction".toObj()] as Statement).invoke(otherScope, dummyThis, ObjInt(50))
+        val r = (exports["exportedFunction".toObj()] as Statement).invokeCallable(otherScope, dummyThis, ObjInt(50))
         println(r)
         assertEquals(51, r.toInt())
     }

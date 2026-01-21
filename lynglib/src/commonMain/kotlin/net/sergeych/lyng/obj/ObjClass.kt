@@ -40,14 +40,18 @@ val ObjClassType by lazy {
             doc = "Full name of this class including package if available.",
             type = type("lyng.String"),
             moduleName = "lyng.stdlib",
-            getter = { (this.thisObj as ObjClass).classNameObj }
+            getter = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj = (scp.thisObj as ObjClass).classNameObj
+            }
         )
         addPropertyDoc(
             name = "name",
             doc = "Simple name of this class (without package).",
             type = type("lyng.String"),
             moduleName = "lyng.stdlib",
-            getter = { (this.thisObj as ObjClass).classNameObj }
+            getter = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj = (scp.thisObj as ObjClass).classNameObj
+            }
         )
 
         addPropertyDoc(
@@ -55,16 +59,18 @@ val ObjClassType by lazy {
             doc = "Declared instance fields of this class and its ancestors (C3 order), without duplicates.",
             type = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.String"))),
             moduleName = "lyng.stdlib",
-            getter = {
-                val cls = this.thisObj as ObjClass
-                val seen = hashSetOf<String>()
-                val names = mutableListOf<Obj>()
-                for (c in cls.mro) {
-                    for ((n, rec) in c.members) {
-                        if (rec.value !is Statement && seen.add(n)) names += ObjString(n)
+            getter = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val cls = scp.thisObj as ObjClass
+                    val seen = hashSetOf<String>()
+                    val names = mutableListOf<Obj>()
+                    for (c in cls.mro) {
+                        for ((n, rec) in c.members) {
+                            if (rec.value !is Statement && seen.add(n)) names += ObjString(n)
+                        }
                     }
+                    return ObjList(names.toMutableList())
                 }
-                ObjList(names.toMutableList())
             }
         )
 
@@ -73,16 +79,18 @@ val ObjClassType by lazy {
             doc = "Declared instance methods of this class and its ancestors (C3 order), without duplicates.",
             type = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.String"))),
             moduleName = "lyng.stdlib",
-            getter = {
-                val cls = this.thisObj as ObjClass
-                val seen = hashSetOf<String>()
-                val names = mutableListOf<Obj>()
-                for (c in cls.mro) {
-                    for ((n, rec) in c.members) {
-                        if (rec.value is Statement && seen.add(n)) names += ObjString(n)
+            getter = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val cls = scp.thisObj as ObjClass
+                    val seen = hashSetOf<String>()
+                    val names = mutableListOf<Obj>()
+                    for (c in cls.mro) {
+                        for ((n, rec) in c.members) {
+                            if (rec.value is Statement && seen.add(n)) names += ObjString(n)
+                        }
                     }
+                    return ObjList(names.toMutableList())
                 }
-                ObjList(names.toMutableList())
             }
         )
 
@@ -91,13 +99,16 @@ val ObjClassType by lazy {
             doc = "Lookup a member by name in this class (including ancestors) and return it, or null if absent.",
             params = listOf(ParamDoc("name", type("lyng.String"))),
             returns = type("lyng.Any", nullable = true),
-            moduleName = "lyng.stdlib"
-        ) {
-            val cls = thisAs<ObjClass>()
-            val name = requiredArg<ObjString>(0).value
-            val rec = cls.getInstanceMemberOrNull(name)
-            rec?.value ?: ObjNull
-        }
+            moduleName = "lyng.stdlib",
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val cls = scp.thisAs<ObjClass>()
+                    val name = scp.requiredArg<ObjString>(0).value
+                    val rec = cls.getInstanceMemberOrNull(name)
+                    return rec?.value ?: ObjNull
+                }
+            }
+        )
     }
 }
 
@@ -547,9 +558,9 @@ open class ObjClass(
         isClosed: Boolean = false,
         isOverride: Boolean = false,
         pos: Pos = Pos.builtIn,
-        code: (suspend Scope.() -> Obj)? = null
+        code: ScopeCallable? = null
     ) {
-        val stmt = code?.let { statement { it() } } ?: ObjNull
+        val stmt = code?.let { statement(pos, f = it) } ?: ObjNull
         createField(
             name, stmt, isMutable, visibility, writeVisibility, pos, declaringClass,
             isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride,
@@ -561,8 +572,8 @@ open class ObjClass(
 
     fun addProperty(
         name: String,
-        getter: (suspend Scope.() -> Obj)? = null,
-        setter: (suspend Scope.(Obj) -> Unit)? = null,
+        getter: ScopeCallable? = null,
+        setter: ScopeCallable? = null,
         visibility: Visibility = Visibility.Public,
         writeVisibility: Visibility? = null,
         declaringClass: ObjClass? = this,
@@ -572,8 +583,8 @@ open class ObjClass(
         pos: Pos = Pos.builtIn,
         prop: ObjProperty? = null
     ) {
-        val g = getter?.let { statement { it() } }
-        val s = setter?.let { statement { it(requiredArg(0)); ObjVoid } }
+        val g = getter?.let { statement(pos, f = it) }
+        val s = setter?.let { statement(pos, f = it) }
         val finalProp = prop ?: if (isAbstract) ObjNull else ObjProperty(name, g, s)
         createField(
             name, finalProp, false, visibility, writeVisibility, pos, declaringClass,
@@ -583,8 +594,8 @@ open class ObjClass(
     }
 
     fun addClassConst(name: String, value: Obj) = createClassField(name, value)
-    fun addClassFn(name: String, isOpen: Boolean = false, code: suspend Scope.() -> Obj) {
-        createClassField(name, statement { code() }, isOpen, type = ObjRecord.Type.Fun)
+    fun addClassFn(name: String, isOpen: Boolean = false, code: ScopeCallable) {
+        createClassField(name, statement(f = code), isOpen, type = ObjRecord.Type.Fun)
     }
 
 
@@ -694,25 +705,25 @@ open class ObjClass(
 
     override suspend fun invokeInstanceMethod(
         scope: Scope, name: String, args: Arguments,
-        onNotFoundResult: (suspend () -> Obj?)?
+        onNotFoundResult: OnNotFound?
     ): Obj {
         getInstanceMemberOrNull(name)?.let { rec ->
             val decl = rec.declaringClass ?: findDeclaringClassOf(name) ?: this
             if (rec.type == ObjRecord.Type.Delegated) {
                 val del = rec.delegate ?: scope.raiseError("Internal error: delegated member $name has no delegate")
                 val allArgs = (listOf(this, ObjString(name)) + args.list).toTypedArray()
-                return del.invokeInstanceMethod(scope, "invoke", Arguments(*allArgs), onNotFoundResult = {
+                return del.invokeInstanceMethod(scope, "invokeCallable", Arguments(*allArgs), onNotFoundResult = {
                     // Fallback: property delegation
                     val propVal = del.invokeInstanceMethod(scope, "getValue", Arguments(this, ObjString(name)))
-                    propVal.invoke(scope, this, args, decl)
+                    propVal.invokeCallable(scope, this, args, decl)
                 })
             }
             if (rec.type == ObjRecord.Type.Fun) {
-                return rec.value.invoke(scope, this, args, decl)
+                return rec.value.invokeCallable(scope, this, args, decl)
             } else {
                 // Resolved field or property value
                 val resolved = readField(scope, name)
-                return resolved.value.invoke(scope, this, args, decl)
+                return resolved.value.invokeCallable(scope, this, args, decl)
             }
         }
         return super.invokeInstanceMethod(scope, name, args, onNotFoundResult)

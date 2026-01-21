@@ -125,7 +125,9 @@ open class ObjException(
         class ExceptionClass(val name: String, vararg parents: ObjClass) : ObjClass(name, *parents) {
             init {
                 constructorMeta = ArgsDeclaration(
-                    listOf(ArgsDeclaration.Item("message", defaultValue = statement { ObjString(name) })),
+                    listOf(ArgsDeclaration.Item("message", defaultValue = statement(f = object : ScopeCallable {
+                        override suspend fun call(scope: Scope): Obj = ObjString(name)
+                    }))),
                     Token.Type.RPAREN
                 )
             }
@@ -163,27 +165,33 @@ open class ObjException(
         }
 
         val Root = ExceptionClass("Exception").apply {
-            instanceInitializers.add(statement {
-                if (thisObj is ObjInstance) {
-                    val msg = get("message")?.value ?: ObjString("Exception")
-                    (thisObj as ObjInstance).instanceScope.addItem("Exception::message", false, msg)
+            instanceInitializers.add(statement(f = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    if (scp.thisObj is ObjInstance) {
+                        val msg = scp.get("message")?.value ?: ObjString("Exception")
+                        (scp.thisObj as ObjInstance).instanceScope.addItem("Exception::message", false, msg)
 
-                    val stack = captureStackTrace(this)
-                    (thisObj as ObjInstance).instanceScope.addItem("Exception::stackTrace", false, stack)
+                        val stack = captureStackTrace(scp)
+                        (scp.thisObj as ObjInstance).instanceScope.addItem("Exception::stackTrace", false, stack)
+                    }
+                    return ObjVoid
                 }
-                ObjVoid
+            }))
+            instanceConstructor = statement(f = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj = ObjVoid
             })
-            instanceConstructor = statement { ObjVoid }
             addPropertyDoc(
                 name = "message",
                 doc = "Human‑readable error message.",
                 type = type("lyng.String"),
                 moduleName = "lyng.stdlib",
-                getter = {
-                    when (val t = this.thisObj) {
-                        is ObjException -> t.message
-                        is ObjInstance -> t.instanceScope.get("Exception::message")?.value ?: ObjNull
-                        else -> ObjNull
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        return when (val t = scp.thisObj) {
+                            is ObjException -> t.message
+                            is ObjInstance -> t.instanceScope.get("Exception::message")?.value ?: ObjNull
+                            else -> ObjNull
+                        }
                     }
                 }
             )
@@ -192,10 +200,12 @@ open class ObjException(
                 doc = "Extra data associated with the exception.",
                 type = type("lyng.Any", nullable = true),
                 moduleName = "lyng.stdlib",
-                getter = {
-                    when (val t = this.thisObj) {
-                        is ObjException -> t.extraData
-                        else -> ObjNull
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        return when (val t = scp.thisObj) {
+                            is ObjException -> t.extraData
+                            else -> ObjNull
+                        }
                     }
                 }
             )
@@ -204,11 +214,13 @@ open class ObjException(
                 doc = "Stack trace captured at throw site as a list of `StackTraceEntry`.",
                 type = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.StackTraceEntry"))),
                 moduleName = "lyng.stdlib",
-                getter = {
-                    when (val t = this.thisObj) {
-                        is ObjException -> t.getStackTrace()
-                        is ObjInstance -> t.instanceScope.get("Exception::stackTrace")?.value as? ObjList ?: ObjList()
-                        else -> ObjList()
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        return when (val t = scp.thisObj) {
+                            is ObjException -> t.getStackTrace()
+                            is ObjInstance -> t.instanceScope.get("Exception::stackTrace")?.value as? ObjList ?: ObjList()
+                            else -> ObjList()
+                        }
                     }
                 }
             )
@@ -216,23 +228,26 @@ open class ObjException(
                 name = "toString",
                 doc = "Human‑readable string representation of the error.",
                 returns = type("lyng.String"),
-                moduleName = "lyng.stdlib"
-            ) {
-                val msg = when (val t = thisObj) {
-                    is ObjException -> t.message.value
-                    is ObjInstance -> (t.instanceScope.get("Exception::message")?.value as? ObjString)?.value
-                        ?: t.objClass.className
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val msg = when (val t = scp.thisObj) {
+                            is ObjException -> t.message.value
+                            is ObjInstance -> (t.instanceScope.get("Exception::message")?.value as? ObjString)?.value
+                                ?: t.objClass.className
 
-                    else -> t.objClass.className
+                            else -> t.objClass.className
+                        }
+                        val stack = when (val t = scp.thisObj) {
+                            is ObjException -> t.getStackTrace()
+                            is ObjInstance -> t.instanceScope.get("Exception::stackTrace")?.value as? ObjList ?: ObjList()
+                            else -> ObjList()
+                        }
+                        val at = stack.list.firstOrNull()?.toString(scp) ?: ObjString("(unknown)")
+                        return ObjString("${scp.thisObj.objClass.className}: $msg at $at")
+                    }
                 }
-                val stack = when (val t = thisObj) {
-                    is ObjException -> t.getStackTrace()
-                    is ObjInstance -> t.instanceScope.get("Exception::stackTrace")?.value as? ObjList ?: ObjList()
-                    else -> ObjList()
-                }
-                val at = stack.list.firstOrNull()?.toString(this) ?: ObjString("(unknown)")
-                ObjString("${thisObj.objClass.className}: $msg at $at")
-            }
+            )
         }
 
         private val op = ProtectedOp()

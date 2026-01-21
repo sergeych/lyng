@@ -21,6 +21,23 @@ import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.pacman.ImportProvider
 
+interface ScopeCallable {
+    suspend fun call(scope: Scope): Obj
+}
+
+interface VoidScopeCallable {
+    suspend fun call(scope: Scope)
+}
+
+interface ScopeBlock<R> {
+    suspend fun call(scope: Scope): R
+}
+
+private class FnStatement(val fn: ScopeCallable) : Statement() {
+    override val pos: Pos = Pos.builtIn
+    override suspend fun execute(scope: Scope): Obj = fn.call(scope)
+}
+
 // Simple per-frame id generator for perf caches (not thread-safe, fine for scripts)
 object FrameIdGen { var c: Long = 1L; fun nextId(): Long = c++ }
 fun nextFrameId(): Long = FrameIdGen.nextId()
@@ -447,17 +464,17 @@ open class Scope(
      * Execute a block inside a child frame. Guarded for future pooling via [PerfFlags.SCOPE_POOL].
      * Currently always creates a fresh child scope to preserve unique frameId semantics.
      */
-    inline suspend fun <R> withChildFrame(args: Arguments = Arguments.EMPTY, newThisObj: Obj? = null, crossinline block: suspend (Scope) -> R): R {
+    suspend fun <R> withChildFrame(args: Arguments = Arguments.EMPTY, newThisObj: Obj? = null, block: ScopeBlock<R>): R {
         if (PerfFlags.SCOPE_POOL) {
             val child = ScopePool.borrow(this, args, pos, newThisObj ?: thisObj)
             try {
-                return block(child)
+                return block.call(child)
             } finally {
                 ScopePool.release(child)
             }
         } else {
             val child = createChildScope(args, newThisObj)
-            return block(child)
+            return block.call(child)
         }
     }
 
@@ -563,20 +580,17 @@ open class Scope(
         return ns.objClass
     }
 
-    inline fun addVoidFn(vararg names: String, crossinline fn: suspend Scope.() -> Unit) {
-        addFn(*names) {
-            fn(this)
-            ObjVoid
-        }
+    fun addVoidFn(vararg names: String, fn: VoidScopeCallable) {
+        addFn(*names, fn = object : ScopeCallable {
+            override suspend fun call(scope: Scope): Obj {
+                fn.call(scope)
+                return ObjVoid
+            }
+        })
     }
 
-    fun addFn(vararg names: String, fn: suspend Scope.() -> Obj) {
-        val newFn = object : Statement() {
-            override val pos: Pos = Pos.builtIn
-
-            override suspend fun execute(scope: Scope): Obj = scope.fn()
-
-        }
+    fun addFn(vararg names: String, fn: ScopeCallable) {
+        val newFn = FnStatement(fn)
         for (name in names) {
             addItem(
                 name,

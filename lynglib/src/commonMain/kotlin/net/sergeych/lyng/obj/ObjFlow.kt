@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,28 +45,31 @@ class ObjFlowBuilder(val output: SendChannel<Obj>) : Obj() {
                 doc = "Send a value to the flow consumer. Suspends if back‑pressured; no‑ops after consumer stops.",
                 params = listOf(ParamDoc("value", type("lyng.Any"))),
                 returns = type("lyng.Void"),
-                moduleName = "lyng.stdlib"
-            ) {
-                val data = requireOnlyArg<Obj>()
-                try {
-                    val channel = thisAs<ObjFlowBuilder>().output
-                    if (!channel.isClosedForSend)
-                        channel.send(data)
-                    else
-                        // Flow consumer is no longer collecting; signal producer to stop
-                        throw ScriptFlowIsNoMoreCollected()
-                } catch (x: Exception) {
-                    // Any failure to send (including closed channel) should gracefully stop the producer.
-                    if (x is CancellationException) {
-                        // Cancellation is a normal control-flow event
-                        throw ScriptFlowIsNoMoreCollected()
-                    } else {
-                        // Treat other send failures as normal flow termination as well
-                        throw ScriptFlowIsNoMoreCollected()
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val data = scp.requireOnlyArg<Obj>()
+                        try {
+                            val channel = scp.thisAs<ObjFlowBuilder>().output
+                            if (!channel.isClosedForSend)
+                                channel.send(data)
+                            else
+                                // Flow consumer is no longer collecting; signal producer to stop
+                                throw ScriptFlowIsNoMoreCollected()
+                        } catch (x: Exception) {
+                            // Any failure to send (including closed channel) should gracefully stop the producer.
+                            if (x is CancellationException) {
+                                // Cancellation is a normal control-flow event
+                                throw ScriptFlowIsNoMoreCollected()
+                            } else {
+                                // Treat other send failures as normal flow termination as well
+                                throw ScriptFlowIsNoMoreCollected()
+                            }
+                        }
+                        return ObjVoid
                     }
                 }
-                ObjVoid
-            }
+            )
         }
     }
 }
@@ -103,15 +106,21 @@ class ObjFlow(val producer: Statement, val scope: Scope) : Obj() {
                 name = "iterator",
                 doc = "Create a pull‑based iterator over this flow. Each step resumes the producer as needed.",
                 returns = TypeGenericDoc(type("lyng.Iterator"), listOf(type("lyng.Any"))),
-                moduleName = "lyng.stdlib"
-            ) {
-                val objFlow = thisAs<ObjFlow>()
-                ObjFlowIterator(statement {
-                    objFlow.producer.execute(
-                        ClosureScope(this, objFlow.scope)
-                    )
-                })
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val objFlow = scp.thisAs<ObjFlow>()
+                        return ObjFlowIterator(statement(f = object : ScopeCallable {
+                            override suspend fun call(scp2: Scope): Obj {
+                                objFlow.producer.execute(
+                                    ClosureScope(scp2, objFlow.scope)
+                                )
+                                return ObjVoid
+                            }
+                        }))
+                    }
+                }
+            )
         }
     }
 }
@@ -164,27 +173,36 @@ class ObjFlowIterator(val producer: Statement) : Obj() {
                 name = "hasNext",
                 doc = "Whether another element is available from the flow.",
                 returns = type("lyng.Bool"),
-                moduleName = "lyng.stdlib"
-            ) { thisAs<ObjFlowIterator>().hasNext(this).toObj() }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjFlowIterator>().hasNext(scp).toObj()
+                }
+            )
             addFnDoc(
                 name = "next",
                 doc = "Receive the next element from the flow or throw if completed.",
                 returns = type("lyng.Any"),
-                moduleName = "lyng.stdlib"
-            ) {
-                val x = thisAs<ObjFlowIterator>()
-                x.next(this)
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val x = scp.thisAs<ObjFlowIterator>()
+                        return x.next(scp)
+                    }
+                }
+            )
             addFnDoc(
                 name = "cancelIteration",
                 doc = "Stop iteration and cancel the underlying flow producer.",
                 returns = type("lyng.Void"),
-                moduleName = "lyng.stdlib"
-            ) {
-                val x = thisAs<ObjFlowIterator>()
-                x.cancel()
-                ObjVoid
-            }
+                moduleName = "lyng.stdlib",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val x = scp.thisAs<ObjFlowIterator>()
+                        x.cancel()
+                        return ObjVoid
+                    }
+                }
+            )
         }
     }
 }

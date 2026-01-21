@@ -41,11 +41,11 @@ object ObjLynonClass : ObjClass("Lynon") {
 
     init {
         addClassConst("test", ObjString("test_const"))
-        addClassFn("encode") {
-            encodeAny(this, requireOnlyArg<Obj>())
+        addClassFn("encode") { scp ->
+            encodeAny(scp, scp.requireOnlyArg<Obj>())
         }
-        addClassFn("decode") {
-            decodeAny(this, requireOnlyArg<Obj>())
+        addClassFn("decode") { scp ->
+            decodeAny(scp, scp.requireOnlyArg<Obj>())
         }
     }
 }

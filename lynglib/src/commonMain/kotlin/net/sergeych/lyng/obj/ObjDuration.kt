@@ -18,6 +18,7 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
 import net.sergeych.lyng.miniast.addPropertyDoc
 import net.sergeych.lyng.miniast.type
 import kotlin.time.Duration
@@ -79,42 +80,54 @@ class ObjDuration(val duration: Duration) : Obj() {
                 doc = "Return this duration as a real number of days.",
                 type = type("lyng.Real"),
                 moduleName = "lyng.time",
-                getter = { thisAs<ObjDuration>().duration.toDouble(DurationUnit.DAYS).toObj() }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjDuration>().duration.toDouble(DurationUnit.DAYS).toObj()
+                }
             )
             addPropertyDoc(
                 name = "hours",
                 doc = "Return this duration as a real number of hours.",
                 type = type("lyng.Real"),
                 moduleName = "lyng.time",
-                getter = { thisAs<ObjDuration>().duration.toDouble(DurationUnit.HOURS).toObj() }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjDuration>().duration.toDouble(DurationUnit.HOURS).toObj()
+                }
             )
             addPropertyDoc(
                 name = "minutes",
                 doc = "Return this duration as a real number of minutes.",
                 type = type("lyng.Real"),
                 moduleName = "lyng.time",
-                getter = { thisAs<ObjDuration>().duration.toDouble(DurationUnit.MINUTES).toObj() }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjDuration>().duration.toDouble(DurationUnit.MINUTES).toObj()
+                }
             )
             addPropertyDoc(
                 name = "seconds",
                 doc = "Return this duration as a real number of seconds.",
                 type = type("lyng.Real"),
                 moduleName = "lyng.time",
-                getter = { thisAs<ObjDuration>().duration.toDouble(DurationUnit.SECONDS).toObj() }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjDuration>().duration.toDouble(DurationUnit.SECONDS).toObj()
+                }
             )
             addPropertyDoc(
                 name = "milliseconds",
                 doc = "Return this duration as a real number of milliseconds.",
                 type = type("lyng.Real"),
                 moduleName = "lyng.time",
-                getter = { thisAs<ObjDuration>().duration.toDouble(DurationUnit.MILLISECONDS).toObj() }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjDuration>().duration.toDouble(DurationUnit.MILLISECONDS).toObj()
+                }
             )
             addPropertyDoc(
                 name = "microseconds",
                 doc = "Return this duration as a real number of microseconds.",
                 type = type("lyng.Real"),
                 moduleName = "lyng.time",
-                getter = { thisAs<ObjDuration>().duration.toDouble(DurationUnit.MICROSECONDS).toObj() }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjDuration>().duration.toDouble(DurationUnit.MICROSECONDS).toObj()
+                }
             )
             // extensions
 
@@ -123,7 +136,9 @@ class ObjDuration(val duration: Duration) : Obj() {
                 doc = "Construct a `Duration` equal to this integer number of seconds.",
                 type = type("lyng.Duration"),
                 moduleName = "lyng.time",
-                getter = { ObjDuration(thisAs<ObjInt>().value.seconds) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjDuration(scp.thisAs<ObjInt>().value.seconds)
+                }
             )
 
             ObjInt.type.addPropertyDoc(
@@ -131,14 +146,18 @@ class ObjDuration(val duration: Duration) : Obj() {
                 doc = "Construct a `Duration` equal to this integer number of seconds.",
                 type = type("lyng.Duration"),
                 moduleName = "lyng.time",
-                getter = { ObjDuration(thisAs<ObjInt>().value.seconds) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjDuration(scp.thisAs<ObjInt>().value.seconds)
+                }
             )
             ObjInt.type.addPropertyDoc(
                 name = "milliseconds",
                 doc = "Construct a `Duration` equal to this integer number of milliseconds.",
                 type = type("lyng.Duration"),
                 moduleName = "lyng.time",
-                getter = { ObjDuration(thisAs<ObjInt>().value.milliseconds) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjDuration(scp.thisAs<ObjInt>().value.milliseconds)
+                }
             )
 
             ObjInt.type.addPropertyDoc(
@@ -146,14 +165,18 @@ class ObjDuration(val duration: Duration) : Obj() {
                 doc = "Construct a `Duration` equal to this integer number of milliseconds.",
                 type = type("lyng.Duration"),
                 moduleName = "lyng.time",
-                getter = { ObjDuration(thisAs<ObjInt>().value.milliseconds) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjDuration(scp.thisAs<ObjInt>().value.milliseconds)
+                }
             )
             ObjReal.type.addPropertyDoc(
                 name = "seconds",
                 doc = "Construct a `Duration` equal to this real number of seconds.",
                 type = type("lyng.Duration"),
                 moduleName = "lyng.time",
-                getter = { ObjDuration(thisAs<ObjReal>().value.seconds) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjDuration(scp.thisAs<ObjReal>().value.seconds)
+                }
             )
 
             ObjReal.type.addPropertyDoc(
@@ -161,7 +184,9 @@ class ObjDuration(val duration: Duration) : Obj() {
                 doc = "Construct a `Duration` equal to this real number of seconds.",
                 type = type("lyng.Duration"),
                 moduleName = "lyng.time",
-                getter = { ObjDuration(thisAs<ObjReal>().value.seconds) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjDuration(scp.thisAs<ObjReal>().value.seconds)
+                }
             )
 
             ObjReal.type.addPropertyDoc(
@@ -169,14 +194,18 @@ class ObjDuration(val duration: Duration) : Obj() {
                 doc = "Construct a `Duration` equal to this real number of milliseconds.",
                 type = type("lyng.Duration"),
                 moduleName = "lyng.time",
-                getter = { ObjDuration(thisAs<ObjReal>().value.milliseconds) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjDuration(scp.thisAs<ObjReal>().value.milliseconds)
+                }
             )
             ObjReal.type.addPropertyDoc(
                 name = "millisecond",
                 doc = "Construct a `Duration` equal to this real number of milliseconds.",
                 type = type("lyng.Duration"),
                 moduleName = "lyng.time",
-                getter = { ObjDuration(thisAs<ObjReal>().value.milliseconds) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjDuration(scp.thisAs<ObjReal>().value.milliseconds)
+                }
             )
 
             ObjInt.type.addPropertyDoc(
@@ -184,84 +213,108 @@ class ObjDuration(val duration: Duration) : Obj() {
                 doc = "Construct a `Duration` equal to this integer number of minutes.",
                 type = type("lyng.Duration"),
                 moduleName = "lyng.time",
-                getter = { ObjDuration(thisAs<ObjInt>().value.minutes) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjDuration(scp.thisAs<ObjInt>().value.minutes)
+                }
             )
             ObjReal.type.addPropertyDoc(
                 name = "minutes",
                 doc = "Construct a `Duration` equal to this real number of minutes.",
                 type = type("lyng.Duration"),
                 moduleName = "lyng.time",
-                getter = { ObjDuration(thisAs<ObjReal>().value.minutes) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjDuration(scp.thisAs<ObjReal>().value.minutes)
+                }
             )
             ObjInt.type.addPropertyDoc(
                 name = "minute",
                 doc = "Construct a `Duration` equal to this integer number of minutes.",
                 type = type("lyng.Duration"),
                 moduleName = "lyng.time",
-                getter = { ObjDuration(thisAs<ObjInt>().value.minutes) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjDuration(scp.thisAs<ObjInt>().value.minutes)
+                }
             )
             ObjReal.type.addPropertyDoc(
                 name = "minute",
                 doc = "Construct a `Duration` equal to this real number of minutes.",
                 type = type("lyng.Duration"),
                 moduleName = "lyng.time",
-                getter = { ObjDuration(thisAs<ObjReal>().value.minutes) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjDuration(scp.thisAs<ObjReal>().value.minutes)
+                }
             )
             ObjInt.type.addPropertyDoc(
                 name = "hours",
                 doc = "Construct a `Duration` equal to this integer number of hours.",
                 type = type("lyng.Duration"),
                 moduleName = "lyng.time",
-                getter = { ObjDuration(thisAs<ObjInt>().value.hours) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjDuration(scp.thisAs<ObjInt>().value.hours)
+                }
             )
             ObjReal.type.addPropertyDoc(
                 name = "hours",
                 doc = "Construct a `Duration` equal to this real number of hours.",
                 type = type("lyng.Duration"),
                 moduleName = "lyng.time",
-                getter = { ObjDuration(thisAs<ObjReal>().value.hours) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjDuration(scp.thisAs<ObjReal>().value.hours)
+                }
             )
             ObjInt.type.addPropertyDoc(
                 name = "hour",
                 doc = "Construct a `Duration` equal to this integer number of hours.",
                 type = type("lyng.Duration"),
                 moduleName = "lyng.time",
-                getter = { ObjDuration(thisAs<ObjInt>().value.hours) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjDuration(scp.thisAs<ObjInt>().value.hours)
+                }
             )
             ObjReal.type.addPropertyDoc(
                 name = "hour",
                 doc = "Construct a `Duration` equal to this real number of hours.",
                 type = type("lyng.Duration"),
                 moduleName = "lyng.time",
-                getter = { ObjDuration(thisAs<ObjReal>().value.hours) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjDuration(scp.thisAs<ObjReal>().value.hours)
+                }
             )
             ObjInt.type.addPropertyDoc(
                 name = "days",
                 doc = "Construct a `Duration` equal to this integer number of days.",
                 type = type("lyng.Duration"),
                 moduleName = "lyng.time",
-                getter = { ObjDuration(thisAs<ObjInt>().value.days) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjDuration(scp.thisAs<ObjInt>().value.days)
+                }
             )
             ObjReal.type.addPropertyDoc(
                 name = "days",
                 doc = "Construct a `Duration` equal to this real number of days.",
                 type = type("lyng.Duration"),
                 moduleName = "lyng.time",
-                getter = { ObjDuration(thisAs<ObjReal>().value.days) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjDuration(scp.thisAs<ObjReal>().value.days)
+                }
             )
             ObjInt.type.addPropertyDoc(
                 name = "day",
                 doc = "Construct a `Duration` equal to this integer number of days.",
                 type = type("lyng.Duration"),
                 moduleName = "lyng.time",
-                getter = { ObjDuration(thisAs<ObjInt>().value.days) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjDuration(scp.thisAs<ObjInt>().value.days)
+                }
             )
             ObjReal.type.addPropertyDoc(
                 name = "day",
                 doc = "Construct a `Duration` equal to this real number of days.",
                 type = type("lyng.Duration"),
                 moduleName = "lyng.time",
-                getter = { ObjDuration(thisAs<ObjReal>().value.days) }
+                getter = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj = ObjDuration(scp.thisAs<ObjReal>().value.days)
+                }
             )
 
 

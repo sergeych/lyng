@@ -18,6 +18,8 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Arguments
+import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
 import net.sergeych.lyng.Statement
 import net.sergeych.lyng.miniast.ParamDoc
 import net.sergeych.lyng.miniast.addFnDoc
@@ -35,13 +37,15 @@ val ObjIterable by lazy {
             doc = "Collect elements of this iterable into a new list.",
             type = type("lyng.List"),
             moduleName = "lyng.stdlib",
-            getter = {
-                val result = mutableListOf<Obj>()
-                val it = this.thisObj.invokeInstanceMethod(this, "iterator")
-                while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
-                    result.add(it.invokeInstanceMethod(this, "next"))
+            getter = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val result = mutableListOf<Obj>()
+                    val it = scp.thisObj.invokeInstanceMethod(scp, "iterator")
+                    while (it.invokeInstanceMethod(scp, "hasNext").toBool()) {
+                        result.add(it.invokeInstanceMethod(scp, "next"))
+                    }
+                    return ObjList(result)
                 }
-                ObjList(result)
             }
         )
 
@@ -52,16 +56,19 @@ val ObjIterable by lazy {
             params = listOf(ParamDoc("element")),
             returns = type("lyng.Bool"),
             isOpen = true,
-            moduleName = "lyng.stdlib"
-        ) {
-            val obj = args.firstAndOnly()
-            val it = thisObj.invokeInstanceMethod(this, "iterator")
-            while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
-                if (obj.equals(this, it.invokeInstanceMethod(this, "next")))
-                    return@addFnDoc ObjTrue
+            moduleName = "lyng.stdlib",
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val obj = scp.args.firstAndOnly()
+                    val it = scp.thisObj.invokeInstanceMethod(scp, "iterator")
+                    while (it.invokeInstanceMethod(scp, "hasNext").toBool()) {
+                        if (obj.equals(scp, it.invokeInstanceMethod(scp, "next")))
+                            return ObjTrue
+                    }
+                    return ObjFalse
+                }
             }
-            ObjFalse
-        }
+        )
 
         addFnDoc(
             name = "indexOf",
@@ -69,34 +76,39 @@ val ObjIterable by lazy {
             params = listOf(ParamDoc("element")),
             returns = type("lyng.Int"),
             isOpen = true,
-            moduleName = "lyng.stdlib"
-        ) {
-            val obj = args.firstAndOnly()
-            var index = 0
-            val it = thisObj.invokeInstanceMethod(this, "iterator")
-            while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
-                if (obj.equals(this, it.invokeInstanceMethod(this, "next")))
-                    return@addFnDoc ObjInt(index.toLong())
-                index++
+            moduleName = "lyng.stdlib",
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val obj = scp.args.firstAndOnly()
+                    var index = 0
+                    val it = scp.thisObj.invokeInstanceMethod(scp, "iterator")
+                    while (it.invokeInstanceMethod(scp, "hasNext").toBool()) {
+                        if (obj.equals(scp, it.invokeInstanceMethod(scp, "next")))
+                            return ObjInt(index.toLong())
+                        index++
+                    }
+                    return ObjInt(-1L)
+                }
             }
-            ObjInt(-1L)
-        }
+        )
 
         addPropertyDoc(
             name = "toSet",
             doc = "Collect elements of this iterable into a new set.",
             type = type("lyng.Set"),
             moduleName = "lyng.stdlib",
-            getter = {
-                if( this.thisObj.isInstanceOf(ObjSet.type) )
-                    this.thisObj
-                else {
-                    val result = mutableSetOf<Obj>()
-                    val it = this.thisObj.invokeInstanceMethod(this, "iterator")
-                    while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
-                        result.add(it.invokeInstanceMethod(this, "next"))
+            getter = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    return if( scp.thisObj.isInstanceOf(ObjSet.type) )
+                        scp.thisObj
+                    else {
+                        val result = mutableSetOf<Obj>()
+                        val it = scp.thisObj.invokeInstanceMethod(scp, "iterator")
+                        while (it.invokeInstanceMethod(scp, "hasNext").toBool()) {
+                            result.add(it.invokeInstanceMethod(scp, "next"))
+                        }
+                        ObjSet(result)
                     }
-                    ObjSet(result)
                 }
             }
         )
@@ -106,16 +118,20 @@ val ObjIterable by lazy {
             doc = "Collect pairs into a map using [0] as key and [1] as value for each element.",
             type = type("lyng.Map"),
             moduleName = "lyng.stdlib",
-            getter = {
-                val result = mutableMapOf<Obj, Obj>()
-                this.thisObj.enumerate(this) { pair ->
-                    when (pair) {
-                        is ObjMapEntry -> result[pair.key] = pair.value
-                        else -> result[pair.getAt(this, 0)] = pair.getAt(this, 1)
-                    }
-                    true
+            getter = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val result = mutableMapOf<Obj, Obj>()
+                    scp.thisObj.enumerate(scp, object : EnumerateCallback {
+                        override suspend fun call(pair: Obj): Boolean {
+                            when (pair) {
+                                is ObjMapEntry -> result[pair.key] = pair.value
+                                else -> result[pair.getAt(scp, ObjInt(0))] = pair.getAt(scp, ObjInt(1))
+                            }
+                            return true
+                        }
+                    })
+                    return ObjMap(result)
                 }
-                ObjMap(result)
             }
         )
 
@@ -124,31 +140,37 @@ val ObjIterable by lazy {
             doc = "Build a map from elements using the lambda result as key.",
             params = listOf(ParamDoc("keySelector")),
             returns = type("lyng.Map"),
-            moduleName = "lyng.stdlib"
-        ) {
-            val association = requireOnlyArg<Statement>()
-            val result = ObjMap()
-            thisObj.toFlow(this).collect {
-                result.map[association.call(this, it)] = it
+            moduleName = "lyng.stdlib",
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val association = scp.requireOnlyArg<Statement>()
+                    val result = ObjMap()
+                    scp.thisObj.toFlow(scp).collect {
+                        result.map[association.invokeCallable(scp, scp.thisObj, it)] = it
+                    }
+                    return result
+                }
             }
-            result
-        }
+        )
 
         addFnDoc(
             name = "forEach",
             doc = "Apply the lambda to each element in iteration order.",
             params = listOf(ParamDoc("action")),
             isOpen = true,
-            moduleName = "lyng.stdlib"
-        ) {
-            val it = thisObj.invokeInstanceMethod(this, "iterator")
-            val fn = requiredArg<Statement>(0)
-            while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
-                val x = it.invokeInstanceMethod(this, "next")
-                fn.execute(this.createChildScope(Arguments(listOf(x))))
+            moduleName = "lyng.stdlib",
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val it = scp.thisObj.invokeInstanceMethod(scp, "iterator")
+                    val fn = scp.requiredArg<Statement>(0)
+                    while (it.invokeInstanceMethod(scp, "hasNext").toBool()) {
+                        val x = it.invokeInstanceMethod(scp, "next")
+                        fn.execute(scp.createChildScope(Arguments(listOf(x))))
+                    }
+                    return ObjVoid
+                }
             }
-            ObjVoid
-        }
+        )
 
         addFnDoc(
             name = "map",
@@ -156,15 +178,18 @@ val ObjIterable by lazy {
             params = listOf(ParamDoc("transform")),
             returns = type("lyng.List"),
             isOpen = true,
-            moduleName = "lyng.stdlib"
-        ) {
-            val fn = requiredArg<Statement>(0)
-            val result = mutableListOf<Obj>()
-            thisObj.toFlow(this).collect {
-                result.add(fn.call(this, it))
+            moduleName = "lyng.stdlib",
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val fn = scp.requiredArg<Statement>(0)
+                    val result = mutableListOf<Obj>()
+                    scp.thisObj.toFlow(scp).collect {
+                        result.add(fn.invokeCallable(scp, scp.thisObj, it))
+                    }
+                    return ObjList(result)
+                }
             }
-            ObjList(result)
-        }
+        )
 
         addFnDoc(
             name = "mapNotNull",
@@ -172,46 +197,56 @@ val ObjIterable by lazy {
             params = listOf(ParamDoc("transform")),
             returns = type("lyng.List"),
             isOpen = true,
-            moduleName = "lyng.stdlib"
-        ) {
-            val fn = requiredArg<Statement>(0)
-            val result = mutableListOf<Obj>()
-            thisObj.toFlow(this).collect {
-                val transformed = fn.call(this, it)
-                if( transformed != ObjNull) result.add(transformed)
+            moduleName = "lyng.stdlib",
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val fn = scp.requiredArg<Statement>(0)
+                    val result = mutableListOf<Obj>()
+                    scp.thisObj.toFlow(scp).collect {
+                        val transformed = fn.invokeCallable(scp, scp.thisObj, it)
+                        if( transformed != ObjNull) result.add(transformed)
+                    }
+                    return ObjList(result)
+                }
             }
-            ObjList(result)
-        }
+        )
 
         addFnDoc(
             name = "take",
             doc = "Take the first N elements and return them as a list.",
             params = listOf(ParamDoc("n", type("lyng.Int"))),
             returns = type("lyng.List"),
-            moduleName = "lyng.stdlib"
-        ) {
-            var n = requireOnlyArg<ObjInt>().value.toInt()
-            val result = mutableListOf<Obj>()
-            if (n > 0) {
-                thisObj.enumerate(this) {
-                    result.add(it)
-                    --n > 0
+            moduleName = "lyng.stdlib",
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    var n = scp.requireOnlyArg<ObjInt>().value.toInt()
+                    val result = mutableListOf<Obj>()
+                    if (n > 0) {
+                        scp.thisObj.enumerate(scp, object : EnumerateCallback {
+                            override suspend fun call(element: Obj): Boolean {
+                                result.add(element)
+                                return --n > 0
+                            }
+                        })
+                    }
+                    return ObjList(result)
                 }
             }
-            ObjList(result)
-        }
+        )
 
         addPropertyDoc(
             name = "isEmpty",
             doc = "Whether the iterable has no elements.",
             type = type("lyng.Bool"),
             moduleName = "lyng.stdlib",
-            getter = {
-                ObjBool(
-                    this.thisObj.invokeInstanceMethod(this, "iterator")
-                        .invokeInstanceMethod(this, "hasNext").toBool()
-                        .not()
-                )
+            getter = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    return ObjBool(
+                        scp.thisObj.invokeInstanceMethod(scp, "iterator")
+                            .invokeInstanceMethod(scp, "hasNext").toBool()
+                            .not()
+                    )
+                }
             }
         )
 
@@ -220,25 +255,31 @@ val ObjIterable by lazy {
             doc = "Return a new list sorted using the provided comparator `(a, b) -> Int`.",
             params = listOf(ParamDoc("comparator")),
             returns = type("lyng.List"),
-            moduleName = "lyng.stdlib"
-        ) {
-            val list = thisObj.callMethod<ObjList>(this, "toList")
-            val comparator = requireOnlyArg<Statement>()
-            list.quicksort { a, b ->
-                comparator.call(this, a, b).toInt()
+            moduleName = "lyng.stdlib",
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val list = scp.thisObj.callMethod<ObjList>(scp, "toList")
+                    val comparator = scp.requireOnlyArg<Statement>()
+                    list.quicksort { a, b ->
+                        comparator.invokeCallable(scp, scp.thisObj, a, b).toInt()
+                    }
+                    return list
+                }
             }
-            list
-        }
+        )
 
         addFnDoc(
             name = "reversed",
             doc = "Return a new list with elements in reverse order.",
             returns = type("lyng.List"),
-            moduleName = "lyng.stdlib"
-        ) {
-            val list = thisObj.callMethod<ObjList>(this, "toList")
-            list.list.reverse()
-            list
-        }
+            moduleName = "lyng.stdlib",
+            code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val list = scp.thisObj.callMethod<ObjList>(scp, "toList")
+                    list.list.reverse()
+                    return list
+                }
+            }
+        )
     }
 }

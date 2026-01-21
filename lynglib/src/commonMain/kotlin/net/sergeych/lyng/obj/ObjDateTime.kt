@@ -21,6 +21,7 @@ import kotlinx.datetime.*
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeCallable
 import net.sergeych.lyng.Statement
 import net.sergeych.lyng.miniast.addClassFnDoc
 import net.sergeych.lyng.miniast.addFnDoc
@@ -54,7 +55,9 @@ class ObjDateTime(val instant: Instant, val timeZone: TimeZone) : Obj() {
                 }
                 if (rec.type == ObjRecord.Type.Fun || rec.value is Statement) {
                     val s = rec.value as Statement
-                    return ObjRecord(net.sergeych.lyng.statement { s.execute(this.createChildScope(newThisObj = this@ObjDateTime)) }, rec.isMutable)
+                    return ObjRecord(net.sergeych.lyng.statement(f = object : ScopeCallable {
+                        override suspend fun call(scp: Scope): Obj = s.execute(scp.createChildScope(newThisObj = this@ObjDateTime))
+                    }), rec.isMutable)
                 }
                 return resolveRecord(scope, rec, name, rec.declaringClass ?: cls)
             }
@@ -172,122 +175,129 @@ class ObjDateTime(val instant: Instant, val timeZone: TimeZone) : Obj() {
             }
         }.apply {
             addPropertyDoc("year", "The year component.", type("lyng.Int"), moduleName = "lyng.time",
-                getter = { thisAs<ObjDateTime>().localDateTime.year.toObj() })
+                getter = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjDateTime>().localDateTime.year.toObj() })
             addPropertyDoc("month", "The month component (1..12).", type("lyng.Int"), moduleName = "lyng.time",
-                getter = { thisAs<ObjDateTime>().localDateTime.monthNumber.toObj() })
+                getter = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjDateTime>().localDateTime.monthNumber.toObj() })
             addPropertyDoc("dayOfMonth", "The day of month component.", type("lyng.Int"), moduleName = "lyng.time",
-                getter = { thisAs<ObjDateTime>().localDateTime.dayOfMonth.toObj() })
+                getter = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjDateTime>().localDateTime.dayOfMonth.toObj() })
             addPropertyDoc("day", "Alias to dayOfMonth.", type("lyng.Int"), moduleName = "lyng.time",
-                getter = { thisAs<ObjDateTime>().localDateTime.dayOfMonth.toObj() })
+                getter = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjDateTime>().localDateTime.dayOfMonth.toObj() })
             addPropertyDoc("hour", "The hour component (0..23).", type("lyng.Int"), moduleName = "lyng.time",
-                getter = { thisAs<ObjDateTime>().localDateTime.hour.toObj() })
+                getter = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjDateTime>().localDateTime.hour.toObj() })
             addPropertyDoc("minute", "The minute component (0..59).", type("lyng.Int"), moduleName = "lyng.time",
-                getter = { thisAs<ObjDateTime>().localDateTime.minute.toObj() })
+                getter = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjDateTime>().localDateTime.minute.toObj() })
             addPropertyDoc("second", "The second component (0..59).", type("lyng.Int"), moduleName = "lyng.time",
-                getter = { thisAs<ObjDateTime>().localDateTime.second.toObj() })
+                getter = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjDateTime>().localDateTime.second.toObj() })
             addPropertyDoc("dayOfWeek", "The day of week (1=Monday, 7=Sunday).", type("lyng.Int"), moduleName = "lyng.time",
-                getter = { thisAs<ObjDateTime>().localDateTime.dayOfWeek.isoDayNumber.toObj() })
+                getter = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjDateTime>().localDateTime.dayOfWeek.isoDayNumber.toObj() })
             addPropertyDoc("timeZone", "The time zone ID (e.g. 'Z', '+02:00', 'Europe/Prague').", type("lyng.String"), moduleName = "lyng.time",
-                getter = { thisAs<ObjDateTime>().timeZone.id.toObj() })
+                getter = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjDateTime>().timeZone.id.toObj() })
 
-            addFnDoc("toInstant", "Convert this localized date time back to an absolute Instant.", returns = type("lyng.Instant"), moduleName = "lyng.time") {
-                ObjInstant(thisAs<ObjDateTime>().instant)
-            }
-            addFnDoc("toEpochSeconds", "Return the number of full seconds since the Unix epoch (UTC).", returns = type("lyng.Int"), moduleName = "lyng.time") {
-                thisAs<ObjDateTime>().instant.epochSeconds.toObj()
-            }
-            addFnDoc("toRFC3339", "Return the RFC3339 string representation of this date time, including its timezone offset.", returns = type("lyng.String"), moduleName = "lyng.time") {
-                thisAs<ObjDateTime>().toRFC3339().toObj()
-            }
-            addFnDoc("toSortableString", "Alias to toRFC3339.", returns = type("lyng.String"), moduleName = "lyng.time") {
-                thisAs<ObjDateTime>().toRFC3339().toObj()
-            }
-            
-            addFnDoc("toEpochMilliseconds", "Return the number of milliseconds since the Unix epoch (UTC).", returns = type("lyng.Int"), moduleName = "lyng.time") {
-                thisAs<ObjDateTime>().instant.toEpochMilliseconds().toObj()
-            }
+            addFnDoc("toInstant", "Convert this localized date time back to an absolute Instant.", returns = type("lyng.Instant"), moduleName = "lyng.time",
+                code = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = ObjInstant(scp.thisAs<ObjDateTime>().instant) })
+            addFnDoc("toEpochSeconds", "Return the number of full seconds since the Unix epoch (UTC).", returns = type("lyng.Int"), moduleName = "lyng.time",
+                code = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjDateTime>().instant.epochSeconds.toObj() })
+            addFnDoc("toRFC3339", "Return the RFC3339 string representation of this date time, including its timezone offset.", returns = type("lyng.String"), moduleName = "lyng.time",
+                code = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjDateTime>().toRFC3339().toObj() })
+            addFnDoc("toSortableString", "Alias to toRFC3339.", returns = type("lyng.String"), moduleName = "lyng.time",
+                code = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjDateTime>().toRFC3339().toObj() })
+
+            addFnDoc("toEpochMilliseconds", "Return the number of milliseconds since the Unix epoch (UTC).", returns = type("lyng.Int"), moduleName = "lyng.time",
+                code = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = scp.thisAs<ObjDateTime>().instant.toEpochMilliseconds().toObj() })
             addFnDoc("toTimeZone", "Return a new DateTime representing the same instant but in a different time zone. " +
                     "Accepts a timezone ID string (e.g., 'UTC', '+02:00') or an integer offset in seconds.",
                 params = listOf(net.sergeych.lyng.miniast.ParamDoc("tz", type = type("lyng.Any"))),
-                returns = type("lyng.DateTime"), moduleName = "lyng.time") {
-                val tz = when (val a = args.list.getOrNull(0)) {
-                    is ObjString -> TimeZone.of(a.value)
-                    is ObjInt -> UtcOffset(seconds = a.value.toInt()).asTimeZone()
-                    else -> raiseIllegalArgument("invalid timezone: $a")
-                }
-                ObjDateTime(thisAs<ObjDateTime>().instant, tz)
-            }
-            addFnDoc("toUTC", "Shortcut to convert this date time to the UTC time zone.", returns = type("lyng.DateTime"), moduleName = "lyng.time") {
-                ObjDateTime(thisAs<ObjDateTime>().instant, TimeZone.UTC)
-            }
+                returns = type("lyng.DateTime"), moduleName = "lyng.time",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val tz = when (val a = scp.args.list.getOrNull(0)) {
+                            is ObjString -> TimeZone.of(a.value)
+                            is ObjInt -> UtcOffset(seconds = a.value.toInt()).asTimeZone()
+                            else -> scp.raiseIllegalArgument("invalid timezone: $a")
+                        }
+                        return ObjDateTime(scp.thisAs<ObjDateTime>().instant, tz)
+                    }
+                })
+            addFnDoc("toUTC", "Shortcut to convert this date time to the UTC time zone.", returns = type("lyng.DateTime"), moduleName = "lyng.time",
+                code = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = ObjDateTime(scp.thisAs<ObjDateTime>().instant, TimeZone.UTC) })
 
             addFnDoc("addMonths", "Return a new DateTime with the specified number of months added (or subtracted if negative). " +
                     "Normalizes the day of month if necessary (e.g., Jan 31 + 1 month = Feb 28/29).",
                 params = listOf(net.sergeych.lyng.miniast.ParamDoc("months", type = type("lyng.Int"))),
-                returns = type("lyng.DateTime"), moduleName = "lyng.time") {
-                val n = args.list.getOrNull(0)?.toInt() ?: 0
-                val res = thisAs<ObjDateTime>().instant.plus(n, DateTimeUnit.MONTH, thisAs<ObjDateTime>().timeZone)
-                ObjDateTime(res, thisAs<ObjDateTime>().timeZone)
-            }
+                returns = type("lyng.DateTime"), moduleName = "lyng.time",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val n = scp.args.list.getOrNull(0)?.toInt() ?: 0
+                        val res = scp.thisAs<ObjDateTime>().instant.plus(n, DateTimeUnit.MONTH, scp.thisAs<ObjDateTime>().timeZone)
+                        return ObjDateTime(res, scp.thisAs<ObjDateTime>().timeZone)
+                    }
+                })
             addFnDoc("addYears", "Return a new DateTime with the specified number of years added (or subtracted if negative).",
                 params = listOf(net.sergeych.lyng.miniast.ParamDoc("years", type = type("lyng.Int"))),
-                returns = type("lyng.DateTime"), moduleName = "lyng.time") {
-                val n = args.list.getOrNull(0)?.toInt() ?: 0
-                val res = thisAs<ObjDateTime>().instant.plus(n, DateTimeUnit.YEAR, thisAs<ObjDateTime>().timeZone)
-                ObjDateTime(res, thisAs<ObjDateTime>().timeZone)
-            }
+                returns = type("lyng.DateTime"), moduleName = "lyng.time",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val n = scp.args.list.getOrNull(0)?.toInt() ?: 0
+                        val res = scp.thisAs<ObjDateTime>().instant.plus(n, DateTimeUnit.YEAR, scp.thisAs<ObjDateTime>().timeZone)
+                        return ObjDateTime(res, scp.thisAs<ObjDateTime>().timeZone)
+                    }
+                })
 
-            addClassFn("now") {
-                val tz = when (val a = args.list.getOrNull(0)) {
-                    null -> TimeZone.currentSystemDefault()
-                    is ObjString -> TimeZone.of(a.value)
-                    is ObjInt -> UtcOffset(seconds = a.value.toInt()).asTimeZone()
-                    else -> raiseIllegalArgument("invalid timezone: $a")
+            addClassFn("now", code = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val tz = when (val a = scp.args.list.getOrNull(0)) {
+                        null -> TimeZone.currentSystemDefault()
+                        is ObjString -> TimeZone.of(a.value)
+                        is ObjInt -> UtcOffset(seconds = a.value.toInt()).asTimeZone()
+                        else -> scp.raiseIllegalArgument("invalid timezone: $a")
+                    }
+                    return ObjDateTime(kotlin.time.Clock.System.now(), tz)
                 }
-                ObjDateTime(kotlin.time.Clock.System.now(), tz)
-            }
+            })
 
             addClassFnDoc("parseRFC3339",
                 "Parse an RFC3339 string into a DateTime object. " +
                         "Note: if the string does not specify a timezone, UTC is assumed.",
                 params = listOf(net.sergeych.lyng.miniast.ParamDoc("string", type = type("lyng.String"))),
                 returns = type("lyng.DateTime"),
-                moduleName = "lyng.time") {
-                val s = (args.firstAndOnly() as ObjString).value
-                // kotlinx-datetime's Instant.parse handles RFC3339
-                // But we want to preserve the offset if present for DateTime.
-                // However, Instant.parse("...") always gives an Instant.
-                // If we want the specific offset from the string, we might need a more complex parse.
-                // For now, let's stick to parsing it as Instant and converting to UTC or specified TZ.
-                // Actually, if the string has an offset, Instant.parse handles it but returns UTC instant.
-                
-                // Let's try to detect if there is an offset in the string.
-                // If not, use UTC.
-                val instant = Instant.parse(s)
-                
-                // RFC3339 can have Z or +/-HH:mm or +/-HHmm or +/-HH
-                val tz = try {
-                    if (s.endsWith("Z", ignoreCase = true)) {
-                        TimeZone.of("Z")
-                    } else {
-                        // Look for the last + or - which is likely the start of the offset
-                        val lastPlus = s.lastIndexOf('+')
-                        val lastMinus = s.lastIndexOf('-')
-                        val offsetStart = if (lastPlus > lastMinus) lastPlus else lastMinus
-                        if (offsetStart > s.lastIndexOf('T')) {
-                            // Likely an offset
-                            val offsetStr = s.substring(offsetStart)
-                            TimeZone.of(offsetStr)
-                        } else {
+                moduleName = "lyng.time",
+                code = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val s = (scp.args.firstAndOnly() as ObjString).value
+                        // kotlinx-datetime's Instant.parse handles RFC3339
+                        // But we want to preserve the offset if present for DateTime.
+                        // However, Instant.parse("...") always gives an Instant.
+                        // If we want the specific offset from the string, we might need a more complex parse.
+                        // For now, let's stick to parsing it as Instant and converting to UTC or specified TZ.
+                        // Actually, if the string has an offset, Instant.parse handles it but returns UTC instant.
+
+                        // Let's try to detect if there is an offset in the string.
+                        // If not, use UTC.
+                        val instant = Instant.parse(s)
+
+                        // RFC3339 can have Z or +/-HH:mm or +/-HHmm or +/-HH
+                        val tz = try {
+                            if (s.endsWith("Z", ignoreCase = true)) {
+                                TimeZone.of("Z")
+                            } else {
+                                // Look for the last + or - which is likely the start of the offset
+                                val lastPlus = s.lastIndexOf('+')
+                                val lastMinus = s.lastIndexOf('-')
+                                val offsetStart = if (lastPlus > lastMinus) lastPlus else lastMinus
+                                if (offsetStart > s.lastIndexOf('T')) {
+                                    // Likely an offset
+                                    val offsetStr = s.substring(offsetStart)
+                                    TimeZone.of(offsetStr)
+                                } else {
+                                    TimeZone.UTC
+                                }
+                            }
+                        } catch (e: Exception) {
                             TimeZone.UTC
                         }
+                        return ObjDateTime(instant, tz)
                     }
-                } catch (e: Exception) {
-                    TimeZone.UTC
-                }
-                
-                ObjDateTime(instant, tz)
-            }
+                })
         }
     }
 }

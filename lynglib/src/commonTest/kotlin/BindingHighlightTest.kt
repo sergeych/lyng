@@ -171,7 +171,7 @@ class BindingHighlightTest {
         // Find the specific usage inside string-literal invocation: "%s is directory"(name)
         val pattern = "\"%s is directory\"(name)"
         val lineIdx = text.indexOf(pattern)
-        assertTrue(lineIdx >= 0, "Pattern with string invoke should be present in the snippet")
+        assertTrue(lineIdx >= 0, "Pattern with string invokeCallable should be present in the snippet")
         val nameStart = lineIdx + pattern.indexOf("name")
         val nameEnd = nameStart + "name".length
 

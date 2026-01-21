@@ -18,14 +18,13 @@
 package net.sergeych.lyng
 
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.yield
 import net.sergeych.lyng.Script.Companion.defaultImportManager
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
+import net.sergeych.lyng.pacman.ModuleBuilder
 import net.sergeych.lyng.stdlib_included.rootLyng
 import net.sergeych.lynon.ObjLynonClass
-import net.sergeych.mp_tools.globalDefer
 import kotlin.math.*
 
 @Suppress("TYPE_INTERSECTION_AS_REIFIED_WARNING")
@@ -59,186 +58,173 @@ class Script(
         internal val rootScope: Scope = Scope(null).apply {
             ObjException.addExceptionsToContext(this)
             addConst("Unset", ObjUnset)
-            addFn("print") {
-                for ((i, a) in args.withIndex()) {
-                    if (i > 0) print(' ' + a.toString(this).value)
-                    else print(a.toString(this).value)
+            addFn("print", fn = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    for ((i, a) in scp.args.withIndex()) {
+                        if (i > 0) print(' ' + a.toString(scp).value)
+                        else print(a.toString(scp).value)
+                    }
+                    return ObjVoid
                 }
-                ObjVoid
-            }
-            addFn("println") {
-                for ((i, a) in args.withIndex()) {
-                    if (i > 0) print(' ' + a.toString(this).value)
-                    else print(a.toString(this).value)
+            })
+            addFn("println", fn = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    for ((i, a) in scp.args.withIndex()) {
+                        if (i > 0) print(' ' + a.toString(scp).value)
+                        else print(a.toString(scp).value)
+                    }
+                    println()
+                    return ObjVoid
                 }
-                println()
-                ObjVoid
-            }
-            addFn("floor") {
-                val x = args.firstAndOnly()
-                (if (x is ObjInt) x
-                else ObjReal(floor(x.toDouble())))
-            }
-            addFn("ceil") {
-                val x = args.firstAndOnly()
-                (if (x is ObjInt) x
-                else ObjReal(ceil(x.toDouble())))
-            }
-            addFn("round") {
-                val x = args.firstAndOnly()
-                (if (x is ObjInt) x
-                else ObjReal(round(x.toDouble())))
-            }
+            })
+            addFn("floor", fn = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val x = scp.args.firstAndOnly()
+                    return (if (x is ObjInt) x
+                    else ObjReal(floor(x.toDouble())))
+                }
+            })
+            addFn("ceil", fn = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val x = scp.args.firstAndOnly()
+                    return (if (x is ObjInt) x
+                    else ObjReal(ceil(x.toDouble())))
+                }
+            })
+            addFn("round", fn = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val x = scp.args.firstAndOnly()
+                    return (if (x is ObjInt) x
+                    else ObjReal(round(x.toDouble())))
+                }
+            })
 
-            addFn("sin") {
-                ObjReal(sin(args.firstAndOnly().toDouble()))
-            }
-            addFn("cos") {
-                ObjReal(cos(args.firstAndOnly().toDouble()))
-            }
-            addFn("tan") {
-                ObjReal(tan(args.firstAndOnly().toDouble()))
-            }
-            addFn("asin") {
-                ObjReal(asin(args.firstAndOnly().toDouble()))
-            }
-            addFn("acos") {
-                ObjReal(acos(args.firstAndOnly().toDouble()))
-            }
-            addFn("atan") {
-                ObjReal(atan(args.firstAndOnly().toDouble()))
-            }
+            addFn("sin", fn = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = ObjReal(sin(scp.args.firstAndOnly().toDouble())) })
+            addFn("cos", fn = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = ObjReal(cos(scp.args.firstAndOnly().toDouble())) })
+            addFn("tan", fn = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = ObjReal(tan(scp.args.firstAndOnly().toDouble())) })
+            addFn("asin", fn = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = ObjReal(asin(scp.args.firstAndOnly().toDouble())) })
+            addFn("acos", fn = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = ObjReal(acos(scp.args.firstAndOnly().toDouble())) })
+            addFn("atan", fn = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = ObjReal(atan(scp.args.firstAndOnly().toDouble())) })
 
-            addFn("sinh") {
-                ObjReal(sinh(args.firstAndOnly().toDouble()))
-            }
-            addFn("cosh") {
-                ObjReal(cosh(args.firstAndOnly().toDouble()))
-            }
-            addFn("tanh") {
-                ObjReal(tanh(args.firstAndOnly().toDouble()))
-            }
-            addFn("asinh") {
-                ObjReal(asinh(args.firstAndOnly().toDouble()))
-            }
-            addFn("acosh") {
-                ObjReal(acosh(args.firstAndOnly().toDouble()))
-            }
-            addFn("atanh") {
-                ObjReal(atanh(args.firstAndOnly().toDouble()))
-            }
+            addFn("sinh", fn = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = ObjReal(sinh(scp.args.firstAndOnly().toDouble())) })
+            addFn("cosh", fn = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = ObjReal(cosh(scp.args.firstAndOnly().toDouble())) })
+            addFn("tanh", fn = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = ObjReal(tanh(scp.args.firstAndOnly().toDouble())) })
+            addFn("asinh", fn = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = ObjReal(asinh(scp.args.firstAndOnly().toDouble())) })
+            addFn("acosh", fn = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = ObjReal(acosh(scp.args.firstAndOnly().toDouble())) })
+            addFn("atanh", fn = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = ObjReal(atanh(scp.args.firstAndOnly().toDouble())) })
 
-            addFn("exp") {
-                ObjReal(exp(args.firstAndOnly().toDouble()))
-            }
-            addFn("ln") {
-                ObjReal(ln(args.firstAndOnly().toDouble()))
-            }
+            addFn("exp", fn = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = ObjReal(exp(scp.args.firstAndOnly().toDouble())) })
+            addFn("ln", fn = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = ObjReal(ln(scp.args.firstAndOnly().toDouble())) })
 
-            addFn("log10") {
-                ObjReal(log10(args.firstAndOnly().toDouble()))
-            }
+            addFn("log10", fn = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = ObjReal(log10(scp.args.firstAndOnly().toDouble())) })
 
-            addFn("log2") {
-                ObjReal(log2(args.firstAndOnly().toDouble()))
-            }
+            addFn("log2", fn = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = ObjReal(log2(scp.args.firstAndOnly().toDouble())) })
 
-            addFn("pow") {
-                requireExactCount(2)
-                ObjReal(
-                    (args[0].toDouble()).pow(args[1].toDouble())
-                )
-            }
-            addFn("sqrt") {
-                ObjReal(
-                    sqrt(args.firstAndOnly().toDouble())
-                )
-            }
-            addFn("abs") {
-                val x = args.firstAndOnly()
-                if (x is ObjInt) ObjInt(x.value.absoluteValue) else ObjReal(x.toDouble().absoluteValue)
-            }
+            addFn("pow", fn = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    scp.requireExactCount(2)
+                    return ObjReal((scp.args[0].toDouble()).pow(scp.args[1].toDouble()))
+                }
+            })
+            addFn("sqrt", fn = object : ScopeCallable { override suspend fun call(scp: Scope): Obj = ObjReal(sqrt(scp.args.firstAndOnly().toDouble())) })
+            addFn("abs", fn = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val x = scp.args.firstAndOnly()
+                    return if (x is ObjInt) ObjInt(x.value.absoluteValue) else ObjReal(x.toDouble().absoluteValue)
+                }
+            })
 
-            addFnDoc(
+            addFnDoc<Obj>(
                 "clamp",
                 doc = "Clamps the value within the specified range. If the value is outside the range, it is set to the nearest boundary. Respects inclusive/exclusive range ends.",
                 params = listOf(ParamDoc("value"), ParamDoc("range")),
-                moduleName = "lyng.stdlib"
-            ) {
-                val value = requiredArg<Obj>(0)
-                val range = requiredArg<ObjRange>(1)
-                
-                var result = value
-                if (range.start != null && !range.start.isNull) {
-                    if (result.compareTo(this, range.start) < 0) {
-                        result = range.start
-                    }
-                }
-                if (range.end != null && !range.end.isNull) {
-                    val cmp = range.end.compareTo(this, result)
-                    if (range.isEndInclusive) {
-                        if (cmp < 0) result = range.end
-                    } else {
-                        if (cmp <= 0) {
-                            if (range.end is ObjInt) {
-                                result = ObjInt.of(range.end.value - 1)
-                            } else if (range.end is ObjChar) {
-                                result = ObjChar((range.end.value.code - 1).toChar())
-                            } else {
-                                // For types where we can't easily find "previous" value (like Real),
-                                // we just return the exclusive boundary as a fallback.
-                                result = range.end
+                moduleName = "lyng.stdlib",
+                fn = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val value = scp.requiredArg<Obj>(0)
+                        val range = scp.requiredArg<ObjRange>(1)
+
+                        var result = value
+                        if (range.start != null && !range.start.isNull) {
+                            if (result.compareTo(scp, range.start) < 0) {
+                                result = range.start
                             }
                         }
+                        if (range.end != null && !range.end.isNull) {
+                            val cmp = range.end.compareTo(scp, result)
+                            if (range.isEndInclusive) {
+                                if (cmp < 0) result = range.end
+                            } else {
+                                if (cmp <= 0) {
+                                    if (range.end is ObjInt) {
+                                        result = ObjInt.of(range.end.value - 1)
+                                    } else if (range.end is ObjChar) {
+                                        result = ObjChar((range.end.value.code - 1).toChar())
+                                    } else {
+                                        // For types where we can't easily find "previous" value (like Real),
+                                        // we just return the exclusive boundary as a fallback.
+                                        result = range.end
+                                    }
+                                }
+                            }
+                        }
+                        return result
                     }
                 }
-                result
-            }
+            )
 
-            addVoidFn("assert") {
-                val cond = requiredArg<ObjBool>(0)
-                val message = if (args.size > 1)
-                    ": " + (args[1] as Statement).execute(this).toString(this).value
-                else ""
-                if (!cond.value == true)
-                    raiseError(ObjAssertionFailedException(this, "Assertion failed$message"))
-            }
+            addVoidFn("assert", fn = object : VoidScopeCallable {
+                override suspend fun call(scp: Scope) {
+                    val cond = scp.requiredArg<ObjBool>(0)
+                    val message = if (scp.args.size > 1)
+                        ": " + (scp.args[1] as Statement).execute(scp).toString(scp).value
+                    else ""
+                    if (!cond.value == true)
+                        scp.raiseError(ObjAssertionFailedException(scp, "Assertion failed$message"))
+                }
+            })
 
-            addVoidFn("assertEquals") {
-                val a = requiredArg<Obj>(0)
-                val b = requiredArg<Obj>(1)
-                if (a.compareTo(this, b) != 0)
-                    raiseError(
-                        ObjAssertionFailedException(
-                            this,
-                            "Assertion failed: ${a.inspect(this)} == ${b.inspect(this)}"
+            addVoidFn("assertEquals", fn = object : VoidScopeCallable {
+                override suspend fun call(scp: Scope) {
+                    val a = scp.requiredArg<Obj>(0)
+                    val b = scp.requiredArg<Obj>(1)
+                    if (a.compareTo(scp, b) != 0)
+                        scp.raiseError(
+                            ObjAssertionFailedException(
+                                scp,
+                                "Assertion failed: ${a.inspect(scp)} == ${b.inspect(scp)}"
+                            )
                         )
-                    )
-            }
+                }
+            })
             // alias used in tests
-            addVoidFn("assertEqual") {
-                val a = requiredArg<Obj>(0)
-                val b = requiredArg<Obj>(1)
-                if (a.compareTo(this, b) != 0)
-                    raiseError(
-                        ObjAssertionFailedException(
-                            this,
-                            "Assertion failed: ${a.inspect(this)} == ${b.inspect(this)}"
+            addVoidFn("assertEqual", fn = object : VoidScopeCallable {
+                override suspend fun call(scp: Scope) {
+                    val a = scp.requiredArg<Obj>(0)
+                    val b = scp.requiredArg<Obj>(1)
+                    if (a.compareTo(scp, b) != 0)
+                        scp.raiseError(
+                            ObjAssertionFailedException(
+                                scp,
+                                "Assertion failed: ${a.inspect(scp)} == ${b.inspect(scp)}"
+                            )
                         )
-                    )
-            }
-            addVoidFn("assertNotEquals") {
-                val a = requiredArg<Obj>(0)
-                val b = requiredArg<Obj>(1)
-                if (a.compareTo(this, b) == 0)
-                    raiseError(
-                        ObjAssertionFailedException(
-                            this,
-                            "Assertion failed: ${a.inspect(this)} != ${b.inspect(this)}"
+                }
+            })
+            addVoidFn("assertNotEquals", fn = object : VoidScopeCallable {
+                override suspend fun call(scp: Scope) {
+                    val a = scp.requiredArg<Obj>(0)
+                    val b = scp.requiredArg<Obj>(1)
+                    if (a.compareTo(scp, b) == 0)
+                        scp.raiseError(
+                            ObjAssertionFailedException(
+                                scp,
+                                "Assertion failed: ${a.inspect(scp)} != ${b.inspect(scp)}"
+                            )
                         )
-                    )
-            }
-            addFnDoc(
+                }
+            })
+            addFnDoc<Obj>(
                 "assertThrows",
                 doc = """
                     Asserts that the provided code block throws an exception, with or without exception: 
@@ -249,83 +235,97 @@ class Script(
                     If an expected exception class is provided,
                     it checks that the thrown exception is of that class. If no expected class is provided, any exception
                     will be accepted.
-                """.trimIndent()
-            ) {
-                val code: Statement
-                val expectedClass: ObjClass?
-                when (args.size) {
-                    1 -> {
-                        code = requiredArg<Statement>(0)
-                        expectedClass = null
-                    }
+                """.trimIndent(),
+                fn = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        val code: Statement
+                        val expectedClass: ObjClass?
+                        when (scp.args.size) {
+                            1 -> {
+                                code = scp.requiredArg<Statement>(0)
+                                expectedClass = null
+                            }
 
-                    2 -> {
-                        code = requiredArg<Statement>(1)
-                        expectedClass = requiredArg<ObjClass>(0)
-                    }
+                            2 -> {
+                                code = scp.requiredArg<Statement>(1)
+                                expectedClass = scp.requiredArg<ObjClass>(0)
+                            }
 
-                    else -> raiseIllegalArgument("Expected 1 or 2 arguments, got ${args.size}")
-                }
-                val result = try {
-                    code.execute(this)
-                    null
-                } catch (e: ExecutionError) {
-                    e.errorObject
-                } catch (_: ScriptError) {
-                    ObjNull
-                }
-                if (result == null) raiseError(
-                    ObjAssertionFailedException(
-                        this,
-                        "Expected exception but nothing was thrown"
-                    )
-                )
-                expectedClass?.let {
-                    if (!result.isInstanceOf(it)) {
-                        val actual = if (result is ObjException) result.exceptionClass else result.objClass
-                        raiseError("Expected $it, got $actual")
+                            else -> scp.raiseIllegalArgument("Expected 1 or 2 arguments, got ${scp.args.size}")
+                        }
+                        val result = try {
+                            code.execute(scp)
+                            null
+                        } catch (e: ExecutionError) {
+                            e.errorObject
+                        } catch (_: ScriptError) {
+                            ObjNull
+                        }
+                        if (result == null) scp.raiseError(
+                            ObjAssertionFailedException(
+                                scp,
+                                "Expected exception but nothing was thrown"
+                            )
+                        )
+                        expectedClass?.let {
+                            if (!result.isInstanceOf(it)) {
+                                val actual = if (result is ObjException) result.exceptionClass else result.objClass
+                                scp.raiseError("Expected $it, got $actual")
+                            }
+                        }
+                        return result ?: ObjNull
                     }
                 }
-                result
-            }
+            )
 
-            addFn("dynamic") {
-                ObjDynamic.create(this, requireOnlyArg())
-            }
+            addFn("dynamic", fn = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    return ObjDynamic.create(scp, scp.requireOnlyArg())
+                }
+            })
 
             val root = this
             val mathClass = ObjClass("Math").apply {
-                addFn("sqrt") {
-                    ObjReal(sqrt(args.firstAndOnly().toDouble()))
-                }
+                addFn("sqrt", fn = object : ScopeCallable {
+                    override suspend fun call(scp: Scope): Obj {
+                        return ObjReal(sqrt(scp.args.firstAndOnly().toDouble()))
+                    }
+                })
             }
             addItem("Math", false, ObjInstance(mathClass).apply {
                 instanceScope = Scope(root, thisObj = this)
             })
 
-            addFn("require") {
-                val condition = requiredArg<ObjBool>(0)
-                if (!condition.value) {
-                    var message = args.list.getOrNull(1)
-                    if (message is Statement) message = message.execute(this)
-                    raiseIllegalArgument(message?.toString() ?: "requirement not met")
+            addFn("require", fn = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val condition = scp.requiredArg<ObjBool>(0)
+                    if (!condition.value) {
+                        var message = scp.args.list.getOrNull(1)
+                        if (message is Statement) message = message.execute(scp)
+                        scp.raiseIllegalArgument(message?.toString() ?: "requirement not met")
+                    }
+                    return ObjVoid
                 }
-                ObjVoid
-            }
-            addFn("check") {
-                val condition = requiredArg<ObjBool>(0)
-                if (!condition.value) {
-                    var message = args.list.getOrNull(1)
-                    if (message is Statement) message = message.execute(this)
-                    raiseIllegalState(message?.toString() ?: "check failed")
+            })
+            addFn("check", fn = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    val condition = scp.requiredArg<ObjBool>(0)
+                    if (!condition.value) {
+                        var message = scp.args.list.getOrNull(1)
+                        if (message is Statement) message = message.execute(scp)
+                        scp.raiseIllegalState(message?.toString() ?: "check failed")
+                    }
+                    return ObjVoid
                 }
-                ObjVoid
-            }
-            addFn("traceScope") {
-                this.trace(args.getOrNull(0)?.toString() ?: "")
-                ObjVoid
-            }
+            })
+            addFn("traceScope", fn = object : ScopeCallable {
+                override suspend fun call(scp: Scope): Obj {
+                    scp.trace(scp.args.getOrNull(0)?.toString() ?: "")
+                    return ObjVoid
+                }
+            })
 
+/*
             addVoidFn("delay") {
                 val a = args.firstAndOnly()
                 when (a) {
@@ -335,7 +335,7 @@ class Script(
                     else -> raiseIllegalArgument("Expected Int, Real or Duration, got ${a.inspect(this)}")
                 }
             }
-
+*/
             addConst("Object", rootObjectType)
             addConst("Real", ObjReal.type)
             addConst("String", ObjString.type)
@@ -362,7 +362,7 @@ class Script(
             addConst("Flow", ObjFlow.type)
 
             addConst("Regex", ObjRegex.type)
-
+/*
             addFn("launch") {
                 val callable = requireOnlyArg<Statement>()
                 ObjDeferred(globalDefer {
@@ -380,7 +380,7 @@ class Script(
                 // we'll need it for the producer
                 ObjFlow(requireOnlyArg<Statement>(), this)
             }
-
+*/
             val pi = ObjReal(PI)
             addConstDoc(
                 name = "π",
@@ -403,60 +403,69 @@ class Script(
                 addTextPackages(
                     rootLyng
                 )
-                addPackage("lyng.buffer") {
-                    it.addConstDoc(
-                        name = "Buffer",
-                        value = ObjBuffer.type,
-                        doc = "Immutable sequence of bytes. Use for binary data and IO.",
-                        type = type("lyng.Class")
-                    )
-                    it.addConstDoc(
-                        name = "MutableBuffer",
-                        value = ObjMutableBuffer.type,
-                        doc = "Mutable byte buffer. Supports in-place modifications.",
-                        type = type("lyng.Class")
-                    )
-                }
-                addPackage("lyng.serialization") {
-                    it.addConstDoc(
-                        name = "Lynon",
-                        value = ObjLynonClass,
-                        doc = "Lynon serialization utilities: encode/decode data structures to a portable binary/text form.",
-                        type = type("lyng.Class")
-                    )
-                }
-                addPackage("lyng.time") {
-                    it.addConstDoc(
-                        name = "Instant",
-                        value = ObjInstant.type,
-                        doc = "Point in time (epoch-based).",
-                        type = type("lyng.Class")
-                    )
-                    it.addConstDoc(
-                        name = "DateTime",
-                        value = ObjDateTime.type,
-                        doc = "Point in time in a specific time zone.",
-                        type = type("lyng.Class")
-                    )
-                    it.addConstDoc(
-                        name = "Duration",
-                        value = ObjDuration.type,
-                        doc = "Time duration with millisecond precision.",
-                        type = type("lyng.Class")
-                    )
-                    it.addVoidFnDoc(
-                        "delay",
-                        doc = "Suspend for the given time. Accepts Duration, Int seconds, or Real seconds."
-                    ) {
-                        val a = args.firstAndOnly()
-                        when (a) {
-                            is ObjInt -> delay(a.value * 1000)
-                            is ObjReal -> delay((a.value * 1000).roundToLong())
-                            is ObjDuration -> delay(a.duration)
-                            else -> raiseIllegalArgument("Expected Duration, Int or Real, got ${a.inspect(this)}")
-                        }
+                addPackage("lyng.buffer", object : ModuleBuilder {
+                    override suspend fun build(ms: ModuleScope) {
+                        ms.addConstDoc(
+                            name = "Buffer",
+                            value = ObjBuffer.type,
+                            doc = "Immutable sequence of bytes. Use for binary data and IO.",
+                            type = type("lyng.Class")
+                        )
+                        ms.addConstDoc(
+                            name = "MutableBuffer",
+                            value = ObjMutableBuffer.type,
+                            doc = "Mutable byte buffer. Supports in-place modifications.",
+                            type = type("lyng.Class")
+                        )
                     }
-                }
+                })
+                addPackage("lyng.serialization", object : ModuleBuilder {
+                    override suspend fun build(ms: ModuleScope) {
+                        ms.addConstDoc(
+                            name = "Lynon",
+                            value = ObjLynonClass,
+                            doc = "Lynon serialization utilities: encode/decode data structures to a portable binary/text form.",
+                            type = type("lyng.Class")
+                        )
+                    }
+                })
+                addPackage("lyng.time", object : ModuleBuilder {
+                    override suspend fun build(ms: ModuleScope) {
+                        ms.addConstDoc(
+                            name = "Instant",
+                            value = ObjInstant.type,
+                            doc = "Point in time (epoch-based).",
+                            type = type("lyng.Class")
+                        )
+                        ms.addConstDoc(
+                            name = "DateTime",
+                            value = ObjDateTime.type,
+                            doc = "Point in time in a specific time zone.",
+                            type = type("lyng.Class")
+                        )
+                        ms.addConstDoc(
+                            name = "Duration",
+                            value = ObjDuration.type,
+                            doc = "Time duration with millisecond precision.",
+                            type = type("lyng.Class")
+                        )
+                        ms.addVoidFnDoc(
+                            "delay",
+                            doc = "Suspend for the given time. Accepts Duration, Int seconds, or Real seconds.",
+                            fn = object : VoidScopeCallable {
+                                override suspend fun call(scp: Scope) {
+                                    val a = scp.args.firstAndOnly()
+                                    when (a) {
+                                        is ObjInt -> delay(a.value * 1000)
+                                        is ObjReal -> delay((a.value * 1000).roundToLong())
+                                        is ObjDuration -> delay(a.duration)
+                                        else -> scp.raiseIllegalArgument("Expected Duration, Int or Real, got ${a.inspect(scp)}")
+                                    }
+                                }
+                            }
+                        )
+                    }
+                })
             }
 
         }

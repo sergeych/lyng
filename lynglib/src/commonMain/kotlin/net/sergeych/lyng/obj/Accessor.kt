@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,29 +32,41 @@ typealias DocCompiler = Compiler
  */
 typealias Accessor = ObjRef
 
+interface AccessorGetter {
+    suspend fun call(scope: Scope): ObjRecord
+}
+
+interface AccessorSetter {
+    suspend fun call(scope: Scope, value: Obj)
+}
+
 /** Lambda-based reference for edge cases that still construct access via lambdas. */
 private class LambdaRef(
-    private val getterFn: suspend (Scope) -> ObjRecord,
-    private val setterFn: (suspend (Pos, Scope, Obj) -> Unit)? = null
+    private val getterFn: AccessorGetter,
+    private val setterFn: AccessorSetter? = null
 ) : ObjRef {
-    override suspend fun get(scope: Scope): ObjRecord = getterFn(scope)
+    override suspend fun get(scope: Scope): ObjRecord = getterFn.call(scope)
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
         val s = setterFn ?: throw ScriptError(pos, "can't assign value")
-        s(pos, scope, newValue)
+        s.call(scope, newValue)
     }
 }
 
 // Factory functions to preserve current call sites like `Accessor { ... }`
-fun Accessor(getter: suspend (Scope) -> ObjRecord): Accessor = LambdaRef(getter)
+fun Accessor(getter: AccessorGetter): Accessor = LambdaRef(getter)
 fun Accessor(
-    getter: suspend (Scope) -> ObjRecord,
-    setter: suspend (Scope, Obj) -> Unit
-): Accessor = LambdaRef(getter) { _, scope, value -> setter(scope, value) }
+    getter: AccessorGetter,
+    setter: AccessorSetter
+): Accessor = LambdaRef(getter, setter)
 
 // Compatibility shims used throughout Compiler: `.getter(...)` and `.setter(pos)`
-val Accessor.getter: suspend (Scope) -> ObjRecord
-    get() = { scope -> this.get(scope) }
+val Accessor.getter: AccessorGetter
+    get() = object : AccessorGetter {
+        override suspend fun call(scope: Scope): ObjRecord = this@getter.get(scope)
+    }
 
-fun Accessor.setter(pos: Pos): suspend (Scope, Obj) -> Unit = { scope, newValue ->
-    this.setAt(pos, scope, newValue)
+fun Accessor.setter(pos: Pos): AccessorSetter = object : AccessorSetter {
+    override suspend fun call(scope: Scope, value: Obj) {
+        this@setter.setAt(pos, scope, value)
+    }
 }
