@@ -442,16 +442,17 @@ open class Obj {
         scope.raiseNotImplemented()
     }
 
-    suspend fun invoke(scope: Scope, thisObj: Obj, args: Arguments, declaringClass: ObjClass? = null): Obj =
-        if (PerfFlags.SCOPE_POOL)
-            scope.withChildFrame(args, newThisObj = thisObj) { child ->
+    suspend fun invoke(scope: Scope, thisObj: Obj, args: Arguments, declaringClass: ObjClass? = null): Obj {
+        if (PerfFlags.SCOPE_POOL) {
+            return scope.withChildFrame(args, newThisObj = thisObj) { child ->
                 if (declaringClass != null) child.currentClassCtx = declaringClass
                 callOn(child)
             }
-        else
-            callOn(scope.createChildScope(scope.pos, args = args, newThisObj = thisObj).also {
-                if (declaringClass != null) it.currentClassCtx = declaringClass
-            })
+        }
+        val child = scope.createChildScope(scope.pos, args = args, newThisObj = thisObj)
+        if (declaringClass != null) child.currentClassCtx = declaringClass
+        return callOn(child)
+    }
 
     suspend fun invoke(scope: Scope, thisObj: Obj, vararg args: Obj): Obj =
         callOn(

@@ -3053,7 +3053,7 @@ class Compiler(
                         cc.skipWsTokens()
                         cc.next() // consume '='
                         val expr = parseExpression() ?: throw ScriptError(cc.current().pos, "Expected getter expression")
-                        (expr as? Statement) ?: statement(expr.pos) { s -> expr.execute(s) }
+                        expr
                     } else {
                         throw ScriptError(cc.current().pos, "Expected { or = after get()")
                     }
@@ -3074,7 +3074,7 @@ class Compiler(
                         cc.skipWsTokens()
                         cc.next() // consume '='
                         val expr = parseExpression() ?: throw ScriptError(cc.current().pos, "Expected setter expression")
-                        val st = (expr as? Statement) ?: statement(expr.pos) { s -> expr.execute(s) }
+                        val st = expr
                         statement(st.pos) { scope ->
                             val value = scope.args.list.firstOrNull() ?: ObjNull
                             scope.addItem(setArg.value, true, value, recordType = ObjRecord.Type.Argument)
@@ -3109,7 +3109,7 @@ class Compiler(
                                     cc.current().pos,
                                     "Expected setter expression"
                                 )
-                                val st = (expr as? Statement) ?: statement(expr.pos) { s -> expr.execute(s) }
+                                val st = expr
                                 statement(st.pos) { scope ->
                                     val value = scope.args.list.firstOrNull() ?: ObjNull
                                     scope.addItem(setArg.value, true, value, recordType = ObjRecord.Type.Argument)
@@ -3141,14 +3141,23 @@ class Compiler(
             }
         }
 
-        return statement(start) { context ->
+        return object : Statement() {
+            override val pos: Pos = start
+            override suspend fun execute(context: Scope): Obj {
             if (extTypeName != null) {
                 val prop = if (getter != null || setter != null) {
                     ObjProperty(name, getter, setter)
                 } else {
                     // Simple val extension with initializer
                     val initExpr = initialExpression ?: throw ScriptError(start, "Extension val must be initialized")
-                    ObjProperty(name, statement(initExpr.pos) { scp -> initExpr.execute(scp) }, null)
+                    ObjProperty(
+                        name,
+                        object : Statement() {
+                            override val pos: Pos = initExpr.pos
+                            override suspend fun execute(scp: Scope): Obj = initExpr.execute(scp)
+                        },
+                        null
+                    )
                 }
 
                 val type = context[extTypeName]?.value ?: context.raiseSymbolNotFound("class $extTypeName not found")
@@ -3156,7 +3165,7 @@ class Compiler(
 
                 context.addExtension(type, name, ObjRecord(prop, isMutable = false, visibility = visibility, writeVisibility = setterVisibility, declaringClass = null, type = ObjRecord.Type.Property))
 
-                return@statement prop
+                return prop
             }
             // In true class bodies (not inside a function), store fields under a class-qualified key to support MI collisions
             // Do NOT infer declaring class from runtime thisObj here; only the compile-time captured
@@ -3189,27 +3198,34 @@ class Compiler(
                             isClosed = isClosed,
                             isOverride = isOverride
                         )
-                        cls.instanceInitializers += statement(start) { scp ->
-                            val initValue = initialExpression!!.execute(scp)
-                            val accessTypeStr = if (isMutable) "Var" else "Val"
-                            val accessType = scp.resolveQualifiedIdentifier("DelegateAccess.$accessTypeStr")
-                            val finalDelegate = try {
-                                initValue.invokeInstanceMethod(scp, "bind", Arguments(ObjString(name), accessType, scp.thisObj))
-                            } catch (e: Exception) {
-                                initValue
+                        cls.instanceInitializers += object : Statement() {
+                            override val pos: Pos = start
+                            override suspend fun execute(scp: Scope): Obj {
+                                val initValue = initialExpression!!.execute(scp)
+                                val accessTypeStr = if (isMutable) "Var" else "Val"
+                                val accessType = scp.resolveQualifiedIdentifier("DelegateAccess.$accessTypeStr")
+                                val finalDelegate = try {
+                                    initValue.invokeInstanceMethod(
+                                        scp,
+                                        "bind",
+                                        Arguments(ObjString(name), accessType, scp.thisObj)
+                                    )
+                                } catch (e: Exception) {
+                                    initValue
+                                }
+                                scp.addItem(
+                                    storageName, isMutable, ObjUnset, visibility, setterVisibility,
+                                    recordType = ObjRecord.Type.Delegated,
+                                    isAbstract = isAbstract,
+                                    isClosed = isClosed,
+                                    isOverride = isOverride
+                                ).apply {
+                                    delegate = finalDelegate
+                                }
+                                return ObjVoid
                             }
-                            scp.addItem(
-                                storageName, isMutable, ObjUnset, visibility, setterVisibility,
-                                recordType = ObjRecord.Type.Delegated,
-                                isAbstract = isAbstract,
-                                isClosed = isClosed,
-                                isOverride = isOverride
-                            ).apply {
-                                delegate = finalDelegate
-                            }
-                            ObjVoid
                         }
-                        return@statement ObjVoid
+                        return ObjVoid
                     } else {
                         val initValue = initialExpression!!.execute(context)
                         val accessTypeStr = if (isMutable) "Var" else "Val"
@@ -3227,7 +3243,7 @@ class Compiler(
                             isOverride = isOverride
                         )
                         rec.delegate = finalDelegate
-                        return@statement finalDelegate
+                        return finalDelegate
                     }
                 } else {
                     val initValue = initialExpression!!.execute(context)
@@ -3246,7 +3262,7 @@ class Compiler(
                         isOverride = isOverride
                     )
                     rec.delegate = finalDelegate
-                    return@statement finalDelegate
+                    return finalDelegate
                 }
             } else if (getter != null || setter != null) {
                 val declaringClassName = declaringClassNameCaptured!!
@@ -3255,7 +3271,7 @@ class Compiler(
 
                 // If we are in class scope now (defining instance field), defer initialization to instance time
                 val isClassScope = context.thisObj is ObjClass && (context.thisObj !is ObjInstance)
-                if (isClassScope) {
+                return if (isClassScope) {
                     val cls = context.thisObj as ObjClass
                     // Register in class members for reflection/MRO/satisfaction checks
                     if (isProperty) {
@@ -3284,19 +3300,22 @@ class Compiler(
 
                     // Register the property/field initialization thunk
                     if (!isAbstract) {
-                        cls.instanceInitializers += statement(start) { scp ->
-                            scp.addItem(
-                                storageName,
-                                isMutable,
-                                prop,
-                                visibility,
-                                setterVisibility,
-                                recordType = ObjRecord.Type.Property,
-                                isAbstract = isAbstract,
-                                isClosed = isClosed,
-                                isOverride = isOverride
-                            )
-                            ObjVoid
+                        cls.instanceInitializers += object : Statement() {
+                            override val pos: Pos = start
+                            override suspend fun execute(scp: Scope): Obj {
+                                scp.addItem(
+                                    storageName,
+                                    isMutable,
+                                    prop,
+                                    visibility,
+                                    setterVisibility,
+                                    recordType = ObjRecord.Type.Property,
+                                    isAbstract = isAbstract,
+                                    isClosed = isClosed,
+                                    isOverride = isOverride
+                                )
+                                return ObjVoid
+                            }
                         }
                     }
                     ObjVoid
@@ -3312,30 +3331,32 @@ class Compiler(
                     prop
                 }
             } else {
-                    val isLateInitVal = !isMutable && initialExpression == null && getter == null && setter == null
-                    if (declaringClassName != null && !isStatic) {
-                        val storageName = "$declaringClassName::$name"
-                        // If we are in class scope now (defining instance field), defer initialization to instance time
-                        val isClassScope = context.thisObj is ObjClass && (context.thisObj !is ObjInstance)
-                        if (isClassScope) {
-                            val cls = context.thisObj as ObjClass
-                            // Register in class members for reflection/MRO/satisfaction checks
-                            cls.createField(
-                                name,
-                                ObjNull,
-                                isMutable = isMutable,
-                                visibility = visibility,
-                                writeVisibility = setterVisibility,
-                                isAbstract = isAbstract,
-                                isClosed = isClosed,
-                                isOverride = isOverride,
-                                pos = start,
-                                type = ObjRecord.Type.Field
-                            )
+                val isLateInitVal = !isMutable && initialExpression == null && getter == null && setter == null
+                return if (declaringClassName != null && !isStatic) {
+                    val storageName = "$declaringClassName::$name"
+                    // If we are in class scope now (defining instance field), defer initialization to instance time
+                    val isClassScope = context.thisObj is ObjClass && (context.thisObj !is ObjInstance)
+                    if (isClassScope) {
+                        val cls = context.thisObj as ObjClass
+                        // Register in class members for reflection/MRO/satisfaction checks
+                        cls.createField(
+                            name,
+                            ObjNull,
+                            isMutable = isMutable,
+                            visibility = visibility,
+                            writeVisibility = setterVisibility,
+                            isAbstract = isAbstract,
+                            isClosed = isClosed,
+                            isOverride = isOverride,
+                            pos = start,
+                            type = ObjRecord.Type.Field
+                        )
 
-                            // Defer: at instance construction, evaluate initializer in instance scope and store under mangled name
-                            if (!isAbstract) {
-                                val initStmt = statement(start) { scp ->
+                        // Defer: at instance construction, evaluate initializer in instance scope and store under mangled name
+                        if (!isAbstract) {
+                            val initStmt = object : Statement() {
+                                override val pos: Pos = start
+                                override suspend fun execute(scp: Scope): Obj {
                                     val initValue =
                                         initialExpression?.execute(scp)?.byValueCopy()
                                             ?: if (isLateInitVal) ObjUnset else ObjNull
@@ -3347,33 +3368,36 @@ class Compiler(
                                         isClosed = isClosed,
                                         isOverride = isOverride
                                     )
-                                    ObjVoid
+                                    return ObjVoid
                                 }
-                                cls.instanceInitializers += initStmt
                             }
-                            ObjVoid
-                        } else {
-                            // We are in instance scope already: perform initialization immediately
-                            val initValue =
-                                initialExpression?.execute(context)?.byValueCopy() ?: if (isLateInitVal) ObjUnset else ObjNull
-                            // Preserve mutability of declaration: create record with correct mutability
-                            context.addItem(
-                                storageName, isMutable, initValue, visibility, setterVisibility,
-                                recordType = ObjRecord.Type.Field,
-                                isAbstract = isAbstract,
-                                isClosed = isClosed,
-                                isOverride = isOverride
-                            )
-                            initValue
+                            cls.instanceInitializers += initStmt
                         }
+                        ObjVoid
                     } else {
-                        // Not in class body: regular local/var declaration
-                        val initValue = initialExpression?.execute(context)?.byValueCopy() ?: ObjNull
-                        context.addItem(name, isMutable, initValue, visibility, recordType = ObjRecord.Type.Field)
+                        // We are in instance scope already: perform initialization immediately
+                        val initValue =
+                            initialExpression?.execute(context)?.byValueCopy() ?: if (isLateInitVal) ObjUnset else ObjNull
+                        // Preserve mutability of declaration: create record with correct mutability
+                        context.addItem(
+                            storageName, isMutable, initValue, visibility, setterVisibility,
+                            recordType = ObjRecord.Type.Field,
+                            isAbstract = isAbstract,
+                            isClosed = isClosed,
+                            isOverride = isOverride
+                        )
                         initValue
                     }
+                } else {
+                    // Not in class body: regular local/var declaration
+                    val initValue = initialExpression?.execute(context)?.byValueCopy() ?: ObjNull
+                    context.addItem(name, isMutable, initValue, visibility, recordType = ObjRecord.Type.Field)
+                    initValue
+                }
             }
         }
+    }
+
     }
 
     data class Operator(
@@ -3682,4 +3706,3 @@ class Compiler(
 }
 
 suspend fun eval(code: String) = compile(code).execute()
-

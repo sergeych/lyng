@@ -625,9 +625,8 @@ open class Scope(
         if (rec.type == ObjRecord.Type.Delegated) {
             val del = rec.delegate ?: raiseError("Internal error: delegated property $name has no delegate")
             val th = if (thisObj === ObjVoid) ObjNull else thisObj
-            return del.invokeInstanceMethod(this, "getValue", Arguments(th, ObjString(name)), onNotFoundResult = {
-                // If getValue not found, return a wrapper that calls invoke
-                object : Statement() {
+            if (del.objClass.getInstanceMemberOrNull("getValue") == null) {
+                return object : Statement() {
                     override val pos: Pos = Pos.builtIn
                     override suspend fun execute(scope: Scope): Obj {
                         val th2 = if (scope.thisObj === ObjVoid) ObjNull else scope.thisObj
@@ -635,7 +634,8 @@ open class Scope(
                         return del.invokeInstanceMethod(scope, "invoke", Arguments(*allArgs))
                     }
                 }
-            })!!
+            }
+            return del.invokeInstanceMethod(this, "getValue", Arguments(th, ObjString(name)))
         }
         return rec.value
     }
