@@ -3472,89 +3472,140 @@ class Compiler(
             }
         }
 
-        return statement(start) { context ->
-            if (extTypeName != null) {
-                val prop = if (getter != null || setter != null) {
-                    ObjProperty(name, getter, setter)
-                } else {
-                    // Simple val extension with initializer
-                    val initExpr = initialExpression ?: throw ScriptError(start, "Extension val must be initialized")
-                    ObjProperty(name, statement(initExpr.pos) { scp -> initExpr.execute(scp) }, null)
+        return object : Statement() {
+            override val pos: Pos = start
+            override suspend fun execute(context: Scope): Obj {
+                if (extTypeName != null) {
+                    val prop = if (getter != null || setter != null) {
+                        ObjProperty(name, getter, setter)
+                    } else {
+                        // Simple val extension with initializer
+                        val initExpr = initialExpression ?: throw ScriptError(start, "Extension val must be initialized")
+                        ObjProperty(
+                            name,
+                            object : Statement() {
+                                override val pos: Pos = initExpr.pos
+                                override suspend fun execute(scp: Scope): Obj = initExpr.execute(scp)
+                            },
+                            null
+                        )
+                    }
+
+                    val type = context[extTypeName]?.value ?: context.raiseSymbolNotFound("class $extTypeName not found")
+                    if (type !is ObjClass) context.raiseClassCastError("$extTypeName is not the class instance")
+
+                    context.addExtension(
+                        type,
+                        name,
+                        ObjRecord(
+                            prop,
+                            isMutable = false,
+                            visibility = visibility,
+                            writeVisibility = setterVisibility,
+                            declaringClass = null,
+                            type = ObjRecord.Type.Property
+                        )
+                    )
+
+                    return prop
+                }
+                // In true class bodies (not inside a function), store fields under a class-qualified key to support MI collisions
+                // Do NOT infer declaring class from runtime thisObj here; only the compile-time captured
+                // ClassBody qualifies for class-field storage. Otherwise, this is a plain local.
+                isProperty = getter != null || setter != null
+                val declaringClassName = declaringClassNameCaptured
+                if (declaringClassName == null) {
+                    if (context.containsLocal(name))
+                        throw ScriptError(start, "Variable $name is already defined")
                 }
 
-                val type = context[extTypeName]?.value ?: context.raiseSymbolNotFound("class $extTypeName not found")
-                if (type !is ObjClass) context.raiseClassCastError("$extTypeName is not the class instance")
+                // Register the local name so subsequent identifiers can be emitted as fast locals
+                if (!isStatic) declareLocalName(name)
 
-                context.addExtension(type, name, ObjRecord(prop, isMutable = false, visibility = visibility, writeVisibility = setterVisibility, declaringClass = null, type = ObjRecord.Type.Property))
-
-                return@statement prop
-            }
-            // In true class bodies (not inside a function), store fields under a class-qualified key to support MI collisions
-            // Do NOT infer declaring class from runtime thisObj here; only the compile-time captured
-            // ClassBody qualifies for class-field storage. Otherwise, this is a plain local.
-            isProperty = getter != null || setter != null
-            val declaringClassName = declaringClassNameCaptured
-            if (declaringClassName == null) {
-                if (context.containsLocal(name))
-                    throw ScriptError(start, "Variable $name is already defined")
-            }
-
-            // Register the local name so subsequent identifiers can be emitted as fast locals
-            if (!isStatic) declareLocalName(name)
-
-            if (isDelegate) {
-                val declaringClassName = declaringClassNameCaptured
-                if (declaringClassName != null) {
-                    val storageName = "$declaringClassName::$name"
-                    val isClassScope = context.thisObj is ObjClass && (context.thisObj !is ObjInstance)
-                    if (isClassScope) {
-                        val cls = context.thisObj as ObjClass
-                        cls.createField(
-                            name,
-                            ObjUnset,
-                            isMutable,
-                            visibility,
-                            setterVisibility,
-                            start,
-                            isTransient = isTransient,
-                            type = ObjRecord.Type.Delegated,
-                            isAbstract = isAbstract,
-                            isClosed = isClosed,
-                            isOverride = isOverride
-                        )
-                        cls.instanceInitializers += statement(start) { scp ->
-                            val initValue = initialExpression!!.execute(scp)
+                if (isDelegate) {
+                    val declaringClassName = declaringClassNameCaptured
+                    if (declaringClassName != null) {
+                        val storageName = "$declaringClassName::$name"
+                        val isClassScope = context.thisObj is ObjClass && (context.thisObj !is ObjInstance)
+                        if (isClassScope) {
+                            val cls = context.thisObj as ObjClass
+                            cls.createField(
+                                name,
+                                ObjUnset,
+                                isMutable,
+                                visibility,
+                                setterVisibility,
+                                start,
+                                isTransient = isTransient,
+                                type = ObjRecord.Type.Delegated,
+                                isAbstract = isAbstract,
+                                isClosed = isClosed,
+                                isOverride = isOverride
+                            )
+                            cls.instanceInitializers += object : Statement() {
+                                override val pos: Pos = start
+                                override suspend fun execute(scp: Scope): Obj {
+                                    val initValue = initialExpression!!.execute(scp)
+                                    val accessTypeStr = if (isMutable) "Var" else "Val"
+                                    val accessType = scp.resolveQualifiedIdentifier("DelegateAccess.$accessTypeStr")
+                                    val finalDelegate = try {
+                                        initValue.invokeInstanceMethod(
+                                            scp,
+                                            "bind",
+                                            Arguments(ObjString(name), accessType, scp.thisObj)
+                                        )
+                                    } catch (e: Exception) {
+                                        initValue
+                                    }
+                                    scp.addItem(
+                                        storageName, isMutable, ObjUnset, visibility, setterVisibility,
+                                        recordType = ObjRecord.Type.Delegated,
+                                        isAbstract = isAbstract,
+                                        isClosed = isClosed,
+                                        isOverride = isOverride,
+                                        isTransient = isTransient
+                                    ).apply {
+                                        delegate = finalDelegate
+                                    }
+                                    return ObjVoid
+                                }
+                            }
+                            return ObjVoid
+                        } else {
+                            val initValue = initialExpression!!.execute(context)
                             val accessTypeStr = if (isMutable) "Var" else "Val"
-                            val accessType = scp.resolveQualifiedIdentifier("DelegateAccess.$accessTypeStr")
+                            val accessType = context.resolveQualifiedIdentifier("DelegateAccess.$accessTypeStr")
                             val finalDelegate = try {
-                                initValue.invokeInstanceMethod(scp, "bind", Arguments(ObjString(name), accessType, scp.thisObj))
+                                initValue.invokeInstanceMethod(
+                                    context,
+                                    "bind",
+                                    Arguments(ObjString(name), accessType, context.thisObj)
+                                )
                             } catch (e: Exception) {
                                 initValue
                             }
-                            scp.addItem(
+                            val rec = context.addItem(
                                 storageName, isMutable, ObjUnset, visibility, setterVisibility,
                                 recordType = ObjRecord.Type.Delegated,
                                 isAbstract = isAbstract,
                                 isClosed = isClosed,
                                 isOverride = isOverride,
                                 isTransient = isTransient
-                            ).apply {
-                                delegate = finalDelegate
-                            }
-                            ObjVoid
+                            )
+                            rec.delegate = finalDelegate
+                            return finalDelegate
                         }
-                        return@statement ObjVoid
                     } else {
                         val initValue = initialExpression!!.execute(context)
                         val accessTypeStr = if (isMutable) "Var" else "Val"
                         val accessType = context.resolveQualifiedIdentifier("DelegateAccess.$accessTypeStr")
                         val finalDelegate = try {
-                            initValue.invokeInstanceMethod(context, "bind", Arguments(ObjString(name), accessType, context.thisObj))
+                            initValue.invokeInstanceMethod(context, "bind", Arguments(ObjString(name), accessType, ObjNull))
                         } catch (e: Exception) {
                             initValue
                         }
                         val rec = context.addItem(
-                            storageName, isMutable, ObjUnset, visibility, setterVisibility,
+                            name, isMutable, ObjUnset, visibility, setterVisibility,
                             recordType = ObjRecord.Type.Delegated,
                             isAbstract = isAbstract,
                             isClosed = isClosed,
@@ -3562,95 +3613,78 @@ class Compiler(
                             isTransient = isTransient
                         )
                         rec.delegate = finalDelegate
-                        return@statement finalDelegate
+                        return finalDelegate
                     }
-                } else {
-                    val initValue = initialExpression!!.execute(context)
-                    val accessTypeStr = if (isMutable) "Var" else "Val"
-                    val accessType = context.resolveQualifiedIdentifier("DelegateAccess.$accessTypeStr")
-                    val finalDelegate = try {
-                        initValue.invokeInstanceMethod(context, "bind", Arguments(ObjString(name), accessType, ObjNull))
-                    } catch (e: Exception) {
-                        initValue
-                    }
-                    val rec = context.addItem(
-                        name, isMutable, ObjUnset, visibility, setterVisibility,
-                        recordType = ObjRecord.Type.Delegated,
-                        isAbstract = isAbstract,
-                        isClosed = isClosed,
-                        isOverride = isOverride,
-                        isTransient = isTransient
-                    )
-                    rec.delegate = finalDelegate
-                    return@statement finalDelegate
-                }
-            } else if (getter != null || setter != null) {
-                val declaringClassName = declaringClassNameCaptured!!
-                val storageName = "$declaringClassName::$name"
-                val prop = ObjProperty(name, getter, setter)
+                } else if (getter != null || setter != null) {
+                    val declaringClassName = declaringClassNameCaptured!!
+                    val storageName = "$declaringClassName::$name"
+                    val prop = ObjProperty(name, getter, setter)
 
-                // If we are in class scope now (defining instance field), defer initialization to instance time
-                val isClassScope = context.thisObj is ObjClass && (context.thisObj !is ObjInstance)
-                if (isClassScope) {
-                    val cls = context.thisObj as ObjClass
-                    // Register in class members for reflection/MRO/satisfaction checks
-                    if (isProperty) {
-                        cls.addProperty(
-                            name,
-                            visibility = visibility,
-                            writeVisibility = setterVisibility,
-                            isAbstract = isAbstract,
-                            isClosed = isClosed,
-                            isOverride = isOverride,
-                            pos = start,
-                            prop = prop
-                        )
-                    } else {
-                        cls.createField(
-                            name,
-                            ObjNull,
-                            isMutable = isMutable,
-                            visibility = visibility,
-                            writeVisibility = setterVisibility,
-                            isAbstract = isAbstract,
-                            isClosed = isClosed,
-                            isOverride = isOverride,
-                            isTransient = isTransient,
-                            type = ObjRecord.Type.Field
-                        )
-                    }
-
-                    // Register the property/field initialization thunk
-                    if (!isAbstract) {
-                        cls.instanceInitializers += statement(start) { scp ->
-                            scp.addItem(
-                                storageName,
-                                isMutable,
-                                prop,
-                                visibility,
-                                setterVisibility,
-                                recordType = ObjRecord.Type.Property,
+                    // If we are in class scope now (defining instance field), defer initialization to instance time
+                    val isClassScope = context.thisObj is ObjClass && (context.thisObj !is ObjInstance)
+                    if (isClassScope) {
+                        val cls = context.thisObj as ObjClass
+                        // Register in class members for reflection/MRO/satisfaction checks
+                        if (isProperty) {
+                            cls.addProperty(
+                                name,
+                                visibility = visibility,
+                                writeVisibility = setterVisibility,
                                 isAbstract = isAbstract,
                                 isClosed = isClosed,
-                                isOverride = isOverride
+                                isOverride = isOverride,
+                                pos = start,
+                                prop = prop
                             )
-                            ObjVoid
+                        } else {
+                            cls.createField(
+                                name,
+                                ObjNull,
+                                isMutable = isMutable,
+                                visibility = visibility,
+                                writeVisibility = setterVisibility,
+                                isAbstract = isAbstract,
+                                isClosed = isClosed,
+                                isOverride = isOverride,
+                                isTransient = isTransient,
+                                type = ObjRecord.Type.Field
+                            )
                         }
+
+                        // Register the property/field initialization thunk
+                        if (!isAbstract) {
+                            cls.instanceInitializers += object : Statement() {
+                                override val pos: Pos = start
+                                override suspend fun execute(scp: Scope): Obj {
+                                    scp.addItem(
+                                        storageName,
+                                        isMutable,
+                                        prop,
+                                        visibility,
+                                        setterVisibility,
+                                        recordType = ObjRecord.Type.Property,
+                                        isAbstract = isAbstract,
+                                        isClosed = isClosed,
+                                        isOverride = isOverride
+                                    )
+                                    return ObjVoid
+                                }
+                            }
+                        }
+                        return ObjVoid
+                    } else {
+                        // We are in instance scope already: perform initialization immediately
+                        context.addItem(
+                            storageName, isMutable, prop, visibility, setterVisibility,
+                            recordType = ObjRecord.Type.Property,
+                            isAbstract = isAbstract,
+                            isClosed = isClosed,
+                            isOverride = isOverride,
+                            isTransient = isTransient
+                        )
+                        return prop
                     }
-                    ObjVoid
                 } else {
-                    // We are in instance scope already: perform initialization immediately
-                    context.addItem(
-                        storageName, isMutable, prop, visibility, setterVisibility,
-                        recordType = ObjRecord.Type.Property,
-                        isAbstract = isAbstract,
-                        isClosed = isClosed,
-                        isOverride = isOverride,
-                        isTransient = isTransient
-                    )
-                    prop
-                }
-            } else {
                     val isLateInitVal = !isMutable && initialExpression == null
                     if (declaringClassName != null && !isStatic) {
                         val storageName = "$declaringClassName::$name"
@@ -3675,28 +3709,32 @@ class Compiler(
 
                             // Defer: at instance construction, evaluate initializer in instance scope and store under mangled name
                             if (!isAbstract) {
-                                val initStmt = statement(start) { scp ->
-                                    val initValue =
-                                        initialExpression?.execute(scp)?.byValueCopy()
-                                            ?: if (isLateInitVal) ObjUnset else ObjNull
-                                    // Preserve mutability of declaration: do NOT use addOrUpdateItem here, as it creates mutable records
-                                    scp.addItem(
-                                        storageName, isMutable, initValue, visibility, setterVisibility,
-                                        recordType = ObjRecord.Type.Field,
-                                        isAbstract = isAbstract,
-                                        isClosed = isClosed,
-                                        isOverride = isOverride,
-                                        isTransient = isTransient
-                                    )
-                                    ObjVoid
+                                val initStmt = object : Statement() {
+                                    override val pos: Pos = start
+                                    override suspend fun execute(scp: Scope): Obj {
+                                        val initValue =
+                                            initialExpression?.execute(scp)?.byValueCopy()
+                                                ?: if (isLateInitVal) ObjUnset else ObjNull
+                                        // Preserve mutability of declaration: do NOT use addOrUpdateItem here, as it creates mutable records
+                                        scp.addItem(
+                                            storageName, isMutable, initValue, visibility, setterVisibility,
+                                            recordType = ObjRecord.Type.Field,
+                                            isAbstract = isAbstract,
+                                            isClosed = isClosed,
+                                            isOverride = isOverride,
+                                            isTransient = isTransient
+                                        )
+                                        return ObjVoid
+                                    }
                                 }
                                 cls.instanceInitializers += initStmt
                             }
-                            ObjVoid
+                            return ObjVoid
                         } else {
                             // We are in instance scope already: perform initialization immediately
                             val initValue =
-                                initialExpression?.execute(context)?.byValueCopy() ?: if (isLateInitVal) ObjUnset else ObjNull
+                                initialExpression?.execute(context)?.byValueCopy()
+                                    ?: if (isLateInitVal) ObjUnset else ObjNull
                             // Preserve mutability of declaration: create record with correct mutability
                             context.addItem(
                                 storageName, isMutable, initValue, visibility, setterVisibility,
@@ -3706,14 +3744,15 @@ class Compiler(
                                 isOverride = isOverride,
                                 isTransient = isTransient
                             )
-                            initValue
+                            return initValue
                         }
                     } else {
                         // Not in class body: regular local/var declaration
                         val initValue = initialExpression?.execute(context)?.byValueCopy() ?: ObjNull
                         context.addItem(name, isMutable, initValue, visibility, recordType = ObjRecord.Type.Other, isTransient = isTransient)
-                        initValue
+                        return initValue
                     }
+                }
             }
         }
     }
