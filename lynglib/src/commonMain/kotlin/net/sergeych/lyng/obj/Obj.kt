@@ -501,9 +501,8 @@ open class Obj {
         if (obj.type == ObjRecord.Type.Delegated) {
             val del = obj.delegate ?: scope.raiseError("Internal error: delegated property $name has no delegate")
             val th = if (this === ObjVoid) ObjNull else this
-            val res = del.invokeInstanceMethod(scope, "getValue", Arguments(th, ObjString(name)), onNotFoundResult = {
-                // If getValue not found, return a wrapper that calls invoke
-                object : Statement() {
+            if (del.objClass.getInstanceMemberOrNull("getValue") == null) {
+                val wrapper = object : Statement() {
                     override val pos: Pos = Pos.builtIn
                     override suspend fun execute(s: Scope): Obj {
                         val th2 = if (s.thisObj === ObjVoid) ObjNull else s.thisObj
@@ -511,7 +510,12 @@ open class Obj {
                         return del.invokeInstanceMethod(s, "invoke", Arguments(*allArgs))
                     }
                 }
-            })
+                return obj.copy(
+                    value = wrapper,
+                    type = ObjRecord.Type.Other
+                )
+            }
+            val res = del.invokeInstanceMethod(scope, "getValue", Arguments(th, ObjString(name)))
             return obj.copy(
                 value = res,
                 type = ObjRecord.Type.Other
@@ -605,16 +609,17 @@ open class Obj {
         scope.raiseNotImplemented()
     }
 
-    suspend fun invoke(scope: Scope, thisObj: Obj, args: Arguments, declaringClass: ObjClass? = null): Obj =
-        if (PerfFlags.SCOPE_POOL)
-            scope.withChildFrame(args, newThisObj = thisObj) { child ->
+    suspend fun invoke(scope: Scope, thisObj: Obj, args: Arguments, declaringClass: ObjClass? = null): Obj {
+        if (PerfFlags.SCOPE_POOL) {
+            return scope.withChildFrame(args, newThisObj = thisObj) { child ->
                 if (declaringClass != null) child.currentClassCtx = declaringClass
                 callOn(child)
             }
-        else
-            callOn(scope.createChildScope(scope.pos, args = args, newThisObj = thisObj).also {
-                if (declaringClass != null) it.currentClassCtx = declaringClass
-            })
+        }
+        val child = scope.createChildScope(scope.pos, args = args, newThisObj = thisObj)
+        if (declaringClass != null) child.currentClassCtx = declaringClass
+        return callOn(child)
+    }
 
     suspend fun invoke(scope: Scope, thisObj: Obj, vararg args: Obj): Obj =
         callOn(
