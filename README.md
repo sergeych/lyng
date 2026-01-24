@@ -45,6 +45,7 @@ fun swapEnds(first, args..., last, f) {
 - [Samples directory](docs/samples)
 - [Formatter (core + CLI + IDE)](docs/formatter.md)
 - [Books directory](docs)
+- [AI agent guidance](AGENTS.md)
 
 ## Integration in Kotlin multiplatform
 
