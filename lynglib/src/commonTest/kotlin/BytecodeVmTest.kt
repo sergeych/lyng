@@ -26,6 +26,7 @@ import net.sergeych.lyng.obj.BinaryOpRef
 import net.sergeych.lyng.obj.BinOp
 import net.sergeych.lyng.obj.ConstRef
 import net.sergeych.lyng.obj.ObjInt
+import net.sergeych.lyng.obj.ObjVoid
 import net.sergeych.lyng.obj.toInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -67,5 +68,29 @@ class BytecodeVmTest {
         val fn = BytecodeCompiler().compileStatement("ifTest", ifStmt) ?: error("bytecode compile failed")
         val result = BytecodeVm().execute(fn, Scope(), emptyList())
         assertEquals(10, result.toInt())
+    }
+
+    @Test
+    fun ifWithoutElseReturnsVoid() = kotlinx.coroutines.test.runTest {
+        val cond = ExpressionStatement(
+            BinaryOpRef(
+                BinOp.LT,
+                ConstRef(ObjInt.of(2).asReadonly),
+                ConstRef(ObjInt.of(1).asReadonly),
+            ),
+            net.sergeych.lyng.Pos.builtIn
+        )
+        val thenStmt = ExpressionStatement(
+            ConstRef(ObjInt.of(10).asReadonly),
+            net.sergeych.lyng.Pos.builtIn
+        )
+        val ifStmt = IfStatement(cond, thenStmt, null, net.sergeych.lyng.Pos.builtIn)
+        val fn = BytecodeCompiler().compileStatement("ifNoElse", ifStmt).also {
+            if (it == null) {
+                error("bytecode compile failed for ifNoElse")
+            }
+        }!!
+        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        assertEquals(ObjVoid, result)
     }
 }

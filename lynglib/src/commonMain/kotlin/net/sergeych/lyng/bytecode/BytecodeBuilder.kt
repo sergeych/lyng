@@ -30,6 +30,7 @@ class BytecodeBuilder {
     private val constPool = mutableListOf<BytecodeConst>()
     private val labelPositions = mutableMapOf<Label, Int>()
     private var nextLabelId = 0
+    private val fallbackStatements = mutableListOf<net.sergeych.lyng.Statement>()
 
     fun addConst(c: BytecodeConst): Int {
         constPool += c
@@ -48,6 +49,11 @@ class BytecodeBuilder {
 
     fun mark(label: Label) {
         labelPositions[label] = instructions.size
+    }
+
+    fun addFallback(stmt: net.sergeych.lyng.Statement): Int {
+        fallbackStatements += stmt
+        return fallbackStatements.lastIndex
     }
 
     fun build(name: String, localCount: Int): BytecodeFunction {
@@ -100,6 +106,7 @@ class BytecodeBuilder {
             ipWidth = ipWidth,
             constIdWidth = constIdWidth,
             constants = constPool.toList(),
+            fallbackStatements = fallbackStatements.toList(),
             code = code.toByteArray()
         )
     }

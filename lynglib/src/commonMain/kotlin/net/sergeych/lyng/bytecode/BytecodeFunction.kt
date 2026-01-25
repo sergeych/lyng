@@ -23,6 +23,7 @@ data class BytecodeFunction(
     val ipWidth: Int,
     val constIdWidth: Int,
     val constants: List<BytecodeConst>,
+    val fallbackStatements: List<net.sergeych.lyng.Statement>,
     val code: ByteArray,
 ) {
     init {

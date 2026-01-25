@@ -79,6 +79,15 @@ class IfStatement(
     }
 }
 
+class ToBoolStatement(
+    val expr: Statement,
+    override val pos: Pos,
+) : Statement() {
+    override suspend fun execute(scope: Scope): Obj {
+        return if (expr.execute(scope).toBool()) net.sergeych.lyng.obj.ObjTrue else net.sergeych.lyng.obj.ObjFalse
+    }
+}
+
 class ExpressionStatement(
     val ref: net.sergeych.lyng.obj.ObjRef,
     override val pos: Pos

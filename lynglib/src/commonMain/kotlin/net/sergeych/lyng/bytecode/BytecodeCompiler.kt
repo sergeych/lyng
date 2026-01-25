@@ -18,6 +18,9 @@ package net.sergeych.lyng.bytecode
 
 import net.sergeych.lyng.ExpressionStatement
 import net.sergeych.lyng.IfStatement
+import net.sergeych.lyng.Pos
+import net.sergeych.lyng.Statement
+import net.sergeych.lyng.ToBoolStatement
 import net.sergeych.lyng.obj.*
 
 class BytecodeCompiler {
@@ -33,7 +36,7 @@ class BytecodeCompiler {
     }
 
     fun compileExpression(name: String, stmt: ExpressionStatement): BytecodeFunction? {
-        val value = compileRef(stmt.ref) ?: return null
+        val value = compileRefWithFallback(stmt.ref, null, stmt.pos) ?: return null
         builder.emit(Opcode.RET, value.slot)
         val localCount = maxOf(nextSlot, value.slot + 1)
         return builder.build(name, localCount)
@@ -252,7 +255,7 @@ class BytecodeCompiler {
 
     private fun compileIf(name: String, stmt: IfStatement): BytecodeFunction? {
         val conditionStmt = stmt.condition as? ExpressionStatement ?: return null
-        val condValue = compileRef(conditionStmt.ref) ?: return null
+        val condValue = compileRefWithFallback(conditionStmt.ref, SlotType.BOOL, stmt.pos) ?: return null
         if (condValue.type != SlotType.BOOL) return null
 
         val resultSlot = allocSlot()
@@ -282,9 +285,9 @@ class BytecodeCompiler {
         return builder.build(name, localCount)
     }
 
-    private fun compileStatementValue(stmt: net.sergeych.lyng.Statement): CompiledValue? {
+    private fun compileStatementValue(stmt: Statement): CompiledValue? {
         return when (stmt) {
-            is ExpressionStatement -> compileRef(stmt.ref)
+            is ExpressionStatement -> compileRefWithFallback(stmt.ref, null, stmt.pos)
             else -> null
         }
     }
@@ -296,6 +299,24 @@ class BytecodeCompiler {
             SlotType.BOOL -> builder.emit(Opcode.MOVE_BOOL, value.slot, dstSlot)
             else -> builder.emit(Opcode.MOVE_OBJ, value.slot, dstSlot)
         }
+    }
+
+    private fun compileRefWithFallback(ref: ObjRef, forceType: SlotType?, pos: Pos): CompiledValue? {
+        val compiled = compileRef(ref)
+        if (compiled != null && (forceType == null || compiled.type == forceType || compiled.type == SlotType.UNKNOWN)) {
+            return if (forceType != null && compiled.type == SlotType.UNKNOWN) {
+                CompiledValue(compiled.slot, forceType)
+            } else compiled
+        }
+        val slot = allocSlot()
+        val stmt = if (forceType == SlotType.BOOL) {
+            ToBoolStatement(ExpressionStatement(ref, pos), pos)
+        } else {
+            ExpressionStatement(ref, pos)
+        }
+        val id = builder.addFallback(stmt)
+        builder.emit(Opcode.EVAL_FALLBACK, id, slot)
+        return CompiledValue(slot, forceType ?: SlotType.OBJ)
     }
 
     private fun refSlot(ref: LocalSlotRef): Int = ref.slot

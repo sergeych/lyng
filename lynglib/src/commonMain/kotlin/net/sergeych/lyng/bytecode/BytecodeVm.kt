@@ -67,6 +67,21 @@ class BytecodeVm {
                         ?: error("CONST_BOOL expects Bool at $constId")
                     frame.setBool(dst, c.value)
                 }
+                Opcode.CONST_OBJ -> {
+                    val constId = decoder.readConstId(code, ip, fn.constIdWidth)
+                    ip += fn.constIdWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val c = fn.constants[constId] as? BytecodeConst.ObjRef
+                        ?: error("CONST_OBJ expects ObjRef at $constId")
+                    val obj = c.value
+                    when (obj) {
+                        is ObjInt -> frame.setInt(dst, obj.value)
+                        is ObjReal -> frame.setReal(dst, obj.value)
+                        is ObjBool -> frame.setBool(dst, obj.value)
+                        else -> frame.setObj(dst, obj)
+                    }
+                }
                 Opcode.CONST_NULL -> {
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
@@ -138,6 +153,21 @@ class BytecodeVm {
                     ip += fn.ipWidth
                     if (!frame.getBool(cond)) {
                         ip = target
+                    }
+                }
+                Opcode.EVAL_FALLBACK -> {
+                    val id = decoder.readConstId(code, ip, 2)
+                    ip += 2
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val stmt = fn.fallbackStatements.getOrNull(id)
+                        ?: error("Fallback statement not found: $id")
+                    val result = stmt.execute(scope)
+                    when (result) {
+                        is ObjInt -> frame.setInt(dst, result.value)
+                        is ObjReal -> frame.setReal(dst, result.value)
+                        is ObjBool -> frame.setBool(dst, result.value)
+                        else -> frame.setObj(dst, result)
                     }
                 }
                 Opcode.RET -> {
