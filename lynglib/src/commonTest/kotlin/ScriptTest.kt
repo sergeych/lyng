@@ -5035,5 +5035,13 @@ class ScriptTest {
             assertEquals(10.0, 15.5.clamp(0.0..10.0))
         """.trimIndent())
     }
+
+    @Test
+    fun testEmptySpreadList() = runTest {
+        eval("""
+            fun t(a, tags=[]) { [a, ...tags] }
+            assertEquals( [1], t(1) )
+        """.trimIndent())
+    }
 }
 

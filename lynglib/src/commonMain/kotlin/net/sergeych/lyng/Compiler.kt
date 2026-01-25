@@ -3266,7 +3266,13 @@ class Compiler(
                                     this.currentClassCtx = cls
                                     try {
                                         (thisObj as? ObjInstance)?.let { i ->
-                                            annotatedFnBody.execute(ClosureScope(this, i.instanceScope))
+                                            val execScope = i.instanceScope.createChildScope(
+                                                pos = this.pos,
+                                                args = this.args,
+                                                newThisObj = i
+                                            )
+                                            execScope.currentClassCtx = cls
+                                            annotatedFnBody.execute(execScope)
                                         } ?: annotatedFnBody.execute(thisObj.autoInstanceScope(this))
                                     } finally {
                                         this.currentClassCtx = savedCtx

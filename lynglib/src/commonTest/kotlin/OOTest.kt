@@ -911,4 +911,19 @@ class OOTest {
             assertEquals("{\"a\":\"foo\",\"b\":\"bar\"}",T("foo", "bar").toJsonString())
         """.trimIndent())
     }
+
+    @Test
+    fun testAssignToUnqualifiedParams() = runTest {
+        eval("""
+            class T(x) {
+                fun setx(v) { x = v }
+                fun incr(v) { x += v }
+            }
+            val t = T(1)
+            t.setx(2)
+            assertEquals(2, t.x)
+            t.incr(3)
+            assertEquals(5, t.x)
+        """.trimIndent())
+    }
 }
