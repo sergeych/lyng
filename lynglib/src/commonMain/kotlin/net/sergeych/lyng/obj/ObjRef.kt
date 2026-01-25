@@ -89,7 +89,7 @@ enum class BinOp {
 }
 
 /** R-value reference for unary operations. */
-class UnaryOpRef(private val op: UnaryOp, private val a: ObjRef) : ObjRef {
+class UnaryOpRef(internal val op: UnaryOp, internal val a: ObjRef) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
         val v = a.evalValue(scope)
         if (PerfFlags.PRIMITIVE_FASTOPS) {
@@ -141,7 +141,7 @@ class UnaryOpRef(private val op: UnaryOp, private val a: ObjRef) : ObjRef {
 }
 
 /** R-value reference for binary operations. */
-class BinaryOpRef(private val op: BinOp, private val left: ObjRef, private val right: ObjRef) : ObjRef {
+class BinaryOpRef(internal val op: BinOp, internal val left: ObjRef, internal val right: ObjRef) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
         return evalValue(scope).asReadonly
     }
@@ -2403,8 +2403,8 @@ class ImplicitThisMethodCallRef(
  */
 class LocalSlotRef(
     val name: String,
-    private val slot: Int,
-    private val depth: Int,
+    internal val slot: Int,
+    internal val depth: Int,
     private val atPos: Pos,
 ) : ObjRef {
     override fun forEachVariable(block: (String) -> Unit) {
@@ -2657,8 +2657,8 @@ class AssignIfNullRef(
 
 /** Simple assignment: target = value */
 class AssignRef(
-    private val target: ObjRef,
-    private val value: ObjRef,
+    internal val target: ObjRef,
+    internal val value: ObjRef,
     private val atPos: Pos,
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
