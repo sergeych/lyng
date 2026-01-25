@@ -30,6 +30,8 @@ import net.sergeych.lyng.obj.ObjFalse
 import net.sergeych.lyng.obj.ObjInt
 import net.sergeych.lyng.obj.ObjTrue
 import net.sergeych.lyng.obj.ObjReal
+import net.sergeych.lyng.obj.ObjString
+import net.sergeych.lyng.obj.ObjList
 import net.sergeych.lyng.obj.AssignRef
 import net.sergeych.lyng.obj.ValueFnRef
 import net.sergeych.lyng.obj.ObjVoid
@@ -225,5 +227,48 @@ class BytecodeVmTest {
         val fn = BytecodeCompiler().compileExpression("localSlotAdd", expr) ?: error("bytecode compile failed")
         val result = BytecodeVm().execute(fn, Scope(), emptyList())
         assertEquals(4, result.toInt())
+    }
+
+    @Test
+    fun objectEqualityUsesBytecodeOps() = kotlinx.coroutines.test.runTest {
+        val expr = ExpressionStatement(
+            BinaryOpRef(
+                BinOp.EQ,
+                ConstRef(ObjString("abc").asReadonly),
+                ConstRef(ObjString("abc").asReadonly),
+            ),
+            net.sergeych.lyng.Pos.builtIn
+        )
+        val fn = BytecodeCompiler().compileExpression("objEq", expr) ?: error("bytecode compile failed")
+        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        assertEquals(true, result.toBool())
+    }
+
+    @Test
+    fun objectReferenceEqualityUsesBytecodeOps() = kotlinx.coroutines.test.runTest {
+        val shared = ObjList()
+        val eqExpr = ExpressionStatement(
+            BinaryOpRef(
+                BinOp.REF_EQ,
+                ConstRef(shared.asReadonly),
+                ConstRef(shared.asReadonly),
+            ),
+            net.sergeych.lyng.Pos.builtIn
+        )
+        val eqFn = BytecodeCompiler().compileExpression("objRefEq", eqExpr) ?: error("bytecode compile failed")
+        val eqResult = BytecodeVm().execute(eqFn, Scope(), emptyList())
+        assertEquals(true, eqResult.toBool())
+
+        val neqExpr = ExpressionStatement(
+            BinaryOpRef(
+                BinOp.REF_NEQ,
+                ConstRef(ObjList().asReadonly),
+                ConstRef(ObjList().asReadonly),
+            ),
+            net.sergeych.lyng.Pos.builtIn
+        )
+        val neqFn = BytecodeCompiler().compileExpression("objRefNeq", neqExpr) ?: error("bytecode compile failed")
+        val neqResult = BytecodeVm().execute(neqFn, Scope(), emptyList())
+        assertEquals(true, neqResult.toBool())
     }
 }

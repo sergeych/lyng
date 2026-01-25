@@ -253,6 +253,16 @@ class BytecodeCompiler {
             BinOp.GTE -> {
                 compileCompareGte(a, b, out)
             }
+            BinOp.REF_EQ -> {
+                if (a.type != SlotType.OBJ || b.type != SlotType.OBJ) return null
+                builder.emit(Opcode.CMP_REF_EQ_OBJ, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            BinOp.REF_NEQ -> {
+                if (a.type != SlotType.OBJ || b.type != SlotType.OBJ) return null
+                builder.emit(Opcode.CMP_REF_NEQ_OBJ, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
             BinOp.AND -> {
                 if (a.type != SlotType.BOOL) return null
                 builder.emit(Opcode.AND_BOOL, a.slot, b.slot, out)
@@ -336,6 +346,10 @@ class BytecodeCompiler {
                 builder.emit(Opcode.CMP_EQ_REAL_INT, a.slot, b.slot, out)
                 CompiledValue(out, SlotType.BOOL)
             }
+            a.type == SlotType.OBJ && b.type == SlotType.OBJ -> {
+                builder.emit(Opcode.CMP_EQ_OBJ, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
             else -> null
         }
     }
@@ -361,6 +375,10 @@ class BytecodeCompiler {
             }
             a.type == SlotType.REAL && b.type == SlotType.INT -> {
                 builder.emit(Opcode.CMP_NEQ_REAL_INT, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.OBJ && b.type == SlotType.OBJ -> {
+                builder.emit(Opcode.CMP_NEQ_OBJ, a.slot, b.slot, out)
                 CompiledValue(out, SlotType.BOOL)
             }
             else -> null

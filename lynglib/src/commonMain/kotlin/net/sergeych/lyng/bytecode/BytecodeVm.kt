@@ -72,14 +72,18 @@ class BytecodeVm {
                     ip += fn.constIdWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    val c = fn.constants[constId] as? BytecodeConst.ObjRef
-                        ?: error("CONST_OBJ expects ObjRef at $constId")
-                    val obj = c.value
-                    when (obj) {
-                        is ObjInt -> frame.setInt(dst, obj.value)
-                        is ObjReal -> frame.setReal(dst, obj.value)
-                        is ObjBool -> frame.setBool(dst, obj.value)
-                        else -> frame.setObj(dst, obj)
+                    when (val c = fn.constants[constId]) {
+                        is BytecodeConst.ObjRef -> {
+                            val obj = c.value
+                            when (obj) {
+                                is ObjInt -> frame.setInt(dst, obj.value)
+                                is ObjReal -> frame.setReal(dst, obj.value)
+                                is ObjBool -> frame.setBool(dst, obj.value)
+                                else -> frame.setObj(dst, obj)
+                            }
+                        }
+                        is BytecodeConst.StringVal -> frame.setObj(dst, ObjString(c.value))
+                        else -> error("CONST_OBJ expects ObjRef/StringVal at $constId")
                     }
                 }
                 Opcode.CONST_NULL -> {
@@ -542,6 +546,42 @@ class BytecodeVm {
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
                     frame.setBool(dst, frame.getReal(a) != frame.getInt(b).toDouble())
+                }
+                Opcode.CMP_EQ_OBJ -> {
+                    val a = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val b = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    frame.setBool(dst, frame.getObj(a).equals(scope, frame.getObj(b)))
+                }
+                Opcode.CMP_NEQ_OBJ -> {
+                    val a = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val b = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    frame.setBool(dst, !frame.getObj(a).equals(scope, frame.getObj(b)))
+                }
+                Opcode.CMP_REF_EQ_OBJ -> {
+                    val a = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val b = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    frame.setBool(dst, frame.getObj(a) === frame.getObj(b))
+                }
+                Opcode.CMP_REF_NEQ_OBJ -> {
+                    val a = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val b = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    frame.setBool(dst, frame.getObj(a) !== frame.getObj(b))
                 }
                 Opcode.NOT_BOOL -> {
                     val src = decoder.readSlot(code, ip)
