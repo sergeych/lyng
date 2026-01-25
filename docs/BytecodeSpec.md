@@ -155,6 +155,10 @@ Note: Any opcode can be compiled to FALLBACK if not implemented in a VM pass.
 - CMP_NEQ_OBJ S, S -> S
 - CMP_REF_EQ_OBJ S, S -> S
 - CMP_REF_NEQ_OBJ S, S -> S
+- CMP_LT_OBJ S, S -> S
+- CMP_LTE_OBJ S, S -> S
+- CMP_GT_OBJ S, S -> S
+- CMP_GTE_OBJ S, S -> S
 
 ### Boolean ops
 - NOT_BOOL S -> S

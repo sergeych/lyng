@@ -102,6 +102,7 @@ object BytecodeDisassembler {
             Opcode.CMP_LTE_INT_REAL, Opcode.CMP_LTE_REAL_INT, Opcode.CMP_GT_INT_REAL, Opcode.CMP_GT_REAL_INT,
             Opcode.CMP_GTE_INT_REAL, Opcode.CMP_GTE_REAL_INT, Opcode.CMP_NEQ_INT_REAL, Opcode.CMP_NEQ_REAL_INT,
             Opcode.CMP_EQ_OBJ, Opcode.CMP_NEQ_OBJ, Opcode.CMP_REF_EQ_OBJ, Opcode.CMP_REF_NEQ_OBJ,
+            Opcode.CMP_LT_OBJ, Opcode.CMP_LTE_OBJ, Opcode.CMP_GT_OBJ, Opcode.CMP_GTE_OBJ,
             Opcode.AND_BOOL, Opcode.OR_BOOL ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.INC_INT, Opcode.DEC_INT, Opcode.RET ->

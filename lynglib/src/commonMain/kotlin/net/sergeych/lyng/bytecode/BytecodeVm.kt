@@ -583,6 +583,42 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     frame.setBool(dst, frame.getObj(a) !== frame.getObj(b))
                 }
+                Opcode.CMP_LT_OBJ -> {
+                    val a = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val b = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    frame.setBool(dst, frame.getObj(a).compareTo(scope, frame.getObj(b)) < 0)
+                }
+                Opcode.CMP_LTE_OBJ -> {
+                    val a = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val b = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    frame.setBool(dst, frame.getObj(a).compareTo(scope, frame.getObj(b)) <= 0)
+                }
+                Opcode.CMP_GT_OBJ -> {
+                    val a = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val b = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    frame.setBool(dst, frame.getObj(a).compareTo(scope, frame.getObj(b)) > 0)
+                }
+                Opcode.CMP_GTE_OBJ -> {
+                    val a = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val b = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    frame.setBool(dst, frame.getObj(a).compareTo(scope, frame.getObj(b)) >= 0)
+                }
                 Opcode.NOT_BOOL -> {
                     val src = decoder.readSlot(code, ip)
                     ip += fn.slotWidth

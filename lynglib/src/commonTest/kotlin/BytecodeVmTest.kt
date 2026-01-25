@@ -271,4 +271,31 @@ class BytecodeVmTest {
         val neqResult = BytecodeVm().execute(neqFn, Scope(), emptyList())
         assertEquals(true, neqResult.toBool())
     }
+
+    @Test
+    fun objectComparisonUsesBytecodeOps() = kotlinx.coroutines.test.runTest {
+        val ltExpr = ExpressionStatement(
+            BinaryOpRef(
+                BinOp.LT,
+                ConstRef(ObjString("a").asReadonly),
+                ConstRef(ObjString("b").asReadonly),
+            ),
+            net.sergeych.lyng.Pos.builtIn
+        )
+        val ltFn = BytecodeCompiler().compileExpression("objLt", ltExpr) ?: error("bytecode compile failed")
+        val ltResult = BytecodeVm().execute(ltFn, Scope(), emptyList())
+        assertEquals(true, ltResult.toBool())
+
+        val gteExpr = ExpressionStatement(
+            BinaryOpRef(
+                BinOp.GTE,
+                ConstRef(ObjString("b").asReadonly),
+                ConstRef(ObjString("a").asReadonly),
+            ),
+            net.sergeych.lyng.Pos.builtIn
+        )
+        val gteFn = BytecodeCompiler().compileExpression("objGte", gteExpr) ?: error("bytecode compile failed")
+        val gteResult = BytecodeVm().execute(gteFn, Scope(), emptyList())
+        assertEquals(true, gteResult.toBool())
+    }
 }

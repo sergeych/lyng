@@ -404,6 +404,10 @@ class BytecodeCompiler {
                 builder.emit(Opcode.CMP_LT_REAL_INT, a.slot, b.slot, out)
                 CompiledValue(out, SlotType.BOOL)
             }
+            a.type == SlotType.OBJ && b.type == SlotType.OBJ -> {
+                builder.emit(Opcode.CMP_LT_OBJ, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
             else -> null
         }
     }
@@ -425,6 +429,10 @@ class BytecodeCompiler {
             }
             a.type == SlotType.REAL && b.type == SlotType.INT -> {
                 builder.emit(Opcode.CMP_LTE_REAL_INT, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.OBJ && b.type == SlotType.OBJ -> {
+                builder.emit(Opcode.CMP_LTE_OBJ, a.slot, b.slot, out)
                 CompiledValue(out, SlotType.BOOL)
             }
             else -> null
@@ -450,6 +458,10 @@ class BytecodeCompiler {
                 builder.emit(Opcode.CMP_GT_REAL_INT, a.slot, b.slot, out)
                 CompiledValue(out, SlotType.BOOL)
             }
+            a.type == SlotType.OBJ && b.type == SlotType.OBJ -> {
+                builder.emit(Opcode.CMP_GT_OBJ, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
             else -> null
         }
     }
@@ -471,6 +483,10 @@ class BytecodeCompiler {
             }
             a.type == SlotType.REAL && b.type == SlotType.INT -> {
                 builder.emit(Opcode.CMP_GTE_REAL_INT, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.OBJ && b.type == SlotType.OBJ -> {
+                builder.emit(Opcode.CMP_GTE_OBJ, a.slot, b.slot, out)
                 CompiledValue(out, SlotType.BOOL)
             }
             else -> null

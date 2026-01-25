@@ -91,6 +91,10 @@ enum class Opcode(val code: Int) {
     NOT_BOOL(0x70),
     AND_BOOL(0x71),
     OR_BOOL(0x72),
+    CMP_LT_OBJ(0x73),
+    CMP_LTE_OBJ(0x74),
+    CMP_GT_OBJ(0x75),
+    CMP_GTE_OBJ(0x76),
 
     JMP(0x80),
     JMP_IF_TRUE(0x81),
