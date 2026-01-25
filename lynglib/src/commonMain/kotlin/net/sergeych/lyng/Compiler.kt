@@ -44,6 +44,10 @@ class Compiler(
     private val currentLocalNames: MutableSet<String>?
         get() = localNamesStack.lastOrNull()
 
+    private data class SlotPlan(val slots: MutableMap<String, Int>, var nextIndex: Int)
+    private data class SlotLocation(val slot: Int, val depth: Int)
+    private val slotPlanStack = mutableListOf<SlotPlan>()
+
     // Track declared local variables count per function for precise capacity hints
     private val localDeclCountStack = mutableListOf<Int>()
     private val currentLocalDeclCount: Int
@@ -64,6 +68,35 @@ class Compiler(
         if (added && localDeclCountStack.isNotEmpty()) {
             localDeclCountStack[localDeclCountStack.lastIndex] = currentLocalDeclCount + 1
         }
+        declareSlotName(name)
+    }
+
+    private fun declareSlotName(name: String) {
+        val plan = slotPlanStack.lastOrNull() ?: return
+        if (plan.slots.containsKey(name)) return
+        plan.slots[name] = plan.nextIndex
+        plan.nextIndex += 1
+    }
+
+    private fun buildParamSlotPlan(names: List<String>): SlotPlan {
+        val map = mutableMapOf<String, Int>()
+        var idx = 0
+        for (name in names) {
+            if (!map.containsKey(name)) {
+                map[name] = idx
+                idx++
+            }
+        }
+        return SlotPlan(map, idx)
+    }
+
+    private fun lookupSlotLocation(name: String): SlotLocation? {
+        for (i in slotPlanStack.indices.reversed()) {
+            val slot = slotPlanStack[i].slots[name] ?: continue
+            val depth = slotPlanStack.size - 1 - i
+            return SlotLocation(slot, depth)
+        }
+        return null
     }
 
     var packageName: String? = null
@@ -243,9 +276,12 @@ class Compiler(
                                 }
                             }
                             val module = importManager.prepareImport(pos, name, null)
-                            statements += statement {
-                                module.importInto(this, null)
-                                ObjVoid
+                            statements += object : Statement() {
+                                override val pos: Pos = pos
+                                override suspend fun execute(scope: Scope): Obj {
+                                    module.importInto(scope, null)
+                                    return ObjVoid
+                                }
                             }
                             continue
                         }
@@ -376,7 +412,13 @@ class Compiler(
 
     private suspend fun parseExpression(): Statement? {
         val pos = cc.currentPos()
-        return parseExpressionLevel()?.let { a -> statement(pos) { a.evalValue(it) } }
+        return parseExpressionLevel()?.let { ref ->
+            val stmtPos = pos
+            object : Statement() {
+                override val pos: Pos = stmtPos
+                override suspend fun execute(scope: Scope): Obj = ref.evalValue(scope)
+            }
+        }
     }
 
     private suspend fun parseExpressionLevel(level: Int = 0): ObjRef? {
@@ -414,6 +456,10 @@ class Compiler(
                     val name = when (target) {
                         is LocalVarRef -> target.name
                         is FastLocalVarRef -> target.name
+                        is LocalSlotRef -> target.name
+                        is ImplicitThisMemberRef -> target.name
+                        is ThisFieldSlotRef -> target.name
+                        is QualifiedThisFieldSlotRef -> target.name
                         is FieldRef -> if (target.target is LocalVarRef && target.target.name == "this") target.name else null
                         else -> null
                     }
@@ -487,7 +533,16 @@ class Compiler(
                                     val args = parsed.first
                                     val tailBlock = parsed.second
                                     isCall = true
-                                    operand = MethodCallRef(left, next.value, args, tailBlock, isOptional)
+                                    operand = when (left) {
+                                        is LocalVarRef -> if (left.name == "this") {
+                                            ThisMethodSlotCallRef(next.value, args, tailBlock, isOptional)
+                                        } else {
+                                            MethodCallRef(left, next.value, args, tailBlock, isOptional)
+                                        }
+                                        is QualifiedThisRef ->
+                                            QualifiedThisMethodSlotCallRef(left.typeName, next.value, args, tailBlock, isOptional)
+                                        else -> MethodCallRef(left, next.value, args, tailBlock, isOptional)
+                                    }
                                 }
 
 
@@ -496,16 +551,37 @@ class Compiler(
                                     cc.next()
                                     isCall = true
                                     val lambda = parseLambdaExpression()
-                                    val argStmt = statement { lambda.get(this).value }
+                                    val argPos = next.pos
+                                    val argStmt = object : Statement() {
+                                        override val pos: Pos = argPos
+                                        override suspend fun execute(scope: Scope): Obj = lambda.get(scope).value
+                                    }
                                     val args = listOf(ParsedArgument(argStmt, next.pos))
-                                    operand = MethodCallRef(left, next.value, args, true, isOptional)
+                                    operand = when (left) {
+                                        is LocalVarRef -> if (left.name == "this") {
+                                            ThisMethodSlotCallRef(next.value, args, true, isOptional)
+                                        } else {
+                                            MethodCallRef(left, next.value, args, true, isOptional)
+                                        }
+                                        is QualifiedThisRef ->
+                                            QualifiedThisMethodSlotCallRef(left.typeName, next.value, args, true, isOptional)
+                                        else -> MethodCallRef(left, next.value, args, true, isOptional)
+                                    }
                                 }
 
                                 else -> {}
                             }
                         }
                         if (!isCall) {
-                            operand = FieldRef(left, next.value, isOptional)
+                            operand = when (left) {
+                                is LocalVarRef -> if (left.name == "this") {
+                                    ThisFieldSlotRef(next.value, isOptional)
+                                } else {
+                                    FieldRef(left, next.value, isOptional)
+                                }
+                                is QualifiedThisRef -> QualifiedThisFieldSlotRef(left.typeName, next.value, isOptional)
+                                else -> FieldRef(left, next.value, isOptional)
+                            }
                         }
                     }
 
@@ -597,7 +673,15 @@ class Compiler(
                             // selector: <lvalue>, '.' , <id>
                             // we replace operand with selector code, that
                             // is RW:
-                            operand = FieldRef(left, t.value, false)
+                            operand = when (left) {
+                                is LocalVarRef -> if (left.name == "this") {
+                                    ThisFieldSlotRef(t.value, false)
+                                } else {
+                                    FieldRef(left, t.value, false)
+                                }
+                                is QualifiedThisRef -> QualifiedThisFieldSlotRef(left.typeName, t.value, false)
+                                else -> FieldRef(left, t.value, false)
+                            }
                         } ?: run {
                             // variable to read or like
                             cc.previous()
@@ -696,44 +780,58 @@ class Compiler(
             )
 
         val paramNames = argsDeclaration?.params?.map { it.name } ?: emptyList()
+        val hasImplicitIt = argsDeclaration == null
+        val slotParamNames = if (hasImplicitIt) paramNames + "it" else paramNames
+        val paramSlotPlan = buildParamSlotPlan(slotParamNames)
 
         label?.let { cc.labels.add(it) }
-        val body = inCodeContext(CodeContext.Function("<lambda>")) {
-            withLocalNames(paramNames.toSet()) {
-                parseBlock(skipLeadingBrace = true)
+        slotPlanStack.add(paramSlotPlan)
+        val body = try {
+            inCodeContext(CodeContext.Function("<lambda>")) {
+                withLocalNames(slotParamNames.toSet()) {
+                    parseBlock(skipLeadingBrace = true)
+                }
             }
+        } finally {
+            slotPlanStack.removeLast()
         }
         label?.let { cc.labels.remove(it) }
 
+        val paramSlotPlanSnapshot = if (paramSlotPlan.slots.isEmpty()) emptyMap() else paramSlotPlan.slots.toMap()
         return ValueFnRef { closureScope ->
-            statement(body.pos) { scope ->
-                // and the source closure of the lambda which might have other thisObj.
-                val context = scope.applyClosure(closureScope)
-                // Execute lambda body in a closure-aware context. Blocks inside the lambda
-                // will create child scopes as usual, so re-declarations inside loops work.
-                if (argsDeclaration == null) {
-                    // no args: automatic var 'it'
-                    val l = scope.args.list
-                    val itValue: Obj = when (l.size) {
-                        // no args: it == void
-                        0 -> ObjVoid
-                        // one args: it is this arg
-                        1 -> l[0]
-                        // more args: it is a list of args
-                        else -> ObjList(l.toMutableList())
+            val stmt = object : Statement() {
+                override val pos: Pos = body.pos
+                override suspend fun execute(scope: Scope): Obj {
+                    // and the source closure of the lambda which might have other thisObj.
+                    val context = scope.applyClosure(closureScope)
+                    if (paramSlotPlanSnapshot.isNotEmpty()) context.applySlotPlan(paramSlotPlanSnapshot)
+                    // Execute lambda body in a closure-aware context. Blocks inside the lambda
+                    // will create child scopes as usual, so re-declarations inside loops work.
+                    if (argsDeclaration == null) {
+                        // no args: automatic var 'it'
+                        val l = scope.args.list
+                        val itValue: Obj = when (l.size) {
+                            // no args: it == void
+                            0 -> ObjVoid
+                            // one args: it is this arg
+                            1 -> l[0]
+                            // more args: it is a list of args
+                            else -> ObjList(l.toMutableList())
+                        }
+                        context.addItem("it", false, itValue, recordType = ObjRecord.Type.Argument)
+                    } else {
+                        // assign vars as declared the standard way
+                        argsDeclaration.assignToContext(context, defaultAccessType = AccessType.Val)
                     }
-                    context.addItem("it", false, itValue, recordType = ObjRecord.Type.Argument)
-                } else {
-                    // assign vars as declared the standard way
-                    argsDeclaration.assignToContext(context, defaultAccessType = AccessType.Val)
+                    return try {
+                        body.execute(context)
+                    } catch (e: ReturnException) {
+                        if (e.label == null || e.label == label) e.result
+                        else throw e
+                    }
                 }
-                try {
-                    body.execute(context)
-                } catch (e: ReturnException) {
-                    if (e.label == null || e.label == label) e.result
-                    else throw e
-                }
-            }.asReadonly
+            }
+            stmt.asReadonly
         }
     }
 
@@ -1122,7 +1220,12 @@ class Compiler(
                     val next = cc.peekNextNonWhitespace()
                     if (next.type == Token.Type.COMMA || next.type == Token.Type.RPAREN) {
                         val localVar = LocalVarRef(name, t1.pos)
-                        return ParsedArgument(statement(t1.pos) { localVar.evalValue(it) }, t1.pos, isSplat = false, name = name)
+                        val argPos = t1.pos
+                        val argStmt = object : Statement() {
+                            override val pos: Pos = argPos
+                            override suspend fun execute(scope: Scope): Obj = localVar.evalValue(scope)
+                        }
+                        return ParsedArgument(argStmt, t1.pos, isSplat = false, name = name)
                     }
                     val rhs = parseExpression() ?: t2.raiseSyntax("expected expression after named argument '${name}:'")
                     return ParsedArgument(rhs, t1.pos, isSplat = false, name = name)
@@ -1166,8 +1269,9 @@ class Compiler(
             val callableAccessor = parseLambdaExpression()
             args += ParsedArgument(
                 // transform ObjRef to the callable value
-                statement {
-                    callableAccessor.get(this).value
+                object : Statement() {
+                    override val pos: Pos = end.pos
+                    override suspend fun execute(scope: Scope): Obj = callableAccessor.get(scope).value
                 },
                 end.pos
             )
@@ -1194,7 +1298,12 @@ class Compiler(
                     val next = cc.peekNextNonWhitespace()
                     if (next.type == Token.Type.COMMA || next.type == Token.Type.RPAREN) {
                         val localVar = LocalVarRef(name, t1.pos)
-                        return ParsedArgument(statement(t1.pos) { localVar.evalValue(it) }, t1.pos, isSplat = false, name = name)
+                        val argPos = t1.pos
+                        val argStmt = object : Statement() {
+                            override val pos: Pos = argPos
+                            override suspend fun execute(scope: Scope): Obj = localVar.evalValue(scope)
+                        }
+                        return ParsedArgument(argStmt, t1.pos, isSplat = false, name = name)
                     }
                     val rhs = parseExpression() ?: t2.raiseSyntax("expected expression after named argument '${name}:'")
                     return ParsedArgument(rhs, t1.pos, isSplat = false, name = name)
@@ -1246,14 +1355,21 @@ class Compiler(
             // into the lambda body. This ensures expected order:
             //   foo { ... }.bar()  ==  (foo { ... }).bar()
             val callableAccessor = parseLambdaExpression()
-            val argStmt = statement { callableAccessor.get(this).value }
+            val argStmt = object : Statement() {
+                override val pos: Pos = cc.currentPos()
+                override suspend fun execute(scope: Scope): Obj = callableAccessor.get(scope).value
+            }
             listOf(ParsedArgument(argStmt, cc.currentPos()))
         } else {
             val r = parseArgs()
             detectedBlockArgument = r.second
             r.first
         }
-        return CallRef(left, args, detectedBlockArgument, isOptional)
+        return when (left) {
+            is ImplicitThisMemberRef ->
+                ImplicitThisMethodCallRef(left.name, args, detectedBlockArgument, isOptional, left.atPos)
+            else -> CallRef(left, args, detectedBlockArgument, isOptional)
+        }
     }
 
     private suspend fun parseAccessor(): ObjRef? {
@@ -1301,9 +1417,17 @@ class Compiler(
                     "null" -> ConstRef(ObjNull.asReadonly)
                     "true" -> ConstRef(ObjTrue.asReadonly)
                     "false" -> ConstRef(ObjFalse.asReadonly)
-                    else -> if (PerfFlags.EMIT_FAST_LOCAL_REFS && (currentLocalNames?.contains(t.value) == true))
-                        FastLocalVarRef(t.value, t.pos)
-                    else LocalVarRef(t.value, t.pos)
+                    else -> {
+                        val slotLoc = lookupSlotLocation(t.value)
+                        val inClassCtx = codeContexts.any { it is CodeContext.ClassBody }
+                        when {
+                            slotLoc != null -> LocalSlotRef(t.value, slotLoc.slot, slotLoc.depth, t.pos)
+                            PerfFlags.EMIT_FAST_LOCAL_REFS && (currentLocalNames?.contains(t.value) == true) ->
+                                FastLocalVarRef(t.value, t.pos)
+                            inClassCtx -> ImplicitThisMemberRef(t.value, t.pos)
+                            else -> LocalVarRef(t.value, t.pos)
+                        }
+                    }
                 }
             }
 
@@ -1526,20 +1650,27 @@ class Compiler(
                 lastParsedBlockRange?.let { range ->
                     miniSink?.onInitDecl(MiniInitDecl(MiniRange(id.pos, range.end), id.pos))
                 }
-                val initStmt = statement(id.pos) { scp ->
-                    val cls = scp.thisObj.objClass
-                    val saved = scp.currentClassCtx
-                    scp.currentClassCtx = cls
-                    try {
-                        block.execute(scp)
-                    } finally {
-                        scp.currentClassCtx = saved
+                val initPos = id.pos
+                val initStmt = object : Statement() {
+                    override val pos: Pos = initPos
+                    override suspend fun execute(scope: Scope): Obj {
+                        val cls = scope.thisObj.objClass
+                        val saved = scope.currentClassCtx
+                        scope.currentClassCtx = cls
+                        try {
+                            block.execute(scope)
+                        } finally {
+                            scope.currentClassCtx = saved
+                        }
+                        return ObjVoid
                     }
-                    ObjVoid
                 }
-                statement {
-                    currentClassCtx?.instanceInitializers?.add(initStmt)
-                    ObjVoid
+                object : Statement() {
+                    override val pos: Pos = id.pos
+                    override suspend fun execute(scope: Scope): Obj {
+                        scope.currentClassCtx?.instanceInitializers?.add(initStmt)
+                        return ObjVoid
+                    }
                 }
             } else null
         }
@@ -1695,9 +1826,13 @@ class Compiler(
                             // we need a copy in the closure:
                             val isIn = t.type == Token.Type.IN
                             val container = parseExpression() ?: throw ScriptError(cc.currentPos(), "type expected")
-                            currentCondition += statement {
-                                val r = container.execute(this).contains(this, whenValue)
-                                ObjBool(if (isIn) r else !r)
+                            val condPos = t.pos
+                            currentCondition += object : Statement() {
+                                override val pos: Pos = condPos
+                                override suspend fun execute(scope: Scope): Obj {
+                                    val r = container.execute(scope).contains(scope, whenValue)
+                                    return ObjBool(if (isIn) r else !r)
+                                }
                             }
                         }
 
@@ -1705,9 +1840,13 @@ class Compiler(
                             // we need a copy in the closure:
                             val isIn = t.type == Token.Type.IS
                             val caseType = parseExpression() ?: throw ScriptError(cc.currentPos(), "type expected")
-                            currentCondition += statement {
-                                val r = whenValue.isInstanceOf(caseType.execute(this))
-                                ObjBool(if (isIn) r else !r)
+                            val condPos = t.pos
+                            currentCondition += object : Statement() {
+                                override val pos: Pos = condPos
+                                override suspend fun execute(scope: Scope): Obj {
+                                    val r = whenValue.isInstanceOf(caseType.execute(scope))
+                                    return ObjBool(if (isIn) r else !r)
+                                }
                             }
                         }
 
@@ -1737,8 +1876,12 @@ class Compiler(
                                 cc.previous()
                                 val x = parseExpression()
                                     ?: throw ScriptError(cc.currentPos(), "when case condition expected")
-                                currentCondition += statement {
-                                    ObjBool(x.execute(this).compareTo(this, whenValue) == 0)
+                                val condPos = t.pos
+                                currentCondition += object : Statement() {
+                                    override val pos: Pos = condPos
+                                    override suspend fun execute(scope: Scope): Obj {
+                                        return ObjBool(x.execute(scope).compareTo(scope, whenValue) == 0)
+                                    }
                                 }
                             }
                         }
@@ -1750,19 +1893,24 @@ class Compiler(
                     for (c in currentCondition) cases += WhenCase(c, block)
                 }
             }
-            statement {
-                var result: Obj = ObjVoid
-                // in / is and like uses whenValue from closure:
-                whenValue = value.execute(this)
-                var found = false
-                for (c in cases)
-                    if (c.condition.execute(this).toBool()) {
-                        result = c.block.execute(this)
-                        found = true
-                        break
+            val whenPos = t.pos
+            object : Statement() {
+                override val pos: Pos = whenPos
+                override suspend fun execute(scope: Scope): Obj {
+                    var result: Obj = ObjVoid
+                    // in / is and like uses whenValue from closure:
+                    whenValue = value.execute(scope)
+                    var found = false
+                    for (c in cases) {
+                        if (c.condition.execute(scope).toBool()) {
+                            result = c.block.execute(scope)
+                            found = true
+                            break
+                        }
                     }
-                if (!found && elseCase != null) result = elseCase.execute(this)
-                result
+                    if (!found && elseCase != null) result = elseCase.execute(scope)
+                    return result
+                }
             }
         } else {
             // when { cond -> ... }
@@ -1774,28 +1922,32 @@ class Compiler(
         val throwStatement = parseStatement() ?: throw ScriptError(cc.currentPos(), "throw object expected")
         // Important: bind the created statement to the position of the `throw` keyword so that
         // any raised error reports the correct source location.
-        return statement(start) { sc ->
-            var errorObject = throwStatement.execute(sc)
-            // Rebind error scope to the throw-site position so ScriptError.pos is accurate
-            val throwScope = sc.createChildScope(pos = start)
-            if (errorObject is ObjString) {
-                errorObject = ObjException(throwScope, errorObject.value).apply { getStackTrace() }
-            }
-            if (!errorObject.isInstanceOf(ObjException.Root)) {
-                throwScope.raiseError("this is not an exception object: $errorObject")
-            }
-            if (errorObject is ObjException) {
-                errorObject = ObjException(
-                    errorObject.exceptionClass,
-                    throwScope,
-                    errorObject.message,
-                    errorObject.extraData,
-                    errorObject.useStackTrace
-                ).apply { getStackTrace() }
-                throwScope.raiseError(errorObject)
-            } else {
-                val msg = errorObject.invokeInstanceMethod(sc, "message").toString(sc).value
-                throwScope.raiseError(errorObject, start, msg)
+        return object : Statement() {
+            override val pos: Pos = start
+            override suspend fun execute(scope: Scope): Obj {
+                var errorObject = throwStatement.execute(scope)
+                // Rebind error scope to the throw-site position so ScriptError.pos is accurate
+                val throwScope = scope.createChildScope(pos = start)
+                if (errorObject is ObjString) {
+                    errorObject = ObjException(throwScope, errorObject.value).apply { getStackTrace() }
+                }
+                if (!errorObject.isInstanceOf(ObjException.Root)) {
+                    throwScope.raiseError("this is not an exception object: $errorObject")
+                }
+                if (errorObject is ObjException) {
+                    errorObject = ObjException(
+                        errorObject.exceptionClass,
+                        throwScope,
+                        errorObject.message,
+                        errorObject.extraData,
+                        errorObject.useStackTrace
+                    ).apply { getStackTrace() }
+                    throwScope.raiseError(errorObject)
+                } else {
+                    val msg = errorObject.invokeInstanceMethod(scope, "message").toString(scope).value
+                    throwScope.raiseError(errorObject, start, msg)
+                }
+                return ObjVoid
             }
         }
     }
@@ -1868,49 +2020,53 @@ class Compiler(
         if (catches.isEmpty() && finallyClause == null)
             throw ScriptError(cc.currentPos(), "try block must have either catch or finally clause or both")
 
-        return statement {
-            var result: Obj = ObjVoid
-            try {
-                // body is a parsed block, it already has separate context
-                result = body.execute(this)
-            } catch (e: ReturnException) {
-                throw e
-            } catch (e: LoopBreakContinueException) {
-                throw e
-            } catch (e: Exception) {
-                // convert to appropriate exception
-                val caughtObj = when (e) {
-                    is ExecutionError -> e.errorObject
-                    else -> ObjUnknownException(this, e.message ?: e.toString())
-                }
-                // let's see if we should catch it:
-                var isCaught = false
-                for (cdata in catches) {
-                    var match: Obj? = null
-                    for (exceptionClassName in cdata.classNames) {
-                        val exObj = this[exceptionClassName]?.value as? ObjClass
-                            ?: raiseSymbolNotFound("error class does not exist or is not a class: $exceptionClassName")
-                        if (caughtObj.isInstanceOf(exObj)) {
-                            match = caughtObj
+        val stmtPos = body.pos
+        return object : Statement() {
+            override val pos: Pos = stmtPos
+            override suspend fun execute(scope: Scope): Obj {
+                var result: Obj = ObjVoid
+                try {
+                    // body is a parsed block, it already has separate context
+                    result = body.execute(scope)
+                } catch (e: ReturnException) {
+                    throw e
+                } catch (e: LoopBreakContinueException) {
+                    throw e
+                } catch (e: Exception) {
+                    // convert to appropriate exception
+                    val caughtObj = when (e) {
+                        is ExecutionError -> e.errorObject
+                        else -> ObjUnknownException(scope, e.message ?: e.toString())
+                    }
+                    // let's see if we should catch it:
+                    var isCaught = false
+                    for (cdata in catches) {
+                        var match: Obj? = null
+                        for (exceptionClassName in cdata.classNames) {
+                            val exObj = scope[exceptionClassName]?.value as? ObjClass
+                                ?: scope.raiseSymbolNotFound("error class does not exist or is not a class: $exceptionClassName")
+                            if (caughtObj.isInstanceOf(exObj)) {
+                                match = caughtObj
+                                break
+                            }
+                        }
+                        if (match != null) {
+                            val catchContext = scope.createChildScope(pos = cdata.catchVar.pos)
+                            catchContext.addItem(cdata.catchVar.value, false, caughtObj)
+                            result = cdata.block.execute(catchContext)
+                            isCaught = true
                             break
                         }
                     }
-                    if (match != null) {
-                        val catchContext = this.createChildScope(pos = cdata.catchVar.pos)
-                        catchContext.addItem(cdata.catchVar.value, false, caughtObj)
-                        result = cdata.block.execute(catchContext)
-                        isCaught = true
-                        break
-                    }
+                    // rethrow if not caught this exception
+                    if (!isCaught)
+                        throw e
+                } finally {
+                    // finally clause does not alter result!
+                    finallyClause?.execute(scope)
                 }
-                // rethrow if not caught this exception
-                if (!isCaught)
-                    throw e
-            } finally {
-                // finally clause does not alter result!
-                finallyClause?.execute(this)
+                return result
             }
-            result
         }
     }
 
@@ -1964,9 +2120,13 @@ class Compiler(
             )
         )
 
-        return statement {
-            ObjEnumClass.createSimpleEnum(nameToken.value, names).also {
-                addItem(nameToken.value, false, it, recordType = ObjRecord.Type.Enum)
+        val stmtPos = startPos
+        return object : Statement() {
+            override val pos: Pos = stmtPos
+            override suspend fun execute(scope: Scope): Obj {
+                val enumClass = ObjEnumClass.createSimpleEnum(nameToken.value, names)
+                scope.addItem(nameToken.value, false, enumClass, recordType = ObjRecord.Type.Enum)
+                return enumClass
             }
         }
     }
@@ -2052,33 +2212,36 @@ class Compiler(
 
         val initScope = popInitScope()
 
-        return statement(startPos) { context ->
-            val parentClasses = baseSpecs.map { baseSpec ->
-                val rec = context[baseSpec.name] ?: throw ScriptError(startPos, "unknown base class: ${baseSpec.name}")
-                (rec.value as? ObjClass) ?: throw ScriptError(startPos, "${baseSpec.name} is not a class")
+        return object : Statement() {
+            override val pos: Pos = startPos
+            override suspend fun execute(scope: Scope): Obj {
+                val parentClasses = baseSpecs.map { baseSpec ->
+                    val rec = scope[baseSpec.name] ?: throw ScriptError(startPos, "unknown base class: ${baseSpec.name}")
+                    (rec.value as? ObjClass) ?: throw ScriptError(startPos, "${baseSpec.name} is not a class")
+                }
+
+                val newClass = ObjInstanceClass(className, *parentClasses.toTypedArray())
+                newClass.isAnonymous = nameToken == null
+                newClass.constructorMeta = ArgsDeclaration(emptyList(), Token.Type.RPAREN)
+                for (i in parentClasses.indices) {
+                    val argsList = baseSpecs[i].args
+                    // In object, we evaluate parent args once at creation time
+                    if (argsList != null) newClass.directParentArgs[parentClasses[i]] = argsList
+                }
+
+                val classScope = scope.createChildScope(newThisObj = newClass)
+                classScope.currentClassCtx = newClass
+                newClass.classScope = classScope
+                classScope.addConst("object", newClass)
+
+                bodyInit?.execute(classScope)
+
+                // Create instance (singleton)
+                val instance = newClass.callOn(scope.createChildScope(Arguments.EMPTY))
+                if (nameToken != null)
+                    scope.addItem(className, false, instance)
+                return instance
             }
-
-            val newClass = ObjInstanceClass(className, *parentClasses.toTypedArray())
-            newClass.isAnonymous = nameToken == null
-            newClass.constructorMeta = ArgsDeclaration(emptyList(), Token.Type.RPAREN)
-            for (i in parentClasses.indices) {
-                val argsList = baseSpecs[i].args
-                // In object, we evaluate parent args once at creation time
-                if (argsList != null) newClass.directParentArgs[parentClasses[i]] = argsList
-            }
-
-            val classScope = context.createChildScope(newThisObj = newClass)
-            classScope.currentClassCtx = newClass
-            newClass.classScope = classScope
-            classScope.addConst("object", newClass)
-
-            bodyInit?.execute(classScope)
-
-            // Create instance (singleton)
-            val instance = newClass.callOn(context.createChildScope(Arguments.EMPTY))
-            if (nameToken != null)
-                context.addItem(className, false, instance)
-            instance
         }
     }
 
@@ -2198,70 +2361,76 @@ class Compiler(
             // create instance constructor
             // create custom objClass with all fields and instance constructor
 
-            val constructorCode = statement {
-                // constructor code is registered with class instance and is called over
-                // new `thisObj` already set by class to ObjInstance.instanceContext
-                val instance = thisObj as ObjInstance
-                // Constructor parameters have been assigned to instance scope by ObjClass.callOn before
-                // invoking parent/child constructors.
-                // IMPORTANT: do not execute class body here; class body was executed once in the class scope
-                // to register methods and prepare initializers. Instance constructor should be empty unless
-                // we later add explicit constructor body syntax.
-                instance
-            }
-            statement {
-                // the main statement should create custom ObjClass instance with field
-                // accessors, constructor registration, etc.
-                // Resolve parent classes by name at execution time
-                val parentClasses = baseSpecs.map { baseSpec ->
-                    val rec =
-                        this[baseSpec.name] ?: throw ScriptError(nameToken.pos, "unknown base class: ${baseSpec.name}")
-                    (rec.value as? ObjClass) ?: throw ScriptError(nameToken.pos, "${baseSpec.name} is not a class")
+            val constructorCode = object : Statement() {
+                override val pos: Pos = startPos
+                override suspend fun execute(scope: Scope): Obj {
+                    // constructor code is registered with class instance and is called over
+                    // new `thisObj` already set by class to ObjInstance.instanceContext
+                    val instance = scope.thisObj as ObjInstance
+                    // Constructor parameters have been assigned to instance scope by ObjClass.callOn before
+                    // invoking parent/child constructors.
+                    // IMPORTANT: do not execute class body here; class body was executed once in the class scope
+                    // to register methods and prepare initializers. Instance constructor should be empty unless
+                    // we later add explicit constructor body syntax.
+                    return instance
                 }
-
-                val newClass = ObjInstanceClass(className, *parentClasses.toTypedArray()).also {
-                    it.isAbstract = isAbstract
-                    it.instanceConstructor = constructorCode
-                    it.constructorMeta = constructorArgsDeclaration
-                    // Attach per-parent constructor args (thunks) if provided
-                    for (i in parentClasses.indices) {
-                        val argsList = baseSpecs[i].args
-                        if (argsList != null) it.directParentArgs[parentClasses[i]] = argsList
+            }
+            object : Statement() {
+                override val pos: Pos = startPos
+                override suspend fun execute(scope: Scope): Obj {
+                    // the main statement should create custom ObjClass instance with field
+                    // accessors, constructor registration, etc.
+                    // Resolve parent classes by name at execution time
+                    val parentClasses = baseSpecs.map { baseSpec ->
+                        val rec =
+                            scope[baseSpec.name] ?: throw ScriptError(nameToken.pos, "unknown base class: ${baseSpec.name}")
+                        (rec.value as? ObjClass) ?: throw ScriptError(nameToken.pos, "${baseSpec.name} is not a class")
                     }
-                    // Register constructor fields in the class members
-                    constructorArgsDeclaration?.params?.forEach { p ->
-                        if (p.accessType != null) {
-                            it.createField(
-                                p.name, ObjNull,
-                                isMutable = p.accessType == AccessType.Var,
-                                visibility = p.visibility ?: Visibility.Public,
-                                declaringClass = it,
-                                // Constructor fields are not currently supporting override/closed in parser
-                                // but we should pass Pos.builtIn to skip validation for now if needed,
-                                // or p.pos to allow it.
-                                pos = Pos.builtIn,
-                                isTransient = p.isTransient,
-                                type = ObjRecord.Type.ConstructorField
-                            )
+
+                    val newClass = ObjInstanceClass(className, *parentClasses.toTypedArray()).also {
+                        it.isAbstract = isAbstract
+                        it.instanceConstructor = constructorCode
+                        it.constructorMeta = constructorArgsDeclaration
+                        // Attach per-parent constructor args (thunks) if provided
+                        for (i in parentClasses.indices) {
+                            val argsList = baseSpecs[i].args
+                            if (argsList != null) it.directParentArgs[parentClasses[i]] = argsList
+                        }
+                        // Register constructor fields in the class members
+                        constructorArgsDeclaration?.params?.forEach { p ->
+                            if (p.accessType != null) {
+                                it.createField(
+                                    p.name, ObjNull,
+                                    isMutable = p.accessType == AccessType.Var,
+                                    visibility = p.visibility ?: Visibility.Public,
+                                    declaringClass = it,
+                                    // Constructor fields are not currently supporting override/closed in parser
+                                    // but we should pass Pos.builtIn to skip validation for now if needed,
+                                    // or p.pos to allow it.
+                                    pos = Pos.builtIn,
+                                    isTransient = p.isTransient,
+                                    type = ObjRecord.Type.ConstructorField
+                                )
+                            }
                         }
                     }
-                }
 
-                addItem(className, false, newClass)
-                // Prepare class scope for class-scope members (static) and future registrations
-                val classScope = createChildScope(newThisObj = newClass)
-                // Set lexical class context for visibility tagging inside class body
-                classScope.currentClassCtx = newClass
-                newClass.classScope = classScope
-                // Execute class body once in class scope to register instance methods and prepare instance field initializers
-                bodyInit?.execute(classScope)
-                if (initScope.isNotEmpty()) {
-                    for (s in initScope)
-                        s.execute(classScope)
+                    scope.addItem(className, false, newClass)
+                    // Prepare class scope for class-scope members (static) and future registrations
+                    val classScope = scope.createChildScope(newThisObj = newClass)
+                    // Set lexical class context for visibility tagging inside class body
+                    classScope.currentClassCtx = newClass
+                    newClass.classScope = classScope
+                    // Execute class body once in class scope to register instance methods and prepare instance field initializers
+                    bodyInit?.execute(classScope)
+                    if (initScope.isNotEmpty()) {
+                        for (s in initScope)
+                            s.execute(classScope)
+                    }
+                    newClass.checkAbstractSatisfaction(nameToken.pos)
+                    // Debug summary: list registered instance methods and class-scope functions for this class
+                    return newClass
                 }
-                newClass.checkAbstractSatisfaction(nameToken.pos)
-                // Debug summary: list registered instance methods and class-scope functions for this class
-                newClass
             }
         }
 
@@ -2319,77 +2488,80 @@ class Compiler(
                 Triple(loopParsed.first, loopParsed.second, elseStmt)
             }
 
-            return statement(body.pos) { cxt ->
-                val forContext = cxt.createChildScope(start)
+            return object : Statement() {
+                override val pos: Pos = body.pos
+                override suspend fun execute(scope: Scope): Obj {
+                    val forContext = scope.createChildScope(start)
 
-                // loop var: StoredObject
-                val loopSO = forContext.addItem(tVar.value, true, ObjNull)
+                    // loop var: StoredObject
+                    val loopSO = forContext.addItem(tVar.value, true, ObjNull)
 
-                // insofar we suggest source object is enumerable. Later we might need to add checks
-                val sourceObj = source.execute(forContext)
+                    // insofar we suggest source object is enumerable. Later we might need to add checks
+                    val sourceObj = source.execute(forContext)
 
-                if (sourceObj is ObjRange && sourceObj.isIntRange && PerfFlags.PRIMITIVE_FASTOPS) {
-                    loopIntRange(
-                        forContext,
-                        sourceObj.start!!.toLong(),
-                        if (sourceObj.isEndInclusive)
-                            sourceObj.end!!.toLong() + 1
-                        else
-                            sourceObj.end!!.toLong(),
-                        loopSO,
-                        body,
-                        elseStatement,
-                        label,
-                        canBreak
-                    )
-                } else if (sourceObj.isInstanceOf(ObjIterable)) {
-                    loopIterable(forContext, sourceObj, loopSO, body, elseStatement, label, canBreak)
-                } else {
-                    val size = runCatching { sourceObj.readField(forContext, "size").value.toInt() }
-                        .getOrElse {
-                            throw ScriptError(
-                                tOp.pos,
-                                "object is not enumerable: no size in $sourceObj",
-                                it
-                            )
-                        }
-
-                    var result: Obj = ObjVoid
-                    var breakCaught = false
-
-                    if (size > 0) {
-                        var current = runCatching { sourceObj.getAt(forContext, ObjInt.of(0)) }
+                    if (sourceObj is ObjRange && sourceObj.isIntRange && PerfFlags.PRIMITIVE_FASTOPS) {
+                        return loopIntRange(
+                            forContext,
+                            sourceObj.start!!.toLong(),
+                            if (sourceObj.isEndInclusive)
+                                sourceObj.end!!.toLong() + 1
+                            else
+                                sourceObj.end!!.toLong(),
+                            loopSO,
+                            body,
+                            elseStatement,
+                            label,
+                            canBreak
+                        )
+                    } else if (sourceObj.isInstanceOf(ObjIterable)) {
+                        return loopIterable(forContext, sourceObj, loopSO, body, elseStatement, label, canBreak)
+                    } else {
+                        val size = runCatching { sourceObj.readField(forContext, "size").value.toInt() }
                             .getOrElse {
                                 throw ScriptError(
                                     tOp.pos,
-                                    "object is not enumerable: no index access for ${sourceObj.inspect(cxt)}",
+                                    "object is not enumerable: no size in $sourceObj",
                                     it
                                 )
                             }
-                        var index = 0
-                        while (true) {
-                            loopSO.value = current
-                            try {
-                                result = body.execute(forContext)
-                            } catch (lbe: LoopBreakContinueException) {
-                                if (lbe.label == label || lbe.label == null) {
-                                    breakCaught = true
-                                    if (lbe.doContinue) continue
-                                    else {
-                                        result = lbe.result
-                                        break
-                                    }
-                                } else
-                                    throw lbe
+
+                        var result: Obj = ObjVoid
+                        var breakCaught = false
+
+                        if (size > 0) {
+                            var current = runCatching { sourceObj.getAt(forContext, ObjInt.of(0)) }
+                                .getOrElse {
+                                    throw ScriptError(
+                                        tOp.pos,
+                                        "object is not enumerable: no index access for ${sourceObj.inspect(scope)}",
+                                        it
+                                    )
+                                }
+                            var index = 0
+                            while (true) {
+                                loopSO.value = current
+                                try {
+                                    result = body.execute(forContext)
+                                } catch (lbe: LoopBreakContinueException) {
+                                    if (lbe.label == label || lbe.label == null) {
+                                        breakCaught = true
+                                        if (lbe.doContinue) continue
+                                        else {
+                                            result = lbe.result
+                                            break
+                                        }
+                                    } else
+                                        throw lbe
+                                }
+                                if (++index >= size) break
+                                current = sourceObj.getAt(forContext, ObjInt.of(index.toLong()))
                             }
-                            if (++index >= size) break
-                            current = sourceObj.getAt(forContext, ObjInt.of(index.toLong()))
                         }
+                        if (!breakCaught && elseStatement != null) {
+                            result = elseStatement.execute(scope)
+                        }
+                        return result
                     }
-                    if (!breakCaught && elseStatement != null) {
-                        result = elseStatement.execute(cxt)
-                    }
-                    result
                 }
             }
         } else {
@@ -2484,31 +2656,34 @@ class Compiler(
             null
         }
 
-        return statement(body.pos) {
-            var wasBroken = false
-            var result: Obj = ObjVoid
-            while (true) {
-                val doScope = it.createChildScope().apply { skipScopeCreation = true }
-                try {
-                    result = body.execute(doScope)
-                } catch (e: LoopBreakContinueException) {
-                    if (e.label == label || e.label == null) {
-                        if (!e.doContinue) {
-                            result = e.result
-                            wasBroken = true
-                            break
+        return object : Statement() {
+            override val pos: Pos = body.pos
+            override suspend fun execute(scope: Scope): Obj {
+                var wasBroken = false
+                var result: Obj = ObjVoid
+                while (true) {
+                    val doScope = scope.createChildScope().apply { skipScopeCreation = true }
+                    try {
+                        result = body.execute(doScope)
+                    } catch (e: LoopBreakContinueException) {
+                        if (e.label == label || e.label == null) {
+                            if (!e.doContinue) {
+                                result = e.result
+                                wasBroken = true
+                                break
+                            }
+                            // for continue: just fall through to condition check below
+                        } else {
+                            throw e
                         }
-                        // for continue: just fall through to condition check below
-                    } else {
-                        throw e
+                    }
+                    if (!condition.execute(doScope).toBool()) {
+                        break
                     }
                 }
-                if (!condition.execute(doScope).toBool()) {
-                    break
-                }
+                if (!wasBroken) elseStatement?.let { s -> result = s.execute(scope) }
+                return result
             }
-            if (!wasBroken) elseStatement?.let { s -> result = s.execute(it) }
-            result
         }
     }
 
@@ -2532,30 +2707,33 @@ class Compiler(
             cc.previous()
             null
         }
-        return statement(body.pos) {
-            var result: Obj = ObjVoid
-            var wasBroken = false
-            while (condition.execute(it).toBool()) {
-                val loopScope = it.createChildScope()
-                if (canBreak) {
-                    try {
+        return object : Statement() {
+            override val pos: Pos = body.pos
+            override suspend fun execute(scope: Scope): Obj {
+                var result: Obj = ObjVoid
+                var wasBroken = false
+                while (condition.execute(scope).toBool()) {
+                    val loopScope = scope.createChildScope()
+                    if (canBreak) {
+                        try {
+                            result = body.execute(loopScope)
+                        } catch (lbe: LoopBreakContinueException) {
+                            if (lbe.label == label || lbe.label == null) {
+                                if (lbe.doContinue) continue
+                                else {
+                                    result = lbe.result
+                                    wasBroken = true
+                                    break
+                                }
+                            } else
+                                throw lbe
+                        }
+                    } else
                         result = body.execute(loopScope)
-                    } catch (lbe: LoopBreakContinueException) {
-                        if (lbe.label == label || lbe.label == null) {
-                            if (lbe.doContinue) continue
-                            else {
-                                result = lbe.result
-                                wasBroken = true
-                                break
-                            }
-                        } else
-                            throw lbe
-                    }
-                } else
-                    result = body.execute(loopScope)
+                }
+                if (!wasBroken) elseStatement?.let { s -> result = s.execute(scope) }
+                return result
             }
-            if (!wasBroken) elseStatement?.let { s -> result = s.execute(it) }
-            result
         }
     }
 
@@ -2590,13 +2768,16 @@ class Compiler(
 
         cc.addBreak()
 
-        return statement(start) {
-            val returnValue = resultExpr?.execute(it)// ?: ObjVoid
-            throw LoopBreakContinueException(
-                doContinue = false,
-                label = label,
-                result = returnValue ?: ObjVoid
-            )
+        return object : Statement() {
+            override val pos: Pos = start
+            override suspend fun execute(scope: Scope): Obj {
+                val returnValue = resultExpr?.execute(scope)// ?: ObjVoid
+                throw LoopBreakContinueException(
+                    doContinue = false,
+                    label = label,
+                    result = returnValue ?: ObjVoid
+                )
+            }
         }
     }
 
@@ -2614,11 +2795,14 @@ class Compiler(
         }
         cc.addBreak()
 
-        return statement(start) {
-            throw LoopBreakContinueException(
-                doContinue = true,
-                label = label,
-            )
+        return object : Statement() {
+            override val pos: Pos = start
+            override suspend fun execute(scope: Scope): Obj {
+                throw LoopBreakContinueException(
+                    doContinue = true,
+                    label = label,
+                )
+            }
         }
     }
 
@@ -2648,9 +2832,12 @@ class Compiler(
             parseExpression()
         } else null
 
-        return statement(start) {
-            val returnValue = resultExpr?.execute(it) ?: ObjVoid
-            throw ReturnException(returnValue, label)
+        return object : Statement() {
+            override val pos: Pos = start
+            override suspend fun execute(scope: Scope): Obj {
+                val returnValue = resultExpr?.execute(scope) ?: ObjVoid
+                throw ReturnException(returnValue, label)
+            }
         }
     }
 
@@ -2686,19 +2873,24 @@ class Compiler(
         return if (t2.type == Token.Type.ID && t2.value == "else") {
             val elseBody =
                 parseStatement() ?: throw ScriptError(pos, "Bad else statement: expected statement")
-            return statement(start) {
-                if (condition.execute(it).toBool())
-                    ifBody.execute(it)
-                else
-                    elseBody.execute(it)
+            return object : Statement() {
+                override val pos: Pos = start
+                override suspend fun execute(scope: Scope): Obj {
+                    return if (condition.execute(scope).toBool())
+                        ifBody.execute(scope)
+                    else
+                        elseBody.execute(scope)
+                }
             }
         } else {
             cc.previous()
-            statement(start) {
-                if (condition.execute(it).toBool())
-                    ifBody.execute(it)
-                else
-                    ObjVoid
+            object : Statement() {
+                override val pos: Pos = start
+                override suspend fun execute(scope: Scope): Obj {
+                    if (condition.execute(scope).toBool())
+                        return ifBody.execute(scope)
+                    return ObjVoid
+                }
             }
         }
     }
@@ -2803,175 +2995,203 @@ class Compiler(
             cc.labels.add(name)
             outerLabel?.let { cc.labels.add(it) }
 
-            val paramNames: Set<String> = argsDeclaration.params.map { it.name }.toSet()
+            val paramNamesList = argsDeclaration.params.map { it.name }
+            val paramNames: Set<String> = paramNamesList.toSet()
+            val paramSlotPlan = buildParamSlotPlan(paramNamesList)
 
             // Parse function body while tracking declared locals to compute precise capacity hints
             currentLocalDeclCount
             localDeclCountStack.add(0)
-            val fnStatements = if (actualExtern)
-                statement { raiseError("extern function not provided: $name") }
-            else if (isAbstract || isDelegated) {
-                null
-            } else
-                withLocalNames(paramNames) {
-                    val next = cc.peekNextNonWhitespace()
-                    if (next.type == Token.Type.ASSIGN) {
-                        cc.nextNonWhitespace() // consume '='
-                        if (cc.peekNextNonWhitespace().value == "return")
-                            throw ScriptError(cc.currentPos(), "return is not allowed in shorthand function")
-                        val expr = parseExpression() ?: throw ScriptError(cc.currentPos(), "Expected function body expression")
-                        // Shorthand function returns the expression value
-                        statement(expr.pos) { scope ->
-                            expr.execute(scope)
+            slotPlanStack.add(paramSlotPlan)
+            val fnStatements = try {
+                if (actualExtern)
+                    object : Statement() {
+                        override val pos: Pos = start
+                        override suspend fun execute(scope: Scope): Obj {
+                            scope.raiseError("extern function not provided: $name")
                         }
-                    } else {
-                        parseBlock()
                     }
-                }
+                else if (isAbstract || isDelegated) {
+                    null
+                } else
+                    withLocalNames(paramNames) {
+                        val next = cc.peekNextNonWhitespace()
+                        if (next.type == Token.Type.ASSIGN) {
+                            cc.nextNonWhitespace() // consume '='
+                            if (cc.peekNextNonWhitespace().value == "return")
+                                throw ScriptError(cc.currentPos(), "return is not allowed in shorthand function")
+                            val expr = parseExpression() ?: throw ScriptError(cc.currentPos(), "Expected function body expression")
+                            // Shorthand function returns the expression value
+                            object : Statement() {
+                                override val pos: Pos = expr.pos
+                                override suspend fun execute(scope: Scope): Obj = expr.execute(scope)
+                            }
+                        } else {
+                            parseBlock()
+                        }
+                    }
+            } finally {
+                slotPlanStack.removeLast()
+            }
             // Capture and pop the local declarations count for this function
             val fnLocalDecls = localDeclCountStack.removeLastOrNull() ?: 0
 
             var closure: Scope? = null
 
-            val fnBody = statement(t.pos) { callerContext ->
-                callerContext.pos = start
+            val paramSlotPlanSnapshot = if (paramSlotPlan.slots.isEmpty()) emptyMap() else paramSlotPlan.slots.toMap()
+            val fnBody = object : Statement() {
+                override val pos: Pos = t.pos
+                override suspend fun execute(callerContext: Scope): Obj {
+                    callerContext.pos = start
 
-                // restore closure where the function was defined, and making a copy of it
-                // for local space. If there is no closure, we are in, say, class context where
-                // the closure is in the class initialization and we needn't more:
-                val context = closure?.let { ClosureScope(callerContext, it) }
-                    ?: callerContext
+                    // restore closure where the function was defined, and making a copy of it
+                    // for local space. If there is no closure, we are in, say, class context where
+                    // the closure is in the class initialization and we needn't more:
+                    val context = closure?.let { ClosureScope(callerContext, it) }
+                        ?: callerContext
 
-                // Capacity hint: parameters + declared locals + small overhead
-                val capacityHint = paramNames.size + fnLocalDecls + 4
-                context.hintLocalCapacity(capacityHint)
+                    // Capacity hint: parameters + declared locals + small overhead
+                    val capacityHint = paramNames.size + fnLocalDecls + 4
+                    context.hintLocalCapacity(capacityHint)
+                    if (paramSlotPlanSnapshot.isNotEmpty()) context.applySlotPlan(paramSlotPlanSnapshot)
 
-                // load params from caller context
-                argsDeclaration.assignToContext(context, callerContext.args, defaultAccessType = AccessType.Val)
-                if (extTypeName != null) {
-                    context.thisObj = callerContext.thisObj
-                }
-                try {
-                    fnStatements?.execute(context) ?: ObjVoid
-                } catch (e: ReturnException) {
-                    if (e.label == null || e.label == name || e.label == outerLabel) e.result
-                    else throw e
+                    // load params from caller context
+                    argsDeclaration.assignToContext(context, callerContext.args, defaultAccessType = AccessType.Val)
+                    if (extTypeName != null) {
+                        context.thisObj = callerContext.thisObj
+                    }
+                    return try {
+                        fnStatements?.execute(context) ?: ObjVoid
+                    } catch (e: ReturnException) {
+                        if (e.label == null || e.label == name || e.label == outerLabel) e.result
+                        else throw e
+                    }
                 }
             }
             cc.labels.remove(name)
             outerLabel?.let { cc.labels.remove(it) }
 //            parentContext
-            val fnCreateStatement = statement(start) { context ->
-                if (isDelegated) {
-                    val accessType = context.resolveQualifiedIdentifier("DelegateAccess.Callable")
-                    val initValue = delegateExpression!!.execute(context)
-                    val finalDelegate = try {
-                        initValue.invokeInstanceMethod(context, "bind", Arguments(ObjString(name), accessType, context.thisObj))
-                    } catch (e: Exception) {
-                        initValue
-                    }
-
-                    if (extTypeName != null) {
-                        val type = context[extTypeName]?.value ?: context.raiseSymbolNotFound("class $extTypeName not found")
-                        if (type !is ObjClass) context.raiseClassCastError("$extTypeName is not the class instance")
-                        context.addExtension(type, name, ObjRecord(ObjUnset, isMutable = false, visibility = visibility, declaringClass = null, type = ObjRecord.Type.Delegated).apply {
-                            delegate = finalDelegate
-                        })
-                        return@statement ObjVoid
-                    }
-
-                    val th = context.thisObj
-                    if (isStatic) {
-                        (th as ObjClass).createClassField(name, ObjUnset, false, visibility, null, start, isTransient = isTransient, type = ObjRecord.Type.Delegated).apply {
-                            delegate = finalDelegate
+            val fnCreateStatement = object : Statement() {
+                override val pos: Pos = start
+                override suspend fun execute(context: Scope): Obj {
+                    if (isDelegated) {
+                        val accessType = context.resolveQualifiedIdentifier("DelegateAccess.Callable")
+                        val initValue = delegateExpression!!.execute(context)
+                        val finalDelegate = try {
+                            initValue.invokeInstanceMethod(context, "bind", Arguments(ObjString(name), accessType, context.thisObj))
+                        } catch (e: Exception) {
+                            initValue
                         }
-                        context.addItem(name, false, ObjUnset, visibility, recordType = ObjRecord.Type.Delegated, isTransient = isTransient).apply {
-                            delegate = finalDelegate
-                        }
-                    } else if (th is ObjClass) {
-                        val cls: ObjClass = th
-                        val storageName = "${cls.className}::$name"
-                        cls.createField(name, ObjUnset, false, visibility, null, start, declaringClass = cls, isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride, isTransient = isTransient, type = ObjRecord.Type.Delegated)
-                        cls.instanceInitializers += statement(start) { scp ->
-                            val accessType2 = scp.resolveQualifiedIdentifier("DelegateAccess.Callable")
-                            val initValue2 = delegateExpression.execute(scp)
-                            val finalDelegate2 = try {
-                                initValue2.invokeInstanceMethod(scp, "bind", Arguments(ObjString(name), accessType2, scp.thisObj))
-                            } catch (e: Exception) {
-                                initValue2
-                            }
-                            scp.addItem(storageName, false, ObjUnset, visibility, null, recordType = ObjRecord.Type.Delegated, isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride, isTransient = isTransient).apply {
-                                delegate = finalDelegate2
-                            }
-                            ObjVoid
-                        }
-                    } else {
-                        context.addItem(name, false, ObjUnset, visibility, recordType = ObjRecord.Type.Delegated, isTransient = isTransient).apply {
-                            delegate = finalDelegate
-                        }
-                    }
-                    return@statement ObjVoid
-                }
 
-                // we added fn in the context. now we must save closure
-                // for the function, unless we're in the class scope:
-                if (isStatic || parentContext !is CodeContext.ClassBody)
-                    closure = context
-
-                val annotatedFnBody = annotation?.invoke(context, ObjString(name), fnBody)
-                    ?: fnBody
-
-                extTypeName?.let { typeName ->
-                    // class extension method
-                    val type = context[typeName]?.value ?: context.raiseSymbolNotFound("class $typeName not found")
-                    if (type !is ObjClass) context.raiseClassCastError("$typeName is not the class instance")
-                    val stmt = statement {
-                        // ObjInstance has a fixed instance scope, so we need to build a closure
-                        (thisObj as? ObjInstance)?.let { i ->
-                            annotatedFnBody.execute(ClosureScope(this, i.instanceScope))
+                        if (extTypeName != null) {
+                            val type = context[extTypeName]?.value ?: context.raiseSymbolNotFound("class $extTypeName not found")
+                            if (type !is ObjClass) context.raiseClassCastError("$extTypeName is not the class instance")
+                            context.addExtension(type, name, ObjRecord(ObjUnset, isMutable = false, visibility = visibility, declaringClass = null, type = ObjRecord.Type.Delegated).apply {
+                                delegate = finalDelegate
+                            })
+                            return ObjVoid
                         }
-                        // other classes can create one-time scope for this rare case:
-                            ?: annotatedFnBody.execute(thisObj.autoInstanceScope(this))
-                    }
-                    context.addExtension(type, name, ObjRecord(stmt, isMutable = false, visibility = visibility, declaringClass = null))
-                }
-                // regular function/method
-                    ?: run {
+
                         val th = context.thisObj
-                        if (!isStatic && th is ObjClass) {
-                            // Instance method declared inside a class body: register on the class
+                        if (isStatic) {
+                            (th as ObjClass).createClassField(name, ObjUnset, false, visibility, null, start, isTransient = isTransient, type = ObjRecord.Type.Delegated).apply {
+                                delegate = finalDelegate
+                            }
+                            context.addItem(name, false, ObjUnset, visibility, recordType = ObjRecord.Type.Delegated, isTransient = isTransient).apply {
+                                delegate = finalDelegate
+                            }
+                        } else if (th is ObjClass) {
                             val cls: ObjClass = th
-                            cls.addFn(
-                                name,
-                                isMutable = true,
-                                visibility = visibility,
-                                isAbstract = isAbstract,
-                                isClosed = isClosed,
-                                isOverride = isOverride,
-                                pos = start
-                            ) {
-                                // Execute with the instance as receiver; set caller lexical class for visibility
-                                val savedCtx = this.currentClassCtx
-                                this.currentClassCtx = cls
-                                try {
-                                    (thisObj as? ObjInstance)?.let { i ->
-                                        annotatedFnBody.execute(ClosureScope(this, i.instanceScope))
-                                    } ?: annotatedFnBody.execute(thisObj.autoInstanceScope(this))
-                                } finally {
-                                    this.currentClassCtx = savedCtx
+                            val storageName = "${cls.className}::$name"
+                            cls.createField(name, ObjUnset, false, visibility, null, start, declaringClass = cls, isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride, isTransient = isTransient, type = ObjRecord.Type.Delegated)
+                            cls.instanceInitializers += object : Statement() {
+                                override val pos: Pos = start
+                                override suspend fun execute(scp: Scope): Obj {
+                                    val accessType2 = scp.resolveQualifiedIdentifier("DelegateAccess.Callable")
+                                    val initValue2 = delegateExpression.execute(scp)
+                                    val finalDelegate2 = try {
+                                        initValue2.invokeInstanceMethod(scp, "bind", Arguments(ObjString(name), accessType2, scp.thisObj))
+                                    } catch (e: Exception) {
+                                        initValue2
+                                    }
+                                    scp.addItem(storageName, false, ObjUnset, visibility, null, recordType = ObjRecord.Type.Delegated, isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride, isTransient = isTransient).apply {
+                                        delegate = finalDelegate2
+                                    }
+                                    return ObjVoid
                                 }
                             }
-                            // also expose the symbol in the class scope for possible references
-                            context.addItem(name, false, annotatedFnBody, visibility)
-                            annotatedFnBody
                         } else {
-                            // top-level or nested function
-                            context.addItem(name, false, annotatedFnBody, visibility)
+                            context.addItem(name, false, ObjUnset, visibility, recordType = ObjRecord.Type.Delegated, isTransient = isTransient).apply {
+                                delegate = finalDelegate
+                            }
                         }
+                        return ObjVoid
                     }
-                // as the function can be called from anywhere, we have
-                // saved the proper context in the closure
-                annotatedFnBody
+
+                    // we added fn in the context. now we must save closure
+                    // for the function, unless we're in the class scope:
+                    if (isStatic || parentContext !is CodeContext.ClassBody)
+                        closure = context
+
+                    val annotatedFnBody = annotation?.invoke(context, ObjString(name), fnBody)
+                        ?: fnBody
+
+                    extTypeName?.let { typeName ->
+                        // class extension method
+                        val type = context[typeName]?.value ?: context.raiseSymbolNotFound("class $typeName not found")
+                        if (type !is ObjClass) context.raiseClassCastError("$typeName is not the class instance")
+                        val stmt = object : Statement() {
+                            override val pos: Pos = start
+                            override suspend fun execute(scope: Scope): Obj {
+                                // ObjInstance has a fixed instance scope, so we need to build a closure
+                                val result = (scope.thisObj as? ObjInstance)?.let { i ->
+                                    annotatedFnBody.execute(ClosureScope(scope, i.instanceScope))
+                                }
+                                // other classes can create one-time scope for this rare case:
+                                    ?: annotatedFnBody.execute(scope.thisObj.autoInstanceScope(scope))
+                                return result
+                            }
+                        }
+                        context.addExtension(type, name, ObjRecord(stmt, isMutable = false, visibility = visibility, declaringClass = null))
+                    }
+                    // regular function/method
+                        ?: run {
+                            val th = context.thisObj
+                            if (!isStatic && th is ObjClass) {
+                                // Instance method declared inside a class body: register on the class
+                                val cls: ObjClass = th
+                                cls.addFn(
+                                    name,
+                                    isMutable = true,
+                                    visibility = visibility,
+                                    isAbstract = isAbstract,
+                                    isClosed = isClosed,
+                                    isOverride = isOverride,
+                                    pos = start
+                                ) {
+                                    // Execute with the instance as receiver; set caller lexical class for visibility
+                                    val savedCtx = this.currentClassCtx
+                                    this.currentClassCtx = cls
+                                    try {
+                                        (thisObj as? ObjInstance)?.let { i ->
+                                            annotatedFnBody.execute(ClosureScope(this, i.instanceScope))
+                                        } ?: annotatedFnBody.execute(thisObj.autoInstanceScope(this))
+                                    } finally {
+                                        this.currentClassCtx = savedCtx
+                                    }
+                                }
+                                // also expose the symbol in the class scope for possible references
+                                context.addItem(name, false, annotatedFnBody, visibility)
+                                annotatedFnBody
+                            } else {
+                                // top-level or nested function
+                                context.addItem(name, false, annotatedFnBody, visibility)
+                            }
+                        }
+                    // as the function can be called from anywhere, we have
+                    // saved the proper context in the closure
+                    return annotatedFnBody
+                }
             }
             if (isStatic) {
                 currentInitScope += fnCreateStatement
@@ -3013,11 +3233,24 @@ class Compiler(
             if (t.type != Token.Type.LBRACE)
                 throw ScriptError(t.pos, "Expected block body start: {")
         }
-        val block = parseScript()
-        return statement(startPos) {
-            // block run on inner context:
-            block.execute(if (it.skipScopeCreation) it else it.createChildScope(startPos))
-        }.also {
+        val blockSlotPlan = SlotPlan(mutableMapOf(), 0)
+        slotPlanStack.add(blockSlotPlan)
+        val block = try {
+            parseScript()
+        } finally {
+            slotPlanStack.removeLast()
+        }
+        val planSnapshot = if (blockSlotPlan.slots.isEmpty()) emptyMap() else blockSlotPlan.slots.toMap()
+        val stmt = object : Statement() {
+            override val pos: Pos = startPos
+            override suspend fun execute(scope: Scope): Obj {
+                // block run on inner context:
+                val target = if (scope.skipScopeCreation) scope else scope.createChildScope(startPos)
+                if (planSnapshot.isNotEmpty()) target.applySlotPlan(planSnapshot)
+                return block.execute(target)
+            }
+        }
+        return stmt.also {
             val t1 = cc.next()
             if (t1.type != Token.Type.RBRACE)
                 throw ScriptError(t1.pos, "unbalanced braces: expected block body end: }")
@@ -3079,22 +3312,25 @@ class Compiler(
             val names = mutableListOf<String>()
             pattern.forEachVariable { names.add(it) }
 
-            return statement(start) { context ->
-                val value = initialExpression.execute(context)
-                for (name in names) {
-                    context.addItem(name, true, ObjVoid, visibility, isTransient = isTransient)
-                }
-                pattern.setAt(start, context, value)
-                if (!isMutable) {
+            return object : Statement() {
+                override val pos: Pos = start
+                override suspend fun execute(context: Scope): Obj {
+                    val value = initialExpression.execute(context)
                     for (name in names) {
-                        val rec = context.objects[name]!!
-                        val immutableRec = rec.copy(isMutable = false)
-                        context.objects[name] = immutableRec
-                        context.localBindings[name] = immutableRec
-                        context.updateSlotFor(name, immutableRec)
+                        context.addItem(name, true, ObjVoid, visibility, isTransient = isTransient)
                     }
+                    pattern.setAt(start, context, value)
+                    if (!isMutable) {
+                        for (name in names) {
+                            val rec = context.objects[name]!!
+                            val immutableRec = rec.copy(isMutable = false)
+                            context.objects[name] = immutableRec
+                            context.localBindings[name] = immutableRec
+                            context.updateSlotFor(name, immutableRec)
+                        }
+                    }
+                    return ObjVoid
                 }
-                ObjVoid
             }
         }
 

@@ -381,7 +381,7 @@ class CastRef(
 }
 
 /** Qualified `this@Type`: resolves to a view of current `this` starting dispatch from the ancestor Type. */
-class QualifiedThisRef(private val typeName: String, private val atPos: Pos) : ObjRef {
+class QualifiedThisRef(val typeName: String, private val atPos: Pos) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
         val t = scope[typeName]?.value as? ObjClass
             ?: scope.raiseError("unknown type $typeName")
@@ -400,6 +400,188 @@ class QualifiedThisRef(private val typeName: String, private val atPos: Pos) : O
         scope.raiseClassCastError(
             "No instance of type ${t.className} found in the scope chain"
         )
+    }
+}
+
+private suspend fun resolveQualifiedThisInstance(scope: Scope, typeName: String): Pair<ObjInstance, ObjClass> {
+    val t = scope[typeName]?.value as? ObjClass
+        ?: scope.raiseError("unknown type $typeName")
+    var s: Scope? = scope
+    while (s != null) {
+        val inst = s.thisObj as? ObjInstance
+        if (inst != null && (inst.objClass === t || inst.objClass.allParentsSet.contains(t))) {
+            return inst to t
+        }
+        s = s.parent
+    }
+    scope.raiseClassCastError(
+        "No instance of type ${t.className} found in the scope chain"
+    )
+}
+
+/**
+ * Fast path for direct `this@Type.name` access using slot maps when possible.
+ */
+class QualifiedThisFieldSlotRef(
+    private val typeName: String,
+    val name: String,
+    private val isOptional: Boolean
+) : ObjRef {
+    override suspend fun get(scope: Scope): ObjRecord {
+        val (inst, startClass) = resolveQualifiedThisInstance(scope, typeName)
+        if (isOptional && inst == ObjNull) return ObjNull.asMutable
+
+        if (startClass !== inst.objClass) {
+            return ObjQualifiedView(inst, startClass).readField(scope, name)
+        }
+
+        val caller = scope.currentClassCtx
+        if (caller != null) {
+            val mangled = caller.mangledName(name)
+            inst.fieldRecordForKey(mangled)?.let { rec ->
+                if (rec.visibility == Visibility.Private) {
+                    return inst.resolveRecord(scope, rec, name, caller)
+                }
+            }
+            inst.methodRecordForKey(mangled)?.let { rec ->
+                if (rec.visibility == Visibility.Private) {
+                    return inst.resolveRecord(scope, rec, name, caller)
+                }
+            }
+        }
+
+        val key = inst.objClass.publicMemberResolution[name] ?: name
+        inst.fieldRecordForKey(key)?.let { rec ->
+            if ((rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.ConstructorField) && !rec.isAbstract)
+                return rec
+        }
+        inst.methodRecordForKey(key)?.let { rec ->
+            if (!rec.isAbstract) {
+                val decl = rec.declaringClass ?: inst.objClass.findDeclaringClassOf(name) ?: inst.objClass
+                return inst.resolveRecord(scope, rec, name, decl)
+            }
+        }
+
+        return inst.readField(scope, name)
+    }
+
+    override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
+        val (inst, startClass) = resolveQualifiedThisInstance(scope, typeName)
+        if (isOptional && inst == ObjNull) return
+
+        if (startClass !== inst.objClass) {
+            ObjQualifiedView(inst, startClass).writeField(scope, name, newValue)
+            return
+        }
+
+        val caller = scope.currentClassCtx
+        if (caller != null) {
+            val mangled = caller.mangledName(name)
+            inst.fieldRecordForKey(mangled)?.let { rec ->
+                if (rec.visibility == Visibility.Private) {
+                    writeDirectOrFallback(scope, inst, rec, name, newValue, caller)
+                    return
+                }
+            }
+            inst.methodRecordForKey(mangled)?.let { rec ->
+                if (rec.visibility == Visibility.Private &&
+                    (rec.type == ObjRecord.Type.Property || rec.type == ObjRecord.Type.Delegated)) {
+                    inst.writeField(scope, name, newValue)
+                    return
+                }
+            }
+        }
+
+        val key = inst.objClass.publicMemberResolution[name] ?: name
+        inst.fieldRecordForKey(key)?.let { rec ->
+            val decl = rec.declaringClass ?: inst.objClass.findDeclaringClassOf(name)
+            if (canAccessMember(rec.effectiveWriteVisibility, decl, caller, name)) {
+                writeDirectOrFallback(scope, inst, rec, name, newValue, decl)
+                return
+            }
+        }
+        inst.methodRecordForKey(key)?.let { rec ->
+            if (rec.effectiveWriteVisibility == Visibility.Public &&
+                (rec.type == ObjRecord.Type.Property || rec.type == ObjRecord.Type.Delegated)) {
+                inst.writeField(scope, name, newValue)
+                return
+            }
+        }
+
+        inst.writeField(scope, name, newValue)
+    }
+
+    private suspend fun writeDirectOrFallback(
+        scope: Scope,
+        inst: ObjInstance,
+        rec: ObjRecord,
+        name: String,
+        newValue: Obj,
+        decl: ObjClass?
+    ) {
+        if ((rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.ConstructorField) && !rec.isAbstract) {
+            if (!rec.isMutable && rec.value !== ObjUnset) {
+                ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
+            }
+            if (rec.value.assign(scope, newValue) == null) rec.value = newValue
+        } else {
+            inst.writeField(scope, name, newValue)
+        }
+    }
+}
+
+/**
+ * Fast path for direct `this@Type.method(...)` calls using slots when the qualifier is the
+ * dynamic class. Otherwise falls back to a qualified view dispatch.
+ */
+class QualifiedThisMethodSlotCallRef(
+    private val typeName: String,
+    private val name: String,
+    private val args: List<ParsedArgument>,
+    private val tailBlock: Boolean,
+    private val isOptional: Boolean
+) : ObjRef {
+    override suspend fun get(scope: Scope): ObjRecord = evalValue(scope).asReadonly
+
+    override suspend fun evalValue(scope: Scope): Obj {
+        val (inst, startClass) = resolveQualifiedThisInstance(scope, typeName)
+        if (isOptional && inst == ObjNull) return ObjNull
+        val callArgs = args.toArguments(scope, tailBlock)
+
+        if (startClass !== inst.objClass) {
+            return ObjQualifiedView(inst, startClass).invokeInstanceMethod(scope, name, callArgs, null)
+        }
+
+        val caller = scope.currentClassCtx
+        if (caller != null) {
+            val mangled = caller.mangledName(name)
+            inst.methodRecordForKey(mangled)?.let { rec ->
+                if (rec.visibility == Visibility.Private && !rec.isAbstract) {
+                    if (rec.type == ObjRecord.Type.Property) {
+                        if (callArgs.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, inst, caller)
+                    } else if (rec.type == ObjRecord.Type.Fun) {
+                        return rec.value.invoke(inst.instanceScope, inst, callArgs, caller)
+                    }
+                }
+            }
+        }
+
+        val key = inst.objClass.publicMemberResolution[name] ?: name
+        inst.methodRecordForKey(key)?.let { rec ->
+            if (!rec.isAbstract) {
+                val decl = rec.declaringClass ?: inst.objClass.findDeclaringClassOf(name) ?: inst.objClass
+                val effectiveCaller = caller ?: if (scope.thisObj === inst) inst.objClass else null
+                if (!canAccessMember(rec.visibility, decl, effectiveCaller, name))
+                    scope.raiseError(ObjIllegalAccessException(scope, "can't invoke method $name (declared in ${decl.className})"))
+                if (rec.type == ObjRecord.Type.Property) {
+                    if (callArgs.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, inst, decl)
+                } else if (rec.type == ObjRecord.Type.Fun) {
+                    return rec.value.invoke(inst.instanceScope, inst, callArgs, decl)
+                }
+            }
+        }
+
+        return inst.invokeInstanceMethod(scope, name, callArgs)
     }
 }
 
@@ -691,9 +873,20 @@ class FieldRef(
                         if (effectiveKey != null) {
                             rKey1 = key; rVer1 = ver; rGetter1 = { obj, sc ->
                                 if (obj is ObjInstance && obj.objClass === cls) {
-                                    val rec = obj.instanceScope.objects[effectiveKey]
-                                    if (rec != null && rec.type != ObjRecord.Type.Delegated) rec
-                                    else obj.readField(sc, name)
+                                    val slot = cls.fieldSlotForKey(effectiveKey)
+                                    if (slot != null) {
+                                        val idx = slot.slot
+                                        val rec = if (idx >= 0 && idx < obj.fieldSlots.size) obj.fieldSlots[idx] else null
+                                        if (rec != null &&
+                                            (rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.ConstructorField) &&
+                                            !rec.isAbstract) {
+                                            rec
+                                        } else obj.readField(sc, name)
+                                    } else {
+                                        val rec = obj.fieldRecordForKey(effectiveKey) ?: obj.instanceScope.objects[effectiveKey]
+                                        if (rec != null && rec.type != ObjRecord.Type.Delegated) rec
+                                        else obj.readField(sc, name)
+                                    }
                                 } else obj.readField(sc, name)
                             }
                         } else {
@@ -809,10 +1002,24 @@ class FieldRef(
                         if (effectiveKey != null) {
                             wKey1 = key; wVer1 = ver; wSetter1 = { obj, sc, nv ->
                                 if (obj is ObjInstance && obj.objClass === cls) {
-                                    val rec = obj.instanceScope.objects[effectiveKey]
-                                    if (rec != null && rec.effectiveWriteVisibility == Visibility.Public && rec.isMutable && rec.type == ObjRecord.Type.Field) {
-                                        if (rec.value.assign(sc, nv) == null) rec.value = nv
-                                    } else obj.writeField(sc, name, nv)
+                                    val slot = cls.fieldSlotForKey(effectiveKey)
+                                    if (slot != null) {
+                                        val idx = slot.slot
+                                        val rec = if (idx >= 0 && idx < obj.fieldSlots.size) obj.fieldSlots[idx] else null
+                                        if (rec != null &&
+                                            rec.effectiveWriteVisibility == Visibility.Public &&
+                                            rec.isMutable &&
+                                            (rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.ConstructorField) &&
+                                            !rec.isAbstract) {
+                                            if (rec.value.assign(sc, nv) == null) rec.value = nv
+                                        } else obj.writeField(sc, name, nv)
+                                    } else {
+                                        val rec = obj.fieldRecordForKey(effectiveKey) ?: obj.instanceScope.objects[effectiveKey]
+                                        if (rec != null && rec.effectiveWriteVisibility == Visibility.Public && rec.isMutable &&
+                                            (rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.ConstructorField)) {
+                                            if (rec.value.assign(sc, nv) == null) rec.value = nv
+                                        } else obj.writeField(sc, name, nv)
+                                    }
                                 } else obj.writeField(sc, name, nv)
                             }
                         } else {
@@ -887,6 +1094,113 @@ class FieldRef(
             }
         }
         return base.readField(scope, name).value
+    }
+}
+
+/**
+ * Fast path for direct `this.name` access using slot maps.
+ * Falls back to normal member resolution when needed.
+ */
+class ThisFieldSlotRef(
+    val name: String,
+    private val isOptional: Boolean
+) : ObjRef {
+    override suspend fun get(scope: Scope): ObjRecord {
+        val th = scope.thisObj
+        if (th == ObjNull && isOptional) return ObjNull.asMutable
+        if (th !is ObjInstance) return th.readField(scope, name)
+
+        val caller = scope.currentClassCtx
+        if (caller != null) {
+            val mangled = caller.mangledName(name)
+            th.fieldRecordForKey(mangled)?.let { rec ->
+                if (rec.visibility == Visibility.Private) {
+                    return th.resolveRecord(scope, rec, name, caller)
+                }
+            }
+            th.methodRecordForKey(mangled)?.let { rec ->
+                if (rec.visibility == Visibility.Private) {
+                    return th.resolveRecord(scope, rec, name, caller)
+                }
+            }
+        }
+
+        val key = th.objClass.publicMemberResolution[name] ?: name
+        th.fieldRecordForKey(key)?.let { rec ->
+            if ((rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.ConstructorField) && !rec.isAbstract)
+                return rec
+        }
+        th.methodRecordForKey(key)?.let { rec ->
+            if (!rec.isAbstract) {
+                val decl = rec.declaringClass ?: th.objClass.findDeclaringClassOf(name) ?: th.objClass
+                return th.resolveRecord(scope, rec, name, decl)
+            }
+        }
+
+        return th.readField(scope, name)
+    }
+
+    override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
+        val th = scope.thisObj
+        if (th == ObjNull && isOptional) return
+        if (th !is ObjInstance) {
+            th.writeField(scope, name, newValue)
+            return
+        }
+
+        val caller = scope.currentClassCtx
+        if (caller != null) {
+            val mangled = caller.mangledName(name)
+            th.fieldRecordForKey(mangled)?.let { rec ->
+                if (rec.visibility == Visibility.Private) {
+                    writeDirectOrFallback(scope, th, rec, name, newValue, caller)
+                    return
+                }
+            }
+            th.methodRecordForKey(mangled)?.let { rec ->
+                if (rec.visibility == Visibility.Private &&
+                    (rec.type == ObjRecord.Type.Property || rec.type == ObjRecord.Type.Delegated)) {
+                    th.writeField(scope, name, newValue)
+                    return
+                }
+            }
+        }
+
+        val key = th.objClass.publicMemberResolution[name] ?: name
+        th.fieldRecordForKey(key)?.let { rec ->
+            val decl = rec.declaringClass ?: th.objClass.findDeclaringClassOf(name)
+            if (canAccessMember(rec.effectiveWriteVisibility, decl, caller, name)) {
+                writeDirectOrFallback(scope, th, rec, name, newValue, decl)
+                return
+            }
+        }
+        th.methodRecordForKey(key)?.let { rec ->
+            if (rec.effectiveWriteVisibility == Visibility.Public &&
+                (rec.type == ObjRecord.Type.Property || rec.type == ObjRecord.Type.Delegated)) {
+                th.writeField(scope, name, newValue)
+                return
+            }
+        }
+
+        th.writeField(scope, name, newValue)
+    }
+
+    private suspend fun writeDirectOrFallback(
+        scope: Scope,
+        inst: ObjInstance,
+        rec: ObjRecord,
+        name: String,
+        newValue: Obj,
+        decl: ObjClass?
+    ) {
+        if ((rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.ConstructorField) && !rec.isAbstract) {
+            if (!rec.isMutable && rec.value !== ObjUnset) {
+                ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
+            }
+            if (rec.value.assign(scope, newValue) == null) rec.value = newValue
+        } else {
+            inst.writeField(scope, name, newValue)
+        }
     }
 }
 
@@ -1336,36 +1650,50 @@ class MethodCallRef(
                     is ObjInstance -> {
                         // Prefer resolved class member to avoid per-call lookup on hit
                         // BUT only if it's NOT a root object member (which can be shadowed by extensions)
-                        var hierarchyMember: ObjRecord? = null
                         val cls0 = base.objClass
                         val keyInScope = cls0.publicMemberResolution[name]
-                        if (keyInScope != null) {
-                            val rec = base.instanceScope.objects[keyInScope]
-                            if (rec != null && rec.type == ObjRecord.Type.Fun) {
-                                hierarchyMember = rec
-                            }
-                        }
+                        val methodSlot = if (keyInScope != null) cls0.methodSlotForKey(keyInScope) else null
+                        val fastRec = if (methodSlot != null) {
+                            val idx = methodSlot.slot
+                            if (idx >= 0 && idx < base.methodSlots.size) base.methodSlots[idx] else null
+                        } else if (keyInScope != null) {
+                            base.methodRecordForKey(keyInScope) ?: base.instanceScope.objects[keyInScope]
+                        } else null
+                        val resolved = if (fastRec != null) null else cls0.resolveInstanceMember(name)
 
-                        if (hierarchyMember == null) {
-                            for (cls in base.objClass.mro) {
-                                if (cls.className == "Obj") break
-                                val rec = cls.members[name] ?: cls.classScope?.objects?.get(name)
-                                if (rec != null && !rec.isAbstract && rec.type != ObjRecord.Type.Field) {
-                                    hierarchyMember = rec
-                                    break
+                        val targetRec = when {
+                            fastRec != null && fastRec.type == ObjRecord.Type.Fun -> fastRec
+                            resolved != null && resolved.record.type == ObjRecord.Type.Fun && !resolved.record.isAbstract -> resolved.record
+                            else -> null
+                        }
+                        if (targetRec != null) {
+                            val visibility = targetRec.visibility
+                            val decl = targetRec.declaringClass ?: (resolved?.declaringClass ?: cls0)
+                            if (methodSlot != null && targetRec.type == ObjRecord.Type.Fun) {
+                                val slotIndex = methodSlot.slot
+                                mKey1 = key; mVer1 = ver; mInvoker1 = { obj, sc, a ->
+                                    val inst = obj as ObjInstance
+                                    if (inst.objClass === cls0) {
+                                        val rec = if (slotIndex >= 0 && slotIndex < inst.methodSlots.size) inst.methodSlots[slotIndex] else null
+                                        if (rec != null && rec.type == ObjRecord.Type.Fun && !rec.isAbstract) {
+                                            if (!visibility.isPublic && !canAccessMember(visibility, decl, sc.currentClassCtx, name))
+                                                sc.raiseError(ObjIllegalAccessException(sc, "can't invoke non-public method $name"))
+                                            rec.value.invoke(inst.instanceScope, inst, a, decl)
+                                        } else {
+                                            obj.invokeInstanceMethod(sc, name, a)
+                                        }
+                                    } else {
+                                        obj.invokeInstanceMethod(sc, name, a)
+                                    }
                                 }
-                            }
-                        }
-
-                        if (hierarchyMember != null) {
-                            val visibility = hierarchyMember.visibility
-                            val callable = hierarchyMember.value
-                            val decl = hierarchyMember.declaringClass ?: base.objClass
-                            mKey1 = key; mVer1 = ver; mInvoker1 = { obj, sc, a ->
-                                val inst = obj as ObjInstance
-                                if (!visibility.isPublic && !canAccessMember(visibility, decl, sc.currentClassCtx, name))
-                                    sc.raiseError(ObjIllegalAccessException(sc, "can't invoke non-public method $name"))
-                                callable.invoke(inst.instanceScope, inst, a)
+                            } else {
+                                val callable = targetRec.value
+                                mKey1 = key; mVer1 = ver; mInvoker1 = { obj, sc, a ->
+                                    val inst = obj as ObjInstance
+                                    if (!visibility.isPublic && !canAccessMember(visibility, decl, sc.currentClassCtx, name))
+                                        sc.raiseError(ObjIllegalAccessException(sc, "can't invoke non-public method $name"))
+                                    callable.invoke(inst.instanceScope, inst, a)
+                                }
                             }
                         } else {
                             // Fallback to name-based lookup per call (handles extensions and root members)
@@ -1396,6 +1724,57 @@ class MethodCallRef(
         is ObjInstance -> obj.objClass.classId to obj.objClass.layoutVersion
         is ObjClass -> obj.classId to obj.layoutVersion
         else -> 0L to -1
+    }
+}
+
+/**
+ * Fast path for direct `this.method(...)` calls using slot maps.
+ * Falls back to normal invoke semantics when needed.
+ */
+class ThisMethodSlotCallRef(
+    private val name: String,
+    private val args: List<ParsedArgument>,
+    private val tailBlock: Boolean,
+    private val isOptional: Boolean
+) : ObjRef {
+    override suspend fun get(scope: Scope): ObjRecord = evalValue(scope).asReadonly
+
+    override suspend fun evalValue(scope: Scope): Obj {
+        val base = scope.thisObj
+        if (base == ObjNull && isOptional) return ObjNull
+        val callArgs = args.toArguments(scope, tailBlock)
+        if (base !is ObjInstance) return base.invokeInstanceMethod(scope, name, callArgs)
+
+        val caller = scope.currentClassCtx
+        if (caller != null) {
+            val mangled = caller.mangledName(name)
+            base.methodRecordForKey(mangled)?.let { rec ->
+                if (rec.visibility == Visibility.Private && !rec.isAbstract) {
+                    if (rec.type == ObjRecord.Type.Property) {
+                        if (callArgs.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, base, caller)
+                    } else if (rec.type == ObjRecord.Type.Fun) {
+                        return rec.value.invoke(base.instanceScope, base, callArgs, caller)
+                    }
+                }
+            }
+        }
+
+        val key = base.objClass.publicMemberResolution[name] ?: name
+        base.methodRecordForKey(key)?.let { rec ->
+            if (!rec.isAbstract) {
+                val decl = rec.declaringClass ?: base.objClass.findDeclaringClassOf(name) ?: base.objClass
+                val effectiveCaller = caller ?: if (scope.thisObj === base) base.objClass else null
+                if (!canAccessMember(rec.visibility, decl, effectiveCaller, name))
+                    scope.raiseError(ObjIllegalAccessException(scope, "can't invoke method $name (declared in ${decl.className})"))
+                if (rec.type == ObjRecord.Type.Property) {
+                    if (callArgs.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, base, decl)
+                } else if (rec.type == ObjRecord.Type.Fun) {
+                    return rec.value.invoke(base.instanceScope, base, callArgs, decl)
+                }
+            }
+        }
+
+        return base.invokeInstanceMethod(scope, name, callArgs)
     }
 }
 
@@ -1729,6 +2108,240 @@ class FastLocalVarRef(
     }
 }
 
+/**
+ * Identifier reference in class context that prefers member slots on `this` after local lookup.
+ * Falls back to normal scope lookup for globals/outer scopes.
+ */
+class ImplicitThisMemberRef(
+    val name: String,
+    val atPos: Pos
+) : ObjRef {
+    override fun forEachVariable(block: (String) -> Unit) {
+        block(name)
+    }
+
+    override fun forEachVariableWithPos(block: (String, Pos) -> Unit) {
+        block(name, atPos)
+    }
+
+    override suspend fun get(scope: Scope): ObjRecord {
+        scope.pos = atPos
+        val caller = scope.currentClassCtx
+        val th = scope.thisObj
+
+        // 1) locals in the same `this` chain
+        var s: Scope? = scope
+        while (s != null && s.thisObj === th) {
+            scope.tryGetLocalRecord(s, name, caller)?.let { return it }
+            s = s.parent
+        }
+
+        // 2) member slots on this instance
+        if (th is ObjInstance) {
+            // private member access for current class context
+            caller?.let { c ->
+                val mangled = c.mangledName(name)
+                th.fieldRecordForKey(mangled)?.let { rec ->
+                    if (rec.visibility == Visibility.Private) {
+                        return th.resolveRecord(scope, rec, name, c)
+                    }
+                }
+                th.methodRecordForKey(mangled)?.let { rec ->
+                    if (rec.visibility == Visibility.Private) {
+                        return th.resolveRecord(scope, rec, name, c)
+                    }
+                }
+            }
+
+            val key = th.objClass.publicMemberResolution[name] ?: name
+            th.fieldRecordForKey(key)?.let { rec ->
+                if ((rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.ConstructorField) && !rec.isAbstract)
+                    return rec
+            }
+            th.methodRecordForKey(key)?.let { rec ->
+                if (!rec.isAbstract) {
+                    val decl = rec.declaringClass ?: th.objClass.findDeclaringClassOf(name) ?: th.objClass
+                    return th.resolveRecord(scope, rec, name, decl)
+                }
+            }
+        }
+
+        // 3) fallback to normal scope resolution (globals/outer scopes)
+        scope[name]?.let { return it }
+        try {
+            return th.readField(scope, name)
+        } catch (e: ExecutionError) {
+            if ((e.message ?: "").contains("no such field: $name")) scope.raiseSymbolNotFound(name)
+            throw e
+        }
+    }
+
+    override suspend fun evalValue(scope: Scope): Obj {
+        val rec = get(scope)
+        return scope.resolve(rec, name)
+    }
+
+    override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
+        scope.pos = atPos
+        val caller = scope.currentClassCtx
+        val th = scope.thisObj
+
+        // 1) locals in the same `this` chain
+        var s: Scope? = scope
+        while (s != null && s.thisObj === th) {
+            val rec = scope.tryGetLocalRecord(s, name, caller)
+            if (rec != null) {
+                scope.assign(rec, name, newValue)
+                return
+            }
+            s = s.parent
+        }
+
+        // 2) member slots on this instance
+        if (th is ObjInstance) {
+            val key = th.objClass.publicMemberResolution[name] ?: name
+            th.fieldRecordForKey(key)?.let { rec ->
+                val decl = rec.declaringClass ?: th.objClass.findDeclaringClassOf(name)
+                if (canAccessMember(rec.effectiveWriteVisibility, decl, caller, name)) {
+                    if ((rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.ConstructorField) && !rec.isAbstract) {
+                        if (!rec.isMutable && rec.value !== ObjUnset) {
+                            ObjIllegalAssignmentException(scope, "can't reassign val $name").raise()
+                        }
+                        if (rec.value.assign(scope, newValue) == null) rec.value = newValue
+                    } else {
+                        th.writeField(scope, name, newValue)
+                    }
+                    return
+                }
+            }
+            th.methodRecordForKey(key)?.let { rec ->
+                if (rec.effectiveWriteVisibility == Visibility.Public &&
+                    (rec.type == ObjRecord.Type.Property || rec.type == ObjRecord.Type.Delegated)) {
+                    th.writeField(scope, name, newValue)
+                    return
+                }
+            }
+        }
+
+        // 3) fallback to normal scope resolution
+        scope[name]?.let { stored ->
+            scope.assign(stored, name, newValue)
+            return
+        }
+        th.writeField(scope, name, newValue)
+    }
+}
+
+/**
+ * Fast path for implicit member calls in class bodies: `foo(...)` resolves locals first,
+ * then falls back to member lookup on `this`.
+ */
+class ImplicitThisMethodCallRef(
+    private val name: String,
+    private val args: List<ParsedArgument>,
+    private val tailBlock: Boolean,
+    private val isOptional: Boolean,
+    private val atPos: Pos
+) : ObjRef {
+    private val memberRef = ImplicitThisMemberRef(name, atPos)
+
+    override suspend fun get(scope: Scope): ObjRecord = evalValue(scope).asReadonly
+
+    override suspend fun evalValue(scope: Scope): Obj {
+        scope.pos = atPos
+        val callee = memberRef.evalValue(scope)
+        if (callee == ObjNull && isOptional) return ObjNull
+        val callArgs = args.toArguments(scope, tailBlock)
+        val usePool = PerfFlags.SCOPE_POOL
+        return if (usePool) {
+            scope.withChildFrame(callArgs) { child ->
+                callee.callOn(child)
+            }
+        } else {
+            callee.callOn(scope.createChildScope(scope.pos, callArgs))
+        }
+    }
+}
+
+/**
+ * Direct local slot reference with known slot index and lexical depth.
+ * Depth=0 means current scope, depth=1 means parent scope, etc.
+ */
+class LocalSlotRef(
+    val name: String,
+    private val slot: Int,
+    private val depth: Int,
+    private val atPos: Pos,
+) : ObjRef {
+    override fun forEachVariable(block: (String) -> Unit) {
+        block(name)
+    }
+
+    private val fallbackRef = LocalVarRef(name, atPos)
+    private var cachedFrameId: Long = 0L
+    private var cachedOwner: Scope? = null
+    private var cachedOwnerVerified: Boolean = false
+
+    private fun resolveOwner(scope: Scope): Scope? {
+        if (cachedOwner != null && cachedFrameId == scope.frameId && cachedOwnerVerified) return cachedOwner
+        var s: Scope? = scope
+        var remaining = depth
+        while (s != null && remaining > 0) {
+            s = s.parent
+            remaining--
+        }
+        if (s == null || s.getSlotIndexOf(name) != slot) {
+            cachedOwner = null
+            cachedOwnerVerified = false
+            cachedFrameId = scope.frameId
+            return null
+        }
+        cachedOwner = s
+        cachedOwnerVerified = true
+        cachedFrameId = scope.frameId
+        return s
+    }
+
+    override suspend fun get(scope: Scope): ObjRecord {
+        scope.pos = atPos
+        val owner = resolveOwner(scope) ?: return fallbackRef.get(scope)
+        if (slot < 0 || slot >= owner.slotCount()) return fallbackRef.get(scope)
+        val rec = owner.getSlotRecord(slot)
+        if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)) {
+            scope.raiseError(ObjIllegalAccessException(scope, "private field access"))
+        }
+        return rec
+    }
+
+    override suspend fun evalValue(scope: Scope): Obj {
+        scope.pos = atPos
+        val owner = resolveOwner(scope) ?: return fallbackRef.evalValue(scope)
+        if (slot < 0 || slot >= owner.slotCount()) return fallbackRef.evalValue(scope)
+        val rec = owner.getSlotRecord(slot)
+        if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)) {
+            scope.raiseError(ObjIllegalAccessException(scope, "private field access"))
+        }
+        return scope.resolve(rec, name)
+    }
+
+    override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
+        scope.pos = atPos
+        val owner = resolveOwner(scope) ?: run {
+            fallbackRef.setAt(pos, scope, newValue)
+            return
+        }
+        if (slot < 0 || slot >= owner.slotCount()) {
+            fallbackRef.setAt(pos, scope, newValue)
+            return
+        }
+        val rec = owner.getSlotRecord(slot)
+        if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)) {
+            scope.raiseError(ObjIllegalAccessException(scope, "private field access"))
+        }
+        scope.assign(rec, name, newValue)
+    }
+}
+
 class ListLiteralRef(private val entries: List<ListEntry>) : ObjRef {
     override fun forEachVariable(block: (String) -> Unit) {
         for (e in entries) {
@@ -1910,7 +2523,15 @@ class AssignRef(
         val v = value.evalValue(scope)
         // For properties, we should not call get() on target because it invokes the getter.
         // Instead, we call setAt directly.
-        if (target is FieldRef || target is IndexRef || target is LocalVarRef || target is FastLocalVarRef || target is BoundLocalVarRef) {
+        if (target is FieldRef ||
+            target is IndexRef ||
+            target is LocalVarRef ||
+            target is FastLocalVarRef ||
+            target is BoundLocalVarRef ||
+            target is LocalSlotRef ||
+            target is ThisFieldSlotRef ||
+            target is QualifiedThisFieldSlotRef ||
+            target is ImplicitThisMemberRef) {
              target.setAt(atPos, scope, v)
         } else {
             val rec = target.get(scope)

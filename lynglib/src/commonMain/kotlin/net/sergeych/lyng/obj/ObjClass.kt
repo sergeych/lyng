@@ -114,8 +114,7 @@ open class ObjClass(
     val classId: Long = ClassIdGen.nextId()
     var layoutVersion: Int = 0
 
-    private val mangledNameCache = mutableMapOf<String, String>()
-    fun mangledName(name: String): String = mangledNameCache.getOrPut(name) { "$className::$name" }
+    fun mangledName(name: String): String = "$className::$name"
 
     /**
      * Map of public member names to their effective storage keys in instanceScope.objects.
@@ -128,7 +127,7 @@ open class ObjClass(
             if (cls.className == "Obj") continue
             for ((name, rec) in cls.members) {
                 if (rec.visibility == Visibility.Public) {
-                    val key = if (rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.Delegated) cls.mangledName(name) else name
+                    val key = if (rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.ConstructorField || rec.type == ObjRecord.Type.Delegated) cls.mangledName(name) else name
                     res[name] = key
                 }
             }
@@ -267,6 +266,119 @@ open class ObjClass(
      */
     internal val members = mutableMapOf<String, ObjRecord>()
 
+    internal data class FieldSlot(val slot: Int, val record: ObjRecord)
+    internal data class ResolvedMember(val record: ObjRecord, val declaringClass: ObjClass)
+    internal data class MethodSlot(val slot: Int, val record: ObjRecord)
+    private var fieldSlotLayoutVersion: Int = -1
+    private var fieldSlotMap: Map<String, FieldSlot> = emptyMap()
+    private var fieldSlotCount: Int = 0
+    private var instanceMemberLayoutVersion: Int = -1
+    private var instanceMemberCache: Map<String, ResolvedMember> = emptyMap()
+    private var methodSlotLayoutVersion: Int = -1
+    private var methodSlotMap: Map<String, MethodSlot> = emptyMap()
+    private var methodSlotCount: Int = 0
+
+    private fun ensureFieldSlots(): Map<String, FieldSlot> {
+        if (fieldSlotLayoutVersion == layoutVersion) return fieldSlotMap
+        val res = mutableMapOf<String, FieldSlot>()
+        var idx = 0
+        for (cls in mro) {
+            for ((name, rec) in cls.members) {
+                if (rec.isAbstract) continue
+                if (rec.type != ObjRecord.Type.Field && rec.type != ObjRecord.Type.ConstructorField) continue
+                val key = cls.mangledName(name)
+                if (res.containsKey(key)) continue
+                res[key] = FieldSlot(idx, rec)
+                idx += 1
+            }
+        }
+        fieldSlotMap = res
+        fieldSlotCount = idx
+        fieldSlotLayoutVersion = layoutVersion
+        return fieldSlotMap
+    }
+
+    private fun ensureInstanceMemberCache(): Map<String, ResolvedMember> {
+        if (instanceMemberLayoutVersion == layoutVersion) return instanceMemberCache
+        val res = mutableMapOf<String, ResolvedMember>()
+        for (cls in mro) {
+            if (cls.className == "Obj") break
+            for ((name, rec) in cls.members) {
+                if (rec.isAbstract) continue
+                if (res.containsKey(name)) continue
+                val decl = rec.declaringClass ?: cls
+                res[name] = ResolvedMember(rec, decl)
+            }
+            cls.classScope?.objects?.forEach { (name, rec) ->
+                if (rec.isAbstract) return@forEach
+                if (res.containsKey(name)) return@forEach
+                val decl = rec.declaringClass ?: cls
+                res[name] = ResolvedMember(rec, decl)
+            }
+        }
+        instanceMemberCache = res
+        instanceMemberLayoutVersion = layoutVersion
+        return instanceMemberCache
+    }
+
+    private fun ensureMethodSlots(): Map<String, MethodSlot> {
+        if (methodSlotLayoutVersion == layoutVersion) return methodSlotMap
+        val res = mutableMapOf<String, MethodSlot>()
+        var idx = 0
+        for (cls in mro) {
+            if (cls.className == "Obj") break
+            for ((name, rec) in cls.members) {
+                if (rec.isAbstract) continue
+                if (rec.value !is Statement &&
+                    rec.type != ObjRecord.Type.Delegated &&
+                    rec.type != ObjRecord.Type.Fun &&
+                    rec.type != ObjRecord.Type.Property) {
+                    continue
+                }
+                val key = if (rec.visibility == Visibility.Private || rec.type == ObjRecord.Type.Delegated) cls.mangledName(name) else name
+                if (res.containsKey(key)) continue
+                res[key] = MethodSlot(idx, rec)
+                idx += 1
+            }
+            cls.classScope?.objects?.forEach { (name, rec) ->
+                if (rec.isAbstract) return@forEach
+                if (rec.value !is Statement &&
+                    rec.type != ObjRecord.Type.Delegated &&
+                    rec.type != ObjRecord.Type.Property) return@forEach
+                val key = if (rec.visibility == Visibility.Private || rec.type == ObjRecord.Type.Delegated) cls.mangledName(name) else name
+                if (res.containsKey(key)) return@forEach
+                res[key] = MethodSlot(idx, rec)
+                idx += 1
+            }
+        }
+        methodSlotMap = res
+        methodSlotCount = idx
+        methodSlotLayoutVersion = layoutVersion
+        return methodSlotMap
+    }
+
+    internal fun fieldSlotCount(): Int {
+        ensureFieldSlots()
+        return fieldSlotCount
+    }
+
+    internal fun fieldSlotForKey(key: String): FieldSlot? {
+        ensureFieldSlots()
+        return fieldSlotMap[key]
+    }
+
+    internal fun fieldSlotMap(): Map<String, FieldSlot> = ensureFieldSlots()
+    internal fun resolveInstanceMember(name: String): ResolvedMember? = ensureInstanceMemberCache()[name]
+    internal fun methodSlotCount(): Int {
+        ensureMethodSlots()
+        return methodSlotCount
+    }
+    internal fun methodSlotForKey(key: String): MethodSlot? {
+        ensureMethodSlots()
+        return methodSlotMap[key]
+    }
+    internal fun methodSlotMap(): Map<String, MethodSlot> = ensureMethodSlots()
+
     override fun toString(): String = className
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int = if (other === this) 0 else -1
@@ -284,8 +396,8 @@ open class ObjClass(
         for (cls in mro) {
             // 1) members-defined methods and fields
             for ((k, v) in cls.members) {
-                if (!v.isAbstract && (v.value is Statement || v.type == ObjRecord.Type.Delegated || v.type == ObjRecord.Type.Field)) {
-                    val key = if (v.visibility == Visibility.Private || v.type == ObjRecord.Type.Field || v.type == ObjRecord.Type.Delegated) cls.mangledName(k) else k
+                if (!v.isAbstract && (v.value is Statement || v.type == ObjRecord.Type.Delegated || v.type == ObjRecord.Type.Field || v.type == ObjRecord.Type.ConstructorField)) {
+                    val key = if (v.visibility == Visibility.Private || v.type == ObjRecord.Type.Field || v.type == ObjRecord.Type.ConstructorField || v.type == ObjRecord.Type.Delegated) cls.mangledName(k) else k
                     if (!res.containsKey(key)) {
                         res[key] = v
                     }
@@ -327,12 +439,47 @@ open class ObjClass(
         val stableParent = classScope ?: scope.parent
         instance.instanceScope = Scope(stableParent, scope.args, scope.pos, instance)
         instance.instanceScope.currentClassCtx = null
+        val fieldSlots = fieldSlotMap()
+        if (fieldSlots.isNotEmpty()) {
+            instance.initFieldSlots(fieldSlotCount())
+        }
+        val methodSlots = methodSlotMap()
+        if (methodSlots.isNotEmpty()) {
+            instance.initMethodSlots(methodSlotCount())
+        }
         // Expose instance methods (and other callable members) directly in the instance scope for fast lookup
         // This mirrors Obj.autoInstanceScope behavior for ad-hoc scopes and makes fb.method() resolution robust
         
         instance.instanceScope.objects.putAll(templateMethods)
+        if (methodSlots.isNotEmpty()) {
+            for ((key, rec) in templateMethods) {
+                val slot = methodSlots[key]
+                if (slot != null) {
+                    instance.setMethodSlotRecord(slot.slot, rec)
+                }
+            }
+        }
         for (p in templateOthers) {
-            instance.instanceScope.objects[p.first] = p.second.copy()
+            val rec = p.second.copy()
+            instance.instanceScope.objects[p.first] = rec
+            val slot = fieldSlots[p.first]
+            if (slot != null) {
+                instance.setFieldSlotRecord(slot.slot, rec)
+            }
+            if (methodSlots.isNotEmpty()) {
+                val mSlot = methodSlots[p.first]
+                if (mSlot != null) {
+                    instance.setMethodSlotRecord(mSlot.slot, rec)
+                }
+            }
+        }
+        if (methodSlots.isNotEmpty()) {
+            for ((_, mSlot) in methodSlots) {
+                val idx = mSlot.slot
+                if (idx >= 0 && idx < instance.methodSlots.size && instance.methodSlots[idx] == null) {
+                    instance.setMethodSlotRecord(idx, mSlot.record)
+                }
+            }
         }
         return instance
     }
@@ -417,6 +564,10 @@ open class ObjClass(
                 if (rec != null) {
                     val mangled = c.mangledName(p.name)
                     instance.instanceScope.objects[mangled] = rec
+                    val slot = instance.objClass.fieldSlotForKey(mangled)
+                    if (slot != null) {
+                        instance.setFieldSlotRecord(slot.slot, rec)
+                    }
                 }
             }
         }
@@ -738,5 +889,3 @@ open class ObjClass(
         scope.raiseNotImplemented()
 
 }
-
-

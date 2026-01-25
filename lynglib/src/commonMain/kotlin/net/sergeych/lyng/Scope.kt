@@ -393,6 +393,24 @@ open class Scope(
     }
 
     /**
+     * Apply a precomputed slot plan (name -> slot index) for this scope.
+     * This enables direct slot references to bypass name-based lookup.
+     */
+    fun applySlotPlan(plan: Map<String, Int>) {
+        if (plan.isEmpty()) return
+        val maxIndex = plan.values.maxOrNull() ?: return
+        if (slots.size <= maxIndex) {
+            val targetSize = maxIndex + 1
+            while (slots.size < targetSize) {
+                slots.add(ObjRecord(ObjUnset, isMutable = true))
+            }
+        }
+        for ((name, idx) in plan) {
+            nameToSlot[name] = idx
+        }
+    }
+
+    /**
      * Clear all references and maps to prevent memory leaks when pooled.
      */
     fun scrub() {
@@ -503,6 +521,7 @@ open class Scope(
             if (this is ClosureScope) {
                 callScope.localBindings[name] = it
             }
+            bumpClassLayoutIfNeeded(name, value, recordType)
             it
         } ?: addItem(name, true, value, visibility, writeVisibility, recordType, isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride)
 
@@ -529,6 +548,24 @@ open class Scope(
             isTransient = isTransient
         )
         objects[name] = rec
+        bumpClassLayoutIfNeeded(name, value, recordType)
+        if (recordType == ObjRecord.Type.Field || recordType == ObjRecord.Type.ConstructorField) {
+            val inst = thisObj as? net.sergeych.lyng.obj.ObjInstance
+            if (inst != null) {
+                val slot = inst.objClass.fieldSlotForKey(name)
+                if (slot != null) inst.setFieldSlotRecord(slot.slot, rec)
+            }
+        }
+        if (value is Statement ||
+            recordType == ObjRecord.Type.Fun ||
+            recordType == ObjRecord.Type.Delegated ||
+            recordType == ObjRecord.Type.Property) {
+            val inst = thisObj as? net.sergeych.lyng.obj.ObjInstance
+            if (inst != null) {
+                val slot = inst.objClass.methodSlotForKey(name)
+                if (slot != null) inst.setMethodSlotRecord(slot.slot, rec)
+            }
+        }
         // Index this binding within the current frame to help resolve locals across suspension
         localBindings[name] = rec
         // If we are a ClosureScope, mirror binding into the caller frame to keep it discoverable
@@ -556,6 +593,14 @@ open class Scope(
             }
         }
         return rec
+    }
+
+    private fun bumpClassLayoutIfNeeded(name: String, value: Obj, recordType: ObjRecord.Type) {
+        val cls = thisObj as? net.sergeych.lyng.obj.ObjClass ?: return
+        if (cls.classScope !== this) return
+        if (!(value is Statement || recordType == ObjRecord.Type.Fun || recordType == ObjRecord.Type.Delegated)) return
+        if (cls.members.containsKey(name)) return
+        cls.layoutVersion += 1
     }
 
     fun getOrCreateNamespace(name: String): ObjClass {
