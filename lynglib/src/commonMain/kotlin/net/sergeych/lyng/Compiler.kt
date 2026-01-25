@@ -2965,25 +2965,10 @@ class Compiler(
         return if (t2.type == Token.Type.ID && t2.value == "else") {
             val elseBody =
                 parseStatement() ?: throw ScriptError(pos, "Bad else statement: expected statement")
-            return object : Statement() {
-                override val pos: Pos = start
-                override suspend fun execute(scope: Scope): Obj {
-                    return if (condition.execute(scope).toBool())
-                        ifBody.execute(scope)
-                    else
-                        elseBody.execute(scope)
-                }
-            }
+            IfStatement(condition, ifBody, elseBody, start)
         } else {
             cc.previous()
-            object : Statement() {
-                override val pos: Pos = start
-                override suspend fun execute(scope: Scope): Obj {
-                    if (condition.execute(scope).toBool())
-                        return ifBody.execute(scope)
-                    return ObjVoid
-                }
-            }
+            IfStatement(condition, ifBody, null, start)
         }
     }
 

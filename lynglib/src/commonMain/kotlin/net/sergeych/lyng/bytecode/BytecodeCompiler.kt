@@ -17,11 +17,20 @@
 package net.sergeych.lyng.bytecode
 
 import net.sergeych.lyng.ExpressionStatement
+import net.sergeych.lyng.IfStatement
 import net.sergeych.lyng.obj.*
 
 class BytecodeCompiler {
     private val builder = BytecodeBuilder()
     private var nextSlot = 0
+
+    fun compileStatement(name: String, stmt: net.sergeych.lyng.Statement): BytecodeFunction? {
+        return when (stmt) {
+            is ExpressionStatement -> compileExpression(name, stmt)
+            is net.sergeych.lyng.IfStatement -> compileIf(name, stmt)
+            else -> null
+        }
+    }
 
     fun compileExpression(name: String, stmt: ExpressionStatement): BytecodeFunction? {
         val value = compileRef(stmt.ref) ?: return null
@@ -241,27 +250,61 @@ class BytecodeCompiler {
         return CompiledValue(slot, value.type)
     }
 
+    private fun compileIf(name: String, stmt: IfStatement): BytecodeFunction? {
+        val conditionStmt = stmt.condition as? ExpressionStatement ?: return null
+        val condValue = compileRef(conditionStmt.ref) ?: return null
+        if (condValue.type != SlotType.BOOL) return null
+
+        val resultSlot = allocSlot()
+        val elseLabel = builder.label()
+        val endLabel = builder.label()
+
+        builder.emit(
+            Opcode.JMP_IF_FALSE,
+            listOf(BytecodeBuilder.Operand.IntVal(condValue.slot), BytecodeBuilder.Operand.LabelRef(elseLabel))
+        )
+        val thenValue = compileStatementValue(stmt.ifBody) ?: return null
+        emitMove(thenValue, resultSlot)
+        builder.emit(Opcode.JMP, listOf(BytecodeBuilder.Operand.LabelRef(endLabel)))
+
+        builder.mark(elseLabel)
+        if (stmt.elseBody != null) {
+            val elseValue = compileStatementValue(stmt.elseBody) ?: return null
+            emitMove(elseValue, resultSlot)
+        } else {
+            val id = builder.addConst(BytecodeConst.ObjRef(ObjVoid))
+            builder.emit(Opcode.CONST_OBJ, id, resultSlot)
+        }
+
+        builder.mark(endLabel)
+        builder.emit(Opcode.RET, resultSlot)
+        val localCount = maxOf(nextSlot, resultSlot + 1)
+        return builder.build(name, localCount)
+    }
+
+    private fun compileStatementValue(stmt: net.sergeych.lyng.Statement): CompiledValue? {
+        return when (stmt) {
+            is ExpressionStatement -> compileRef(stmt.ref)
+            else -> null
+        }
+    }
+
+    private fun emitMove(value: CompiledValue, dstSlot: Int) {
+        when (value.type) {
+            SlotType.INT -> builder.emit(Opcode.MOVE_INT, value.slot, dstSlot)
+            SlotType.REAL -> builder.emit(Opcode.MOVE_REAL, value.slot, dstSlot)
+            SlotType.BOOL -> builder.emit(Opcode.MOVE_BOOL, value.slot, dstSlot)
+            else -> builder.emit(Opcode.MOVE_OBJ, value.slot, dstSlot)
+        }
+    }
+
     private fun refSlot(ref: LocalSlotRef): Int = ref.slot
-
-    private fun refDepth(ref: LocalSlotRef): Int = refDepthAccessor(ref)
-
-    private fun binaryLeft(ref: BinaryOpRef): ObjRef = binaryLeftAccessor(ref)
-    private fun binaryRight(ref: BinaryOpRef): ObjRef = binaryRightAccessor(ref)
-    private fun binaryOp(ref: BinaryOpRef): BinOp = binaryOpAccessor(ref)
-
-    private fun unaryOperand(ref: UnaryOpRef): ObjRef = unaryOperandAccessor(ref)
-    private fun unaryOp(ref: UnaryOpRef): UnaryOp = unaryOpAccessor(ref)
-
-    private fun assignTarget(ref: AssignRef): LocalSlotRef? = assignTargetAccessor(ref)
-    private fun assignValue(ref: AssignRef): ObjRef = assignValueAccessor(ref)
-
-    // Accessor helpers to avoid exposing fields directly in ObjRef classes.
-    private fun refDepthAccessor(ref: LocalSlotRef): Int = ref.depth
-    private fun binaryLeftAccessor(ref: BinaryOpRef): ObjRef = ref.left
-    private fun binaryRightAccessor(ref: BinaryOpRef): ObjRef = ref.right
-    private fun binaryOpAccessor(ref: BinaryOpRef): BinOp = ref.op
-    private fun unaryOperandAccessor(ref: UnaryOpRef): ObjRef = ref.a
-    private fun unaryOpAccessor(ref: UnaryOpRef): UnaryOp = ref.op
-    private fun assignTargetAccessor(ref: AssignRef): LocalSlotRef? = ref.target as? LocalSlotRef
-    private fun assignValueAccessor(ref: AssignRef): ObjRef = ref.value
+    private fun refDepth(ref: LocalSlotRef): Int = ref.depth
+    private fun binaryLeft(ref: BinaryOpRef): ObjRef = ref.left
+    private fun binaryRight(ref: BinaryOpRef): ObjRef = ref.right
+    private fun binaryOp(ref: BinaryOpRef): BinOp = ref.op
+    private fun unaryOperand(ref: UnaryOpRef): ObjRef = ref.a
+    private fun unaryOp(ref: UnaryOpRef): UnaryOp = ref.op
+    private fun assignTarget(ref: AssignRef): LocalSlotRef? = ref.target as? LocalSlotRef
+    private fun assignValue(ref: AssignRef): ObjRef = ref.value
 }

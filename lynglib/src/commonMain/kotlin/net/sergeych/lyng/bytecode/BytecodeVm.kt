@@ -109,6 +109,37 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     frame.setInt(dst, frame.getInt(a) + frame.getInt(b))
                 }
+                Opcode.CMP_LT_INT -> {
+                    val a = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val b = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    frame.setBool(dst, frame.getInt(a) < frame.getInt(b))
+                }
+                Opcode.CMP_EQ_INT -> {
+                    val a = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val b = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    frame.setBool(dst, frame.getInt(a) == frame.getInt(b))
+                }
+                Opcode.JMP -> {
+                    val target = decoder.readIp(code, ip, fn.ipWidth)
+                    ip = target
+                }
+                Opcode.JMP_IF_FALSE -> {
+                    val cond = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val target = decoder.readIp(code, ip, fn.ipWidth)
+                    ip += fn.ipWidth
+                    if (!frame.getBool(cond)) {
+                        ip = target
+                    }
+                }
                 Opcode.RET -> {
                     val slot = decoder.readSlot(code, ip)
                     return slotToObj(frame, slot)

@@ -17,10 +17,19 @@
 package net.sergeych.lyng.bytecode
 
 class BytecodeBuilder {
-    data class Instr(val op: Opcode, val operands: IntArray)
+    sealed interface Operand {
+        data class IntVal(val value: Int) : Operand
+        data class LabelRef(val label: Label) : Operand
+    }
+
+    data class Label(val id: Int)
+
+    data class Instr(val op: Opcode, val operands: List<Operand>)
 
     private val instructions = mutableListOf<Instr>()
     private val constPool = mutableListOf<BytecodeConst>()
+    private val labelPositions = mutableMapOf<Label, Int>()
+    private var nextLabelId = 0
 
     fun addConst(c: BytecodeConst): Int {
         constPool += c
@@ -28,7 +37,17 @@ class BytecodeBuilder {
     }
 
     fun emit(op: Opcode, vararg operands: Int) {
-        instructions += Instr(op, operands.copyOf())
+        instructions += Instr(op, operands.map { Operand.IntVal(it) })
+    }
+
+    fun emit(op: Opcode, operands: List<Operand>) {
+        instructions += Instr(op, operands)
+    }
+
+    fun label(): Label = Label(nextLabelId++)
+
+    fun mark(label: Label) {
+        labelPositions[label] = instructions.size
     }
 
     fun build(name: String, localCount: Int): BytecodeFunction {
@@ -39,15 +58,32 @@ class BytecodeBuilder {
         }
         val constIdWidth = if (constPool.size < 65536) 2 else 4
         val ipWidth = 2
+        val instrOffsets = IntArray(instructions.size)
+        var currentIp = 0
+        for (i in instructions.indices) {
+            instrOffsets[i] = currentIp
+            val kinds = operandKinds(instructions[i].op)
+            currentIp += 1 + kinds.sumOf { operandWidth(it, slotWidth, constIdWidth, ipWidth) }
+        }
+        val labelIps = mutableMapOf<Label, Int>()
+        for ((label, idx) in labelPositions) {
+            labelIps[label] = instrOffsets.getOrNull(idx) ?: error("Invalid label index: $idx")
+        }
+
         val code = ByteArrayOutput()
         for (ins in instructions) {
-            code.writeU8(ins.op.code.toInt() and 0xFF)
+            code.writeU8(ins.op.code and 0xFF)
             val kinds = operandKinds(ins.op)
             if (kinds.size != ins.operands.size) {
                 error("Operand count mismatch for ${ins.op}: expected ${kinds.size}, got ${ins.operands.size}")
             }
             for (i in kinds.indices) {
-                val v = ins.operands[i]
+                val operand = ins.operands[i]
+                val v = when (operand) {
+                    is Operand.IntVal -> operand.value
+                    is Operand.LabelRef -> labelIps[operand.label]
+                        ?: error("Unknown label ${operand.label.id} for ${ins.op}")
+                }
                 when (kinds[i]) {
                     OperandKind.SLOT -> code.writeUInt(v, slotWidth)
                     OperandKind.CONST -> code.writeUInt(v, constIdWidth)
@@ -112,6 +148,16 @@ class BytecodeBuilder {
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.EVAL_FALLBACK ->
                 listOf(OperandKind.ID, OperandKind.SLOT)
+        }
+    }
+
+    private fun operandWidth(kind: OperandKind, slotWidth: Int, constIdWidth: Int, ipWidth: Int): Int {
+        return when (kind) {
+            OperandKind.SLOT -> slotWidth
+            OperandKind.CONST -> constIdWidth
+            OperandKind.IP -> ipWidth
+            OperandKind.COUNT -> 2
+            OperandKind.ID -> 2
         }
     }
 

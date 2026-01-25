@@ -20,6 +20,7 @@ package net.sergeych.lyng
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjClass
 import net.sergeych.lyng.obj.ObjVoid
+import net.sergeych.lyng.obj.toBool
 
 fun String.toSource(name: String = "eval"): Source = Source(name, this)
 
@@ -61,6 +62,21 @@ abstract class Statement(
 
     suspend fun call(scope: Scope, vararg args: Obj) = execute(scope.createChildScope(args =  Arguments(*args)))
 
+}
+
+class IfStatement(
+    val condition: Statement,
+    val ifBody: Statement,
+    val elseBody: Statement?,
+    override val pos: Pos,
+) : Statement() {
+    override suspend fun execute(scope: Scope): Obj {
+        return if (condition.execute(scope).toBool()) {
+            ifBody.execute(scope)
+        } else {
+            elseBody?.execute(scope) ?: ObjVoid
+        }
+    }
 }
 
 class ExpressionStatement(

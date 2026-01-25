@@ -14,11 +14,18 @@
  * limitations under the License.
  */
 
+import net.sergeych.lyng.ExpressionStatement
+import net.sergeych.lyng.IfStatement
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.bytecode.BytecodeBuilder
+import net.sergeych.lyng.bytecode.BytecodeCompiler
 import net.sergeych.lyng.bytecode.BytecodeConst
 import net.sergeych.lyng.bytecode.BytecodeVm
 import net.sergeych.lyng.bytecode.Opcode
+import net.sergeych.lyng.obj.BinaryOpRef
+import net.sergeych.lyng.obj.BinOp
+import net.sergeych.lyng.obj.ConstRef
+import net.sergeych.lyng.obj.ObjInt
 import net.sergeych.lyng.obj.toInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -36,5 +43,29 @@ class BytecodeVmTest {
         val fn = builder.build("addInts", localCount = 3)
         val result = BytecodeVm().execute(fn, Scope(), emptyList())
         assertEquals(5, result.toInt())
+    }
+
+    @Test
+    fun ifExpressionReturnsThenValue() = kotlinx.coroutines.test.runTest {
+        val cond = ExpressionStatement(
+            BinaryOpRef(
+                BinOp.LT,
+                ConstRef(ObjInt.of(2).asReadonly),
+                ConstRef(ObjInt.of(3).asReadonly),
+            ),
+            net.sergeych.lyng.Pos.builtIn
+        )
+        val thenStmt = ExpressionStatement(
+            ConstRef(ObjInt.of(10).asReadonly),
+            net.sergeych.lyng.Pos.builtIn
+        )
+        val elseStmt = ExpressionStatement(
+            ConstRef(ObjInt.of(20).asReadonly),
+            net.sergeych.lyng.Pos.builtIn
+        )
+        val ifStmt = IfStatement(cond, thenStmt, elseStmt, net.sergeych.lyng.Pos.builtIn)
+        val fn = BytecodeCompiler().compileStatement("ifTest", ifStmt) ?: error("bytecode compile failed")
+        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        assertEquals(10, result.toInt())
     }
 }
