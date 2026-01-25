@@ -125,11 +125,14 @@ class BytecodeCompiler {
     }
 
     private fun compileBinary(ref: BinaryOpRef): CompiledValue? {
+        val op = binaryOp(ref)
+        if (op == BinOp.AND || op == BinOp.OR) {
+            return compileLogical(op, binaryLeft(ref), binaryRight(ref), refPos(ref))
+        }
         val a = compileRef(binaryLeft(ref)) ?: return null
         val b = compileRef(binaryRight(ref)) ?: return null
         if (a.type != b.type && a.type != SlotType.UNKNOWN && b.type != SlotType.UNKNOWN) return null
         val out = allocSlot()
-        val op = binaryOp(ref)
         return when (op) {
             BinOp.PLUS -> when (a.type) {
                 SlotType.INT -> {
@@ -305,6 +308,33 @@ class BytecodeCompiler {
         }
     }
 
+    private fun compileLogical(op: BinOp, left: ObjRef, right: ObjRef, pos: Pos): CompiledValue? {
+        val leftValue = compileRefWithFallback(left, SlotType.BOOL, pos) ?: return null
+        if (leftValue.type != SlotType.BOOL) return null
+        val resultSlot = allocSlot()
+        val shortLabel = builder.label()
+        val endLabel = builder.label()
+        if (op == BinOp.AND) {
+            builder.emit(
+                Opcode.JMP_IF_FALSE,
+                listOf(BytecodeBuilder.Operand.IntVal(leftValue.slot), BytecodeBuilder.Operand.LabelRef(shortLabel))
+            )
+        } else {
+            builder.emit(
+                Opcode.JMP_IF_TRUE,
+                listOf(BytecodeBuilder.Operand.IntVal(leftValue.slot), BytecodeBuilder.Operand.LabelRef(shortLabel))
+            )
+        }
+        val rightValue = compileRefWithFallback(right, SlotType.BOOL, pos) ?: return null
+        emitMove(rightValue, resultSlot)
+        builder.emit(Opcode.JMP, listOf(BytecodeBuilder.Operand.LabelRef(endLabel)))
+        builder.mark(shortLabel)
+        val constId = builder.addConst(BytecodeConst.Bool(op == BinOp.OR))
+        builder.emit(Opcode.CONST_BOOL, constId, resultSlot)
+        builder.mark(endLabel)
+        return CompiledValue(resultSlot, SlotType.BOOL)
+    }
+
     private fun compileAssign(ref: AssignRef): CompiledValue? {
         val target = assignTarget(ref) ?: return null
         if (refDepth(target) != 0) return null
@@ -394,4 +424,5 @@ class BytecodeCompiler {
     private fun unaryOp(ref: UnaryOpRef): UnaryOp = ref.op
     private fun assignTarget(ref: AssignRef): LocalSlotRef? = ref.target as? LocalSlotRef
     private fun assignValue(ref: AssignRef): ObjRef = ref.value
+    private fun refPos(ref: BinaryOpRef): Pos = Pos.builtIn
 }

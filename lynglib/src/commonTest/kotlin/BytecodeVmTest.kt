@@ -25,8 +25,12 @@ import net.sergeych.lyng.bytecode.Opcode
 import net.sergeych.lyng.obj.BinaryOpRef
 import net.sergeych.lyng.obj.BinOp
 import net.sergeych.lyng.obj.ConstRef
+import net.sergeych.lyng.obj.ObjFalse
 import net.sergeych.lyng.obj.ObjInt
+import net.sergeych.lyng.obj.ObjTrue
+import net.sergeych.lyng.obj.ValueFnRef
 import net.sergeych.lyng.obj.ObjVoid
+import net.sergeych.lyng.obj.toBool
 import net.sergeych.lyng.obj.toInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -92,5 +96,37 @@ class BytecodeVmTest {
         }!!
         val result = BytecodeVm().execute(fn, Scope(), emptyList())
         assertEquals(ObjVoid, result)
+    }
+
+    @Test
+    fun andIsShortCircuit() = kotlinx.coroutines.test.runTest {
+        val throwingRef = ValueFnRef { error("should not execute") }
+        val expr = ExpressionStatement(
+            BinaryOpRef(
+                BinOp.AND,
+                ConstRef(ObjFalse.asReadonly),
+                throwingRef
+            ),
+            net.sergeych.lyng.Pos.builtIn
+        )
+        val fn = BytecodeCompiler().compileExpression("andShort", expr) ?: error("bytecode compile failed")
+        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        assertEquals(false, result.toBool())
+    }
+
+    @Test
+    fun orIsShortCircuit() = kotlinx.coroutines.test.runTest {
+        val throwingRef = ValueFnRef { error("should not execute") }
+        val expr = ExpressionStatement(
+            BinaryOpRef(
+                BinOp.OR,
+                ConstRef(ObjTrue.asReadonly),
+                throwingRef
+            ),
+            net.sergeych.lyng.Pos.builtIn
+        )
+        val fn = BytecodeCompiler().compileExpression("orShort", expr) ?: error("bytecode compile failed")
+        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        assertEquals(true, result.toBool())
     }
 }

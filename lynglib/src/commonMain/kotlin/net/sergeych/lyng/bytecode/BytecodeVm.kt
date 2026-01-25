@@ -200,6 +200,15 @@ class BytecodeVm {
                         ip = target
                     }
                 }
+                Opcode.JMP_IF_TRUE -> {
+                    val cond = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val target = decoder.readIp(code, ip, fn.ipWidth)
+                    ip += fn.ipWidth
+                    if (frame.getBool(cond)) {
+                        ip = target
+                    }
+                }
                 Opcode.EVAL_FALLBACK -> {
                     val id = decoder.readConstId(code, ip, 2)
                     ip += 2
