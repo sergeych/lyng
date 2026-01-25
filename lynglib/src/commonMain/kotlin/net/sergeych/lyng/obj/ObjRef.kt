@@ -2228,6 +2228,21 @@ class ImplicitThisMemberRef(
     val name: String,
     val atPos: Pos
 ) : ObjRef {
+    private fun resolveInstanceFieldRecord(th: ObjInstance, caller: ObjClass?): ObjRecord? {
+        if (caller == null) return null
+        for (cls in th.objClass.mro) {
+            if (cls.className == "Obj") break
+            val rec = cls.members[name] ?: continue
+            if (rec.isAbstract) continue
+            val decl = rec.declaringClass ?: cls
+            if (!canAccessMember(rec.visibility, decl, caller, name)) continue
+            val key = decl.mangledName(name)
+            th.fieldRecordForKey(key)?.let { return it }
+            th.instanceScope.objects[key]?.let { return it }
+        }
+        return null
+    }
+
     override fun forEachVariable(block: (String) -> Unit) {
         block(name)
     }
@@ -2264,6 +2279,8 @@ class ImplicitThisMemberRef(
                     }
                 }
             }
+
+            resolveInstanceFieldRecord(th, caller)?.let { return it }
 
             val key = th.objClass.publicMemberResolution[name] ?: name
             th.fieldRecordForKey(key)?.let { rec ->
@@ -2332,6 +2349,11 @@ class ImplicitThisMemberRef(
                     th.writeField(scope, name, newValue)
                     return
                 }
+            }
+
+            resolveInstanceFieldRecord(th, caller)?.let { rec ->
+                scope.assign(rec, name, newValue)
+                return
             }
         }
 
