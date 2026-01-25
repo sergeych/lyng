@@ -1,0 +1,246 @@
+diff --git a/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjInt.kt b/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjInt.kt
+index 0671102..d4cb6ba 100644
+--- a/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjInt.kt
++++ b/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjInt.kt
+@@ -55,7 +55,11 @@ class ObjInt(val value: Long, override val isConst: Boolean = false) : Obj(), Nu
+ 
+     override suspend fun compareTo(scope: Scope, other: Obj): Int {
+         if (other !is Numeric) return -2
+-        return value.compareTo(other.doubleValue)
++        return if (other is ObjInt) {
++            value.compareTo(other.value)
++        } else {
++            doubleValue.compareTo(other.doubleValue)
++        }
+     }
+ 
+     override fun toString(): String = value.toString()
+@@ -192,4 +196,4 @@ class ObjInt(val value: Long, override val isConst: Boolean = false) : Obj(), Nu
+ }
+ 
+ fun Int.toObj() = ObjInt.of(this.toLong())
+-fun Long.toObj() = ObjInt.of(this)
+\ No newline at end of file
++fun Long.toObj() = ObjInt.of(this)
+diff --git a/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjRange.kt b/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjRange.kt
+index 0c631d0..dc61c66 100644
+--- a/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjRange.kt
++++ b/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjRange.kt
+@@ -96,6 +96,30 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
+         if (other is ObjRange)
+             return containsRange(scope, other)
+ 
++        if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
++            if (start is ObjInt && end is ObjInt && other is ObjInt) {
++                val s = start.value
++                val e = end.value
++                val v = other.value
++                if (v < s) return false
++                return if (isEndInclusive) v <= e else v < e
++            }
++            if (start is ObjChar && end is ObjChar && other is ObjChar) {
++                val s = start.value
++                val e = end.value
++                val v = other.value
++                if (v < s) return false
++                return if (isEndInclusive) v <= e else v < e
++            }
++            if (start is ObjString && end is ObjString && other is ObjString) {
++                val s = start.value
++                val e = end.value
++                val v = other.value
++                if (v < s) return false
++                return if (isEndInclusive) v <= e else v < e
++            }
++        }
++
+         if (start == null && end == null) return true
+         if (start != null) {
+             if (start.compareTo(scope, other) > 0) return false
+@@ -241,4 +265,3 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
+         }
+     }
+ }
+-
+diff --git a/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjRef.kt b/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjRef.kt
+index 2dd0ae6..76e56d4 100644
+--- a/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjRef.kt
++++ b/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjRef.kt
+@@ -152,6 +152,90 @@ class BinaryOpRef(private val op: BinOp, private val left: ObjRef, private val r
+ 
+         // Primitive fast paths for common cases (guarded by PerfFlags.PRIMITIVE_FASTOPS)
+         if (PerfFlags.PRIMITIVE_FASTOPS) {
++            // Fast range equality: avoid compareTo/equals for ObjRange when possible
++            if ((op == BinOp.EQ || op == BinOp.NEQ) && a is ObjRange && b is ObjRange) {
++                val eq = (a.start == b.start && a.end == b.end)
++                if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.primitiveFastOpsHit++
++                return if (op == BinOp.EQ) {
++                    if (eq) ObjTrue else ObjFalse
++                } else {
++                    if (eq) ObjFalse else ObjTrue
++                }
++            }
++            // Fast membership for common containers
++            if (op == BinOp.IN || op == BinOp.NOTIN) {
++                val inResult: Boolean? = when (b) {
++                    is ObjList -> {
++                        if (a is ObjInt) {
++                            var i = 0
++                            val sz = b.list.size
++                            var found = false
++                            while (i < sz) {
++                                val v = b.list[i]
++                                if (v is ObjInt && v.value == a.value) {
++                                    found = true
++                                    break
++                                }
++                                i++
++                            }
++                            found
++                        } else {
++                            b.list.contains(a)
++                        }
++                    }
++                    is ObjSet -> b.set.contains(a)
++                    is ObjMap -> b.map.containsKey(a)
++                    is ObjRange -> {
++                        when (a) {
++                            is ObjInt -> {
++                                val s = b.start as? ObjInt
++                                val e = b.end as? ObjInt
++                                val v = a.value
++                                if (s == null && e == null) null
++                                else {
++                                    if (s != null && v < s.value) false
++                                    else if (e != null) if (b.isEndInclusive) v <= e.value else v < e.value else true
++                                }
++                            }
++                            is ObjChar -> {
++                                val s = b.start as? ObjChar
++                                val e = b.end as? ObjChar
++                                val v = a.value
++                                if (s == null && e == null) null
++                                else {
++                                    if (s != null && v < s.value) false
++                                    else if (e != null) if (b.isEndInclusive) v <= e.value else v < e.value else true
++                                }
++                            }
++                            is ObjString -> {
++                                val s = b.start as? ObjString
++                                val e = b.end as? ObjString
++                                val v = a.value
++                                if (s == null && e == null) null
++                                else {
++                                    if (s != null && v < s.value) false
++                                    else if (e != null) if (b.isEndInclusive) v <= e.value else v < e.value else true
++                                }
++                            }
++                            else -> null
++                        }
++                    }
++                    is ObjString -> when (a) {
++                        is ObjString -> b.value.contains(a.value)
++                        is ObjChar -> b.value.contains(a.value)
++                        else -> null
++                    }
++                    else -> null
++                }
++                if (inResult != null) {
++                    if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.primitiveFastOpsHit++
++                    return if (op == BinOp.IN) {
++                        if (inResult) ObjTrue else ObjFalse
++                    } else {
++                        if (inResult) ObjFalse else ObjTrue
++                    }
++                }
++            }
+             // Fast boolean ops when both operands are ObjBool
+             if (a is ObjBool && b is ObjBool) {
+                 val r: Obj? = when (op) {
+@@ -604,7 +688,37 @@ class AssignOpRef(
+             else -> null
+         }
+         if (inPlace != null) return inPlace.asReadonly
+-        val result: Obj = when (op) {
++        val fast: Obj? = if (PerfFlags.PRIMITIVE_FASTOPS) {
++            when {
++                x is ObjInt && y is ObjInt -> {
++                    val xv = x.value
++                    val yv = y.value
++                    when (op) {
++                        BinOp.PLUS -> ObjInt.of(xv + yv)
++                        BinOp.MINUS -> ObjInt.of(xv - yv)
++                        BinOp.STAR -> ObjInt.of(xv * yv)
++                        BinOp.SLASH -> if (yv != 0L) ObjInt.of(xv / yv) else null
++                        BinOp.PERCENT -> if (yv != 0L) ObjInt.of(xv % yv) else null
++                        else -> null
++                    }
++                }
++                (x is ObjInt || x is ObjReal) && (y is ObjInt || y is ObjReal) -> {
++                    val xv = if (x is ObjInt) x.doubleValue else (x as ObjReal).value
++                    val yv = if (y is ObjInt) y.doubleValue else (y as ObjReal).value
++                    when (op) {
++                        BinOp.PLUS -> ObjReal.of(xv + yv)
++                        BinOp.MINUS -> ObjReal.of(xv - yv)
++                        BinOp.STAR -> ObjReal.of(xv * yv)
++                        BinOp.SLASH -> ObjReal.of(xv / yv)
++                        BinOp.PERCENT -> ObjReal.of(xv % yv)
++                        else -> null
++                    }
++                }
++                x is ObjString && op == BinOp.PLUS -> ObjString(x.value + y.toString())
++                else -> null
++            }
++        } else null
++        val result: Obj = fast ?: when (op) {
+             BinOp.PLUS -> x.plus(scope, y)
+             BinOp.MINUS -> x.minus(scope, y)
+             BinOp.STAR -> x.mul(scope, y)
+@@ -632,7 +746,15 @@ class IncDecRef(
+         // We now treat numbers as immutable and always perform write-back via setAt.
+         // This avoids issues where literals are shared and mutated in-place.
+         // For post-inc: return ORIGINAL value; for pre-inc: return NEW value.
+-        val result = if (isIncrement) v.plus(scope, one) else v.minus(scope, one)
++        val result = if (PerfFlags.PRIMITIVE_FASTOPS) {
++            when (v) {
++                is ObjInt -> if (isIncrement) ObjInt.of(v.value + 1L) else ObjInt.of(v.value - 1L)
++                is ObjReal -> if (isIncrement) ObjReal.of(v.value + 1.0) else ObjReal.of(v.value - 1.0)
++                else -> if (isIncrement) v.plus(scope, one) else v.minus(scope, one)
++            }
++        } else {
++            if (isIncrement) v.plus(scope, one) else v.minus(scope, one)
++        }
+         target.setAt(atPos, scope, result)
+         return (if (isPost) v else result).asReadonly
+     }
+@@ -1246,8 +1368,8 @@ class IndexRef(
+                 val i = idx.toInt()
+                 return ObjChar(base.value[i]).asMutable
+             }
+-            // Map[String] fast path (common case); return ObjNull if absent
+-            if (base is ObjMap && idx is ObjString) {
++            // Map[String/Int/Char] fast path (common cases); return ObjNull if absent
++            if (base is ObjMap && (idx is ObjString || idx is ObjInt || idx is ObjChar)) {
+                 val v = base.map[idx] ?: ObjNull
+                 return v.asMutable
+             }
+@@ -1321,8 +1443,8 @@ class IndexRef(
+                 val i = idx.toInt()
+                 return ObjChar(base.value[i])
+             }
+-            // Map[String] fast path
+-            if (base is ObjMap && idx is ObjString) {
++            // Map[String/Int/Char] fast path
++            if (base is ObjMap && (idx is ObjString || idx is ObjInt || idx is ObjChar)) {
+                 return base.map[idx] ?: ObjNull
+             }
+             if (PerfFlags.INDEX_PIC) {
+@@ -1393,7 +1515,7 @@ class IndexRef(
+             return
+         }
+         // Direct write fast path for ObjMap + ObjString
+-        if (base is ObjMap && idx is ObjString) {
++        if (base is ObjMap && (idx is ObjString || idx is ObjInt || idx is ObjChar)) {
+             base.map[idx] = newValue
+             return
+         }

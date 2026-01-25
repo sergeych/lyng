@@ -1,0 +1,157 @@
+Reusing configuration cache.
+> Task :lynglib:jvmTestProcessResources NO-SOURCE
+> Task :lynglib:jvmProcessResources NO-SOURCE
+> Task :lyngio:jvmProcessResources NO-SOURCE
+> Task :lynglib:kmpPartiallyResolvedDependenciesChecker
+> Task :lyngio:kmpPartiallyResolvedDependenciesChecker
+> Task :lyngio:processJvmMainResources SKIPPED
+> Task :lynglib:processJvmMainResources SKIPPED
+> Task :lyngio:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :lynglib:processJvmTestResources SKIPPED
+> Task :lynglib:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :lynglib:generateLyngStdlib
+> Task :lynglib:generateBuildKonfig
+
+> Task :lynglib:compileKotlinJvm
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/Arguments.kt:171:13 Check for instance is always 'true'.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/Compiler.kt:228:25 'when' is exhaustive so 'else' is redundant here.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/Compiler.kt:3044:46 The corresponding parameter in the supertype 'Statement' is named 'scope'. This may cause problems when calling this function with named arguments.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/Compiler.kt:3076:46 The corresponding parameter in the supertype 'Statement' is named 'scope'. This may cause problems when calling this function with named arguments.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/Compiler.kt:3109:62 The corresponding parameter in the supertype 'Statement' is named 'scope'. This may cause problems when calling this function with named arguments.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/Compiler.kt:3317:46 The corresponding parameter in the supertype 'Statement' is named 'scope'. This may cause problems when calling this function with named arguments.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/Compiler.kt:3713:42 The corresponding parameter in the supertype 'Statement' is named 'scope'. This may cause problems when calling this function with named arguments.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/Compiler.kt:3724:62 The corresponding parameter in the supertype 'Statement' is named 'scope'. This may cause problems when calling this function with named arguments.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/Compiler.kt:3783:62 The corresponding parameter in the supertype 'Statement' is named 'scope'. This may cause problems when calling this function with named arguments.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/Compiler.kt:3894:62 The corresponding parameter in the supertype 'Statement' is named 'scope'. This may cause problems when calling this function with named arguments.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/Compiler.kt:3950:66 The corresponding parameter in the supertype 'Statement' is named 'scope'. This may cause problems when calling this function with named arguments.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/Scope.kt:727:31 No cast needed.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/Obj.kt:507:50 The corresponding parameter in the supertype 'Statement' is named 'scope'. This may cause problems when calling this function with named arguments.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/Obj.kt:820:57 No cast needed.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjDateTime.kt:33:32 'typealias Instant = Instant' is deprecated. This type is deprecated in favor of `kotlin.time.Instant`.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjDateTime.kt:158:39 'typealias Instant = Instant' is deprecated. This type is deprecated in favor of `kotlin.time.Instant`.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjDateTime.kt:177:64 'val monthNumber: Int' is deprecated. Use the 'month' property instead.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjDateTime.kt:179:64 'val dayOfMonth: Int' is deprecated. Use the 'day' property instead.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjDateTime.kt:181:64 'val dayOfMonth: Int' is deprecated. Use the 'day' property instead.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjDateTime.kt:266:31 'typealias Instant = Instant' is deprecated. This type is deprecated in favor of `kotlin.time.Instant`.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjInstant.kt:35:31 'typealias Instant = Instant' is deprecated. This type is deprecated in favor of `kotlin.time.Instant`.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjInstant.kt:102:24 'typealias Instant = Instant' is deprecated. This type is deprecated in favor of `kotlin.time.Instant`.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjInstant.kt:106:24 'typealias Instant = Instant' is deprecated. This type is deprecated in favor of `kotlin.time.Instant`.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjInstant.kt:117:29 'typealias Instant = Instant' is deprecated. This type is deprecated in favor of `kotlin.time.Instant`.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjInstant.kt:119:38 'typealias Instant = Instant' is deprecated. This type is deprecated in favor of `kotlin.time.Instant`.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjInstant.kt:123:29 'typealias Instant = Instant' is deprecated. This type is deprecated in favor of `kotlin.time.Instant`.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjInstant.kt:125:41 'typealias Instant = Instant' is deprecated. This type is deprecated in favor of `kotlin.time.Instant`.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjInstant.kt:139:25 'typealias Instant = Instant' is deprecated. This type is deprecated in favor of `kotlin.time.Instant`.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjInstant.kt:144:25 'typealias Instant = Instant' is deprecated. This type is deprecated in favor of `kotlin.time.Instant`.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjInstant.kt:149:25 'typealias Instant = Instant' is deprecated. This type is deprecated in favor of `kotlin.time.Instant`.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjInstant.kt:202:69 'val dayOfMonth: Int' is deprecated. Use the 'day' property instead.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjInstant.kt:212:28 'typealias Instant = Instant' is deprecated. This type is deprecated in favor of `kotlin.time.Instant`.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjInstant.kt:222:21 'typealias Instant = Instant' is deprecated. This type is deprecated in favor of `kotlin.time.Instant`.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjInstant.kt:234:21 'typealias Instant = Instant' is deprecated. This type is deprecated in favor of `kotlin.time.Instant`.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjRef.kt:432:35 No cast needed.
+w: file:///home/sergeych/dev/ling_lib/lynglib/src/commonMain/kotlin/net/sergeych/lyng/obj/ObjRef.kt:451:35 No cast needed.
+
+> Task :lynglib:compileJvmMainJava NO-SOURCE
+> Task :lynglib:jvmMainClasses
+> Task :lynglib:jvmJar
+
+> Task :lyngio:compileKotlinJvm
+w: file:///home/sergeych/dev/ling_lib/lyngio/src/commonMain/kotlin/net/sergeych/lyng/io/fs/LyngFsModule.kt:192:71 'typealias Instant = Instant' is deprecated. This type is deprecated in favor of `kotlin.time.Instant`.
+w: file:///home/sergeych/dev/ling_lib/lyngio/src/commonMain/kotlin/net/sergeych/lyng/io/fs/LyngFsModule.kt:315:51 Redundant call of conversion method.
+
+> Task :lyngio:compileJvmMainJava NO-SOURCE
+> Task :lyngio:jvmMainClasses
+> Task :lyngio:jvmJar
+> Task :lynglib:compileTestKotlinJvm
+> Task :lynglib:compileJvmTestJava NO-SOURCE
+> Task :lynglib:jvmTestClasses
+
+> Task :lynglib:jvmTest
+
+ArithmeticBenchmarkTest[jvm] > benchmarkIntArithmeticAndComparisons[jvm] STANDARD_OUT
+    [DEBUG_LOG] [BENCH] int-sum x400000 [PRIMITIVE_FASTOPS=OFF]: 262.456983 ms
+    [DEBUG_LOG] [BENCH] int-sum x400000 [PRIMITIVE_FASTOPS=ON]: 143.016118 ms
+    [DEBUG_LOG] [BENCH] int-cmp x400000 [PRIMITIVE_FASTOPS=OFF]: 204.504575 ms
+    [DEBUG_LOG] [BENCH] int-cmp x400000 [PRIMITIVE_FASTOPS=ON]: 169.943911 ms
+
+CallBenchmarkTest[jvm] > benchmarkMixedArityCalls[jvm] STANDARD_OUT
+    [DEBUG_LOG] [BENCH] mixed-arity x200000 [ARG_BUILDER=OFF]: 1249.839264 ms
+    [DEBUG_LOG] [BENCH] mixed-arity x200000 [ARG_BUILDER=ON]: 1222.298584 ms
+
+CallBenchmarkTest[jvm] > benchmarkSimpleFunctionCalls[jvm] STANDARD_OUT
+    [DEBUG_LOG] [BENCH] calls x300000 [ARG_BUILDER=OFF]: 901.399509 ms
+    [DEBUG_LOG] [BENCH] calls x300000 [ARG_BUILDER=ON]: 862.404202 ms
+
+CallMixedArityBenchmarkTest[jvm] > benchmarkMixedArityCalls[jvm] STANDARD_OUT
+    [DEBUG_LOG] [BENCH] mixed-arity x200000 [ARG_BUILDER=OFF]: 1288.885586 ms
+    [DEBUG_LOG] [BENCH] mixed-arity x200000 [ARG_BUILDER=ON]: 1240.515769 ms
+
+CallPoolingBenchmarkTest[jvm] > benchmarkScopePoolingOnFunctionCalls[jvm] STANDARD_OUT
+    [DEBUG_LOG] [BENCH] call-pooling x300000 [SCOPE_POOL=OFF]: 818.753611 ms
+    [DEBUG_LOG] [BENCH] call-pooling x300000 [SCOPE_POOL=ON]: 846.609202 ms
+
+CallSplatBenchmarkTest[jvm] > benchmarkCallsWithSplatArgs[jvm] STANDARD_OUT
+    [DEBUG_LOG] [BENCH] splat-calls x120000 [ARG_BUILDER=OFF]: 673.750784 ms
+    [DEBUG_LOG] [BENCH] splat-calls x120000 [ARG_BUILDER=ON]: 656.929851 ms
+
+ConcurrencyCallBenchmarkTest[jvm] > benchmark_multithread_calls_off_on[jvm] STANDARD_OUT
+    [DEBUG_LOG] [BENCH] ConcurrencyCallBenchmark workers=8 iters=15000 each: OFF=277.571 ms, ON=278.333 ms, speedup=1.00x
+
+ExpressionBenchmarkTest[jvm] > benchmarkExpressionChains[jvm] STANDARD_OUT
+    [DEBUG_LOG] [BENCH] expr-chain x350000 [RVAL_FASTPATH=OFF]: 352.770834 ms
+    [DEBUG_LOG] [BENCH] expr-chain x350000 [RVAL_FASTPATH=ON]: 350.420946 ms
+
+ExpressionBenchmarkTest[jvm] > benchmarkListIndexReads[jvm] STANDARD_OUT
+    [DEBUG_LOG] [BENCH] list-index x350000 [RVAL_FASTPATH=OFF]: 203.043167 ms
+    [DEBUG_LOG] [BENCH] list-index x350000 [RVAL_FASTPATH=ON]: 191.784157 ms
+
+ExpressionBenchmarkTest[jvm] > benchmarkFieldReadPureReceiver[jvm] STANDARD_OUT
+    [DEBUG_LOG] [BENCH] field-read x300000 [RVAL_FASTPATH=OFF]: 190.975557 ms
+    [DEBUG_LOG] [BENCH] field-read x300000 [RVAL_FASTPATH=ON]: 173.62457 ms
+
+ListOpsBenchmarkTest[jvm] > benchmarkSumInts[jvm] STANDARD_OUT
+    [DEBUG_LOG] [BENCH] list-sum x200000 [PRIMITIVE_FASTOPS=OFF]: 162.948512 ms
+    [DEBUG_LOG] [BENCH] list-sum x200000 [PRIMITIVE_FASTOPS=ON]: 161.115548 ms
+
+ListOpsBenchmarkTest[jvm] > benchmarkContainsInts[jvm] STANDARD_OUT
+    [DEBUG_LOG] [BENCH] list-contains x1000000 [PRIMITIVE_FASTOPS=OFF]: 481.70436 ms
+    [DEBUG_LOG] [BENCH] list-contains x1000000 [PRIMITIVE_FASTOPS=ON]: 457.081838 ms
+
+LocalVarBenchmarkTest[jvm] > benchmarkLocalReadsWrites_off_on[jvm] STANDARD_OUT
+    [DEBUG_LOG] [BENCH] locals x400000 [PIC=OFF, FAST_LOCAL=OFF]: 416.136033 ms
+    [DEBUG_LOG] [BENCH] locals x400000 [PIC=ON, FAST_LOCAL=ON]: 377.996669 ms
+
+MethodPoolingBenchmarkTest[jvm] > benchmarkInstanceMethodCallsWithPooling[jvm] STANDARD_OUT
+    [DEBUG_LOG] [BENCH] method-loop x300000 [SCOPE_POOL=OFF]: 415.789128 ms
+    [DEBUG_LOG] [BENCH] method-loop x300000 [SCOPE_POOL=ON]: 369.789878 ms
+
+MixedBenchmarkTest[jvm] > benchmarkMixedWorkloadRvalFastpath[jvm] STANDARD_OUT
+    [DEBUG_LOG] [BENCH] mixed x250000 [RVAL_FASTPATH=OFF]: 615.689206 ms
+    [DEBUG_LOG] [BENCH] mixed x250000 [RVAL_FASTPATH=ON]: 604.213533 ms
+
+PicBenchmarkTest[jvm] > benchmarkMethodPic[jvm] STANDARD_OUT
+    [DEBUG_LOG] [BENCH] Method PIC=OFF, POOL=OFF: 330.268329 ms
+    [DEBUG_LOG] [BENCH] Method PIC=ON, POOL=ON: 331.937563 ms
+
+PicBenchmarkTest[jvm] > benchmarkFieldGetSetPic[jvm] STANDARD_OUT
+    [DEBUG_LOG] [BENCH] Field PIC=OFF: 130.221941 ms
+    [DEBUG_LOG] [BENCH] Field PIC=ON: 129.656747 ms
+
+PicBenchmarkTest[jvm] > benchmarkLoopScopePooling[jvm] STANDARD_OUT
+    [DEBUG_LOG] [BENCH] Loop Pool=OFF: 280.648819 ms
+    [DEBUG_LOG] [BENCH] Loop Pool=ON: 276.585595 ms
+
+RangeBenchmarkTest[jvm] > benchmarkIntRangeForIn[jvm] STANDARD_OUT
+    [DEBUG_LOG] [BENCH] range-for-in x5000 (inner 0..999) [PRIMITIVE_FASTOPS=OFF]: 1244.04352 ms
+    [DEBUG_LOG] [BENCH] range-for-in x5000 (inner 0..999) [PRIMITIVE_FASTOPS=ON]: 1181.395693 ms
+
+RegexBenchmarkTest[jvm] > benchmarkDynamicPatternMatches[jvm] STANDARD_OUT
+    [DEBUG_LOG] [BENCH] regex-dynamic x300000 [REGEX_CACHE=OFF]: 455.504952 ms
+    [DEBUG_LOG] [BENCH] regex-dynamic x300000 [REGEX_CACHE=ON]: 388.443547 ms
+
+RegexBenchmarkTest[jvm] > benchmarkLiteralPatternMatches[jvm] STANDARD_OUT
+    [DEBUG_LOG] [BENCH] regex-literal x500000 [REGEX_CACHE=OFF]: 628.199793 ms
+    [DEBUG_LOG] [BENCH] regex-literal x500000 [REGEX_CACHE=ON]: 574.342775 ms
+
+BUILD SUCCESSFUL in 32s
+10 actionable tasks: 10 executed
+Configuration cache entry reused.
