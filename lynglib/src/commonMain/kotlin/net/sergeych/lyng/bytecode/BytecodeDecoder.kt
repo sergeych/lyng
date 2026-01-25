@@ -25,7 +25,7 @@ interface BytecodeDecoder {
 
 object Decoder8 : BytecodeDecoder {
     override fun readOpcode(code: ByteArray, ip: Int): Opcode =
-        Opcode.fromCode(code[ip]) ?: error("Unknown opcode: ${code[ip]}")
+        Opcode.fromCode(code[ip].toInt() and 0xFF) ?: error("Unknown opcode: ${code[ip]}")
 
     override fun readSlot(code: ByteArray, ip: Int): Int = code[ip].toInt() and 0xFF
 
@@ -38,7 +38,7 @@ object Decoder8 : BytecodeDecoder {
 
 object Decoder16 : BytecodeDecoder {
     override fun readOpcode(code: ByteArray, ip: Int): Opcode =
-        Opcode.fromCode(code[ip]) ?: error("Unknown opcode: ${code[ip]}")
+        Opcode.fromCode(code[ip].toInt() and 0xFF) ?: error("Unknown opcode: ${code[ip]}")
 
     override fun readSlot(code: ByteArray, ip: Int): Int =
         (code[ip].toInt() and 0xFF) or ((code[ip + 1].toInt() and 0xFF) shl 8)
@@ -52,7 +52,7 @@ object Decoder16 : BytecodeDecoder {
 
 object Decoder32 : BytecodeDecoder {
     override fun readOpcode(code: ByteArray, ip: Int): Opcode =
-        Opcode.fromCode(code[ip]) ?: error("Unknown opcode: ${code[ip]}")
+        Opcode.fromCode(code[ip].toInt() and 0xFF) ?: error("Unknown opcode: ${code[ip]}")
 
     override fun readSlot(code: ByteArray, ip: Int): Int = readUInt(code, ip, 4)
 

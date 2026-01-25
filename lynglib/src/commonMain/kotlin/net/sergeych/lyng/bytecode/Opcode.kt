@@ -16,7 +16,7 @@
 
 package net.sergeych.lyng.bytecode
 
-enum class Opcode(val code: Byte) {
+enum class Opcode(val code: Int) {
     NOP(0x00),
     MOVE_OBJ(0x01),
     MOVE_INT(0x02),
@@ -105,7 +105,7 @@ enum class Opcode(val code: Byte) {
     ;
 
     companion object {
-        private val byCode: Map<Byte, Opcode> = values().associateBy { it.code }
-        fun fromCode(code: Byte): Opcode? = byCode[code]
+        private val byCode: Map<Int, Opcode> = values().associateBy { it.code }
+        fun fromCode(code: Int): Opcode? = byCode[code]
     }
 }

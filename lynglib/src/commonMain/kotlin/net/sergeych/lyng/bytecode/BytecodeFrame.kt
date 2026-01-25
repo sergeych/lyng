@@ -33,6 +33,7 @@ class BytecodeFrame(
     private val boolSlots: BooleanArray = BooleanArray(slotCount)
 
     fun getSlotType(slot: Int): SlotType = SlotType.values().first { it.code == slotTypes[slot] }
+    fun getSlotTypeCode(slot: Int): Byte = slotTypes[slot]
     fun setSlotType(slot: Int, type: SlotType) {
         slotTypes[slot] = type.code
     }

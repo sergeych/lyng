@@ -17,8 +17,7 @@
 package net.sergeych.lyng.bytecode
 
 import net.sergeych.lyng.Scope
-import net.sergeych.lyng.obj.Obj
-import net.sergeych.lyng.obj.ObjVoid
+import net.sergeych.lyng.obj.*
 
 class BytecodeVm {
     suspend fun execute(fn: BytecodeFunction, scope: Scope, args: List<Obj>): Obj {
@@ -41,10 +40,93 @@ class BytecodeVm {
                 Opcode.NOP -> {
                     // no-op
                 }
+                Opcode.CONST_INT -> {
+                    val constId = decoder.readConstId(code, ip, fn.constIdWidth)
+                    ip += fn.constIdWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val c = fn.constants[constId] as? BytecodeConst.IntVal
+                        ?: error("CONST_INT expects IntVal at $constId")
+                    frame.setInt(dst, c.value)
+                }
+                Opcode.CONST_REAL -> {
+                    val constId = decoder.readConstId(code, ip, fn.constIdWidth)
+                    ip += fn.constIdWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val c = fn.constants[constId] as? BytecodeConst.RealVal
+                        ?: error("CONST_REAL expects RealVal at $constId")
+                    frame.setReal(dst, c.value)
+                }
+                Opcode.CONST_BOOL -> {
+                    val constId = decoder.readConstId(code, ip, fn.constIdWidth)
+                    ip += fn.constIdWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val c = fn.constants[constId] as? BytecodeConst.Bool
+                        ?: error("CONST_BOOL expects Bool at $constId")
+                    frame.setBool(dst, c.value)
+                }
+                Opcode.CONST_NULL -> {
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    frame.setObj(dst, ObjNull)
+                }
+                Opcode.MOVE_INT -> {
+                    val src = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    frame.setInt(dst, frame.getInt(src))
+                }
+                Opcode.MOVE_REAL -> {
+                    val src = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    frame.setReal(dst, frame.getReal(src))
+                }
+                Opcode.MOVE_BOOL -> {
+                    val src = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    frame.setBool(dst, frame.getBool(src))
+                }
+                Opcode.MOVE_OBJ -> {
+                    val src = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    frame.setObj(dst, frame.getObj(src))
+                }
+                Opcode.ADD_INT -> {
+                    val a = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val b = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    frame.setInt(dst, frame.getInt(a) + frame.getInt(b))
+                }
+                Opcode.RET -> {
+                    val slot = decoder.readSlot(code, ip)
+                    return slotToObj(frame, slot)
+                }
                 Opcode.RET_VOID -> return ObjVoid
                 else -> error("Opcode not implemented: $op")
             }
         }
         return ObjVoid
+    }
+
+    private fun slotToObj(frame: BytecodeFrame, slot: Int): Obj {
+        return when (frame.getSlotTypeCode(slot)) {
+            SlotType.INT.code -> ObjInt.of(frame.getInt(slot))
+            SlotType.REAL.code -> ObjReal.of(frame.getReal(slot))
+            SlotType.BOOL.code -> if (frame.getBool(slot)) ObjTrue else ObjFalse
+            SlotType.OBJ.code -> frame.getObj(slot)
+            else -> ObjVoid
+        }
     }
 }
