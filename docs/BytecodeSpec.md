@@ -176,7 +176,24 @@ Note: Any opcode can be compiled to FALLBACK if not implemented in a VM pass.
 ### Fallback
 - EVAL_FALLBACK T -> S
 
-## 6) Function Header (binary container)
+## 6) Const Pool Encoding (v0)
+
+Each const entry is encoded as:
+  [tag:U8] [payload...]
+
+Tags:
+- 0x00: NULL
+- 0x01: BOOL (payload: U8 0/1)
+- 0x02: INT (payload: S64, little-endian)
+- 0x03: REAL (payload: F64, IEEE-754, little-endian)
+- 0x04: STRING (payload: U32 length + UTF-8 bytes)
+- 0x05: OBJ_REF (payload: U32 index into external Obj table)
+
+Notes:
+- OBJ_REF is reserved for embedding prebuilt Obj handles if needed.
+- Strings use UTF-8; length is bytes, not chars.
+
+## 7) Function Header (binary container)
 
 Suggested layout for a bytecode function blob:
 - magic: U32 ("LYBC")
@@ -190,10 +207,34 @@ Suggested layout for a bytecode function blob:
 - constPool: [const entries...]
 - code: [bytecode...]
 
-Const pool entries are encoded as type-tagged values (Obj/Int/Real/Bool/String)
-in a simple tagged format. This is intentionally unspecified in v0.
+Const pool entries use the encoding described in section 6.
 
-## 7) Notes
+## 8) Sample Bytecode (illustrative)
+
+Example Lyng:
+  val x = 2
+  val y = 3
+  val z = x + y
+
+Assume:
+- localCount = 3 (x,y,z)
+- argCount = 0
+- slot width = 1 byte
+- const pool: [INT 2, INT 3]
+
+Bytecode:
+  CONST_INT k0 -> s0
+  CONST_INT k1 -> s1
+  ADD_INT s0, s1 -> s2
+  RET_VOID
+
+Encoded (opcode values symbolic):
+  [OP_CONST_INT][k0][s0]
+  [OP_CONST_INT][k1][s1]
+  [OP_ADD_INT][s0][s1][s2]
+  [OP_RET_VOID]
+
+## 9) Notes
 
 - Mixed-mode is allowed: compiler can emit FALLBACK ops for unsupported nodes.
 - The VM must be suspendable; on suspension, store ip + minimal operand state.
