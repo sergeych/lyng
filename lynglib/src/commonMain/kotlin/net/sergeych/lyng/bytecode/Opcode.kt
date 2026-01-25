@@ -81,6 +81,8 @@ enum class Opcode(val code: Int) {
     CMP_GT_REAL_INT(0x67),
     CMP_GTE_INT_REAL(0x68),
     CMP_GTE_REAL_INT(0x69),
+    CMP_NEQ_INT_REAL(0x6A),
+    CMP_NEQ_REAL_INT(0x6B),
 
     NOT_BOOL(0x70),
     AND_BOOL(0x71),

@@ -25,12 +25,16 @@ import net.sergeych.lyng.bytecode.Opcode
 import net.sergeych.lyng.obj.BinaryOpRef
 import net.sergeych.lyng.obj.BinOp
 import net.sergeych.lyng.obj.ConstRef
+import net.sergeych.lyng.obj.LocalSlotRef
 import net.sergeych.lyng.obj.ObjFalse
 import net.sergeych.lyng.obj.ObjInt
 import net.sergeych.lyng.obj.ObjTrue
+import net.sergeych.lyng.obj.ObjReal
+import net.sergeych.lyng.obj.AssignRef
 import net.sergeych.lyng.obj.ValueFnRef
 import net.sergeych.lyng.obj.ObjVoid
 import net.sergeych.lyng.obj.toBool
+import net.sergeych.lyng.obj.toDouble
 import net.sergeych.lyng.obj.toInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -128,5 +132,98 @@ class BytecodeVmTest {
         val fn = BytecodeCompiler().compileExpression("orShort", expr) ?: error("bytecode compile failed")
         val result = BytecodeVm().execute(fn, Scope(), emptyList())
         assertEquals(true, result.toBool())
+    }
+
+    @Test
+    fun realArithmeticUsesBytecodeOps() = kotlinx.coroutines.test.runTest {
+        val expr = ExpressionStatement(
+            BinaryOpRef(
+                BinOp.PLUS,
+                ConstRef(ObjReal.of(2.5).asReadonly),
+                ConstRef(ObjReal.of(3.25).asReadonly),
+            ),
+            net.sergeych.lyng.Pos.builtIn
+        )
+        val fn = BytecodeCompiler().compileExpression("realPlus", expr) ?: error("bytecode compile failed")
+        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        assertEquals(5.75, result.toDouble())
+    }
+
+    @Test
+    fun mixedIntRealComparisonUsesBytecodeOps() = kotlinx.coroutines.test.runTest {
+        val ltExpr = ExpressionStatement(
+            BinaryOpRef(
+                BinOp.LT,
+                ConstRef(ObjInt.of(2).asReadonly),
+                ConstRef(ObjReal.of(2.5).asReadonly),
+            ),
+            net.sergeych.lyng.Pos.builtIn
+        )
+        val ltFn = BytecodeCompiler().compileExpression("mixedLt", ltExpr) ?: error("bytecode compile failed")
+        val ltResult = BytecodeVm().execute(ltFn, Scope(), emptyList())
+        assertEquals(true, ltResult.toBool())
+
+        val eqExpr = ExpressionStatement(
+            BinaryOpRef(
+                BinOp.EQ,
+                ConstRef(ObjReal.of(4.0).asReadonly),
+                ConstRef(ObjInt.of(4).asReadonly),
+            ),
+            net.sergeych.lyng.Pos.builtIn
+        )
+        val eqFn = BytecodeCompiler().compileExpression("mixedEq", eqExpr) ?: error("bytecode compile failed")
+        val eqResult = BytecodeVm().execute(eqFn, Scope(), emptyList())
+        assertEquals(true, eqResult.toBool())
+    }
+
+    @Test
+    fun mixedIntRealArithmeticUsesBytecodeOps() = kotlinx.coroutines.test.runTest {
+        val expr = ExpressionStatement(
+            BinaryOpRef(
+                BinOp.PLUS,
+                ConstRef(ObjInt.of(2).asReadonly),
+                ConstRef(ObjReal.of(3.5).asReadonly),
+            ),
+            net.sergeych.lyng.Pos.builtIn
+        )
+        val fn = BytecodeCompiler().compileExpression("mixedPlus", expr) ?: error("bytecode compile failed")
+        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        assertEquals(5.5, result.toDouble())
+    }
+
+    @Test
+    fun mixedIntRealNotEqualUsesBytecodeOps() = kotlinx.coroutines.test.runTest {
+        val expr = ExpressionStatement(
+            BinaryOpRef(
+                BinOp.NEQ,
+                ConstRef(ObjInt.of(3).asReadonly),
+                ConstRef(ObjReal.of(2.5).asReadonly),
+            ),
+            net.sergeych.lyng.Pos.builtIn
+        )
+        val fn = BytecodeCompiler().compileExpression("mixedNeq", expr) ?: error("bytecode compile failed")
+        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        assertEquals(true, result.toBool())
+    }
+
+    @Test
+    fun localSlotTypeTrackingEnablesArithmetic() = kotlinx.coroutines.test.runTest {
+        val slotRef = LocalSlotRef("a", 0, 0, net.sergeych.lyng.Pos.builtIn)
+        val assign = AssignRef(
+            slotRef,
+            ConstRef(ObjInt.of(2).asReadonly),
+            net.sergeych.lyng.Pos.builtIn
+        )
+        val expr = ExpressionStatement(
+            BinaryOpRef(
+                BinOp.PLUS,
+                assign,
+                slotRef
+            ),
+            net.sergeych.lyng.Pos.builtIn
+        )
+        val fn = BytecodeCompiler().compileExpression("localSlotAdd", expr) ?: error("bytecode compile failed")
+        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        assertEquals(4, result.toInt())
     }
 }

@@ -26,6 +26,7 @@ import net.sergeych.lyng.obj.*
 class BytecodeCompiler {
     private val builder = BytecodeBuilder()
     private var nextSlot = 0
+    private val slotTypes = mutableMapOf<Int, SlotType>()
 
     fun compileStatement(name: String, stmt: net.sergeych.lyng.Statement): BytecodeFunction? {
         return when (stmt) {
@@ -52,7 +53,7 @@ class BytecodeCompiler {
             is LocalSlotRef -> {
                 if (ref.name.isEmpty()) return null
                 if (refDepth(ref) != 0) return null
-                CompiledValue(refSlot(ref), SlotType.UNKNOWN)
+                CompiledValue(refSlot(ref), slotTypes[refSlot(ref)] ?: SlotType.UNKNOWN)
             }
             is BinaryOpRef -> compileBinary(ref)
             is UnaryOpRef -> compileUnary(ref)
@@ -131,50 +132,101 @@ class BytecodeCompiler {
         }
         val a = compileRef(binaryLeft(ref)) ?: return null
         val b = compileRef(binaryRight(ref)) ?: return null
-        if (a.type != b.type && a.type != SlotType.UNKNOWN && b.type != SlotType.UNKNOWN) return null
+        val typesMismatch = a.type != b.type && a.type != SlotType.UNKNOWN && b.type != SlotType.UNKNOWN
+        if (typesMismatch && op !in setOf(BinOp.EQ, BinOp.NEQ, BinOp.LT, BinOp.LTE, BinOp.GT, BinOp.GTE)) {
+            return null
+        }
         val out = allocSlot()
         return when (op) {
             BinOp.PLUS -> when (a.type) {
                 SlotType.INT -> {
-                    builder.emit(Opcode.ADD_INT, a.slot, b.slot, out)
-                    CompiledValue(out, SlotType.INT)
+                    when (b.type) {
+                        SlotType.INT -> {
+                            builder.emit(Opcode.ADD_INT, a.slot, b.slot, out)
+                            CompiledValue(out, SlotType.INT)
+                        }
+                        SlotType.REAL -> compileRealArithmeticWithCoercion(Opcode.ADD_REAL, a, b, out)
+                        else -> null
+                    }
                 }
                 SlotType.REAL -> {
-                    builder.emit(Opcode.ADD_REAL, a.slot, b.slot, out)
-                    CompiledValue(out, SlotType.REAL)
+                    when (b.type) {
+                        SlotType.REAL -> {
+                            builder.emit(Opcode.ADD_REAL, a.slot, b.slot, out)
+                            CompiledValue(out, SlotType.REAL)
+                        }
+                        SlotType.INT -> compileRealArithmeticWithCoercion(Opcode.ADD_REAL, a, b, out)
+                        else -> null
+                    }
                 }
                 else -> null
             }
             BinOp.MINUS -> when (a.type) {
                 SlotType.INT -> {
-                    builder.emit(Opcode.SUB_INT, a.slot, b.slot, out)
-                    CompiledValue(out, SlotType.INT)
+                    when (b.type) {
+                        SlotType.INT -> {
+                            builder.emit(Opcode.SUB_INT, a.slot, b.slot, out)
+                            CompiledValue(out, SlotType.INT)
+                        }
+                        SlotType.REAL -> compileRealArithmeticWithCoercion(Opcode.SUB_REAL, a, b, out)
+                        else -> null
+                    }
                 }
                 SlotType.REAL -> {
-                    builder.emit(Opcode.SUB_REAL, a.slot, b.slot, out)
-                    CompiledValue(out, SlotType.REAL)
+                    when (b.type) {
+                        SlotType.REAL -> {
+                            builder.emit(Opcode.SUB_REAL, a.slot, b.slot, out)
+                            CompiledValue(out, SlotType.REAL)
+                        }
+                        SlotType.INT -> compileRealArithmeticWithCoercion(Opcode.SUB_REAL, a, b, out)
+                        else -> null
+                    }
                 }
                 else -> null
             }
             BinOp.STAR -> when (a.type) {
                 SlotType.INT -> {
-                    builder.emit(Opcode.MUL_INT, a.slot, b.slot, out)
-                    CompiledValue(out, SlotType.INT)
+                    when (b.type) {
+                        SlotType.INT -> {
+                            builder.emit(Opcode.MUL_INT, a.slot, b.slot, out)
+                            CompiledValue(out, SlotType.INT)
+                        }
+                        SlotType.REAL -> compileRealArithmeticWithCoercion(Opcode.MUL_REAL, a, b, out)
+                        else -> null
+                    }
                 }
                 SlotType.REAL -> {
-                    builder.emit(Opcode.MUL_REAL, a.slot, b.slot, out)
-                    CompiledValue(out, SlotType.REAL)
+                    when (b.type) {
+                        SlotType.REAL -> {
+                            builder.emit(Opcode.MUL_REAL, a.slot, b.slot, out)
+                            CompiledValue(out, SlotType.REAL)
+                        }
+                        SlotType.INT -> compileRealArithmeticWithCoercion(Opcode.MUL_REAL, a, b, out)
+                        else -> null
+                    }
                 }
                 else -> null
             }
             BinOp.SLASH -> when (a.type) {
                 SlotType.INT -> {
-                    builder.emit(Opcode.DIV_INT, a.slot, b.slot, out)
-                    CompiledValue(out, SlotType.INT)
+                    when (b.type) {
+                        SlotType.INT -> {
+                            builder.emit(Opcode.DIV_INT, a.slot, b.slot, out)
+                            CompiledValue(out, SlotType.INT)
+                        }
+                        SlotType.REAL -> compileRealArithmeticWithCoercion(Opcode.DIV_REAL, a, b, out)
+                        else -> null
+                    }
                 }
                 SlotType.REAL -> {
-                    builder.emit(Opcode.DIV_REAL, a.slot, b.slot, out)
-                    CompiledValue(out, SlotType.REAL)
+                    when (b.type) {
+                        SlotType.REAL -> {
+                            builder.emit(Opcode.DIV_REAL, a.slot, b.slot, out)
+                            CompiledValue(out, SlotType.REAL)
+                        }
+                        SlotType.INT -> compileRealArithmeticWithCoercion(Opcode.DIV_REAL, a, b, out)
+                        else -> null
+                    }
                 }
                 else -> null
             }
@@ -184,90 +236,22 @@ class BytecodeCompiler {
                 CompiledValue(out, SlotType.INT)
             }
             BinOp.EQ -> {
-                when (a.type) {
-                    SlotType.INT -> {
-                        builder.emit(Opcode.CMP_EQ_INT, a.slot, b.slot, out)
-                        CompiledValue(out, SlotType.BOOL)
-                    }
-                    SlotType.REAL -> {
-                        builder.emit(Opcode.CMP_EQ_REAL, a.slot, b.slot, out)
-                        CompiledValue(out, SlotType.BOOL)
-                    }
-                    SlotType.BOOL -> {
-                        builder.emit(Opcode.CMP_EQ_BOOL, a.slot, b.slot, out)
-                        CompiledValue(out, SlotType.BOOL)
-                    }
-                    else -> null
-                }
+                compileCompareEq(a, b, out)
             }
             BinOp.NEQ -> {
-                when (a.type) {
-                    SlotType.INT -> {
-                        builder.emit(Opcode.CMP_NEQ_INT, a.slot, b.slot, out)
-                        CompiledValue(out, SlotType.BOOL)
-                    }
-                    SlotType.REAL -> {
-                        builder.emit(Opcode.CMP_NEQ_REAL, a.slot, b.slot, out)
-                        CompiledValue(out, SlotType.BOOL)
-                    }
-                    SlotType.BOOL -> {
-                        builder.emit(Opcode.CMP_NEQ_BOOL, a.slot, b.slot, out)
-                        CompiledValue(out, SlotType.BOOL)
-                    }
-                    else -> null
-                }
+                compileCompareNeq(a, b, out)
             }
             BinOp.LT -> {
-                when (a.type) {
-                    SlotType.INT -> {
-                        builder.emit(Opcode.CMP_LT_INT, a.slot, b.slot, out)
-                        CompiledValue(out, SlotType.BOOL)
-                    }
-                    SlotType.REAL -> {
-                        builder.emit(Opcode.CMP_LT_REAL, a.slot, b.slot, out)
-                        CompiledValue(out, SlotType.BOOL)
-                    }
-                    else -> null
-                }
+                compileCompareLt(a, b, out)
             }
             BinOp.LTE -> {
-                when (a.type) {
-                    SlotType.INT -> {
-                        builder.emit(Opcode.CMP_LTE_INT, a.slot, b.slot, out)
-                        CompiledValue(out, SlotType.BOOL)
-                    }
-                    SlotType.REAL -> {
-                        builder.emit(Opcode.CMP_LTE_REAL, a.slot, b.slot, out)
-                        CompiledValue(out, SlotType.BOOL)
-                    }
-                    else -> null
-                }
+                compileCompareLte(a, b, out)
             }
             BinOp.GT -> {
-                when (a.type) {
-                    SlotType.INT -> {
-                        builder.emit(Opcode.CMP_GT_INT, a.slot, b.slot, out)
-                        CompiledValue(out, SlotType.BOOL)
-                    }
-                    SlotType.REAL -> {
-                        builder.emit(Opcode.CMP_GT_REAL, a.slot, b.slot, out)
-                        CompiledValue(out, SlotType.BOOL)
-                    }
-                    else -> null
-                }
+                compileCompareGt(a, b, out)
             }
             BinOp.GTE -> {
-                when (a.type) {
-                    SlotType.INT -> {
-                        builder.emit(Opcode.CMP_GTE_INT, a.slot, b.slot, out)
-                        CompiledValue(out, SlotType.BOOL)
-                    }
-                    SlotType.REAL -> {
-                        builder.emit(Opcode.CMP_GTE_REAL, a.slot, b.slot, out)
-                        CompiledValue(out, SlotType.BOOL)
-                    }
-                    else -> null
-                }
+                compileCompareGte(a, b, out)
             }
             BinOp.AND -> {
                 if (a.type != SlotType.BOOL) return null
@@ -303,6 +287,173 @@ class BytecodeCompiler {
                 if (a.type != SlotType.INT) return null
                 builder.emit(Opcode.SHR_INT, a.slot, b.slot, out)
                 CompiledValue(out, SlotType.INT)
+            }
+            else -> null
+        }
+    }
+
+    private fun compileRealArithmeticWithCoercion(
+        op: Opcode,
+        a: CompiledValue,
+        b: CompiledValue,
+        out: Int
+    ): CompiledValue? {
+        if (a.type == SlotType.INT && b.type == SlotType.REAL) {
+            val left = allocSlot()
+            builder.emit(Opcode.INT_TO_REAL, a.slot, left)
+            builder.emit(op, left, b.slot, out)
+            return CompiledValue(out, SlotType.REAL)
+        }
+        if (a.type == SlotType.REAL && b.type == SlotType.INT) {
+            val right = allocSlot()
+            builder.emit(Opcode.INT_TO_REAL, b.slot, right)
+            builder.emit(op, a.slot, right, out)
+            return CompiledValue(out, SlotType.REAL)
+        }
+        return null
+    }
+
+    private fun compileCompareEq(a: CompiledValue, b: CompiledValue, out: Int): CompiledValue? {
+        if (a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) return null
+        return when {
+            a.type == SlotType.INT && b.type == SlotType.INT -> {
+                builder.emit(Opcode.CMP_EQ_INT, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.REAL && b.type == SlotType.REAL -> {
+                builder.emit(Opcode.CMP_EQ_REAL, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.BOOL && b.type == SlotType.BOOL -> {
+                builder.emit(Opcode.CMP_EQ_BOOL, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.INT && b.type == SlotType.REAL -> {
+                builder.emit(Opcode.CMP_EQ_INT_REAL, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.REAL && b.type == SlotType.INT -> {
+                builder.emit(Opcode.CMP_EQ_REAL_INT, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            else -> null
+        }
+    }
+
+    private fun compileCompareNeq(a: CompiledValue, b: CompiledValue, out: Int): CompiledValue? {
+        if (a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) return null
+        return when {
+            a.type == SlotType.INT && b.type == SlotType.INT -> {
+                builder.emit(Opcode.CMP_NEQ_INT, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.REAL && b.type == SlotType.REAL -> {
+                builder.emit(Opcode.CMP_NEQ_REAL, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.BOOL && b.type == SlotType.BOOL -> {
+                builder.emit(Opcode.CMP_NEQ_BOOL, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.INT && b.type == SlotType.REAL -> {
+                builder.emit(Opcode.CMP_NEQ_INT_REAL, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.REAL && b.type == SlotType.INT -> {
+                builder.emit(Opcode.CMP_NEQ_REAL_INT, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            else -> null
+        }
+    }
+
+    private fun compileCompareLt(a: CompiledValue, b: CompiledValue, out: Int): CompiledValue? {
+        if (a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) return null
+        return when {
+            a.type == SlotType.INT && b.type == SlotType.INT -> {
+                builder.emit(Opcode.CMP_LT_INT, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.REAL && b.type == SlotType.REAL -> {
+                builder.emit(Opcode.CMP_LT_REAL, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.INT && b.type == SlotType.REAL -> {
+                builder.emit(Opcode.CMP_LT_INT_REAL, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.REAL && b.type == SlotType.INT -> {
+                builder.emit(Opcode.CMP_LT_REAL_INT, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            else -> null
+        }
+    }
+
+    private fun compileCompareLte(a: CompiledValue, b: CompiledValue, out: Int): CompiledValue? {
+        if (a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) return null
+        return when {
+            a.type == SlotType.INT && b.type == SlotType.INT -> {
+                builder.emit(Opcode.CMP_LTE_INT, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.REAL && b.type == SlotType.REAL -> {
+                builder.emit(Opcode.CMP_LTE_REAL, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.INT && b.type == SlotType.REAL -> {
+                builder.emit(Opcode.CMP_LTE_INT_REAL, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.REAL && b.type == SlotType.INT -> {
+                builder.emit(Opcode.CMP_LTE_REAL_INT, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            else -> null
+        }
+    }
+
+    private fun compileCompareGt(a: CompiledValue, b: CompiledValue, out: Int): CompiledValue? {
+        if (a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) return null
+        return when {
+            a.type == SlotType.INT && b.type == SlotType.INT -> {
+                builder.emit(Opcode.CMP_GT_INT, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.REAL && b.type == SlotType.REAL -> {
+                builder.emit(Opcode.CMP_GT_REAL, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.INT && b.type == SlotType.REAL -> {
+                builder.emit(Opcode.CMP_GT_INT_REAL, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.REAL && b.type == SlotType.INT -> {
+                builder.emit(Opcode.CMP_GT_REAL_INT, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            else -> null
+        }
+    }
+
+    private fun compileCompareGte(a: CompiledValue, b: CompiledValue, out: Int): CompiledValue? {
+        if (a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) return null
+        return when {
+            a.type == SlotType.INT && b.type == SlotType.INT -> {
+                builder.emit(Opcode.CMP_GTE_INT, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.REAL && b.type == SlotType.REAL -> {
+                builder.emit(Opcode.CMP_GTE_REAL, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.INT && b.type == SlotType.REAL -> {
+                builder.emit(Opcode.CMP_GTE_INT_REAL, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            a.type == SlotType.REAL && b.type == SlotType.INT -> {
+                builder.emit(Opcode.CMP_GTE_REAL_INT, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
             }
             else -> null
         }
@@ -346,6 +497,7 @@ class BytecodeCompiler {
             SlotType.BOOL -> builder.emit(Opcode.MOVE_BOOL, value.slot, slot)
             else -> builder.emit(Opcode.MOVE_OBJ, value.slot, slot)
         }
+        updateSlotType(slot, value.type)
         return CompiledValue(slot, value.type)
     }
 
@@ -412,6 +564,7 @@ class BytecodeCompiler {
         }
         val id = builder.addFallback(stmt)
         builder.emit(Opcode.EVAL_FALLBACK, id, slot)
+        updateSlotType(slot, forceType ?: SlotType.OBJ)
         return CompiledValue(slot, forceType ?: SlotType.OBJ)
     }
 
@@ -425,4 +578,12 @@ class BytecodeCompiler {
     private fun assignTarget(ref: AssignRef): LocalSlotRef? = ref.target as? LocalSlotRef
     private fun assignValue(ref: AssignRef): ObjRef = ref.value
     private fun refPos(ref: BinaryOpRef): Pos = Pos.builtIn
+
+    private fun updateSlotType(slot: Int, type: SlotType) {
+        if (type == SlotType.UNKNOWN) {
+            slotTypes.remove(slot)
+        } else {
+            slotTypes[slot] = type
+        }
+    }
 }
