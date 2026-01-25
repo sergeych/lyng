@@ -152,6 +152,80 @@ class BinaryOpRef(private val op: BinOp, private val left: ObjRef, private val r
 
         // Primitive fast paths for common cases (guarded by PerfFlags.PRIMITIVE_FASTOPS)
         if (PerfFlags.PRIMITIVE_FASTOPS) {
+            // Fast membership for common containers
+            if (op == BinOp.IN || op == BinOp.NOTIN) {
+                val inResult: Boolean? = when (b) {
+                    is ObjList -> {
+                        if (a is ObjInt) {
+                            var i = 0
+                            val sz = b.list.size
+                            var found = false
+                            while (i < sz) {
+                                val v = b.list[i]
+                                if (v is ObjInt && v.value == a.value) {
+                                    found = true
+                                    break
+                                }
+                                i++
+                            }
+                            found
+                        } else {
+                            b.list.contains(a)
+                        }
+                    }
+                    is ObjSet -> b.set.contains(a)
+                    is ObjMap -> b.map.containsKey(a)
+                    is ObjRange -> {
+                        when (a) {
+                            is ObjInt -> {
+                                val s = b.start as? ObjInt
+                                val e = b.end as? ObjInt
+                                val v = a.value
+                                if (s == null && e == null) null
+                                else {
+                                    if (s != null && v < s.value) false
+                                    else if (e != null) if (b.isEndInclusive) v <= e.value else v < e.value else true
+                                }
+                            }
+                            is ObjChar -> {
+                                val s = b.start as? ObjChar
+                                val e = b.end as? ObjChar
+                                val v = a.value
+                                if (s == null && e == null) null
+                                else {
+                                    if (s != null && v < s.value) false
+                                    else if (e != null) if (b.isEndInclusive) v <= e.value else v < e.value else true
+                                }
+                            }
+                            is ObjString -> {
+                                val s = b.start as? ObjString
+                                val e = b.end as? ObjString
+                                val v = a.value
+                                if (s == null && e == null) null
+                                else {
+                                    if (s != null && v < s.value) false
+                                    else if (e != null) if (b.isEndInclusive) v <= e.value else v < e.value else true
+                                }
+                            }
+                            else -> null
+                        }
+                    }
+                    is ObjString -> when (a) {
+                        is ObjString -> b.value.contains(a.value)
+                        is ObjChar -> b.value.contains(a.value)
+                        else -> null
+                    }
+                    else -> null
+                }
+                if (inResult != null) {
+                    if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.primitiveFastOpsHit++
+                    return if (op == BinOp.IN) {
+                        if (inResult) ObjTrue else ObjFalse
+                    } else {
+                        if (inResult) ObjFalse else ObjTrue
+                    }
+                }
+            }
             // Fast boolean ops when both operands are ObjBool
             if (a is ObjBool && b is ObjBool) {
                 val r: Obj? = when (op) {
@@ -604,7 +678,37 @@ class AssignOpRef(
             else -> null
         }
         if (inPlace != null) return inPlace.asReadonly
-        val result: Obj = when (op) {
+        val fast: Obj? = if (PerfFlags.PRIMITIVE_FASTOPS) {
+            when {
+                x is ObjInt && y is ObjInt -> {
+                    val xv = x.value
+                    val yv = y.value
+                    when (op) {
+                        BinOp.PLUS -> ObjInt.of(xv + yv)
+                        BinOp.MINUS -> ObjInt.of(xv - yv)
+                        BinOp.STAR -> ObjInt.of(xv * yv)
+                        BinOp.SLASH -> if (yv != 0L) ObjInt.of(xv / yv) else null
+                        BinOp.PERCENT -> if (yv != 0L) ObjInt.of(xv % yv) else null
+                        else -> null
+                    }
+                }
+                (x is ObjInt || x is ObjReal) && (y is ObjInt || y is ObjReal) -> {
+                    val xv = if (x is ObjInt) x.doubleValue else (x as ObjReal).value
+                    val yv = if (y is ObjInt) y.doubleValue else (y as ObjReal).value
+                    when (op) {
+                        BinOp.PLUS -> ObjReal.of(xv + yv)
+                        BinOp.MINUS -> ObjReal.of(xv - yv)
+                        BinOp.STAR -> ObjReal.of(xv * yv)
+                        BinOp.SLASH -> ObjReal.of(xv / yv)
+                        BinOp.PERCENT -> ObjReal.of(xv % yv)
+                        else -> null
+                    }
+                }
+                x is ObjString && op == BinOp.PLUS -> ObjString(x.value + y.toString())
+                else -> null
+            }
+        } else null
+        val result: Obj = fast ?: when (op) {
             BinOp.PLUS -> x.plus(scope, y)
             BinOp.MINUS -> x.minus(scope, y)
             BinOp.STAR -> x.mul(scope, y)
@@ -632,7 +736,15 @@ class IncDecRef(
         // We now treat numbers as immutable and always perform write-back via setAt.
         // This avoids issues where literals are shared and mutated in-place.
         // For post-inc: return ORIGINAL value; for pre-inc: return NEW value.
-        val result = if (isIncrement) v.plus(scope, one) else v.minus(scope, one)
+        val result = if (PerfFlags.PRIMITIVE_FASTOPS) {
+            when (v) {
+                is ObjInt -> if (isIncrement) ObjInt.of(v.value + 1L) else ObjInt.of(v.value - 1L)
+                is ObjReal -> if (isIncrement) ObjReal.of(v.value + 1.0) else ObjReal.of(v.value - 1.0)
+                else -> if (isIncrement) v.plus(scope, one) else v.minus(scope, one)
+            }
+        } else {
+            if (isIncrement) v.plus(scope, one) else v.minus(scope, one)
+        }
         target.setAt(atPos, scope, result)
         return (if (isPost) v else result).asReadonly
     }
@@ -1447,7 +1559,7 @@ class IndexRef(
 /**
  * R-value reference that wraps a Statement (used during migration for expressions parsed as Statement).
  */
-class StatementRef(private val statement: Statement) : ObjRef {
+class StatementRef(internal val statement: Statement) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord = statement.execute(scope).asReadonly
 }
 
@@ -2283,7 +2395,19 @@ class LocalSlotRef(
     private var cachedOwnerVerified: Boolean = false
 
     private fun resolveOwner(scope: Scope): Scope? {
-        if (cachedOwner != null && cachedFrameId == scope.frameId && cachedOwnerVerified) return cachedOwner
+        if (cachedOwner != null && cachedFrameId == scope.frameId && cachedOwnerVerified) {
+            val cached = cachedOwner!!
+            val candidate = if (depth == 0) scope else {
+                var s: Scope? = scope
+                var remaining = depth
+                while (s != null && remaining > 0) {
+                    s = s.parent
+                    remaining--
+                }
+                s
+            }
+            if (candidate === cached && candidate?.getSlotIndexOf(name) == slot) return cached
+        }
         var s: Scope? = scope
         var remaining = depth
         while (s != null && remaining > 0) {
@@ -2475,9 +2599,9 @@ class MapLiteralRef(private val entries: List<MapLiteralEntry>) : ObjRef {
  * Range literal: left .. right or left ..< right. Right may be omitted in certain contexts.
  */
 class RangeRef(
-    private val left: ObjRef?,
-    private val right: ObjRef?,
-    private val isEndInclusive: Boolean
+    internal val left: ObjRef?,
+    internal val right: ObjRef?,
+    internal val isEndInclusive: Boolean
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
         return evalValue(scope).asReadonly

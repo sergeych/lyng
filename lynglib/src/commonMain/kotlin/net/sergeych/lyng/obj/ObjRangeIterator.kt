@@ -58,7 +58,7 @@ class ObjRangeIterator(val self: ObjRange) : Obj() {
                 start.value.code.toLong() + nextIndex++
             else
                 scope.raiseError("iterator error: unsupported range start")
-            if( isCharRange ) ObjChar(x.toInt().toChar()) else ObjInt(x)
+            if (isCharRange) ObjChar(x.toInt().toChar()) else ObjInt.of(x)
         }
         else {
             scope.raiseError(ObjIterationFinishedException(scope))
@@ -83,13 +83,18 @@ class ObjRangeIterator(val self: ObjRange) : Obj() {
 class ObjFastIntRangeIterator(private val start: Int, private val endExclusive: Int) : Obj() {
 
     private var cur: Int = start
+    private val cacheLow = ObjInt.CACHE_LOW.toInt()
+    private val useCache = start >= cacheLow && endExclusive <= ObjInt.CACHE_HIGH.toInt() + 1
+    private val cache = if (useCache) ObjInt.cacheArray() else null
 
     override val objClass: ObjClass get() = type
 
     fun hasNext(): Boolean = cur < endExclusive
 
     fun next(scope: Scope): Obj =
-        if (cur < endExclusive) ObjInt(cur++.toLong())
+        if (cur < endExclusive) {
+            if (useCache && cache != null) cache[cur++ - cacheLow] else ObjInt(cur++.toLong())
+        }
         else scope.raiseError(ObjIterationFinishedException(scope))
 
     companion object {

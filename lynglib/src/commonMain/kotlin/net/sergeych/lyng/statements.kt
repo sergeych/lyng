@@ -63,6 +63,13 @@ abstract class Statement(
 
 }
 
+class ExpressionStatement(
+    val ref: net.sergeych.lyng.obj.ObjRef,
+    override val pos: Pos
+) : Statement() {
+    override suspend fun execute(scope: Scope): Obj = ref.evalValue(scope)
+}
+
 fun Statement.raise(text: String): Nothing {
     throw ScriptError(pos, text)
 }

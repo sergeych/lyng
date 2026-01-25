@@ -413,11 +413,7 @@ class Compiler(
     private suspend fun parseExpression(): Statement? {
         val pos = cc.currentPos()
         return parseExpressionLevel()?.let { ref ->
-            val stmtPos = pos
-            object : Statement() {
-                override val pos: Pos = stmtPos
-                override suspend fun execute(scope: Scope): Obj = ref.evalValue(scope)
-            }
+            ExpressionStatement(ref, pos)
         }
     }
 
@@ -722,11 +718,18 @@ class Compiler(
                             null
                         else
                             parseExpression()
-                    operand = RangeRef(
-                        left,
-                        right?.let { StatementRef(it) },
-                        isEndInclusive
-                    )
+                    val rightRef = right?.let { StatementRef(it) }
+                    if (left != null && rightRef != null) {
+                        val lConst = constIntValueOrNull(left)
+                        val rConst = constIntValueOrNull(rightRef)
+                        if (lConst != null && rConst != null) {
+                            operand = ConstRef(ObjRange(ObjInt.of(lConst), ObjInt.of(rConst), isEndInclusive).asReadonly)
+                        } else {
+                            operand = RangeRef(left, rightRef, isEndInclusive)
+                        }
+                    } else {
+                        operand = RangeRef(left, rightRef, isEndInclusive)
+                    }
                 }
 
                 Token.Type.LBRACE, Token.Type.NULL_COALESCE_BLOCKINVOKE -> {
@@ -2467,39 +2470,68 @@ class Compiler(
             // So we parse an expression explicitly and wrap it into a StatementRef.
             val exprAfterIn = parseExpression() ?: throw ScriptError(start, "Bad for statement: expected expression")
             val source: Statement = exprAfterIn
+            val constRange = (exprAfterIn as? ExpressionStatement)?.ref?.let { ref ->
+                constIntRangeOrNull(ref)
+            }
             ensureRparen()
 
             // Expose the loop variable name to the parser so identifiers inside the loop body
             // can be emitted as FastLocalVarRef when enabled.
             val namesForLoop = (currentLocalNames?.toSet() ?: emptySet()) + tVar.value
-            val (canBreak, body, elseStatement) = withLocalNames(namesForLoop) {
-                val loopParsed = cc.parseLoop {
-                    if (cc.current().type == Token.Type.LBRACE) parseBlock()
-                    else parseStatement() ?: throw ScriptError(start, "Bad for statement: expected loop body")
+            val loopSlotPlan = SlotPlan(mutableMapOf(), 0)
+            slotPlanStack.add(loopSlotPlan)
+            declareSlotName(tVar.value)
+            val (canBreak, body, elseStatement) = try {
+                withLocalNames(namesForLoop) {
+                    val loopParsed = cc.parseLoop {
+                        if (cc.current().type == Token.Type.LBRACE) parseBlock()
+                        else parseStatement() ?: throw ScriptError(start, "Bad for statement: expected loop body")
+                    }
+                    // possible else clause
+                    cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
+                    val elseStmt = if (cc.next().let { it.type == Token.Type.ID && it.value == "else" }) {
+                        parseStatement()
+                    } else {
+                        cc.previous()
+                        null
+                    }
+                    Triple(loopParsed.first, loopParsed.second, elseStmt)
                 }
-                // possible else clause
-                cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
-                val elseStmt = if (cc.next().let { it.type == Token.Type.ID && it.value == "else" }) {
-                    parseStatement()
-                } else {
-                    cc.previous()
-                    null
-                }
-                Triple(loopParsed.first, loopParsed.second, elseStmt)
+            } finally {
+                slotPlanStack.removeLast()
             }
+            val loopSlotPlanSnapshot = if (loopSlotPlan.slots.isEmpty()) emptyMap() else loopSlotPlan.slots.toMap()
 
             return object : Statement() {
                 override val pos: Pos = body.pos
                 override suspend fun execute(scope: Scope): Obj {
                     val forContext = scope.createChildScope(start)
+                    if (loopSlotPlanSnapshot.isNotEmpty()) {
+                        forContext.applySlotPlan(loopSlotPlanSnapshot)
+                    }
 
                     // loop var: StoredObject
                     val loopSO = forContext.addItem(tVar.value, true, ObjNull)
 
+                    if (constRange != null && PerfFlags.PRIMITIVE_FASTOPS) {
+                        val loopSlotIndex = forContext.getSlotIndexOf(tVar.value) ?: -1
+                        return loopIntRange(
+                            forContext,
+                            constRange.start,
+                            constRange.endExclusive,
+                            loopSO,
+                            loopSlotIndex,
+                            body,
+                            elseStatement,
+                            label,
+                            canBreak
+                        )
+                    }
                     // insofar we suggest source object is enumerable. Later we might need to add checks
                     val sourceObj = source.execute(forContext)
 
                     if (sourceObj is ObjRange && sourceObj.isIntRange && PerfFlags.PRIMITIVE_FASTOPS) {
+                        val loopSlotIndex = forContext.getSlotIndexOf(tVar.value) ?: -1
                         return loopIntRange(
                             forContext,
                             sourceObj.start!!.toLong(),
@@ -2508,6 +2540,7 @@ class Compiler(
                             else
                                 sourceObj.end!!.toLong(),
                             loopSO,
+                            loopSlotIndex,
                             body,
                             elseStatement,
                             label,
@@ -2571,30 +2604,89 @@ class Compiler(
     }
 
     private suspend fun loopIntRange(
-        forScope: Scope, start: Long, end: Long, loopVar: ObjRecord,
+        forScope: Scope, start: Long, end: Long, loopVar: ObjRecord, loopSlotIndex: Int,
         body: Statement, elseStatement: Statement?, label: String?, catchBreak: Boolean
     ): Obj {
         var result: Obj = ObjVoid
+        val cacheLow = ObjInt.CACHE_LOW
+        val cacheHigh = ObjInt.CACHE_HIGH
+        val useCache = start >= cacheLow && end <= cacheHigh + 1
+        val cache = if (useCache) ObjInt.cacheArray() else null
+        val useSlot = loopSlotIndex >= 0
         if (catchBreak) {
-            for (i in start..<end) {
-                loopVar.value = ObjInt.of(i)
-                try {
-                    result = body.execute(forScope)
-                } catch (lbe: LoopBreakContinueException) {
-                    if (lbe.label == label || lbe.label == null) {
-                        if (lbe.doContinue) continue
-                        return lbe.result
+            if (useCache && cache != null) {
+                var i = start
+                while (i < end) {
+                    val v = cache[(i - cacheLow).toInt()]
+                    if (useSlot) forScope.setSlotValue(loopSlotIndex, v) else loopVar.value = v
+                    try {
+                        result = body.execute(forScope)
+                    } catch (lbe: LoopBreakContinueException) {
+                        if (lbe.label == label || lbe.label == null) {
+                            if (lbe.doContinue) {
+                                i++
+                                continue
+                            }
+                            return lbe.result
+                        }
+                        throw lbe
                     }
-                    throw lbe
+                    i++
+                }
+            } else {
+                for (i in start..<end) {
+                    val v = ObjInt.of(i)
+                    if (useSlot) forScope.setSlotValue(loopSlotIndex, v) else loopVar.value = v
+                    try {
+                        result = body.execute(forScope)
+                    } catch (lbe: LoopBreakContinueException) {
+                        if (lbe.label == label || lbe.label == null) {
+                            if (lbe.doContinue) continue
+                            return lbe.result
+                        }
+                        throw lbe
+                    }
                 }
             }
         } else {
-            for (i in start..<end) {
-                loopVar.value = ObjInt.of(i)
-                result = body.execute(forScope)
+            if (useCache && cache != null) {
+                var i = start
+                while (i < end) {
+                    val v = cache[(i - cacheLow).toInt()]
+                    if (useSlot) forScope.setSlotValue(loopSlotIndex, v) else loopVar.value = v
+                    result = body.execute(forScope)
+                    i++
+                }
+            } else {
+                for (i in start..<end) {
+                    val v = ObjInt.of(i)
+                    if (useSlot) forScope.setSlotValue(loopSlotIndex, v) else loopVar.value = v
+                    result = body.execute(forScope)
+                }
             }
         }
         return elseStatement?.execute(forScope) ?: result
+    }
+
+    private data class ConstIntRange(val start: Long, val endExclusive: Long)
+
+    private fun constIntRangeOrNull(ref: ObjRef): ConstIntRange? {
+        if (ref !is RangeRef) return null
+        val start = constIntValueOrNull(ref.left) ?: return null
+        val end = constIntValueOrNull(ref.right) ?: return null
+        val endExclusive = if (ref.isEndInclusive) end + 1 else end
+        return ConstIntRange(start, endExclusive)
+    }
+
+    private fun constIntValueOrNull(ref: ObjRef?): Long? {
+        return when (ref) {
+            is ConstRef -> (ref.constValue as? ObjInt)?.value
+            is StatementRef -> {
+                val stmt = ref.statement
+                if (stmt is ExpressionStatement) constIntValueOrNull(stmt.ref) else null
+            }
+            else -> null
+        }
     }
 
     private suspend fun loopIterable(

@@ -55,7 +55,11 @@ class ObjInt(val value: Long, override val isConst: Boolean = false) : Obj(), Nu
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
         if (other !is Numeric) return -2
-        return value.compareTo(other.doubleValue)
+        return if (other is ObjInt) {
+            value.compareTo(other.value)
+        } else {
+            doubleValue.compareTo(other.doubleValue)
+        }
     }
 
     override fun toString(): String = value.toString()
@@ -159,12 +163,18 @@ class ObjInt(val value: Long, override val isConst: Boolean = false) : Obj(), Nu
     }
 
     companion object {
-        private val cache = Array(256) { ObjInt((it - 128).toLong(), true) }
+        internal const val CACHE_LOW: Long = -1024L
+        internal const val CACHE_HIGH: Long = 1023L
+        private val cache = Array((CACHE_HIGH - CACHE_LOW + 1).toInt()) {
+            ObjInt((it + CACHE_LOW).toLong(), true)
+        }
 
         fun of(value: Long): ObjInt {
-            return if (value in -128L..127L) cache[(value + 128).toInt()]
+            return if (value in CACHE_LOW..CACHE_HIGH) cache[(value - CACHE_LOW).toInt()]
             else ObjInt(value)
         }
+
+        internal fun cacheArray(): Array<ObjInt> = cache
 
         val Zero = of(0)
         val One = of(1)

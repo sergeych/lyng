@@ -37,7 +37,7 @@ data class ParsedArgument(
              count++
              if (count > limit) break
          }
-         if (!hasSplatOrNamed && count == this.size) {
+        if (!hasSplatOrNamed && count == this.size) {
              val quick = when (count) {
                  0 -> Arguments.EMPTY
                  1 -> Arguments(listOf(this.elementAt(0).value.execute(scope)), tailBlockMode)
@@ -154,11 +154,11 @@ data class ParsedArgument(
                  else -> null
              }
              if (quick != null) return quick
-         }
+        }
      }
 
      // General path: build positional list and named map, enforcing ordering rules
-     val positional: MutableList<Obj> = mutableListOf()
+    val positional: MutableList<Obj> = mutableListOf()
      var named: MutableMap<String, Obj>? = null
      var namedSeen = false
      for ((idx, x) in this.withIndex()) {
@@ -254,4 +254,3 @@ data class ParsedArgument(
          fun from(values: Collection<Obj>) = Arguments(values.toList())
      }
  }
-

@@ -96,6 +96,30 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
         if (other is ObjRange)
             return containsRange(scope, other)
 
+        if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
+            if (start is ObjInt && end is ObjInt && other is ObjInt) {
+                val s = start.value
+                val e = end.value
+                val v = other.value
+                if (v < s) return false
+                return if (isEndInclusive) v <= e else v < e
+            }
+            if (start is ObjChar && end is ObjChar && other is ObjChar) {
+                val s = start.value
+                val e = end.value
+                val v = other.value
+                if (v < s) return false
+                return if (isEndInclusive) v <= e else v < e
+            }
+            if (start is ObjString && end is ObjString && other is ObjString) {
+                val s = start.value
+                val e = end.value
+                val v = other.value
+                if (v < s) return false
+                return if (isEndInclusive) v <= e else v < e
+            }
+        }
+
         if (start == null && end == null) return true
         if (start != null) {
             if (start.compareTo(scope, other) > 0) return false
@@ -241,4 +265,3 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
         }
     }
 }
-
