@@ -142,6 +142,51 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     frame.setBool(dst, frame.getInt(a) == frame.getInt(b))
                 }
+                Opcode.CMP_NEQ_INT -> {
+                    val a = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val b = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    frame.setBool(dst, frame.getInt(a) != frame.getInt(b))
+                }
+                Opcode.CMP_EQ_BOOL -> {
+                    val a = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val b = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    frame.setBool(dst, frame.getBool(a) == frame.getBool(b))
+                }
+                Opcode.CMP_NEQ_BOOL -> {
+                    val a = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val b = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    frame.setBool(dst, frame.getBool(a) != frame.getBool(b))
+                }
+                Opcode.AND_BOOL -> {
+                    val a = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val b = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    frame.setBool(dst, frame.getBool(a) && frame.getBool(b))
+                }
+                Opcode.OR_BOOL -> {
+                    val a = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val b = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    frame.setBool(dst, frame.getBool(a) || frame.getBool(b))
+                }
                 Opcode.JMP -> {
                     val target = decoder.readIp(code, ip, fn.ipWidth)
                     ip = target

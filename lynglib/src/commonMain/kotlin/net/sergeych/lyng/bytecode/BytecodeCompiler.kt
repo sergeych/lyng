@@ -181,33 +181,99 @@ class BytecodeCompiler {
                 CompiledValue(out, SlotType.INT)
             }
             BinOp.EQ -> {
-                if (a.type != SlotType.INT) return null
-                builder.emit(Opcode.CMP_EQ_INT, a.slot, b.slot, out)
-                CompiledValue(out, SlotType.BOOL)
+                when (a.type) {
+                    SlotType.INT -> {
+                        builder.emit(Opcode.CMP_EQ_INT, a.slot, b.slot, out)
+                        CompiledValue(out, SlotType.BOOL)
+                    }
+                    SlotType.REAL -> {
+                        builder.emit(Opcode.CMP_EQ_REAL, a.slot, b.slot, out)
+                        CompiledValue(out, SlotType.BOOL)
+                    }
+                    SlotType.BOOL -> {
+                        builder.emit(Opcode.CMP_EQ_BOOL, a.slot, b.slot, out)
+                        CompiledValue(out, SlotType.BOOL)
+                    }
+                    else -> null
+                }
             }
             BinOp.NEQ -> {
-                if (a.type != SlotType.INT) return null
-                builder.emit(Opcode.CMP_NEQ_INT, a.slot, b.slot, out)
-                CompiledValue(out, SlotType.BOOL)
+                when (a.type) {
+                    SlotType.INT -> {
+                        builder.emit(Opcode.CMP_NEQ_INT, a.slot, b.slot, out)
+                        CompiledValue(out, SlotType.BOOL)
+                    }
+                    SlotType.REAL -> {
+                        builder.emit(Opcode.CMP_NEQ_REAL, a.slot, b.slot, out)
+                        CompiledValue(out, SlotType.BOOL)
+                    }
+                    SlotType.BOOL -> {
+                        builder.emit(Opcode.CMP_NEQ_BOOL, a.slot, b.slot, out)
+                        CompiledValue(out, SlotType.BOOL)
+                    }
+                    else -> null
+                }
             }
             BinOp.LT -> {
-                if (a.type != SlotType.INT) return null
-                builder.emit(Opcode.CMP_LT_INT, a.slot, b.slot, out)
-                CompiledValue(out, SlotType.BOOL)
+                when (a.type) {
+                    SlotType.INT -> {
+                        builder.emit(Opcode.CMP_LT_INT, a.slot, b.slot, out)
+                        CompiledValue(out, SlotType.BOOL)
+                    }
+                    SlotType.REAL -> {
+                        builder.emit(Opcode.CMP_LT_REAL, a.slot, b.slot, out)
+                        CompiledValue(out, SlotType.BOOL)
+                    }
+                    else -> null
+                }
             }
             BinOp.LTE -> {
-                if (a.type != SlotType.INT) return null
-                builder.emit(Opcode.CMP_LTE_INT, a.slot, b.slot, out)
-                CompiledValue(out, SlotType.BOOL)
+                when (a.type) {
+                    SlotType.INT -> {
+                        builder.emit(Opcode.CMP_LTE_INT, a.slot, b.slot, out)
+                        CompiledValue(out, SlotType.BOOL)
+                    }
+                    SlotType.REAL -> {
+                        builder.emit(Opcode.CMP_LTE_REAL, a.slot, b.slot, out)
+                        CompiledValue(out, SlotType.BOOL)
+                    }
+                    else -> null
+                }
             }
             BinOp.GT -> {
-                if (a.type != SlotType.INT) return null
-                builder.emit(Opcode.CMP_GT_INT, a.slot, b.slot, out)
-                CompiledValue(out, SlotType.BOOL)
+                when (a.type) {
+                    SlotType.INT -> {
+                        builder.emit(Opcode.CMP_GT_INT, a.slot, b.slot, out)
+                        CompiledValue(out, SlotType.BOOL)
+                    }
+                    SlotType.REAL -> {
+                        builder.emit(Opcode.CMP_GT_REAL, a.slot, b.slot, out)
+                        CompiledValue(out, SlotType.BOOL)
+                    }
+                    else -> null
+                }
             }
             BinOp.GTE -> {
-                if (a.type != SlotType.INT) return null
-                builder.emit(Opcode.CMP_GTE_INT, a.slot, b.slot, out)
+                when (a.type) {
+                    SlotType.INT -> {
+                        builder.emit(Opcode.CMP_GTE_INT, a.slot, b.slot, out)
+                        CompiledValue(out, SlotType.BOOL)
+                    }
+                    SlotType.REAL -> {
+                        builder.emit(Opcode.CMP_GTE_REAL, a.slot, b.slot, out)
+                        CompiledValue(out, SlotType.BOOL)
+                    }
+                    else -> null
+                }
+            }
+            BinOp.AND -> {
+                if (a.type != SlotType.BOOL) return null
+                builder.emit(Opcode.AND_BOOL, a.slot, b.slot, out)
+                CompiledValue(out, SlotType.BOOL)
+            }
+            BinOp.OR -> {
+                if (a.type != SlotType.BOOL) return null
+                builder.emit(Opcode.OR_BOOL, a.slot, b.slot, out)
                 CompiledValue(out, SlotType.BOOL)
             }
             BinOp.BAND -> {
