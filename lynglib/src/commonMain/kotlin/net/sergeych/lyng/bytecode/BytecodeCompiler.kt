@@ -23,12 +23,21 @@ import net.sergeych.lyng.Statement
 import net.sergeych.lyng.ToBoolStatement
 import net.sergeych.lyng.obj.*
 
-class BytecodeCompiler {
-    private val builder = BytecodeBuilder()
+class BytecodeCompiler(
+    private val allowLocalSlots: Boolean = true,
+) {
+    private var builder = BytecodeBuilder()
     private var nextSlot = 0
+    private var scopeSlotCount = 0
+    private var scopeSlotDepths = IntArray(0)
+    private var scopeSlotIndices = IntArray(0)
+    private var scopeSlotNames = emptyArray<String?>()
+    private val scopeSlotMap = LinkedHashMap<ScopeSlotKey, Int>()
+    private val scopeSlotNameMap = LinkedHashMap<ScopeSlotKey, String>()
     private val slotTypes = mutableMapOf<Int, SlotType>()
 
     fun compileStatement(name: String, stmt: net.sergeych.lyng.Statement): BytecodeFunction? {
+        prepareCompilation(stmt)
         return when (stmt) {
             is ExpressionStatement -> compileExpression(name, stmt)
             is net.sergeych.lyng.IfStatement -> compileIf(name, stmt)
@@ -37,10 +46,11 @@ class BytecodeCompiler {
     }
 
     fun compileExpression(name: String, stmt: ExpressionStatement): BytecodeFunction? {
+        prepareCompilation(stmt)
         val value = compileRefWithFallback(stmt.ref, null, stmt.pos) ?: return null
         builder.emit(Opcode.RET, value.slot)
-        val localCount = maxOf(nextSlot, value.slot + 1)
-        return builder.build(name, localCount)
+        val localCount = maxOf(nextSlot, value.slot + 1) - scopeSlotCount
+        return builder.build(name, localCount, scopeSlotDepths, scopeSlotIndices, scopeSlotNames)
     }
 
     private data class CompiledValue(val slot: Int, val type: SlotType)
@@ -51,9 +61,11 @@ class BytecodeCompiler {
         return when (ref) {
             is ConstRef -> compileConst(ref.constValue)
             is LocalSlotRef -> {
+                if (!allowLocalSlots) return null
+                if (ref.isDelegated) return null
                 if (ref.name.isEmpty()) return null
-                if (refDepth(ref) != 0) return null
-                CompiledValue(refSlot(ref), slotTypes[refSlot(ref)] ?: SlotType.UNKNOWN)
+                val mapped = scopeSlotMap[ScopeSlotKey(refDepth(ref), refSlot(ref))] ?: return null
+                CompiledValue(mapped, slotTypes[mapped] ?: SlotType.UNKNOWN)
             }
             is BinaryOpRef -> compileBinary(ref)
             is UnaryOpRef -> compileUnary(ref)
@@ -146,6 +158,7 @@ class BytecodeCompiler {
                             CompiledValue(out, SlotType.INT)
                         }
                         SlotType.REAL -> compileRealArithmeticWithCoercion(Opcode.ADD_REAL, a, b, out)
+                        SlotType.OBJ -> null
                         else -> null
                     }
                 }
@@ -156,8 +169,14 @@ class BytecodeCompiler {
                             CompiledValue(out, SlotType.REAL)
                         }
                         SlotType.INT -> compileRealArithmeticWithCoercion(Opcode.ADD_REAL, a, b, out)
+                        SlotType.OBJ -> null
                         else -> null
                     }
+                }
+                SlotType.OBJ -> {
+                    if (b.type != SlotType.OBJ) return null
+                    builder.emit(Opcode.ADD_OBJ, a.slot, b.slot, out)
+                    CompiledValue(out, SlotType.OBJ)
                 }
                 else -> null
             }
@@ -169,6 +188,7 @@ class BytecodeCompiler {
                             CompiledValue(out, SlotType.INT)
                         }
                         SlotType.REAL -> compileRealArithmeticWithCoercion(Opcode.SUB_REAL, a, b, out)
+                        SlotType.OBJ -> null
                         else -> null
                     }
                 }
@@ -179,8 +199,14 @@ class BytecodeCompiler {
                             CompiledValue(out, SlotType.REAL)
                         }
                         SlotType.INT -> compileRealArithmeticWithCoercion(Opcode.SUB_REAL, a, b, out)
+                        SlotType.OBJ -> null
                         else -> null
                     }
+                }
+                SlotType.OBJ -> {
+                    if (b.type != SlotType.OBJ) return null
+                    builder.emit(Opcode.SUB_OBJ, a.slot, b.slot, out)
+                    CompiledValue(out, SlotType.OBJ)
                 }
                 else -> null
             }
@@ -192,6 +218,7 @@ class BytecodeCompiler {
                             CompiledValue(out, SlotType.INT)
                         }
                         SlotType.REAL -> compileRealArithmeticWithCoercion(Opcode.MUL_REAL, a, b, out)
+                        SlotType.OBJ -> null
                         else -> null
                     }
                 }
@@ -202,8 +229,14 @@ class BytecodeCompiler {
                             CompiledValue(out, SlotType.REAL)
                         }
                         SlotType.INT -> compileRealArithmeticWithCoercion(Opcode.MUL_REAL, a, b, out)
+                        SlotType.OBJ -> null
                         else -> null
                     }
+                }
+                SlotType.OBJ -> {
+                    if (b.type != SlotType.OBJ) return null
+                    builder.emit(Opcode.MUL_OBJ, a.slot, b.slot, out)
+                    CompiledValue(out, SlotType.OBJ)
                 }
                 else -> null
             }
@@ -215,6 +248,7 @@ class BytecodeCompiler {
                             CompiledValue(out, SlotType.INT)
                         }
                         SlotType.REAL -> compileRealArithmeticWithCoercion(Opcode.DIV_REAL, a, b, out)
+                        SlotType.OBJ -> null
                         else -> null
                     }
                 }
@@ -225,15 +259,31 @@ class BytecodeCompiler {
                             CompiledValue(out, SlotType.REAL)
                         }
                         SlotType.INT -> compileRealArithmeticWithCoercion(Opcode.DIV_REAL, a, b, out)
+                        SlotType.OBJ -> null
                         else -> null
                     }
+                }
+                SlotType.OBJ -> {
+                    if (b.type != SlotType.OBJ) return null
+                    builder.emit(Opcode.DIV_OBJ, a.slot, b.slot, out)
+                    CompiledValue(out, SlotType.OBJ)
                 }
                 else -> null
             }
             BinOp.PERCENT -> {
-                if (a.type != SlotType.INT) return null
-                builder.emit(Opcode.MOD_INT, a.slot, b.slot, out)
-                CompiledValue(out, SlotType.INT)
+                return when (a.type) {
+                    SlotType.INT -> {
+                        if (b.type != SlotType.INT) return null
+                        builder.emit(Opcode.MOD_INT, a.slot, b.slot, out)
+                        CompiledValue(out, SlotType.INT)
+                    }
+                    SlotType.OBJ -> {
+                        if (b.type != SlotType.OBJ) return null
+                        builder.emit(Opcode.MOD_OBJ, a.slot, b.slot, out)
+                        CompiledValue(out, SlotType.OBJ)
+                    }
+                    else -> null
+                }
             }
             BinOp.EQ -> {
                 compileCompareEq(a, b, out)
@@ -522,9 +572,11 @@ class BytecodeCompiler {
 
     private fun compileAssign(ref: AssignRef): CompiledValue? {
         val target = assignTarget(ref) ?: return null
-        if (refDepth(target) != 0) return null
+        if (!allowLocalSlots) return null
+        if (!target.isMutable || target.isDelegated) return null
+        if (refDepth(target) > 0) return null
         val value = compileRef(assignValue(ref)) ?: return null
-        val slot = refSlot(target)
+        val slot = scopeSlotMap[ScopeSlotKey(refDepth(target), refSlot(target))] ?: return null
         when (value.type) {
             SlotType.INT -> builder.emit(Opcode.MOVE_INT, value.slot, slot)
             SlotType.REAL -> builder.emit(Opcode.MOVE_REAL, value.slot, slot)
@@ -563,8 +615,8 @@ class BytecodeCompiler {
 
         builder.mark(endLabel)
         builder.emit(Opcode.RET, resultSlot)
-        val localCount = maxOf(nextSlot, resultSlot + 1)
-        return builder.build(name, localCount)
+        val localCount = maxOf(nextSlot, resultSlot + 1) - scopeSlotCount
+        return builder.build(name, localCount, scopeSlotDepths, scopeSlotIndices, scopeSlotNames)
     }
 
     private fun compileStatementValue(stmt: Statement): CompiledValue? {
@@ -620,4 +672,71 @@ class BytecodeCompiler {
             slotTypes[slot] = type
         }
     }
+
+    private fun prepareCompilation(stmt: Statement) {
+        builder = BytecodeBuilder()
+        nextSlot = 0
+        slotTypes.clear()
+        scopeSlotMap.clear()
+        if (allowLocalSlots) {
+            collectScopeSlots(stmt)
+        }
+        scopeSlotCount = scopeSlotMap.size
+        scopeSlotDepths = IntArray(scopeSlotCount)
+        scopeSlotIndices = IntArray(scopeSlotCount)
+        scopeSlotNames = arrayOfNulls(scopeSlotCount)
+        for ((key, index) in scopeSlotMap) {
+            scopeSlotDepths[index] = key.depth
+            scopeSlotIndices[index] = key.slot
+            scopeSlotNames[index] = scopeSlotNameMap[key]
+        }
+        nextSlot = scopeSlotCount
+    }
+
+    private fun collectScopeSlots(stmt: Statement) {
+        when (stmt) {
+            is ExpressionStatement -> collectScopeSlotsRef(stmt.ref)
+            is IfStatement -> {
+                collectScopeSlots(stmt.condition)
+                collectScopeSlots(stmt.ifBody)
+                stmt.elseBody?.let { collectScopeSlots(it) }
+            }
+            else -> {}
+        }
+    }
+
+    private fun collectScopeSlotsRef(ref: ObjRef) {
+        when (ref) {
+            is LocalSlotRef -> {
+                val key = ScopeSlotKey(refDepth(ref), refSlot(ref))
+                if (!scopeSlotMap.containsKey(key)) {
+                    scopeSlotMap[key] = scopeSlotMap.size
+                }
+                if (!scopeSlotNameMap.containsKey(key)) {
+                    scopeSlotNameMap[key] = ref.name
+                }
+            }
+            is BinaryOpRef -> {
+                collectScopeSlotsRef(binaryLeft(ref))
+                collectScopeSlotsRef(binaryRight(ref))
+            }
+            is UnaryOpRef -> collectScopeSlotsRef(unaryOperand(ref))
+            is AssignRef -> {
+                val target = assignTarget(ref)
+                if (target != null) {
+                    val key = ScopeSlotKey(refDepth(target), refSlot(target))
+                    if (!scopeSlotMap.containsKey(key)) {
+                        scopeSlotMap[key] = scopeSlotMap.size
+                    }
+                    if (!scopeSlotNameMap.containsKey(key)) {
+                        scopeSlotNameMap[key] = target.name
+                    }
+                }
+                collectScopeSlotsRef(assignValue(ref))
+            }
+            else -> {}
+        }
+    }
+
+    private data class ScopeSlotKey(val depth: Int, val slot: Int)
 }

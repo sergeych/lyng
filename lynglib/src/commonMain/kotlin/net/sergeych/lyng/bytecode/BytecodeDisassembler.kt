@@ -38,7 +38,8 @@ object BytecodeDisassembler {
                     OperandKind.SLOT -> {
                         val v = decoder.readSlot(code, ip)
                         ip += fn.slotWidth
-                        operands += "s$v"
+                        val name = if (v < fn.scopeSlotCount) fn.scopeSlotNames[v] else null
+                        operands += if (name != null) "s$v($name)" else "s$v"
                     }
                     OperandKind.CONST -> {
                         val v = decoder.readConstId(code, ip, fn.constIdWidth)
@@ -103,6 +104,7 @@ object BytecodeDisassembler {
             Opcode.CMP_GTE_INT_REAL, Opcode.CMP_GTE_REAL_INT, Opcode.CMP_NEQ_INT_REAL, Opcode.CMP_NEQ_REAL_INT,
             Opcode.CMP_EQ_OBJ, Opcode.CMP_NEQ_OBJ, Opcode.CMP_REF_EQ_OBJ, Opcode.CMP_REF_NEQ_OBJ,
             Opcode.CMP_LT_OBJ, Opcode.CMP_LTE_OBJ, Opcode.CMP_GT_OBJ, Opcode.CMP_GTE_OBJ,
+            Opcode.ADD_OBJ, Opcode.SUB_OBJ, Opcode.MUL_OBJ, Opcode.DIV_OBJ, Opcode.MOD_OBJ,
             Opcode.AND_BOOL, Opcode.OR_BOOL ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.INC_INT, Opcode.DEC_INT, Opcode.RET ->

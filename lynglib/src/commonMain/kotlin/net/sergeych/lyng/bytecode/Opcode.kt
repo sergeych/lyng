@@ -95,6 +95,11 @@ enum class Opcode(val code: Int) {
     CMP_LTE_OBJ(0x74),
     CMP_GT_OBJ(0x75),
     CMP_GTE_OBJ(0x76),
+    ADD_OBJ(0x77),
+    SUB_OBJ(0x78),
+    MUL_OBJ(0x79),
+    DIV_OBJ(0x7A),
+    MOD_OBJ(0x7B),
 
     JMP(0x80),
     JMP_IF_TRUE(0x81),

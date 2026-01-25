@@ -2405,6 +2405,8 @@ class LocalSlotRef(
     val name: String,
     internal val slot: Int,
     internal val depth: Int,
+    internal val isMutable: Boolean,
+    internal val isDelegated: Boolean,
     private val atPos: Pos,
 ) : ObjRef {
     override fun forEachVariable(block: (String) -> Unit) {

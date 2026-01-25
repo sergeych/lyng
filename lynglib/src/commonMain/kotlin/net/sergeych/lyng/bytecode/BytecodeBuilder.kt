@@ -56,10 +56,22 @@ class BytecodeBuilder {
         return fallbackStatements.lastIndex
     }
 
-    fun build(name: String, localCount: Int): BytecodeFunction {
+    fun build(
+        name: String,
+        localCount: Int,
+        scopeSlotDepths: IntArray = IntArray(0),
+        scopeSlotIndices: IntArray = IntArray(0),
+        scopeSlotNames: Array<String?> = emptyArray()
+    ): BytecodeFunction {
+        val scopeSlotCount = scopeSlotDepths.size
+        require(scopeSlotIndices.size == scopeSlotCount) { "scope slot mapping size mismatch" }
+        require(scopeSlotNames.isEmpty() || scopeSlotNames.size == scopeSlotCount) {
+            "scope slot name mapping size mismatch"
+        }
+        val totalSlots = localCount + scopeSlotCount
         val slotWidth = when {
-            localCount < 256 -> 1
-            localCount < 65536 -> 2
+            totalSlots < 256 -> 1
+            totalSlots < 65536 -> 2
             else -> 4
         }
         val constIdWidth = if (constPool.size < 65536) 2 else 4
@@ -102,6 +114,10 @@ class BytecodeBuilder {
         return BytecodeFunction(
             name = name,
             localCount = localCount,
+            scopeSlotCount = scopeSlotCount,
+            scopeSlotDepths = scopeSlotDepths,
+            scopeSlotIndices = scopeSlotIndices,
+            scopeSlotNames = if (scopeSlotNames.isEmpty()) Array(scopeSlotCount) { null } else scopeSlotNames,
             slotWidth = slotWidth,
             ipWidth = ipWidth,
             constIdWidth = constIdWidth,
@@ -135,6 +151,7 @@ class BytecodeBuilder {
             Opcode.CMP_GTE_INT_REAL, Opcode.CMP_GTE_REAL_INT, Opcode.CMP_NEQ_INT_REAL, Opcode.CMP_NEQ_REAL_INT,
             Opcode.CMP_EQ_OBJ, Opcode.CMP_NEQ_OBJ, Opcode.CMP_REF_EQ_OBJ, Opcode.CMP_REF_NEQ_OBJ,
             Opcode.CMP_LT_OBJ, Opcode.CMP_LTE_OBJ, Opcode.CMP_GT_OBJ, Opcode.CMP_GTE_OBJ,
+            Opcode.ADD_OBJ, Opcode.SUB_OBJ, Opcode.MUL_OBJ, Opcode.DIV_OBJ, Opcode.MOD_OBJ,
             Opcode.AND_BOOL, Opcode.OR_BOOL ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.INC_INT, Opcode.DEC_INT, Opcode.RET ->

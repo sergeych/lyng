@@ -47,7 +47,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val c = fn.constants[constId] as? BytecodeConst.IntVal
                         ?: error("CONST_INT expects IntVal at $constId")
-                    frame.setInt(dst, c.value)
+                    setInt(fn, frame, scope, dst, c.value)
                 }
                 Opcode.CONST_REAL -> {
                     val constId = decoder.readConstId(code, ip, fn.constIdWidth)
@@ -56,7 +56,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val c = fn.constants[constId] as? BytecodeConst.RealVal
                         ?: error("CONST_REAL expects RealVal at $constId")
-                    frame.setReal(dst, c.value)
+                    setReal(fn, frame, scope, dst, c.value)
                 }
                 Opcode.CONST_BOOL -> {
                     val constId = decoder.readConstId(code, ip, fn.constIdWidth)
@@ -65,7 +65,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val c = fn.constants[constId] as? BytecodeConst.Bool
                         ?: error("CONST_BOOL expects Bool at $constId")
-                    frame.setBool(dst, c.value)
+                    setBool(fn, frame, scope, dst, c.value)
                 }
                 Opcode.CONST_OBJ -> {
                     val constId = decoder.readConstId(code, ip, fn.constIdWidth)
@@ -76,76 +76,76 @@ class BytecodeVm {
                         is BytecodeConst.ObjRef -> {
                             val obj = c.value
                             when (obj) {
-                                is ObjInt -> frame.setInt(dst, obj.value)
-                                is ObjReal -> frame.setReal(dst, obj.value)
-                                is ObjBool -> frame.setBool(dst, obj.value)
-                                else -> frame.setObj(dst, obj)
+                                is ObjInt -> setInt(fn, frame, scope, dst, obj.value)
+                                is ObjReal -> setReal(fn, frame, scope, dst, obj.value)
+                                is ObjBool -> setBool(fn, frame, scope, dst, obj.value)
+                                else -> setObj(fn, frame, scope, dst, obj)
                             }
                         }
-                        is BytecodeConst.StringVal -> frame.setObj(dst, ObjString(c.value))
+                        is BytecodeConst.StringVal -> setObj(fn, frame, scope, dst, ObjString(c.value))
                         else -> error("CONST_OBJ expects ObjRef/StringVal at $constId")
                     }
                 }
                 Opcode.CONST_NULL -> {
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setObj(dst, ObjNull)
+                    setObj(fn, frame, scope, dst, ObjNull)
                 }
                 Opcode.MOVE_INT -> {
                     val src = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setInt(dst, frame.getInt(src))
+                    setInt(fn, frame, scope, dst, getInt(fn, frame, scope, src))
                 }
                 Opcode.MOVE_REAL -> {
                     val src = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setReal(dst, frame.getReal(src))
+                    setReal(fn, frame, scope, dst, getReal(fn, frame, scope, src))
                 }
                 Opcode.MOVE_BOOL -> {
                     val src = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getBool(src))
+                    setBool(fn, frame, scope, dst, getBool(fn, frame, scope, src))
                 }
                 Opcode.MOVE_OBJ -> {
                     val src = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setObj(dst, frame.getObj(src))
+                    setObj(fn, frame, scope, dst, getObj(fn, frame, scope, src))
                 }
                 Opcode.INT_TO_REAL -> {
                     val src = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setReal(dst, frame.getInt(src).toDouble())
+                    setReal(fn, frame, scope, dst, getInt(fn, frame, scope, src).toDouble())
                 }
                 Opcode.REAL_TO_INT -> {
                     val src = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setInt(dst, frame.getReal(src).toLong())
+                    setInt(fn, frame, scope, dst, getReal(fn, frame, scope, src).toLong())
                 }
                 Opcode.BOOL_TO_INT -> {
                     val src = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setInt(dst, if (frame.getBool(src)) 1L else 0L)
+                    setInt(fn, frame, scope, dst, if (getBool(fn, frame, scope, src)) 1L else 0L)
                 }
                 Opcode.INT_TO_BOOL -> {
                     val src = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getInt(src) != 0L)
+                    setBool(fn, frame, scope, dst, getInt(fn, frame, scope, src) != 0L)
                 }
                 Opcode.ADD_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -154,7 +154,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setInt(dst, frame.getInt(a) + frame.getInt(b))
+                    setInt(fn, frame, scope, dst, getInt(fn, frame, scope, a) + getInt(fn, frame, scope, b))
                 }
                 Opcode.SUB_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -163,7 +163,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setInt(dst, frame.getInt(a) - frame.getInt(b))
+                    setInt(fn, frame, scope, dst, getInt(fn, frame, scope, a) - getInt(fn, frame, scope, b))
                 }
                 Opcode.MUL_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -172,7 +172,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setInt(dst, frame.getInt(a) * frame.getInt(b))
+                    setInt(fn, frame, scope, dst, getInt(fn, frame, scope, a) * getInt(fn, frame, scope, b))
                 }
                 Opcode.DIV_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -181,7 +181,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setInt(dst, frame.getInt(a) / frame.getInt(b))
+                    setInt(fn, frame, scope, dst, getInt(fn, frame, scope, a) / getInt(fn, frame, scope, b))
                 }
                 Opcode.MOD_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -190,24 +190,24 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setInt(dst, frame.getInt(a) % frame.getInt(b))
+                    setInt(fn, frame, scope, dst, getInt(fn, frame, scope, a) % getInt(fn, frame, scope, b))
                 }
                 Opcode.NEG_INT -> {
                     val src = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setInt(dst, -frame.getInt(src))
+                    setInt(fn, frame, scope, dst, -getInt(fn, frame, scope, src))
                 }
                 Opcode.INC_INT -> {
                     val slot = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setInt(slot, frame.getInt(slot) + 1L)
+                    setInt(fn, frame, scope, slot, getInt(fn, frame, scope, slot) + 1L)
                 }
                 Opcode.DEC_INT -> {
                     val slot = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setInt(slot, frame.getInt(slot) - 1L)
+                    setInt(fn, frame, scope, slot, getInt(fn, frame, scope, slot) - 1L)
                 }
                 Opcode.ADD_REAL -> {
                     val a = decoder.readSlot(code, ip)
@@ -216,7 +216,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setReal(dst, frame.getReal(a) + frame.getReal(b))
+                    setReal(fn, frame, scope, dst, getReal(fn, frame, scope, a) + getReal(fn, frame, scope, b))
                 }
                 Opcode.SUB_REAL -> {
                     val a = decoder.readSlot(code, ip)
@@ -225,7 +225,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setReal(dst, frame.getReal(a) - frame.getReal(b))
+                    setReal(fn, frame, scope, dst, getReal(fn, frame, scope, a) - getReal(fn, frame, scope, b))
                 }
                 Opcode.MUL_REAL -> {
                     val a = decoder.readSlot(code, ip)
@@ -234,7 +234,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setReal(dst, frame.getReal(a) * frame.getReal(b))
+                    setReal(fn, frame, scope, dst, getReal(fn, frame, scope, a) * getReal(fn, frame, scope, b))
                 }
                 Opcode.DIV_REAL -> {
                     val a = decoder.readSlot(code, ip)
@@ -243,14 +243,14 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setReal(dst, frame.getReal(a) / frame.getReal(b))
+                    setReal(fn, frame, scope, dst, getReal(fn, frame, scope, a) / getReal(fn, frame, scope, b))
                 }
                 Opcode.NEG_REAL -> {
                     val src = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setReal(dst, -frame.getReal(src))
+                    setReal(fn, frame, scope, dst, -getReal(fn, frame, scope, src))
                 }
                 Opcode.AND_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -259,7 +259,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setInt(dst, frame.getInt(a) and frame.getInt(b))
+                    setInt(fn, frame, scope, dst, getInt(fn, frame, scope, a) and getInt(fn, frame, scope, b))
                 }
                 Opcode.OR_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -268,7 +268,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setInt(dst, frame.getInt(a) or frame.getInt(b))
+                    setInt(fn, frame, scope, dst, getInt(fn, frame, scope, a) or getInt(fn, frame, scope, b))
                 }
                 Opcode.XOR_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -277,7 +277,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setInt(dst, frame.getInt(a) xor frame.getInt(b))
+                    setInt(fn, frame, scope, dst, getInt(fn, frame, scope, a) xor getInt(fn, frame, scope, b))
                 }
                 Opcode.SHL_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -286,7 +286,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setInt(dst, frame.getInt(a) shl frame.getInt(b).toInt())
+                    setInt(fn, frame, scope, dst, getInt(fn, frame, scope, a) shl getInt(fn, frame, scope, b).toInt())
                 }
                 Opcode.SHR_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -295,7 +295,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setInt(dst, frame.getInt(a) shr frame.getInt(b).toInt())
+                    setInt(fn, frame, scope, dst, getInt(fn, frame, scope, a) shr getInt(fn, frame, scope, b).toInt())
                 }
                 Opcode.USHR_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -304,14 +304,14 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setInt(dst, frame.getInt(a) ushr frame.getInt(b).toInt())
+                    setInt(fn, frame, scope, dst, getInt(fn, frame, scope, a) ushr getInt(fn, frame, scope, b).toInt())
                 }
                 Opcode.INV_INT -> {
                     val src = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setInt(dst, frame.getInt(src).inv())
+                    setInt(fn, frame, scope, dst, getInt(fn, frame, scope, src).inv())
                 }
                 Opcode.CMP_LT_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -320,7 +320,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getInt(a) < frame.getInt(b))
+                    setBool(fn, frame, scope, dst, getInt(fn, frame, scope, a) < getInt(fn, frame, scope, b))
                 }
                 Opcode.CMP_LTE_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -329,7 +329,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getInt(a) <= frame.getInt(b))
+                    setBool(fn, frame, scope, dst, getInt(fn, frame, scope, a) <= getInt(fn, frame, scope, b))
                 }
                 Opcode.CMP_GT_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -338,7 +338,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getInt(a) > frame.getInt(b))
+                    setBool(fn, frame, scope, dst, getInt(fn, frame, scope, a) > getInt(fn, frame, scope, b))
                 }
                 Opcode.CMP_GTE_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -347,7 +347,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getInt(a) >= frame.getInt(b))
+                    setBool(fn, frame, scope, dst, getInt(fn, frame, scope, a) >= getInt(fn, frame, scope, b))
                 }
                 Opcode.CMP_EQ_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -356,7 +356,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getInt(a) == frame.getInt(b))
+                    setBool(fn, frame, scope, dst, getInt(fn, frame, scope, a) == getInt(fn, frame, scope, b))
                 }
                 Opcode.CMP_NEQ_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -365,7 +365,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getInt(a) != frame.getInt(b))
+                    setBool(fn, frame, scope, dst, getInt(fn, frame, scope, a) != getInt(fn, frame, scope, b))
                 }
                 Opcode.CMP_EQ_REAL -> {
                     val a = decoder.readSlot(code, ip)
@@ -374,7 +374,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getReal(a) == frame.getReal(b))
+                    setBool(fn, frame, scope, dst, getReal(fn, frame, scope, a) == getReal(fn, frame, scope, b))
                 }
                 Opcode.CMP_NEQ_REAL -> {
                     val a = decoder.readSlot(code, ip)
@@ -383,7 +383,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getReal(a) != frame.getReal(b))
+                    setBool(fn, frame, scope, dst, getReal(fn, frame, scope, a) != getReal(fn, frame, scope, b))
                 }
                 Opcode.CMP_LT_REAL -> {
                     val a = decoder.readSlot(code, ip)
@@ -392,7 +392,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getReal(a) < frame.getReal(b))
+                    setBool(fn, frame, scope, dst, getReal(fn, frame, scope, a) < getReal(fn, frame, scope, b))
                 }
                 Opcode.CMP_LTE_REAL -> {
                     val a = decoder.readSlot(code, ip)
@@ -401,7 +401,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getReal(a) <= frame.getReal(b))
+                    setBool(fn, frame, scope, dst, getReal(fn, frame, scope, a) <= getReal(fn, frame, scope, b))
                 }
                 Opcode.CMP_GT_REAL -> {
                     val a = decoder.readSlot(code, ip)
@@ -410,7 +410,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getReal(a) > frame.getReal(b))
+                    setBool(fn, frame, scope, dst, getReal(fn, frame, scope, a) > getReal(fn, frame, scope, b))
                 }
                 Opcode.CMP_GTE_REAL -> {
                     val a = decoder.readSlot(code, ip)
@@ -419,7 +419,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getReal(a) >= frame.getReal(b))
+                    setBool(fn, frame, scope, dst, getReal(fn, frame, scope, a) >= getReal(fn, frame, scope, b))
                 }
                 Opcode.CMP_EQ_BOOL -> {
                     val a = decoder.readSlot(code, ip)
@@ -428,7 +428,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getBool(a) == frame.getBool(b))
+                    setBool(fn, frame, scope, dst, getBool(fn, frame, scope, a) == getBool(fn, frame, scope, b))
                 }
                 Opcode.CMP_NEQ_BOOL -> {
                     val a = decoder.readSlot(code, ip)
@@ -437,7 +437,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getBool(a) != frame.getBool(b))
+                    setBool(fn, frame, scope, dst, getBool(fn, frame, scope, a) != getBool(fn, frame, scope, b))
                 }
                 Opcode.CMP_EQ_INT_REAL -> {
                     val a = decoder.readSlot(code, ip)
@@ -446,7 +446,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getInt(a).toDouble() == frame.getReal(b))
+                    setBool(fn, frame, scope, dst, getInt(fn, frame, scope, a).toDouble() == getReal(fn, frame, scope, b))
                 }
                 Opcode.CMP_EQ_REAL_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -455,7 +455,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getReal(a) == frame.getInt(b).toDouble())
+                    setBool(fn, frame, scope, dst, getReal(fn, frame, scope, a) == getInt(fn, frame, scope, b).toDouble())
                 }
                 Opcode.CMP_LT_INT_REAL -> {
                     val a = decoder.readSlot(code, ip)
@@ -464,7 +464,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getInt(a).toDouble() < frame.getReal(b))
+                    setBool(fn, frame, scope, dst, getInt(fn, frame, scope, a).toDouble() < getReal(fn, frame, scope, b))
                 }
                 Opcode.CMP_LT_REAL_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -473,7 +473,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getReal(a) < frame.getInt(b).toDouble())
+                    setBool(fn, frame, scope, dst, getReal(fn, frame, scope, a) < getInt(fn, frame, scope, b).toDouble())
                 }
                 Opcode.CMP_LTE_INT_REAL -> {
                     val a = decoder.readSlot(code, ip)
@@ -482,7 +482,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getInt(a).toDouble() <= frame.getReal(b))
+                    setBool(fn, frame, scope, dst, getInt(fn, frame, scope, a).toDouble() <= getReal(fn, frame, scope, b))
                 }
                 Opcode.CMP_LTE_REAL_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -491,7 +491,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getReal(a) <= frame.getInt(b).toDouble())
+                    setBool(fn, frame, scope, dst, getReal(fn, frame, scope, a) <= getInt(fn, frame, scope, b).toDouble())
                 }
                 Opcode.CMP_GT_INT_REAL -> {
                     val a = decoder.readSlot(code, ip)
@@ -500,7 +500,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getInt(a).toDouble() > frame.getReal(b))
+                    setBool(fn, frame, scope, dst, getInt(fn, frame, scope, a).toDouble() > getReal(fn, frame, scope, b))
                 }
                 Opcode.CMP_GT_REAL_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -509,7 +509,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getReal(a) > frame.getInt(b).toDouble())
+                    setBool(fn, frame, scope, dst, getReal(fn, frame, scope, a) > getInt(fn, frame, scope, b).toDouble())
                 }
                 Opcode.CMP_GTE_INT_REAL -> {
                     val a = decoder.readSlot(code, ip)
@@ -518,7 +518,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getInt(a).toDouble() >= frame.getReal(b))
+                    setBool(fn, frame, scope, dst, getInt(fn, frame, scope, a).toDouble() >= getReal(fn, frame, scope, b))
                 }
                 Opcode.CMP_GTE_REAL_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -527,7 +527,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getReal(a) >= frame.getInt(b).toDouble())
+                    setBool(fn, frame, scope, dst, getReal(fn, frame, scope, a) >= getInt(fn, frame, scope, b).toDouble())
                 }
                 Opcode.CMP_NEQ_INT_REAL -> {
                     val a = decoder.readSlot(code, ip)
@@ -536,7 +536,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getInt(a).toDouble() != frame.getReal(b))
+                    setBool(fn, frame, scope, dst, getInt(fn, frame, scope, a).toDouble() != getReal(fn, frame, scope, b))
                 }
                 Opcode.CMP_NEQ_REAL_INT -> {
                     val a = decoder.readSlot(code, ip)
@@ -545,7 +545,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getReal(a) != frame.getInt(b).toDouble())
+                    setBool(fn, frame, scope, dst, getReal(fn, frame, scope, a) != getInt(fn, frame, scope, b).toDouble())
                 }
                 Opcode.CMP_EQ_OBJ -> {
                     val a = decoder.readSlot(code, ip)
@@ -554,7 +554,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getObj(a).equals(scope, frame.getObj(b)))
+                    setBool(fn, frame, scope, dst, getObj(fn, frame, scope, a).equals(scope, getObj(fn, frame, scope, b)))
                 }
                 Opcode.CMP_NEQ_OBJ -> {
                     val a = decoder.readSlot(code, ip)
@@ -563,7 +563,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, !frame.getObj(a).equals(scope, frame.getObj(b)))
+                    setBool(fn, frame, scope, dst, !getObj(fn, frame, scope, a).equals(scope, getObj(fn, frame, scope, b)))
                 }
                 Opcode.CMP_REF_EQ_OBJ -> {
                     val a = decoder.readSlot(code, ip)
@@ -572,7 +572,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getObj(a) === frame.getObj(b))
+                    setBool(fn, frame, scope, dst, getObj(fn, frame, scope, a) === getObj(fn, frame, scope, b))
                 }
                 Opcode.CMP_REF_NEQ_OBJ -> {
                     val a = decoder.readSlot(code, ip)
@@ -581,7 +581,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getObj(a) !== frame.getObj(b))
+                    setBool(fn, frame, scope, dst, getObj(fn, frame, scope, a) !== getObj(fn, frame, scope, b))
                 }
                 Opcode.CMP_LT_OBJ -> {
                     val a = decoder.readSlot(code, ip)
@@ -590,7 +590,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getObj(a).compareTo(scope, frame.getObj(b)) < 0)
+                    setBool(fn, frame, scope, dst, getObj(fn, frame, scope, a).compareTo(scope, getObj(fn, frame, scope, b)) < 0)
                 }
                 Opcode.CMP_LTE_OBJ -> {
                     val a = decoder.readSlot(code, ip)
@@ -599,7 +599,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getObj(a).compareTo(scope, frame.getObj(b)) <= 0)
+                    setBool(fn, frame, scope, dst, getObj(fn, frame, scope, a).compareTo(scope, getObj(fn, frame, scope, b)) <= 0)
                 }
                 Opcode.CMP_GT_OBJ -> {
                     val a = decoder.readSlot(code, ip)
@@ -608,7 +608,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getObj(a).compareTo(scope, frame.getObj(b)) > 0)
+                    setBool(fn, frame, scope, dst, getObj(fn, frame, scope, a).compareTo(scope, getObj(fn, frame, scope, b)) > 0)
                 }
                 Opcode.CMP_GTE_OBJ -> {
                     val a = decoder.readSlot(code, ip)
@@ -617,14 +617,59 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getObj(a).compareTo(scope, frame.getObj(b)) >= 0)
+                    setBool(fn, frame, scope, dst, getObj(fn, frame, scope, a).compareTo(scope, getObj(fn, frame, scope, b)) >= 0)
+                }
+                Opcode.ADD_OBJ -> {
+                    val a = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val b = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    setObj(fn, frame, scope, dst, getObj(fn, frame, scope, a).plus(scope, getObj(fn, frame, scope, b)))
+                }
+                Opcode.SUB_OBJ -> {
+                    val a = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val b = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    setObj(fn, frame, scope, dst, getObj(fn, frame, scope, a).minus(scope, getObj(fn, frame, scope, b)))
+                }
+                Opcode.MUL_OBJ -> {
+                    val a = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val b = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    setObj(fn, frame, scope, dst, getObj(fn, frame, scope, a).mul(scope, getObj(fn, frame, scope, b)))
+                }
+                Opcode.DIV_OBJ -> {
+                    val a = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val b = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    setObj(fn, frame, scope, dst, getObj(fn, frame, scope, a).div(scope, getObj(fn, frame, scope, b)))
+                }
+                Opcode.MOD_OBJ -> {
+                    val a = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val b = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    setObj(fn, frame, scope, dst, getObj(fn, frame, scope, a).mod(scope, getObj(fn, frame, scope, b)))
                 }
                 Opcode.NOT_BOOL -> {
                     val src = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, !frame.getBool(src))
+                    setBool(fn, frame, scope, dst, !getBool(fn, frame, scope, src))
                 }
                 Opcode.AND_BOOL -> {
                     val a = decoder.readSlot(code, ip)
@@ -633,7 +678,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getBool(a) && frame.getBool(b))
+                    setBool(fn, frame, scope, dst, getBool(fn, frame, scope, a) && getBool(fn, frame, scope, b))
                 }
                 Opcode.OR_BOOL -> {
                     val a = decoder.readSlot(code, ip)
@@ -642,7 +687,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
-                    frame.setBool(dst, frame.getBool(a) || frame.getBool(b))
+                    setBool(fn, frame, scope, dst, getBool(fn, frame, scope, a) || getBool(fn, frame, scope, b))
                 }
                 Opcode.JMP -> {
                     val target = decoder.readIp(code, ip, fn.ipWidth)
@@ -653,7 +698,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val target = decoder.readIp(code, ip, fn.ipWidth)
                     ip += fn.ipWidth
-                    if (!frame.getBool(cond)) {
+                    if (!getBool(fn, frame, scope, cond)) {
                         ip = target
                     }
                 }
@@ -662,7 +707,7 @@ class BytecodeVm {
                     ip += fn.slotWidth
                     val target = decoder.readIp(code, ip, fn.ipWidth)
                     ip += fn.ipWidth
-                    if (frame.getBool(cond)) {
+                    if (getBool(fn, frame, scope, cond)) {
                         ip = target
                     }
                 }
@@ -675,15 +720,15 @@ class BytecodeVm {
                         ?: error("Fallback statement not found: $id")
                     val result = stmt.execute(scope)
                     when (result) {
-                        is ObjInt -> frame.setInt(dst, result.value)
-                        is ObjReal -> frame.setReal(dst, result.value)
-                        is ObjBool -> frame.setBool(dst, result.value)
-                        else -> frame.setObj(dst, result)
+                        is ObjInt -> setInt(fn, frame, scope, dst, result.value)
+                        is ObjReal -> setReal(fn, frame, scope, dst, result.value)
+                        is ObjBool -> setBool(fn, frame, scope, dst, result.value)
+                        else -> setObj(fn, frame, scope, dst, result)
                     }
                 }
                 Opcode.RET -> {
                     val slot = decoder.readSlot(code, ip)
-                    return slotToObj(frame, slot)
+                    return slotToObj(fn, frame, scope, slot)
                 }
                 Opcode.RET_VOID -> return ObjVoid
                 else -> error("Opcode not implemented: $op")
@@ -692,13 +737,96 @@ class BytecodeVm {
         return ObjVoid
     }
 
-    private fun slotToObj(frame: BytecodeFrame, slot: Int): Obj {
-        return when (frame.getSlotTypeCode(slot)) {
-            SlotType.INT.code -> ObjInt.of(frame.getInt(slot))
-            SlotType.REAL.code -> ObjReal.of(frame.getReal(slot))
-            SlotType.BOOL.code -> if (frame.getBool(slot)) ObjTrue else ObjFalse
-            SlotType.OBJ.code -> frame.getObj(slot)
+    private fun slotToObj(fn: BytecodeFunction, frame: BytecodeFrame, scope: Scope, slot: Int): Obj {
+        if (slot < fn.scopeSlotCount) {
+            return resolveScope(scope, fn.scopeSlotDepths[slot]).getSlotRecord(fn.scopeSlotIndices[slot]).value
+        }
+        val local = slot - fn.scopeSlotCount
+        return when (frame.getSlotTypeCode(local)) {
+            SlotType.INT.code -> ObjInt.of(frame.getInt(local))
+            SlotType.REAL.code -> ObjReal.of(frame.getReal(local))
+            SlotType.BOOL.code -> if (frame.getBool(local)) ObjTrue else ObjFalse
+            SlotType.OBJ.code -> frame.getObj(local)
             else -> ObjVoid
         }
+    }
+
+    private fun getObj(fn: BytecodeFunction, frame: BytecodeFrame, scope: Scope, slot: Int): Obj {
+        return if (slot < fn.scopeSlotCount) {
+            resolveScope(scope, fn.scopeSlotDepths[slot]).getSlotRecord(fn.scopeSlotIndices[slot]).value
+        } else {
+            frame.getObj(slot - fn.scopeSlotCount)
+        }
+    }
+
+    private fun setObj(fn: BytecodeFunction, frame: BytecodeFrame, scope: Scope, slot: Int, value: Obj) {
+        if (slot < fn.scopeSlotCount) {
+            setScopeSlotValue(scope, fn.scopeSlotDepths[slot], fn.scopeSlotIndices[slot], value)
+        } else {
+            frame.setObj(slot - fn.scopeSlotCount, value)
+        }
+    }
+
+    private fun getInt(fn: BytecodeFunction, frame: BytecodeFrame, scope: Scope, slot: Int): Long {
+        return if (slot < fn.scopeSlotCount) {
+            resolveScope(scope, fn.scopeSlotDepths[slot]).getSlotRecord(fn.scopeSlotIndices[slot]).value.toLong()
+        } else {
+            frame.getInt(slot - fn.scopeSlotCount)
+        }
+    }
+
+    private fun setInt(fn: BytecodeFunction, frame: BytecodeFrame, scope: Scope, slot: Int, value: Long) {
+        if (slot < fn.scopeSlotCount) {
+            setScopeSlotValue(scope, fn.scopeSlotDepths[slot], fn.scopeSlotIndices[slot], ObjInt.of(value))
+        } else {
+            frame.setInt(slot - fn.scopeSlotCount, value)
+        }
+    }
+
+    private fun getReal(fn: BytecodeFunction, frame: BytecodeFrame, scope: Scope, slot: Int): Double {
+        return if (slot < fn.scopeSlotCount) {
+            resolveScope(scope, fn.scopeSlotDepths[slot]).getSlotRecord(fn.scopeSlotIndices[slot]).value.toDouble()
+        } else {
+            frame.getReal(slot - fn.scopeSlotCount)
+        }
+    }
+
+    private fun setReal(fn: BytecodeFunction, frame: BytecodeFrame, scope: Scope, slot: Int, value: Double) {
+        if (slot < fn.scopeSlotCount) {
+            setScopeSlotValue(scope, fn.scopeSlotDepths[slot], fn.scopeSlotIndices[slot], ObjReal.of(value))
+        } else {
+            frame.setReal(slot - fn.scopeSlotCount, value)
+        }
+    }
+
+    private fun getBool(fn: BytecodeFunction, frame: BytecodeFrame, scope: Scope, slot: Int): Boolean {
+        return if (slot < fn.scopeSlotCount) {
+            resolveScope(scope, fn.scopeSlotDepths[slot]).getSlotRecord(fn.scopeSlotIndices[slot]).value.toBool()
+        } else {
+            frame.getBool(slot - fn.scopeSlotCount)
+        }
+    }
+
+    private fun setBool(fn: BytecodeFunction, frame: BytecodeFrame, scope: Scope, slot: Int, value: Boolean) {
+        if (slot < fn.scopeSlotCount) {
+            setScopeSlotValue(scope, fn.scopeSlotDepths[slot], fn.scopeSlotIndices[slot], if (value) ObjTrue else ObjFalse)
+        } else {
+            frame.setBool(slot - fn.scopeSlotCount, value)
+        }
+    }
+
+    private fun setScopeSlotValue(scope: Scope, depth: Int, index: Int, value: Obj) {
+        val target = resolveScope(scope, depth)
+        target.setSlotValue(index, value)
+    }
+
+    private fun resolveScope(scope: Scope, depth: Int): Scope {
+        if (depth == 0) return scope
+        val next = when (scope) {
+            is net.sergeych.lyng.ClosureScope -> scope.closureScope
+            else -> scope.parent
+        }
+        return next?.let { resolveScope(it, depth - 1) }
+            ?: error("Scope depth $depth is out of range")
     }
 }

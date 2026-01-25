@@ -18,6 +18,7 @@
 package net.sergeych.lyng
 
 import net.sergeych.lyng.Compiler.Companion.compile
+import net.sergeych.lyng.bytecode.BytecodeStatement
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
@@ -44,8 +45,9 @@ class Compiler(
     private val currentLocalNames: MutableSet<String>?
         get() = localNamesStack.lastOrNull()
 
-    private data class SlotPlan(val slots: MutableMap<String, Int>, var nextIndex: Int)
-    private data class SlotLocation(val slot: Int, val depth: Int)
+    private data class SlotEntry(val index: Int, val isMutable: Boolean, val isDelegated: Boolean)
+    private data class SlotPlan(val slots: MutableMap<String, SlotEntry>, var nextIndex: Int)
+    private data class SlotLocation(val slot: Int, val depth: Int, val isMutable: Boolean, val isDelegated: Boolean)
     private val slotPlanStack = mutableListOf<SlotPlan>()
 
     // Track declared local variables count per function for precise capacity hints
@@ -62,19 +64,20 @@ class Compiler(
         }
     }
 
-    private fun declareLocalName(name: String) {
+    private fun declareLocalName(name: String, isMutable: Boolean, isDelegated: Boolean = false) {
         // Add to current function's local set; only count if it was newly added (avoid duplicates)
         val added = currentLocalNames?.add(name) == true
         if (added && localDeclCountStack.isNotEmpty()) {
             localDeclCountStack[localDeclCountStack.lastIndex] = currentLocalDeclCount + 1
         }
-        declareSlotName(name)
+        declareSlotName(name, isMutable, isDelegated)
     }
 
-    private fun declareSlotName(name: String) {
+    private fun declareSlotName(name: String, isMutable: Boolean, isDelegated: Boolean) {
+        if (codeContexts.lastOrNull() is CodeContext.ClassBody) return
         val plan = slotPlanStack.lastOrNull() ?: return
         if (plan.slots.containsKey(name)) return
-        plan.slots[name] = plan.nextIndex
+        plan.slots[name] = SlotEntry(plan.nextIndex, isMutable, isDelegated)
         plan.nextIndex += 1
     }
 
@@ -87,14 +90,38 @@ class Compiler(
                 idx++
             }
         }
-        return SlotPlan(map, idx)
+        val entries = mutableMapOf<String, SlotEntry>()
+        for ((name, index) in map) {
+            entries[name] = SlotEntry(index, isMutable = false, isDelegated = false)
+        }
+        return SlotPlan(entries, idx)
+    }
+
+    private fun markDelegatedSlot(name: String) {
+        val plan = slotPlanStack.lastOrNull() ?: return
+        val entry = plan.slots[name] ?: return
+        if (!entry.isDelegated) {
+            plan.slots[name] = entry.copy(isDelegated = true)
+        }
+    }
+
+    private fun slotPlanIndices(plan: SlotPlan): Map<String, Int> {
+        if (plan.slots.isEmpty()) return emptyMap()
+        val result = LinkedHashMap<String, Int>(plan.slots.size)
+        for ((name, entry) in plan.slots) {
+            result[name] = entry.index
+        }
+        return result
     }
 
     private fun lookupSlotLocation(name: String): SlotLocation? {
         for (i in slotPlanStack.indices.reversed()) {
             val slot = slotPlanStack[i].slots[name] ?: continue
             val depth = slotPlanStack.size - 1 - i
-            return SlotLocation(slot, depth)
+            if (codeContexts.any { it is CodeContext.ClassBody } && depth > 1) {
+                return null
+            }
+            return SlotLocation(slot.index, depth, slot.isMutable, slot.isDelegated)
         }
         return null
     }
@@ -339,6 +366,12 @@ class Compiler(
     private var lastAnnotation: (suspend (Scope, ObjString, Statement) -> Statement)? = null
     private var isTransientFlag: Boolean = false
     private var lastLabel: String? = null
+    private val useBytecodeStatements: Boolean = true
+
+    private fun wrapBytecode(stmt: Statement): Statement {
+        if (!useBytecodeStatements) return stmt
+        return BytecodeStatement.wrap(stmt, "stmt@${stmt.pos}", allowLocalSlots = true)
+    }
 
     private suspend fun parseStatement(braceMeansLambda: Boolean = false): Statement? {
         lastAnnotation = null
@@ -348,16 +381,16 @@ class Compiler(
             val t = cc.next()
             return when (t.type) {
                 Token.Type.ID, Token.Type.OBJECT -> {
-                    parseKeywordStatement(t)
+                    parseKeywordStatement(t)?.let { wrapBytecode(it) }
                         ?: run {
                             cc.previous()
-                            parseExpression()
+                            parseExpression()?.let { wrapBytecode(it) }
                         }
                 }
 
                 Token.Type.PLUS2, Token.Type.MINUS2 -> {
                     cc.previous()
-                    parseExpression()
+                    parseExpression()?.let { wrapBytecode(it) }
                 }
 
                 Token.Type.ATLABEL -> {
@@ -389,9 +422,9 @@ class Compiler(
                 Token.Type.LBRACE -> {
                     cc.previous()
                     if (braceMeansLambda)
-                        parseExpression()
+                        parseExpression()?.let { wrapBytecode(it) }
                     else
-                        parseBlock()
+                        wrapBytecode(parseBlock())
                 }
 
                 Token.Type.RBRACE, Token.Type.RBRACKET -> {
@@ -404,7 +437,7 @@ class Compiler(
                 else -> {
                     // could be expression
                     cc.previous()
-                    parseExpression()
+                    parseExpression()?.let { wrapBytecode(it) }
                 }
             }
         }
@@ -800,7 +833,7 @@ class Compiler(
         }
         label?.let { cc.labels.remove(it) }
 
-        val paramSlotPlanSnapshot = if (paramSlotPlan.slots.isEmpty()) emptyMap() else paramSlotPlan.slots.toMap()
+        val paramSlotPlanSnapshot = slotPlanIndices(paramSlotPlan)
         return ValueFnRef { closureScope ->
             val stmt = object : Statement() {
                 override val pos: Pos = body.pos
@@ -1424,7 +1457,14 @@ class Compiler(
                         val slotLoc = lookupSlotLocation(t.value)
                         val inClassCtx = codeContexts.any { it is CodeContext.ClassBody }
                         when {
-                            slotLoc != null -> LocalSlotRef(t.value, slotLoc.slot, slotLoc.depth, t.pos)
+                            slotLoc != null -> LocalSlotRef(
+                                t.value,
+                                slotLoc.slot,
+                                slotLoc.depth,
+                                slotLoc.isMutable,
+                                slotLoc.isDelegated,
+                                t.pos
+                            )
                             PerfFlags.EMIT_FAST_LOCAL_REFS && (currentLocalNames?.contains(t.value) == true) ->
                                 FastLocalVarRef(t.value, t.pos)
                             inClassCtx -> ImplicitThisMemberRef(t.value, t.pos)
@@ -1798,7 +1838,7 @@ class Compiler(
     private suspend fun parseWhenStatement(): Statement {
         // has a value, when(value) ?
         var t = cc.nextNonWhitespace()
-        return if (t.type == Token.Type.LPAREN) {
+        val stmt = if (t.type == Token.Type.LPAREN) {
             // when(value)
             val value = parseStatement() ?: throw ScriptError(cc.currentPos(), "when(value) expected")
             cc.skipTokenOfType(Token.Type.RPAREN)
@@ -1919,13 +1959,14 @@ class Compiler(
             // when { cond -> ... }
             TODO("when without object is not yet implemented")
         }
+        return wrapBytecode(stmt)
     }
 
     private suspend fun parseThrowStatement(start: Pos): Statement {
         val throwStatement = parseStatement() ?: throw ScriptError(cc.currentPos(), "throw object expected")
         // Important: bind the created statement to the position of the `throw` keyword so that
         // any raised error reports the correct source location.
-        return object : Statement() {
+        val stmt = object : Statement() {
             override val pos: Pos = start
             override suspend fun execute(scope: Scope): Obj {
                 var errorObject = throwStatement.execute(scope)
@@ -1953,6 +1994,7 @@ class Compiler(
                 return ObjVoid
             }
         }
+        return wrapBytecode(stmt)
     }
 
     private data class CatchBlockData(
@@ -2185,8 +2227,14 @@ class Compiler(
                     miniSink?.onEnterClass(node)
                 }
                 val bodyStart = nextBody.pos
-                val st = withLocalNames(emptySet()) {
-                    parseScript()
+                val classSlotPlan = SlotPlan(mutableMapOf(), 0)
+                slotPlanStack.add(classSlotPlan)
+                val st = try {
+                    withLocalNames(emptySet()) {
+                        parseScript()
+                    }
+                } finally {
+                    slotPlanStack.removeLast()
                 }
                 val rbTok = cc.next()
                 if (rbTok.type != Token.Type.RBRACE) throw ScriptError(rbTok.pos, "unbalanced braces in object body")
@@ -2324,8 +2372,14 @@ class Compiler(
                     }
                     // parse body
                     val bodyStart = next.pos
-                    val st = withLocalNames(constructorArgsDeclaration?.params?.map { it.name }?.toSet() ?: emptySet()) {
-                        parseScript()
+                    val classSlotPlan = SlotPlan(mutableMapOf(), 0)
+                    slotPlanStack.add(classSlotPlan)
+                    val st = try {
+                        withLocalNames(constructorArgsDeclaration?.params?.map { it.name }?.toSet() ?: emptySet()) {
+                            parseScript()
+                        }
+                    } finally {
+                        slotPlanStack.removeLast()
                     }
                     val rbTok = cc.next()
                     if (rbTok.type != Token.Type.RBRACE) throw ScriptError(rbTok.pos, "unbalanced braces in class body")
@@ -2480,7 +2534,7 @@ class Compiler(
             val namesForLoop = (currentLocalNames?.toSet() ?: emptySet()) + tVar.value
             val loopSlotPlan = SlotPlan(mutableMapOf(), 0)
             slotPlanStack.add(loopSlotPlan)
-            declareSlotName(tVar.value)
+            declareSlotName(tVar.value, isMutable = true, isDelegated = false)
             val (canBreak, body, elseStatement) = try {
                 withLocalNames(namesForLoop) {
                     val loopParsed = cc.parseLoop {
@@ -2500,7 +2554,7 @@ class Compiler(
             } finally {
                 slotPlanStack.removeLast()
             }
-            val loopSlotPlanSnapshot = if (loopSlotPlan.slots.isEmpty()) emptyMap() else loopSlotPlan.slots.toMap()
+            val loopSlotPlanSnapshot = slotPlanIndices(loopSlotPlan)
 
             return object : Statement() {
                 override val pos: Pos = body.pos
@@ -2805,7 +2859,7 @@ class Compiler(
                 var result: Obj = ObjVoid
                 var wasBroken = false
                 while (condition.execute(scope).toBool()) {
-                    val loopScope = scope.createChildScope()
+                    val loopScope = scope.createChildScope().apply { skipScopeCreation = true }
                     if (canBreak) {
                         try {
                             result = body.execute(loopScope)
@@ -2962,7 +3016,7 @@ class Compiler(
         val t2 = cc.nextNonWhitespace()
 
         // we generate different statements: optimization
-        return if (t2.type == Token.Type.ID && t2.value == "else") {
+        val stmt = if (t2.type == Token.Type.ID && t2.value == "else") {
             val elseBody =
                 parseStatement() ?: throw ScriptError(pos, "Bad else statement: expected statement")
             IfStatement(condition, ifBody, elseBody, start)
@@ -2970,6 +3024,7 @@ class Compiler(
             cc.previous()
             IfStatement(condition, ifBody, null, start)
         }
+        return wrapBytecode(stmt)
     }
 
     private suspend fun parseFunctionDeclaration(
@@ -3115,7 +3170,7 @@ class Compiler(
 
             var closure: Scope? = null
 
-            val paramSlotPlanSnapshot = if (paramSlotPlan.slots.isEmpty()) emptyMap() else paramSlotPlan.slots.toMap()
+            val paramSlotPlanSnapshot = slotPlanIndices(paramSlotPlan)
             val fnBody = object : Statement() {
                 override val pos: Pos = t.pos
                 override suspend fun execute(callerContext: Scope): Obj {
@@ -3323,7 +3378,7 @@ class Compiler(
         } finally {
             slotPlanStack.removeLast()
         }
-        val planSnapshot = if (blockSlotPlan.slots.isEmpty()) emptyMap() else blockSlotPlan.slots.toMap()
+        val planSnapshot = slotPlanIndices(blockSlotPlan)
         val stmt = object : Statement() {
             override val pos: Pos = startPos
             override suspend fun execute(scope: Scope): Obj {
@@ -3333,7 +3388,8 @@ class Compiler(
                 return block.execute(target)
             }
         }
-        return stmt.also {
+        val wrapped = wrapBytecode(stmt)
+        return wrapped.also {
             val t1 = cc.next()
             if (t1.type != Token.Type.RBRACE)
                 throw ScriptError(t1.pos, "unbalanced braces: expected block body end: }")
@@ -3368,7 +3424,7 @@ class Compiler(
 
             // Register all names in the pattern
             pattern.forEachVariableWithPos { name, namePos ->
-                declareLocalName(name)
+                declareLocalName(name, isMutable)
                 val declRange = MiniRange(namePos, namePos)
                 val node = MiniValDecl(
                     range = declRange,
@@ -3526,7 +3582,7 @@ class Compiler(
         val effectiveEqToken = if (isProperty) null else eqToken
 
         // Register the local name at compile time so that subsequent identifiers can be emitted as fast locals
-        if (!isStatic) declareLocalName(name)
+        if (!isStatic) declareLocalName(name, isMutable)
 
         val isDelegate = if (isAbstract || actualExtern) {
             if (!isProperty && (effectiveEqToken?.type == Token.Type.ASSIGN || effectiveEqToken?.type == Token.Type.BY))
@@ -3560,6 +3616,10 @@ class Compiler(
         val initialExpression = if (setNull || isProperty) null
         else parseStatement(true)
             ?: throw ScriptError(effectiveEqToken!!.pos, "Expected initializer expression")
+
+        if (!isStatic && isDelegate) {
+            markDelegatedSlot(name)
+        }
 
         // Emit MiniValDecl for this declaration (before execution wiring), attach doc if any
         run {
@@ -3839,7 +3899,7 @@ class Compiler(
                 }
 
                 // Register the local name so subsequent identifiers can be emitted as fast locals
-                if (!isStatic) declareLocalName(name)
+                if (!isStatic) declareLocalName(name, isMutable)
 
                 if (isDelegate) {
                     val declaringClassName = declaringClassNameCaptured

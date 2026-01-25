@@ -210,7 +210,7 @@ class BytecodeVmTest {
 
     @Test
     fun localSlotTypeTrackingEnablesArithmetic() = kotlinx.coroutines.test.runTest {
-        val slotRef = LocalSlotRef("a", 0, 0, net.sergeych.lyng.Pos.builtIn)
+        val slotRef = LocalSlotRef("a", 0, 0, true, false, net.sergeych.lyng.Pos.builtIn)
         val assign = AssignRef(
             slotRef,
             ConstRef(ObjInt.of(2).asReadonly),
@@ -225,8 +225,30 @@ class BytecodeVmTest {
             net.sergeych.lyng.Pos.builtIn
         )
         val fn = BytecodeCompiler().compileExpression("localSlotAdd", expr) ?: error("bytecode compile failed")
-        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        val scope = Scope().apply { applySlotPlan(mapOf("a" to 0)) }
+        val result = BytecodeVm().execute(fn, scope, emptyList())
         assertEquals(4, result.toInt())
+    }
+
+    @Test
+    fun parentScopeSlotAccessWorks() = kotlinx.coroutines.test.runTest {
+        val parentRef = LocalSlotRef("a", 0, 1, true, false, net.sergeych.lyng.Pos.builtIn)
+        val expr = ExpressionStatement(
+            BinaryOpRef(
+                BinOp.PLUS,
+                parentRef,
+                ConstRef(ObjInt.of(2).asReadonly)
+            ),
+            net.sergeych.lyng.Pos.builtIn
+        )
+        val fn = BytecodeCompiler().compileExpression("parentSlotAdd", expr) ?: error("bytecode compile failed")
+        val parent = Scope().apply {
+            applySlotPlan(mapOf("a" to 0))
+            setSlotValue(0, ObjInt.of(3))
+        }
+        val child = Scope(parent)
+        val result = BytecodeVm().execute(fn, child, emptyList())
+        assertEquals(5, result.toInt())
     }
 
     @Test
@@ -297,5 +319,20 @@ class BytecodeVmTest {
         val gteFn = BytecodeCompiler().compileExpression("objGte", gteExpr) ?: error("bytecode compile failed")
         val gteResult = BytecodeVm().execute(gteFn, Scope(), emptyList())
         assertEquals(true, gteResult.toBool())
+    }
+
+    @Test
+    fun objectArithmeticUsesBytecodeOps() = kotlinx.coroutines.test.runTest {
+        val expr = ExpressionStatement(
+            BinaryOpRef(
+                BinOp.PLUS,
+                ConstRef(ObjString("a").asReadonly),
+                ConstRef(ObjString("b").asReadonly),
+            ),
+            net.sergeych.lyng.Pos.builtIn
+        )
+        val fn = BytecodeCompiler().compileExpression("objPlus", expr) ?: error("bytecode compile failed")
+        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        assertEquals("ab", (result as ObjString).value)
     }
 }

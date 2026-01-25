@@ -10,6 +10,7 @@ interpreter and fall back to the existing AST execution when needed.
 ### Frame metadata
 - localCount: number of local slots for this function (fixed at compile time).
 - argCount: number of arguments passed at call time.
+- scopeSlotNames: optional debug names for scope slots (locals/params), aligned to slot mapping.
 - argBase = localCount.
 
 ### Slot layout
@@ -24,6 +25,10 @@ slots[localCount .. localCount+argCount-1]  arguments
 ### Parameter access
 - param i => slot localCount + i
 - variadic extra => slot localCount + declaredParamCount + k
+
+### Debug metadata (optional)
+- scopeSlotNames: array sized scopeSlotCount, each entry nullable.
+- Intended for disassembly/debug tooling; VM semantics do not depend on it.
 
 ## 2) Slot ID Width
 
@@ -112,6 +117,13 @@ Note: Any opcode can be compiled to FALLBACK if not implemented in a VM pass.
 - MUL_REAL S, S -> S
 - DIV_REAL S, S -> S
 - NEG_REAL S -> S
+
+### Arithmetic: OBJ
+- ADD_OBJ S, S -> S
+- SUB_OBJ S, S -> S
+- MUL_OBJ S, S -> S
+- DIV_OBJ S, S -> S
+- MOD_OBJ S, S -> S
 
 ### Bitwise: INT
 - AND_INT S, S -> S
