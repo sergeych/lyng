@@ -43,6 +43,8 @@ class Script(
         return lastResult
     }
 
+    internal fun debugStatements(): List<Statement> = statements
+
     suspend fun execute() = execute(
         defaultImportManager.newStdScope()
     )

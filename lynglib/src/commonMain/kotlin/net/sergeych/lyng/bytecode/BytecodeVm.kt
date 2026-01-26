@@ -19,6 +19,7 @@ package net.sergeych.lyng.bytecode
 import net.sergeych.lyng.Arguments
 import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.obj.ObjRecord
 import net.sergeych.lyng.obj.*
 
 class BytecodeVm {
@@ -27,11 +28,16 @@ class BytecodeVm {
         private const val ARG_PLAN_MASK = 0x7FFF
     }
 
+    private var virtualDepth = 0
+
     suspend fun execute(fn: BytecodeFunction, scope0: Scope, args: List<Obj>): Obj {
         val scopeStack = ArrayDeque<Scope>()
+        val scopeVirtualStack = ArrayDeque<Boolean>()
+        val slotPlanStack = ArrayDeque<Map<String, Int?>>()
         var scope = scope0
         val methodCallSites = BytecodeCallSiteCache.methodCallSites(fn)
         val frame = BytecodeFrame(fn.localCount, args.size)
+        virtualDepth = 0
         for (i in args.indices) {
             frame.setObj(frame.argBase + i, args[i])
         }
@@ -734,15 +740,64 @@ class BytecodeVm {
                     ip += fn.constIdWidth
                     val planConst = fn.constants[constId] as? BytecodeConst.SlotPlan
                         ?: error("PUSH_SCOPE expects SlotPlan at $constId")
-                    scopeStack.addLast(scope)
-                    scope = scope.createChildScope()
-                    if (planConst.plan.isNotEmpty()) {
-                        scope.applySlotPlan(planConst.plan)
+                    if (scope.skipScopeCreation) {
+                        val snapshot = scope.applySlotPlanWithSnapshot(planConst.plan)
+                        slotPlanStack.addLast(snapshot)
+                        virtualDepth += 1
+                        scopeStack.addLast(scope)
+                        scopeVirtualStack.addLast(true)
+                    } else {
+                        scopeStack.addLast(scope)
+                        scopeVirtualStack.addLast(false)
+                        scope = scope.createChildScope()
+                        if (planConst.plan.isNotEmpty()) {
+                            scope.applySlotPlan(planConst.plan)
+                        }
                     }
                 }
                 Opcode.POP_SCOPE -> {
+                    val isVirtual = scopeVirtualStack.removeLastOrNull()
+                        ?: error("Scope stack underflow in POP_SCOPE")
+                    if (isVirtual) {
+                        val snapshot = slotPlanStack.removeLastOrNull()
+                            ?: error("Slot plan stack underflow in POP_SCOPE")
+                        scope.restoreSlotPlan(snapshot)
+                        virtualDepth -= 1
+                    }
                     scope = scopeStack.removeLastOrNull()
                         ?: error("Scope stack underflow in POP_SCOPE")
+                }
+                Opcode.PUSH_SLOT_PLAN -> {
+                    val constId = decoder.readConstId(code, ip, fn.constIdWidth)
+                    ip += fn.constIdWidth
+                    val planConst = fn.constants[constId] as? BytecodeConst.SlotPlan
+                        ?: error("PUSH_SLOT_PLAN expects SlotPlan at $constId")
+                    val snapshot = scope.applySlotPlanWithSnapshot(planConst.plan)
+                    slotPlanStack.addLast(snapshot)
+                    virtualDepth += 1
+                }
+                Opcode.POP_SLOT_PLAN -> {
+                    val snapshot = slotPlanStack.removeLastOrNull()
+                        ?: error("Slot plan stack underflow in POP_SLOT_PLAN")
+                    scope.restoreSlotPlan(snapshot)
+                    virtualDepth -= 1
+                }
+                Opcode.DECL_LOCAL -> {
+                    val constId = decoder.readConstId(code, ip, fn.constIdWidth)
+                    ip += fn.constIdWidth
+                    val slot = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val decl = fn.constants[constId] as? BytecodeConst.LocalDecl
+                        ?: error("DECL_LOCAL expects LocalDecl at $constId")
+                    val value = slotToObj(fn, frame, scope, slot).byValueCopy()
+                    scope.addItem(
+                        decl.name,
+                        decl.isMutable,
+                        value,
+                        decl.visibility,
+                        recordType = ObjRecord.Type.Other,
+                        isTransient = decl.isTransient
+                    )
                 }
                 Opcode.CALL_SLOT -> {
                     val calleeSlot = decoder.readSlot(code, ip)
@@ -979,11 +1034,16 @@ class BytecodeVm {
 
     private fun resolveScope(scope: Scope, depth: Int): Scope {
         if (depth == 0) return scope
+        var effectiveDepth = depth
+        if (virtualDepth > 0) {
+            if (effectiveDepth <= virtualDepth) return scope
+            effectiveDepth -= virtualDepth
+        }
         val next = when (scope) {
             is net.sergeych.lyng.ClosureScope -> scope.closureScope
             else -> scope.parent
         }
-        return next?.let { resolveScope(it, depth - 1) }
+        return next?.let { resolveScope(it, effectiveDepth - 1) }
             ?: error("Scope depth $depth is out of range")
     }
 }

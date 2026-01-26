@@ -31,6 +31,8 @@ class BytecodeStatement private constructor(
         return BytecodeVm().execute(function, scope, emptyList())
     }
 
+    internal fun bytecodeFunction(): BytecodeFunction = function
+
     companion object {
         fun wrap(statement: Statement, nameHint: String, allowLocalSlots: Boolean): Statement {
             if (statement is BytecodeStatement) return statement

@@ -239,11 +239,12 @@ class Compiler(
         val statements = mutableListOf<Statement>()
         val start = cc.currentPos()
         // Track locals at script level for fast local refs
-        return withLocalNames(emptySet()) {
-            // package level declarations
-            // Notify sink about script start
-            miniSink?.onScriptStart(start)
-            do {
+        return try {
+            withLocalNames(emptySet()) {
+                // package level declarations
+                // Notify sink about script start
+                miniSink?.onScriptStart(start)
+                do {
                 val t = cc.current()
                 if (t.type == Token.Type.NEWLINE || t.type == Token.Type.SINGLE_LINE_COMMENT || t.type == Token.Type.MULTILINE_COMMENT) {
                     when (t.type) {
@@ -337,14 +338,16 @@ class Compiler(
                     break
                 }
 
-            } while (true)
-            Script(start, statements)
-        }.also {
-            // Best-effort script end notification (use current position)
-            miniSink?.onScriptEnd(
-                cc.currentPos(),
-                MiniScript(MiniRange(start, cc.currentPos()))
-            )
+                } while (true)
+                Script(start, statements)
+            }.also {
+                // Best-effort script end notification (use current position)
+                miniSink?.onScriptEnd(
+                    cc.currentPos(),
+                    MiniScript(MiniRange(start, cc.currentPos()))
+                )
+            }
+        } finally {
         }
     }
 
@@ -371,6 +374,40 @@ class Compiler(
     private fun wrapBytecode(stmt: Statement): Statement {
         if (!useBytecodeStatements) return stmt
         return BytecodeStatement.wrap(stmt, "stmt@${stmt.pos}", allowLocalSlots = true)
+    }
+
+    private fun wrapFunctionBytecode(stmt: Statement, name: String): Statement {
+        if (!useBytecodeStatements) return stmt
+        return BytecodeStatement.wrap(stmt, "fn@$name", allowLocalSlots = true)
+    }
+
+    private fun unwrapBytecodeDeep(stmt: Statement): Statement {
+        return when (stmt) {
+            is BytecodeStatement -> unwrapBytecodeDeep(stmt.original)
+            is BlockStatement -> {
+                val unwrapped = stmt.statements().map { unwrapBytecodeDeep(it) }
+                val script = Script(stmt.block.pos, unwrapped)
+                BlockStatement(script, stmt.slotPlan, stmt.pos)
+            }
+            is VarDeclStatement -> {
+                val init = stmt.initializer?.let { unwrapBytecodeDeep(it) }
+                VarDeclStatement(
+                    stmt.name,
+                    stmt.isMutable,
+                    stmt.visibility,
+                    init,
+                    stmt.isTransient,
+                    stmt.pos
+                )
+            }
+            is IfStatement -> {
+                val cond = unwrapBytecodeDeep(stmt.condition)
+                val ifBody = unwrapBytecodeDeep(stmt.ifBody)
+                val elseBody = stmt.elseBody?.let { unwrapBytecodeDeep(it) }
+                IfStatement(cond, ifBody, elseBody, stmt.pos)
+            }
+            else -> stmt
+        }
     }
 
     private suspend fun parseStatement(braceMeansLambda: Boolean = false): Statement? {
@@ -2376,7 +2413,7 @@ class Compiler(
                     slotPlanStack.add(classSlotPlan)
                     val st = try {
                         withLocalNames(constructorArgsDeclaration?.params?.map { it.name }?.toSet() ?: emptySet()) {
-                            parseScript()
+                        parseScript()
                         }
                     } finally {
                         slotPlanStack.removeLast()
@@ -2574,11 +2611,23 @@ class Compiler(
     }
 
     private fun constIntRangeOrNull(ref: ObjRef): ConstIntRange? {
-        if (ref !is RangeRef) return null
-        val start = constIntValueOrNull(ref.left) ?: return null
-        val end = constIntValueOrNull(ref.right) ?: return null
-        val endExclusive = if (ref.isEndInclusive) end + 1 else end
-        return ConstIntRange(start, endExclusive)
+        when (ref) {
+            is ConstRef -> {
+                val range = ref.constValue as? ObjRange ?: return null
+                if (!range.isIntRange) return null
+                val start = range.start?.toLong() ?: return null
+                val end = range.end?.toLong() ?: return null
+                val endExclusive = if (range.isEndInclusive) end + 1 else end
+                return ConstIntRange(start, endExclusive)
+            }
+            is RangeRef -> {
+                val start = constIntValueOrNull(ref.left) ?: return null
+                val end = constIntValueOrNull(ref.right) ?: return null
+                val endExclusive = if (ref.isEndInclusive) end + 1 else end
+                return ConstIntRange(start, endExclusive)
+            }
+            else -> return null
+        }
     }
 
     private fun constIntValueOrNull(ref: ObjRef?): Long? {
@@ -2595,10 +2644,17 @@ class Compiler(
     @Suppress("UNUSED_VARIABLE")
     private suspend fun parseDoWhileStatement(): Statement {
         val label = getLabel()?.also { cc.labels += it }
-        val (canBreak, body) = cc.parseLoop {
-            parseStatement() ?: throw ScriptError(cc.currentPos(), "Bad do-while statement: expected body statement")
+        val loopSlotPlan = SlotPlan(mutableMapOf(), 0)
+        slotPlanStack.add(loopSlotPlan)
+        val (canBreak, parsedBody) = try {
+            cc.parseLoop {
+                parseStatement() ?: throw ScriptError(cc.currentPos(), "Bad do-while statement: expected body statement")
+            }
+        } finally {
+            slotPlanStack.removeLast()
         }
         label?.also { cc.labels -= it }
+        val body = unwrapBytecodeDeep(parsedBody)
 
         cc.skipWsTokens()
         val tWhile = cc.next()
@@ -2606,12 +2662,18 @@ class Compiler(
             throw ScriptError(tWhile.pos, "Expected 'while' after do body")
 
         ensureLparen()
-        val condition = parseExpression() ?: throw ScriptError(cc.currentPos(), "Expected condition after 'while'")
+        slotPlanStack.add(loopSlotPlan)
+        val condition = try {
+            parseExpression() ?: throw ScriptError(cc.currentPos(), "Expected condition after 'while'")
+        } finally {
+            slotPlanStack.removeLast()
+        }
         ensureRparen()
 
         cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
         val elseStatement = if (cc.next().let { it.type == Token.Type.ID && it.value == "else" }) {
-            parseStatement()
+            val parsedElse = parseStatement()
+            parsedElse?.let { unwrapBytecodeDeep(it) }
         } else {
             cc.previous()
             null
@@ -2655,15 +2717,23 @@ class Compiler(
             parseExpression() ?: throw ScriptError(start, "Bad while statement: expected expression")
         ensureRparen()
 
-        val (canBreak, body) = cc.parseLoop {
-            if (cc.current().type == Token.Type.LBRACE) parseBlock()
-            else parseStatement() ?: throw ScriptError(start, "Bad while statement: expected statement")
+        val loopSlotPlan = SlotPlan(mutableMapOf(), 0)
+        slotPlanStack.add(loopSlotPlan)
+        val (canBreak, parsedBody) = try {
+            cc.parseLoop {
+                if (cc.current().type == Token.Type.LBRACE) parseBlock()
+                else parseStatement() ?: throw ScriptError(start, "Bad while statement: expected statement")
+            }
+        } finally {
+            slotPlanStack.removeLast()
         }
         label?.also { cc.labels -= it }
+        val body = unwrapBytecodeDeep(parsedBody)
 
         cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
         val elseStatement = if (cc.next().let { it.type == Token.Type.ID && it.value == "else" }) {
-            parseStatement()
+            val parsedElse = parseStatement()
+            parsedElse?.let { unwrapBytecodeDeep(it) }
         } else {
             cc.previous()
             null
@@ -2986,8 +3056,9 @@ class Compiler(
             var closure: Scope? = null
 
             val paramSlotPlanSnapshot = slotPlanIndices(paramSlotPlan)
-            val fnBody = object : Statement() {
+            val fnBody = object : Statement(), BytecodeBodyProvider {
                 override val pos: Pos = t.pos
+                override fun bytecodeBody(): BytecodeStatement? = fnStatements as? BytecodeStatement
                 override suspend fun execute(callerContext: Scope): Obj {
                     callerContext.pos = start
 
@@ -3082,6 +3153,7 @@ class Compiler(
 
                     val annotatedFnBody = annotation?.invoke(context, ObjString(name), fnBody)
                         ?: fnBody
+                    val compiledFnBody = annotatedFnBody
 
                     extTypeName?.let { typeName ->
                         // class extension method
@@ -3092,10 +3164,10 @@ class Compiler(
                             override suspend fun execute(scope: Scope): Obj {
                                 // ObjInstance has a fixed instance scope, so we need to build a closure
                                 val result = (scope.thisObj as? ObjInstance)?.let { i ->
-                                    annotatedFnBody.execute(ClosureScope(scope, i.instanceScope))
+                                    compiledFnBody.execute(ClosureScope(scope, i.instanceScope))
                                 }
                                 // other classes can create one-time scope for this rare case:
-                                    ?: annotatedFnBody.execute(scope.thisObj.autoInstanceScope(scope))
+                                    ?: compiledFnBody.execute(scope.thisObj.autoInstanceScope(scope))
                                 return result
                             }
                         }
@@ -3127,18 +3199,18 @@ class Compiler(
                                                 newThisObj = i
                                             )
                                             execScope.currentClassCtx = cls
-                                            annotatedFnBody.execute(execScope)
-                                        } ?: annotatedFnBody.execute(thisObj.autoInstanceScope(this))
+                                            compiledFnBody.execute(execScope)
+                                        } ?: compiledFnBody.execute(thisObj.autoInstanceScope(this))
                                     } finally {
                                         this.currentClassCtx = savedCtx
                                     }
                                 }
                                 // also expose the symbol in the class scope for possible references
-                                context.addItem(name, false, annotatedFnBody, visibility)
-                                annotatedFnBody
+                                context.addItem(name, false, compiledFnBody, visibility)
+                                compiledFnBody
                             } else {
                                 // top-level or nested function
-                                context.addItem(name, false, annotatedFnBody, visibility)
+                                context.addItem(name, false, compiledFnBody, visibility)
                             }
                         }
                     // as the function can be called from anywhere, we have
@@ -3194,15 +3266,7 @@ class Compiler(
             slotPlanStack.removeLast()
         }
         val planSnapshot = slotPlanIndices(blockSlotPlan)
-        val stmt = object : Statement() {
-            override val pos: Pos = startPos
-            override suspend fun execute(scope: Scope): Obj {
-                // block run on inner context:
-                val target = if (scope.skipScopeCreation) scope else scope.createChildScope(startPos)
-                if (planSnapshot.isNotEmpty()) target.applySlotPlan(planSnapshot)
-                return block.execute(target)
-            }
-        }
+        val stmt = BlockStatement(block, planSnapshot, startPos)
         val wrapped = wrapBytecode(stmt)
         return wrapped.also {
             val t1 = cc.next()
@@ -3454,6 +3518,17 @@ class Compiler(
             )
             miniSink?.onValDecl(node)
             pendingDeclDoc = null
+        }
+
+        if (declaringClassNameCaptured == null &&
+            extTypeName == null &&
+            !isStatic &&
+            !isProperty &&
+            !isDelegate &&
+            !actualExtern &&
+            !isAbstract
+        ) {
+            return VarDeclStatement(name, isMutable, visibility, initialExpression, isTransient, start)
         }
 
         if (isStatic) {

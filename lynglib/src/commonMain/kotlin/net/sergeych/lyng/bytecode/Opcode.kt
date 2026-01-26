@@ -109,6 +109,9 @@ enum class Opcode(val code: Int) {
     RET_VOID(0x84),
     PUSH_SCOPE(0x85),
     POP_SCOPE(0x86),
+    PUSH_SLOT_PLAN(0x87),
+    POP_SLOT_PLAN(0x88),
+    DECL_LOCAL(0x89),
 
     CALL_DIRECT(0x90),
     CALL_VIRTUAL(0x91),

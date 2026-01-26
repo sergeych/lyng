@@ -3989,6 +3989,7 @@ class ScriptTest {
         )
     }
 
+
     @Test
     fun testParserOverflow() = runTest {
         try {
@@ -5044,4 +5045,3 @@ class ScriptTest {
         """.trimIndent())
     }
 }
-

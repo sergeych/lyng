@@ -18,6 +18,8 @@
 package net.sergeych.lyng
 
 import net.sergeych.lyng.obj.*
+import net.sergeych.lyng.bytecode.BytecodeDisassembler
+import net.sergeych.lyng.bytecode.BytecodeStatement
 import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.pacman.ImportProvider
 
@@ -410,6 +412,34 @@ open class Scope(
         }
     }
 
+    fun applySlotPlanWithSnapshot(plan: Map<String, Int>): Map<String, Int?> {
+        if (plan.isEmpty()) return emptyMap()
+        val maxIndex = plan.values.maxOrNull() ?: return emptyMap()
+        if (slots.size <= maxIndex) {
+            val targetSize = maxIndex + 1
+            while (slots.size < targetSize) {
+                slots.add(ObjRecord(ObjUnset, isMutable = true))
+            }
+        }
+        val snapshot = LinkedHashMap<String, Int?>(plan.size)
+        for ((name, idx) in plan) {
+            snapshot[name] = nameToSlot[name]
+            nameToSlot[name] = idx
+        }
+        return snapshot
+    }
+
+    fun restoreSlotPlan(snapshot: Map<String, Int?>) {
+        if (snapshot.isEmpty()) return
+        for ((name, idx) in snapshot) {
+            if (idx == null) {
+                nameToSlot.remove(name)
+            } else {
+                nameToSlot[name] = idx
+            }
+        }
+    }
+
     /**
      * Clear all references and maps to prevent memory leaks when pooled.
      */
@@ -613,6 +643,15 @@ open class Scope(
             fn(this)
             ObjVoid
         }
+    }
+
+    fun disassembleSymbol(name: String): String {
+        val record = get(name) ?: return "$name is not found"
+        val stmt = record.value as? Statement ?: return "$name is not a compiled body"
+        val bytecode = (stmt as? BytecodeStatement)?.bytecodeFunction()
+            ?: (stmt as? BytecodeBodyProvider)?.bytecodeBody()?.bytecodeFunction()
+            ?: return "$name is not a compiled body"
+        return BytecodeDisassembler.disassemble(bytecode)
     }
 
     fun addFn(vararg names: String, fn: suspend Scope.() -> Obj) {

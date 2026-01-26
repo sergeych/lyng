@@ -16,6 +16,7 @@
 
 package net.sergeych.lyng.bytecode
 
+import net.sergeych.lyng.Visibility
 import net.sergeych.lyng.obj.Obj
 
 sealed class BytecodeConst {
@@ -26,6 +27,12 @@ sealed class BytecodeConst {
     data class StringVal(val value: String) : BytecodeConst()
     data class ObjRef(val value: Obj) : BytecodeConst()
     data class SlotPlan(val plan: Map<String, Int>) : BytecodeConst()
+    data class LocalDecl(
+        val name: String,
+        val isMutable: Boolean,
+        val visibility: Visibility,
+        val isTransient: Boolean,
+    ) : BytecodeConst()
     data class CallArgsPlan(val tailBlock: Boolean, val specs: List<CallArgSpec>) : BytecodeConst()
     data class CallArgSpec(val name: String?, val isSplat: Boolean)
 }
