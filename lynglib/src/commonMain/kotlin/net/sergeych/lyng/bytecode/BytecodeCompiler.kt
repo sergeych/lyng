@@ -382,7 +382,12 @@ class BytecodeCompiler(
     }
 
     private fun compileCompareEq(a: CompiledValue, b: CompiledValue, out: Int): CompiledValue? {
-        if (a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) return null
+        if (a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) {
+            val left = ensureObjSlot(a)
+            val right = ensureObjSlot(b)
+            builder.emit(Opcode.CMP_EQ_OBJ, left.slot, right.slot, out)
+            return CompiledValue(out, SlotType.BOOL)
+        }
         return when {
             a.type == SlotType.INT && b.type == SlotType.INT -> {
                 builder.emit(Opcode.CMP_EQ_INT, a.slot, b.slot, out)
@@ -413,7 +418,12 @@ class BytecodeCompiler(
     }
 
     private fun compileCompareNeq(a: CompiledValue, b: CompiledValue, out: Int): CompiledValue? {
-        if (a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) return null
+        if (a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) {
+            val left = ensureObjSlot(a)
+            val right = ensureObjSlot(b)
+            builder.emit(Opcode.CMP_NEQ_OBJ, left.slot, right.slot, out)
+            return CompiledValue(out, SlotType.BOOL)
+        }
         return when {
             a.type == SlotType.INT && b.type == SlotType.INT -> {
                 builder.emit(Opcode.CMP_NEQ_INT, a.slot, b.slot, out)
@@ -444,7 +454,12 @@ class BytecodeCompiler(
     }
 
     private fun compileCompareLt(a: CompiledValue, b: CompiledValue, out: Int): CompiledValue? {
-        if (a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) return null
+        if (a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) {
+            val left = ensureObjSlot(a)
+            val right = ensureObjSlot(b)
+            builder.emit(Opcode.CMP_LT_OBJ, left.slot, right.slot, out)
+            return CompiledValue(out, SlotType.BOOL)
+        }
         return when {
             a.type == SlotType.INT && b.type == SlotType.INT -> {
                 builder.emit(Opcode.CMP_LT_INT, a.slot, b.slot, out)
@@ -471,7 +486,12 @@ class BytecodeCompiler(
     }
 
     private fun compileCompareLte(a: CompiledValue, b: CompiledValue, out: Int): CompiledValue? {
-        if (a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) return null
+        if (a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) {
+            val left = ensureObjSlot(a)
+            val right = ensureObjSlot(b)
+            builder.emit(Opcode.CMP_LTE_OBJ, left.slot, right.slot, out)
+            return CompiledValue(out, SlotType.BOOL)
+        }
         return when {
             a.type == SlotType.INT && b.type == SlotType.INT -> {
                 builder.emit(Opcode.CMP_LTE_INT, a.slot, b.slot, out)
@@ -498,7 +518,12 @@ class BytecodeCompiler(
     }
 
     private fun compileCompareGt(a: CompiledValue, b: CompiledValue, out: Int): CompiledValue? {
-        if (a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) return null
+        if (a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) {
+            val left = ensureObjSlot(a)
+            val right = ensureObjSlot(b)
+            builder.emit(Opcode.CMP_GT_OBJ, left.slot, right.slot, out)
+            return CompiledValue(out, SlotType.BOOL)
+        }
         return when {
             a.type == SlotType.INT && b.type == SlotType.INT -> {
                 builder.emit(Opcode.CMP_GT_INT, a.slot, b.slot, out)
@@ -525,7 +550,12 @@ class BytecodeCompiler(
     }
 
     private fun compileCompareGte(a: CompiledValue, b: CompiledValue, out: Int): CompiledValue? {
-        if (a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) return null
+        if (a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) {
+            val left = ensureObjSlot(a)
+            val right = ensureObjSlot(b)
+            builder.emit(Opcode.CMP_GTE_OBJ, left.slot, right.slot, out)
+            return CompiledValue(out, SlotType.BOOL)
+        }
         return when {
             a.type == SlotType.INT && b.type == SlotType.INT -> {
                 builder.emit(Opcode.CMP_GTE_INT, a.slot, b.slot, out)
@@ -762,62 +792,69 @@ class BytecodeCompiler(
         return CompiledValue(dst, SlotType.OBJ)
     }
 
-    private data class CallArgs(val base: Int, val count: Int)
-
     private fun compileCall(ref: CallRef): CompiledValue? {
         if (ref.isOptionalInvoke) return null
-        if (!argsEligible(ref.args, ref.tailBlock)) return null
         val callee = compileRefWithFallback(ref.target, null, Pos.builtIn) ?: return null
         val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
+        val encodedCount = encodeCallArgCount(args) ?: return null
         val dst = allocSlot()
-        builder.emit(Opcode.CALL_SLOT, callee.slot, args.base, args.count, dst)
+        builder.emit(Opcode.CALL_SLOT, callee.slot, args.base, encodedCount, dst)
         return CompiledValue(dst, SlotType.UNKNOWN)
     }
 
     private fun compileMethodCall(ref: MethodCallRef): CompiledValue? {
         if (ref.isOptional) return null
-        if (!argsEligible(ref.args, ref.tailBlock)) return null
         val receiver = compileRefWithFallback(ref.receiver, null, Pos.builtIn) ?: return null
         val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
+        val encodedCount = encodeCallArgCount(args) ?: return null
         val methodId = builder.addConst(BytecodeConst.StringVal(ref.name))
         if (methodId > 0xFFFF) return null
         val dst = allocSlot()
-        builder.emit(Opcode.CALL_VIRTUAL, receiver.slot, methodId, args.base, args.count, dst)
+        builder.emit(Opcode.CALL_VIRTUAL, receiver.slot, methodId, args.base, encodedCount, dst)
         return CompiledValue(dst, SlotType.UNKNOWN)
     }
 
-    private fun argsEligible(args: List<ParsedArgument>, tailBlock: Boolean): Boolean {
-        if (tailBlock) return false
-        for (arg in args) {
-            if (arg.isSplat || arg.name != null) return false
-            if (arg.value !is ExpressionStatement) return false
-        }
-        return true
-    }
+    private data class CallArgs(val base: Int, val count: Int, val planId: Int?)
 
     private fun compileCallArgs(args: List<ParsedArgument>, tailBlock: Boolean): CallArgs? {
-        if (tailBlock) return null
-        for (arg in args) {
-            if (arg.isSplat || arg.name != null) return null
-        }
-        if (args.isEmpty()) return CallArgs(base = 0, count = 0)
+        if (args.isEmpty()) return CallArgs(base = 0, count = 0, planId = null)
         val argSlots = IntArray(args.size) { allocSlot() }
+        val needPlan = tailBlock || args.any { it.isSplat || it.name != null }
+        val specs = if (needPlan) ArrayList<BytecodeConst.CallArgSpec>(args.size) else null
         for ((index, arg) in args.withIndex()) {
-            val stmt = arg.value
-            val compiled = if (stmt is ExpressionStatement) {
-                compileRefWithFallback(stmt.ref, null, stmt.pos)
-            } else {
-                null
-            } ?: return null
+            val compiled = compileArgValue(arg.value) ?: return null
             val dst = argSlots[index]
-            if (compiled.slot != dst) {
-                builder.emit(Opcode.BOX_OBJ, compiled.slot, dst)
-            } else if (compiled.type != SlotType.OBJ) {
+            if (compiled.slot != dst || compiled.type != SlotType.OBJ) {
                 builder.emit(Opcode.BOX_OBJ, compiled.slot, dst)
             }
             updateSlotType(dst, SlotType.OBJ)
+            specs?.add(BytecodeConst.CallArgSpec(arg.name, arg.isSplat))
         }
-        return CallArgs(base = argSlots[0], count = argSlots.size)
+        val planId = if (needPlan) {
+            builder.addConst(BytecodeConst.CallArgsPlan(tailBlock, specs ?: emptyList()))
+        } else {
+            null
+        }
+        return CallArgs(base = argSlots[0], count = argSlots.size, planId = planId)
+    }
+
+    private fun compileArgValue(stmt: Statement): CompiledValue? {
+        return when (stmt) {
+            is ExpressionStatement -> compileRefWithFallback(stmt.ref, null, stmt.pos)
+            else -> {
+                val slot = allocSlot()
+                val id = builder.addFallback(stmt)
+                builder.emit(Opcode.EVAL_FALLBACK, id, slot)
+                updateSlotType(slot, SlotType.OBJ)
+                CompiledValue(slot, SlotType.OBJ)
+            }
+        }
+    }
+
+    private fun encodeCallArgCount(args: CallArgs): Int? {
+        val planId = args.planId ?: return args.count
+        if (planId > 0x7FFF) return null
+        return 0x8000 or planId
     }
 
     private fun compileIf(name: String, stmt: IfStatement): BytecodeFunction? {

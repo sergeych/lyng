@@ -16,16 +16,10 @@
 
 package net.sergeych.lyng.bytecode
 
-import net.sergeych.lyng.obj.Obj
+internal actual object BytecodeCallSiteCache {
+    private val cache = mutableMapOf<BytecodeFunction, MutableMap<Int, MethodCallSite>>()
 
-sealed class BytecodeConst {
-    object Null : BytecodeConst()
-    data class Bool(val value: Boolean) : BytecodeConst()
-    data class IntVal(val value: Long) : BytecodeConst()
-    data class RealVal(val value: Double) : BytecodeConst()
-    data class StringVal(val value: String) : BytecodeConst()
-    data class ObjRef(val value: Obj) : BytecodeConst()
-    data class SlotPlan(val plan: Map<String, Int>) : BytecodeConst()
-    data class CallArgsPlan(val tailBlock: Boolean, val specs: List<CallArgSpec>) : BytecodeConst()
-    data class CallArgSpec(val name: String?, val isSplat: Boolean)
+    actual fun methodCallSites(fn: BytecodeFunction): MutableMap<Int, MethodCallSite> {
+        return cache.getOrPut(fn) { mutableMapOf() }
+    }
 }

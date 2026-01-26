@@ -22,9 +22,15 @@ import net.sergeych.lyng.Scope
 import net.sergeych.lyng.obj.*
 
 class BytecodeVm {
+    companion object {
+        private const val ARG_PLAN_FLAG = 0x8000
+        private const val ARG_PLAN_MASK = 0x7FFF
+    }
+
     suspend fun execute(fn: BytecodeFunction, scope0: Scope, args: List<Obj>): Obj {
         val scopeStack = ArrayDeque<Scope>()
         var scope = scope0
+        val methodCallSites = BytecodeCallSiteCache.methodCallSites(fn)
         val frame = BytecodeFrame(fn.localCount, args.size)
         for (i in args.indices) {
             frame.setObj(frame.argBase + i, args[i])
@@ -776,7 +782,7 @@ class BytecodeVm {
                     val nameConst = fn.constants.getOrNull(methodId) as? BytecodeConst.StringVal
                         ?: error("CALL_VIRTUAL expects StringVal at $methodId")
                     val args = buildArguments(fn, frame, scope, argBase, argCount)
-                    val site = fn.methodCallSites.getOrPut(startIp) { MethodCallSite(nameConst.value) }
+                    val site = methodCallSites.getOrPut(startIp) { MethodCallSite(nameConst.value) }
                     val result = site.invoke(scope, receiver, args)
                     when (result) {
                         is ObjInt -> setInt(fn, frame, scope, dst, result.value)
@@ -825,7 +831,7 @@ class BytecodeVm {
         }
     }
 
-    private fun buildArguments(
+    private suspend fun buildArguments(
         fn: BytecodeFunction,
         frame: BytecodeFrame,
         scope: Scope,
@@ -833,11 +839,73 @@ class BytecodeVm {
         argCount: Int,
     ): Arguments {
         if (argCount == 0) return Arguments.EMPTY
+        if ((argCount and ARG_PLAN_FLAG) != 0) {
+            val planId = argCount and ARG_PLAN_MASK
+            val plan = fn.constants.getOrNull(planId) as? BytecodeConst.CallArgsPlan
+                ?: error("CALL args plan not found: $planId")
+            return buildArgumentsFromPlan(fn, frame, scope, argBase, plan)
+        }
         val list = ArrayList<Obj>(argCount)
         for (i in 0 until argCount) {
             list.add(slotToObj(fn, frame, scope, argBase + i))
         }
         return Arguments(list)
+    }
+
+    private suspend fun buildArgumentsFromPlan(
+        fn: BytecodeFunction,
+        frame: BytecodeFrame,
+        scope: Scope,
+        argBase: Int,
+        plan: BytecodeConst.CallArgsPlan,
+    ): Arguments {
+        val positional = ArrayList<Obj>(plan.specs.size)
+        var named: LinkedHashMap<String, Obj>? = null
+        var namedSeen = false
+        for ((idx, spec) in plan.specs.withIndex()) {
+            val value = slotToObj(fn, frame, scope, argBase + idx)
+            val name = spec.name
+            if (name != null) {
+                if (named == null) named = linkedMapOf()
+                if (named.containsKey(name)) scope.raiseIllegalArgument("argument '$name' is already set")
+                named[name] = value
+                namedSeen = true
+                continue
+            }
+            if (spec.isSplat) {
+                when {
+                    value is ObjMap -> {
+                        if (named == null) named = linkedMapOf()
+                        for ((k, v) in value.map) {
+                            if (k !is ObjString) scope.raiseIllegalArgument("named splat expects a Map with string keys")
+                            val key = k.value
+                            if (named.containsKey(key)) scope.raiseIllegalArgument("argument '$key' is already set")
+                            named[key] = v
+                        }
+                        namedSeen = true
+                    }
+                    value is ObjList -> {
+                        if (namedSeen) scope.raiseIllegalArgument("positional splat cannot follow named arguments")
+                        positional.addAll(value.list)
+                    }
+                    value.isInstanceOf(ObjIterable) -> {
+                        if (namedSeen) scope.raiseIllegalArgument("positional splat cannot follow named arguments")
+                        val list = (value.invokeInstanceMethod(scope, "toList") as ObjList).list
+                        positional.addAll(list)
+                    }
+                    else -> scope.raiseClassCastError("expected list of objects for splat argument")
+                }
+            } else {
+                if (namedSeen) {
+                    val isLast = idx == plan.specs.lastIndex
+                    if (!(isLast && plan.tailBlock)) {
+                        scope.raiseIllegalArgument("positional argument cannot follow named arguments")
+                    }
+                }
+                positional.add(value)
+            }
+        }
+        return Arguments(positional, plan.tailBlock, named ?: emptyMap())
     }
 
     private fun getObj(fn: BytecodeFunction, frame: BytecodeFrame, scope: Scope, slot: Int): Obj {

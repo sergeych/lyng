@@ -32,6 +32,7 @@ slots[localCount .. localCount+argCount-1]  arguments
 
 ### Constant pool extras
 - SlotPlan: map of name -> slot index, used by PUSH_SCOPE to pre-allocate and map loop locals.
+- CallArgsPlan: ordered argument specs (name/splat) + tailBlock flag, used when argCount has the plan flag set.
 
 ## 2) Slot ID Width
 
@@ -82,6 +83,10 @@ Common operand patterns:
 - S I: slot + jump target
 - I: jump target
 - F S C S: fnId, argBase slot, argCount, dst slot
+
+Arg count flag:
+- If high bit of C is set (0x8000), the low 15 bits encode a CallArgsPlan constId.
+- When not set, C is the raw positional count and tailBlockMode=false.
 
 ## 5) Opcode Table
 

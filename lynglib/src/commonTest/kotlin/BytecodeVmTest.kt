@@ -26,6 +26,7 @@ import net.sergeych.lyng.bytecode.BytecodeVm
 import net.sergeych.lyng.bytecode.Opcode
 import net.sergeych.lyng.obj.BinaryOpRef
 import net.sergeych.lyng.obj.BinOp
+import net.sergeych.lyng.obj.CallRef
 import net.sergeych.lyng.obj.ConstRef
 import net.sergeych.lyng.obj.LocalSlotRef
 import net.sergeych.lyng.obj.ObjFalse
@@ -201,6 +202,81 @@ class BytecodeVmTest {
         val eqFn = BytecodeCompiler().compileExpression("mixedEq", eqExpr) ?: error("bytecode compile failed")
         val eqResult = BytecodeVm().execute(eqFn, Scope(), emptyList())
         assertEquals(true, eqResult.toBool())
+    }
+
+    @Test
+    fun callWithTailBlockKeepsTailBlockMode() = kotlinx.coroutines.test.runTest {
+        val callable = object : Statement() {
+            override val pos: Pos = Pos.builtIn
+            override suspend fun execute(scope: Scope) =
+                if (scope.args.tailBlockMode) ObjTrue else ObjFalse
+        }
+        val callRef = CallRef(
+            ConstRef(callable.asReadonly),
+            listOf(
+                net.sergeych.lyng.ParsedArgument(
+                    ExpressionStatement(ConstRef(ObjInt.of(1).asReadonly), Pos.builtIn),
+                    Pos.builtIn
+                )
+            ),
+            tailBlock = true,
+            isOptionalInvoke = false
+        )
+        val expr = ExpressionStatement(callRef, Pos.builtIn)
+        val fn = BytecodeCompiler().compileExpression("tailBlockArgs", expr) ?: error("bytecode compile failed")
+        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        assertEquals(true, result.toBool())
+    }
+
+    @Test
+    fun callWithNamedArgumentsUsesPlan() = kotlinx.coroutines.test.runTest {
+        val callable = object : Statement() {
+            override val pos: Pos = Pos.builtIn
+            override suspend fun execute(scope: Scope) =
+                (scope.args.named["x"] as ObjInt)
+        }
+        val callRef = CallRef(
+            ConstRef(callable.asReadonly),
+            listOf(
+                net.sergeych.lyng.ParsedArgument(
+                    ExpressionStatement(ConstRef(ObjInt.of(5).asReadonly), Pos.builtIn),
+                    Pos.builtIn,
+                    name = "x"
+                )
+            ),
+            tailBlock = false,
+            isOptionalInvoke = false
+        )
+        val expr = ExpressionStatement(callRef, Pos.builtIn)
+        val fn = BytecodeCompiler().compileExpression("namedArgs", expr) ?: error("bytecode compile failed")
+        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        assertEquals(5, result.toInt())
+    }
+
+    @Test
+    fun callWithSplatArgumentsUsesPlan() = kotlinx.coroutines.test.runTest {
+        val callable = object : Statement() {
+            override val pos: Pos = Pos.builtIn
+            override suspend fun execute(scope: Scope) =
+                ObjInt.of(scope.args.size.toLong())
+        }
+        val list = ObjList(mutableListOf<net.sergeych.lyng.obj.Obj>(ObjInt.of(1), ObjInt.of(2), ObjInt.of(3)))
+        val callRef = CallRef(
+            ConstRef(callable.asReadonly),
+            listOf(
+                net.sergeych.lyng.ParsedArgument(
+                    ExpressionStatement(ConstRef(list.asReadonly), Pos.builtIn),
+                    Pos.builtIn,
+                    isSplat = true
+                )
+            ),
+            tailBlock = false,
+            isOptionalInvoke = false
+        )
+        val expr = ExpressionStatement(callRef, Pos.builtIn)
+        val fn = BytecodeCompiler().compileExpression("splatArgs", expr) ?: error("bytecode compile failed")
+        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        assertEquals(3, result.toInt())
     }
 
     @Test
