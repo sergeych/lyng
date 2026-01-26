@@ -30,6 +30,8 @@ data class BytecodeFunction(
     val fallbackStatements: List<net.sergeych.lyng.Statement>,
     val code: ByteArray,
 ) {
+    val methodCallSites: MutableMap<Int, MethodCallSite> = mutableMapOf()
+
     init {
         require(slotWidth == 1 || slotWidth == 2 || slotWidth == 4) { "slotWidth must be 1,2,4" }
         require(ipWidth == 2 || ipWidth == 4) { "ipWidth must be 2 or 4" }

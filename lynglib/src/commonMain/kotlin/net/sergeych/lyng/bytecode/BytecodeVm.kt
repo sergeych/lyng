@@ -16,6 +16,8 @@
 
 package net.sergeych.lyng.bytecode
 
+import net.sergeych.lyng.Arguments
+import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.obj.*
 
@@ -34,6 +36,7 @@ class BytecodeVm {
         var ip = 0
         val code = fn.code
         while (ip < code.size) {
+            val startIp = ip
             val op = decoder.readOpcode(code, ip)
             ip += 1
             when (op) {
@@ -118,6 +121,13 @@ class BytecodeVm {
                     val dst = decoder.readSlot(code, ip)
                     ip += fn.slotWidth
                     setObj(fn, frame, scope, dst, getObj(fn, frame, scope, src))
+                }
+                Opcode.BOX_OBJ -> {
+                    val src = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    setObj(fn, frame, scope, dst, slotToObj(fn, frame, scope, src))
                 }
                 Opcode.INT_TO_REAL -> {
                     val src = decoder.readSlot(code, ip)
@@ -711,6 +721,53 @@ class BytecodeVm {
                         ip = target
                     }
                 }
+                Opcode.CALL_SLOT -> {
+                    val calleeSlot = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val argBase = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val argCount = decoder.readConstId(code, ip, 2)
+                    ip += 2
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val callee = slotToObj(fn, frame, scope, calleeSlot)
+                    val args = buildArguments(fn, frame, scope, argBase, argCount)
+                    val result = if (PerfFlags.SCOPE_POOL) {
+                        scope.withChildFrame(args) { child -> callee.callOn(child) }
+                    } else {
+                        callee.callOn(scope.createChildScope(scope.pos, args = args))
+                    }
+                    when (result) {
+                        is ObjInt -> setInt(fn, frame, scope, dst, result.value)
+                        is ObjReal -> setReal(fn, frame, scope, dst, result.value)
+                        is ObjBool -> setBool(fn, frame, scope, dst, result.value)
+                        else -> setObj(fn, frame, scope, dst, result)
+                    }
+                }
+                Opcode.CALL_VIRTUAL -> {
+                    val recvSlot = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val methodId = decoder.readConstId(code, ip, 2)
+                    ip += 2
+                    val argBase = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val argCount = decoder.readConstId(code, ip, 2)
+                    ip += 2
+                    val dst = decoder.readSlot(code, ip)
+                    ip += fn.slotWidth
+                    val receiver = slotToObj(fn, frame, scope, recvSlot)
+                    val nameConst = fn.constants.getOrNull(methodId) as? BytecodeConst.StringVal
+                        ?: error("CALL_VIRTUAL expects StringVal at $methodId")
+                    val args = buildArguments(fn, frame, scope, argBase, argCount)
+                    val site = fn.methodCallSites.getOrPut(startIp) { MethodCallSite(nameConst.value) }
+                    val result = site.invoke(scope, receiver, args)
+                    when (result) {
+                        is ObjInt -> setInt(fn, frame, scope, dst, result.value)
+                        is ObjReal -> setReal(fn, frame, scope, dst, result.value)
+                        is ObjBool -> setBool(fn, frame, scope, dst, result.value)
+                        else -> setObj(fn, frame, scope, dst, result)
+                    }
+                }
                 Opcode.EVAL_FALLBACK -> {
                     val id = decoder.readConstId(code, ip, 2)
                     ip += 2
@@ -749,6 +806,21 @@ class BytecodeVm {
             SlotType.OBJ.code -> frame.getObj(local)
             else -> ObjVoid
         }
+    }
+
+    private fun buildArguments(
+        fn: BytecodeFunction,
+        frame: BytecodeFrame,
+        scope: Scope,
+        argBase: Int,
+        argCount: Int,
+    ): Arguments {
+        if (argCount == 0) return Arguments.EMPTY
+        val list = ArrayList<Obj>(argCount)
+        for (i in 0 until argCount) {
+            list.add(slotToObj(fn, frame, scope, argBase + i))
+        }
+        return Arguments(list)
     }
 
     private fun getObj(fn: BytecodeFunction, frame: BytecodeFrame, scope: Scope, slot: Int): Obj {

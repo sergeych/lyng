@@ -83,7 +83,7 @@ object BytecodeDisassembler {
     private fun operandKinds(op: Opcode): List<OperandKind> {
         return when (op) {
             Opcode.NOP, Opcode.RET_VOID -> emptyList()
-            Opcode.MOVE_OBJ, Opcode.MOVE_INT, Opcode.MOVE_REAL, Opcode.MOVE_BOOL,
+            Opcode.MOVE_OBJ, Opcode.MOVE_INT, Opcode.MOVE_REAL, Opcode.MOVE_BOOL, Opcode.BOX_OBJ,
             Opcode.INT_TO_REAL, Opcode.REAL_TO_INT, Opcode.BOOL_TO_INT, Opcode.INT_TO_BOOL,
             Opcode.NEG_INT, Opcode.NEG_REAL, Opcode.NOT_BOOL, Opcode.INV_INT ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT)
@@ -115,6 +115,8 @@ object BytecodeDisassembler {
                 listOf(OperandKind.SLOT, OperandKind.IP)
             Opcode.CALL_DIRECT, Opcode.CALL_FALLBACK ->
                 listOf(OperandKind.ID, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
+            Opcode.CALL_SLOT ->
+                listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
             Opcode.CALL_VIRTUAL ->
                 listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
             Opcode.GET_FIELD ->

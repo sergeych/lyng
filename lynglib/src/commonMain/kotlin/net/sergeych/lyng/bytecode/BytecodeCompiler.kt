@@ -18,6 +18,7 @@ package net.sergeych.lyng.bytecode
 
 import net.sergeych.lyng.ExpressionStatement
 import net.sergeych.lyng.IfStatement
+import net.sergeych.lyng.ParsedArgument
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Statement
 import net.sergeych.lyng.ToBoolStatement
@@ -70,6 +71,8 @@ class BytecodeCompiler(
             is BinaryOpRef -> compileBinary(ref)
             is UnaryOpRef -> compileUnary(ref)
             is AssignRef -> compileAssign(ref)
+            is CallRef -> compileCall(ref)
+            is MethodCallRef -> compileMethodCall(ref)
             else -> null
         }
     }
@@ -587,6 +590,64 @@ class BytecodeCompiler(
         return CompiledValue(slot, value.type)
     }
 
+    private data class CallArgs(val base: Int, val count: Int)
+
+    private fun compileCall(ref: CallRef): CompiledValue? {
+        if (ref.isOptionalInvoke) return null
+        if (!argsEligible(ref.args, ref.tailBlock)) return null
+        val callee = compileRefWithFallback(ref.target, null, Pos.builtIn) ?: return null
+        val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
+        val dst = allocSlot()
+        builder.emit(Opcode.CALL_SLOT, callee.slot, args.base, args.count, dst)
+        return CompiledValue(dst, SlotType.UNKNOWN)
+    }
+
+    private fun compileMethodCall(ref: MethodCallRef): CompiledValue? {
+        if (ref.isOptional) return null
+        if (!argsEligible(ref.args, ref.tailBlock)) return null
+        val receiver = compileRefWithFallback(ref.receiver, null, Pos.builtIn) ?: return null
+        val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
+        val methodId = builder.addConst(BytecodeConst.StringVal(ref.name))
+        if (methodId > 0xFFFF) return null
+        val dst = allocSlot()
+        builder.emit(Opcode.CALL_VIRTUAL, receiver.slot, methodId, args.base, args.count, dst)
+        return CompiledValue(dst, SlotType.UNKNOWN)
+    }
+
+    private fun argsEligible(args: List<ParsedArgument>, tailBlock: Boolean): Boolean {
+        if (tailBlock) return false
+        for (arg in args) {
+            if (arg.isSplat || arg.name != null) return false
+            if (arg.value !is ExpressionStatement) return false
+        }
+        return true
+    }
+
+    private fun compileCallArgs(args: List<ParsedArgument>, tailBlock: Boolean): CallArgs? {
+        if (tailBlock) return null
+        for (arg in args) {
+            if (arg.isSplat || arg.name != null) return null
+        }
+        if (args.isEmpty()) return CallArgs(base = 0, count = 0)
+        val argSlots = IntArray(args.size) { allocSlot() }
+        for ((index, arg) in args.withIndex()) {
+            val stmt = arg.value
+            val compiled = if (stmt is ExpressionStatement) {
+                compileRefWithFallback(stmt.ref, null, stmt.pos)
+            } else {
+                null
+            } ?: return null
+            val dst = argSlots[index]
+            if (compiled.slot != dst) {
+                builder.emit(Opcode.BOX_OBJ, compiled.slot, dst)
+            } else if (compiled.type != SlotType.OBJ) {
+                builder.emit(Opcode.BOX_OBJ, compiled.slot, dst)
+            }
+            updateSlotType(dst, SlotType.OBJ)
+        }
+        return CallArgs(base = argSlots[0], count = argSlots.size)
+    }
+
     private fun compileIf(name: String, stmt: IfStatement): BytecodeFunction? {
         val conditionStmt = stmt.condition as? ExpressionStatement ?: return null
         val condValue = compileRefWithFallback(conditionStmt.ref, SlotType.BOOL, stmt.pos) ?: return null
@@ -636,11 +697,13 @@ class BytecodeCompiler(
     }
 
     private fun compileRefWithFallback(ref: ObjRef, forceType: SlotType?, pos: Pos): CompiledValue? {
-        val compiled = compileRef(ref)
-        if (compiled != null && (forceType == null || compiled.type == forceType || compiled.type == SlotType.UNKNOWN)) {
-            return if (forceType != null && compiled.type == SlotType.UNKNOWN) {
-                CompiledValue(compiled.slot, forceType)
-            } else compiled
+        var compiled = compileRef(ref)
+        if (compiled != null) {
+            if (forceType == null) return compiled
+            if (compiled.type == forceType) return compiled
+            if (compiled.type == SlotType.UNKNOWN) {
+                compiled = null
+            }
         }
         val slot = allocSlot()
         val stmt = if (forceType == SlotType.BOOL) {
@@ -734,7 +797,24 @@ class BytecodeCompiler(
                 }
                 collectScopeSlotsRef(assignValue(ref))
             }
+            is CallRef -> {
+                collectScopeSlotsRef(ref.target)
+                collectScopeSlotsArgs(ref.args)
+            }
+            is MethodCallRef -> {
+                collectScopeSlotsRef(ref.receiver)
+                collectScopeSlotsArgs(ref.args)
+            }
             else -> {}
+        }
+    }
+
+    private fun collectScopeSlotsArgs(args: List<ParsedArgument>) {
+        for (arg in args) {
+            val stmt = arg.value
+            if (stmt is ExpressionStatement) {
+                collectScopeSlotsRef(stmt.ref)
+            }
         }
     }
 

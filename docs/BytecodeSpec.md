@@ -55,6 +55,7 @@ Behavior:
 Other calls:
 - CALL_VIRTUAL recvSlot, methodId, argBase, argCount, dst
 - CALL_FALLBACK stmtId, argBase, argCount, dst
+- CALL_SLOT calleeSlot, argBase, argCount, dst
 
 ## 4) Binary Encoding Layout
 
@@ -89,6 +90,7 @@ Note: Any opcode can be compiled to FALLBACK if not implemented in a VM pass.
 - MOVE_INT S -> S
 - MOVE_REAL S -> S
 - MOVE_BOOL S -> S
+- BOX_OBJ S -> S
 - CONST_OBJ K -> S
 - CONST_INT K -> S
 - CONST_REAL K -> S
@@ -188,6 +190,7 @@ Note: Any opcode can be compiled to FALLBACK if not implemented in a VM pass.
 - CALL_DIRECT F, S, C, S
 - CALL_VIRTUAL S, M, S, C, S
 - CALL_FALLBACK T, S, C, S
+- CALL_SLOT S, S, C, S
 
 ### Object access (optional, later)
 - GET_FIELD S, M -> S

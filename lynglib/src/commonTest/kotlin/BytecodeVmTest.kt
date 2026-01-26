@@ -16,7 +16,9 @@
 
 import net.sergeych.lyng.ExpressionStatement
 import net.sergeych.lyng.IfStatement
+import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.Statement
 import net.sergeych.lyng.bytecode.BytecodeBuilder
 import net.sergeych.lyng.bytecode.BytecodeCompiler
 import net.sergeych.lyng.bytecode.BytecodeConst
@@ -38,6 +40,7 @@ import net.sergeych.lyng.obj.ObjVoid
 import net.sergeych.lyng.obj.toBool
 import net.sergeych.lyng.obj.toDouble
 import net.sergeych.lyng.obj.toInt
+import net.sergeych.lyng.obj.toLong
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -149,6 +152,28 @@ class BytecodeVmTest {
         val fn = BytecodeCompiler().compileExpression("realPlus", expr) ?: error("bytecode compile failed")
         val result = BytecodeVm().execute(fn, Scope(), emptyList())
         assertEquals(5.75, result.toDouble())
+    }
+
+    @Test
+    fun callSlotInvokesCallable() = kotlinx.coroutines.test.runTest {
+        val callable = object : Statement() {
+            override val pos: Pos = Pos.builtIn
+            override suspend fun execute(scope: Scope) = ObjInt.of(
+                scope.args[0].toLong() + scope.args[1].toLong()
+            )
+        }
+        val builder = BytecodeBuilder()
+        val fnId = builder.addConst(BytecodeConst.ObjRef(callable))
+        val arg0 = builder.addConst(BytecodeConst.IntVal(2L))
+        val arg1 = builder.addConst(BytecodeConst.IntVal(3L))
+        builder.emit(Opcode.CONST_OBJ, fnId, 0)
+        builder.emit(Opcode.CONST_INT, arg0, 1)
+        builder.emit(Opcode.CONST_INT, arg1, 2)
+        builder.emit(Opcode.CALL_SLOT, 0, 1, 2, 3)
+        builder.emit(Opcode.RET, 3)
+        val fn = builder.build("callSlot", localCount = 4)
+        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        assertEquals(5, result.toInt())
     }
 
     @Test

@@ -1155,6 +1155,17 @@ class FieldRef(
         else -> 0L to -1 // no caching for primitives/dynamics without stable shape
     }
 
+    private suspend fun resolveValue(scope: Scope, base: Obj, rec: ObjRecord): Obj {
+        if (rec.type == ObjRecord.Type.Delegated || rec.value is ObjProperty || rec.type == ObjRecord.Type.Property) {
+            val receiver = rec.receiver ?: base
+            return receiver.resolveRecord(scope, rec, name, rec.declaringClass).value
+        }
+        if (rec.receiver != null && rec.declaringClass != null) {
+            return rec.receiver!!.resolveRecord(scope, rec, name, rec.declaringClass).value
+        }
+        return rec.value
+    }
+
     override suspend fun evalValue(scope: Scope): Obj {
         // Mirror get(), but return raw Obj to avoid transient ObjRecord on R-value paths
         val fieldPic = PerfFlags.FIELD_PIC
@@ -1172,14 +1183,14 @@ class FieldRef(
             if (key != 0L) {
                 rGetter1?.let { g -> if (key == rKey1 && ver == rVer1) {
                     if (picCounters) PerfStats.fieldPicHit++
-                    return g(base, scope).value
+                    return resolveValue(scope, base, g(base, scope))
                 } }
                 rGetter2?.let { g -> if (key == rKey2 && ver == rVer2) {
                     if (picCounters) PerfStats.fieldPicHit++
                     val tK = rKey2; val tV = rVer2; val tG = rGetter2
                     rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
                     rKey1 = tK; rVer1 = tV; rGetter1 = tG
-                    return g(base, scope).value
+                    return resolveValue(scope, base, g(base, scope))
                 } }
                 if (size4ReadsEnabled()) rGetter3?.let { g -> if (key == rKey3 && ver == rVer3) {
                     if (picCounters) PerfStats.fieldPicHit++
@@ -1187,7 +1198,7 @@ class FieldRef(
                     rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
                     rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
                     rKey1 = tK; rVer1 = tV; rGetter1 = tG
-                    return g(base, scope).value
+                    return resolveValue(scope, base, g(base, scope))
                 } }
                 if (size4ReadsEnabled()) rGetter4?.let { g -> if (key == rKey4 && ver == rVer4) {
                     if (picCounters) PerfStats.fieldPicHit++
@@ -1196,16 +1207,17 @@ class FieldRef(
                     rKey3 = rKey2; rVer3 = rVer2; rGetter3 = rGetter2
                     rKey2 = rKey1; rVer2 = rVer1; rGetter2 = rGetter1
                     rKey1 = tK; rVer1 = tV; rGetter1 = tG
-                    return g(base, scope).value
+                    return resolveValue(scope, base, g(base, scope))
                 } }
                 if (picCounters) PerfStats.fieldPicMiss++
                 val rec = base.readField(scope, name)
                 // install primary generic getter for this shape
                 rKey1 = key; rVer1 = ver; rGetter1 = { obj, sc -> obj.readField(sc, name) }
-                return rec.value
+                return resolveValue(scope, base, rec)
             }
         }
-        return base.readField(scope, name).value
+        val rec = base.readField(scope, name)
+        return resolveValue(scope, base, rec)
     }
 }
 
@@ -1567,10 +1579,10 @@ class StatementRef(internal val statement: Statement) : ObjRef {
  * Direct function call reference: f(args) and optional f?(args).
  */
 class CallRef(
-    private val target: ObjRef,
-    private val args: List<ParsedArgument>,
-    private val tailBlock: Boolean,
-    private val isOptionalInvoke: Boolean,
+    internal val target: ObjRef,
+    internal val args: List<ParsedArgument>,
+    internal val tailBlock: Boolean,
+    internal val isOptionalInvoke: Boolean,
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
         val usePool = PerfFlags.SCOPE_POOL
@@ -1592,11 +1604,11 @@ class CallRef(
  * Instance method call reference: obj.method(args) and optional obj?.method(args).
  */
 class MethodCallRef(
-    private val receiver: ObjRef,
-    private val name: String,
-    private val args: List<ParsedArgument>,
-    private val tailBlock: Boolean,
-    private val isOptional: Boolean,
+    internal val receiver: ObjRef,
+    internal val name: String,
+    internal val args: List<ParsedArgument>,
+    internal val tailBlock: Boolean,
+    internal val isOptional: Boolean,
 ) : ObjRef {
     // 4-entry PIC for method invocations (guarded by PerfFlags.METHOD_PIC)
     private var mKey1: Long = 0L; private var mVer1: Int = -1; private var mInvoker1: (suspend (Obj, Scope, Arguments) -> Obj)? = null

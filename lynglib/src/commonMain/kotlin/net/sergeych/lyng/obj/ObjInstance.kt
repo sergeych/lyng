@@ -166,8 +166,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             }
             del = del ?: scope.raiseError("Internal error: delegated property $name has no delegate")
             val res = del.invokeInstanceMethod(scope, "getValue", Arguments(this, ObjString(name)))
-            obj.value = res
-            return obj
+            return obj.copy(value = res, type = ObjRecord.Type.Other)
         }
 
         // Map member template to instance storage if applicable

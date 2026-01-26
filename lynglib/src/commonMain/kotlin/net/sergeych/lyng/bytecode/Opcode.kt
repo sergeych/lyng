@@ -27,6 +27,7 @@ enum class Opcode(val code: Int) {
     CONST_REAL(0x07),
     CONST_BOOL(0x08),
     CONST_NULL(0x09),
+    BOX_OBJ(0x0A),
 
     INT_TO_REAL(0x10),
     REAL_TO_INT(0x11),
@@ -110,6 +111,7 @@ enum class Opcode(val code: Int) {
     CALL_DIRECT(0x90),
     CALL_VIRTUAL(0x91),
     CALL_FALLBACK(0x92),
+    CALL_SLOT(0x93),
 
     GET_FIELD(0xA0),
     SET_FIELD(0xA1),
