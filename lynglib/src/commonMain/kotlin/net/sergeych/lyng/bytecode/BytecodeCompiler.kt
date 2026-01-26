@@ -42,6 +42,7 @@ class BytecodeCompiler(
         return when (stmt) {
             is ExpressionStatement -> compileExpression(name, stmt)
             is net.sergeych.lyng.IfStatement -> compileIf(name, stmt)
+            is net.sergeych.lyng.ForInStatement -> compileForIn(name, stmt)
             else -> null
         }
     }
@@ -71,6 +72,10 @@ class BytecodeCompiler(
             is BinaryOpRef -> compileBinary(ref)
             is UnaryOpRef -> compileUnary(ref)
             is AssignRef -> compileAssign(ref)
+            is AssignOpRef -> compileAssignOp(ref)
+            is IncDecRef -> compileIncDec(ref)
+            is ConditionalRef -> compileConditional(ref)
+            is ElvisRef -> compileElvis(ref)
             is CallRef -> compileCall(ref)
             is MethodCallRef -> compileMethodCall(ref)
             else -> null
@@ -590,6 +595,173 @@ class BytecodeCompiler(
         return CompiledValue(slot, value.type)
     }
 
+    private fun compileAssignOp(ref: AssignOpRef): CompiledValue? {
+        val target = ref.target as? LocalSlotRef ?: return null
+        if (!allowLocalSlots) return null
+        if (!target.isMutable || target.isDelegated) return null
+        if (refDepth(target) > 0) return null
+        val slot = scopeSlotMap[ScopeSlotKey(refDepth(target), refSlot(target))] ?: return null
+        val targetType = slotTypes[slot] ?: return null
+        val rhs = compileRef(ref.value) ?: return null
+        val out = slot
+        val result = when (ref.op) {
+            BinOp.PLUS -> compileAssignOpBinary(targetType, rhs, out, Opcode.ADD_INT, Opcode.ADD_REAL, Opcode.ADD_OBJ)
+            BinOp.MINUS -> compileAssignOpBinary(targetType, rhs, out, Opcode.SUB_INT, Opcode.SUB_REAL, Opcode.SUB_OBJ)
+            BinOp.STAR -> compileAssignOpBinary(targetType, rhs, out, Opcode.MUL_INT, Opcode.MUL_REAL, Opcode.MUL_OBJ)
+            BinOp.SLASH -> compileAssignOpBinary(targetType, rhs, out, Opcode.DIV_INT, Opcode.DIV_REAL, Opcode.DIV_OBJ)
+            BinOp.PERCENT -> compileAssignOpBinary(targetType, rhs, out, Opcode.MOD_INT, null, Opcode.MOD_OBJ)
+            else -> null
+        } ?: return null
+        updateSlotType(out, result.type)
+        return CompiledValue(out, result.type)
+    }
+
+    private fun compileAssignOpBinary(
+        targetType: SlotType,
+        rhs: CompiledValue,
+        out: Int,
+        intOp: Opcode,
+        realOp: Opcode?,
+        objOp: Opcode?,
+    ): CompiledValue? {
+        return when (targetType) {
+            SlotType.INT -> {
+                when (rhs.type) {
+                    SlotType.INT -> {
+                        builder.emit(intOp, out, rhs.slot, out)
+                        CompiledValue(out, SlotType.INT)
+                    }
+                    SlotType.REAL -> {
+                        if (realOp == null) return null
+                        val left = allocSlot()
+                        builder.emit(Opcode.INT_TO_REAL, out, left)
+                        builder.emit(realOp, left, rhs.slot, out)
+                        CompiledValue(out, SlotType.REAL)
+                    }
+                    else -> null
+                }
+            }
+            SlotType.REAL -> {
+                if (realOp == null) return null
+                when (rhs.type) {
+                    SlotType.REAL -> {
+                        builder.emit(realOp, out, rhs.slot, out)
+                        CompiledValue(out, SlotType.REAL)
+                    }
+                    SlotType.INT -> {
+                        val right = allocSlot()
+                        builder.emit(Opcode.INT_TO_REAL, rhs.slot, right)
+                        builder.emit(realOp, out, right, out)
+                        CompiledValue(out, SlotType.REAL)
+                    }
+                    else -> null
+                }
+            }
+            SlotType.OBJ -> {
+                if (objOp == null) return null
+                if (rhs.type != SlotType.OBJ) return null
+                builder.emit(objOp, out, rhs.slot, out)
+                CompiledValue(out, SlotType.OBJ)
+            }
+            else -> null
+        }
+    }
+
+    private fun compileIncDec(ref: IncDecRef): CompiledValue? {
+        val target = ref.target as? LocalSlotRef ?: return null
+        if (!allowLocalSlots) return null
+        if (!target.isMutable || target.isDelegated) return null
+        if (refDepth(target) > 0) return null
+        val slot = scopeSlotMap[ScopeSlotKey(refDepth(target), refSlot(target))] ?: return null
+        val slotType = slotTypes[slot] ?: return null
+        return when (slotType) {
+            SlotType.INT -> {
+                if (ref.isPost) {
+                    val old = allocSlot()
+                    builder.emit(Opcode.MOVE_INT, slot, old)
+                    builder.emit(if (ref.isIncrement) Opcode.INC_INT else Opcode.DEC_INT, slot)
+                    CompiledValue(old, SlotType.INT)
+                } else {
+                    builder.emit(if (ref.isIncrement) Opcode.INC_INT else Opcode.DEC_INT, slot)
+                    CompiledValue(slot, SlotType.INT)
+                }
+            }
+            SlotType.REAL -> {
+                val oneSlot = allocSlot()
+                val oneId = builder.addConst(BytecodeConst.RealVal(1.0))
+                builder.emit(Opcode.CONST_REAL, oneId, oneSlot)
+                if (ref.isPost) {
+                    val old = allocSlot()
+                    builder.emit(Opcode.MOVE_REAL, slot, old)
+                    val op = if (ref.isIncrement) Opcode.ADD_REAL else Opcode.SUB_REAL
+                    builder.emit(op, slot, oneSlot, slot)
+                    CompiledValue(old, SlotType.REAL)
+                } else {
+                    val op = if (ref.isIncrement) Opcode.ADD_REAL else Opcode.SUB_REAL
+                    builder.emit(op, slot, oneSlot, slot)
+                    CompiledValue(slot, SlotType.REAL)
+                }
+            }
+            else -> null
+        }
+    }
+
+    private fun compileConditional(ref: ConditionalRef): CompiledValue? {
+        val condition = compileRefWithFallback(ref.condition, SlotType.BOOL, Pos.builtIn) ?: return null
+        if (condition.type != SlotType.BOOL) return null
+        val resultSlot = allocSlot()
+        val elseLabel = builder.label()
+        val endLabel = builder.label()
+        builder.emit(
+            Opcode.JMP_IF_FALSE,
+            listOf(BytecodeBuilder.Operand.IntVal(condition.slot), BytecodeBuilder.Operand.LabelRef(elseLabel))
+        )
+        val thenValue = compileRefWithFallback(ref.ifTrue, null, Pos.builtIn) ?: return null
+        val thenObj = ensureObjSlot(thenValue)
+        builder.emit(Opcode.MOVE_OBJ, thenObj.slot, resultSlot)
+        builder.emit(Opcode.JMP, listOf(BytecodeBuilder.Operand.LabelRef(endLabel)))
+        builder.mark(elseLabel)
+        val elseValue = compileRefWithFallback(ref.ifFalse, null, Pos.builtIn) ?: return null
+        val elseObj = ensureObjSlot(elseValue)
+        builder.emit(Opcode.MOVE_OBJ, elseObj.slot, resultSlot)
+        builder.mark(endLabel)
+        updateSlotType(resultSlot, SlotType.OBJ)
+        return CompiledValue(resultSlot, SlotType.OBJ)
+    }
+
+    private fun compileElvis(ref: ElvisRef): CompiledValue? {
+        val leftValue = compileRefWithFallback(ref.left, null, Pos.builtIn) ?: return null
+        val leftObj = ensureObjSlot(leftValue)
+        val resultSlot = allocSlot()
+        val nullSlot = allocSlot()
+        builder.emit(Opcode.CONST_NULL, nullSlot)
+        val cmpSlot = allocSlot()
+        builder.emit(Opcode.CMP_REF_EQ_OBJ, leftObj.slot, nullSlot, cmpSlot)
+        val rightLabel = builder.label()
+        val endLabel = builder.label()
+        builder.emit(
+            Opcode.JMP_IF_TRUE,
+            listOf(BytecodeBuilder.Operand.IntVal(cmpSlot), BytecodeBuilder.Operand.LabelRef(rightLabel))
+        )
+        builder.emit(Opcode.MOVE_OBJ, leftObj.slot, resultSlot)
+        builder.emit(Opcode.JMP, listOf(BytecodeBuilder.Operand.LabelRef(endLabel)))
+        builder.mark(rightLabel)
+        val rightValue = compileRefWithFallback(ref.right, null, Pos.builtIn) ?: return null
+        val rightObj = ensureObjSlot(rightValue)
+        builder.emit(Opcode.MOVE_OBJ, rightObj.slot, resultSlot)
+        builder.mark(endLabel)
+        updateSlotType(resultSlot, SlotType.OBJ)
+        return CompiledValue(resultSlot, SlotType.OBJ)
+    }
+
+    private fun ensureObjSlot(value: CompiledValue): CompiledValue {
+        if (value.type == SlotType.OBJ) return value
+        val dst = allocSlot()
+        builder.emit(Opcode.BOX_OBJ, value.slot, dst)
+        updateSlotType(dst, SlotType.OBJ)
+        return CompiledValue(dst, SlotType.OBJ)
+    }
+
     private data class CallArgs(val base: Int, val count: Int)
 
     private fun compileCall(ref: CallRef): CompiledValue? {
@@ -680,10 +852,113 @@ class BytecodeCompiler(
         return builder.build(name, localCount, scopeSlotDepths, scopeSlotIndices, scopeSlotNames)
     }
 
+    private fun compileForIn(name: String, stmt: net.sergeych.lyng.ForInStatement): BytecodeFunction? {
+        if (stmt.canBreak) return null
+        val range = stmt.constRange ?: return null
+        val loopSlotIndex = stmt.loopSlotPlan[stmt.loopVarName] ?: return null
+        val loopSlot = scopeSlotMap[ScopeSlotKey(0, loopSlotIndex)] ?: return null
+        val planId = builder.addConst(BytecodeConst.SlotPlan(stmt.loopSlotPlan))
+        builder.emit(Opcode.PUSH_SCOPE, planId)
+
+        val iSlot = allocSlot()
+        val endSlot = allocSlot()
+        val startId = builder.addConst(BytecodeConst.IntVal(range.start))
+        val endId = builder.addConst(BytecodeConst.IntVal(range.endExclusive))
+        builder.emit(Opcode.CONST_INT, startId, iSlot)
+        builder.emit(Opcode.CONST_INT, endId, endSlot)
+
+        val resultSlot = allocSlot()
+        val voidId = builder.addConst(BytecodeConst.ObjRef(ObjVoid))
+        builder.emit(Opcode.CONST_OBJ, voidId, resultSlot)
+
+        val loopLabel = builder.label()
+        val endLabel = builder.label()
+        builder.mark(loopLabel)
+        val cmpSlot = allocSlot()
+        builder.emit(Opcode.CMP_GTE_INT, iSlot, endSlot, cmpSlot)
+        builder.emit(
+            Opcode.JMP_IF_TRUE,
+            listOf(BytecodeBuilder.Operand.IntVal(cmpSlot), BytecodeBuilder.Operand.LabelRef(endLabel))
+        )
+        builder.emit(Opcode.MOVE_INT, iSlot, loopSlot)
+        val bodyValue = compileStatementValueOrFallback(stmt.body) ?: return null
+        val bodyObj = ensureObjSlot(bodyValue)
+        builder.emit(Opcode.MOVE_OBJ, bodyObj.slot, resultSlot)
+        builder.emit(Opcode.INC_INT, iSlot)
+        builder.emit(Opcode.JMP, listOf(BytecodeBuilder.Operand.LabelRef(loopLabel)))
+
+        builder.mark(endLabel)
+        if (stmt.elseStatement != null) {
+            val elseValue = compileStatementValueOrFallback(stmt.elseStatement) ?: return null
+            val elseObj = ensureObjSlot(elseValue)
+            builder.emit(Opcode.MOVE_OBJ, elseObj.slot, resultSlot)
+        }
+        builder.emit(Opcode.POP_SCOPE)
+        builder.emit(Opcode.RET, resultSlot)
+
+        val localCount = maxOf(nextSlot, resultSlot + 1) - scopeSlotCount
+        return builder.build(name, localCount, scopeSlotDepths, scopeSlotIndices, scopeSlotNames)
+    }
+
     private fun compileStatementValue(stmt: Statement): CompiledValue? {
         return when (stmt) {
             is ExpressionStatement -> compileRefWithFallback(stmt.ref, null, stmt.pos)
             else -> null
+        }
+    }
+
+    private fun compileStatementValueOrFallback(stmt: Statement): CompiledValue? {
+        return when (stmt) {
+            is ExpressionStatement -> compileRefWithFallback(stmt.ref, null, stmt.pos)
+            is IfStatement -> compileIfExpression(stmt)
+            else -> {
+                val slot = allocSlot()
+                val id = builder.addFallback(stmt)
+                builder.emit(Opcode.EVAL_FALLBACK, id, slot)
+                updateSlotType(slot, SlotType.OBJ)
+                CompiledValue(slot, SlotType.OBJ)
+            }
+        }
+    }
+
+    private fun compileIfExpression(stmt: IfStatement): CompiledValue? {
+        val condition = compileCondition(stmt.condition, stmt.pos) ?: return null
+        if (condition.type != SlotType.BOOL) return null
+        val resultSlot = allocSlot()
+        val elseLabel = builder.label()
+        val endLabel = builder.label()
+        builder.emit(
+            Opcode.JMP_IF_FALSE,
+            listOf(BytecodeBuilder.Operand.IntVal(condition.slot), BytecodeBuilder.Operand.LabelRef(elseLabel))
+        )
+        val thenValue = compileStatementValueOrFallback(stmt.ifBody) ?: return null
+        val thenObj = ensureObjSlot(thenValue)
+        builder.emit(Opcode.MOVE_OBJ, thenObj.slot, resultSlot)
+        builder.emit(Opcode.JMP, listOf(BytecodeBuilder.Operand.LabelRef(endLabel)))
+        builder.mark(elseLabel)
+        if (stmt.elseBody != null) {
+            val elseValue = compileStatementValueOrFallback(stmt.elseBody) ?: return null
+            val elseObj = ensureObjSlot(elseValue)
+            builder.emit(Opcode.MOVE_OBJ, elseObj.slot, resultSlot)
+        } else {
+            val id = builder.addConst(BytecodeConst.ObjRef(ObjVoid))
+            builder.emit(Opcode.CONST_OBJ, id, resultSlot)
+        }
+        builder.mark(endLabel)
+        updateSlotType(resultSlot, SlotType.OBJ)
+        return CompiledValue(resultSlot, SlotType.OBJ)
+    }
+
+    private fun compileCondition(stmt: Statement, pos: Pos): CompiledValue? {
+        return when (stmt) {
+            is ExpressionStatement -> compileRefWithFallback(stmt.ref, SlotType.BOOL, stmt.pos)
+            else -> {
+                val slot = allocSlot()
+                val id = builder.addFallback(ToBoolStatement(stmt, pos))
+                builder.emit(Opcode.EVAL_FALLBACK, id, slot)
+                updateSlotType(slot, SlotType.BOOL)
+                CompiledValue(slot, SlotType.BOOL)
+            }
         }
     }
 
@@ -764,6 +1039,21 @@ class BytecodeCompiler(
                 collectScopeSlots(stmt.ifBody)
                 stmt.elseBody?.let { collectScopeSlots(it) }
             }
+            is net.sergeych.lyng.ForInStatement -> {
+                val loopSlotIndex = stmt.loopSlotPlan[stmt.loopVarName]
+                if (loopSlotIndex != null) {
+                    val key = ScopeSlotKey(0, loopSlotIndex)
+                    if (!scopeSlotMap.containsKey(key)) {
+                        scopeSlotMap[key] = scopeSlotMap.size
+                    }
+                    if (!scopeSlotNameMap.containsKey(key)) {
+                        scopeSlotNameMap[key] = stmt.loopVarName
+                    }
+                }
+                collectScopeSlots(stmt.source)
+                collectScopeSlots(stmt.body)
+                stmt.elseStatement?.let { collectScopeSlots(it) }
+            }
             else -> {}
         }
     }
@@ -796,6 +1086,20 @@ class BytecodeCompiler(
                     }
                 }
                 collectScopeSlotsRef(assignValue(ref))
+            }
+            is AssignOpRef -> {
+                collectScopeSlotsRef(ref.target)
+                collectScopeSlotsRef(ref.value)
+            }
+            is IncDecRef -> collectScopeSlotsRef(ref.target)
+            is ConditionalRef -> {
+                collectScopeSlotsRef(ref.condition)
+                collectScopeSlotsRef(ref.ifTrue)
+                collectScopeSlotsRef(ref.ifFalse)
+            }
+            is ElvisRef -> {
+                collectScopeSlotsRef(ref.left)
+                collectScopeSlotsRef(ref.right)
             }
             is CallRef -> {
                 collectScopeSlotsRef(ref.target)

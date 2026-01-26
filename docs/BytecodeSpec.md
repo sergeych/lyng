@@ -30,6 +30,9 @@ slots[localCount .. localCount+argCount-1]  arguments
 - scopeSlotNames: array sized scopeSlotCount, each entry nullable.
 - Intended for disassembly/debug tooling; VM semantics do not depend on it.
 
+### Constant pool extras
+- SlotPlan: map of name -> slot index, used by PUSH_SCOPE to pre-allocate and map loop locals.
+
 ## 2) Slot ID Width
 
 Per frame, select:
@@ -185,6 +188,12 @@ Note: Any opcode can be compiled to FALLBACK if not implemented in a VM pass.
 - JMP_IF_FALSE S, I
 - RET S
 - RET_VOID
+- PUSH_SCOPE K
+- POP_SCOPE
+
+### Scope setup
+- PUSH_SCOPE uses const `SlotPlan` (name -> slot index) to create a child scope and apply slot mapping.
+- POP_SCOPE restores the parent scope.
 
 ### Calls
 - CALL_DIRECT F, S, C, S

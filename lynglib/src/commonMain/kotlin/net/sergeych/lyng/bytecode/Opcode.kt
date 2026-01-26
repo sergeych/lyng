@@ -107,6 +107,8 @@ enum class Opcode(val code: Int) {
     JMP_IF_FALSE(0x82),
     RET(0x83),
     RET_VOID(0x84),
+    PUSH_SCOPE(0x85),
+    POP_SCOPE(0x86),
 
     CALL_DIRECT(0x90),
     CALL_VIRTUAL(0x91),

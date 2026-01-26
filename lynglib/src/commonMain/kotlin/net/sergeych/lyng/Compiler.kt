@@ -2556,173 +2556,22 @@ class Compiler(
             }
             val loopSlotPlanSnapshot = slotPlanIndices(loopSlotPlan)
 
-            return object : Statement() {
-                override val pos: Pos = body.pos
-                override suspend fun execute(scope: Scope): Obj {
-                    val forContext = scope.createChildScope(start)
-                    if (loopSlotPlanSnapshot.isNotEmpty()) {
-                        forContext.applySlotPlan(loopSlotPlanSnapshot)
-                    }
-
-                    // loop var: StoredObject
-                    val loopSO = forContext.addItem(tVar.value, true, ObjNull)
-
-                    if (constRange != null && PerfFlags.PRIMITIVE_FASTOPS) {
-                        val loopSlotIndex = forContext.getSlotIndexOf(tVar.value) ?: -1
-                        return loopIntRange(
-                            forContext,
-                            constRange.start,
-                            constRange.endExclusive,
-                            loopSO,
-                            loopSlotIndex,
-                            body,
-                            elseStatement,
-                            label,
-                            canBreak
-                        )
-                    }
-                    // insofar we suggest source object is enumerable. Later we might need to add checks
-                    val sourceObj = source.execute(forContext)
-
-                    if (sourceObj is ObjRange && sourceObj.isIntRange && PerfFlags.PRIMITIVE_FASTOPS) {
-                        val loopSlotIndex = forContext.getSlotIndexOf(tVar.value) ?: -1
-                        return loopIntRange(
-                            forContext,
-                            sourceObj.start!!.toLong(),
-                            if (sourceObj.isEndInclusive)
-                                sourceObj.end!!.toLong() + 1
-                            else
-                                sourceObj.end!!.toLong(),
-                            loopSO,
-                            loopSlotIndex,
-                            body,
-                            elseStatement,
-                            label,
-                            canBreak
-                        )
-                    } else if (sourceObj.isInstanceOf(ObjIterable)) {
-                        return loopIterable(forContext, sourceObj, loopSO, body, elseStatement, label, canBreak)
-                    } else {
-                        val size = runCatching { sourceObj.readField(forContext, "size").value.toInt() }
-                            .getOrElse {
-                                throw ScriptError(
-                                    tOp.pos,
-                                    "object is not enumerable: no size in $sourceObj",
-                                    it
-                                )
-                            }
-
-                        var result: Obj = ObjVoid
-                        var breakCaught = false
-
-                        if (size > 0) {
-                            var current = runCatching { sourceObj.getAt(forContext, ObjInt.of(0)) }
-                                .getOrElse {
-                                    throw ScriptError(
-                                        tOp.pos,
-                                        "object is not enumerable: no index access for ${sourceObj.inspect(scope)}",
-                                        it
-                                    )
-                                }
-                            var index = 0
-                            while (true) {
-                                loopSO.value = current
-                                try {
-                                    result = body.execute(forContext)
-                                } catch (lbe: LoopBreakContinueException) {
-                                    if (lbe.label == label || lbe.label == null) {
-                                        breakCaught = true
-                                        if (lbe.doContinue) continue
-                                        else {
-                                            result = lbe.result
-                                            break
-                                        }
-                                    } else
-                                        throw lbe
-                                }
-                                if (++index >= size) break
-                                current = sourceObj.getAt(forContext, ObjInt.of(index.toLong()))
-                            }
-                        }
-                        if (!breakCaught && elseStatement != null) {
-                            result = elseStatement.execute(scope)
-                        }
-                        return result
-                    }
-                }
-            }
+            return ForInStatement(
+                loopVarName = tVar.value,
+                source = source,
+                constRange = constRange,
+                body = body,
+                elseStatement = elseStatement,
+                label = label,
+                canBreak = canBreak,
+                loopSlotPlan = loopSlotPlanSnapshot,
+                pos = body.pos
+            )
         } else {
             // maybe other loops?
             throw ScriptError(tOp.pos, "Unsupported for-loop syntax")
         }
     }
-
-    private suspend fun loopIntRange(
-        forScope: Scope, start: Long, end: Long, loopVar: ObjRecord, loopSlotIndex: Int,
-        body: Statement, elseStatement: Statement?, label: String?, catchBreak: Boolean
-    ): Obj {
-        var result: Obj = ObjVoid
-        val cacheLow = ObjInt.CACHE_LOW
-        val cacheHigh = ObjInt.CACHE_HIGH
-        val useCache = start >= cacheLow && end <= cacheHigh + 1
-        val cache = if (useCache) ObjInt.cacheArray() else null
-        val useSlot = loopSlotIndex >= 0
-        if (catchBreak) {
-            if (useCache && cache != null) {
-                var i = start
-                while (i < end) {
-                    val v = cache[(i - cacheLow).toInt()]
-                    if (useSlot) forScope.setSlotValue(loopSlotIndex, v) else loopVar.value = v
-                    try {
-                        result = body.execute(forScope)
-                    } catch (lbe: LoopBreakContinueException) {
-                        if (lbe.label == label || lbe.label == null) {
-                            if (lbe.doContinue) {
-                                i++
-                                continue
-                            }
-                            return lbe.result
-                        }
-                        throw lbe
-                    }
-                    i++
-                }
-            } else {
-                for (i in start..<end) {
-                    val v = ObjInt.of(i)
-                    if (useSlot) forScope.setSlotValue(loopSlotIndex, v) else loopVar.value = v
-                    try {
-                        result = body.execute(forScope)
-                    } catch (lbe: LoopBreakContinueException) {
-                        if (lbe.label == label || lbe.label == null) {
-                            if (lbe.doContinue) continue
-                            return lbe.result
-                        }
-                        throw lbe
-                    }
-                }
-            }
-        } else {
-            if (useCache && cache != null) {
-                var i = start
-                while (i < end) {
-                    val v = cache[(i - cacheLow).toInt()]
-                    if (useSlot) forScope.setSlotValue(loopSlotIndex, v) else loopVar.value = v
-                    result = body.execute(forScope)
-                    i++
-                }
-            } else {
-                for (i in start..<end) {
-                    val v = ObjInt.of(i)
-                    if (useSlot) forScope.setSlotValue(loopSlotIndex, v) else loopVar.value = v
-                    result = body.execute(forScope)
-                }
-            }
-        }
-        return elseStatement?.execute(forScope) ?: result
-    }
-
-    private data class ConstIntRange(val start: Long, val endExclusive: Long)
 
     private fun constIntRangeOrNull(ref: ObjRef): ConstIntRange? {
         if (ref !is RangeRef) return null
@@ -2741,40 +2590,6 @@ class Compiler(
             }
             else -> null
         }
-    }
-
-    private suspend fun loopIterable(
-        forScope: Scope, sourceObj: Obj, loopVar: ObjRecord,
-        body: Statement, elseStatement: Statement?, label: String?,
-        catchBreak: Boolean
-    ): Obj {
-        var result: Obj = ObjVoid
-        var breakCaught = false
-        sourceObj.enumerate(forScope) { item ->
-            loopVar.value = item
-            if (catchBreak) {
-                try {
-                    result = body.execute(forScope)
-                    true
-                } catch (lbe: LoopBreakContinueException) {
-                    if (lbe.label == label || lbe.label == null) {
-                        if (lbe.doContinue) true
-                        else {
-                            result = lbe.result
-                            breakCaught = true
-                            false
-                        }
-                    } else
-                        throw lbe
-                }
-            } else {
-                result = body.execute(forScope)
-                true
-            }
-        }
-        return if (!breakCaught && elseStatement != null) {
-            elseStatement.execute(forScope)
-        } else result
     }
 
     @Suppress("UNUSED_VARIABLE")

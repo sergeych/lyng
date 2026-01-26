@@ -385,9 +385,9 @@ class BinaryOpRef(internal val op: BinOp, internal val left: ObjRef, internal va
 
 /** Conditional (ternary) operator reference: cond ? a : b */
 class ConditionalRef(
-    private val condition: ObjRef,
-    private val ifTrue: ObjRef,
-    private val ifFalse: ObjRef
+    internal val condition: ObjRef,
+    internal val ifTrue: ObjRef,
+    internal val ifFalse: ObjRef
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
         return evalCondition(scope).get(scope)
@@ -661,9 +661,9 @@ class QualifiedThisMethodSlotCallRef(
 
 /** Assignment compound op: target op= value */
 class AssignOpRef(
-    private val op: BinOp,
-    private val target: ObjRef,
-    private val value: ObjRef,
+    internal val op: BinOp,
+    internal val target: ObjRef,
+    internal val value: ObjRef,
     private val atPos: Pos,
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
@@ -723,9 +723,9 @@ class AssignOpRef(
 
 /** Pre/post ++/-- on l-values */
 class IncDecRef(
-    private val target: ObjRef,
-    private val isIncrement: Boolean,
-    private val isPost: Boolean,
+    internal val target: ObjRef,
+    internal val isIncrement: Boolean,
+    internal val isPost: Boolean,
     private val atPos: Pos,
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
@@ -751,7 +751,7 @@ class IncDecRef(
 }
 
 /** Elvis operator reference: a ?: b */
-class ElvisRef(private val left: ObjRef, private val right: ObjRef) : ObjRef {
+class ElvisRef(internal val left: ObjRef, internal val right: ObjRef) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
         val a = left.evalValue(scope)
         val r = if (a != ObjNull) a else right.evalValue(scope)

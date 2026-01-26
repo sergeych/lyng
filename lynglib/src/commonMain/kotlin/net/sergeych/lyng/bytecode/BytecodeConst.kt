@@ -25,4 +25,5 @@ sealed class BytecodeConst {
     data class RealVal(val value: Double) : BytecodeConst()
     data class StringVal(val value: String) : BytecodeConst()
     data class ObjRef(val value: Obj) : BytecodeConst()
+    data class SlotPlan(val plan: Map<String, Int>) : BytecodeConst()
 }

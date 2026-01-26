@@ -22,7 +22,9 @@ import net.sergeych.lyng.Scope
 import net.sergeych.lyng.obj.*
 
 class BytecodeVm {
-    suspend fun execute(fn: BytecodeFunction, scope: Scope, args: List<Obj>): Obj {
+    suspend fun execute(fn: BytecodeFunction, scope0: Scope, args: List<Obj>): Obj {
+        val scopeStack = ArrayDeque<Scope>()
+        var scope = scope0
         val frame = BytecodeFrame(fn.localCount, args.size)
         for (i in args.indices) {
             frame.setObj(frame.argBase + i, args[i])
@@ -720,6 +722,21 @@ class BytecodeVm {
                     if (getBool(fn, frame, scope, cond)) {
                         ip = target
                     }
+                }
+                Opcode.PUSH_SCOPE -> {
+                    val constId = decoder.readConstId(code, ip, fn.constIdWidth)
+                    ip += fn.constIdWidth
+                    val planConst = fn.constants[constId] as? BytecodeConst.SlotPlan
+                        ?: error("PUSH_SCOPE expects SlotPlan at $constId")
+                    scopeStack.addLast(scope)
+                    scope = scope.createChildScope()
+                    if (planConst.plan.isNotEmpty()) {
+                        scope.applySlotPlan(planConst.plan)
+                    }
+                }
+                Opcode.POP_SCOPE -> {
+                    scope = scopeStack.removeLastOrNull()
+                        ?: error("Scope stack underflow in POP_SCOPE")
                 }
                 Opcode.CALL_SLOT -> {
                     val calleeSlot = decoder.readSlot(code, ip)
