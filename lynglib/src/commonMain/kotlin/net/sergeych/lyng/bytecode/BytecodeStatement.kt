@@ -23,30 +23,111 @@ import net.sergeych.lyng.obj.Obj
 
 class BytecodeStatement private constructor(
     val original: Statement,
-    private val function: BytecodeFunction,
+    private val function: CmdFunction,
 ) : Statement(original.isStaticConst, original.isConst, original.returnType) {
     override val pos: Pos = original.pos
 
     override suspend fun execute(scope: Scope): Obj {
-        return BytecodeVm().execute(function, scope, emptyList())
+        return CmdVm().execute(function, scope, emptyList())
     }
 
-    internal fun bytecodeFunction(): BytecodeFunction = function
+    internal fun bytecodeFunction(): CmdFunction = function
 
     companion object {
         fun wrap(statement: Statement, nameHint: String, allowLocalSlots: Boolean): Statement {
             if (statement is BytecodeStatement) return statement
-            val compiler = BytecodeCompiler(allowLocalSlots = allowLocalSlots)
+            val hasUnsupported = containsUnsupportedStatement(statement)
+            if (hasUnsupported) return unwrapDeep(statement)
+            val safeLocals = allowLocalSlots
+            val compiler = BytecodeCompiler(allowLocalSlots = safeLocals)
             val compiled = compiler.compileStatement(nameHint, statement)
             val fn = compiled ?: run {
-                val builder = BytecodeBuilder()
+                val builder = CmdBuilder()
                 val slot = 0
                 val id = builder.addFallback(statement)
                 builder.emit(Opcode.EVAL_FALLBACK, id, slot)
                 builder.emit(Opcode.RET, slot)
-                builder.build(nameHint, localCount = 1)
+                builder.build(
+                    nameHint,
+                    localCount = 1,
+                    addrCount = 0,
+                    localSlotNames = emptyArray(),
+                    localSlotMutables = BooleanArray(0),
+                    localSlotDepths = IntArray(0)
+                )
             }
             return BytecodeStatement(statement, fn)
+        }
+
+        private fun containsUnsupportedStatement(stmt: Statement): Boolean {
+            val target = if (stmt is BytecodeStatement) stmt.original else stmt
+            return when (target) {
+                is net.sergeych.lyng.ExpressionStatement -> false
+                is net.sergeych.lyng.IfStatement -> {
+                    containsUnsupportedStatement(target.condition) ||
+                        containsUnsupportedStatement(target.ifBody) ||
+                        (target.elseBody?.let { containsUnsupportedStatement(it) } ?: false)
+                }
+                is net.sergeych.lyng.ForInStatement -> {
+                    target.constRange == null || target.canBreak ||
+                        containsUnsupportedStatement(target.source) ||
+                        containsUnsupportedStatement(target.body) ||
+                        (target.elseStatement?.let { containsUnsupportedStatement(it) } ?: false)
+                }
+                is net.sergeych.lyng.BlockStatement ->
+                    target.statements().any { containsUnsupportedStatement(it) }
+                is net.sergeych.lyng.VarDeclStatement ->
+                    target.initializer?.let { containsUnsupportedStatement(it) } ?: false
+                else -> true
+            }
+        }
+
+        private fun unwrapDeep(stmt: Statement): Statement {
+            return when (stmt) {
+                is BytecodeStatement -> unwrapDeep(stmt.original)
+                is net.sergeych.lyng.BlockStatement -> {
+                    val unwrapped = stmt.statements().map { unwrapDeep(it) }
+                    net.sergeych.lyng.BlockStatement(
+                        net.sergeych.lyng.Script(stmt.pos, unwrapped),
+                        stmt.slotPlan,
+                        stmt.pos
+                    )
+                }
+                is net.sergeych.lyng.VarDeclStatement -> {
+                    net.sergeych.lyng.VarDeclStatement(
+                        stmt.name,
+                        stmt.isMutable,
+                        stmt.visibility,
+                        stmt.initializer?.let { unwrapDeep(it) },
+                        stmt.isTransient,
+                        stmt.slotIndex,
+                        stmt.slotDepth,
+                        stmt.pos
+                    )
+                }
+                is net.sergeych.lyng.IfStatement -> {
+                    net.sergeych.lyng.IfStatement(
+                        unwrapDeep(stmt.condition),
+                        unwrapDeep(stmt.ifBody),
+                        stmt.elseBody?.let { unwrapDeep(it) },
+                        stmt.pos
+                    )
+                }
+                is net.sergeych.lyng.ForInStatement -> {
+                    net.sergeych.lyng.ForInStatement(
+                        stmt.loopVarName,
+                        unwrapDeep(stmt.source),
+                        stmt.constRange,
+                        unwrapDeep(stmt.body),
+                        stmt.elseStatement?.let { unwrapDeep(it) },
+                        stmt.label,
+                        stmt.canBreak,
+                        stmt.loopSlotPlan,
+                        stmt.pos
+                    )
+                }
+                else -> stmt
+            }
         }
     }
 }

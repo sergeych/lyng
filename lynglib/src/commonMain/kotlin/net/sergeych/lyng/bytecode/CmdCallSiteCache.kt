@@ -16,11 +16,6 @@
 
 package net.sergeych.lyng.bytecode
 
-@kotlin.native.concurrent.ThreadLocal
-internal actual object BytecodeCallSiteCache {
-    private val cache = mutableMapOf<BytecodeFunction, MutableMap<Int, MethodCallSite>>()
-
-    actual fun methodCallSites(fn: BytecodeFunction): MutableMap<Int, MethodCallSite> {
-        return cache.getOrPut(fn) { mutableMapOf() }
-    }
+internal expect object CmdCallSiteCache {
+    fun methodCallSites(fn: CmdFunction): MutableMap<Int, MethodCallSite>
 }

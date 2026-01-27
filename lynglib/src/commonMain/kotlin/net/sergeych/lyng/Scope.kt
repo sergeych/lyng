@@ -18,7 +18,7 @@
 package net.sergeych.lyng
 
 import net.sergeych.lyng.obj.*
-import net.sergeych.lyng.bytecode.BytecodeDisassembler
+import net.sergeych.lyng.bytecode.CmdDisassembler
 import net.sergeych.lyng.bytecode.BytecodeStatement
 import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.pacman.ImportProvider
@@ -339,6 +339,8 @@ open class Scope(
 
     internal val objects = mutableMapOf<String, ObjRecord>()
 
+    internal fun getLocalRecordDirect(name: String): ObjRecord? = objects[name]
+
     open operator fun get(name: String): ObjRecord? {
         if (name == "this") return thisObj.asReadonly
 
@@ -381,6 +383,8 @@ open class Scope(
     fun setSlotValue(index: Int, newValue: Obj) {
         slots[index].value = newValue
     }
+    val slotCount: Int
+        get() = slots.size
 
     fun getSlotIndexOf(name: String): Int? = nameToSlot[name]
     fun allocateSlotFor(name: String, record: ObjRecord): Int {
@@ -438,6 +442,20 @@ open class Scope(
                 nameToSlot[name] = idx
             }
         }
+    }
+
+    fun hasSlotPlanConflict(plan: Map<String, Int>): Boolean {
+        if (plan.isEmpty() || nameToSlot.isEmpty()) return false
+        val planIndexToNames = HashMap<Int, HashSet<String>>(plan.size)
+        for ((name, idx) in plan) {
+            val names = planIndexToNames.getOrPut(idx) { HashSet(2) }
+            names.add(name)
+        }
+        for ((existingName, existingIndex) in nameToSlot) {
+            val plannedNames = planIndexToNames[existingIndex] ?: continue
+            if (!plannedNames.contains(existingName)) return true
+        }
+        return false
     }
 
     /**
@@ -651,7 +669,7 @@ open class Scope(
         val bytecode = (stmt as? BytecodeStatement)?.bytecodeFunction()
             ?: (stmt as? BytecodeBodyProvider)?.bytecodeBody()?.bytecodeFunction()
             ?: return "$name is not a compiled body"
-        return BytecodeDisassembler.disassemble(bytecode)
+        return CmdDisassembler.disassemble(bytecode)
     }
 
     fun addFn(vararg names: String, fn: suspend Scope.() -> Obj) {

@@ -16,10 +16,15 @@
 
 package net.sergeych.lyng.bytecode
 
-internal actual object BytecodeCallSiteCache {
-    private val cache = mutableMapOf<BytecodeFunction, MutableMap<Int, MethodCallSite>>()
+import java.util.IdentityHashMap
 
-    actual fun methodCallSites(fn: BytecodeFunction): MutableMap<Int, MethodCallSite> {
-        return cache.getOrPut(fn) { mutableMapOf() }
+internal actual object CmdCallSiteCache {
+    private val cache = ThreadLocal.withInitial {
+        IdentityHashMap<CmdFunction, MutableMap<Int, MethodCallSite>>()
+    }
+
+    actual fun methodCallSites(fn: CmdFunction): MutableMap<Int, MethodCallSite> {
+        val map = cache.get()
+        return map.getOrPut(fn) { mutableMapOf() }
     }
 }

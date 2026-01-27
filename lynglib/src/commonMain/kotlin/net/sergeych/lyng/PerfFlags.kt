@@ -72,4 +72,5 @@ object PerfFlags {
 
     // Specialized non-allocating integer range iteration in hot loops
     var RANGE_FAST_ITER: Boolean = PerfDefaults.RANGE_FAST_ITER
+
 }

@@ -21,7 +21,7 @@ import net.sergeych.lyng.Compiler
 import net.sergeych.lyng.ForInStatement
 import net.sergeych.lyng.Script
 import net.sergeych.lyng.Statement
-import net.sergeych.lyng.bytecode.BytecodeDisassembler
+import net.sergeych.lyng.bytecode.CmdDisassembler
 import net.sergeych.lyng.bytecode.BytecodeStatement
 import net.sergeych.lyng.obj.ObjInt
 import kotlin.time.TimeSource
@@ -56,8 +56,11 @@ class NestedRangeBenchmarkTest {
         val scope = Script.newScope()
         scope.eval(script)
         val fnDisasm = scope.disassembleSymbol("naiveCountHappyNumbers")
-        println("[DEBUG_LOG] [BENCH] nested-happy function naiveCountHappyNumbers bytecode:\n$fnDisasm")
+        println("[DEBUG_LOG] [BENCH] nested-happy function naiveCountHappyNumbers cmd:\n$fnDisasm")
+        runMode(scope)
+    }
 
+    private suspend fun runMode(scope: net.sergeych.lyng.Scope) {
         val start = TimeSource.Monotonic.markNow()
         val result = scope.eval("naiveCountHappyNumbers()") as ObjInt
         val elapsedMs = start.elapsedNow().inWholeMilliseconds
@@ -83,13 +86,13 @@ class NestedRangeBenchmarkTest {
                 "$slotName@${fn.scopeSlotDepths[idx]}:${fn.scopeSlotIndices[idx]}"
             }
             println("[DEBUG_LOG] [BENCH] nested-happy slots depth=$depth: ${slots.joinToString(", ")}")
-            val disasm = BytecodeDisassembler.disassemble(fn)
-            println("[DEBUG_LOG] [BENCH] nested-happy bytecode depth=$depth:\n$disasm")
+            val disasm = CmdDisassembler.disassemble(fn)
+            println("[DEBUG_LOG] [BENCH] nested-happy cmd depth=$depth:\n$disasm")
             current = original.body
             depth += 1
         }
         if (depth == 1) {
-            println("[DEBUG_LOG] [BENCH] nested-happy bytecode: <not found>")
+            println("[DEBUG_LOG] [BENCH] nested-happy cmd: <not found>")
         }
     }
 

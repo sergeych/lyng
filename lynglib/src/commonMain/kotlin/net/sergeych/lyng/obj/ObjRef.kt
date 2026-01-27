@@ -1991,6 +1991,10 @@ class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
                 scope.assign(rec, name, newValue)
                 return
             }
+            scope.chainLookupIgnoreClosure(name, followClosure = true, caller = scope.currentClassCtx)?.let { rec ->
+                scope.assign(rec, name, newValue)
+                return
+            }
             scope[name]?.let { stored ->
                 scope.assign(stored, name, newValue)
                 return
@@ -2006,6 +2010,10 @@ class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
                 scope.assign(rec, name, newValue)
                 return
             }
+        }
+        scope.chainLookupIgnoreClosure(name, followClosure = true, caller = scope.currentClassCtx)?.let { rec ->
+            scope.assign(rec, name, newValue)
+            return
         }
         scope[name]?.let { stored ->
             scope.assign(stored, name, newValue)
@@ -2417,6 +2425,7 @@ class LocalSlotRef(
     val name: String,
     internal val slot: Int,
     internal val depth: Int,
+    internal val scopeDepth: Int,
     internal val isMutable: Boolean,
     internal val isDelegated: Boolean,
     private val atPos: Pos,

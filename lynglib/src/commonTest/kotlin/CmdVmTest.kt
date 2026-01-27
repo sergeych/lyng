@@ -19,10 +19,10 @@ import net.sergeych.lyng.IfStatement
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Statement
-import net.sergeych.lyng.bytecode.BytecodeBuilder
+import net.sergeych.lyng.bytecode.CmdBuilder
 import net.sergeych.lyng.bytecode.BytecodeCompiler
 import net.sergeych.lyng.bytecode.BytecodeConst
-import net.sergeych.lyng.bytecode.BytecodeVm
+import net.sergeych.lyng.bytecode.CmdVm
 import net.sergeych.lyng.bytecode.Opcode
 import net.sergeych.lyng.obj.BinaryOpRef
 import net.sergeych.lyng.obj.BinOp
@@ -45,10 +45,10 @@ import net.sergeych.lyng.obj.toLong
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-class BytecodeVmTest {
+class CmdVmTest {
     @Test
     fun addsIntConstants() = kotlinx.coroutines.test.runTest {
-        val builder = BytecodeBuilder()
+        val builder = CmdBuilder()
         val k0 = builder.addConst(BytecodeConst.IntVal(2))
         val k1 = builder.addConst(BytecodeConst.IntVal(3))
         builder.emit(Opcode.CONST_INT, k0, 0)
@@ -56,7 +56,7 @@ class BytecodeVmTest {
         builder.emit(Opcode.ADD_INT, 0, 1, 2)
         builder.emit(Opcode.RET, 2)
         val fn = builder.build("addInts", localCount = 3)
-        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        val result = CmdVm().execute(fn, Scope(), emptyList())
         assertEquals(5, result.toInt())
     }
 
@@ -80,7 +80,7 @@ class BytecodeVmTest {
         )
         val ifStmt = IfStatement(cond, thenStmt, elseStmt, net.sergeych.lyng.Pos.builtIn)
         val fn = BytecodeCompiler().compileStatement("ifTest", ifStmt) ?: error("bytecode compile failed")
-        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        val result = CmdVm().execute(fn, Scope(), emptyList())
         assertEquals(10, result.toInt())
     }
 
@@ -104,7 +104,7 @@ class BytecodeVmTest {
                 error("bytecode compile failed for ifNoElse")
             }
         }!!
-        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        val result = CmdVm().execute(fn, Scope(), emptyList())
         assertEquals(ObjVoid, result)
     }
 
@@ -120,7 +120,7 @@ class BytecodeVmTest {
             net.sergeych.lyng.Pos.builtIn
         )
         val fn = BytecodeCompiler().compileExpression("andShort", expr) ?: error("bytecode compile failed")
-        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        val result = CmdVm().execute(fn, Scope(), emptyList())
         assertEquals(false, result.toBool())
     }
 
@@ -136,7 +136,7 @@ class BytecodeVmTest {
             net.sergeych.lyng.Pos.builtIn
         )
         val fn = BytecodeCompiler().compileExpression("orShort", expr) ?: error("bytecode compile failed")
-        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        val result = CmdVm().execute(fn, Scope(), emptyList())
         assertEquals(true, result.toBool())
     }
 
@@ -151,7 +151,7 @@ class BytecodeVmTest {
             net.sergeych.lyng.Pos.builtIn
         )
         val fn = BytecodeCompiler().compileExpression("realPlus", expr) ?: error("bytecode compile failed")
-        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        val result = CmdVm().execute(fn, Scope(), emptyList())
         assertEquals(5.75, result.toDouble())
     }
 
@@ -163,7 +163,7 @@ class BytecodeVmTest {
                 scope.args[0].toLong() + scope.args[1].toLong()
             )
         }
-        val builder = BytecodeBuilder()
+        val builder = CmdBuilder()
         val fnId = builder.addConst(BytecodeConst.ObjRef(callable))
         val arg0 = builder.addConst(BytecodeConst.IntVal(2L))
         val arg1 = builder.addConst(BytecodeConst.IntVal(3L))
@@ -173,7 +173,7 @@ class BytecodeVmTest {
         builder.emit(Opcode.CALL_SLOT, 0, 1, 2, 3)
         builder.emit(Opcode.RET, 3)
         val fn = builder.build("callSlot", localCount = 4)
-        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        val result = CmdVm().execute(fn, Scope(), emptyList())
         assertEquals(5, result.toInt())
     }
 
@@ -188,7 +188,7 @@ class BytecodeVmTest {
             net.sergeych.lyng.Pos.builtIn
         )
         val ltFn = BytecodeCompiler().compileExpression("mixedLt", ltExpr) ?: error("bytecode compile failed")
-        val ltResult = BytecodeVm().execute(ltFn, Scope(), emptyList())
+        val ltResult = CmdVm().execute(ltFn, Scope(), emptyList())
         assertEquals(true, ltResult.toBool())
 
         val eqExpr = ExpressionStatement(
@@ -200,7 +200,7 @@ class BytecodeVmTest {
             net.sergeych.lyng.Pos.builtIn
         )
         val eqFn = BytecodeCompiler().compileExpression("mixedEq", eqExpr) ?: error("bytecode compile failed")
-        val eqResult = BytecodeVm().execute(eqFn, Scope(), emptyList())
+        val eqResult = CmdVm().execute(eqFn, Scope(), emptyList())
         assertEquals(true, eqResult.toBool())
     }
 
@@ -224,7 +224,7 @@ class BytecodeVmTest {
         )
         val expr = ExpressionStatement(callRef, Pos.builtIn)
         val fn = BytecodeCompiler().compileExpression("tailBlockArgs", expr) ?: error("bytecode compile failed")
-        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        val result = CmdVm().execute(fn, Scope(), emptyList())
         assertEquals(true, result.toBool())
     }
 
@@ -249,7 +249,7 @@ class BytecodeVmTest {
         )
         val expr = ExpressionStatement(callRef, Pos.builtIn)
         val fn = BytecodeCompiler().compileExpression("namedArgs", expr) ?: error("bytecode compile failed")
-        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        val result = CmdVm().execute(fn, Scope(), emptyList())
         assertEquals(5, result.toInt())
     }
 
@@ -275,7 +275,7 @@ class BytecodeVmTest {
         )
         val expr = ExpressionStatement(callRef, Pos.builtIn)
         val fn = BytecodeCompiler().compileExpression("splatArgs", expr) ?: error("bytecode compile failed")
-        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        val result = CmdVm().execute(fn, Scope(), emptyList())
         assertEquals(3, result.toInt())
     }
 
@@ -290,7 +290,7 @@ class BytecodeVmTest {
             net.sergeych.lyng.Pos.builtIn
         )
         val fn = BytecodeCompiler().compileExpression("mixedPlus", expr) ?: error("bytecode compile failed")
-        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        val result = CmdVm().execute(fn, Scope(), emptyList())
         assertEquals(5.5, result.toDouble())
     }
 
@@ -305,13 +305,13 @@ class BytecodeVmTest {
             net.sergeych.lyng.Pos.builtIn
         )
         val fn = BytecodeCompiler().compileExpression("mixedNeq", expr) ?: error("bytecode compile failed")
-        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        val result = CmdVm().execute(fn, Scope(), emptyList())
         assertEquals(true, result.toBool())
     }
 
     @Test
     fun localSlotTypeTrackingEnablesArithmetic() = kotlinx.coroutines.test.runTest {
-        val slotRef = LocalSlotRef("a", 0, 0, true, false, net.sergeych.lyng.Pos.builtIn)
+        val slotRef = LocalSlotRef("a", 0, 0, 0, true, false, net.sergeych.lyng.Pos.builtIn)
         val assign = AssignRef(
             slotRef,
             ConstRef(ObjInt.of(2).asReadonly),
@@ -327,13 +327,13 @@ class BytecodeVmTest {
         )
         val fn = BytecodeCompiler().compileExpression("localSlotAdd", expr) ?: error("bytecode compile failed")
         val scope = Scope().apply { applySlotPlan(mapOf("a" to 0)) }
-        val result = BytecodeVm().execute(fn, scope, emptyList())
+        val result = CmdVm().execute(fn, scope, emptyList())
         assertEquals(4, result.toInt())
     }
 
     @Test
     fun parentScopeSlotAccessWorks() = kotlinx.coroutines.test.runTest {
-        val parentRef = LocalSlotRef("a", 0, 1, true, false, net.sergeych.lyng.Pos.builtIn)
+        val parentRef = LocalSlotRef("a", 0, 1, 0, true, false, net.sergeych.lyng.Pos.builtIn)
         val expr = ExpressionStatement(
             BinaryOpRef(
                 BinOp.PLUS,
@@ -348,7 +348,7 @@ class BytecodeVmTest {
             setSlotValue(0, ObjInt.of(3))
         }
         val child = Scope(parent)
-        val result = BytecodeVm().execute(fn, child, emptyList())
+        val result = CmdVm().execute(fn, child, emptyList())
         assertEquals(5, result.toInt())
     }
 
@@ -363,7 +363,7 @@ class BytecodeVmTest {
             net.sergeych.lyng.Pos.builtIn
         )
         val fn = BytecodeCompiler().compileExpression("objEq", expr) ?: error("bytecode compile failed")
-        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        val result = CmdVm().execute(fn, Scope(), emptyList())
         assertEquals(true, result.toBool())
     }
 
@@ -379,7 +379,7 @@ class BytecodeVmTest {
             net.sergeych.lyng.Pos.builtIn
         )
         val eqFn = BytecodeCompiler().compileExpression("objRefEq", eqExpr) ?: error("bytecode compile failed")
-        val eqResult = BytecodeVm().execute(eqFn, Scope(), emptyList())
+        val eqResult = CmdVm().execute(eqFn, Scope(), emptyList())
         assertEquals(true, eqResult.toBool())
 
         val neqExpr = ExpressionStatement(
@@ -391,7 +391,7 @@ class BytecodeVmTest {
             net.sergeych.lyng.Pos.builtIn
         )
         val neqFn = BytecodeCompiler().compileExpression("objRefNeq", neqExpr) ?: error("bytecode compile failed")
-        val neqResult = BytecodeVm().execute(neqFn, Scope(), emptyList())
+        val neqResult = CmdVm().execute(neqFn, Scope(), emptyList())
         assertEquals(true, neqResult.toBool())
     }
 
@@ -406,7 +406,7 @@ class BytecodeVmTest {
             net.sergeych.lyng.Pos.builtIn
         )
         val ltFn = BytecodeCompiler().compileExpression("objLt", ltExpr) ?: error("bytecode compile failed")
-        val ltResult = BytecodeVm().execute(ltFn, Scope(), emptyList())
+        val ltResult = CmdVm().execute(ltFn, Scope(), emptyList())
         assertEquals(true, ltResult.toBool())
 
         val gteExpr = ExpressionStatement(
@@ -418,7 +418,7 @@ class BytecodeVmTest {
             net.sergeych.lyng.Pos.builtIn
         )
         val gteFn = BytecodeCompiler().compileExpression("objGte", gteExpr) ?: error("bytecode compile failed")
-        val gteResult = BytecodeVm().execute(gteFn, Scope(), emptyList())
+        val gteResult = CmdVm().execute(gteFn, Scope(), emptyList())
         assertEquals(true, gteResult.toBool())
     }
 
@@ -433,7 +433,7 @@ class BytecodeVmTest {
             net.sergeych.lyng.Pos.builtIn
         )
         val fn = BytecodeCompiler().compileExpression("objPlus", expr) ?: error("bytecode compile failed")
-        val result = BytecodeVm().execute(fn, Scope(), emptyList())
+        val result = CmdVm().execute(fn, Scope(), emptyList())
         assertEquals("ab", (result as ObjString).value)
     }
 }

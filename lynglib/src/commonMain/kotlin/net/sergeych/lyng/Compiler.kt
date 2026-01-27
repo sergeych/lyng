@@ -373,12 +373,34 @@ class Compiler(
 
     private fun wrapBytecode(stmt: Statement): Statement {
         if (!useBytecodeStatements) return stmt
-        return BytecodeStatement.wrap(stmt, "stmt@${stmt.pos}", allowLocalSlots = true)
+        val allowLocals = codeContexts.lastOrNull() is CodeContext.Function
+        return BytecodeStatement.wrap(stmt, "stmt@${stmt.pos}", allowLocalSlots = allowLocals)
     }
 
     private fun wrapFunctionBytecode(stmt: Statement, name: String): Statement {
         if (!useBytecodeStatements) return stmt
         return BytecodeStatement.wrap(stmt, "fn@$name", allowLocalSlots = true)
+    }
+
+    private fun containsUnsupportedForBytecode(stmt: Statement): Boolean {
+        val target = if (stmt is BytecodeStatement) stmt.original else stmt
+        return when (target) {
+            is ExpressionStatement -> false
+            is IfStatement -> {
+                containsUnsupportedForBytecode(target.condition) ||
+                    containsUnsupportedForBytecode(target.ifBody) ||
+                    (target.elseBody?.let { containsUnsupportedForBytecode(it) } ?: false)
+            }
+            is ForInStatement -> {
+                target.constRange == null || target.canBreak ||
+                    containsUnsupportedForBytecode(target.source) ||
+                    containsUnsupportedForBytecode(target.body) ||
+                    (target.elseStatement?.let { containsUnsupportedForBytecode(it) } ?: false)
+            }
+            is BlockStatement -> target.statements().any { containsUnsupportedForBytecode(it) }
+            is VarDeclStatement -> target.initializer?.let { containsUnsupportedForBytecode(it) } ?: false
+            else -> true
+        }
     }
 
     private fun unwrapBytecodeDeep(stmt: Statement): Statement {
@@ -397,6 +419,8 @@ class Compiler(
                     stmt.visibility,
                     init,
                     stmt.isTransient,
+                    stmt.slotIndex,
+                    stmt.slotDepth,
                     stmt.pos
                 )
             }
@@ -859,7 +883,7 @@ class Compiler(
 
         label?.let { cc.labels.add(it) }
         slotPlanStack.add(paramSlotPlan)
-        val body = try {
+        val parsedBody = try {
             inCodeContext(CodeContext.Function("<lambda>")) {
                 withLocalNames(slotParamNames.toSet()) {
                     parseBlock(skipLeadingBrace = true)
@@ -868,6 +892,7 @@ class Compiler(
         } finally {
             slotPlanStack.removeLast()
         }
+        val body = unwrapBytecodeDeep(parsedBody)
         label?.let { cc.labels.remove(it) }
 
         val paramSlotPlanSnapshot = slotPlanIndices(paramSlotPlan)
@@ -1494,15 +1519,20 @@ class Compiler(
                         val slotLoc = lookupSlotLocation(t.value)
                         val inClassCtx = codeContexts.any { it is CodeContext.ClassBody }
                         when {
-                            slotLoc != null -> LocalSlotRef(
-                                t.value,
-                                slotLoc.slot,
-                                slotLoc.depth,
-                                slotLoc.isMutable,
-                                slotLoc.isDelegated,
-                                t.pos
-                            )
-                            PerfFlags.EMIT_FAST_LOCAL_REFS && (currentLocalNames?.contains(t.value) == true) ->
+                            slotLoc != null -> {
+                                val scopeDepth = slotPlanStack.size - 1 - slotLoc.depth
+                                LocalSlotRef(
+                                    t.value,
+                                    slotLoc.slot,
+                                    slotLoc.depth,
+                                    scopeDepth,
+                                    slotLoc.isMutable,
+                                    slotLoc.isDelegated,
+                                    t.pos
+                                )
+                            }
+                            PerfFlags.EMIT_FAST_LOCAL_REFS && !useBytecodeStatements &&
+                                (currentLocalNames?.contains(t.value) == true) ->
                                 FastLocalVarRef(t.value, t.pos)
                             inClassCtx -> ImplicitThisMemberRef(t.value, t.pos)
                             else -> LocalVarRef(t.value, t.pos)
@@ -2041,7 +2071,19 @@ class Compiler(
     )
 
     private suspend fun parseTryStatement(): Statement {
-        val body = parseBlock()
+        fun withCatchSlot(block: Statement, catchName: String): Statement {
+            val stmt = block as? BlockStatement ?: return block
+            if (stmt.slotPlan.containsKey(catchName)) return stmt
+            val basePlan = stmt.slotPlan
+            val newPlan = LinkedHashMap<String, Int>(basePlan.size + 1)
+            newPlan[catchName] = 0
+            for ((name, idx) in basePlan) {
+                newPlan[name] = idx + 1
+            }
+            return BlockStatement(stmt.block, newPlan, stmt.pos)
+        }
+
+        val body = unwrapBytecodeDeep(parseBlock())
         val catches = mutableListOf<CatchBlockData>()
         cc.skipTokens(Token.Type.NEWLINE)
         var t = cc.next()
@@ -2078,7 +2120,7 @@ class Compiler(
                     exClassNames += "Exception"
                     cc.skipTokenOfType(Token.Type.RPAREN)
                 }
-                val block = parseBlock()
+                val block = withCatchSlot(unwrapBytecodeDeep(parseBlock()), catchVar.value)
                 catches += CatchBlockData(catchVar, exClassNames, block)
                 cc.skipTokens(Token.Type.NEWLINE)
                 t = cc.next()
@@ -2087,13 +2129,13 @@ class Compiler(
                 cc.skipTokenOfType(Token.Type.LBRACE, "expected catch(...) or catch { ... } here")
                 catches += CatchBlockData(
                     Token("it", cc.currentPos(), Token.Type.ID), listOf("Exception"),
-                    parseBlock(true)
+                    withCatchSlot(unwrapBytecodeDeep(parseBlock(true)), "it")
                 )
                 t = cc.next()
             }
         }
         val finallyClause = if (t.value == "finally") {
-            parseBlock()
+            unwrapBytecodeDeep(parseBlock())
         } else {
             cc.previous()
             null
@@ -2133,7 +2175,9 @@ class Compiler(
                             }
                         }
                         if (match != null) {
-                            val catchContext = scope.createChildScope(pos = cdata.catchVar.pos)
+                            val catchContext = scope.createChildScope(pos = cdata.catchVar.pos).apply {
+                                skipScopeCreation = true
+                            }
                             catchContext.addItem(cdata.catchVar.value, false, caughtObj)
                             result = cdata.block.execute(catchContext)
                             isCaught = true
@@ -3020,7 +3064,7 @@ class Compiler(
             currentLocalDeclCount
             localDeclCountStack.add(0)
             slotPlanStack.add(paramSlotPlan)
-            val fnStatements = try {
+            val parsedFnStatements = try {
                 if (actualExtern)
                     object : Statement() {
                         override val pos: Pos = start
@@ -3049,6 +3093,9 @@ class Compiler(
                     }
             } finally {
                 slotPlanStack.removeLast()
+            }
+            val fnStatements = parsedFnStatements?.let {
+                if (containsUnsupportedForBytecode(it)) unwrapBytecodeDeep(it) else it
             }
             // Capture and pop the local declarations count for this function
             val fnLocalDecls = localDeclCountStack.removeLastOrNull() ?: 0
@@ -3528,7 +3575,10 @@ class Compiler(
             !actualExtern &&
             !isAbstract
         ) {
-            return VarDeclStatement(name, isMutable, visibility, initialExpression, isTransient, start)
+            val slotPlan = slotPlanStack.lastOrNull()
+            val slotIndex = slotPlan?.slots?.get(name)?.index
+            val slotDepth = slotPlan?.let { slotPlanStack.size - 1 }
+            return VarDeclStatement(name, isMutable, visibility, initialExpression, isTransient, slotIndex, slotDepth, start)
         }
 
         if (isStatic) {

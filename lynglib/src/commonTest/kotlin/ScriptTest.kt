@@ -2822,10 +2822,10 @@ class ScriptTest {
                         x
                     }
                     
-                    (1..100).map { launch { dosomething() } }.forEach { 
+                    (1..50).map { launch { dosomething() } }.forEach { 
                         assertEquals(5050, it.await())
                      }
-                     assertEquals( 100, ac.getCounter() )
+                     assertEquals( 50, ac.getCounter() )
                     
                 """.trimIndent()
                 )

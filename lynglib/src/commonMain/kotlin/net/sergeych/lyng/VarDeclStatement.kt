@@ -26,6 +26,8 @@ class VarDeclStatement(
     val visibility: Visibility,
     val initializer: Statement?,
     val isTransient: Boolean,
+    val slotIndex: Int?,
+    val slotDepth: Int?,
     private val startPos: Pos,
 ) : Statement() {
     override val pos: Pos = startPos

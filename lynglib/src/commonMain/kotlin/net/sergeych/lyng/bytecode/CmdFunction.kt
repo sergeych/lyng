@@ -16,26 +16,28 @@
 
 package net.sergeych.lyng.bytecode
 
-data class BytecodeFunction(
+data class CmdFunction(
     val name: String,
     val localCount: Int,
+    val addrCount: Int,
     val scopeSlotCount: Int,
     val scopeSlotDepths: IntArray,
     val scopeSlotIndices: IntArray,
     val scopeSlotNames: Array<String?>,
-    val slotWidth: Int,
-    val ipWidth: Int,
-    val constIdWidth: Int,
+    val localSlotNames: Array<String?>,
+    val localSlotMutables: BooleanArray,
+    val localSlotDepths: IntArray,
     val constants: List<BytecodeConst>,
     val fallbackStatements: List<net.sergeych.lyng.Statement>,
-    val code: ByteArray,
+    val cmds: Array<Cmd>,
 ) {
     init {
-        require(slotWidth == 1 || slotWidth == 2 || slotWidth == 4) { "slotWidth must be 1,2,4" }
-        require(ipWidth == 2 || ipWidth == 4) { "ipWidth must be 2 or 4" }
-        require(constIdWidth == 2 || constIdWidth == 4) { "constIdWidth must be 2 or 4" }
         require(scopeSlotDepths.size == scopeSlotCount) { "scopeSlotDepths size mismatch" }
         require(scopeSlotIndices.size == scopeSlotCount) { "scopeSlotIndices size mismatch" }
         require(scopeSlotNames.size == scopeSlotCount) { "scopeSlotNames size mismatch" }
+        require(localSlotNames.size == localSlotMutables.size) { "localSlot metadata size mismatch" }
+        require(localSlotNames.size == localSlotDepths.size) { "localSlot depth metadata size mismatch" }
+        require(localSlotNames.size <= localCount) { "localSlotNames exceed localCount" }
+        require(addrCount >= 0) { "addrCount must be non-negative" }
     }
 }

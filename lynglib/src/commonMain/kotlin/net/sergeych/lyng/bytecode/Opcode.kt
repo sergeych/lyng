@@ -124,6 +124,15 @@ enum class Opcode(val code: Int) {
     SET_INDEX(0xA3),
 
     EVAL_FALLBACK(0xB0),
+    RESOLVE_SCOPE_SLOT(0xB1),
+    LOAD_OBJ_ADDR(0xB2),
+    STORE_OBJ_ADDR(0xB3),
+    LOAD_INT_ADDR(0xB4),
+    STORE_INT_ADDR(0xB5),
+    LOAD_REAL_ADDR(0xB6),
+    STORE_REAL_ADDR(0xB7),
+    LOAD_BOOL_ADDR(0xB8),
+    STORE_BOOL_ADDR(0xB9),
     ;
 
     companion object {
