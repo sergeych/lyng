@@ -1006,6 +1006,19 @@ class BytecodeCompiler(
             updateSlotType(result, SlotType.OBJ)
             return CompiledValue(result, SlotType.OBJ)
         }
+        val implicitTarget = ref.target as? ImplicitThisMemberRef
+        if (implicitTarget != null) {
+            val nameId = builder.addConst(BytecodeConst.StringVal(implicitTarget.name))
+            if (nameId > 0xFFFF) return compileEvalRef(ref)
+            val current = allocSlot()
+            val result = allocSlot()
+            val rhs = compileRef(ref.value) ?: return compileEvalRef(ref)
+            builder.emit(Opcode.GET_THIS_MEMBER, nameId, current)
+            builder.emit(objOp, current, rhs.slot, result)
+            builder.emit(Opcode.SET_THIS_MEMBER, nameId, result)
+            updateSlotType(result, SlotType.OBJ)
+            return CompiledValue(result, SlotType.OBJ)
+        }
         val indexTarget = ref.target as? IndexRef
         if (indexTarget != null) {
             val receiver = compileRefWithFallback(indexTarget.targetRef, null, Pos.builtIn) ?: return null
