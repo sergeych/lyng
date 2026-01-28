@@ -5202,6 +5202,20 @@ class ScriptTest {
     }
 
     @Test
+    fun testInOperatorBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun inList(x, xs) { x in xs }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("inList")
+        assertFalse(disasm.contains("not a compiled body"))
+        assertEquals(ObjTrue, scope.eval("inList(2, [1,2,3])"))
+        assertEquals(ObjFalse, scope.eval("inList(5, [1,2,3])"))
+    }
+
+    @Test
     fun testFilterBug() = runTest {
         eval(
             """

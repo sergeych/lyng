@@ -204,6 +204,29 @@ class BytecodeCompiler(
         if (op == BinOp.AND || op == BinOp.OR) {
             return compileLogical(op, binaryLeft(ref), binaryRight(ref), refPos(ref))
         }
+        if (op == BinOp.IN || op == BinOp.NOTIN) {
+            val leftValue = compileRefWithFallback(binaryLeft(ref), null, refPos(ref)) ?: return null
+            val rightValue = compileRefWithFallback(binaryRight(ref), null, refPos(ref)) ?: return null
+            val leftObj = ensureObjSlot(leftValue)
+            val rightObj = ensureObjSlot(rightValue)
+            val methodId = builder.addConst(BytecodeConst.StringVal("contains"))
+            if (methodId > 0xFFFF) return null
+            val argSlot = allocSlot()
+            builder.emit(Opcode.BOX_OBJ, leftObj.slot, argSlot)
+            updateSlotType(argSlot, SlotType.OBJ)
+            val callSlot = allocSlot()
+            builder.emit(Opcode.CALL_VIRTUAL, rightObj.slot, methodId, argSlot, 1, callSlot)
+            val boolSlot = allocSlot()
+            builder.emit(Opcode.OBJ_TO_BOOL, callSlot, boolSlot)
+            updateSlotType(boolSlot, SlotType.BOOL)
+            if (op == BinOp.NOTIN) {
+                val outSlot = allocSlot()
+                builder.emit(Opcode.NOT_BOOL, boolSlot, outSlot)
+                updateSlotType(outSlot, SlotType.BOOL)
+                return CompiledValue(outSlot, SlotType.BOOL)
+            }
+            return CompiledValue(boolSlot, SlotType.BOOL)
+        }
         val leftRef = binaryLeft(ref)
         val rightRef = binaryRight(ref)
         var a = compileRef(leftRef) ?: return null
