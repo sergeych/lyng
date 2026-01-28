@@ -202,7 +202,13 @@ class BytecodeCompiler(
             is CallRef -> compileCall(ref)
             is MethodCallRef -> compileMethodCall(ref)
             is FieldRef -> compileFieldRef(ref)
-            is ImplicitThisMemberRef -> compileEvalRef(ref)
+            is ImplicitThisMemberRef -> {
+                val nameId = builder.addConst(BytecodeConst.StringVal(ref.name))
+                val slot = allocSlot()
+                builder.emit(Opcode.GET_THIS_MEMBER, nameId, slot)
+                updateSlotType(slot, SlotType.OBJ)
+                CompiledValue(slot, SlotType.OBJ)
+            }
             is ImplicitThisMethodCallRef -> compileEvalRef(ref)
             is IndexRef -> compileIndexRef(ref)
             else -> null
@@ -878,6 +884,12 @@ class BytecodeCompiler(
                 builder.emit(Opcode.SET_FIELD, receiver.slot, nameId, value.slot)
                 builder.mark(endLabel)
             }
+            return value
+        }
+        if (target is ImplicitThisMemberRef) {
+            val nameId = builder.addConst(BytecodeConst.StringVal(target.name))
+            if (nameId > 0xFFFF) return null
+            builder.emit(Opcode.SET_THIS_MEMBER, nameId, value.slot)
             return value
         }
         if (target is IndexRef) {

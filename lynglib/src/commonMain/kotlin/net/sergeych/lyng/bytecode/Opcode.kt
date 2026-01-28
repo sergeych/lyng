@@ -131,6 +131,8 @@ enum class Opcode(val code: Int) {
     SET_INDEX(0xA3),
     GET_NAME(0xA4),
     LIST_LITERAL(0xA5),
+    GET_THIS_MEMBER(0xA6),
+    SET_THIS_MEMBER(0xA7),
 
     EVAL_FALLBACK(0xB0),
     RESOLVE_SCOPE_SLOT(0xB1),

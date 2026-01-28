@@ -1252,6 +1252,42 @@ class CmdListLiteral(
     }
 }
 
+class CmdGetThisMember(
+    internal val nameId: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.fn.localSlotNames.isNotEmpty()) {
+            frame.syncFrameToScope()
+        }
+        val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
+            ?: error("GET_THIS_MEMBER expects StringVal at $nameId")
+        val ref = net.sergeych.lyng.obj.ImplicitThisMemberRef(nameConst.value, frame.scope.pos)
+        val result = ref.evalValue(frame.scope)
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
+class CmdSetThisMember(
+    internal val nameId: Int,
+    internal val valueSlot: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.fn.localSlotNames.isNotEmpty()) {
+            frame.syncFrameToScope()
+        }
+        val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
+            ?: error("SET_THIS_MEMBER expects StringVal at $nameId")
+        val ref = net.sergeych.lyng.obj.ImplicitThisMemberRef(nameConst.value, frame.scope.pos)
+        ref.setAt(frame.scope.pos, frame.scope, frame.slotToObj(valueSlot))
+        if (frame.fn.localSlotNames.isNotEmpty()) {
+            frame.syncScopeToFrame()
+        }
+        return
+    }
+}
+
 class CmdSetField(
     internal val recvSlot: Int,
     internal val fieldId: Int,
