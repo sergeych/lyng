@@ -142,7 +142,7 @@ class CmdBuilder {
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.PUSH_SCOPE, Opcode.PUSH_SLOT_PLAN ->
                 listOf(OperandKind.CONST)
-            Opcode.DECL_LOCAL ->
+            Opcode.DECL_LOCAL, Opcode.DECL_EXT_PROPERTY ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.ADD_INT, Opcode.SUB_INT, Opcode.MUL_INT, Opcode.DIV_INT, Opcode.MOD_INT,
             Opcode.ADD_REAL, Opcode.SUB_REAL, Opcode.MUL_REAL, Opcode.DIV_REAL,
@@ -176,11 +176,13 @@ class CmdBuilder {
                 listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT)
             Opcode.SET_FIELD ->
                 listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT)
+            Opcode.GET_NAME ->
+                listOf(OperandKind.ID, OperandKind.SLOT)
             Opcode.GET_INDEX ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.SET_INDEX ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
-            Opcode.EVAL_FALLBACK ->
+            Opcode.EVAL_FALLBACK, Opcode.EVAL_REF, Opcode.EVAL_STMT ->
                 listOf(OperandKind.ID, OperandKind.SLOT)
         }
     }
@@ -359,15 +361,19 @@ class CmdBuilder {
             Opcode.PUSH_SLOT_PLAN -> CmdPushSlotPlan(operands[0])
             Opcode.POP_SLOT_PLAN -> CmdPopSlotPlan()
             Opcode.DECL_LOCAL -> CmdDeclLocal(operands[0], operands[1])
+            Opcode.DECL_EXT_PROPERTY -> CmdDeclExtProperty(operands[0], operands[1])
             Opcode.CALL_DIRECT -> CmdCallDirect(operands[0], operands[1], operands[2], operands[3])
             Opcode.CALL_VIRTUAL -> CmdCallVirtual(operands[0], operands[1], operands[2], operands[3], operands[4])
             Opcode.CALL_FALLBACK -> CmdCallFallback(operands[0], operands[1], operands[2], operands[3])
             Opcode.CALL_SLOT -> CmdCallSlot(operands[0], operands[1], operands[2], operands[3])
             Opcode.GET_FIELD -> CmdGetField(operands[0], operands[1], operands[2])
             Opcode.SET_FIELD -> CmdSetField(operands[0], operands[1], operands[2])
+            Opcode.GET_NAME -> CmdGetName(operands[0], operands[1])
             Opcode.GET_INDEX -> CmdGetIndex(operands[0], operands[1], operands[2])
             Opcode.SET_INDEX -> CmdSetIndex(operands[0], operands[1], operands[2])
             Opcode.EVAL_FALLBACK -> CmdEvalFallback(operands[0], operands[1])
+            Opcode.EVAL_REF -> CmdEvalRef(operands[0], operands[1])
+            Opcode.EVAL_STMT -> CmdEvalStmt(operands[0], operands[1])
         }
     }
 }

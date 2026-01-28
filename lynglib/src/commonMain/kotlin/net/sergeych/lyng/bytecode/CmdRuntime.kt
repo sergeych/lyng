@@ -1031,6 +1031,32 @@ class CmdDeclLocal(internal val constId: Int, internal val slot: Int) : Cmd() {
     }
 }
 
+class CmdDeclExtProperty(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.ExtensionPropertyDecl
+            ?: error("DECL_EXT_PROPERTY expects ExtensionPropertyDecl at $constId")
+        val type = frame.scope[decl.extTypeName]?.value
+            ?: frame.scope.raiseSymbolNotFound("class ${decl.extTypeName} not found")
+        if (type !is ObjClass) {
+            frame.scope.raiseClassCastError("${decl.extTypeName} is not the class instance")
+        }
+        frame.scope.addExtension(
+            type,
+            decl.property.name,
+            ObjRecord(
+                decl.property,
+                isMutable = false,
+                visibility = decl.visibility,
+                writeVisibility = decl.setterVisibility,
+                declaringClass = null,
+                type = ObjRecord.Type.Property
+            )
+        )
+        frame.setObj(slot, decl.property)
+        return
+    }
+}
+
 class CmdCallDirect(
     internal val id: Int,
     internal val argBase: Int,
@@ -1120,6 +1146,17 @@ class CmdCallSlot(
             frame.syncFrameToScope()
         }
         val callee = frame.slotToObj(calleeSlot)
+        if (callee === ObjUnset) {
+            val name = if (calleeSlot < frame.fn.scopeSlotCount) {
+                frame.fn.scopeSlotNames[calleeSlot]
+            } else {
+                val localIndex = calleeSlot - frame.fn.scopeSlotCount
+                frame.fn.localSlotNames.getOrNull(localIndex)
+            }
+            val message = name?.let { "property '$it' is unset (not initialized)" }
+                ?: "property is unset (not initialized)"
+            frame.scope.raiseUnset(message)
+        }
         val args = frame.buildArguments(argBase, argCount)
         val canPool = PerfFlags.SCOPE_POOL && callee !is Statement
         val result = if (canPool) {
@@ -1165,6 +1202,22 @@ class CmdGetField(
             }
         }
         val result = receiver.readField(frame.scope, nameConst.value).value
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
+class CmdGetName(
+    internal val nameId: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.fn.localSlotNames.isNotEmpty()) {
+            frame.syncFrameToScope()
+        }
+        val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
+            ?: error("GET_NAME expects StringVal at $nameId")
+        val result = frame.scope.get(nameConst.value)?.value ?: ObjUnset
         frame.storeObjResult(dst, result)
         return
     }
@@ -1233,6 +1286,38 @@ class CmdEvalFallback(internal val id: Int, internal val dst: Int) : Cmd() {
         frame.syncFrameToScope()
         val result = stmt.execute(frame.scope)
         frame.syncScopeToFrame()
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
+class CmdEvalRef(internal val id: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.fn.localSlotNames.isNotEmpty()) {
+            frame.syncFrameToScope()
+        }
+        val ref = frame.fn.constants[id] as? BytecodeConst.Ref
+            ?: error("EVAL_REF expects Ref at $id")
+        val result = ref.value.evalValue(frame.scope)
+        if (frame.fn.localSlotNames.isNotEmpty()) {
+            frame.syncScopeToFrame()
+        }
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
+class CmdEvalStmt(internal val id: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.fn.localSlotNames.isNotEmpty()) {
+            frame.syncFrameToScope()
+        }
+        val stmt = frame.fn.constants.getOrNull(id) as? BytecodeConst.StatementVal
+            ?: error("EVAL_STMT expects StatementVal at $id")
+        val result = stmt.statement.execute(frame.scope)
+        if (frame.fn.localSlotNames.isNotEmpty()) {
+            frame.syncScopeToFrame()
+        }
         frame.storeObjResult(dst, result)
         return
     }
@@ -1659,9 +1744,14 @@ class CmdFrame(
     }
 
     private fun ensureScopeSlot(target: Scope, slot: Int): Int {
+        val name = fn.scopeSlotNames[slot]
+        if (name != null) {
+            val existing = target.getSlotIndexOf(name)
+            if (existing != null) return existing
+        }
         val index = fn.scopeSlotIndices[slot]
         if (index < target.slotCount) return index
-        val name = fn.scopeSlotNames[slot] ?: return index
+        if (name == null) return index
         target.applySlotPlan(mapOf(name to index))
         val existing = target.getLocalRecordDirect(name)
         if (existing != null) {

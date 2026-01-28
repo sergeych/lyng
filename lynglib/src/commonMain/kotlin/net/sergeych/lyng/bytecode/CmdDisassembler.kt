@@ -173,15 +173,19 @@ object CmdDisassembler {
             is CmdPushSlotPlan -> Opcode.PUSH_SLOT_PLAN to intArrayOf(cmd.planId)
             is CmdPopSlotPlan -> Opcode.POP_SLOT_PLAN to intArrayOf()
             is CmdDeclLocal -> Opcode.DECL_LOCAL to intArrayOf(cmd.constId, cmd.slot)
+            is CmdDeclExtProperty -> Opcode.DECL_EXT_PROPERTY to intArrayOf(cmd.constId, cmd.slot)
             is CmdCallDirect -> Opcode.CALL_DIRECT to intArrayOf(cmd.id, cmd.argBase, cmd.argCount, cmd.dst)
             is CmdCallVirtual -> Opcode.CALL_VIRTUAL to intArrayOf(cmd.recvSlot, cmd.methodId, cmd.argBase, cmd.argCount, cmd.dst)
             is CmdCallFallback -> Opcode.CALL_FALLBACK to intArrayOf(cmd.id, cmd.argBase, cmd.argCount, cmd.dst)
             is CmdCallSlot -> Opcode.CALL_SLOT to intArrayOf(cmd.calleeSlot, cmd.argBase, cmd.argCount, cmd.dst)
             is CmdGetField -> Opcode.GET_FIELD to intArrayOf(cmd.recvSlot, cmd.fieldId, cmd.dst)
             is CmdSetField -> Opcode.SET_FIELD to intArrayOf(cmd.recvSlot, cmd.fieldId, cmd.valueSlot)
+            is CmdGetName -> Opcode.GET_NAME to intArrayOf(cmd.nameId, cmd.dst)
             is CmdGetIndex -> Opcode.GET_INDEX to intArrayOf(cmd.targetSlot, cmd.indexSlot, cmd.dst)
             is CmdSetIndex -> Opcode.SET_INDEX to intArrayOf(cmd.targetSlot, cmd.indexSlot, cmd.valueSlot)
             is CmdEvalFallback -> Opcode.EVAL_FALLBACK to intArrayOf(cmd.id, cmd.dst)
+            is CmdEvalRef -> Opcode.EVAL_REF to intArrayOf(cmd.id, cmd.dst)
+            is CmdEvalStmt -> Opcode.EVAL_STMT to intArrayOf(cmd.id, cmd.dst)
         }
     }
 
@@ -221,7 +225,7 @@ object CmdDisassembler {
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.PUSH_SCOPE, Opcode.PUSH_SLOT_PLAN ->
                 listOf(OperandKind.CONST)
-            Opcode.DECL_LOCAL ->
+            Opcode.DECL_LOCAL, Opcode.DECL_EXT_PROPERTY ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.ADD_INT, Opcode.SUB_INT, Opcode.MUL_INT, Opcode.DIV_INT, Opcode.MOD_INT,
             Opcode.ADD_REAL, Opcode.SUB_REAL, Opcode.MUL_REAL, Opcode.DIV_REAL,
@@ -255,11 +259,13 @@ object CmdDisassembler {
                 listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT)
             Opcode.SET_FIELD ->
                 listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT)
+            Opcode.GET_NAME ->
+                listOf(OperandKind.ID, OperandKind.SLOT)
             Opcode.GET_INDEX ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.SET_INDEX ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
-            Opcode.EVAL_FALLBACK ->
+            Opcode.EVAL_FALLBACK, Opcode.EVAL_REF, Opcode.EVAL_STMT ->
                 listOf(OperandKind.ID, OperandKind.SLOT)
         }
     }

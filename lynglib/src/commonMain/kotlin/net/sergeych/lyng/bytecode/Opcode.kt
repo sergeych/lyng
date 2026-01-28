@@ -118,6 +118,7 @@ enum class Opcode(val code: Int) {
     PUSH_SLOT_PLAN(0x87),
     POP_SLOT_PLAN(0x88),
     DECL_LOCAL(0x89),
+    DECL_EXT_PROPERTY(0x8A),
 
     CALL_DIRECT(0x90),
     CALL_VIRTUAL(0x91),
@@ -128,6 +129,7 @@ enum class Opcode(val code: Int) {
     SET_FIELD(0xA1),
     GET_INDEX(0xA2),
     SET_INDEX(0xA3),
+    GET_NAME(0xA4),
 
     EVAL_FALLBACK(0xB0),
     RESOLVE_SCOPE_SLOT(0xB1),
@@ -140,6 +142,8 @@ enum class Opcode(val code: Int) {
     LOAD_BOOL_ADDR(0xB8),
     STORE_BOOL_ADDR(0xB9),
     THROW(0xBB),
+    EVAL_REF(0xBC),
+    EVAL_STMT(0xBD),
     ;
 
     companion object {
