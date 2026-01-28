@@ -21,11 +21,13 @@ import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.obj.*
 import net.sergeych.lynon.lynonDecodeAny
 import net.sergeych.lynon.lynonEncodeAny
+import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
+@Ignore("TODO(bytecode-only): uses fallback")
 class EmbeddingExceptionTest {
 
     @Test

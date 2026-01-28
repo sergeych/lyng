@@ -1332,11 +1332,10 @@ class BytecodeCompiler(
         return when (stmt) {
             is ExpressionStatement -> compileRefWithFallback(stmt.ref, null, stmt.pos)
             else -> {
-                val slot = allocSlot()
-                val id = builder.addFallback(stmt)
-                builder.emit(Opcode.EVAL_FALLBACK, id, slot)
-                updateSlotType(slot, SlotType.OBJ)
-                CompiledValue(slot, SlotType.OBJ)
+                throw BytecodeFallbackException(
+                    "Bytecode fallback: unsupported argument expression",
+                    stmt.pos
+                )
             }
         }
     }
@@ -1490,12 +1489,10 @@ class BytecodeCompiler(
     }
 
     private fun emitFallbackStatement(stmt: Statement): CompiledValue {
-        val slot = allocSlot()
-        val id = builder.addFallback(stmt)
-        builder.emit(Opcode.EVAL_FALLBACK, id, slot)
-        builder.emit(Opcode.BOX_OBJ, slot, slot)
-        updateSlotType(slot, SlotType.OBJ)
-        return CompiledValue(slot, SlotType.OBJ)
+        throw BytecodeFallbackException(
+            "Bytecode fallback: unsupported statement",
+            stmt.pos
+        )
     }
 
     private fun compileStatementValueOrFallback(stmt: Statement, needResult: Boolean = true): CompiledValue? {
@@ -1808,10 +1805,10 @@ class BytecodeCompiler(
                 val rangeObj = ensureObjSlot(rangeValue)
                 val okSlot = allocSlot()
                 builder.emit(Opcode.RANGE_INT_BOUNDS, rangeObj.slot, iSlot, endSlot, okSlot)
-                val fallbackLabel = builder.label()
+                val badRangeLabel = builder.label()
                 builder.emit(
                     Opcode.JMP_IF_FALSE,
-                    listOf(CmdBuilder.Operand.IntVal(okSlot), CmdBuilder.Operand.LabelRef(fallbackLabel))
+                    listOf(CmdBuilder.Operand.IntVal(okSlot), CmdBuilder.Operand.LabelRef(badRangeLabel))
                 )
                 val breakFlagSlot = allocSlot()
                 val falseId = builder.addConst(BytecodeConst.Bool(false))
@@ -1863,9 +1860,11 @@ class BytecodeCompiler(
                     builder.mark(afterElse)
                 }
                 builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(doneLabel)))
-                builder.mark(fallbackLabel)
-                val fallbackId = builder.addFallback(stmt)
-                builder.emit(Opcode.EVAL_FALLBACK, fallbackId, resultSlot)
+                builder.mark(badRangeLabel)
+                val msgId = builder.addConst(BytecodeConst.StringVal("expected Int range"))
+                builder.emit(Opcode.CONST_OBJ, msgId, resultSlot)
+                val posId = builder.addConst(BytecodeConst.PosVal(stmt.pos))
+                builder.emit(Opcode.THROW, posId, resultSlot)
                 builder.mark(doneLabel)
                 return resultSlot
             }
@@ -2081,11 +2080,10 @@ class BytecodeCompiler(
         return when (stmt) {
             is ExpressionStatement -> compileRefWithFallback(stmt.ref, SlotType.BOOL, stmt.pos)
             else -> {
-                val slot = allocSlot()
-                val id = builder.addFallback(ToBoolStatement(stmt, pos))
-                builder.emit(Opcode.EVAL_FALLBACK, id, slot)
-                updateSlotType(slot, SlotType.BOOL)
-                CompiledValue(slot, SlotType.BOOL)
+                throw BytecodeFallbackException(
+                    "Bytecode fallback: unsupported condition",
+                    pos
+                )
             }
         }
     }
@@ -2237,21 +2235,10 @@ class BytecodeCompiler(
                 compiled = null
             }
         }
-        val slot = allocSlot()
-        val stmt = if (forceType == SlotType.BOOL) {
-            ToBoolStatement(ExpressionStatement(ref, pos), pos)
-        } else {
-            ExpressionStatement(ref, pos)
-        }
-        val id = builder.addFallback(stmt)
-        builder.emit(Opcode.EVAL_FALLBACK, id, slot)
-        if (forceType == null) {
-            builder.emit(Opcode.BOX_OBJ, slot, slot)
-            updateSlotType(slot, SlotType.OBJ)
-            return CompiledValue(slot, SlotType.OBJ)
-        }
-        updateSlotType(slot, forceType)
-        return CompiledValue(slot, forceType)
+        throw BytecodeFallbackException(
+            "Bytecode fallback: unsupported expression",
+            pos
+        )
     }
 
     private fun refSlot(ref: LocalSlotRef): Int = ref.slot

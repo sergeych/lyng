@@ -44,7 +44,12 @@ class BytecodeStatement private constructor(
         ): Statement {
             if (statement is BytecodeStatement) return statement
             val hasUnsupported = containsUnsupportedStatement(statement)
-            if (hasUnsupported) return unwrapDeep(statement)
+            if (hasUnsupported) {
+                throw BytecodeFallbackException(
+                    "Bytecode fallback: unsupported statement in '$nameHint'",
+                    statement.pos
+                )
+            }
             val safeLocals = allowLocalSlots
             val compiler = BytecodeCompiler(
                 allowLocalSlots = safeLocals,
@@ -52,22 +57,10 @@ class BytecodeStatement private constructor(
                 rangeLocalNames = rangeLocalNames
             )
             val compiled = compiler.compileStatement(nameHint, statement)
-            val fn = compiled ?: run {
-                val builder = CmdBuilder()
-                val slot = 0
-                val id = builder.addFallback(statement)
-                builder.emit(Opcode.EVAL_FALLBACK, id, slot)
-                builder.emit(Opcode.RET, slot)
-                builder.build(
-                    nameHint,
-                    localCount = 1,
-                    addrCount = 0,
-                    returnLabels = returnLabels,
-                    localSlotNames = emptyArray(),
-                    localSlotMutables = BooleanArray(0),
-                    localSlotDepths = IntArray(0)
-                )
-            }
+            val fn = compiled ?: throw BytecodeFallbackException(
+                "Bytecode fallback: failed to compile '$nameHint'",
+                statement.pos
+            )
             return BytecodeStatement(statement, fn)
         }
 

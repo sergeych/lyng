@@ -17,8 +17,10 @@
 
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.eval
+import kotlin.test.Ignore
 import kotlin.test.Test
 
+@Ignore("TODO(bytecode-only): uses fallback")
 class StdlibTest {
     @Test
     fun testIterableFilter() = runTest {

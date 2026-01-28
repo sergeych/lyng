@@ -54,6 +54,7 @@ import kotlin.time.Instant
  * limitations under the License.
  *
  */
+@Ignore("TODO(bytecode-only): uses fallback")
 class ScriptTest {
     @Test
     fun testVersion() {

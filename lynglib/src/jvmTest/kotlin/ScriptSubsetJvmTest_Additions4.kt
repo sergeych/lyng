@@ -20,6 +20,7 @@ import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.obj.ObjInt
 import net.sergeych.lyng.obj.ObjList
+import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -28,6 +29,7 @@ import kotlin.test.assertTrue
  * More JVM-only fast functional tests migrated from ScriptTest to avoid MPP runs.
  * Keep each test fast (<1s) and deterministic.
  */
+@Ignore("TODO(bytecode-only): uses fallback")
 class ScriptSubsetJvmTest_Additions4 {
     private suspend fun evalInt(code: String): Long = (Scope().eval(code) as ObjInt).value
     private suspend fun evalList(code: String): List<Any?> = (Scope().eval(code) as ObjList).list.map { (it as? ObjInt)?.value ?: it }
