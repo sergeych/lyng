@@ -1865,6 +1865,11 @@ class ThisMethodSlotCallRef(
     private val tailBlock: Boolean,
     private val isOptional: Boolean
 ) : ObjRef {
+    internal fun methodName(): String = name
+    internal fun arguments(): List<ParsedArgument> = args
+    internal fun hasTailBlock(): Boolean = tailBlock
+    internal fun optionalInvoke(): Boolean = isOptional
+
     override suspend fun get(scope: Scope): ObjRecord = evalValue(scope).asReadonly
 
     override suspend fun evalValue(scope: Scope): Obj {
@@ -2516,6 +2521,8 @@ class LocalSlotRef(
 }
 
 class ListLiteralRef(private val entries: List<ListEntry>) : ObjRef {
+    internal fun entries(): List<ListEntry> = entries
+
     override fun forEachVariable(block: (String) -> Unit) {
         for (e in entries) {
             when (e) {
@@ -2665,9 +2672,9 @@ class RangeRef(
 
 /** Assignment if null op: target ?= value */
 class AssignIfNullRef(
-    private val target: ObjRef,
-    private val value: ObjRef,
-    private val atPos: Pos,
+    internal val target: ObjRef,
+    internal val value: ObjRef,
+    internal val atPos: Pos,
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
         return evalValue(scope).asReadonly

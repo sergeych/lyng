@@ -176,8 +176,8 @@ class BytecodeCompiler(
             }
             is LocalVarRef -> compileNameLookup(ref.name)
             is ValueFnRef -> compileEvalRef(ref)
-            is ListLiteralRef -> compileEvalRef(ref)
-            is ThisMethodSlotCallRef -> compileEvalRef(ref)
+            is ListLiteralRef -> compileListLiteral(ref)
+            is ThisMethodSlotCallRef -> compileThisMethodSlotCall(ref)
             is StatementRef -> {
                 val constId = builder.addConst(BytecodeConst.StatementVal(ref.statement))
                 val slot = allocSlot()
@@ -244,6 +244,29 @@ class BytecodeCompiler(
         builder.emit(Opcode.EVAL_REF, id, slot)
         updateSlotType(slot, SlotType.OBJ)
         return CompiledValue(slot, SlotType.OBJ)
+    }
+
+    private fun compileListLiteral(ref: ListLiteralRef): CompiledValue? {
+        val entries = ref.entries()
+        val count = entries.size
+        val baseSlot = nextSlot
+        val entrySlots = IntArray(count) { allocSlot() }
+        val spreads = ArrayList<Boolean>(count)
+        for ((index, entry) in entries.withIndex()) {
+            val value = when (entry) {
+                is net.sergeych.lyng.ListEntry.Element ->
+                    compileRefWithFallback(entry.ref, null, Pos.builtIn)
+                is net.sergeych.lyng.ListEntry.Spread ->
+                    compileRefWithFallback(entry.ref, null, Pos.builtIn)
+            } ?: return null
+            emitMove(value, entrySlots[index])
+            spreads.add(entry is net.sergeych.lyng.ListEntry.Spread)
+        }
+        val planId = builder.addConst(BytecodeConst.ListLiteralPlan(spreads))
+        val dst = allocSlot()
+        builder.emit(Opcode.LIST_LITERAL, planId, baseSlot, count, dst)
+        updateSlotType(dst, SlotType.OBJ)
+        return CompiledValue(dst, SlotType.OBJ)
     }
 
     private fun compileUnary(ref: UnaryOpRef): CompiledValue? {
@@ -1475,6 +1498,37 @@ class BytecodeCompiler(
             listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
         )
         val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
+        val encodedCount = encodeCallArgCount(args) ?: return null
+        builder.emit(Opcode.CALL_VIRTUAL, receiver.slot, methodId, args.base, encodedCount, dst)
+        builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
+        builder.mark(nullLabel)
+        builder.emit(Opcode.CONST_NULL, dst)
+        builder.mark(endLabel)
+        return CompiledValue(dst, SlotType.OBJ)
+    }
+
+    private fun compileThisMethodSlotCall(ref: ThisMethodSlotCallRef): CompiledValue? {
+        val receiver = compileNameLookup("this")
+        val methodId = builder.addConst(BytecodeConst.StringVal(ref.methodName()))
+        if (methodId > 0xFFFF) return null
+        val dst = allocSlot()
+        if (!ref.optionalInvoke()) {
+            val args = compileCallArgs(ref.arguments(), ref.hasTailBlock()) ?: return null
+            val encodedCount = encodeCallArgCount(args) ?: return null
+            builder.emit(Opcode.CALL_VIRTUAL, receiver.slot, methodId, args.base, encodedCount, dst)
+            return CompiledValue(dst, SlotType.OBJ)
+        }
+        val nullSlot = allocSlot()
+        builder.emit(Opcode.CONST_NULL, nullSlot)
+        val cmpSlot = allocSlot()
+        builder.emit(Opcode.CMP_REF_EQ_OBJ, receiver.slot, nullSlot, cmpSlot)
+        val nullLabel = builder.label()
+        val endLabel = builder.label()
+        builder.emit(
+            Opcode.JMP_IF_TRUE,
+            listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
+        )
+        val args = compileCallArgs(ref.arguments(), ref.hasTailBlock()) ?: return null
         val encodedCount = encodeCallArgCount(args) ?: return null
         builder.emit(Opcode.CALL_VIRTUAL, receiver.slot, methodId, args.base, encodedCount, dst)
         builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
