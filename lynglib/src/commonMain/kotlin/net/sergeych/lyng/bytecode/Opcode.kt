@@ -145,6 +145,7 @@ enum class Opcode(val code: Int) {
     THROW(0xBB),
     EVAL_REF(0xBC),
     EVAL_STMT(0xBD),
+    EVAL_VALUE_FN(0xBE),
     ;
 
     companion object {

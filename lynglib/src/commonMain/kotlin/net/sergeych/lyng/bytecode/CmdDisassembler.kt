@@ -187,6 +187,7 @@ object CmdDisassembler {
             is CmdEvalFallback -> Opcode.EVAL_FALLBACK to intArrayOf(cmd.id, cmd.dst)
             is CmdEvalRef -> Opcode.EVAL_REF to intArrayOf(cmd.id, cmd.dst)
             is CmdEvalStmt -> Opcode.EVAL_STMT to intArrayOf(cmd.id, cmd.dst)
+            is CmdEvalValueFn -> Opcode.EVAL_VALUE_FN to intArrayOf(cmd.id, cmd.dst)
         }
     }
 
@@ -268,7 +269,7 @@ object CmdDisassembler {
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.LIST_LITERAL ->
                 listOf(OperandKind.CONST, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
-            Opcode.EVAL_FALLBACK, Opcode.EVAL_REF, Opcode.EVAL_STMT ->
+            Opcode.EVAL_FALLBACK, Opcode.EVAL_REF, Opcode.EVAL_STMT, Opcode.EVAL_VALUE_FN ->
                 listOf(OperandKind.ID, OperandKind.SLOT)
         }
     }

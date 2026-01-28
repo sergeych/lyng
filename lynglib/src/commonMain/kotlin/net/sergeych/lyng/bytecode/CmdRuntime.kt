@@ -1352,6 +1352,22 @@ class CmdEvalStmt(internal val id: Int, internal val dst: Int) : Cmd() {
     }
 }
 
+class CmdEvalValueFn(internal val id: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.fn.localSlotNames.isNotEmpty()) {
+            frame.syncFrameToScope()
+        }
+        val valueFn = frame.fn.constants.getOrNull(id) as? BytecodeConst.ValueFn
+            ?: error("EVAL_VALUE_FN expects ValueFn at $id")
+        val result = valueFn.fn(frame.scope).value
+        if (frame.fn.localSlotNames.isNotEmpty()) {
+            frame.syncScopeToFrame()
+        }
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
 class CmdFrame(
     val vm: CmdVm,
     val fn: CmdFunction,

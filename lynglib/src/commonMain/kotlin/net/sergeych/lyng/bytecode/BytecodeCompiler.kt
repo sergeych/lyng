@@ -175,7 +175,13 @@ class BytecodeCompiler(
                 CompiledValue(mapped, resolved)
             }
             is LocalVarRef -> compileNameLookup(ref.name)
-            is ValueFnRef -> compileEvalRef(ref)
+            is ValueFnRef -> {
+                val constId = builder.addConst(BytecodeConst.ValueFn(ref.valueFn()))
+                val slot = allocSlot()
+                builder.emit(Opcode.EVAL_VALUE_FN, constId, slot)
+                updateSlotType(slot, SlotType.OBJ)
+                CompiledValue(slot, SlotType.OBJ)
+            }
             is ListLiteralRef -> compileListLiteral(ref)
             is ThisMethodSlotCallRef -> compileThisMethodSlotCall(ref)
             is StatementRef -> {
