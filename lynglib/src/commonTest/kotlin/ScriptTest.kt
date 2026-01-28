@@ -5044,4 +5044,62 @@ class ScriptTest {
             assertEquals( [1], t(1) )
         """.trimIndent())
     }
+
+    @Test
+    fun testForInIterableDisasm() = runTest {
+        val scope = Script.newScope()
+        scope.eval("""
+            fun type(x) {
+                when(x) {
+                    "42", 42 -> "answer to the great question"
+                    is Real, is Int -> "number"
+                    is String -> {
+                        for( d in x ) {
+                            if( d !in '0'..'9' ) 
+                                break "unknown"
+                        }
+                        else "number"
+                    }
+                }
+            }
+        """.trimIndent())
+        println("[DEBUG_LOG] type disasm:\n${scope.disassembleSymbol("type")}")
+        val r1 = scope.eval("""type("12%")""")
+        val r2 = scope.eval("""type("153")""")
+        println("[DEBUG_LOG] type(\"12%\")=${r1.inspect(scope)}")
+        println("[DEBUG_LOG] type(\"153\")=${r2.inspect(scope)}")
+    }
+
+    @Test
+    fun testForInIterableBytecode() = runTest {
+        val result = eval("""
+            fun sumAll(x) {
+                var s = 0
+                for (i in x) s += i
+                s
+            }
+            sumAll([1,2,3]) + sumAll(0..3)
+        """.trimIndent())
+        assertEquals(ObjInt(12), result)
+    }
+
+    @Test
+    fun testForInIterableUnknownTypeDisasm() = runTest {
+        val scope = Script.newScope()
+        scope.eval("""
+            fun countAll(x) {
+                var c = 0
+                for (i in x) c++
+                c
+            }
+        """.trimIndent())
+        val disasm = scope.disassembleSymbol("countAll")
+        println("[DEBUG_LOG] countAll disasm:\n$disasm")
+        assertFalse(disasm.contains("not a compiled body"))
+        assertFalse(disasm.contains("EVAL_FALLBACK"))
+        val r1 = scope.eval("countAll([1,2,3])")
+        val r2 = scope.eval("countAll(0..3)")
+        assertEquals(ObjInt(3), r1)
+        assertEquals(ObjInt(4), r2)
+    }
 }

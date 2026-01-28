@@ -422,8 +422,7 @@ class Compiler(
                     (target.elseBody?.let { containsUnsupportedForBytecode(it) } ?: false)
             }
             is ForInStatement -> {
-                target.constRange == null ||
-                    containsUnsupportedForBytecode(target.source) ||
+                containsUnsupportedForBytecode(target.source) ||
                     containsUnsupportedForBytecode(target.body) ||
                     (target.elseStatement?.let { containsUnsupportedForBytecode(it) } ?: false)
             }
@@ -2079,8 +2078,8 @@ class Compiler(
                                     cc.currentPos(),
                                     "when else block already defined"
                                 )
-                                elseCase =
-                                    parseStatement() ?: throw ScriptError(
+                                elseCase = parseStatement()?.let { unwrapBytecodeDeep(it) }
+                                    ?: throw ScriptError(
                                         cc.currentPos(),
                                         "when else block expected"
                                     )
@@ -2102,7 +2101,8 @@ class Compiler(
                 }
                 // parsed conditions?
                 if (!skipParseBody) {
-                    val block = parseStatement() ?: throw ScriptError(cc.currentPos(), "when case block expected")
+                    val block = parseStatement()?.let { unwrapBytecodeDeep(it) }
+                        ?: throw ScriptError(cc.currentPos(), "when case block expected")
                     for (c in currentCondition) cases += WhenCase(c, block)
                 }
             }

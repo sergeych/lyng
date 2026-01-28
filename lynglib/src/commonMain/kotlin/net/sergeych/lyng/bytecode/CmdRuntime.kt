@@ -154,6 +154,37 @@ class CmdBoxObj(internal val src: Int, internal val dst: Int) : Cmd() {
     }
 }
 
+class CmdObjToBool(internal val src: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.slotToObj(src).toBool())
+        return
+    }
+}
+
+class CmdCheckIs(internal val objSlot: Int, internal val typeSlot: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val obj = frame.slotToObj(objSlot)
+        val typeObj = frame.slotToObj(typeSlot)
+        val clazz = typeObj as? ObjClass
+        frame.setBool(dst, clazz != null && obj.isInstanceOf(clazz))
+        return
+    }
+}
+
+class CmdAssertIs(internal val objSlot: Int, internal val typeSlot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val obj = frame.slotToObj(objSlot)
+        val typeObj = frame.slotToObj(typeSlot)
+        val clazz = typeObj as? ObjClass ?: frame.scope.raiseClassCastError(
+            "${typeObj.inspect(frame.scope)} is not the class instance"
+        )
+        if (!obj.isInstanceOf(clazz)) {
+            frame.scope.raiseClassCastError("expected ${clazz.className}, got ${obj.objClass.className}")
+        }
+        return
+    }
+}
+
 class CmdRangeIntBounds(
     internal val src: Int,
     internal val startSlot: Int,

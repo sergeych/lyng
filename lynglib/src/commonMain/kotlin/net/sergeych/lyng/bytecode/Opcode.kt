@@ -34,6 +34,9 @@ enum class Opcode(val code: Int) {
     REAL_TO_INT(0x11),
     BOOL_TO_INT(0x12),
     INT_TO_BOOL(0x13),
+    OBJ_TO_BOOL(0x14),
+    CHECK_IS(0x15),
+    ASSERT_IS(0x16),
 
     ADD_INT(0x20),
     SUB_INT(0x21),

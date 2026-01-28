@@ -81,14 +81,7 @@ class BytecodeStatement private constructor(
                         (target.elseBody?.let { containsUnsupportedStatement(it) } ?: false)
                 }
                 is net.sergeych.lyng.ForInStatement -> {
-                    val rangeSource = target.source
-                    val rangeRef = (rangeSource as? net.sergeych.lyng.ExpressionStatement)?.ref as? RangeRef
-                    val sourceRef = (rangeSource as? net.sergeych.lyng.ExpressionStatement)?.ref
-                    val hasRange = target.constRange != null ||
-                        rangeRef != null ||
-                        (sourceRef is net.sergeych.lyng.obj.LocalSlotRef)
-                    val unsupported = !hasRange ||
-                        containsUnsupportedStatement(target.source) ||
+                    val unsupported = containsUnsupportedStatement(target.source) ||
                         containsUnsupportedStatement(target.body) ||
                         (target.elseStatement?.let { containsUnsupportedStatement(it) } ?: false)
                     unsupported

@@ -1679,9 +1679,80 @@ class BytecodeCompiler(
             rangeRef = extractRangeFromLocal(stmt.source)
         }
         val typedRangeLocal = if (range == null && rangeRef == null) extractTypedRangeLocal(stmt.source) else null
-        if (range == null && rangeRef == null && typedRangeLocal == null) return null
         val loopLocalIndex = localSlotIndexByName[stmt.loopVarName] ?: return null
         val loopSlotId = scopeSlotCount + loopLocalIndex
+
+        if (range == null && rangeRef == null && typedRangeLocal == null) {
+            val sourceValue = compileStatementValueOrFallback(stmt.source) ?: return null
+            val sourceObj = ensureObjSlot(sourceValue)
+            val typeId = builder.addConst(BytecodeConst.ObjRef(ObjIterable))
+            val typeSlot = allocSlot()
+            builder.emit(Opcode.CONST_OBJ, typeId, typeSlot)
+            builder.emit(Opcode.ASSERT_IS, sourceObj.slot, typeSlot)
+
+            val iterSlot = allocSlot()
+            val iteratorId = builder.addConst(BytecodeConst.StringVal("iterator"))
+            builder.emit(Opcode.CALL_VIRTUAL, sourceObj.slot, iteratorId, 0, 0, iterSlot)
+
+            val breakFlagSlot = allocSlot()
+            val falseId = builder.addConst(BytecodeConst.Bool(false))
+            builder.emit(Opcode.CONST_BOOL, falseId, breakFlagSlot)
+
+            val resultSlot = allocSlot()
+            val voidId = builder.addConst(BytecodeConst.ObjRef(ObjVoid))
+            builder.emit(Opcode.CONST_OBJ, voidId, resultSlot)
+
+            val loopLabel = builder.label()
+            val continueLabel = builder.label()
+            val endLabel = builder.label()
+            builder.mark(loopLabel)
+
+            val hasNextSlot = allocSlot()
+            val hasNextId = builder.addConst(BytecodeConst.StringVal("hasNext"))
+            builder.emit(Opcode.CALL_VIRTUAL, iterSlot, hasNextId, 0, 0, hasNextSlot)
+            val condSlot = allocSlot()
+            builder.emit(Opcode.OBJ_TO_BOOL, hasNextSlot, condSlot)
+            builder.emit(
+                Opcode.JMP_IF_FALSE,
+                listOf(CmdBuilder.Operand.IntVal(condSlot), CmdBuilder.Operand.LabelRef(endLabel))
+            )
+
+            val nextSlot = allocSlot()
+            val nextId = builder.addConst(BytecodeConst.StringVal("next"))
+            builder.emit(Opcode.CALL_VIRTUAL, iterSlot, nextId, 0, 0, nextSlot)
+            val nextObj = ensureObjSlot(CompiledValue(nextSlot, SlotType.UNKNOWN))
+            builder.emit(Opcode.MOVE_OBJ, nextObj.slot, loopSlotId)
+            updateSlotType(loopSlotId, SlotType.OBJ)
+            updateSlotTypeByName(stmt.loopVarName, SlotType.OBJ)
+
+            loopStack.addLast(
+                LoopContext(stmt.label, endLabel, continueLabel, breakFlagSlot, if (wantResult) resultSlot else null)
+            )
+            val bodyValue = compileLoopBody(stmt.body, wantResult) ?: return null
+            loopStack.removeLast()
+            if (wantResult) {
+                val bodyObj = ensureObjSlot(bodyValue)
+                builder.emit(Opcode.MOVE_OBJ, bodyObj.slot, resultSlot)
+            }
+            builder.mark(continueLabel)
+            builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(loopLabel)))
+
+            builder.mark(endLabel)
+            if (stmt.elseStatement != null) {
+                val afterElse = builder.label()
+                builder.emit(
+                    Opcode.JMP_IF_TRUE,
+                    listOf(CmdBuilder.Operand.IntVal(breakFlagSlot), CmdBuilder.Operand.LabelRef(afterElse))
+                )
+                val elseValue = compileStatementValueOrFallback(stmt.elseStatement, wantResult) ?: return null
+                if (wantResult) {
+                    val elseObj = ensureObjSlot(elseValue)
+                    builder.emit(Opcode.MOVE_OBJ, elseObj.slot, resultSlot)
+                }
+                builder.mark(afterElse)
+            }
+            return resultSlot
+        }
 
         val iSlot = allocSlot()
         val endSlot = allocSlot()
