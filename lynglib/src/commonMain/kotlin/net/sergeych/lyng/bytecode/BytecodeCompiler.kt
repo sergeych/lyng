@@ -183,6 +183,7 @@ class BytecodeCompiler(
                 CompiledValue(slot, SlotType.OBJ)
             }
             is ListLiteralRef -> compileListLiteral(ref)
+            is MapLiteralRef -> compileEvalRef(ref)
             is ThisMethodSlotCallRef -> compileThisMethodSlotCall(ref)
             is StatementRef -> {
                 val constId = builder.addConst(BytecodeConst.StatementVal(ref.statement))
