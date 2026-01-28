@@ -5102,4 +5102,32 @@ class ScriptTest {
         assertEquals(ObjInt(3), r1)
         assertEquals(ObjInt(4), r2)
     }
+
+    @Test
+    fun testReturnBreakValueBytecodeDisasm() = runTest {
+        val scope = Script.newScope()
+        scope.eval("""
+            fun firstPositive() {
+                for (i in 0..5)
+                    if (i > 0) return i
+                -1
+            }
+
+            fun firstEvenOrMinus() {
+                val r = for (i in 1..7)
+                    if (i % 2 == 0) break i
+                r
+            }
+        """.trimIndent())
+        val disasmReturn = scope.disassembleSymbol("firstPositive")
+        val disasmBreak = scope.disassembleSymbol("firstEvenOrMinus")
+        println("[DEBUG_LOG] firstPositive disasm:\n$disasmReturn")
+        println("[DEBUG_LOG] firstEvenOrMinus disasm:\n$disasmBreak")
+        assertFalse(disasmReturn.contains("not a compiled body"))
+        assertFalse(disasmBreak.contains("not a compiled body"))
+        assertFalse(disasmReturn.contains("EVAL_FALLBACK"))
+        assertFalse(disasmBreak.contains("EVAL_FALLBACK"))
+        assertEquals(ObjInt(1), scope.eval("firstPositive()"))
+        assertEquals(ObjInt(2), scope.eval("firstEvenOrMinus()"))
+    }
 }

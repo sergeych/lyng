@@ -65,7 +65,11 @@ fun Iterable.filterNotNull(): List {
 /* Skip the first N elements of this iterable. */
 fun Iterable.drop(n) {
     var cnt = 0
-    filter { cnt++ >= n }
+    val result = []
+    for( item in this ) {
+        if( cnt++ >= n ) result.add(item)
+    }
+    result
 }
 
 /* Return the first element or throw if the iterable is empty. */
