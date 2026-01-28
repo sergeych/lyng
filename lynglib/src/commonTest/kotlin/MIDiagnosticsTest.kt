@@ -26,7 +26,7 @@ import kotlin.test.Test
 import kotlin.test.assertFails
 import kotlin.test.assertTrue
 
-@Ignore("TODO(bytecode-only): uses fallback")
+@Ignore("TODO(bytecode-only): uses fallback (cast failure message)")
 class MIDiagnosticsTest {
 
     @Test

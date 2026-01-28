@@ -26,7 +26,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-@Ignore("TODO(bytecode-only): uses fallback")
 class PicInvalidationJvmTest {
     @Test
     fun fieldPicInvalidatesOnClassLayoutChange() = runBlocking {

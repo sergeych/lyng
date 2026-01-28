@@ -24,7 +24,6 @@ import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-@Ignore("TODO(bytecode-only): uses fallback")
 class ScriptSubsetJvmTest {
     private suspend fun evalInt(code: String): Long = (Scope().eval(code) as ObjInt).value
     private suspend fun evalList(code: String): List<Any?> = (Scope().eval(code) as ObjList).list.map { (it as? ObjInt)?.value ?: it }
