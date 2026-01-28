@@ -45,8 +45,9 @@ class BytecodeStatement private constructor(
             if (statement is BytecodeStatement) return statement
             val hasUnsupported = containsUnsupportedStatement(statement)
             if (hasUnsupported) {
+                val statementName = statement::class.qualifiedName ?: statement.javaClass.name
                 throw BytecodeFallbackException(
-                    "Bytecode fallback: unsupported statement in '$nameHint'",
+                    "Bytecode fallback: unsupported statement $statementName in '$nameHint'",
                     statement.pos
                 )
             }
@@ -101,6 +102,9 @@ class BytecodeStatement private constructor(
                 is net.sergeych.lyng.ThrowStatement ->
                     containsUnsupportedStatement(target.throwExpr)
                 is net.sergeych.lyng.ExtensionPropertyDeclStatement -> false
+                is net.sergeych.lyng.ClassDeclStatement -> false
+                is net.sergeych.lyng.FunctionDeclStatement -> false
+                is net.sergeych.lyng.EnumDeclStatement -> false
                 else -> true
             }
         }

@@ -27,7 +27,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-@Ignore("TODO(bytecode-only): uses fallback")
 class BindingHighlightTest {
 
     private suspend fun compileWithMini(code: String): Pair<Script, MiniAstBuilder> {

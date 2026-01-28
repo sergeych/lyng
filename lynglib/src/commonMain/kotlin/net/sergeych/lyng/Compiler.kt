@@ -2447,7 +2447,7 @@ class Compiler(
 
         val initScope = popInitScope()
 
-        return object : Statement() {
+        val declStatement = object : Statement() {
             override val pos: Pos = startPos
             override suspend fun execute(scope: Scope): Obj {
                 val parentClasses = baseSpecs.map { baseSpec ->
@@ -2478,6 +2478,7 @@ class Compiler(
                 return instance
             }
         }
+        return ClassDeclStatement(declStatement, startPos)
     }
 
     private suspend fun parseClassDeclaration(isAbstract: Boolean = false, isExtern: Boolean = false): Statement {

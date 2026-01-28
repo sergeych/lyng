@@ -1761,6 +1761,14 @@ class BytecodeCompiler(
         )
     }
 
+    private fun emitStatementEval(stmt: Statement): CompiledValue {
+        val constId = builder.addConst(BytecodeConst.StatementVal(stmt))
+        val slot = allocSlot()
+        builder.emit(Opcode.EVAL_STMT, constId, slot)
+        updateSlotType(slot, SlotType.OBJ)
+        return CompiledValue(slot, SlotType.OBJ)
+    }
+
     private fun compileStatementValueOrFallback(stmt: Statement, needResult: Boolean = true): CompiledValue? {
         val target = if (stmt is BytecodeStatement) stmt.original else stmt
         return if (needResult) {
@@ -1791,6 +1799,9 @@ class BytecodeCompiler(
                 is BlockStatement -> emitBlock(target, true)
                 is VarDeclStatement -> emitVarDecl(target)
                 is net.sergeych.lyng.ExtensionPropertyDeclStatement -> emitExtensionPropertyDecl(target)
+                is net.sergeych.lyng.ClassDeclStatement -> emitStatementEval(target)
+                is net.sergeych.lyng.FunctionDeclStatement -> emitStatementEval(target)
+                is net.sergeych.lyng.EnumDeclStatement -> emitStatementEval(target)
                 is net.sergeych.lyng.BreakStatement -> compileBreak(target)
                 is net.sergeych.lyng.ContinueStatement -> compileContinue(target)
                 is net.sergeych.lyng.ReturnStatement -> compileReturn(target)

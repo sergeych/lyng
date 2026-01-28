@@ -29,7 +29,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-@Ignore("TODO(bytecode-only): uses fallback")
 class MiniAstTest {
 
     private suspend fun compileWithMini(code: String): Pair<Script, net.sergeych.lyng.miniast.MiniAstBuilder> {
@@ -278,6 +277,7 @@ class MiniAstTest {
         assertEquals("Doc6", e1.doc?.summary)
     }
 
+    @Ignore("TODO(bytecode-only): uses fallback")
     @Test
     fun resolve_inferred_member_type() = runTest {
         val code = """
@@ -292,6 +292,7 @@ class MiniAstTest {
         assertEquals("String", DocLookupUtils.simpleClassNameOf(type))
     }
 
+    @Ignore("TODO(bytecode-only): uses fallback")
     @Test
     fun resolve_inferred_val_type_from_extern_fun() = runTest {
         val code = """
@@ -379,6 +380,7 @@ class MiniAstTest {
         assertTrue(test.isExtern, "function 'test' should be extern")
     }
 
+    @Ignore("TODO(bytecode-only): uses fallback")
     @Test
     fun resolve_object_member_doc() = runTest {
         val code = """
@@ -398,6 +400,7 @@ class MiniAstTest {
         assertEquals("O3", resolved.first)
         assertEquals("doc for name", resolved.second.doc?.summary)
     }
+    @Ignore("TODO(bytecode-only): uses fallback")
     @Test
     fun miniAst_captures_nested_generics() = runTest {
         val code = """
