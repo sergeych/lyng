@@ -7,7 +7,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
-@Ignore("TODO(bytecode-only): uses fallback")
 class ReturnStatementTest {
 
     @Test
