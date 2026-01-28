@@ -154,6 +154,28 @@ class CmdBoxObj(internal val src: Int, internal val dst: Int) : Cmd() {
     }
 }
 
+class CmdRangeIntBounds(
+    internal val src: Int,
+    internal val startSlot: Int,
+    internal val endSlot: Int,
+    internal val okSlot: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val obj = frame.slotToObj(src)
+        val range = obj as? ObjRange
+        if (range == null || !range.isIntRange) {
+            frame.setBool(okSlot, false)
+            return
+        }
+        val start = (range.start as ObjInt).value
+        val end = (range.end as ObjInt).value
+        frame.setInt(startSlot, start)
+        frame.setInt(endSlot, if (range.isEndInclusive) end + 1 else end)
+        frame.setBool(okSlot, true)
+        return
+    }
+}
+
 class CmdResolveScopeSlot(internal val scopeSlot: Int, internal val addrSlot: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         frame.resolveScopeSlotAddr(scopeSlot, addrSlot)

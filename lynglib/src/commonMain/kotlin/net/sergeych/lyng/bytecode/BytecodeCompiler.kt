@@ -29,6 +29,7 @@ import net.sergeych.lyng.obj.*
 class BytecodeCompiler(
     private val allowLocalSlots: Boolean = true,
     private val returnLabels: Set<String> = emptySet(),
+    private val rangeLocalNames: Set<String> = emptySet(),
 ) {
     private var builder = CmdBuilder()
     private var nextSlot = 0
@@ -48,6 +49,7 @@ class BytecodeCompiler(
     private var localSlotMutables = BooleanArray(0)
     private var localSlotDepths = IntArray(0)
     private val declaredLocalKeys = LinkedHashSet<ScopeSlotKey>()
+    private val localRangeRefs = LinkedHashMap<ScopeSlotKey, RangeRef>()
     private val slotTypes = mutableMapOf<Int, SlotType>()
     private val intLoopVarNames = LinkedHashSet<String>()
     private val loopStack = ArrayDeque<LoopContext>()
@@ -1672,8 +1674,12 @@ class BytecodeCompiler(
     }
     private fun emitForIn(stmt: net.sergeych.lyng.ForInStatement, wantResult: Boolean): Int? {
         val range = stmt.constRange
-        val rangeRef = if (range == null) extractRangeRef(stmt.source) else null
-        if (range == null && rangeRef == null) return null
+        var rangeRef = if (range == null) extractRangeRef(stmt.source) else null
+        if (range == null && rangeRef == null) {
+            rangeRef = extractRangeFromLocal(stmt.source)
+        }
+        val typedRangeLocal = if (range == null && rangeRef == null) extractTypedRangeLocal(stmt.source) else null
+        if (range == null && rangeRef == null && typedRangeLocal == null) return null
         val loopLocalIndex = localSlotIndexByName[stmt.loopVarName] ?: return null
         val loopSlotId = scopeSlotCount + loopLocalIndex
 
@@ -1685,15 +1691,83 @@ class BytecodeCompiler(
             builder.emit(Opcode.CONST_INT, startId, iSlot)
             builder.emit(Opcode.CONST_INT, endId, endSlot)
         } else {
-            val left = rangeRef?.left ?: return null
-            val right = rangeRef.right ?: return null
-            val startValue = compileRef(left) ?: return null
-            val endValue = compileRef(right) ?: return null
-            if (startValue.type != SlotType.INT || endValue.type != SlotType.INT) return null
-            emitMove(startValue, iSlot)
-            emitMove(endValue, endSlot)
-            if (rangeRef.isEndInclusive) {
-                builder.emit(Opcode.INC_INT, endSlot)
+            if (rangeRef != null) {
+                val left = rangeRef.left ?: return null
+                val right = rangeRef.right ?: return null
+                val startValue = compileRef(left) ?: return null
+                val endValue = compileRef(right) ?: return null
+                if (startValue.type != SlotType.INT || endValue.type != SlotType.INT) return null
+                emitMove(startValue, iSlot)
+                emitMove(endValue, endSlot)
+                if (rangeRef.isEndInclusive) {
+                    builder.emit(Opcode.INC_INT, endSlot)
+                }
+            } else {
+                val rangeLocal = typedRangeLocal ?: return null
+                val rangeValue = compileRef(rangeLocal) ?: return null
+                val rangeObj = ensureObjSlot(rangeValue)
+                val okSlot = allocSlot()
+                builder.emit(Opcode.RANGE_INT_BOUNDS, rangeObj.slot, iSlot, endSlot, okSlot)
+                val fallbackLabel = builder.label()
+                builder.emit(
+                    Opcode.JMP_IF_FALSE,
+                    listOf(CmdBuilder.Operand.IntVal(okSlot), CmdBuilder.Operand.LabelRef(fallbackLabel))
+                )
+                val breakFlagSlot = allocSlot()
+                val falseId = builder.addConst(BytecodeConst.Bool(false))
+                builder.emit(Opcode.CONST_BOOL, falseId, breakFlagSlot)
+
+                val resultSlot = allocSlot()
+                val voidId = builder.addConst(BytecodeConst.ObjRef(ObjVoid))
+                builder.emit(Opcode.CONST_OBJ, voidId, resultSlot)
+
+                val loopLabel = builder.label()
+                val continueLabel = builder.label()
+                val endLabel = builder.label()
+                val doneLabel = builder.label()
+                builder.mark(loopLabel)
+                val cmpSlot = allocSlot()
+                builder.emit(Opcode.CMP_GTE_INT, iSlot, endSlot, cmpSlot)
+                builder.emit(
+                    Opcode.JMP_IF_TRUE,
+                    listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(endLabel))
+                )
+                builder.emit(Opcode.MOVE_INT, iSlot, loopSlotId)
+                updateSlotType(loopSlotId, SlotType.INT)
+                updateSlotTypeByName(stmt.loopVarName, SlotType.INT)
+                loopStack.addLast(
+                    LoopContext(stmt.label, endLabel, continueLabel, breakFlagSlot, if (wantResult) resultSlot else null)
+                )
+                val bodyValue = compileLoopBody(stmt.body, wantResult) ?: return null
+                loopStack.removeLast()
+                if (wantResult) {
+                    val bodyObj = ensureObjSlot(bodyValue)
+                    builder.emit(Opcode.MOVE_OBJ, bodyObj.slot, resultSlot)
+                }
+                builder.mark(continueLabel)
+                builder.emit(Opcode.INC_INT, iSlot)
+                builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(loopLabel)))
+
+                builder.mark(endLabel)
+                if (stmt.elseStatement != null) {
+                    val afterElse = builder.label()
+                    builder.emit(
+                        Opcode.JMP_IF_TRUE,
+                        listOf(CmdBuilder.Operand.IntVal(breakFlagSlot), CmdBuilder.Operand.LabelRef(afterElse))
+                    )
+                    val elseValue = compileStatementValueOrFallback(stmt.elseStatement, wantResult) ?: return null
+                    if (wantResult) {
+                        val elseObj = ensureObjSlot(elseValue)
+                        builder.emit(Opcode.MOVE_OBJ, elseObj.slot, resultSlot)
+                    }
+                    builder.mark(afterElse)
+                }
+                builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(doneLabel)))
+                builder.mark(fallbackLabel)
+                val fallbackId = builder.addFallback(stmt)
+                builder.emit(Opcode.EVAL_FALLBACK, fallbackId, resultSlot)
+                builder.mark(doneLabel)
+                return resultSlot
             }
         }
 
@@ -2105,6 +2179,7 @@ class BytecodeCompiler(
         localSlotMutables = BooleanArray(0)
         localSlotDepths = IntArray(0)
         declaredLocalKeys.clear()
+        localRangeRefs.clear()
         intLoopVarNames.clear()
         addrSlotByScopeSlot.clear()
         loopStack.clear()
@@ -2167,6 +2242,11 @@ class BytecodeCompiler(
                     declaredLocalKeys.add(key)
                     if (!localSlotInfoMap.containsKey(key)) {
                         localSlotInfoMap[key] = LocalSlotInfo(stmt.name, stmt.isMutable, slotDepth)
+                    }
+                    if (!stmt.isMutable) {
+                        extractDeclaredRange(stmt.initializer)?.let { range ->
+                            localRangeRefs[key] = range
+                        }
                     }
                 }
                 stmt.initializer?.let { collectScopeSlots(it) }
@@ -2525,6 +2605,30 @@ class BytecodeCompiler(
         val target = if (source is BytecodeStatement) source.original else source
         val expr = target as? ExpressionStatement ?: return null
         return expr.ref as? RangeRef
+    }
+
+    private fun extractDeclaredRange(stmt: Statement?): RangeRef? {
+        if (stmt == null) return null
+        val target = if (stmt is BytecodeStatement) stmt.original else stmt
+        val expr = target as? ExpressionStatement ?: return null
+        return expr.ref as? RangeRef
+    }
+
+    private fun extractRangeFromLocal(source: Statement): RangeRef? {
+        val target = if (source is BytecodeStatement) source.original else source
+        val expr = target as? ExpressionStatement ?: return null
+        val localRef = expr.ref as? LocalSlotRef ?: return null
+        val key = ScopeSlotKey(refScopeDepth(localRef), refSlot(localRef))
+        return localRangeRefs[key]
+    }
+
+    private fun extractTypedRangeLocal(source: Statement): LocalSlotRef? {
+        if (rangeLocalNames.isEmpty()) return null
+        val target = if (source is BytecodeStatement) source.original else source
+        val expr = target as? ExpressionStatement ?: return null
+        val localRef = expr.ref as? LocalSlotRef ?: return null
+        if (localRef.isDelegated) return null
+        return if (rangeLocalNames.contains(localRef.name)) localRef else null
     }
 
     private fun effectiveLocalDepth(depth: Int): Int {

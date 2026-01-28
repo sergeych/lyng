@@ -126,6 +126,18 @@ class Compiler(
         return null
     }
 
+    private fun isRangeType(type: TypeDecl): Boolean {
+        val name = when (type) {
+            is TypeDecl.Simple -> type.name
+            is TypeDecl.Generic -> type.name
+            else -> return false
+        }
+        return name == "Range" ||
+            name == "IntRange" ||
+            name.endsWith(".Range") ||
+            name.endsWith(".IntRange")
+    }
+
     var packageName: String? = null
 
     class Settings(
@@ -371,6 +383,9 @@ class Compiler(
     private var lastLabel: String? = null
     private val useBytecodeStatements: Boolean = true
     private val returnLabelStack = ArrayDeque<Set<String>>()
+    private val rangeParamNamesStack = mutableListOf<Set<String>>()
+    private val currentRangeParamNames: Set<String>
+        get() = rangeParamNamesStack.lastOrNull() ?: emptySet()
 
     private fun wrapBytecode(stmt: Statement): Statement {
         if (!useBytecodeStatements) return stmt
@@ -380,7 +395,8 @@ class Compiler(
             stmt,
             "stmt@${stmt.pos}",
             allowLocalSlots = allowLocals,
-            returnLabels = returnLabels
+            returnLabels = returnLabels,
+            rangeLocalNames = currentRangeParamNames
         )
     }
 
@@ -391,7 +407,8 @@ class Compiler(
             stmt,
             "fn@$name",
             allowLocalSlots = true,
-            returnLabels = returnLabels
+            returnLabels = returnLabels,
+            rangeLocalNames = currentRangeParamNames
         )
     }
 
@@ -3041,11 +3058,16 @@ class Compiler(
             val paramNamesList = argsDeclaration.params.map { it.name }
             val paramNames: Set<String> = paramNamesList.toSet()
             val paramSlotPlan = buildParamSlotPlan(paramNamesList)
+            val rangeParamNames = argsDeclaration.params
+                .filter { isRangeType(it.type) }
+                .map { it.name }
+                .toSet()
 
             // Parse function body while tracking declared locals to compute precise capacity hints
             currentLocalDeclCount
             localDeclCountStack.add(0)
             slotPlanStack.add(paramSlotPlan)
+            rangeParamNamesStack.add(rangeParamNames)
             val parsedFnStatements = try {
                 val returnLabels = buildSet {
                     add(name)
@@ -3083,6 +3105,7 @@ class Compiler(
                     returnLabelStack.removeLast()
                 }
             } finally {
+                rangeParamNamesStack.removeLast()
                 slotPlanStack.removeLast()
             }
             val fnStatements = parsedFnStatements?.let {

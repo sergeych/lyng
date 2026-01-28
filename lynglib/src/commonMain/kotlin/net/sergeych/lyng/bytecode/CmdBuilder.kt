@@ -122,6 +122,8 @@ class CmdBuilder {
             Opcode.INT_TO_REAL, Opcode.REAL_TO_INT, Opcode.BOOL_TO_INT, Opcode.INT_TO_BOOL,
             Opcode.NEG_INT, Opcode.NEG_REAL, Opcode.NOT_BOOL, Opcode.INV_INT ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT)
+            Opcode.RANGE_INT_BOUNDS ->
+                listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.RET_LABEL, Opcode.THROW ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.RESOLVE_SCOPE_SLOT ->
@@ -209,6 +211,7 @@ class CmdBuilder {
             Opcode.CONST_BOOL -> CmdConstBool(operands[0], operands[1])
             Opcode.CONST_NULL -> CmdConstNull(operands[0])
             Opcode.BOX_OBJ -> CmdBoxObj(operands[0], operands[1])
+            Opcode.RANGE_INT_BOUNDS -> CmdRangeIntBounds(operands[0], operands[1], operands[2], operands[3])
             Opcode.RET_LABEL -> CmdRetLabel(operands[0], operands[1])
             Opcode.THROW -> CmdThrow(operands[0], operands[1])
             Opcode.RESOLVE_SCOPE_SLOT -> CmdResolveScopeSlot(operands[0], operands[1])

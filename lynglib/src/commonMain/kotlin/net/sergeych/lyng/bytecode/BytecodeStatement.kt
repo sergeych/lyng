@@ -40,12 +40,17 @@ class BytecodeStatement private constructor(
             nameHint: String,
             allowLocalSlots: Boolean,
             returnLabels: Set<String> = emptySet(),
+            rangeLocalNames: Set<String> = emptySet(),
         ): Statement {
             if (statement is BytecodeStatement) return statement
             val hasUnsupported = containsUnsupportedStatement(statement)
             if (hasUnsupported) return unwrapDeep(statement)
             val safeLocals = allowLocalSlots
-            val compiler = BytecodeCompiler(allowLocalSlots = safeLocals, returnLabels = returnLabels)
+            val compiler = BytecodeCompiler(
+                allowLocalSlots = safeLocals,
+                returnLabels = returnLabels,
+                rangeLocalNames = rangeLocalNames
+            )
             val compiled = compiler.compileStatement(nameHint, statement)
             val fn = compiled ?: run {
                 val builder = CmdBuilder()
@@ -78,11 +83,15 @@ class BytecodeStatement private constructor(
                 is net.sergeych.lyng.ForInStatement -> {
                     val rangeSource = target.source
                     val rangeRef = (rangeSource as? net.sergeych.lyng.ExpressionStatement)?.ref as? RangeRef
-                    val hasRange = target.constRange != null || rangeRef != null
-                    !hasRange ||
+                    val sourceRef = (rangeSource as? net.sergeych.lyng.ExpressionStatement)?.ref
+                    val hasRange = target.constRange != null ||
+                        rangeRef != null ||
+                        (sourceRef is net.sergeych.lyng.obj.LocalSlotRef)
+                    val unsupported = !hasRange ||
                         containsUnsupportedStatement(target.source) ||
                         containsUnsupportedStatement(target.body) ||
                         (target.elseStatement?.let { containsUnsupportedStatement(it) } ?: false)
+                    unsupported
                 }
                 is net.sergeych.lyng.WhileStatement -> {
                     containsUnsupportedStatement(target.condition) ||

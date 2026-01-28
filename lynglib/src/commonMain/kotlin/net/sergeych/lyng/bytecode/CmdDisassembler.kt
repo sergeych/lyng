@@ -68,6 +68,7 @@ object CmdDisassembler {
             is CmdConstBool -> Opcode.CONST_BOOL to intArrayOf(cmd.constId, cmd.dst)
             is CmdConstNull -> Opcode.CONST_NULL to intArrayOf(cmd.dst)
             is CmdBoxObj -> Opcode.BOX_OBJ to intArrayOf(cmd.src, cmd.dst)
+            is CmdRangeIntBounds -> Opcode.RANGE_INT_BOUNDS to intArrayOf(cmd.src, cmd.startSlot, cmd.endSlot, cmd.okSlot)
             is CmdResolveScopeSlot -> Opcode.RESOLVE_SCOPE_SLOT to intArrayOf(cmd.scopeSlot, cmd.addrSlot)
             is CmdLoadObjAddr -> Opcode.LOAD_OBJ_ADDR to intArrayOf(cmd.addrSlot, cmd.dst)
             is CmdStoreObjAddr -> Opcode.STORE_OBJ_ADDR to intArrayOf(cmd.src, cmd.addrSlot)
@@ -196,6 +197,8 @@ object CmdDisassembler {
             Opcode.INT_TO_REAL, Opcode.REAL_TO_INT, Opcode.BOOL_TO_INT, Opcode.INT_TO_BOOL,
             Opcode.NEG_INT, Opcode.NEG_REAL, Opcode.NOT_BOOL, Opcode.INV_INT ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT)
+            Opcode.RANGE_INT_BOUNDS ->
+                listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.RET_LABEL, Opcode.THROW ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.RESOLVE_SCOPE_SLOT ->
