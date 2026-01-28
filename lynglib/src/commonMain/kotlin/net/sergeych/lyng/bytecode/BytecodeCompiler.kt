@@ -194,6 +194,8 @@ class BytecodeCompiler(
             }
             is BinaryOpRef -> compileBinary(ref) ?: compileEvalRef(ref)
             is UnaryOpRef -> compileUnary(ref)
+            is LogicalAndRef -> compileEvalRef(ref)
+            is LogicalOrRef -> compileEvalRef(ref)
             is AssignRef -> compileAssign(ref) ?: compileEvalRef(ref)
             is AssignOpRef -> compileAssignOp(ref) ?: compileEvalRef(ref)
             is AssignIfNullRef -> compileAssignIfNull(ref)
@@ -295,7 +297,12 @@ class BytecodeCompiler(
                     builder.emit(Opcode.NEG_REAL, a.slot, out)
                     CompiledValue(out, SlotType.REAL)
                 }
-                else -> null
+                else -> {
+                    val obj = ensureObjSlot(a)
+                    val methodId = builder.addConst(BytecodeConst.StringVal("negate"))
+                    builder.emit(Opcode.CALL_VIRTUAL, obj.slot, methodId, 0, 0, out)
+                    CompiledValue(out, SlotType.OBJ)
+                }
             }
             UnaryOp.NOT -> {
                 when (a.type) {
@@ -307,18 +314,24 @@ class BytecodeCompiler(
                     }
                     SlotType.OBJ, SlotType.UNKNOWN -> {
                         val obj = ensureObjSlot(a)
-                        val tmp = allocSlot()
-                        builder.emit(Opcode.OBJ_TO_BOOL, obj.slot, tmp)
-                        builder.emit(Opcode.NOT_BOOL, tmp, out)
+                        val methodId = builder.addConst(BytecodeConst.StringVal("logicalNot"))
+                        val tmpObj = allocSlot()
+                        builder.emit(Opcode.CALL_VIRTUAL, obj.slot, methodId, 0, 0, tmpObj)
+                        builder.emit(Opcode.OBJ_TO_BOOL, tmpObj, out)
                     }
                     else -> return null
                 }
                 CompiledValue(out, SlotType.BOOL)
             }
             UnaryOp.BITNOT -> {
-                if (a.type != SlotType.INT) return null
-                builder.emit(Opcode.INV_INT, a.slot, out)
-                CompiledValue(out, SlotType.INT)
+                if (a.type == SlotType.INT) {
+                    builder.emit(Opcode.INV_INT, a.slot, out)
+                    return CompiledValue(out, SlotType.INT)
+                }
+                val obj = ensureObjSlot(a)
+                val methodId = builder.addConst(BytecodeConst.StringVal("bitNot"))
+                builder.emit(Opcode.CALL_VIRTUAL, obj.slot, methodId, 0, 0, out)
+                CompiledValue(out, SlotType.OBJ)
             }
         }
     }
@@ -1372,16 +1385,25 @@ class BytecodeCompiler(
                 }
             }
             SlotType.UNKNOWN -> {
+                val oneSlot = allocSlot()
+                val oneId = builder.addConst(BytecodeConst.ObjRef(ObjInt.One))
+                builder.emit(Opcode.CONST_OBJ, oneId, oneSlot)
+                val current = allocSlot()
+                builder.emit(Opcode.BOX_OBJ, slot, current)
                 if (wantResult && ref.isPost) {
-                    val old = allocSlot()
-                    builder.emit(Opcode.MOVE_INT, slot, old)
-                    builder.emit(if (ref.isIncrement) Opcode.INC_INT else Opcode.DEC_INT, slot)
-                    updateSlotType(slot, SlotType.INT)
-                    CompiledValue(old, SlotType.INT)
+                    val result = allocSlot()
+                    val op = if (ref.isIncrement) Opcode.ADD_OBJ else Opcode.SUB_OBJ
+                    builder.emit(op, current, oneSlot, result)
+                    builder.emit(Opcode.MOVE_OBJ, result, slot)
+                    updateSlotType(slot, SlotType.OBJ)
+                    CompiledValue(current, SlotType.OBJ)
                 } else {
-                    builder.emit(if (ref.isIncrement) Opcode.INC_INT else Opcode.DEC_INT, slot)
-                    updateSlotType(slot, SlotType.INT)
-                    CompiledValue(slot, SlotType.INT)
+                    val result = allocSlot()
+                    val op = if (ref.isIncrement) Opcode.ADD_OBJ else Opcode.SUB_OBJ
+                    builder.emit(op, current, oneSlot, result)
+                    builder.emit(Opcode.MOVE_OBJ, result, slot)
+                    updateSlotType(slot, SlotType.OBJ)
+                    CompiledValue(result, SlotType.OBJ)
                 }
             }
             else -> null

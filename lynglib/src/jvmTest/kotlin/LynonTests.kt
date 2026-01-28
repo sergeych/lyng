@@ -31,7 +31,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-@Ignore("TODO(bytecode-only): uses fallback")
+@Ignore("TODO(bytecode-only): uses fallback (unary minus, MI, simple types)")
 class LynonTests {
 
     @Test
@@ -794,5 +794,3 @@ class Wallet( id, ownerKey, balance=0, createdAt=Instant.now().truncateToSecond(
 
 
 }
-
-

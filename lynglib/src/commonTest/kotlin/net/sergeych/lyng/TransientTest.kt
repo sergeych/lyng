@@ -30,7 +30,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 
-@Ignore("TODO(bytecode-only): uses fallback")
 class TransientTest {
 
     @Test
