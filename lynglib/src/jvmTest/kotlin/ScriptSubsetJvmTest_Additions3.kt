@@ -28,7 +28,7 @@ import kotlin.test.assertEquals
 /**
  * JVM-only fast functional subset additions. Keep each test quick (< ~1s) and deterministic.
  */
-@Ignore("TODO(bytecode-only): uses fallback")
+@Ignore("TODO(bytecode-only): uses fallback (when/try)")
 class ScriptSubsetJvmTest_Additions3 {
     private suspend fun evalInt(code: String): Long = (Scope().eval(code) as ObjInt).value
     private suspend fun evalBool(code: String): Boolean = (Scope().eval(code) as ObjBool).value
