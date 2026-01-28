@@ -183,6 +183,7 @@ object CmdDisassembler {
             is CmdGetName -> Opcode.GET_NAME to intArrayOf(cmd.nameId, cmd.dst)
             is CmdGetIndex -> Opcode.GET_INDEX to intArrayOf(cmd.targetSlot, cmd.indexSlot, cmd.dst)
             is CmdSetIndex -> Opcode.SET_INDEX to intArrayOf(cmd.targetSlot, cmd.indexSlot, cmd.valueSlot)
+            is CmdListLiteral -> Opcode.LIST_LITERAL to intArrayOf(cmd.planId, cmd.baseSlot, cmd.count, cmd.dst)
             is CmdEvalFallback -> Opcode.EVAL_FALLBACK to intArrayOf(cmd.id, cmd.dst)
             is CmdEvalRef -> Opcode.EVAL_REF to intArrayOf(cmd.id, cmd.dst)
             is CmdEvalStmt -> Opcode.EVAL_STMT to intArrayOf(cmd.id, cmd.dst)
@@ -265,6 +266,8 @@ object CmdDisassembler {
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.SET_INDEX ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
+            Opcode.LIST_LITERAL ->
+                listOf(OperandKind.CONST, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
             Opcode.EVAL_FALLBACK, Opcode.EVAL_REF, Opcode.EVAL_STMT ->
                 listOf(OperandKind.ID, OperandKind.SLOT)
         }

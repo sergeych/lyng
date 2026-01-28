@@ -249,20 +249,6 @@ fun List.sort() {
     sortWith { a, b -> a <=> b }
 }
 
-/* Represents a single stack trace element. */
-class StackTraceEntry(
-        val sourceName: String,
-        val line: Int,
-        val column: Int,
-        val sourceString: String
-) {
-    val at by lazy { "%s:%s:%s"(sourceName,line+1,column+1) }
-    /* Formatted representation: source:line:column: text. */
-    override fun toString() {
-        "%s: %s"(at, sourceString.trim())
-    }
-}
-
 /* Print this exception and its stack trace to standard output. */
 fun Exception.printStackTrace() {
     println(this)
@@ -335,5 +321,19 @@ class lazy(creatorParam) : Delegate {
         if (value == Unset)
             value = with(thisRef,creator)
         value
+    }
+}
+
+/* Represents a single stack trace element. */
+class StackTraceEntry(
+        val sourceName: String,
+        val line: Int,
+        val column: Int,
+        val sourceString: String
+) {
+    val at by lazy { "%s:%s:%s"(sourceName,line+1,column+1) }
+    /* Formatted representation: source:line:column: text. */
+    override fun toString() {
+        "%s: %s"(at, sourceString.trim())
     }
 }

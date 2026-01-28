@@ -251,6 +251,10 @@ class Compiler(
         val statements = mutableListOf<Statement>()
         val start = cc.currentPos()
         // Track locals at script level for fast local refs
+        val needsSlotPlan = slotPlanStack.isEmpty()
+        if (needsSlotPlan) {
+            slotPlanStack.add(SlotPlan(mutableMapOf(), 0))
+        }
         return try {
             withLocalNames(emptySet()) {
                 // package level declarations
@@ -360,6 +364,9 @@ class Compiler(
                 )
             }
         } finally {
+            if (needsSlotPlan) {
+                slotPlanStack.removeLast()
+            }
         }
     }
 
@@ -387,9 +394,51 @@ class Compiler(
     private val currentRangeParamNames: Set<String>
         get() = rangeParamNamesStack.lastOrNull() ?: emptySet()
 
+    private fun containsLoopControl(stmt: Statement, inLoop: Boolean = false): Boolean {
+        val target = if (stmt is BytecodeStatement) stmt.original else stmt
+        return when (target) {
+            is BreakStatement, is ContinueStatement -> !inLoop
+            is IfStatement -> {
+                containsLoopControl(target.ifBody, inLoop) ||
+                    (target.elseBody?.let { containsLoopControl(it, inLoop) } ?: false)
+            }
+            is ForInStatement -> {
+                containsLoopControl(target.body, true) ||
+                    (target.elseStatement?.let { containsLoopControl(it, inLoop) } ?: false)
+            }
+            is WhileStatement -> {
+                containsLoopControl(target.body, true) ||
+                    (target.elseStatement?.let { containsLoopControl(it, inLoop) } ?: false)
+            }
+            is DoWhileStatement -> {
+                containsLoopControl(target.body, true) ||
+                    (target.elseStatement?.let { containsLoopControl(it, inLoop) } ?: false)
+            }
+            is BlockStatement -> target.statements().any { containsLoopControl(it, inLoop) }
+            is VarDeclStatement -> target.initializer?.let { containsLoopControl(it, inLoop) } ?: false
+            is ReturnStatement, is ThrowStatement, is ExpressionStatement -> false
+            else -> false
+        }
+    }
+
     private fun wrapBytecode(stmt: Statement): Statement {
         if (!useBytecodeStatements) return stmt
-        val allowLocals = codeContexts.lastOrNull() is CodeContext.Function
+        if (codeContexts.lastOrNull() is CodeContext.ClassBody) {
+            return stmt
+        }
+        if (stmt is FunctionDeclStatement ||
+            stmt is ClassDeclStatement ||
+            stmt is EnumDeclStatement ||
+            stmt is BreakStatement ||
+            stmt is ContinueStatement ||
+            stmt is ReturnStatement
+        ) {
+            return stmt
+        }
+        if (containsLoopControl(stmt)) {
+            return stmt
+        }
+        val allowLocals = codeContexts.lastOrNull() !is CodeContext.ClassBody
         val returnLabels = returnLabelStack.lastOrNull() ?: emptySet()
         return BytecodeStatement.wrap(
             stmt,
@@ -738,11 +787,7 @@ class Compiler(
                                     isCall = true
                                     val lambda = parseLambdaExpression()
                                     val argPos = next.pos
-                                    val argStmt = object : Statement() {
-                                        override val pos: Pos = argPos
-                                        override suspend fun execute(scope: Scope): Obj = lambda.get(scope).value
-                                    }
-                                    val args = listOf(ParsedArgument(argStmt, next.pos))
+                                    val args = listOf(ParsedArgument(ExpressionStatement(lambda, argPos), next.pos))
                                     operand = when (left) {
                                         is LocalVarRef -> if (left.name == "this") {
                                             ThisMethodSlotCallRef(next.value, args, true, isOptional)
@@ -1421,11 +1466,7 @@ class Compiler(
                     if (next.type == Token.Type.COMMA || next.type == Token.Type.RPAREN) {
                         val localVar = LocalVarRef(name, t1.pos)
                         val argPos = t1.pos
-                        val argStmt = object : Statement() {
-                            override val pos: Pos = argPos
-                            override suspend fun execute(scope: Scope): Obj = localVar.evalValue(scope)
-                        }
-                        return ParsedArgument(argStmt, t1.pos, isSplat = false, name = name)
+                        return ParsedArgument(ExpressionStatement(localVar, argPos), t1.pos, isSplat = false, name = name)
                     }
                     val rhs = parseExpression() ?: t2.raiseSyntax("expected expression after named argument '${name}:'")
                     return ParsedArgument(rhs, t1.pos, isSplat = false, name = name)
@@ -1468,11 +1509,7 @@ class Compiler(
             // last argument - callable
             val callableAccessor = parseLambdaExpression()
             args += ParsedArgument(
-                // transform ObjRef to the callable value
-                object : Statement() {
-                    override val pos: Pos = end.pos
-                    override suspend fun execute(scope: Scope): Obj = callableAccessor.get(scope).value
-                },
+                ExpressionStatement(callableAccessor, end.pos),
                 end.pos
             )
             lastBlockArgument = true
@@ -1499,11 +1536,7 @@ class Compiler(
                     if (next.type == Token.Type.COMMA || next.type == Token.Type.RPAREN) {
                         val localVar = LocalVarRef(name, t1.pos)
                         val argPos = t1.pos
-                        val argStmt = object : Statement() {
-                            override val pos: Pos = argPos
-                            override suspend fun execute(scope: Scope): Obj = localVar.evalValue(scope)
-                        }
-                        return ParsedArgument(argStmt, t1.pos, isSplat = false, name = name)
+                        return ParsedArgument(ExpressionStatement(localVar, argPos), t1.pos, isSplat = false, name = name)
                     }
                     val rhs = parseExpression() ?: t2.raiseSyntax("expected expression after named argument '${name}:'")
                     return ParsedArgument(rhs, t1.pos, isSplat = false, name = name)
@@ -1555,11 +1588,7 @@ class Compiler(
             // into the lambda body. This ensures expected order:
             //   foo { ... }.bar()  ==  (foo { ... }).bar()
             val callableAccessor = parseLambdaExpression()
-            val argStmt = object : Statement() {
-                override val pos: Pos = cc.currentPos()
-                override suspend fun execute(scope: Scope): Obj = callableAccessor.get(scope).value
-            }
-            listOf(ParsedArgument(argStmt, cc.currentPos()))
+            listOf(ParsedArgument(ExpressionStatement(callableAccessor, cc.currentPos()), cc.currentPos()))
         } else {
             val r = parseArgs()
             detectedBlockArgument = r.second
@@ -2320,7 +2349,7 @@ class Compiler(
         )
 
         val stmtPos = startPos
-        return object : Statement() {
+        val enumDeclStatement = object : Statement() {
             override val pos: Pos = stmtPos
             override suspend fun execute(scope: Scope): Obj {
                 val enumClass = ObjEnumClass.createSimpleEnum(nameToken.value, names)
@@ -2328,6 +2357,7 @@ class Compiler(
                 return enumClass
             }
         }
+        return EnumDeclStatement(enumDeclStatement, stmtPos)
     }
 
     private suspend fun parseObjectDeclaration(isExtern: Boolean = false): Statement {
@@ -2586,7 +2616,7 @@ class Compiler(
                     return instance
                 }
             }
-            object : Statement() {
+            val classDeclStatement = object : Statement() {
                 override val pos: Pos = startPos
                 override suspend fun execute(scope: Scope): Obj {
                     // the main statement should create custom ObjClass instance with field
@@ -2643,6 +2673,7 @@ class Compiler(
                     return newClass
                 }
             }
+            ClassDeclStatement(classDeclStatement, startPos)
         }
 
     }
@@ -3279,11 +3310,12 @@ class Compiler(
                     return annotatedFnBody
                 }
             }
+            val declaredFn = FunctionDeclStatement(fnCreateStatement, start)
             if (isStatic) {
-                currentInitScope += fnCreateStatement
+                currentInitScope += declaredFn
                 NopStatement
             } else
-                fnCreateStatement
+                declaredFn
         }.also {
             val bodyRange = lastParsedBlockRange
             // Also emit a post-parse MiniFunDecl to be robust in case early emission was skipped by some path
@@ -3823,43 +3855,26 @@ class Compiler(
             }
         }
 
+        if (extTypeName != null) {
+            val prop = if (getter != null || setter != null) {
+                ObjProperty(name, getter, setter)
+            } else {
+                // Simple val extension with initializer
+                val initExpr = initialExpression ?: throw ScriptError(start, "Extension val must be initialized")
+                ObjProperty(name, initExpr, null)
+            }
+            return ExtensionPropertyDeclStatement(
+                extTypeName = extTypeName,
+                property = prop,
+                visibility = visibility,
+                setterVisibility = setterVisibility,
+                startPos = start
+            )
+        }
+
         return object : Statement() {
             override val pos: Pos = start
             override suspend fun execute(context: Scope): Obj {
-                if (extTypeName != null) {
-                    val prop = if (getter != null || setter != null) {
-                        ObjProperty(name, getter, setter)
-                    } else {
-                        // Simple val extension with initializer
-                        val initExpr = initialExpression ?: throw ScriptError(start, "Extension val must be initialized")
-                        ObjProperty(
-                            name,
-                            object : Statement() {
-                                override val pos: Pos = initExpr.pos
-                                override suspend fun execute(scp: Scope): Obj = initExpr.execute(scp)
-                            },
-                            null
-                        )
-                    }
-
-                    val type = context[extTypeName]?.value ?: context.raiseSymbolNotFound("class $extTypeName not found")
-                    if (type !is ObjClass) context.raiseClassCastError("$extTypeName is not the class instance")
-
-                    context.addExtension(
-                        type,
-                        name,
-                        ObjRecord(
-                            prop,
-                            isMutable = false,
-                            visibility = visibility,
-                            writeVisibility = setterVisibility,
-                            declaringClass = null,
-                            type = ObjRecord.Type.Property
-                        )
-                    )
-
-                    return prop
-                }
                 // In true class bodies (not inside a function), store fields under a class-qualified key to support MI collisions
                 // Do NOT infer declaring class from runtime thisObj here; only the compile-time captured
                 // ClassBody qualifies for class-field storage. Otherwise, this is a plain local.

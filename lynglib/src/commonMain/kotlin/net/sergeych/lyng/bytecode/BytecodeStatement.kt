@@ -100,6 +100,7 @@ class BytecodeStatement private constructor(
                     target.resultExpr?.let { containsUnsupportedStatement(it) } ?: false
                 is net.sergeych.lyng.ThrowStatement ->
                     containsUnsupportedStatement(target.throwExpr)
+                is net.sergeych.lyng.ExtensionPropertyDeclStatement -> false
                 else -> true
             }
         }

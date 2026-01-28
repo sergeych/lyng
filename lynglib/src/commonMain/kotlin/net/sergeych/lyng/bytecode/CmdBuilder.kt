@@ -182,6 +182,8 @@ class CmdBuilder {
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.SET_INDEX ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
+            Opcode.LIST_LITERAL ->
+                listOf(OperandKind.CONST, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
             Opcode.EVAL_FALLBACK, Opcode.EVAL_REF, Opcode.EVAL_STMT ->
                 listOf(OperandKind.ID, OperandKind.SLOT)
         }
@@ -371,6 +373,7 @@ class CmdBuilder {
             Opcode.GET_NAME -> CmdGetName(operands[0], operands[1])
             Opcode.GET_INDEX -> CmdGetIndex(operands[0], operands[1], operands[2])
             Opcode.SET_INDEX -> CmdSetIndex(operands[0], operands[1], operands[2])
+            Opcode.LIST_LITERAL -> CmdListLiteral(operands[0], operands[1], operands[2], operands[3])
             Opcode.EVAL_FALLBACK -> CmdEvalFallback(operands[0], operands[1])
             Opcode.EVAL_REF -> CmdEvalRef(operands[0], operands[1])
             Opcode.EVAL_STMT -> CmdEvalStmt(operands[0], operands[1])

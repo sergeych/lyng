@@ -31,6 +31,7 @@ sealed class BytecodeConst {
     data class ObjRef(val value: Obj) : BytecodeConst()
     data class Ref(val value: net.sergeych.lyng.obj.ObjRef) : BytecodeConst()
     data class StatementVal(val statement: net.sergeych.lyng.Statement) : BytecodeConst()
+    data class ListLiteralPlan(val spreads: List<Boolean>) : BytecodeConst()
     data class SlotPlan(val plan: Map<String, Int>) : BytecodeConst()
     data class ExtensionPropertyDecl(
         val extTypeName: String,

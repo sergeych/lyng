@@ -1223,6 +1223,35 @@ class CmdGetName(
     }
 }
 
+class CmdListLiteral(
+    internal val planId: Int,
+    internal val baseSlot: Int,
+    internal val count: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val plan = frame.fn.constants.getOrNull(planId) as? BytecodeConst.ListLiteralPlan
+            ?: error("LIST_LITERAL expects ListLiteralPlan at $planId")
+        val list = ArrayList<Obj>(count)
+        for (i in 0 until count) {
+            val value = frame.slotToObj(baseSlot + i)
+            if (plan.spreads.getOrNull(i) == true) {
+                when (value) {
+                    is ObjList -> {
+                        list.ensureCapacity(list.size + value.list.size)
+                        list.addAll(value.list)
+                    }
+                    else -> frame.scope.raiseError("Spread element must be list")
+                }
+            } else {
+                list.add(value)
+            }
+        }
+        frame.storeObjResult(dst, ObjList(list))
+        return
+    }
+}
+
 class CmdSetField(
     internal val recvSlot: Int,
     internal val fieldId: Int,
