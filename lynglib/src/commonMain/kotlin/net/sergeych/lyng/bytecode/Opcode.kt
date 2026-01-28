@@ -107,6 +107,7 @@ enum class Opcode(val code: Int) {
     JMP_IF_FALSE(0x82),
     RET(0x83),
     RET_VOID(0x84),
+    RET_LABEL(0xBA),
     PUSH_SCOPE(0x85),
     POP_SCOPE(0x86),
     PUSH_SLOT_PLAN(0x87),
@@ -133,6 +134,7 @@ enum class Opcode(val code: Int) {
     STORE_REAL_ADDR(0xB7),
     LOAD_BOOL_ADDR(0xB8),
     STORE_BOOL_ADDR(0xB9),
+    THROW(0xBB),
     ;
 
     companion object {

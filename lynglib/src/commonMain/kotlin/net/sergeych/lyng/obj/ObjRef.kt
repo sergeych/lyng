@@ -1336,6 +1336,9 @@ class IndexRef(
     private val index: ObjRef,
     private val isOptional: Boolean,
 ) : ObjRef {
+    internal val targetRef: ObjRef get() = target
+    internal val indexRef: ObjRef get() = index
+    internal val optionalRef: Boolean get() = isOptional
     // Tiny 4-entry PIC for index reads (guarded implicitly by RVAL_FASTPATH); move-to-front on hits
     private var rKey1: Long = 0L; private var rVer1: Int = -1; private var rGetter1: (suspend (Obj, Scope, Obj) -> Obj)? = null
     private var rKey2: Long = 0L; private var rVer2: Int = -1; private var rGetter2: (suspend (Obj, Scope, Obj) -> Obj)? = null

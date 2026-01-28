@@ -370,16 +370,29 @@ class Compiler(
     private var isTransientFlag: Boolean = false
     private var lastLabel: String? = null
     private val useBytecodeStatements: Boolean = true
+    private val returnLabelStack = ArrayDeque<Set<String>>()
 
     private fun wrapBytecode(stmt: Statement): Statement {
         if (!useBytecodeStatements) return stmt
         val allowLocals = codeContexts.lastOrNull() is CodeContext.Function
-        return BytecodeStatement.wrap(stmt, "stmt@${stmt.pos}", allowLocalSlots = allowLocals)
+        val returnLabels = returnLabelStack.lastOrNull() ?: emptySet()
+        return BytecodeStatement.wrap(
+            stmt,
+            "stmt@${stmt.pos}",
+            allowLocalSlots = allowLocals,
+            returnLabels = returnLabels
+        )
     }
 
     private fun wrapFunctionBytecode(stmt: Statement, name: String): Statement {
         if (!useBytecodeStatements) return stmt
-        return BytecodeStatement.wrap(stmt, "fn@$name", allowLocalSlots = true)
+        val returnLabels = returnLabelStack.lastOrNull() ?: emptySet()
+        return BytecodeStatement.wrap(
+            stmt,
+            "fn@$name",
+            allowLocalSlots = true,
+            returnLabels = returnLabels
+        )
     }
 
     private fun containsUnsupportedForBytecode(stmt: Statement): Boolean {
@@ -392,13 +405,27 @@ class Compiler(
                     (target.elseBody?.let { containsUnsupportedForBytecode(it) } ?: false)
             }
             is ForInStatement -> {
-                target.constRange == null || target.canBreak ||
+                target.constRange == null ||
                     containsUnsupportedForBytecode(target.source) ||
                     containsUnsupportedForBytecode(target.body) ||
                     (target.elseStatement?.let { containsUnsupportedForBytecode(it) } ?: false)
             }
+            is WhileStatement -> {
+                containsUnsupportedForBytecode(target.condition) ||
+                    containsUnsupportedForBytecode(target.body) ||
+                    (target.elseStatement?.let { containsUnsupportedForBytecode(it) } ?: false)
+            }
+            is DoWhileStatement -> {
+                containsUnsupportedForBytecode(target.body) ||
+                    containsUnsupportedForBytecode(target.condition) ||
+                    (target.elseStatement?.let { containsUnsupportedForBytecode(it) } ?: false)
+            }
             is BlockStatement -> target.statements().any { containsUnsupportedForBytecode(it) }
             is VarDeclStatement -> target.initializer?.let { containsUnsupportedForBytecode(it) } ?: false
+            is BreakStatement -> target.resultExpr?.let { containsUnsupportedForBytecode(it) } ?: false
+            is ContinueStatement -> false
+            is ReturnStatement -> target.resultExpr?.let { containsUnsupportedForBytecode(it) } ?: false
+            is ThrowStatement -> containsUnsupportedForBytecode(target.throwExpr)
             else -> true
         }
     }
@@ -430,6 +457,59 @@ class Compiler(
                 val elseBody = stmt.elseBody?.let { unwrapBytecodeDeep(it) }
                 IfStatement(cond, ifBody, elseBody, stmt.pos)
             }
+            is ForInStatement -> {
+                val source = unwrapBytecodeDeep(stmt.source)
+                val body = unwrapBytecodeDeep(stmt.body)
+                val elseBody = stmt.elseStatement?.let { unwrapBytecodeDeep(it) }
+                ForInStatement(
+                    stmt.loopVarName,
+                    source,
+                    stmt.constRange,
+                    body,
+                    elseBody,
+                    stmt.label,
+                    stmt.canBreak,
+                    stmt.loopSlotPlan,
+                    stmt.pos
+                )
+            }
+            is WhileStatement -> {
+                val condition = unwrapBytecodeDeep(stmt.condition)
+                val body = unwrapBytecodeDeep(stmt.body)
+                val elseBody = stmt.elseStatement?.let { unwrapBytecodeDeep(it) }
+                WhileStatement(
+                    condition,
+                    body,
+                    elseBody,
+                    stmt.label,
+                    stmt.canBreak,
+                    stmt.loopSlotPlan,
+                    stmt.pos
+                )
+            }
+            is DoWhileStatement -> {
+                val body = unwrapBytecodeDeep(stmt.body)
+                val condition = unwrapBytecodeDeep(stmt.condition)
+                val elseBody = stmt.elseStatement?.let { unwrapBytecodeDeep(it) }
+                DoWhileStatement(
+                    body,
+                    condition,
+                    elseBody,
+                    stmt.label,
+                    stmt.loopSlotPlan,
+                    stmt.pos
+                )
+            }
+            is BreakStatement -> {
+                val resultExpr = stmt.resultExpr?.let { unwrapBytecodeDeep(it) }
+                BreakStatement(stmt.label, resultExpr, stmt.pos)
+            }
+            is ContinueStatement -> ContinueStatement(stmt.label, stmt.pos)
+            is ReturnStatement -> {
+                val resultExpr = stmt.resultExpr?.let { unwrapBytecodeDeep(it) }
+                ReturnStatement(stmt.label, resultExpr, stmt.pos)
+            }
+            is ThrowStatement -> ThrowStatement(unwrapBytecodeDeep(stmt.throwExpr), stmt.pos)
             else -> stmt
         }
     }
@@ -885,8 +965,14 @@ class Compiler(
         slotPlanStack.add(paramSlotPlan)
         val parsedBody = try {
             inCodeContext(CodeContext.Function("<lambda>")) {
-                withLocalNames(slotParamNames.toSet()) {
-                    parseBlock(skipLeadingBrace = true)
+                val returnLabels = label?.let { setOf(it) } ?: emptySet()
+                returnLabelStack.addLast(returnLabels)
+                try {
+                    withLocalNames(slotParamNames.toSet()) {
+                        parseBlock(skipLeadingBrace = true)
+                    }
+                } finally {
+                    returnLabelStack.removeLast()
                 }
             }
         } finally {
@@ -2031,37 +2117,7 @@ class Compiler(
 
     private suspend fun parseThrowStatement(start: Pos): Statement {
         val throwStatement = parseStatement() ?: throw ScriptError(cc.currentPos(), "throw object expected")
-        // Important: bind the created statement to the position of the `throw` keyword so that
-        // any raised error reports the correct source location.
-        val stmt = object : Statement() {
-            override val pos: Pos = start
-            override suspend fun execute(scope: Scope): Obj {
-                var errorObject = throwStatement.execute(scope)
-                // Rebind error scope to the throw-site position so ScriptError.pos is accurate
-                val throwScope = scope.createChildScope(pos = start)
-                if (errorObject is ObjString) {
-                    errorObject = ObjException(throwScope, errorObject.value).apply { getStackTrace() }
-                }
-                if (!errorObject.isInstanceOf(ObjException.Root)) {
-                    throwScope.raiseError("this is not an exception object: $errorObject")
-                }
-                if (errorObject is ObjException) {
-                    errorObject = ObjException(
-                        errorObject.exceptionClass,
-                        throwScope,
-                        errorObject.message,
-                        errorObject.extraData,
-                        errorObject.useStackTrace
-                    ).apply { getStackTrace() }
-                    throwScope.raiseError(errorObject)
-                } else {
-                    val msg = errorObject.invokeInstanceMethod(scope, "message").toString(scope).value
-                    throwScope.raiseError(errorObject, start, msg)
-                }
-                return ObjVoid
-            }
-        }
-        return wrapBytecode(stmt)
+        return wrapBytecode(ThrowStatement(throwStatement, start))
     }
 
     private data class CatchBlockData(
@@ -2692,7 +2748,11 @@ class Compiler(
         slotPlanStack.add(loopSlotPlan)
         val (canBreak, parsedBody) = try {
             cc.parseLoop {
-                parseStatement() ?: throw ScriptError(cc.currentPos(), "Bad do-while statement: expected body statement")
+                if (cc.current().type == Token.Type.LBRACE) {
+                    parseLoopBlock()
+                } else {
+                    parseStatement() ?: throw ScriptError(cc.currentPos(), "Bad do-while statement: expected body statement")
+                }
             }
         } finally {
             slotPlanStack.removeLast()
@@ -2722,36 +2782,8 @@ class Compiler(
             cc.previous()
             null
         }
-
-        return object : Statement() {
-            override val pos: Pos = body.pos
-            override suspend fun execute(scope: Scope): Obj {
-                var wasBroken = false
-                var result: Obj = ObjVoid
-                while (true) {
-                    val doScope = scope.createChildScope().apply { skipScopeCreation = true }
-                    try {
-                        result = body.execute(doScope)
-                    } catch (e: LoopBreakContinueException) {
-                        if (e.label == label || e.label == null) {
-                            if (!e.doContinue) {
-                                result = e.result
-                                wasBroken = true
-                                break
-                            }
-                            // for continue: just fall through to condition check below
-                        } else {
-                            throw e
-                        }
-                    }
-                    if (!condition.execute(doScope).toBool()) {
-                        break
-                    }
-                }
-                if (!wasBroken) elseStatement?.let { s -> result = s.execute(scope) }
-                return result
-            }
-        }
+        val loopPlanSnapshot = slotPlanIndices(loopSlotPlan)
+        return DoWhileStatement(body, condition, elseStatement, label, loopPlanSnapshot, body.pos)
     }
 
     private suspend fun parseWhileStatement(): Statement {
@@ -2765,7 +2797,7 @@ class Compiler(
         slotPlanStack.add(loopSlotPlan)
         val (canBreak, parsedBody) = try {
             cc.parseLoop {
-                if (cc.current().type == Token.Type.LBRACE) parseBlock()
+                if (cc.current().type == Token.Type.LBRACE) parseLoopBlock()
                 else parseStatement() ?: throw ScriptError(start, "Bad while statement: expected statement")
             }
         } finally {
@@ -2782,34 +2814,8 @@ class Compiler(
             cc.previous()
             null
         }
-        return object : Statement() {
-            override val pos: Pos = body.pos
-            override suspend fun execute(scope: Scope): Obj {
-                var result: Obj = ObjVoid
-                var wasBroken = false
-                while (condition.execute(scope).toBool()) {
-                    val loopScope = scope.createChildScope().apply { skipScopeCreation = true }
-                    if (canBreak) {
-                        try {
-                            result = body.execute(loopScope)
-                        } catch (lbe: LoopBreakContinueException) {
-                            if (lbe.label == label || lbe.label == null) {
-                                if (lbe.doContinue) continue
-                                else {
-                                    result = lbe.result
-                                    wasBroken = true
-                                    break
-                                }
-                            } else
-                                throw lbe
-                        }
-                    } else
-                        result = body.execute(loopScope)
-                }
-                if (!wasBroken) elseStatement?.let { s -> result = s.execute(scope) }
-                return result
-            }
-        }
+        val loopPlanSnapshot = slotPlanIndices(loopSlotPlan)
+        return WhileStatement(condition, body, elseStatement, label, canBreak, loopPlanSnapshot, body.pos)
     }
 
     private suspend fun parseBreakStatement(start: Pos): Statement {
@@ -2843,17 +2849,7 @@ class Compiler(
 
         cc.addBreak()
 
-        return object : Statement() {
-            override val pos: Pos = start
-            override suspend fun execute(scope: Scope): Obj {
-                val returnValue = resultExpr?.execute(scope)// ?: ObjVoid
-                throw LoopBreakContinueException(
-                    doContinue = false,
-                    label = label,
-                    result = returnValue ?: ObjVoid
-                )
-            }
-        }
+        return BreakStatement(label, resultExpr, start)
     }
 
     private fun parseContinueStatement(start: Pos): Statement {
@@ -2870,15 +2866,7 @@ class Compiler(
         }
         cc.addBreak()
 
-        return object : Statement() {
-            override val pos: Pos = start
-            override suspend fun execute(scope: Scope): Obj {
-                throw LoopBreakContinueException(
-                    doContinue = true,
-                    label = label,
-                )
-            }
-        }
+        return ContinueStatement(label, start)
     }
 
     private suspend fun parseReturnStatement(start: Pos): Statement {
@@ -2907,13 +2895,7 @@ class Compiler(
             parseExpression()
         } else null
 
-        return object : Statement() {
-            override val pos: Pos = start
-            override suspend fun execute(scope: Scope): Obj {
-                val returnValue = resultExpr?.execute(scope) ?: ObjVoid
-                throw ReturnException(returnValue, label)
-            }
-        }
+        return ReturnStatement(label, resultExpr, start)
     }
 
     private fun ensureRparen(): Pos {
@@ -3065,32 +3047,41 @@ class Compiler(
             localDeclCountStack.add(0)
             slotPlanStack.add(paramSlotPlan)
             val parsedFnStatements = try {
-                if (actualExtern)
-                    object : Statement() {
-                        override val pos: Pos = start
-                        override suspend fun execute(scope: Scope): Obj {
-                            scope.raiseError("extern function not provided: $name")
-                        }
-                    }
-                else if (isAbstract || isDelegated) {
-                    null
-                } else
-                    withLocalNames(paramNames) {
-                        val next = cc.peekNextNonWhitespace()
-                        if (next.type == Token.Type.ASSIGN) {
-                            cc.nextNonWhitespace() // consume '='
-                            if (cc.peekNextNonWhitespace().value == "return")
-                                throw ScriptError(cc.currentPos(), "return is not allowed in shorthand function")
-                            val expr = parseExpression() ?: throw ScriptError(cc.currentPos(), "Expected function body expression")
-                            // Shorthand function returns the expression value
-                            object : Statement() {
-                                override val pos: Pos = expr.pos
-                                override suspend fun execute(scope: Scope): Obj = expr.execute(scope)
+                val returnLabels = buildSet {
+                    add(name)
+                    outerLabel?.let { add(it) }
+                }
+                returnLabelStack.addLast(returnLabels)
+                try {
+                    if (actualExtern)
+                        object : Statement() {
+                            override val pos: Pos = start
+                            override suspend fun execute(scope: Scope): Obj {
+                                scope.raiseError("extern function not provided: $name")
                             }
-                        } else {
-                            parseBlock()
                         }
-                    }
+                    else if (isAbstract || isDelegated) {
+                        null
+                    } else
+                        withLocalNames(paramNames) {
+                            val next = cc.peekNextNonWhitespace()
+                            if (next.type == Token.Type.ASSIGN) {
+                                cc.nextNonWhitespace() // consume '='
+                                if (cc.peekNextNonWhitespace().value == "return")
+                                    throw ScriptError(cc.currentPos(), "return is not allowed in shorthand function")
+                                val expr = parseExpression() ?: throw ScriptError(cc.currentPos(), "Expected function body expression")
+                                // Shorthand function returns the expression value
+                                object : Statement() {
+                                    override val pos: Pos = expr.pos
+                                    override suspend fun execute(scope: Scope): Obj = expr.execute(scope)
+                                }
+                            } else {
+                                parseBlock()
+                            }
+                        }
+                } finally {
+                    returnLabelStack.removeLast()
+                }
             } finally {
                 slotPlanStack.removeLast()
             }
@@ -3320,6 +3311,24 @@ class Compiler(
             if (t1.type != Token.Type.RBRACE)
                 throw ScriptError(t1.pos, "unbalanced braces: expected block body end: }")
             // Record last parsed block range and notify Mini-AST sink
+            val range = MiniRange(startPos, t1.pos)
+            lastParsedBlockRange = range
+            miniSink?.onBlock(MiniBlock(range))
+        }
+    }
+
+    private suspend fun parseLoopBlock(): Statement {
+        val startPos = cc.currentPos()
+        val t = cc.next()
+        if (t.type != Token.Type.LBRACE)
+            throw ScriptError(t.pos, "Expected block body start: {")
+        val block = parseScript()
+        val stmt = BlockStatement(block, emptyMap(), startPos)
+        val wrapped = wrapBytecode(stmt)
+        return wrapped.also {
+            val t1 = cc.next()
+            if (t1.type != Token.Type.RBRACE)
+                throw ScriptError(t1.pos, "unbalanced braces: expected block body end: }")
             val range = MiniRange(startPos, t1.pos)
             lastParsedBlockRange = range
             miniSink?.onBlock(MiniBlock(range))

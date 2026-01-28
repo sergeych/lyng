@@ -20,6 +20,7 @@ data class CmdFunction(
     val name: String,
     val localCount: Int,
     val addrCount: Int,
+    val returnLabels: Set<String>,
     val scopeSlotCount: Int,
     val scopeSlotDepths: IntArray,
     val scopeSlotIndices: IntArray,

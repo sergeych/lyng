@@ -160,7 +160,9 @@ object CmdDisassembler {
             is CmdJmpIfTrue -> Opcode.JMP_IF_TRUE to intArrayOf(cmd.cond, cmd.target)
             is CmdJmpIfFalse -> Opcode.JMP_IF_FALSE to intArrayOf(cmd.cond, cmd.target)
             is CmdRet -> Opcode.RET to intArrayOf(cmd.slot)
+            is CmdRetLabel -> Opcode.RET_LABEL to intArrayOf(cmd.labelId, cmd.slot)
             is CmdRetVoid -> Opcode.RET_VOID to intArrayOf()
+            is CmdThrow -> Opcode.THROW to intArrayOf(cmd.posId, cmd.slot)
             is CmdPushScope -> Opcode.PUSH_SCOPE to intArrayOf(cmd.planId)
             is CmdPopScope -> Opcode.POP_SCOPE to intArrayOf()
             is CmdPushSlotPlan -> Opcode.PUSH_SLOT_PLAN to intArrayOf(cmd.planId)
@@ -194,6 +196,8 @@ object CmdDisassembler {
             Opcode.INT_TO_REAL, Opcode.REAL_TO_INT, Opcode.BOOL_TO_INT, Opcode.INT_TO_BOOL,
             Opcode.NEG_INT, Opcode.NEG_REAL, Opcode.NOT_BOOL, Opcode.INV_INT ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT)
+            Opcode.RET_LABEL, Opcode.THROW ->
+                listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.RESOLVE_SCOPE_SLOT ->
                 listOf(OperandKind.SLOT, OperandKind.ADDR)
             Opcode.LOAD_OBJ_ADDR, Opcode.LOAD_INT_ADDR, Opcode.LOAD_REAL_ADDR, Opcode.LOAD_BOOL_ADDR ->

@@ -22,8 +22,10 @@ import net.sergeych.lyng.obj.ObjClass
 import net.sergeych.lyng.obj.ObjInt
 import net.sergeych.lyng.obj.ObjIterable
 import net.sergeych.lyng.obj.ObjNull
+import net.sergeych.lyng.obj.ObjException
 import net.sergeych.lyng.obj.ObjRange
 import net.sergeych.lyng.obj.ObjRecord
+import net.sergeych.lyng.obj.ObjString
 import net.sergeych.lyng.obj.ObjVoid
 import net.sergeych.lyng.obj.toBool
 import net.sergeych.lyng.obj.toInt
@@ -294,6 +296,146 @@ class ForInStatement(
             result = elseStatement.execute(forScope)
         }
         return result
+    }
+}
+
+class WhileStatement(
+    val condition: Statement,
+    val body: Statement,
+    val elseStatement: Statement?,
+    val label: String?,
+    val canBreak: Boolean,
+    val loopSlotPlan: Map<String, Int>,
+    override val pos: Pos,
+) : Statement() {
+    override suspend fun execute(scope: Scope): Obj {
+        var result: Obj = ObjVoid
+        var wasBroken = false
+        while (condition.execute(scope).toBool()) {
+            val loopScope = scope.createChildScope().apply { skipScopeCreation = true }
+            if (canBreak) {
+                try {
+                    result = body.execute(loopScope)
+                } catch (lbe: LoopBreakContinueException) {
+                    if (lbe.label == label || lbe.label == null) {
+                        if (lbe.doContinue) continue
+                        result = lbe.result
+                        wasBroken = true
+                        break
+                    } else {
+                        throw lbe
+                    }
+                }
+            } else {
+                result = body.execute(loopScope)
+            }
+        }
+        if (!wasBroken) elseStatement?.let { s -> result = s.execute(scope) }
+        return result
+    }
+}
+
+class DoWhileStatement(
+    val body: Statement,
+    val condition: Statement,
+    val elseStatement: Statement?,
+    val label: String?,
+    val loopSlotPlan: Map<String, Int>,
+    override val pos: Pos,
+) : Statement() {
+    override suspend fun execute(scope: Scope): Obj {
+        var wasBroken = false
+        var result: Obj = ObjVoid
+        while (true) {
+            val doScope = scope.createChildScope().apply { skipScopeCreation = true }
+            try {
+                result = body.execute(doScope)
+            } catch (e: LoopBreakContinueException) {
+                if (e.label == label || e.label == null) {
+                    if (!e.doContinue) {
+                        result = e.result
+                        wasBroken = true
+                        break
+                    }
+                    // continue: fall through to condition check
+                } else {
+                    throw e
+                }
+            }
+            if (!condition.execute(doScope).toBool()) {
+                break
+            }
+        }
+        if (!wasBroken) elseStatement?.let { s -> result = s.execute(scope) }
+        return result
+    }
+}
+
+class BreakStatement(
+    val label: String?,
+    val resultExpr: Statement?,
+    override val pos: Pos,
+) : Statement() {
+    override suspend fun execute(scope: Scope): Obj {
+        val returnValue = resultExpr?.execute(scope)
+        throw LoopBreakContinueException(
+            doContinue = false,
+            label = label,
+            result = returnValue ?: ObjVoid
+        )
+    }
+}
+
+class ContinueStatement(
+    val label: String?,
+    override val pos: Pos,
+) : Statement() {
+    override suspend fun execute(scope: Scope): Obj {
+        throw LoopBreakContinueException(
+            doContinue = true,
+            label = label,
+        )
+    }
+}
+
+class ReturnStatement(
+    val label: String?,
+    val resultExpr: Statement?,
+    override val pos: Pos,
+) : Statement() {
+    override suspend fun execute(scope: Scope): Obj {
+        val returnValue = resultExpr?.execute(scope) ?: ObjVoid
+        throw ReturnException(returnValue, label)
+    }
+}
+
+class ThrowStatement(
+    val throwExpr: Statement,
+    override val pos: Pos,
+) : Statement() {
+    override suspend fun execute(scope: Scope): Obj {
+        var errorObject = throwExpr.execute(scope)
+        val throwScope = scope.createChildScope(pos = pos)
+        if (errorObject is ObjString) {
+            errorObject = ObjException(throwScope, errorObject.value).apply { getStackTrace() }
+        }
+        if (!errorObject.isInstanceOf(ObjException.Root)) {
+            throwScope.raiseError("this is not an exception object: $errorObject")
+        }
+        if (errorObject is ObjException) {
+            errorObject = ObjException(
+                errorObject.exceptionClass,
+                throwScope,
+                errorObject.message,
+                errorObject.extraData,
+                errorObject.useStackTrace
+            ).apply { getStackTrace() }
+            throwScope.raiseError(errorObject)
+        } else {
+            val msg = errorObject.invokeInstanceMethod(scope, "message").toString(scope).value
+            throwScope.raiseError(errorObject, pos, msg)
+        }
+        return ObjVoid
     }
 }
 

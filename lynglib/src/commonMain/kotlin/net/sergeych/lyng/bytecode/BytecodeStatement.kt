@@ -20,6 +20,7 @@ import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Statement
 import net.sergeych.lyng.obj.Obj
+import net.sergeych.lyng.obj.RangeRef
 
 class BytecodeStatement private constructor(
     val original: Statement,
@@ -34,12 +35,17 @@ class BytecodeStatement private constructor(
     internal fun bytecodeFunction(): CmdFunction = function
 
     companion object {
-        fun wrap(statement: Statement, nameHint: String, allowLocalSlots: Boolean): Statement {
+        fun wrap(
+            statement: Statement,
+            nameHint: String,
+            allowLocalSlots: Boolean,
+            returnLabels: Set<String> = emptySet(),
+        ): Statement {
             if (statement is BytecodeStatement) return statement
             val hasUnsupported = containsUnsupportedStatement(statement)
             if (hasUnsupported) return unwrapDeep(statement)
             val safeLocals = allowLocalSlots
-            val compiler = BytecodeCompiler(allowLocalSlots = safeLocals)
+            val compiler = BytecodeCompiler(allowLocalSlots = safeLocals, returnLabels = returnLabels)
             val compiled = compiler.compileStatement(nameHint, statement)
             val fn = compiled ?: run {
                 val builder = CmdBuilder()
@@ -51,6 +57,7 @@ class BytecodeStatement private constructor(
                     nameHint,
                     localCount = 1,
                     addrCount = 0,
+                    returnLabels = returnLabels,
                     localSlotNames = emptyArray(),
                     localSlotMutables = BooleanArray(0),
                     localSlotDepths = IntArray(0)
@@ -69,15 +76,35 @@ class BytecodeStatement private constructor(
                         (target.elseBody?.let { containsUnsupportedStatement(it) } ?: false)
                 }
                 is net.sergeych.lyng.ForInStatement -> {
-                    target.constRange == null || target.canBreak ||
+                    val rangeSource = target.source
+                    val rangeRef = (rangeSource as? net.sergeych.lyng.ExpressionStatement)?.ref as? RangeRef
+                    val hasRange = target.constRange != null || rangeRef != null
+                    !hasRange ||
                         containsUnsupportedStatement(target.source) ||
                         containsUnsupportedStatement(target.body) ||
+                        (target.elseStatement?.let { containsUnsupportedStatement(it) } ?: false)
+                }
+                is net.sergeych.lyng.WhileStatement -> {
+                    containsUnsupportedStatement(target.condition) ||
+                        containsUnsupportedStatement(target.body) ||
+                        (target.elseStatement?.let { containsUnsupportedStatement(it) } ?: false)
+                }
+                is net.sergeych.lyng.DoWhileStatement -> {
+                    containsUnsupportedStatement(target.body) ||
+                        containsUnsupportedStatement(target.condition) ||
                         (target.elseStatement?.let { containsUnsupportedStatement(it) } ?: false)
                 }
                 is net.sergeych.lyng.BlockStatement ->
                     target.statements().any { containsUnsupportedStatement(it) }
                 is net.sergeych.lyng.VarDeclStatement ->
                     target.initializer?.let { containsUnsupportedStatement(it) } ?: false
+                is net.sergeych.lyng.BreakStatement ->
+                    target.resultExpr?.let { containsUnsupportedStatement(it) } ?: false
+                is net.sergeych.lyng.ContinueStatement -> false
+                is net.sergeych.lyng.ReturnStatement ->
+                    target.resultExpr?.let { containsUnsupportedStatement(it) } ?: false
+                is net.sergeych.lyng.ThrowStatement ->
+                    containsUnsupportedStatement(target.throwExpr)
                 else -> true
             }
         }
@@ -126,6 +153,39 @@ class BytecodeStatement private constructor(
                         stmt.pos
                     )
                 }
+                is net.sergeych.lyng.WhileStatement -> {
+                    net.sergeych.lyng.WhileStatement(
+                        unwrapDeep(stmt.condition),
+                        unwrapDeep(stmt.body),
+                        stmt.elseStatement?.let { unwrapDeep(it) },
+                        stmt.label,
+                        stmt.canBreak,
+                        stmt.loopSlotPlan,
+                        stmt.pos
+                    )
+                }
+                is net.sergeych.lyng.DoWhileStatement -> {
+                    net.sergeych.lyng.DoWhileStatement(
+                        unwrapDeep(stmt.body),
+                        unwrapDeep(stmt.condition),
+                        stmt.elseStatement?.let { unwrapDeep(it) },
+                        stmt.label,
+                        stmt.loopSlotPlan,
+                        stmt.pos
+                    )
+                }
+                is net.sergeych.lyng.BreakStatement -> {
+                    val resultExpr = stmt.resultExpr?.let { unwrapDeep(it) }
+                    net.sergeych.lyng.BreakStatement(stmt.label, resultExpr, stmt.pos)
+                }
+                is net.sergeych.lyng.ContinueStatement ->
+                    net.sergeych.lyng.ContinueStatement(stmt.label, stmt.pos)
+                is net.sergeych.lyng.ReturnStatement -> {
+                    val resultExpr = stmt.resultExpr?.let { unwrapDeep(it) }
+                    net.sergeych.lyng.ReturnStatement(stmt.label, resultExpr, stmt.pos)
+                }
+                is net.sergeych.lyng.ThrowStatement ->
+                    net.sergeych.lyng.ThrowStatement(unwrapDeep(stmt.throwExpr), stmt.pos)
                 else -> stmt
             }
         }

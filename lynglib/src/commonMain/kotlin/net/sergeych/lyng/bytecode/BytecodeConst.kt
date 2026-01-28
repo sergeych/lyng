@@ -16,6 +16,7 @@
 
 package net.sergeych.lyng.bytecode
 
+import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Visibility
 import net.sergeych.lyng.obj.Obj
 
@@ -25,6 +26,7 @@ sealed class BytecodeConst {
     data class IntVal(val value: Long) : BytecodeConst()
     data class RealVal(val value: Double) : BytecodeConst()
     data class StringVal(val value: String) : BytecodeConst()
+    data class PosVal(val pos: Pos) : BytecodeConst()
     data class ObjRef(val value: Obj) : BytecodeConst()
     data class SlotPlan(val plan: Map<String, Int>) : BytecodeConst()
     data class LocalDecl(

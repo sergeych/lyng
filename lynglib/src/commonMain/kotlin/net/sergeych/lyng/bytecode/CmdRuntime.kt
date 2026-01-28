@@ -18,6 +18,9 @@ package net.sergeych.lyng.bytecode
 
 import net.sergeych.lyng.Arguments
 import net.sergeych.lyng.PerfFlags
+import net.sergeych.lyng.PerfStats
+import net.sergeych.lyng.Pos
+import net.sergeych.lyng.ReturnException
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.obj.*
 
@@ -49,7 +52,7 @@ class CmdNop : Cmd() {
 
 class CmdMoveObj(internal val src: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setObj(dst, frame.getObj(src))
+        frame.setObj(dst, frame.slotToObj(src))
         return
     }
 }
@@ -657,28 +660,28 @@ class CmdCmpNeqRealInt(internal val a: Int, internal val b: Int, internal val ds
 
 class CmdCmpEqObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setBool(dst, frame.getObj(a) == frame.getObj(b))
+        frame.setBool(dst, frame.slotToObj(a) == frame.slotToObj(b))
         return
     }
 }
 
 class CmdCmpNeqObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setBool(dst, frame.getObj(a) != frame.getObj(b))
+        frame.setBool(dst, frame.slotToObj(a) != frame.slotToObj(b))
         return
     }
 }
 
 class CmdCmpRefEqObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setBool(dst, frame.getObj(a) === frame.getObj(b))
+        frame.setBool(dst, frame.slotToObj(a) === frame.slotToObj(b))
         return
     }
 }
 
 class CmdCmpRefNeqObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setBool(dst, frame.getObj(a) !== frame.getObj(b))
+        frame.setBool(dst, frame.slotToObj(a) !== frame.slotToObj(b))
         return
     }
 }
@@ -706,63 +709,148 @@ class CmdOrBool(internal val a: Int, internal val b: Int, internal val dst: Int)
 
 class CmdCmpLtObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setBool(dst, frame.getObj(a).compareTo(frame.scope, frame.getObj(b)) < 0)
+        frame.setBool(dst, frame.slotToObj(a).compareTo(frame.scope, frame.slotToObj(b)) < 0)
         return
     }
 }
 
 class CmdCmpLteObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setBool(dst, frame.getObj(a).compareTo(frame.scope, frame.getObj(b)) <= 0)
+        frame.setBool(dst, frame.slotToObj(a).compareTo(frame.scope, frame.slotToObj(b)) <= 0)
         return
     }
 }
 
 class CmdCmpGtObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setBool(dst, frame.getObj(a).compareTo(frame.scope, frame.getObj(b)) > 0)
+        frame.setBool(dst, frame.slotToObj(a).compareTo(frame.scope, frame.slotToObj(b)) > 0)
         return
     }
 }
 
 class CmdCmpGteObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setBool(dst, frame.getObj(a).compareTo(frame.scope, frame.getObj(b)) >= 0)
+        frame.setBool(dst, frame.slotToObj(a).compareTo(frame.scope, frame.slotToObj(b)) >= 0)
         return
     }
 }
 
 class CmdAddObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setObj(dst, frame.getObj(a).plus(frame.scope, frame.getObj(b)))
+        val scopeSlotCount = frame.fn.scopeSlotCount
+        if (a >= scopeSlotCount && b >= scopeSlotCount) {
+            val la = a - scopeSlotCount
+            val lb = b - scopeSlotCount
+            val ta = frame.frame.getSlotTypeCode(la)
+            val tb = frame.frame.getSlotTypeCode(lb)
+            if (ta == SlotType.INT.code && tb == SlotType.INT.code) {
+                frame.setInt(dst, frame.frame.getInt(la) + frame.frame.getInt(lb))
+                return
+            }
+            if (ta == SlotType.REAL.code || tb == SlotType.REAL.code) {
+                val av = if (ta == SlotType.REAL.code) frame.frame.getReal(la) else frame.frame.getInt(la).toDouble()
+                val bv = if (tb == SlotType.REAL.code) frame.frame.getReal(lb) else frame.frame.getInt(lb).toDouble()
+                frame.setReal(dst, av + bv)
+                return
+            }
+        }
+        frame.setObj(dst, frame.slotToObj(a).plus(frame.scope, frame.slotToObj(b)))
         return
     }
 }
 
 class CmdSubObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setObj(dst, frame.getObj(a).minus(frame.scope, frame.getObj(b)))
+        val scopeSlotCount = frame.fn.scopeSlotCount
+        if (a >= scopeSlotCount && b >= scopeSlotCount) {
+            val la = a - scopeSlotCount
+            val lb = b - scopeSlotCount
+            val ta = frame.frame.getSlotTypeCode(la)
+            val tb = frame.frame.getSlotTypeCode(lb)
+            if (ta == SlotType.INT.code && tb == SlotType.INT.code) {
+                frame.setInt(dst, frame.frame.getInt(la) - frame.frame.getInt(lb))
+                return
+            }
+            if (ta == SlotType.REAL.code || tb == SlotType.REAL.code) {
+                val av = if (ta == SlotType.REAL.code) frame.frame.getReal(la) else frame.frame.getInt(la).toDouble()
+                val bv = if (tb == SlotType.REAL.code) frame.frame.getReal(lb) else frame.frame.getInt(lb).toDouble()
+                frame.setReal(dst, av - bv)
+                return
+            }
+        }
+        frame.setObj(dst, frame.slotToObj(a).minus(frame.scope, frame.slotToObj(b)))
         return
     }
 }
 
 class CmdMulObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setObj(dst, frame.getObj(a).mul(frame.scope, frame.getObj(b)))
+        val scopeSlotCount = frame.fn.scopeSlotCount
+        if (a >= scopeSlotCount && b >= scopeSlotCount) {
+            val la = a - scopeSlotCount
+            val lb = b - scopeSlotCount
+            val ta = frame.frame.getSlotTypeCode(la)
+            val tb = frame.frame.getSlotTypeCode(lb)
+            if (ta == SlotType.INT.code && tb == SlotType.INT.code) {
+                frame.setInt(dst, frame.frame.getInt(la) * frame.frame.getInt(lb))
+                return
+            }
+            if (ta == SlotType.REAL.code || tb == SlotType.REAL.code) {
+                val av = if (ta == SlotType.REAL.code) frame.frame.getReal(la) else frame.frame.getInt(la).toDouble()
+                val bv = if (tb == SlotType.REAL.code) frame.frame.getReal(lb) else frame.frame.getInt(lb).toDouble()
+                frame.setReal(dst, av * bv)
+                return
+            }
+        }
+        frame.setObj(dst, frame.slotToObj(a).mul(frame.scope, frame.slotToObj(b)))
         return
     }
 }
 
 class CmdDivObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setObj(dst, frame.getObj(a).div(frame.scope, frame.getObj(b)))
+        val scopeSlotCount = frame.fn.scopeSlotCount
+        if (a >= scopeSlotCount && b >= scopeSlotCount) {
+            val la = a - scopeSlotCount
+            val lb = b - scopeSlotCount
+            val ta = frame.frame.getSlotTypeCode(la)
+            val tb = frame.frame.getSlotTypeCode(lb)
+            if (ta == SlotType.INT.code && tb == SlotType.INT.code) {
+                frame.setInt(dst, frame.frame.getInt(la) / frame.frame.getInt(lb))
+                return
+            }
+            if (ta == SlotType.REAL.code || tb == SlotType.REAL.code) {
+                val av = if (ta == SlotType.REAL.code) frame.frame.getReal(la) else frame.frame.getInt(la).toDouble()
+                val bv = if (tb == SlotType.REAL.code) frame.frame.getReal(lb) else frame.frame.getInt(lb).toDouble()
+                frame.setReal(dst, av / bv)
+                return
+            }
+        }
+        frame.setObj(dst, frame.slotToObj(a).div(frame.scope, frame.slotToObj(b)))
         return
     }
 }
 
 class CmdModObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setObj(dst, frame.getObj(a).mod(frame.scope, frame.getObj(b)))
+        val scopeSlotCount = frame.fn.scopeSlotCount
+        if (a >= scopeSlotCount && b >= scopeSlotCount) {
+            val la = a - scopeSlotCount
+            val lb = b - scopeSlotCount
+            val ta = frame.frame.getSlotTypeCode(la)
+            val tb = frame.frame.getSlotTypeCode(lb)
+            if (ta == SlotType.INT.code && tb == SlotType.INT.code) {
+                frame.setInt(dst, frame.frame.getInt(la) % frame.frame.getInt(lb))
+                return
+            }
+            if (ta == SlotType.REAL.code || tb == SlotType.REAL.code) {
+                val av = if (ta == SlotType.REAL.code) frame.frame.getReal(la) else frame.frame.getInt(la).toDouble()
+                val bv = if (tb == SlotType.REAL.code) frame.frame.getReal(lb) else frame.frame.getInt(lb).toDouble()
+                frame.setReal(dst, av % bv)
+                return
+            }
+        }
+        frame.setObj(dst, frame.slotToObj(a).mod(frame.scope, frame.slotToObj(b)))
         return
     }
 }
@@ -799,9 +887,32 @@ class CmdRet(internal val slot: Int) : Cmd() {
     }
 }
 
+class CmdRetLabel(internal val labelId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val labelConst = frame.fn.constants.getOrNull(labelId) as? BytecodeConst.StringVal
+            ?: error("RET_LABEL expects StringVal at $labelId")
+        val value = frame.slotToObj(slot)
+        if (frame.fn.returnLabels.contains(labelConst.value)) {
+            frame.vm.result = value
+        } else {
+            throw ReturnException(value, labelConst.value)
+        }
+        return
+    }
+}
+
 class CmdRetVoid : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         frame.vm.result = ObjVoid
+        return
+    }
+}
+
+class CmdThrow(internal val posId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val posConst = frame.fn.constants.getOrNull(posId) as? BytecodeConst.PosVal
+            ?: error("THROW expects PosVal at $posId")
+        frame.throwObj(posConst.pos, frame.slotToObj(slot))
         return
     }
 }
@@ -963,10 +1074,29 @@ class CmdGetField(
     internal val fieldId: Int,
     internal val dst: Int,
 ) : Cmd() {
+    private var rKey: Long = 0L
+    private var rVer: Int = -1
+
     override suspend fun perform(frame: CmdFrame) {
         val receiver = frame.slotToObj(recvSlot)
         val nameConst = frame.fn.constants.getOrNull(fieldId) as? BytecodeConst.StringVal
             ?: error("GET_FIELD expects StringVal at $fieldId")
+        if (PerfFlags.FIELD_PIC) {
+            val (key, ver) = when (receiver) {
+                is ObjInstance -> receiver.objClass.classId to receiver.objClass.layoutVersion
+                is ObjClass -> receiver.classId to receiver.layoutVersion
+                else -> 0L to -1
+            }
+            if (key != 0L) {
+                if (key == rKey && ver == rVer) {
+                    if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.fieldPicHit++
+                } else {
+                    if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.fieldPicMiss++
+                    rKey = key
+                    rVer = ver
+                }
+            }
+        }
         val result = receiver.readField(frame.scope, nameConst.value).value
         frame.storeObjResult(dst, result)
         return
@@ -978,10 +1108,29 @@ class CmdSetField(
     internal val fieldId: Int,
     internal val valueSlot: Int,
 ) : Cmd() {
+    private var wKey: Long = 0L
+    private var wVer: Int = -1
+
     override suspend fun perform(frame: CmdFrame) {
         val receiver = frame.slotToObj(recvSlot)
         val nameConst = frame.fn.constants.getOrNull(fieldId) as? BytecodeConst.StringVal
             ?: error("SET_FIELD expects StringVal at $fieldId")
+        if (PerfFlags.FIELD_PIC) {
+            val (key, ver) = when (receiver) {
+                is ObjInstance -> receiver.objClass.classId to receiver.objClass.layoutVersion
+                is ObjClass -> receiver.classId to receiver.layoutVersion
+                else -> 0L to -1
+            }
+            if (key != 0L) {
+                if (key == wKey && ver == wVer) {
+                    if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.fieldPicSetHit++
+                } else {
+                    if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.fieldPicSetMiss++
+                    wKey = key
+                    wVer = ver
+                }
+            }
+        }
         receiver.writeField(frame.scope, nameConst.value, frame.slotToObj(valueSlot))
         return
     }
@@ -1263,6 +1412,30 @@ class CmdFrame(
             is ObjReal -> setReal(dst, result.value)
             is ObjBool -> setBool(dst, result.value)
             else -> setObj(dst, result)
+        }
+    }
+
+    suspend fun throwObj(pos: Pos, value: Obj) {
+        var errorObject = value
+        val throwScope = scope.createChildScope(pos = pos)
+        if (errorObject is ObjString) {
+            errorObject = ObjException(throwScope, errorObject.value).apply { getStackTrace() }
+        }
+        if (!errorObject.isInstanceOf(ObjException.Root)) {
+            throwScope.raiseError("this is not an exception object: $errorObject")
+        }
+        if (errorObject is ObjException) {
+            errorObject = ObjException(
+                errorObject.exceptionClass,
+                throwScope,
+                errorObject.message,
+                errorObject.extraData,
+                errorObject.useStackTrace
+            ).apply { getStackTrace() }
+            throwScope.raiseError(errorObject)
+        } else {
+            val msg = errorObject.invokeInstanceMethod(scope, "message").toString(scope).value
+            throwScope.raiseError(errorObject, pos, msg)
         }
     }
 
