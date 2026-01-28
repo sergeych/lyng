@@ -1588,15 +1588,16 @@ class CallRef(
     internal val isOptionalInvoke: Boolean,
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
-        val usePool = PerfFlags.SCOPE_POOL
         val callee = target.evalValue(scope)
         if (callee == ObjNull && isOptionalInvoke) return ObjNull.asReadonly
         val callArgs = args.toArguments(scope, tailBlock)
+        val usePool = PerfFlags.SCOPE_POOL && callee !is Statement
         val result: Obj = if (usePool) {
             scope.withChildFrame(callArgs) { child ->
                 callee.callOn(child)
             }
         } else {
+            // Pooling for Statement callables (lambdas) can still perturb closure semantics; keep safe path for now.
             callee.callOn(scope.createChildScope(scope.pos, callArgs))
         }
         return result.asReadonly

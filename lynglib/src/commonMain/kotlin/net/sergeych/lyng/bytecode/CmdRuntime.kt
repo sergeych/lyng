@@ -22,6 +22,7 @@ import net.sergeych.lyng.PerfStats
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.ReturnException
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.Statement
 import net.sergeych.lyng.obj.*
 
 class CmdVm {
@@ -713,14 +714,18 @@ class CmdCmpNeqRealInt(internal val a: Int, internal val b: Int, internal val ds
 
 class CmdCmpEqObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setBool(dst, frame.slotToObj(a) == frame.slotToObj(b))
+        val left = frame.slotToObj(a)
+        val right = frame.slotToObj(b)
+        frame.setBool(dst, left.equals(frame.scope, right))
         return
     }
 }
 
 class CmdCmpNeqObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setBool(dst, frame.slotToObj(a) != frame.slotToObj(b))
+        val left = frame.slotToObj(a)
+        val right = frame.slotToObj(b)
+        frame.setBool(dst, !left.equals(frame.scope, right))
         return
     }
 }
@@ -1109,9 +1114,11 @@ class CmdCallSlot(
         }
         val callee = frame.slotToObj(calleeSlot)
         val args = frame.buildArguments(argBase, argCount)
-        val result = if (PerfFlags.SCOPE_POOL) {
+        val canPool = PerfFlags.SCOPE_POOL && callee !is Statement
+        val result = if (canPool) {
             frame.scope.withChildFrame(args) { child -> callee.callOn(child) }
         } else {
+            // Pooling for Statement-based callables (lambdas) can still alter closure semantics; keep safe path for now.
             callee.callOn(frame.scope.createChildScope(frame.scope.pos, args = args))
         }
         if (frame.fn.localSlotNames.isNotEmpty()) {

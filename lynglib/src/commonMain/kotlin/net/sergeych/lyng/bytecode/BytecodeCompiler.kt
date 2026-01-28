@@ -1182,9 +1182,6 @@ class BytecodeCompiler(
     }
 
     private fun compileCall(ref: CallRef): CompiledValue? {
-        if (ref.target is LocalVarRef || ref.target is FastLocalVarRef || ref.target is BoundLocalVarRef) {
-            return null
-        }
         val fieldTarget = ref.target as? FieldRef
         if (fieldTarget != null) {
             val receiver = compileRefWithFallback(fieldTarget.target, null, Pos.builtIn) ?: return null
@@ -1195,7 +1192,7 @@ class BytecodeCompiler(
                 val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
                 val encodedCount = encodeCallArgCount(args) ?: return null
                 builder.emit(Opcode.CALL_VIRTUAL, receiver.slot, methodId, args.base, encodedCount, dst)
-                return CompiledValue(dst, SlotType.UNKNOWN)
+                return CompiledValue(dst, SlotType.OBJ)
             }
             val nullSlot = allocSlot()
             builder.emit(Opcode.CONST_NULL, nullSlot)
@@ -1222,7 +1219,7 @@ class BytecodeCompiler(
             val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
             val encodedCount = encodeCallArgCount(args) ?: return null
             builder.emit(Opcode.CALL_SLOT, callee.slot, args.base, encodedCount, dst)
-            return CompiledValue(dst, SlotType.UNKNOWN)
+            return CompiledValue(dst, SlotType.OBJ)
         }
         val nullSlot = allocSlot()
         builder.emit(Opcode.CONST_NULL, nullSlot)
@@ -1253,7 +1250,7 @@ class BytecodeCompiler(
             val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
             val encodedCount = encodeCallArgCount(args) ?: return null
             builder.emit(Opcode.CALL_VIRTUAL, receiver.slot, methodId, args.base, encodedCount, dst)
-            return CompiledValue(dst, SlotType.UNKNOWN)
+            return CompiledValue(dst, SlotType.OBJ)
         }
         val nullSlot = allocSlot()
         builder.emit(Opcode.CONST_NULL, nullSlot)
@@ -2186,6 +2183,24 @@ class BytecodeCompiler(
         if (compiled != null) {
             if (forceType == null) return compiled
             if (compiled.type == forceType) return compiled
+            if (forceType == SlotType.BOOL) {
+                val converted = when (compiled.type) {
+                    SlotType.INT -> {
+                        val dst = allocSlot()
+                        builder.emit(Opcode.INT_TO_BOOL, compiled.slot, dst)
+                        updateSlotType(dst, SlotType.BOOL)
+                        CompiledValue(dst, SlotType.BOOL)
+                    }
+                    SlotType.OBJ -> {
+                        val dst = allocSlot()
+                        builder.emit(Opcode.OBJ_TO_BOOL, compiled.slot, dst)
+                        updateSlotType(dst, SlotType.BOOL)
+                        CompiledValue(dst, SlotType.BOOL)
+                    }
+                    else -> null
+                }
+                if (converted != null) return converted
+            }
             if (compiled.type == SlotType.UNKNOWN) {
                 compiled = null
             }
