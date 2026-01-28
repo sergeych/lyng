@@ -105,6 +105,7 @@ enum class Opcode(val code: Int) {
     MUL_OBJ(0x79),
     DIV_OBJ(0x7A),
     MOD_OBJ(0x7B),
+    CONTAINS_OBJ(0x7C),
 
     JMP(0x80),
     JMP_IF_TRUE(0x81),

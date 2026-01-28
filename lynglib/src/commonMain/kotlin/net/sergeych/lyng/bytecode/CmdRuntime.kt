@@ -913,6 +913,13 @@ class CmdModObj(internal val a: Int, internal val b: Int, internal val dst: Int)
     }
 }
 
+class CmdContainsObj(internal val target: Int, internal val value: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.slotToObj(target).contains(frame.scope, frame.slotToObj(value)))
+        return
+    }
+}
+
 class CmdJmp(internal val target: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         frame.ip = target

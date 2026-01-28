@@ -160,6 +160,7 @@ object CmdDisassembler {
             is CmdMulObj -> Opcode.MUL_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
             is CmdDivObj -> Opcode.DIV_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
             is CmdModObj -> Opcode.MOD_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdContainsObj -> Opcode.CONTAINS_OBJ to intArrayOf(cmd.target, cmd.value, cmd.dst)
             is CmdJmp -> Opcode.JMP to intArrayOf(cmd.target)
             is CmdJmpIfTrue -> Opcode.JMP_IF_TRUE to intArrayOf(cmd.cond, cmd.target)
             is CmdJmpIfFalse -> Opcode.JMP_IF_FALSE to intArrayOf(cmd.cond, cmd.target)
@@ -235,7 +236,7 @@ object CmdDisassembler {
             Opcode.CMP_GTE_INT_REAL, Opcode.CMP_GTE_REAL_INT, Opcode.CMP_NEQ_INT_REAL, Opcode.CMP_NEQ_REAL_INT,
             Opcode.CMP_EQ_OBJ, Opcode.CMP_NEQ_OBJ, Opcode.CMP_REF_EQ_OBJ, Opcode.CMP_REF_NEQ_OBJ,
             Opcode.CMP_LT_OBJ, Opcode.CMP_LTE_OBJ, Opcode.CMP_GT_OBJ, Opcode.CMP_GTE_OBJ,
-            Opcode.ADD_OBJ, Opcode.SUB_OBJ, Opcode.MUL_OBJ, Opcode.DIV_OBJ, Opcode.MOD_OBJ,
+            Opcode.ADD_OBJ, Opcode.SUB_OBJ, Opcode.MUL_OBJ, Opcode.DIV_OBJ, Opcode.MOD_OBJ, Opcode.CONTAINS_OBJ,
             Opcode.AND_BOOL, Opcode.OR_BOOL ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.INC_INT, Opcode.DEC_INT, Opcode.RET ->

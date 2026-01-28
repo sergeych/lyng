@@ -209,15 +209,8 @@ class BytecodeCompiler(
             val rightValue = compileRefWithFallback(binaryRight(ref), null, refPos(ref)) ?: return null
             val leftObj = ensureObjSlot(leftValue)
             val rightObj = ensureObjSlot(rightValue)
-            val methodId = builder.addConst(BytecodeConst.StringVal("contains"))
-            if (methodId > 0xFFFF) return null
-            val argSlot = allocSlot()
-            builder.emit(Opcode.BOX_OBJ, leftObj.slot, argSlot)
-            updateSlotType(argSlot, SlotType.OBJ)
-            val callSlot = allocSlot()
-            builder.emit(Opcode.CALL_VIRTUAL, rightObj.slot, methodId, argSlot, 1, callSlot)
             val boolSlot = allocSlot()
-            builder.emit(Opcode.OBJ_TO_BOOL, callSlot, boolSlot)
+            builder.emit(Opcode.CONTAINS_OBJ, rightObj.slot, leftObj.slot, boolSlot)
             updateSlotType(boolSlot, SlotType.BOOL)
             if (op == BinOp.NOTIN) {
                 val outSlot = allocSlot()
@@ -226,6 +219,22 @@ class BytecodeCompiler(
                 return CompiledValue(outSlot, SlotType.BOOL)
             }
             return CompiledValue(boolSlot, SlotType.BOOL)
+        }
+        if (op == BinOp.IS || op == BinOp.NOTIS) {
+            val objValue = compileRefWithFallback(binaryLeft(ref), null, refPos(ref)) ?: return null
+            val typeValue = compileRefWithFallback(binaryRight(ref), null, refPos(ref)) ?: return null
+            val objSlot = ensureObjSlot(objValue)
+            val typeSlot = ensureObjSlot(typeValue)
+            val checkSlot = allocSlot()
+            builder.emit(Opcode.CHECK_IS, objSlot.slot, typeSlot.slot, checkSlot)
+            updateSlotType(checkSlot, SlotType.BOOL)
+            if (op == BinOp.NOTIS) {
+                val outSlot = allocSlot()
+                builder.emit(Opcode.NOT_BOOL, checkSlot, outSlot)
+                updateSlotType(outSlot, SlotType.BOOL)
+                return CompiledValue(outSlot, SlotType.BOOL)
+            }
+            return CompiledValue(checkSlot, SlotType.BOOL)
         }
         val leftRef = binaryLeft(ref)
         val rightRef = binaryRight(ref)

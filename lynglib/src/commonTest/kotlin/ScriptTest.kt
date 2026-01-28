@@ -5216,6 +5216,20 @@ class ScriptTest {
     }
 
     @Test
+    fun testIsOperatorBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun isInt(x) { x is Int }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("isInt")
+        assertFalse(disasm.contains("not a compiled body"))
+        assertEquals(ObjTrue, scope.eval("isInt(42)"))
+        assertEquals(ObjFalse, scope.eval("isInt(\"42\")"))
+    }
+
+    @Test
     fun testFilterBug() = runTest {
         eval(
             """

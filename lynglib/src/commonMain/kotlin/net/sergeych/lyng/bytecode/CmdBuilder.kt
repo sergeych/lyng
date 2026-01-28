@@ -157,7 +157,7 @@ class CmdBuilder {
             Opcode.CMP_GTE_INT_REAL, Opcode.CMP_GTE_REAL_INT, Opcode.CMP_NEQ_INT_REAL, Opcode.CMP_NEQ_REAL_INT,
             Opcode.CMP_EQ_OBJ, Opcode.CMP_NEQ_OBJ, Opcode.CMP_REF_EQ_OBJ, Opcode.CMP_REF_NEQ_OBJ,
             Opcode.CMP_LT_OBJ, Opcode.CMP_LTE_OBJ, Opcode.CMP_GT_OBJ, Opcode.CMP_GTE_OBJ,
-            Opcode.ADD_OBJ, Opcode.SUB_OBJ, Opcode.MUL_OBJ, Opcode.DIV_OBJ, Opcode.MOD_OBJ,
+            Opcode.ADD_OBJ, Opcode.SUB_OBJ, Opcode.MUL_OBJ, Opcode.DIV_OBJ, Opcode.MOD_OBJ, Opcode.CONTAINS_OBJ,
             Opcode.AND_BOOL, Opcode.OR_BOOL ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.INC_INT, Opcode.DEC_INT, Opcode.RET ->
@@ -348,6 +348,7 @@ class CmdBuilder {
             Opcode.MUL_OBJ -> CmdMulObj(operands[0], operands[1], operands[2])
             Opcode.DIV_OBJ -> CmdDivObj(operands[0], operands[1], operands[2])
             Opcode.MOD_OBJ -> CmdModObj(operands[0], operands[1], operands[2])
+            Opcode.CONTAINS_OBJ -> CmdContainsObj(operands[0], operands[1], operands[2])
             Opcode.JMP -> CmdJmp(operands[0])
             Opcode.JMP_IF_TRUE -> CmdJmpIfTrue(operands[0], operands[1])
             Opcode.JMP_IF_FALSE -> CmdJmpIfFalse(operands[0], operands[1])
