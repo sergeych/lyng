@@ -2698,7 +2698,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testApply() = runTest {
         eval(
@@ -2713,7 +2712,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testApplyThis() = runTest {
         eval(
@@ -3707,7 +3705,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testOverridenListToString() = runTest {
         eval(
@@ -3818,7 +3815,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testSum() = runTest {
         eval(
