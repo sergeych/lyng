@@ -2518,7 +2518,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testWhenSample2() = runTest {
         eval(
@@ -5115,7 +5114,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testForInIterableDisasm() = runTest {
         val scope = Script.newScope()
@@ -5143,7 +5141,6 @@ class ScriptTest {
         println("[DEBUG_LOG] type(\"153\")=${r2.inspect(scope)}")
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testForInIterableBytecode() = runTest {
         val result = eval(
@@ -5159,7 +5156,6 @@ class ScriptTest {
         assertEquals(ObjInt(12), result)
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testForInIterableUnknownTypeDisasm() = runTest {
         val scope = Script.newScope()
