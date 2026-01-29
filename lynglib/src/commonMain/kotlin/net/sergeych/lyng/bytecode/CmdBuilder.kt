@@ -192,6 +192,10 @@ class CmdBuilder {
                 listOf(OperandKind.ID, OperandKind.SLOT)
             Opcode.EVAL_FALLBACK, Opcode.EVAL_REF, Opcode.EVAL_STMT, Opcode.EVAL_VALUE_FN ->
                 listOf(OperandKind.ID, OperandKind.SLOT)
+            Opcode.ITER_PUSH ->
+                listOf(OperandKind.SLOT)
+            Opcode.ITER_POP, Opcode.ITER_CANCEL ->
+                emptyList()
         }
     }
 
@@ -387,6 +391,9 @@ class CmdBuilder {
             Opcode.EVAL_REF -> CmdEvalRef(operands[0], operands[1])
             Opcode.EVAL_STMT -> CmdEvalStmt(operands[0], operands[1])
             Opcode.EVAL_VALUE_FN -> CmdEvalValueFn(operands[0], operands[1])
+            Opcode.ITER_PUSH -> CmdIterPush(operands[0])
+            Opcode.ITER_POP -> CmdIterPop()
+            Opcode.ITER_CANCEL -> CmdIterCancel()
         }
     }
 }

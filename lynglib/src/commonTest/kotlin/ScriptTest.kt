@@ -186,7 +186,6 @@ class ScriptTest {
         assertEquals(0, ti.cancelCount)
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testForLoopCancelsOnBreak() = runTest {
         val scope = Script.newScope()
@@ -202,7 +201,6 @@ class ScriptTest {
         assertEquals(1, ti.cancelCount)
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testForLoopCancelsOnException() = runTest {
         val scope = Script.newScope()
@@ -4567,7 +4565,6 @@ class ScriptTest {
     }
 
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testDestructuringAssignment() = runTest {
         eval(

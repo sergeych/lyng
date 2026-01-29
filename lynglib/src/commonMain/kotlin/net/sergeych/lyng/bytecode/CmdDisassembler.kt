@@ -191,6 +191,9 @@ object CmdDisassembler {
             is CmdEvalRef -> Opcode.EVAL_REF to intArrayOf(cmd.id, cmd.dst)
             is CmdEvalStmt -> Opcode.EVAL_STMT to intArrayOf(cmd.id, cmd.dst)
             is CmdEvalValueFn -> Opcode.EVAL_VALUE_FN to intArrayOf(cmd.id, cmd.dst)
+            is CmdIterPush -> Opcode.ITER_PUSH to intArrayOf(cmd.iterSlot)
+            is CmdIterPop -> Opcode.ITER_POP to intArrayOf()
+            is CmdIterCancel -> Opcode.ITER_CANCEL to intArrayOf()
         }
     }
 
@@ -205,7 +208,8 @@ object CmdDisassembler {
 
     private fun operandKinds(op: Opcode): List<OperandKind> {
         return when (op) {
-            Opcode.NOP, Opcode.RET_VOID, Opcode.POP_SCOPE, Opcode.POP_SLOT_PLAN -> emptyList()
+            Opcode.NOP, Opcode.RET_VOID, Opcode.POP_SCOPE, Opcode.POP_SLOT_PLAN,
+            Opcode.ITER_POP, Opcode.ITER_CANCEL -> emptyList()
             Opcode.MOVE_OBJ, Opcode.MOVE_INT, Opcode.MOVE_REAL, Opcode.MOVE_BOOL, Opcode.BOX_OBJ,
             Opcode.INT_TO_REAL, Opcode.REAL_TO_INT, Opcode.BOOL_TO_INT, Opcode.INT_TO_BOOL,
             Opcode.NEG_INT, Opcode.NEG_REAL, Opcode.NOT_BOOL, Opcode.INV_INT ->
@@ -248,7 +252,7 @@ object CmdDisassembler {
             Opcode.ADD_OBJ, Opcode.SUB_OBJ, Opcode.MUL_OBJ, Opcode.DIV_OBJ, Opcode.MOD_OBJ, Opcode.CONTAINS_OBJ,
             Opcode.AND_BOOL, Opcode.OR_BOOL ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
-            Opcode.INC_INT, Opcode.DEC_INT, Opcode.RET ->
+            Opcode.INC_INT, Opcode.DEC_INT, Opcode.RET, Opcode.ITER_PUSH ->
                 listOf(OperandKind.SLOT)
             Opcode.JMP ->
                 listOf(OperandKind.IP)

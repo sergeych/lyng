@@ -32,11 +32,17 @@ class CmdVm {
         result = null
         val frame = CmdFrame(this, fn, scope0, args)
         val cmds = fn.cmds
-        while (result == null) {
-            val cmd = cmds[frame.ip]
-            frame.ip += 1
-            cmd.perform(frame)
+        try {
+            while (result == null) {
+                val cmd = cmds[frame.ip]
+                frame.ip += 1
+                cmd.perform(frame)
+            }
+        } catch (e: Throwable) {
+            frame.cancelIterators()
+            throw e
         }
+        frame.cancelIterators()
         return result ?: ObjVoid
     }
 }
@@ -1419,6 +1425,27 @@ class CmdEvalValueFn(internal val id: Int, internal val dst: Int) : Cmd() {
     }
 }
 
+class CmdIterPush(internal val iterSlot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.pushIterator(frame.slotToObj(iterSlot))
+        return
+    }
+}
+
+class CmdIterPop : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.popIterator()
+        return
+    }
+}
+
+class CmdIterCancel : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.cancelTopIterator()
+        return
+    }
+}
+
 class CmdFrame(
     val vm: CmdVm,
     val fn: CmdFunction,
@@ -1440,6 +1467,7 @@ class CmdFrame(
     internal val slotPlanScopeStack = ArrayDeque<Boolean>()
     private var scopeDepth = 0
     private var virtualDepth = 0
+    private val iterStack = ArrayDeque<Obj>()
 
     internal val frame = BytecodeFrame(fn.localCount, args.size)
     private val addrScopes: Array<Scope?> = arrayOfNulls(fn.addrCount)
@@ -1482,6 +1510,26 @@ class CmdFrame(
         scope = scopeStack.removeLastOrNull()
             ?: error("Scope stack underflow in POP_SCOPE")
         scopeDepth -= 1
+    }
+
+    fun pushIterator(iter: Obj) {
+        iterStack.addLast(iter)
+    }
+
+    fun popIterator() {
+        iterStack.removeLastOrNull()
+    }
+
+    suspend fun cancelTopIterator() {
+        val iter = iterStack.removeLastOrNull() ?: return
+        iter.invokeInstanceMethod(scope, "cancelIteration") { ObjVoid }
+    }
+
+    suspend fun cancelIterators() {
+        while (iterStack.isNotEmpty()) {
+            val iter = iterStack.removeLast()
+            iter.invokeInstanceMethod(scope, "cancelIteration") { ObjVoid }
+        }
     }
 
     fun pushSlotPlan(plan: Map<String, Int>) {

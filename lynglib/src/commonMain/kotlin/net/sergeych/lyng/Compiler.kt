@@ -3401,26 +3401,15 @@ class Compiler(
             val names = mutableListOf<String>()
             pattern.forEachVariable { names.add(it) }
 
-            return object : Statement() {
-                override val pos: Pos = start
-                override suspend fun execute(context: Scope): Obj {
-                    val value = initialExpression.execute(context)
-                    for (name in names) {
-                        context.addItem(name, true, ObjVoid, visibility, isTransient = isTransient)
-                    }
-                    pattern.setAt(start, context, value)
-                    if (!isMutable) {
-                        for (name in names) {
-                            val rec = context.objects[name]!!
-                            val immutableRec = rec.copy(isMutable = false)
-                            context.objects[name] = immutableRec
-                            context.localBindings[name] = immutableRec
-                            context.updateSlotFor(name, immutableRec)
-                        }
-                    }
-                    return ObjVoid
-                }
-            }
+            return DestructuringVarDeclStatement(
+                pattern,
+                names,
+                initialExpression,
+                isMutable,
+                visibility,
+                isTransient,
+                start
+            )
         }
 
         if (nextToken.type != Token.Type.ID)

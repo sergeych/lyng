@@ -149,6 +149,9 @@ enum class Opcode(val code: Int) {
     EVAL_REF(0xBC),
     EVAL_STMT(0xBD),
     EVAL_VALUE_FN(0xBE),
+    ITER_PUSH(0xBF),
+    ITER_POP(0xC0),
+    ITER_CANCEL(0xC1),
     ;
 
     companion object {

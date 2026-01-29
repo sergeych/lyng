@@ -17,6 +17,7 @@
 package net.sergeych.lyng.bytecode
 
 import net.sergeych.lyng.BlockStatement
+import net.sergeych.lyng.DestructuringVarDeclStatement
 import net.sergeych.lyng.ExpressionStatement
 import net.sergeych.lyng.IfStatement
 import net.sergeych.lyng.ParsedArgument
@@ -69,6 +70,7 @@ class BytecodeCompiler(
         val continueLabel: CmdBuilder.Label,
         val breakFlagSlot: Int,
         val resultSlot: Int?,
+        val hasIterator: Boolean,
     )
 
     fun compileStatement(name: String, stmt: net.sergeych.lyng.Statement): CmdFunction? {
@@ -1973,6 +1975,7 @@ class BytecodeCompiler(
                 }
                 is BlockStatement -> emitBlock(target, true)
                 is VarDeclStatement -> emitVarDecl(target)
+                is DestructuringVarDeclStatement -> emitStatementEval(target)
                 is net.sergeych.lyng.ExtensionPropertyDeclStatement -> emitExtensionPropertyDecl(target)
                 is net.sergeych.lyng.ClassDeclStatement -> emitStatementEval(target)
                 is net.sergeych.lyng.FunctionDeclStatement -> emitStatementEval(target)
@@ -2018,6 +2021,7 @@ class BytecodeCompiler(
                 }
                 is BlockStatement -> emitBlock(target, false)
                 is VarDeclStatement -> emitVarDecl(target)
+                is DestructuringVarDeclStatement -> emitStatementEval(target)
                 is net.sergeych.lyng.ExtensionPropertyDeclStatement -> emitExtensionPropertyDecl(target)
                 is net.sergeych.lyng.BreakStatement -> compileBreak(target)
                 is net.sergeych.lyng.ContinueStatement -> compileContinue(target)
@@ -2202,6 +2206,7 @@ class BytecodeCompiler(
             val iterSlot = allocSlot()
             val iteratorId = builder.addConst(BytecodeConst.StringVal("iterator"))
             builder.emit(Opcode.CALL_VIRTUAL, sourceObj.slot, iteratorId, 0, 0, iterSlot)
+            builder.emit(Opcode.ITER_PUSH, iterSlot)
 
             val breakFlagSlot = allocSlot()
             val falseId = builder.addConst(BytecodeConst.Bool(false))
@@ -2235,7 +2240,14 @@ class BytecodeCompiler(
             updateSlotTypeByName(stmt.loopVarName, SlotType.OBJ)
 
             loopStack.addLast(
-                LoopContext(stmt.label, endLabel, continueLabel, breakFlagSlot, if (wantResult) resultSlot else null)
+                LoopContext(
+                    stmt.label,
+                    endLabel,
+                    continueLabel,
+                    breakFlagSlot,
+                    if (wantResult) resultSlot else null,
+                    hasIterator = true
+                )
             )
             val bodyValue = compileLoopBody(stmt.body, wantResult) ?: return null
             loopStack.removeLast()
@@ -2247,6 +2259,13 @@ class BytecodeCompiler(
             builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(loopLabel)))
 
             builder.mark(endLabel)
+            val afterPop = builder.label()
+            builder.emit(
+                Opcode.JMP_IF_TRUE,
+                listOf(CmdBuilder.Operand.IntVal(breakFlagSlot), CmdBuilder.Operand.LabelRef(afterPop))
+            )
+            builder.emit(Opcode.ITER_POP)
+            builder.mark(afterPop)
             if (stmt.elseStatement != null) {
                 val afterElse = builder.label()
                 builder.emit(
@@ -2316,7 +2335,14 @@ class BytecodeCompiler(
                 updateSlotType(loopSlotId, SlotType.INT)
                 updateSlotTypeByName(stmt.loopVarName, SlotType.INT)
                 loopStack.addLast(
-                    LoopContext(stmt.label, endLabel, continueLabel, breakFlagSlot, if (wantResult) resultSlot else null)
+                    LoopContext(
+                        stmt.label,
+                        endLabel,
+                        continueLabel,
+                        breakFlagSlot,
+                        if (wantResult) resultSlot else null,
+                        hasIterator = false
+                    )
                 )
                 val bodyValue = compileLoopBody(stmt.body, wantResult) ?: return null
                 loopStack.removeLast()
@@ -2375,7 +2401,14 @@ class BytecodeCompiler(
         updateSlotType(loopSlotId, SlotType.INT)
         updateSlotTypeByName(stmt.loopVarName, SlotType.INT)
         loopStack.addLast(
-            LoopContext(stmt.label, endLabel, continueLabel, breakFlagSlot, if (wantResult) resultSlot else null)
+            LoopContext(
+                stmt.label,
+                endLabel,
+                continueLabel,
+                breakFlagSlot,
+                if (wantResult) resultSlot else null,
+                hasIterator = false
+            )
         )
         val bodyValue = compileLoopBody(stmt.body, wantResult) ?: return null
         loopStack.removeLast()
@@ -2429,7 +2462,14 @@ class BytecodeCompiler(
             listOf(CmdBuilder.Operand.IntVal(condition.slot), CmdBuilder.Operand.LabelRef(endLabel))
         )
         loopStack.addLast(
-            LoopContext(stmt.label, endLabel, continueLabel, breakFlagSlot, if (wantResult) resultSlot else null)
+            LoopContext(
+                stmt.label,
+                endLabel,
+                continueLabel,
+                breakFlagSlot,
+                if (wantResult) resultSlot else null,
+                hasIterator = false
+            )
         )
         val bodyValue = compileLoopBody(stmt.body, wantResult) ?: return null
         loopStack.removeLast()
@@ -2471,7 +2511,14 @@ class BytecodeCompiler(
         val endLabel = builder.label()
         builder.mark(loopLabel)
         loopStack.addLast(
-            LoopContext(stmt.label, endLabel, continueLabel, breakFlagSlot, if (wantResult) resultSlot else null)
+            LoopContext(
+                stmt.label,
+                endLabel,
+                continueLabel,
+                breakFlagSlot,
+                if (wantResult) resultSlot else null,
+                hasIterator = false
+            )
         )
         val bodyValue = compileStatementValueOrFallback(stmt.body, wantResult) ?: return null
         loopStack.removeLast()
@@ -2577,17 +2624,28 @@ class BytecodeCompiler(
         }
     }
 
-    private fun findLoopContext(label: String?): LoopContext? {
+    private fun findLoopContextIndex(label: String?): Int? {
         if (loopStack.isEmpty()) return null
-        if (label == null) return loopStack.last()
-        for (ctx in loopStack.reversed()) {
-            if (ctx.label == label) return ctx
+        val stack = loopStack.toList()
+        if (label == null) return stack.lastIndex
+        for (i in stack.indices.reversed()) {
+            if (stack[i].label == label) return i
         }
         return null
     }
 
+    private fun emitIteratorCancel(stack: List<LoopContext>, startIndex: Int) {
+        for (i in stack.lastIndex downTo startIndex) {
+            if (stack[i].hasIterator) {
+                builder.emit(Opcode.ITER_CANCEL)
+            }
+        }
+    }
+
     private fun compileBreak(stmt: net.sergeych.lyng.BreakStatement): CompiledValue? {
-        val ctx = findLoopContext(stmt.label) ?: return null
+        val stack = loopStack.toList()
+        val targetIndex = findLoopContextIndex(stmt.label) ?: return null
+        val ctx = stack[targetIndex]
         val value = stmt.resultExpr?.let { compileStatementValueOrFallback(it) }
         if (ctx.resultSlot != null) {
             val objValue = value?.let { ensureObjSlot(it) } ?: run {
@@ -2601,6 +2659,7 @@ class BytecodeCompiler(
         } else if (value != null) {
             ensureObjSlot(value)
         }
+        emitIteratorCancel(stack, targetIndex)
         val trueId = builder.addConst(BytecodeConst.Bool(true))
         builder.emit(Opcode.CONST_BOOL, trueId, ctx.breakFlagSlot)
         builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(ctx.breakLabel)))
@@ -2608,7 +2667,12 @@ class BytecodeCompiler(
     }
 
     private fun compileContinue(stmt: net.sergeych.lyng.ContinueStatement): CompiledValue? {
-        val ctx = findLoopContext(stmt.label) ?: return null
+        val stack = loopStack.toList()
+        val targetIndex = findLoopContextIndex(stmt.label) ?: return null
+        val ctx = stack[targetIndex]
+        if (targetIndex < stack.lastIndex) {
+            emitIteratorCancel(stack, targetIndex + 1)
+        }
         builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(ctx.continueLabel)))
         return CompiledValue(ctx.breakFlagSlot, SlotType.BOOL)
     }

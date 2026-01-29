@@ -19,6 +19,7 @@ package net.sergeych.lyng.bytecode
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Statement
+import net.sergeych.lyng.DestructuringVarDeclStatement
 import net.sergeych.lyng.WhenCase
 import net.sergeych.lyng.WhenCondition
 import net.sergeych.lyng.WhenEqualsCondition
@@ -100,6 +101,8 @@ class BytecodeStatement private constructor(
                     target.statements().any { containsUnsupportedStatement(it) }
                 is net.sergeych.lyng.VarDeclStatement ->
                     target.initializer?.let { containsUnsupportedStatement(it) } ?: false
+                is net.sergeych.lyng.DestructuringVarDeclStatement ->
+                    containsUnsupportedStatement(target.initializer)
                 is net.sergeych.lyng.BreakStatement ->
                     target.resultExpr?.let { containsUnsupportedStatement(it) } ?: false
                 is net.sergeych.lyng.ContinueStatement -> false
@@ -144,6 +147,17 @@ class BytecodeStatement private constructor(
                         stmt.isTransient,
                         stmt.slotIndex,
                         stmt.slotDepth,
+                        stmt.pos
+                    )
+                }
+                is net.sergeych.lyng.DestructuringVarDeclStatement -> {
+                    net.sergeych.lyng.DestructuringVarDeclStatement(
+                        stmt.pattern,
+                        stmt.names,
+                        unwrapDeep(stmt.initializer),
+                        stmt.isMutable,
+                        stmt.visibility,
+                        stmt.isTransient,
                         stmt.pos
                     )
                 }
