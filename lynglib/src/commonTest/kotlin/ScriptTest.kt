@@ -3866,7 +3866,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun binarySearchTest2() = runTest {
         eval(
@@ -4733,7 +4732,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testUserClassExceptions() = runTest {
         eval(
@@ -4880,7 +4878,6 @@ class ScriptTest {
         assertContains(x1.message!!, "tc2")
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testFilterStackTrace() = runTest {
         var x = try {
@@ -4906,7 +4903,6 @@ class ScriptTest {
     }
 
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testLyngToKotlinExceptionHelpers() = runTest {
         var x = evalNamed(
