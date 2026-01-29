@@ -41,7 +41,6 @@ suspend fun executeSampleTests(fileName: String) {
     }
 }
 
-@Ignore("TODO(bytecode-only): uses fallback")
 class SamplesTest {
 
     @Test

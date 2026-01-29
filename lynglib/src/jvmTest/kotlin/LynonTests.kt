@@ -31,7 +31,6 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-@Ignore("TODO(bytecode-only): uses fallback (unary minus, MI, simple types)")
 class LynonTests {
 
     @Test
@@ -344,6 +343,7 @@ class LynonTests {
 
 
     @Test
+    @Ignore("TODO(bytecode-only): unary minus regression")
     fun testUnaryMinus() = runTest {
         eval(
             """
@@ -354,6 +354,7 @@ class LynonTests {
     }
 
     @Test
+    @Ignore("TODO(bytecode-only): simple types regression")
     fun testSimpleTypes() = runTest {
         testScope().eval(
             """
@@ -704,6 +705,7 @@ class Wallet( id, ownerKey, balance=0, createdAt=Instant.now().truncateToSecond(
 
 
     @Test
+    @Ignore("TODO(bytecode-only): MI serialization fallback")
     fun testMISerialization() = runTest {
         val s = testScope()
         s.eval("""

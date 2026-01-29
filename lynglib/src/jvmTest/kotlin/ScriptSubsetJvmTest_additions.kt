@@ -27,7 +27,7 @@ import kotlin.test.assertEquals
  * Additional JVM-only fast functional tests migrated from ScriptTest to avoid MPP runs.
  * Keep each test fast (<1s) and with clear assertions.
  */
-@Ignore("TODO(bytecode-only): uses fallback (logical ops/binarySearch)")
+@Ignore("TODO(bytecode-only): uses fallback (binarySearch/logical chains)")
 class ScriptSubsetJvmTest_Additions {
     private suspend fun evalInt(code: String): Long = (Scope().eval(code) as ObjInt).value
     private suspend fun evalList(code: String): List<Any?> = (Scope().eval(code) as ObjList).list.map { (it as? ObjInt)?.value ?: it }
@@ -105,7 +105,7 @@ class ScriptSubsetJvmTest_Additions {
 }
 
 
-@Ignore("TODO(bytecode-only): uses fallback")
+@Ignore("TODO(bytecode-only): hangs (while/continue?)")
 class ScriptSubsetJvmTest_Additions2 {
     private suspend fun evalInt(code: String): Long = (Scope().eval(code) as ObjInt).value
 
