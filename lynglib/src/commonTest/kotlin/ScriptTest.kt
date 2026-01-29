@@ -2188,7 +2188,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testAccessEHData() = runTest {
         eval(
@@ -2234,7 +2233,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testThrowFromKotlin() = runTest {
         val c = Script.newScope()
@@ -3713,7 +3711,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testExceptionSerialization() = runTest {
         eval(
@@ -3742,7 +3739,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testExceptionSerializationPlain() = runTest {
         eval(
