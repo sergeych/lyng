@@ -162,6 +162,7 @@ object CmdDisassembler {
             is CmdDivObj -> Opcode.DIV_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
             is CmdModObj -> Opcode.MOD_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
             is CmdContainsObj -> Opcode.CONTAINS_OBJ to intArrayOf(cmd.target, cmd.value, cmd.dst)
+            is CmdAssignOpObj -> Opcode.ASSIGN_OP_OBJ to intArrayOf(cmd.opId, cmd.targetSlot, cmd.valueSlot, cmd.dst, cmd.nameId)
             is CmdJmp -> Opcode.JMP to intArrayOf(cmd.target)
             is CmdJmpIfTrue -> Opcode.JMP_IF_TRUE to intArrayOf(cmd.cond, cmd.target)
             is CmdJmpIfFalse -> Opcode.JMP_IF_FALSE to intArrayOf(cmd.cond, cmd.target)
@@ -252,6 +253,8 @@ object CmdDisassembler {
             Opcode.ADD_OBJ, Opcode.SUB_OBJ, Opcode.MUL_OBJ, Opcode.DIV_OBJ, Opcode.MOD_OBJ, Opcode.CONTAINS_OBJ,
             Opcode.AND_BOOL, Opcode.OR_BOOL ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
+            Opcode.ASSIGN_OP_OBJ ->
+                listOf(OperandKind.ID, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.CONST)
             Opcode.INC_INT, Opcode.DEC_INT, Opcode.RET, Opcode.ITER_PUSH ->
                 listOf(OperandKind.SLOT)
             Opcode.JMP ->

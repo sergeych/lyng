@@ -160,6 +160,8 @@ class CmdBuilder {
             Opcode.ADD_OBJ, Opcode.SUB_OBJ, Opcode.MUL_OBJ, Opcode.DIV_OBJ, Opcode.MOD_OBJ, Opcode.CONTAINS_OBJ,
             Opcode.AND_BOOL, Opcode.OR_BOOL ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
+            Opcode.ASSIGN_OP_OBJ ->
+                listOf(OperandKind.ID, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.CONST)
             Opcode.INC_INT, Opcode.DEC_INT, Opcode.RET ->
                 listOf(OperandKind.SLOT)
             Opcode.JMP ->
@@ -364,6 +366,7 @@ class CmdBuilder {
             Opcode.DIV_OBJ -> CmdDivObj(operands[0], operands[1], operands[2])
             Opcode.MOD_OBJ -> CmdModObj(operands[0], operands[1], operands[2])
             Opcode.CONTAINS_OBJ -> CmdContainsObj(operands[0], operands[1], operands[2])
+            Opcode.ASSIGN_OP_OBJ -> CmdAssignOpObj(operands[0], operands[1], operands[2], operands[3], operands[4])
             Opcode.JMP -> CmdJmp(operands[0])
             Opcode.JMP_IF_TRUE -> CmdJmpIfTrue(operands[0], operands[1])
             Opcode.JMP_IF_FALSE -> CmdJmpIfFalse(operands[0], operands[1])

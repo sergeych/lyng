@@ -33,7 +33,6 @@ class StdlibTest {
     }
 
     @Test
-    @Ignore("TODO(bytecode-only): range first/last mismatch")
     fun testFirstLast() = runTest {
         eval("""
             assertEquals(1, (1..8).first )
@@ -42,7 +41,6 @@ class StdlibTest {
     }
 
     @Test
-    @Ignore("TODO(bytecode-only): range take mismatch")
     fun testTake() = runTest {
         eval("""
             val r = 1..8
@@ -52,7 +50,6 @@ class StdlibTest {
     }
 
     @Test
-    @Ignore("TODO(bytecode-only): any/all mismatch")
     fun testAnyAndAll() = runTest {
         eval("""
             assert( [1,2,3].any { it > 2 } )
@@ -90,7 +87,6 @@ class StdlibTest {
     }
 
     @Test
-    @Ignore("TODO(bytecode-only): range drop mismatch")
     fun testDrop() = runTest {
         eval("""
             assertEquals([7,8], (1..8).drop(6).toList() )

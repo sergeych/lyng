@@ -17,6 +17,7 @@
 package net.sergeych.lyng.bytecode
 
 import net.sergeych.lyng.Arguments
+import net.sergeych.lyng.ExecutionError
 import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.PerfStats
 import net.sergeych.lyng.Pos
@@ -32,6 +33,9 @@ class CmdVm {
         result = null
         val frame = CmdFrame(this, fn, scope0, args)
         val cmds = fn.cmds
+        if (fn.localSlotNames.isNotEmpty()) {
+            frame.syncScopeToFrame()
+        }
         try {
             while (result == null) {
                 val cmd = cmds[frame.ip]
@@ -941,6 +945,34 @@ class CmdContainsObj(internal val target: Int, internal val value: Int, internal
     }
 }
 
+class CmdAssignOpObj(
+    internal val opId: Int,
+    internal val targetSlot: Int,
+    internal val valueSlot: Int,
+    internal val dst: Int,
+    internal val nameId: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val target = frame.slotToObj(targetSlot)
+        val value = frame.slotToObj(valueSlot)
+        val result = when (BinOp.values().getOrNull(opId)) {
+            BinOp.PLUS -> target.plusAssign(frame.scope, value)
+            BinOp.MINUS -> target.minusAssign(frame.scope, value)
+            BinOp.STAR -> target.mulAssign(frame.scope, value)
+            BinOp.SLASH -> target.divAssign(frame.scope, value)
+            BinOp.PERCENT -> target.modAssign(frame.scope, value)
+            else -> null
+        }
+        if (result == null) {
+            val name = (frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal)?.value
+            if (name != null) frame.scope.raiseIllegalAssignment("symbol is readonly: $name")
+            frame.scope.raiseIllegalAssignment("symbol is readonly")
+        }
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
 class CmdJmp(internal val target: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         frame.ip = target
@@ -1175,7 +1207,7 @@ class CmdCallSlot(
                 frame.fn.localSlotNames.getOrNull(localIndex)
             }
             val message = name?.let { "property '$it' is unset (not initialized)" }
-                ?: "property is unset (not initialized)"
+                ?: "property is unset (not initialized) in ${frame.fn.name} at slot $calleeSlot"
             frame.scope.raiseUnset(message)
         }
         val args = frame.buildArguments(argBase, argCount)
@@ -1238,7 +1270,14 @@ class CmdGetName(
         }
         val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
             ?: error("GET_NAME expects StringVal at $nameId")
-        val result = frame.scope.get(nameConst.value)?.value ?: ObjUnset
+        val name = nameConst.value
+        val result = frame.scope.get(name)?.value ?: run {
+            try {
+                frame.scope.thisObj.readField(frame.scope, name).value
+            } catch (e: ExecutionError) {
+                if ((e.message ?: "").contains("no such field: $name")) ObjUnset else throw e
+            }
+        }
         frame.storeObjResult(dst, result)
         return
     }
