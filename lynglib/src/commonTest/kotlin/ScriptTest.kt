@@ -3044,7 +3044,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testMapAsDelegate() = runTest {
         eval(
@@ -3144,7 +3143,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testBufferCompare() = runTest {
         eval(
@@ -3773,7 +3771,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testThisInClosure() = runTest {
         eval(
@@ -4520,7 +4517,6 @@ class ScriptTest {
         assertEquals(51, r.toInt())
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testFirstInEnum() = runTest {
         eval(
