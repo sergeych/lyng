@@ -1409,7 +1409,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testCharacterRange() = runTest {
         eval(
@@ -1439,7 +1438,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testForRange() = runTest {
         eval(
@@ -3614,7 +3612,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testJoinToString() = runTest {
         eval(
@@ -5110,7 +5107,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testClamp() = runTest {
         eval(
