@@ -851,7 +851,6 @@ class ScriptTest {
         }
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testWhileBlockIsolation1() = runTest {
         eval(
@@ -868,7 +867,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testWhileBlockIsolation2() = runTest {
         assertFails {
@@ -2278,7 +2276,6 @@ class ScriptTest {
         assertEquals("111", r.toString())
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun doWhileValuesTest() = runTest {
         eval(
@@ -2323,7 +2320,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun doWhileValuesLabelTest() = runTest {
         withTimeout(5.seconds) {
