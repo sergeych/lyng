@@ -19,6 +19,12 @@ package net.sergeych.lyng.bytecode
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Statement
+import net.sergeych.lyng.WhenCase
+import net.sergeych.lyng.WhenCondition
+import net.sergeych.lyng.WhenEqualsCondition
+import net.sergeych.lyng.WhenInCondition
+import net.sergeych.lyng.WhenIsCondition
+import net.sergeych.lyng.WhenStatement
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.RangeRef
 
@@ -106,6 +112,14 @@ class BytecodeStatement private constructor(
                 is net.sergeych.lyng.FunctionDeclStatement -> false
                 is net.sergeych.lyng.EnumDeclStatement -> false
                 is net.sergeych.lyng.TryStatement -> false
+                is net.sergeych.lyng.WhenStatement -> {
+                    containsUnsupportedStatement(target.value) ||
+                        target.cases.any { case ->
+                            case.conditions.any { cond -> containsUnsupportedStatement(cond.expr) } ||
+                                containsUnsupportedStatement(case.block)
+                        } ||
+                        (target.elseCase?.let { containsUnsupportedStatement(it) } ?: false)
+                }
                 else -> true
             }
         }
@@ -187,7 +201,28 @@ class BytecodeStatement private constructor(
                 }
                 is net.sergeych.lyng.ThrowStatement ->
                     net.sergeych.lyng.ThrowStatement(unwrapDeep(stmt.throwExpr), stmt.pos)
+                is net.sergeych.lyng.WhenStatement -> {
+                    net.sergeych.lyng.WhenStatement(
+                        unwrapDeep(stmt.value),
+                        stmt.cases.map { case ->
+                            net.sergeych.lyng.WhenCase(
+                                case.conditions.map { unwrapWhenCondition(it) },
+                                unwrapDeep(case.block)
+                            )
+                        },
+                        stmt.elseCase?.let { unwrapDeep(it) },
+                        stmt.pos
+                    )
+                }
                 else -> stmt
+            }
+        }
+
+        private fun unwrapWhenCondition(cond: WhenCondition): WhenCondition {
+            return when (cond) {
+                is WhenEqualsCondition -> WhenEqualsCondition(unwrapDeep(cond.expr), cond.pos)
+                is WhenInCondition -> WhenInCondition(unwrapDeep(cond.expr), cond.negated, cond.pos)
+                is WhenIsCondition -> WhenIsCondition(unwrapDeep(cond.expr), cond.negated, cond.pos)
             }
         }
     }

@@ -24,6 +24,11 @@ import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Statement
 import net.sergeych.lyng.ToBoolStatement
 import net.sergeych.lyng.VarDeclStatement
+import net.sergeych.lyng.WhenCondition
+import net.sergeych.lyng.WhenEqualsCondition
+import net.sergeych.lyng.WhenInCondition
+import net.sergeych.lyng.WhenIsCondition
+import net.sergeych.lyng.WhenStatement
 import net.sergeych.lyng.obj.*
 
 class BytecodeCompiler(
@@ -1515,6 +1520,96 @@ class BytecodeCompiler(
         return CompiledValue(resultSlot, SlotType.OBJ)
     }
 
+    private fun compileWhen(stmt: WhenStatement, wantResult: Boolean): CompiledValue? {
+        val subjectValue = compileStatementValueOrFallback(stmt.value) ?: return null
+        val subjectObj = ensureObjSlot(subjectValue)
+        val resultSlot = allocSlot()
+        if (wantResult) {
+            val voidId = builder.addConst(BytecodeConst.ObjRef(ObjVoid))
+            builder.emit(Opcode.CONST_OBJ, voidId, resultSlot)
+            updateSlotType(resultSlot, SlotType.OBJ)
+        }
+        val endLabel = builder.label()
+        for (case in stmt.cases) {
+            val caseLabel = builder.label()
+            val nextCaseLabel = builder.label()
+            for (cond in case.conditions) {
+                val condValue = compileWhenCondition(cond, subjectObj) ?: return null
+                builder.emit(
+                    Opcode.JMP_IF_TRUE,
+                    listOf(CmdBuilder.Operand.IntVal(condValue.slot), CmdBuilder.Operand.LabelRef(caseLabel))
+                )
+            }
+            builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(nextCaseLabel)))
+            builder.mark(caseLabel)
+            val bodyValue = compileStatementValueOrFallback(case.block, wantResult) ?: return null
+            if (wantResult) {
+                val bodyObj = ensureObjSlot(bodyValue)
+                builder.emit(Opcode.MOVE_OBJ, bodyObj.slot, resultSlot)
+            }
+            builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
+            builder.mark(nextCaseLabel)
+        }
+        stmt.elseCase?.let {
+            val elseValue = compileStatementValueOrFallback(it, wantResult) ?: return null
+            if (wantResult) {
+                val elseObj = ensureObjSlot(elseValue)
+                builder.emit(Opcode.MOVE_OBJ, elseObj.slot, resultSlot)
+            }
+        }
+        builder.mark(endLabel)
+        return if (wantResult) {
+            updateSlotType(resultSlot, SlotType.OBJ)
+            CompiledValue(resultSlot, SlotType.OBJ)
+        } else {
+            subjectObj
+        }
+    }
+
+    private fun compileWhenCondition(cond: WhenCondition, subjectObj: CompiledValue): CompiledValue? {
+        val subject = ensureObjSlot(subjectObj)
+        return when (cond) {
+            is WhenEqualsCondition -> {
+                val expected = compileStatementValueOrFallback(cond.expr) ?: return null
+                val expectedObj = ensureObjSlot(expected)
+                val dst = allocSlot()
+                builder.emit(Opcode.CMP_EQ_OBJ, expectedObj.slot, subject.slot, dst)
+                updateSlotType(dst, SlotType.BOOL)
+                CompiledValue(dst, SlotType.BOOL)
+            }
+            is WhenInCondition -> {
+                val container = compileStatementValueOrFallback(cond.expr) ?: return null
+                val containerObj = ensureObjSlot(container)
+                val baseDst = allocSlot()
+                builder.emit(Opcode.CONTAINS_OBJ, containerObj.slot, subject.slot, baseDst)
+                updateSlotType(baseDst, SlotType.BOOL)
+                if (!cond.negated) {
+                    CompiledValue(baseDst, SlotType.BOOL)
+                } else {
+                    val neg = allocSlot()
+                    builder.emit(Opcode.NOT_BOOL, baseDst, neg)
+                    updateSlotType(neg, SlotType.BOOL)
+                    CompiledValue(neg, SlotType.BOOL)
+                }
+            }
+            is WhenIsCondition -> {
+                val typeValue = compileStatementValueOrFallback(cond.expr) ?: return null
+                val typeObj = ensureObjSlot(typeValue)
+                val baseDst = allocSlot()
+                builder.emit(Opcode.CHECK_IS, subject.slot, typeObj.slot, baseDst)
+                updateSlotType(baseDst, SlotType.BOOL)
+                if (!cond.negated) {
+                    CompiledValue(baseDst, SlotType.BOOL)
+                } else {
+                    val neg = allocSlot()
+                    builder.emit(Opcode.NOT_BOOL, baseDst, neg)
+                    updateSlotType(neg, SlotType.BOOL)
+                    CompiledValue(neg, SlotType.BOOL)
+                }
+            }
+        }
+    }
+
     private fun ensureObjSlot(value: CompiledValue): CompiledValue {
         if (value.type == SlotType.OBJ) return value
         val dst = allocSlot()
@@ -1883,6 +1978,7 @@ class BytecodeCompiler(
                 is net.sergeych.lyng.FunctionDeclStatement -> emitStatementEval(target)
                 is net.sergeych.lyng.EnumDeclStatement -> emitStatementEval(target)
                 is net.sergeych.lyng.TryStatement -> emitStatementEval(target)
+                is net.sergeych.lyng.WhenStatement -> compileWhen(target, true)
                 is net.sergeych.lyng.BreakStatement -> compileBreak(target)
                 is net.sergeych.lyng.ContinueStatement -> compileContinue(target)
                 is net.sergeych.lyng.ReturnStatement -> compileReturn(target)
@@ -1927,6 +2023,7 @@ class BytecodeCompiler(
                 is net.sergeych.lyng.ContinueStatement -> compileContinue(target)
                 is net.sergeych.lyng.ReturnStatement -> compileReturn(target)
                 is net.sergeych.lyng.ThrowStatement -> compileThrow(target)
+                is net.sergeych.lyng.WhenStatement -> compileWhen(target, false)
                 else -> {
                     emitFallbackStatement(target)
                 }

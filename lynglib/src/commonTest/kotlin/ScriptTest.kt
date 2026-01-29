@@ -2351,7 +2351,6 @@ class ScriptTest {
         }
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testSimpleWhen() = runTest {
         eval(
@@ -2376,7 +2375,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testWhenIs() = runTest {
         eval(
@@ -2407,7 +2405,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testWhenIn() = runTest {
         eval(
@@ -2502,7 +2499,6 @@ class ScriptTest {
 //        )
 //    }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testWhenSample1() = runTest {
         eval(

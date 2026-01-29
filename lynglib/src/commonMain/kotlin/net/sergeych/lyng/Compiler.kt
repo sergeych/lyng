@@ -2031,8 +2031,6 @@ class Compiler(
         }
     }
 
-    data class WhenCase(val condition: Statement, val block: Statement)
-
     private suspend fun parseWhenStatement(): Statement {
         // has a value, when(value) ?
         var t = cc.nextNonWhitespace()
@@ -2044,7 +2042,6 @@ class Compiler(
             if (t.type != Token.Type.LBRACE) throw ScriptError(t.pos, "when { ... } expected")
             val cases = mutableListOf<WhenCase>()
             var elseCase: Statement? = null
-            lateinit var whenValue: Obj
 
             // there could be 0+ then clauses
             // condition could be a value, in and is clauses:
@@ -2053,9 +2050,8 @@ class Compiler(
 
             // loop cases
             outer@ while (true) {
-
                 var skipParseBody = false
-                val currentCondition = mutableListOf<Statement>()
+                val currentConditions = mutableListOf<WhenCondition>()
 
                 // loop conditions
                 while (true) {
@@ -2064,31 +2060,16 @@ class Compiler(
                     when (t.type) {
                         Token.Type.IN,
                         Token.Type.NOTIN -> {
-                            // we need a copy in the closure:
-                            val isIn = t.type == Token.Type.IN
+                            val negated = t.type == Token.Type.NOTIN
                             val container = parseExpression() ?: throw ScriptError(cc.currentPos(), "type expected")
-                            val condPos = t.pos
-                            currentCondition += object : Statement() {
-                                override val pos: Pos = condPos
-                                override suspend fun execute(scope: Scope): Obj {
-                                    val r = container.execute(scope).contains(scope, whenValue)
-                                    return ObjBool(if (isIn) r else !r)
-                                }
-                            }
+                            currentConditions += WhenInCondition(container, negated, t.pos)
                         }
 
-                        Token.Type.IS, Token.Type.NOTIS -> {
-                            // we need a copy in the closure:
-                            val isIn = t.type == Token.Type.IS
+                        Token.Type.IS,
+                        Token.Type.NOTIS -> {
+                            val negated = t.type == Token.Type.NOTIS
                             val caseType = parseExpression() ?: throw ScriptError(cc.currentPos(), "type expected")
-                            val condPos = t.pos
-                            currentCondition += object : Statement() {
-                                override val pos: Pos = condPos
-                                override suspend fun execute(scope: Scope): Obj {
-                                    val r = whenValue.isInstanceOf(caseType.execute(scope))
-                                    return ObjBool(if (isIn) r else !r)
-                                }
-                            }
+                            currentConditions += WhenIsCondition(caseType, negated, t.pos)
                         }
 
                         Token.Type.COMMA ->
@@ -2117,13 +2098,7 @@ class Compiler(
                                 cc.previous()
                                 val x = parseExpression()
                                     ?: throw ScriptError(cc.currentPos(), "when case condition expected")
-                                val condPos = t.pos
-                                currentCondition += object : Statement() {
-                                    override val pos: Pos = condPos
-                                    override suspend fun execute(scope: Scope): Obj {
-                                        return ObjBool(x.execute(scope).compareTo(scope, whenValue) == 0)
-                                    }
-                                }
+                                currentConditions += WhenEqualsCondition(x, t.pos)
                             }
                         }
                     }
@@ -2132,28 +2107,11 @@ class Compiler(
                 if (!skipParseBody) {
                     val block = parseStatement()?.let { unwrapBytecodeDeep(it) }
                         ?: throw ScriptError(cc.currentPos(), "when case block expected")
-                    for (c in currentCondition) cases += WhenCase(c, block)
+                    cases += WhenCase(currentConditions, block)
                 }
             }
             val whenPos = t.pos
-            object : Statement() {
-                override val pos: Pos = whenPos
-                override suspend fun execute(scope: Scope): Obj {
-                    var result: Obj = ObjVoid
-                    // in / is and like uses whenValue from closure:
-                    whenValue = value.execute(scope)
-                    var found = false
-                    for (c in cases) {
-                        if (c.condition.execute(scope).toBool()) {
-                            result = c.block.execute(scope)
-                            found = true
-                            break
-                        }
-                    }
-                    if (!found && elseCase != null) result = elseCase.execute(scope)
-                    return result
-                }
-            }
+            WhenStatement(value, cases, elseCase, whenPos)
         } else {
             // when { cond -> ... }
             TODO("when without object is not yet implemented")
