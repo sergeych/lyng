@@ -65,6 +65,7 @@ class BytecodeCompiler(
     private val loopStack = ArrayDeque<LoopContext>()
     private val effectiveScopeDepthByRef = IdentityHashMap<LocalSlotRef, Int>()
     private val effectiveLocalDepthByKey = LinkedHashMap<ScopeSlotKey, Int>()
+    private var forceScopeSlots = false
 
     private data class LoopContext(
         val label: String?,
@@ -205,6 +206,7 @@ class BytecodeCompiler(
             }
             is LocalVarRef -> {
                 if (allowLocalSlots) {
+                    if (!forceScopeSlots) {
                     loopSlotOverrides[ref.name]?.let { slot ->
                         val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
                         return CompiledValue(slot, resolved)
@@ -214,6 +216,7 @@ class BytecodeCompiler(
                         val slot = scopeSlotCount + localIndex
                         val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
                         return CompiledValue(slot, resolved)
+                    }
                     }
                 }
                 compileNameLookup(ref.name)
@@ -2865,6 +2868,10 @@ class BytecodeCompiler(
     private fun refPos(ref: BinaryOpRef): Pos = Pos.builtIn
 
     private fun resolveSlot(ref: LocalSlotRef): Int? {
+        if (forceScopeSlots) {
+            val scopeKey = ScopeSlotKey(effectiveScopeDepth(ref), refSlot(ref))
+            return scopeSlotMap[scopeKey]
+        }
         loopSlotOverrides[ref.name]?.let { return it }
         val localKey = ScopeSlotKey(refScopeDepth(ref), refSlot(ref))
         val localIndex = localSlotIndexByKey[localKey]
@@ -2906,6 +2913,7 @@ class BytecodeCompiler(
         loopStack.clear()
         effectiveScopeDepthByRef.clear()
         effectiveLocalDepthByKey.clear()
+        forceScopeSlots = allowLocalSlots && containsValueFnRef(stmt)
         if (allowLocalSlots) {
             collectLoopVarNames(stmt)
         }
@@ -2981,7 +2989,7 @@ class BytecodeCompiler(
             is VarDeclStatement -> {
                 val slotIndex = stmt.slotIndex
                 val slotDepth = stmt.slotDepth
-                if (allowLocalSlots && slotIndex != null && slotDepth != null) {
+                if (allowLocalSlots && !forceScopeSlots && slotIndex != null && slotDepth != null) {
                     val key = ScopeSlotKey(slotDepth, slotIndex)
                     declaredLocalKeys.add(key)
                     if (!localSlotInfoMap.containsKey(key)) {
@@ -2991,6 +2999,14 @@ class BytecodeCompiler(
                         extractDeclaredRange(stmt.initializer)?.let { range ->
                             localRangeRefs[key] = range
                         }
+                    }
+                } else if (slotIndex != null && slotDepth != null) {
+                    val key = ScopeSlotKey(slotDepth, slotIndex)
+                    if (!scopeSlotMap.containsKey(key)) {
+                        scopeSlotMap[key] = scopeSlotMap.size
+                    }
+                    if (!scopeSlotNameMap.containsKey(key)) {
+                        scopeSlotNameMap[key] = stmt.name
                     }
                 }
                 stmt.initializer?.let { collectScopeSlots(it) }
@@ -3031,6 +3047,51 @@ class BytecodeCompiler(
     private fun collectLoopSlotPlans(stmt: Statement, scopeDepth: Int) {
         if (stmt is BytecodeStatement) {
             collectLoopSlotPlans(stmt.original, scopeDepth)
+            return
+        }
+        if (forceScopeSlots) {
+            when (stmt) {
+                is net.sergeych.lyng.ForInStatement -> {
+                    collectLoopSlotPlans(stmt.source, scopeDepth)
+                    val loopDepth = scopeDepth + 1
+                    collectLoopSlotPlans(stmt.body, loopDepth)
+                    stmt.elseStatement?.let { collectLoopSlotPlans(it, loopDepth) }
+                }
+                is net.sergeych.lyng.WhileStatement -> {
+                    collectLoopSlotPlans(stmt.condition, scopeDepth)
+                    val loopDepth = scopeDepth + 1
+                    collectLoopSlotPlans(stmt.body, loopDepth)
+                    stmt.elseStatement?.let { collectLoopSlotPlans(it, loopDepth) }
+                }
+                is net.sergeych.lyng.DoWhileStatement -> {
+                    val loopDepth = scopeDepth + 1
+                    collectLoopSlotPlans(stmt.body, loopDepth)
+                    collectLoopSlotPlans(stmt.condition, loopDepth)
+                    stmt.elseStatement?.let { collectLoopSlotPlans(it, loopDepth) }
+                }
+                is BlockStatement -> {
+                    val nextDepth = scopeDepth + 1
+                    for (child in stmt.statements()) {
+                        collectLoopSlotPlans(child, nextDepth)
+                    }
+                }
+                is IfStatement -> {
+                    collectLoopSlotPlans(stmt.condition, scopeDepth)
+                    collectLoopSlotPlans(stmt.ifBody, scopeDepth)
+                    stmt.elseBody?.let { collectLoopSlotPlans(it, scopeDepth) }
+                }
+                is VarDeclStatement -> {
+                    stmt.initializer?.let { collectLoopSlotPlans(it, scopeDepth) }
+                }
+                is ExpressionStatement -> {}
+                is net.sergeych.lyng.ReturnStatement -> {
+                    stmt.resultExpr?.let { collectLoopSlotPlans(it, scopeDepth) }
+                }
+                is net.sergeych.lyng.ThrowStatement -> {
+                    collectLoopSlotPlans(stmt.throwExpr, scopeDepth)
+                }
+                else -> {}
+            }
             return
         }
         when (stmt) {
@@ -3186,8 +3247,8 @@ class BytecodeCompiler(
         when (ref) {
             is LocalSlotRef -> {
                 val localKey = ScopeSlotKey(refScopeDepth(ref), refSlot(ref))
-                val shouldLocalize = (refDepth(ref) == 0) ||
-                    intLoopVarNames.contains(ref.name)
+                val shouldLocalize = !forceScopeSlots && ((refDepth(ref) == 0) ||
+                    intLoopVarNames.contains(ref.name))
                 if (allowLocalSlots && !ref.isDelegated && shouldLocalize) {
                     if (!localSlotInfoMap.containsKey(localKey)) {
                         localSlotInfoMap[localKey] = LocalSlotInfo(ref.name, ref.isMutable, localKey.depth)
@@ -3212,8 +3273,8 @@ class BytecodeCompiler(
                 val target = assignTarget(ref)
                 if (target != null) {
                     val localKey = ScopeSlotKey(refScopeDepth(target), refSlot(target))
-                    val shouldLocalize = (refDepth(target) == 0) ||
-                        intLoopVarNames.contains(target.name)
+                    val shouldLocalize = !forceScopeSlots && ((refDepth(target) == 0) ||
+                        intLoopVarNames.contains(target.name))
                     if (allowLocalSlots && !target.isDelegated && shouldLocalize) {
                         if (!localSlotInfoMap.containsKey(localKey)) {
                             localSlotInfoMap[localKey] = LocalSlotInfo(target.name, target.isMutable, localKey.depth)
@@ -3271,6 +3332,86 @@ class BytecodeCompiler(
             if (stmt is ExpressionStatement) {
                 collectScopeSlotsRef(stmt.ref)
             }
+        }
+    }
+
+    private fun containsValueFnRef(stmt: Statement): Boolean {
+        if (stmt is BytecodeStatement) return containsValueFnRef(stmt.original)
+        return when (stmt) {
+            is ExpressionStatement -> containsValueFnRef(stmt.ref)
+            is BlockStatement -> stmt.statements().any { containsValueFnRef(it) }
+            is VarDeclStatement -> stmt.initializer?.let { containsValueFnRef(it) } ?: false
+            is DestructuringVarDeclStatement -> {
+                containsValueFnRef(stmt.initializer) || containsValueFnRef(stmt.pattern)
+            }
+            is net.sergeych.lyng.ForInStatement -> {
+                containsValueFnRef(stmt.source) ||
+                    containsValueFnRef(stmt.body) ||
+                    (stmt.elseStatement?.let { containsValueFnRef(it) } ?: false)
+            }
+            is net.sergeych.lyng.WhileStatement -> {
+                containsValueFnRef(stmt.condition) ||
+                    containsValueFnRef(stmt.body) ||
+                    (stmt.elseStatement?.let { containsValueFnRef(it) } ?: false)
+            }
+            is net.sergeych.lyng.DoWhileStatement -> {
+                containsValueFnRef(stmt.body) ||
+                    containsValueFnRef(stmt.condition) ||
+                    (stmt.elseStatement?.let { containsValueFnRef(it) } ?: false)
+            }
+            is IfStatement -> {
+                containsValueFnRef(stmt.condition) ||
+                    containsValueFnRef(stmt.ifBody) ||
+                    (stmt.elseBody?.let { containsValueFnRef(it) } ?: false)
+            }
+            is net.sergeych.lyng.ReturnStatement -> {
+                stmt.resultExpr?.let { containsValueFnRef(it) } ?: false
+            }
+            is net.sergeych.lyng.ThrowStatement -> containsValueFnRef(stmt.throwExpr)
+            else -> false
+        }
+    }
+
+    private fun containsValueFnRef(ref: ObjRef): Boolean {
+        return when (ref) {
+            is ValueFnRef -> true
+            is BinaryOpRef -> containsValueFnRef(binaryLeft(ref)) || containsValueFnRef(binaryRight(ref))
+            is UnaryOpRef -> containsValueFnRef(unaryOperand(ref))
+            is AssignRef -> {
+                val target = assignTarget(ref)
+                (target != null && containsValueFnRef(target)) || containsValueFnRef(assignValue(ref))
+            }
+            is AssignOpRef -> containsValueFnRef(ref.target) || containsValueFnRef(ref.value)
+            is AssignIfNullRef -> containsValueFnRef(ref.target) || containsValueFnRef(ref.value)
+            is IncDecRef -> containsValueFnRef(ref.target)
+            is ConditionalRef -> {
+                containsValueFnRef(ref.condition) ||
+                    containsValueFnRef(ref.ifTrue) ||
+                    containsValueFnRef(ref.ifFalse)
+            }
+            is ElvisRef -> containsValueFnRef(ref.left) || containsValueFnRef(ref.right)
+            is FieldRef -> containsValueFnRef(ref.target)
+            is IndexRef -> containsValueFnRef(ref.targetRef) || containsValueFnRef(ref.indexRef)
+            is CallRef -> ref.tailBlock || containsValueFnRef(ref.target) || ref.args.any { arg ->
+                val stmt = arg.value
+                stmt is ExpressionStatement && containsValueFnRef(stmt.ref)
+            }
+            is MethodCallRef -> ref.tailBlock || containsValueFnRef(ref.receiver) || ref.args.any { arg ->
+                val stmt = arg.value
+                stmt is ExpressionStatement && containsValueFnRef(stmt.ref)
+            }
+            is ThisMethodSlotCallRef -> ref.hasTailBlock() || ref.arguments().any { arg ->
+                val stmt = arg.value
+                stmt is ExpressionStatement && containsValueFnRef(stmt.ref)
+            }
+            is ListLiteralRef -> ref.entries().any { entry ->
+                when (entry) {
+                    is net.sergeych.lyng.ListEntry.Element -> containsValueFnRef(entry.ref)
+                    is net.sergeych.lyng.ListEntry.Spread -> containsValueFnRef(entry.ref)
+                }
+            }
+            is StatementRef -> containsValueFnRef(ref.statement)
+            else -> false
         }
     }
 

@@ -22,7 +22,6 @@ import kotlin.test.Test
 
 class StdlibTest {
     @Test
-    @Ignore("TODO(bytecode-only): iterable filter mismatch")
     fun testIterableFilter() = runTest {
         eval("""
             assertEquals([2,4,6,8], (1..8).filter{ println("call2"); it % 2 == 0 }.toList() )
@@ -95,7 +94,6 @@ class StdlibTest {
     }
 
     @Test
-    @Ignore("TODO(bytecode-only): flatten/filter mismatch")
     fun testFlattenAndFilter() = runTest {
         eval("""
             assertEquals([1,2,3,4,5,6], [1,3,5].map { [it, it+1] }.flatten() )
@@ -111,7 +109,6 @@ class StdlibTest {
     }
 
     @Test
-    @Ignore("TODO(bytecode-only): count mismatch")
     fun testCount() = runTest {
         eval("""
             assertEquals(5, (1..10).toList().count { it % 2 == 1 } )
@@ -119,7 +116,6 @@ class StdlibTest {
     }
 
     @Test
-    @Ignore("TODO(bytecode-only): with mismatch")
     fun testWith() = runTest {
         eval("""
             class Person(val name, var age)
