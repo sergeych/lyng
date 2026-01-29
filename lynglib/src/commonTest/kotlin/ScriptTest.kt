@@ -1980,7 +1980,6 @@ class ScriptTest {
 
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testCallLastBlockWithEllipsis() = runTest {
         eval(
@@ -2013,7 +2012,6 @@ class ScriptTest {
 
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testMethodCallLastBlockWithEllipsis() = runTest {
         eval(
@@ -2055,7 +2053,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun doWhileSimpleTest() = runTest {
         eval(
@@ -2099,7 +2096,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testForLabelNreakTest() = runTest {
         eval(
