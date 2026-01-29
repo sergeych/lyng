@@ -1268,16 +1268,17 @@ class BytecodeCompiler(
     }
 
     private fun compileIncDec(ref: IncDecRef, wantResult: Boolean): CompiledValue? {
-        val target = ref.target as? LocalSlotRef ?: return null
-        if (!allowLocalSlots) return null
-        if (!target.isMutable || target.isDelegated) return null
-        val slot = resolveSlot(target) ?: return null
-        val slotType = slotTypes[slot] ?: SlotType.UNKNOWN
-        if (slot < scopeSlotCount && slotType != SlotType.UNKNOWN) {
-            val addrSlot = ensureScopeAddr(slot)
-            val current = allocSlot()
-            emitLoadFromAddr(addrSlot, current, slotType)
-            val result = when (slotType) {
+        val target = ref.target as? LocalSlotRef
+        if (target != null) {
+            if (!allowLocalSlots) return null
+            if (!target.isMutable || target.isDelegated) return null
+            val slot = resolveSlot(target) ?: return null
+            val slotType = slotTypes[slot] ?: SlotType.UNKNOWN
+            if (slot < scopeSlotCount && slotType != SlotType.UNKNOWN) {
+                val addrSlot = ensureScopeAddr(slot)
+                val current = allocSlot()
+                emitLoadFromAddr(addrSlot, current, slotType)
+                val result = when (slotType) {
                 SlotType.INT -> {
                     if (wantResult && ref.isPost) {
                         val old = allocSlot()
@@ -1335,9 +1336,9 @@ class BytecodeCompiler(
                 }
                 else -> null
             }
-            if (result != null) return result
-        }
-        return when (slotType) {
+                if (result != null) return result
+            }
+            return when (slotType) {
             SlotType.INT -> {
                 if (wantResult && ref.isPost) {
                     val old = allocSlot()
@@ -1409,8 +1410,32 @@ class BytecodeCompiler(
                     CompiledValue(result, SlotType.OBJ)
                 }
             }
-            else -> null
+                else -> null
+            }
         }
+
+        val indexTarget = ref.target as? IndexRef ?: return null
+        if (indexTarget.optionalRef) return null
+        val receiver = compileRefWithFallback(indexTarget.targetRef, null, Pos.builtIn) ?: return null
+        val index = compileRefWithFallback(indexTarget.indexRef, null, Pos.builtIn) ?: return null
+        val current = allocSlot()
+        builder.emit(Opcode.GET_INDEX, receiver.slot, index.slot, current)
+        updateSlotType(current, SlotType.OBJ)
+        val oneSlot = allocSlot()
+        val oneId = builder.addConst(BytecodeConst.ObjRef(ObjInt.One))
+        builder.emit(Opcode.CONST_OBJ, oneId, oneSlot)
+        val result = allocSlot()
+        val op = if (ref.isIncrement) Opcode.ADD_OBJ else Opcode.SUB_OBJ
+        if (wantResult && ref.isPost) {
+            val old = allocSlot()
+            builder.emit(Opcode.MOVE_OBJ, current, old)
+            builder.emit(op, current, oneSlot, result)
+            builder.emit(Opcode.SET_INDEX, receiver.slot, index.slot, result)
+            return CompiledValue(old, SlotType.OBJ)
+        }
+        builder.emit(op, current, oneSlot, result)
+        builder.emit(Opcode.SET_INDEX, receiver.slot, index.slot, result)
+        return CompiledValue(result, SlotType.OBJ)
     }
 
     private fun compileConditional(ref: ConditionalRef): CompiledValue? {

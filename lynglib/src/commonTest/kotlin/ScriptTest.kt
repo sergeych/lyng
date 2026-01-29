@@ -1015,7 +1015,6 @@ class ScriptTest {
                 .toInt())
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testDecrIncr3() = runTest {
         val c = Scope()
@@ -3444,7 +3443,6 @@ class ScriptTest {
 
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testIndexIntIncrements() = runTest {
         eval(
@@ -3465,7 +3463,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testIndexIntDecrements() = runTest {
         eval(
@@ -4127,7 +4124,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testInlineMapLiteral() = runTest {
         eval(
