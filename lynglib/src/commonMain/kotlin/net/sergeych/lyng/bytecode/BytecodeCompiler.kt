@@ -217,6 +217,7 @@ class BytecodeCompiler(
             is AssignOpRef -> compileAssignOp(ref) ?: compileEvalRef(ref)
             is AssignIfNullRef -> compileAssignIfNull(ref)
             is IncDecRef -> compileIncDec(ref, true)
+            is RangeRef -> compileRangeRef(ref)
             is ConditionalRef -> compileConditional(ref)
             is ElvisRef -> compileElvis(ref)
             is CallRef -> compileCall(ref)
@@ -1212,6 +1213,34 @@ class BytecodeCompiler(
             builder.emit(Opcode.CONST_NULL, dst)
             builder.mark(endLabel)
         }
+        updateSlotType(dst, SlotType.OBJ)
+        return CompiledValue(dst, SlotType.OBJ)
+    }
+
+    private fun compileRangeRef(ref: RangeRef): CompiledValue? {
+        val startSlot = if (ref.left != null) {
+            val start = compileRefWithFallback(ref.left, null, Pos.builtIn) ?: return null
+            ensureObjSlot(start).slot
+        } else {
+            val slot = allocSlot()
+            builder.emit(Opcode.CONST_NULL, slot)
+            updateSlotType(slot, SlotType.OBJ)
+            slot
+        }
+        val endSlot = if (ref.right != null) {
+            val end = compileRefWithFallback(ref.right, null, Pos.builtIn) ?: return null
+            ensureObjSlot(end).slot
+        } else {
+            val slot = allocSlot()
+            builder.emit(Opcode.CONST_NULL, slot)
+            updateSlotType(slot, SlotType.OBJ)
+            slot
+        }
+        val inclusiveSlot = allocSlot()
+        val inclusiveId = builder.addConst(BytecodeConst.Bool(ref.isEndInclusive))
+        builder.emit(Opcode.CONST_BOOL, inclusiveId, inclusiveSlot)
+        val dst = allocSlot()
+        builder.emit(Opcode.MAKE_RANGE, startSlot, endSlot, inclusiveSlot, dst)
         updateSlotType(dst, SlotType.OBJ)
         return CompiledValue(dst, SlotType.OBJ)
     }

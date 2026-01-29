@@ -29,6 +29,7 @@ enum class Opcode(val code: Int) {
     CONST_NULL(0x09),
     BOX_OBJ(0x0A),
     RANGE_INT_BOUNDS(0x0B),
+    MAKE_RANGE(0x0C),
 
     INT_TO_REAL(0x10),
     REAL_TO_INT(0x11),

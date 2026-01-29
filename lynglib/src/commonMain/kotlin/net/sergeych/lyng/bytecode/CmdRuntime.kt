@@ -141,6 +141,21 @@ class CmdConstBool(internal val constId: Int, internal val dst: Int) : Cmd() {
     }
 }
 
+class CmdMakeRange(
+    internal val startSlot: Int,
+    internal val endSlot: Int,
+    internal val inclusiveSlot: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val start = frame.slotToObj(startSlot)
+        val end = frame.slotToObj(endSlot)
+        val inclusive = frame.slotToObj(inclusiveSlot).toBool()
+        frame.storeObjResult(dst, ObjRange(start, end, isEndInclusive = inclusive))
+        return
+    }
+}
+
 class CmdConstNull(internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         frame.setObj(dst, ObjNull)

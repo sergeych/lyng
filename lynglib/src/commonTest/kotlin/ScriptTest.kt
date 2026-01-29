@@ -1217,7 +1217,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun forLoop1() = runTest {
         eval(
@@ -1245,7 +1244,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun forLoop2() = runTest {
         println(
@@ -1371,7 +1369,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testOpenEndRanges() = runTest {
         eval(
@@ -1384,7 +1381,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testOpenEndRanges2() = runTest {
         eval(

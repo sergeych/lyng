@@ -72,6 +72,7 @@ object CmdDisassembler {
             is CmdCheckIs -> Opcode.CHECK_IS to intArrayOf(cmd.objSlot, cmd.typeSlot, cmd.dst)
             is CmdAssertIs -> Opcode.ASSERT_IS to intArrayOf(cmd.objSlot, cmd.typeSlot)
             is CmdRangeIntBounds -> Opcode.RANGE_INT_BOUNDS to intArrayOf(cmd.src, cmd.startSlot, cmd.endSlot, cmd.okSlot)
+            is CmdMakeRange -> Opcode.MAKE_RANGE to intArrayOf(cmd.startSlot, cmd.endSlot, cmd.inclusiveSlot, cmd.dst)
             is CmdResolveScopeSlot -> Opcode.RESOLVE_SCOPE_SLOT to intArrayOf(cmd.scopeSlot, cmd.addrSlot)
             is CmdLoadObjAddr -> Opcode.LOAD_OBJ_ADDR to intArrayOf(cmd.addrSlot, cmd.dst)
             is CmdStoreObjAddr -> Opcode.STORE_OBJ_ADDR to intArrayOf(cmd.src, cmd.addrSlot)
@@ -213,7 +214,7 @@ object CmdDisassembler {
                 listOf(OperandKind.SLOT, OperandKind.SLOT)
             Opcode.CHECK_IS ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
-            Opcode.RANGE_INT_BOUNDS ->
+            Opcode.RANGE_INT_BOUNDS, Opcode.MAKE_RANGE ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.RET_LABEL, Opcode.THROW ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
