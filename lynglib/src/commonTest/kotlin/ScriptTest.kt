@@ -2789,7 +2789,6 @@ class ScriptTest {
         }
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testParallels2() = runTest {
         withContext(Dispatchers.Default) {
@@ -2837,7 +2836,6 @@ class ScriptTest {
         }
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testExtend() = runTest() {
         eval(
@@ -4947,7 +4945,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testLazyLocals() = runTest() {
         eval(
@@ -5236,7 +5233,6 @@ class ScriptTest {
         assertEquals(ObjFalse, scope.eval("isInt(\"42\")"))
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testFilterBug() = runTest {
         eval(
