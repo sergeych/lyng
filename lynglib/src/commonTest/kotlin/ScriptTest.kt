@@ -4001,7 +4001,6 @@ class ScriptTest {
 
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testIterableMinMax() = runTest {
         eval(
@@ -4377,7 +4376,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testHangOnPrintlnInMethods() = runTest {
         eval(
@@ -4809,7 +4807,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testExceptionToString() = runTest {
         eval(
@@ -4848,7 +4845,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testRaiseAsError() = runTest {
         var x = evalNamed(
