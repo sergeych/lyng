@@ -1343,7 +1343,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testOpenStartRanges() = runTest {
         eval(
@@ -1398,7 +1397,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testOpenEndRanges3() = runTest {
         eval(
@@ -2599,7 +2597,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testSubstringRangeFailure() = runTest {
         eval(
@@ -2610,7 +2607,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun passingOpenEndedRangeAsParam() = runTest {
         eval(
