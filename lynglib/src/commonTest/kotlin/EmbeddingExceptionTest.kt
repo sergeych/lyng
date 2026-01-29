@@ -27,7 +27,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
-@Ignore("TODO(bytecode-only): uses fallback (try/catch)")
+@Ignore("TODO(bytecode-only): exception rethrow mismatch")
 class EmbeddingExceptionTest {
 
     @Test

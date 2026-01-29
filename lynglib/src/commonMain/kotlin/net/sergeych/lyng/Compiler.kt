@@ -2247,7 +2247,7 @@ class Compiler(
             throw ScriptError(cc.currentPos(), "try block must have either catch or finally clause or both")
 
         val stmtPos = body.pos
-        return object : Statement() {
+        val tryStatement = object : Statement() {
             override val pos: Pos = stmtPos
             override suspend fun execute(scope: Scope): Obj {
                 var result: Obj = ObjVoid
@@ -2296,6 +2296,7 @@ class Compiler(
                 return result
             }
         }
+        return TryStatement(tryStatement, stmtPos)
     }
 
     private fun parseEnumDeclaration(isExtern: Boolean = false): Statement {

@@ -105,6 +105,7 @@ class BytecodeStatement private constructor(
                 is net.sergeych.lyng.ClassDeclStatement -> false
                 is net.sergeych.lyng.FunctionDeclStatement -> false
                 is net.sergeych.lyng.EnumDeclStatement -> false
+                is net.sergeych.lyng.TryStatement -> false
                 else -> true
             }
         }

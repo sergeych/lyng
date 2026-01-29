@@ -78,6 +78,23 @@ class BytecodeCompiler(
             is VarDeclStatement -> compileVarDecl(name, stmt)
             is net.sergeych.lyng.ThrowStatement -> compileThrowStatement(name, stmt)
             is net.sergeych.lyng.ExtensionPropertyDeclStatement -> compileExtensionPropertyDecl(name, stmt)
+            is net.sergeych.lyng.TryStatement -> {
+                val value = emitStatementEval(stmt)
+                builder.emit(Opcode.RET, value.slot)
+                val localCount = maxOf(nextSlot, value.slot + 1) - scopeSlotCount
+                builder.build(
+                    name,
+                    localCount,
+                    addrCount = nextAddrSlot,
+                    returnLabels = returnLabels,
+                    scopeSlotDepths,
+                    scopeSlotIndices,
+                    scopeSlotNames,
+                    localSlotNames,
+                    localSlotMutables,
+                    localSlotDepths
+                )
+            }
             else -> null
         }
     }
@@ -297,12 +314,7 @@ class BytecodeCompiler(
                     builder.emit(Opcode.NEG_REAL, a.slot, out)
                     CompiledValue(out, SlotType.REAL)
                 }
-                else -> {
-                    val obj = ensureObjSlot(a)
-                    val methodId = builder.addConst(BytecodeConst.StringVal("negate"))
-                    builder.emit(Opcode.CALL_VIRTUAL, obj.slot, methodId, 0, 0, out)
-                    CompiledValue(out, SlotType.OBJ)
-                }
+                else -> compileEvalRef(ref)
             }
             UnaryOp.NOT -> {
                 when (a.type) {
@@ -312,13 +324,7 @@ class BytecodeCompiler(
                         builder.emit(Opcode.INT_TO_BOOL, a.slot, tmp)
                         builder.emit(Opcode.NOT_BOOL, tmp, out)
                     }
-                    SlotType.OBJ, SlotType.UNKNOWN -> {
-                        val obj = ensureObjSlot(a)
-                        val methodId = builder.addConst(BytecodeConst.StringVal("logicalNot"))
-                        val tmpObj = allocSlot()
-                        builder.emit(Opcode.CALL_VIRTUAL, obj.slot, methodId, 0, 0, tmpObj)
-                        builder.emit(Opcode.OBJ_TO_BOOL, tmpObj, out)
-                    }
+                    SlotType.OBJ, SlotType.UNKNOWN -> return compileEvalRef(ref)
                     else -> return null
                 }
                 CompiledValue(out, SlotType.BOOL)
@@ -328,10 +334,7 @@ class BytecodeCompiler(
                     builder.emit(Opcode.INV_INT, a.slot, out)
                     return CompiledValue(out, SlotType.INT)
                 }
-                val obj = ensureObjSlot(a)
-                val methodId = builder.addConst(BytecodeConst.StringVal("bitNot"))
-                builder.emit(Opcode.CALL_VIRTUAL, obj.slot, methodId, 0, 0, out)
-                CompiledValue(out, SlotType.OBJ)
+                return compileEvalRef(ref)
             }
         }
     }
@@ -1825,6 +1828,7 @@ class BytecodeCompiler(
                 is net.sergeych.lyng.ClassDeclStatement -> emitStatementEval(target)
                 is net.sergeych.lyng.FunctionDeclStatement -> emitStatementEval(target)
                 is net.sergeych.lyng.EnumDeclStatement -> emitStatementEval(target)
+                is net.sergeych.lyng.TryStatement -> emitStatementEval(target)
                 is net.sergeych.lyng.BreakStatement -> compileBreak(target)
                 is net.sergeych.lyng.ContinueStatement -> compileContinue(target)
                 is net.sergeych.lyng.ReturnStatement -> compileReturn(target)

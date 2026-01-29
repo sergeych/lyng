@@ -343,7 +343,6 @@ class LynonTests {
 
 
     @Test
-    @Ignore("TODO(bytecode-only): unary minus regression")
     fun testUnaryMinus() = runTest {
         eval(
             """
@@ -354,7 +353,6 @@ class LynonTests {
     }
 
     @Test
-    @Ignore("TODO(bytecode-only): simple types regression")
     fun testSimpleTypes() = runTest {
         testScope().eval(
             """
