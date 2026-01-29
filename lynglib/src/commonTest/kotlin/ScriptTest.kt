@@ -960,7 +960,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testIncr() = runTest {
         val c = Scope()
@@ -973,7 +972,6 @@ class ScriptTest {
         assertEquals(12, c.eval("x").toInt())
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testDecr() = runTest {
         val c = Scope()
@@ -985,7 +983,6 @@ class ScriptTest {
         assertEquals(5, c.eval("x").toInt())
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testDecrIncr() = runTest {
         val c = Scope()
@@ -1000,7 +997,6 @@ class ScriptTest {
         assertEquals(7, c.eval("x + 0").toInt())
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testDecrIncr2() = runTest {
         val c = Scope()
