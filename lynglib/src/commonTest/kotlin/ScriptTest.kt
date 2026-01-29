@@ -1499,7 +1499,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testLambdaWithArgs() = runTest {
         eval(
@@ -1618,7 +1617,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testLambdaWithArgsEllipsis() = runTest {
         eval(
@@ -1663,7 +1661,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testIsPrimeSampleBug() = runTest {
         eval(
@@ -1684,7 +1681,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testLambdaAsFnCallArg() = runTest {
         eval(
