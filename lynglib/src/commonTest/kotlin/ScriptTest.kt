@@ -883,7 +883,6 @@ class ScriptTest {
         }
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testWhileBlockIsolation3() = runTest {
         eval(
@@ -909,7 +908,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun whileNonLocalBreakTest() = runTest {
         assertEquals(
@@ -2457,7 +2455,6 @@ class ScriptTest {
         assertEquals("$~", l[0].value)
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testMatchOperator() = runTest {
         eval(
@@ -2477,7 +2474,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("Bytecode: unsupported or incorrect behavior")
     @Test
     fun testMatchingOperator2() = runTest {
         eval(
