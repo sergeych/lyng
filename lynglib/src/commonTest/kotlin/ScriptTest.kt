@@ -1406,7 +1406,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testOpenEndRanges3() = runTest {
         eval(
@@ -1419,7 +1418,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testCharacterRange() = runTest {
         eval(
@@ -1434,7 +1432,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testIs() = runTest {
         eval(
@@ -1450,7 +1447,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testForRange() = runTest {
         eval(

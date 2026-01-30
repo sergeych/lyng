@@ -18,6 +18,7 @@ package net.sergeych.lyng.bytecode
 
 import net.sergeych.lyng.Arguments
 import net.sergeych.lyng.ExecutionError
+import net.sergeych.lyng.ModuleScope
 import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.PerfStats
 import net.sergeych.lyng.Pos
@@ -1498,7 +1499,7 @@ class CmdFrame(
 
     var ip: Int = 0
     var scope: Scope = scope0
-    private val moduleScope: Scope = scope0
+    private val moduleScope: Scope = resolveModuleScope(scope0)
     val methodCallSites: MutableMap<Int, MethodCallSite> = CmdCallSiteCache.methodCallSites(fn)
 
     internal val scopeStack = ArrayDeque<Scope>()
@@ -1519,6 +1520,18 @@ class CmdFrame(
         for (i in args.indices) {
             frame.setObj(frame.argBase + i, args[i])
         }
+    }
+
+    private fun resolveModuleScope(scope: Scope): Scope {
+        var current: Scope? = scope
+        var last: Scope = scope
+        while (current != null) {
+            if (current is ModuleScope) return current
+            if (current.parent is ModuleScope) return current
+            last = current
+            current = current.parent
+        }
+        return last
     }
 
     fun pushScope(plan: Map<String, Int>, captures: List<String>) {
@@ -1989,14 +2002,14 @@ class CmdFrame(
             return index
         }
         target.applySlotPlan(mapOf(name to index))
-        val existing = target.getLocalRecordDirect(name)
+        val existing = target.getLocalRecordDirect(name) ?: target.localBindings[name]
         if (existing != null) {
             target.updateSlotFor(name, existing)
-        } else {
-            val resolved = target.get(name)
-            if (resolved != null) {
-                target.updateSlotFor(name, resolved)
-            }
+            return index
+        }
+        val resolved = target.parent?.get(name) ?: target.get(name)
+        if (resolved != null) {
+            target.updateSlotFor(name, resolved)
         }
         return index
     }

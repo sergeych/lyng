@@ -701,6 +701,12 @@ class BytecodeCompiler(
             builder.emit(Opcode.CMP_EQ_OBJ, left.slot, right.slot, out)
             return CompiledValue(out, SlotType.BOOL)
         }
+        if (a.type == SlotType.OBJ || b.type == SlotType.OBJ) {
+            val left = ensureObjSlot(a)
+            val right = ensureObjSlot(b)
+            builder.emit(Opcode.CMP_EQ_OBJ, left.slot, right.slot, out)
+            return CompiledValue(out, SlotType.BOOL)
+        }
         return when {
             a.type == SlotType.INT && b.type == SlotType.INT -> {
                 builder.emit(Opcode.CMP_EQ_INT, a.slot, b.slot, out)
@@ -732,6 +738,12 @@ class BytecodeCompiler(
 
     private fun compileCompareNeq(a: CompiledValue, b: CompiledValue, out: Int): CompiledValue? {
         if (a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) {
+            val left = ensureObjSlot(a)
+            val right = ensureObjSlot(b)
+            builder.emit(Opcode.CMP_NEQ_OBJ, left.slot, right.slot, out)
+            return CompiledValue(out, SlotType.BOOL)
+        }
+        if (a.type == SlotType.OBJ || b.type == SlotType.OBJ) {
             val left = ensureObjSlot(a)
             val right = ensureObjSlot(b)
             builder.emit(Opcode.CMP_NEQ_OBJ, left.slot, right.slot, out)
@@ -773,6 +785,12 @@ class BytecodeCompiler(
             builder.emit(Opcode.CMP_LT_OBJ, left.slot, right.slot, out)
             return CompiledValue(out, SlotType.BOOL)
         }
+        if (a.type == SlotType.OBJ || b.type == SlotType.OBJ) {
+            val left = ensureObjSlot(a)
+            val right = ensureObjSlot(b)
+            builder.emit(Opcode.CMP_LT_OBJ, left.slot, right.slot, out)
+            return CompiledValue(out, SlotType.BOOL)
+        }
         return when {
             a.type == SlotType.INT && b.type == SlotType.INT -> {
                 builder.emit(Opcode.CMP_LT_INT, a.slot, b.slot, out)
@@ -800,6 +818,12 @@ class BytecodeCompiler(
 
     private fun compileCompareLte(a: CompiledValue, b: CompiledValue, out: Int): CompiledValue? {
         if (a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) {
+            val left = ensureObjSlot(a)
+            val right = ensureObjSlot(b)
+            builder.emit(Opcode.CMP_LTE_OBJ, left.slot, right.slot, out)
+            return CompiledValue(out, SlotType.BOOL)
+        }
+        if (a.type == SlotType.OBJ || b.type == SlotType.OBJ) {
             val left = ensureObjSlot(a)
             val right = ensureObjSlot(b)
             builder.emit(Opcode.CMP_LTE_OBJ, left.slot, right.slot, out)
@@ -837,6 +861,12 @@ class BytecodeCompiler(
             builder.emit(Opcode.CMP_GT_OBJ, left.slot, right.slot, out)
             return CompiledValue(out, SlotType.BOOL)
         }
+        if (a.type == SlotType.OBJ || b.type == SlotType.OBJ) {
+            val left = ensureObjSlot(a)
+            val right = ensureObjSlot(b)
+            builder.emit(Opcode.CMP_GT_OBJ, left.slot, right.slot, out)
+            return CompiledValue(out, SlotType.BOOL)
+        }
         return when {
             a.type == SlotType.INT && b.type == SlotType.INT -> {
                 builder.emit(Opcode.CMP_GT_INT, a.slot, b.slot, out)
@@ -864,6 +894,12 @@ class BytecodeCompiler(
 
     private fun compileCompareGte(a: CompiledValue, b: CompiledValue, out: Int): CompiledValue? {
         if (a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) {
+            val left = ensureObjSlot(a)
+            val right = ensureObjSlot(b)
+            builder.emit(Opcode.CMP_GTE_OBJ, left.slot, right.slot, out)
+            return CompiledValue(out, SlotType.BOOL)
+        }
+        if (a.type == SlotType.OBJ || b.type == SlotType.OBJ) {
             val left = ensureObjSlot(a)
             val right = ensureObjSlot(b)
             builder.emit(Opcode.CMP_GTE_OBJ, left.slot, right.slot, out)
@@ -2978,6 +3014,11 @@ class BytecodeCompiler(
             scopeSlotIndexByName[ref.name]?.let { return it }
         }
         if (ref.captureOwnerScopeId != null) {
+            val ownerKey = ScopeSlotKey(ref.captureOwnerScopeId, ref.captureOwnerSlot ?: refSlot(ref))
+            val ownerLocal = localSlotIndexByKey[ownerKey]
+            if (ownerLocal != null) {
+                return scopeSlotCount + ownerLocal
+            }
             val scopeKey = ScopeSlotKey(refScopeId(ref), refSlot(ref))
             return scopeSlotMap[scopeKey]
         }
@@ -3530,7 +3571,17 @@ class BytecodeCompiler(
         if (stmt == null) return null
         val target = if (stmt is BytecodeStatement) stmt.original else stmt
         val expr = target as? ExpressionStatement ?: return null
-        return expr.ref as? RangeRef
+        val ref = expr.ref
+        if (ref is RangeRef) return ref
+        if (ref is ConstRef) {
+            val range = ref.constValue as? ObjRange ?: return null
+            val start = range.start as? ObjInt ?: return null
+            val end = range.end as? ObjInt ?: return null
+            val left = ConstRef(start.asReadonly)
+            val right = ConstRef(end.asReadonly)
+            return RangeRef(left, right, range.isEndInclusive)
+        }
+        return null
     }
 
     private fun extractRangeFromLocal(source: Statement): RangeRef? {
