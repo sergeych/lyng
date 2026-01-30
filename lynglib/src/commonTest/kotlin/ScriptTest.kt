@@ -3696,7 +3696,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable: stackTrace member not resolved in bytecode path")
     @Test
     fun testExceptionSerialization() = runTest {
         eval(
@@ -3854,7 +3853,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable: extension resolution for toList in chained call")
     @Test
     fun binarySearchTest2() = runTest {
         eval(
@@ -4829,7 +4827,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable: raiseAsExecutionError missing source name in trace")
     @Test
     fun testRaiseAsError() = runTest {
         var x = evalNamed(
@@ -4891,7 +4888,6 @@ class ScriptTest {
     }
 
 
-    @Ignore("incremental enable: exception helper missing source info")
     @Test
     fun testLyngToKotlinExceptionHelpers() = runTest {
         var x = evalNamed(
@@ -4949,7 +4945,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable: lazy delegate not resolved in new compiler")
     @Test
     fun testLazyLocals() = runTest() {
         eval(

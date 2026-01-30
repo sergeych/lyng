@@ -55,8 +55,34 @@ class Script(
                 scope.updateSlotFor(name, scope.objects[name]!!)
                 continue
             }
-            parent.get(name)?.let { scope.updateSlotFor(name, it) }
+            val seed = findSeedRecord(parent, name)
+            if (seed != null) {
+                if (name == "Exception" && seed.value !is ObjClass) {
+                    scope.updateSlotFor(name, ObjRecord(ObjException.Root, isMutable = false))
+                } else {
+                    scope.updateSlotFor(name, seed)
+                }
+                continue
+            }
+            if (name == "Exception") {
+                scope.updateSlotFor(name, ObjRecord(ObjException.Root, isMutable = false))
+            }
         }
+    }
+
+    private fun findSeedRecord(scope: Scope?, name: String): ObjRecord? {
+        var s = scope
+        var hops = 0
+        while (s != null && hops++ < 1024) {
+            s.objects[name]?.let { return it }
+            s.localBindings[name]?.let { return it }
+            s.getSlotIndexOf(name)?.let { idx ->
+                val rec = s.getSlotRecord(idx)
+                if (rec.value !== ObjUnset) return rec
+            }
+            s = s.parent
+        }
+        return null
     }
 
     internal fun debugStatements(): List<Statement> = statements
@@ -362,6 +388,10 @@ class Script(
                     }
                 }
                 thunk
+            }
+            addFn("lazy") {
+                val builder = requireOnlyArg<Statement>()
+                ObjLazyDelegate(builder, this)
             }
 
             addVoidFn("delay") {

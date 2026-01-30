@@ -126,6 +126,14 @@ open class Scope(
         }
         s.getSlotIndexOf(name)?.let { idx ->
             val rec = s.getSlotRecord(idx)
+            val hasDirectBinding =
+                s.objects.containsKey(name) ||
+                    s.localBindings.containsKey(name) ||
+                    (caller?.let { ctx ->
+                        s.objects.containsKey(ctx.mangledName(name)) ||
+                            s.localBindings.containsKey(ctx.mangledName(name))
+                    } ?: false)
+            if (!hasDirectBinding && rec.value === ObjUnset) return null
             if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, caller, name)) return rec
         }
         return null

@@ -36,6 +36,7 @@ class BytecodeStatement private constructor(
     override val pos: Pos = original.pos
 
     override suspend fun execute(scope: Scope): Obj {
+        scope.pos = pos
         return CmdVm().execute(function, scope, scope.args.list)
     }
 

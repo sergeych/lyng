@@ -344,7 +344,11 @@ fun Obj.isLyngException(): Boolean = isInstanceOf("Exception")
  */
 suspend fun Obj.getLyngExceptionMessage(scope: Scope? = null): String {
     require(this.isLyngException())
-    val s = scope ?: Script.newScope()
+    val s = scope ?: when (this) {
+        is ObjException -> this.scope
+        is ObjInstance -> this.instanceScope
+        else -> Script.newScope()
+    }
     return invokeInstanceMethod(s, "message").toString(s).value
 }
 
@@ -361,16 +365,25 @@ suspend fun Obj.getLyngExceptionMessage(scope: Scope? = null): String {
  */
 suspend fun Obj.getLyngExceptionMessageWithStackTrace(scope: Scope? = null,showDetails:Boolean=true): String {
     require(this.isLyngException())
-    val s = scope ?: Script.newScope()
+    val s = scope ?: when (this) {
+        is ObjException -> this.scope
+        is ObjInstance -> this.instanceScope
+        else -> Script.newScope()
+    }
     val msg = getLyngExceptionMessage(s)
     val trace = getLyngExceptionStackTrace(s)
     var at = "unknown"
-//    var firstLine = true
     val stack = if (!trace.list.isEmpty()) {
         val first = trace.list[0]
         at = (first.readField(s, "at").value as ObjString).value
         "\n" + trace.list.map { "    at " + it.toString(s).value }.joinToString("\n")
-    } else ""
+    } else {
+        val pos = s.pos
+        if (pos.source.fileName.isNotEmpty() && pos.currentLine.isNotEmpty()) {
+            at = "${pos.source.fileName}:${pos.line + 1}:${pos.column + 1}"
+        }
+        ""
+    }
     return "$at: $msg$stack"
 }
 
@@ -396,9 +409,16 @@ suspend fun Obj.getLyngExceptionString(scope: Scope): String =
  * Rethrow this object as a Kotlin [ExecutionError] if it's an exception.
  */
 suspend fun Obj.raiseAsExecutionError(scope: Scope? = null): Nothing {
-    if (this is ObjException) raise()
-    val sc = scope ?: Script.newScope()
-    val msg = getLyngExceptionMessage(sc)
-    val pos = (this as? ObjInstance)?.instanceScope?.pos ?: Pos.builtIn
+    val sc = scope ?: when (this) {
+        is ObjException -> this.scope
+        is ObjInstance -> this.instanceScope
+        else -> Script.newScope()
+    }
+    val msg = getLyngExceptionMessageWithStackTrace(sc)
+    val pos = when (this) {
+        is ObjException -> this.scope.pos
+        is ObjInstance -> this.instanceScope.pos
+        else -> Pos.builtIn
+    }
     throw ExecutionError(this, pos, msg)
 }

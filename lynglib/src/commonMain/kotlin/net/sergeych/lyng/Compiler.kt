@@ -458,10 +458,14 @@ class Compiler(
 
     private fun seedResolutionFromScope(scope: Scope, pos: Pos) {
         val sink = resolutionSink ?: return
-        for ((name, record) in scope.objects) {
-            if (!record.visibility.isPublic) continue
-            if (!resolutionPredeclared.add(name)) continue
-            sink.declareSymbol(name, SymbolKind.LOCAL, record.isMutable, pos)
+        var current: Scope? = scope
+        while (current != null) {
+            for ((name, record) in current.objects) {
+                if (!record.visibility.isPublic) continue
+                if (!resolutionPredeclared.add(name)) continue
+                sink.declareSymbol(name, SymbolKind.LOCAL, record.isMutable, pos)
+            }
+            current = current.parent
         }
     }
 
@@ -2635,6 +2639,13 @@ class Compiler(
             if (stmt.captureSlots.isEmpty()) return stmt
             return BlockStatement(stmt.block, stmt.slotPlan, emptyList(), stmt.pos)
         }
+        fun resolveExceptionClass(scope: Scope, name: String): ObjClass {
+            val rec = scope[name]
+            val cls = rec?.value as? ObjClass
+            if (cls != null) return cls
+            if (name == "Exception") return ObjException.Root
+            scope.raiseSymbolNotFound("error class does not exist or is not a class: $name")
+        }
 
         val body = unwrapBytecodeDeep(parseBlock())
         val catches = mutableListOf<CatchBlockData>()
@@ -2742,8 +2753,7 @@ class Compiler(
                     for (cdata in catches) {
                         var match: Obj? = null
                         for (exceptionClassName in cdata.classNames) {
-                            val exObj = scope[exceptionClassName]?.value as? ObjClass
-                                ?: scope.raiseSymbolNotFound("error class does not exist or is not a class: $exceptionClassName")
+                            val exObj = resolveExceptionClass(scope, exceptionClassName)
                             if (caughtObj.isInstanceOf(exObj)) {
                                 match = caughtObj
                                 break
@@ -3131,9 +3141,12 @@ class Compiler(
                     // accessors, constructor registration, etc.
                     // Resolve parent classes by name at execution time
                     val parentClasses = baseSpecs.map { baseSpec ->
-                        val rec =
-                            scope[baseSpec.name] ?: throw ScriptError(nameToken.pos, "unknown base class: ${baseSpec.name}")
-                        (rec.value as? ObjClass) ?: throw ScriptError(nameToken.pos, "${baseSpec.name} is not a class")
+                        val rec = scope[baseSpec.name]
+                        val cls = rec?.value as? ObjClass
+                        if (cls != null) return@map cls
+                        if (baseSpec.name == "Exception") return@map ObjException.Root
+                        if (rec == null) throw ScriptError(nameToken.pos, "unknown base class: ${baseSpec.name}")
+                        throw ScriptError(nameToken.pos, "${baseSpec.name} is not a class")
                     }
 
                     val newClass = ObjInstanceClass(className, *parentClasses.toTypedArray()).also {
