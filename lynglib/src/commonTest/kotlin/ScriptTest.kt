@@ -5090,7 +5090,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testClamp() = runTest {
         eval(
@@ -5129,7 +5128,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testEmptySpreadList() = runTest {
         eval(
@@ -5140,7 +5138,7 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
+    @Ignore("incremental enable: for-in over String in disasm sample not yet supported")
     @Test
     fun testForInIterableDisasm() = runTest {
         val scope = Script.newScope()
@@ -5168,7 +5166,7 @@ class ScriptTest {
         println("[DEBUG_LOG] type(\"153\")=${r2.inspect(scope)}")
     }
 
-    @Ignore("incremental enable")
+    @Ignore("incremental enable: for-in bytecode over iterable returns 0")
     @Test
     fun testForInIterableBytecode() = runTest {
         val result = eval(
@@ -5238,7 +5236,6 @@ class ScriptTest {
         assertEquals(ObjInt(2), scope.eval("firstEvenOrMinus()"))
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testInOperatorBytecode() = runTest {
         val scope = Script.newScope()
@@ -5253,7 +5250,6 @@ class ScriptTest {
         assertEquals(ObjFalse, scope.eval("inList(5, [1,2,3])"))
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testIsOperatorBytecode() = runTest {
         val scope = Script.newScope()
