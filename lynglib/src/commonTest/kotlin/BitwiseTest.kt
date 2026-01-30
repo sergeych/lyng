@@ -18,7 +18,6 @@
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.eval
 import net.sergeych.lyng.obj.ObjInt
-import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFails

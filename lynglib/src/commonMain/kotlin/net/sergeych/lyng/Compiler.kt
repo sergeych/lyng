@@ -23,6 +23,11 @@ import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.pacman.ImportProvider
+import net.sergeych.lyng.resolution.CompileTimeResolver
+import net.sergeych.lyng.resolution.ResolutionReport
+import net.sergeych.lyng.resolution.ResolutionSink
+import net.sergeych.lyng.resolution.ScopeKind
+import net.sergeych.lyng.resolution.SymbolKind
 
 /**
  * The LYNG compiler.
@@ -46,9 +51,16 @@ class Compiler(
         get() = localNamesStack.lastOrNull()
 
     private data class SlotEntry(val index: Int, val isMutable: Boolean, val isDelegated: Boolean)
-    private data class SlotPlan(val slots: MutableMap<String, SlotEntry>, var nextIndex: Int)
-    private data class SlotLocation(val slot: Int, val depth: Int, val isMutable: Boolean, val isDelegated: Boolean)
+    private data class SlotPlan(val slots: MutableMap<String, SlotEntry>, var nextIndex: Int, val id: Int)
+    private data class SlotLocation(
+        val slot: Int,
+        val depth: Int,
+        val scopeId: Int,
+        val isMutable: Boolean,
+        val isDelegated: Boolean
+    )
     private val slotPlanStack = mutableListOf<SlotPlan>()
+    private var nextScopeId = 0
 
     // Track declared local variables count per function for precise capacity hints
     private val localDeclCountStack = mutableListOf<Int>()
@@ -81,6 +93,90 @@ class Compiler(
         plan.nextIndex += 1
     }
 
+    private fun declareSlotNameIn(plan: SlotPlan, name: String, isMutable: Boolean, isDelegated: Boolean) {
+        if (plan.slots.containsKey(name)) return
+        plan.slots[name] = SlotEntry(plan.nextIndex, isMutable, isDelegated)
+        plan.nextIndex += 1
+    }
+
+    private fun moduleSlotPlan(): SlotPlan? = slotPlanStack.firstOrNull()
+
+    private fun seedSlotPlanFromScope(scope: Scope) {
+        val plan = moduleSlotPlan() ?: return
+        for ((name, record) in scope.objects) {
+            if (!record.visibility.isPublic) continue
+            declareSlotNameIn(plan, name, record.isMutable, record.type == ObjRecord.Type.Delegated)
+        }
+    }
+
+    private fun predeclareTopLevelSymbols() {
+        val plan = moduleSlotPlan() ?: return
+        val saved = cc.savePos()
+        var depth = 0
+        fun nextNonWs(): Token {
+            var t = cc.next()
+            while (t.type == Token.Type.NEWLINE || t.type == Token.Type.SINGLE_LINE_COMMENT || t.type == Token.Type.MULTILINE_COMMENT) {
+                t = cc.next()
+            }
+            return t
+        }
+        try {
+            while (cc.hasNext()) {
+                val t = cc.next()
+                when (t.type) {
+                    Token.Type.LBRACE -> depth++
+                    Token.Type.RBRACE -> if (depth > 0) depth--
+                    Token.Type.ID -> if (depth == 0) {
+                        when (t.value) {
+                            "fun", "fn" -> {
+                                val nameToken = nextNonWs()
+                                if (nameToken.type != Token.Type.ID) continue
+                                val afterName = cc.peekNextNonWhitespace()
+                                val fnName = if (afterName.type == Token.Type.DOT) {
+                                    cc.nextNonWhitespace()
+                                    val actual = cc.nextNonWhitespace()
+                                    if (actual.type == Token.Type.ID) actual.value else null
+                                } else nameToken.value
+                                if (fnName != null) {
+                                    declareSlotNameIn(plan, fnName, isMutable = false, isDelegated = false)
+                                }
+                            }
+                            "val", "var" -> {
+                                val nameToken = nextNonWs()
+                                if (nameToken.type != Token.Type.ID) continue
+                                val afterName = cc.peekNextNonWhitespace()
+                                val varName = if (afterName.type == Token.Type.DOT) {
+                                    cc.nextNonWhitespace()
+                                    val actual = cc.nextNonWhitespace()
+                                    if (actual.type == Token.Type.ID) actual.value else null
+                                } else nameToken.value
+                                if (varName != null) {
+                                    declareSlotNameIn(plan, varName, isMutable = t.value == "var", isDelegated = false)
+                                }
+                            }
+                            "class", "object" -> {
+                                val nameToken = nextNonWs()
+                                if (nameToken.type == Token.Type.ID) {
+                                    declareSlotNameIn(plan, nameToken.value, isMutable = false, isDelegated = false)
+                                }
+                            }
+                            "enum" -> {
+                                val next = nextNonWs()
+                                val nameToken = if (next.type == Token.Type.ID && next.value == "class") nextNonWs() else next
+                                if (nameToken.type == Token.Type.ID) {
+                                    declareSlotNameIn(plan, nameToken.value, isMutable = false, isDelegated = false)
+                                }
+                            }
+                        }
+                    }
+                    else -> {}
+                }
+            }
+        } finally {
+            cc.restorePos(saved)
+        }
+    }
+
     private fun buildParamSlotPlan(names: List<String>): SlotPlan {
         val map = mutableMapOf<String, Int>()
         var idx = 0
@@ -94,7 +190,7 @@ class Compiler(
         for ((name, index) in map) {
             entries[name] = SlotEntry(index, isMutable = false, isDelegated = false)
         }
-        return SlotPlan(entries, idx)
+        return SlotPlan(entries, idx, nextScopeId++)
     }
 
     private fun markDelegatedSlot(name: String) {
@@ -114,16 +210,102 @@ class Compiler(
         return result
     }
 
-    private fun lookupSlotLocation(name: String): SlotLocation? {
+    private fun lookupSlotLocation(name: String, includeModule: Boolean = true): SlotLocation? {
         for (i in slotPlanStack.indices.reversed()) {
+            if (!includeModule && i == 0) continue
             val slot = slotPlanStack[i].slots[name] ?: continue
             val depth = slotPlanStack.size - 1 - i
-            if (codeContexts.any { it is CodeContext.ClassBody } && depth > 1) {
-                return null
-            }
-            return SlotLocation(slot.index, depth, slot.isMutable, slot.isDelegated)
+            return SlotLocation(slot.index, depth, slotPlanStack[i].id, slot.isMutable, slot.isDelegated)
         }
         return null
+    }
+
+    private fun resolveIdentifierRef(name: String, pos: Pos): ObjRef {
+        if (name == "this") {
+            resolutionSink?.reference(name, pos)
+            return LocalVarRef(name, pos)
+        }
+        val slotLoc = lookupSlotLocation(name, includeModule = false)
+        if (slotLoc != null) {
+            captureLocalRef(name, slotLoc, pos)?.let { ref ->
+                resolutionSink?.reference(name, pos)
+                return ref
+            }
+            val ref = LocalSlotRef(
+                name,
+                slotLoc.slot,
+                slotLoc.scopeId,
+                slotLoc.isMutable,
+                slotLoc.isDelegated,
+                pos,
+                strictSlotRefs
+            )
+            resolutionSink?.reference(name, pos)
+            return ref
+        }
+        val classCtx = codeContexts.lastOrNull { it is CodeContext.ClassBody } as? CodeContext.ClassBody
+        if (classCtx != null && classCtx.declaredMembers.contains(name)) {
+            resolutionSink?.referenceMember(name, pos)
+            return ImplicitThisMemberRef(name, pos)
+        }
+        val modulePlan = moduleSlotPlan()
+        val moduleEntry = modulePlan?.slots?.get(name)
+        if (moduleEntry != null) {
+            val moduleLoc = SlotLocation(
+                moduleEntry.index,
+                slotPlanStack.size - 1,
+                modulePlan.id,
+                moduleEntry.isMutable,
+                moduleEntry.isDelegated
+            )
+            captureLocalRef(name, moduleLoc, pos)?.let { ref ->
+                resolutionSink?.reference(name, pos)
+                return ref
+            }
+            val ref = LocalSlotRef(
+                name,
+                moduleLoc.slot,
+                moduleLoc.scopeId,
+                moduleLoc.isMutable,
+                moduleLoc.isDelegated,
+                pos,
+                strictSlotRefs
+            )
+            resolutionSink?.reference(name, pos)
+            return ref
+        }
+        val rootRecord = importManager.rootScope.objects[name]
+        if (rootRecord != null && rootRecord.visibility.isPublic) {
+            modulePlan?.let { plan ->
+                declareSlotNameIn(plan, name, rootRecord.isMutable, rootRecord.type == ObjRecord.Type.Delegated)
+            }
+            val rootSlot = lookupSlotLocation(name)
+            if (rootSlot != null) {
+                val ref = LocalSlotRef(
+                    name,
+                    rootSlot.slot,
+                    rootSlot.scopeId,
+                    rootSlot.isMutable,
+                    rootSlot.isDelegated,
+                    pos,
+                    strictSlotRefs
+                )
+                resolutionSink?.reference(name, pos)
+                return ref
+            }
+        }
+        val implicitThis = codeContexts.any { ctx ->
+            (ctx as? CodeContext.Function)?.implicitThisMembers == true
+        }
+        if (implicitThis) {
+            resolutionSink?.referenceMember(name, pos)
+            return ImplicitThisMemberRef(name, pos)
+        }
+        resolutionSink?.reference(name, pos)
+        if (allowUnresolvedRefs) {
+            return LocalVarRef(name, pos)
+        }
+        throw ScriptError(pos, "unresolved name: $name")
     }
 
     private fun isRangeType(type: TypeDecl): Boolean {
@@ -142,10 +324,17 @@ class Compiler(
 
     class Settings(
         val miniAstSink: MiniAstSink? = null,
+        val resolutionSink: ResolutionSink? = null,
+        val useBytecodeStatements: Boolean = true,
+        val strictSlotRefs: Boolean = false,
+        val allowUnresolvedRefs: Boolean = false,
     )
 
     // Optional sink for mini-AST streaming (null by default, zero overhead when not used)
     private val miniSink: MiniAstSink? = settings.miniAstSink
+    private val resolutionSink: ResolutionSink? = settings.resolutionSink
+    private var resolutionScriptDepth = 0
+    private val resolutionPredeclared = mutableSetOf<String>()
 
     // --- Doc-comment collection state (for immediate preceding declarations) ---
     private val pendingDocLines = mutableListOf<String>()
@@ -165,6 +354,15 @@ class Compiler(
             }
 
             else -> raw
+        }
+    }
+
+    private fun seedResolutionFromScope(scope: Scope, pos: Pos) {
+        val sink = resolutionSink ?: return
+        for ((name, record) in scope.objects) {
+            if (!record.visibility.isPublic) continue
+            if (!resolutionPredeclared.add(name)) continue
+            sink.declareSymbol(name, SymbolKind.LOCAL, record.isMutable, pos)
         }
     }
 
@@ -250,10 +448,18 @@ class Compiler(
     private suspend fun parseScript(): Script {
         val statements = mutableListOf<Statement>()
         val start = cc.currentPos()
+        val atTopLevel = resolutionSink != null && resolutionScriptDepth == 0
+        if (atTopLevel) {
+            resolutionSink?.enterScope(ScopeKind.MODULE, start, null)
+            seedResolutionFromScope(importManager.rootScope, start)
+        }
+        resolutionScriptDepth++
         // Track locals at script level for fast local refs
         val needsSlotPlan = slotPlanStack.isEmpty()
         if (needsSlotPlan) {
-            slotPlanStack.add(SlotPlan(mutableMapOf(), 0))
+            slotPlanStack.add(SlotPlan(mutableMapOf(), 0, nextScopeId++))
+            seedSlotPlanFromScope(importManager.rootScope)
+            predeclareTopLevelSymbols()
         }
         return try {
             withLocalNames(emptySet()) {
@@ -320,6 +526,8 @@ class Compiler(
                                 }
                             }
                             val module = importManager.prepareImport(pos, name, null)
+                            seedResolutionFromScope(module, pos)
+                            seedSlotPlanFromScope(module)
                             statements += object : Statement() {
                                 override val pos: Pos = pos
                                 override suspend fun execute(scope: Scope): Obj {
@@ -355,7 +563,8 @@ class Compiler(
                 }
 
                 } while (true)
-                Script(start, statements)
+                val modulePlan = if (needsSlotPlan) slotPlanIndices(slotPlanStack.last()) else emptyMap()
+                Script(start, statements, modulePlan)
             }.also {
                 // Best-effort script end notification (use current position)
                 miniSink?.onScriptEnd(
@@ -364,6 +573,10 @@ class Compiler(
                 )
             }
         } finally {
+            resolutionScriptDepth--
+            if (atTopLevel) {
+                resolutionSink?.exitScope(cc.currentPos())
+            }
             if (needsSlotPlan) {
                 slotPlanStack.removeLast()
             }
@@ -388,11 +601,75 @@ class Compiler(
     private var lastAnnotation: (suspend (Scope, ObjString, Statement) -> Statement)? = null
     private var isTransientFlag: Boolean = false
     private var lastLabel: String? = null
-    private val useBytecodeStatements: Boolean = true
+    private val useBytecodeStatements: Boolean = settings.useBytecodeStatements
+    private val strictSlotRefs: Boolean = settings.strictSlotRefs
+    private val allowUnresolvedRefs: Boolean = settings.allowUnresolvedRefs
     private val returnLabelStack = ArrayDeque<Set<String>>()
     private val rangeParamNamesStack = mutableListOf<Set<String>>()
     private val currentRangeParamNames: Set<String>
         get() = rangeParamNamesStack.lastOrNull() ?: emptySet()
+    private val capturePlanStack = mutableListOf<CapturePlan>()
+
+    private data class CapturePlan(
+        val slotPlan: SlotPlan,
+        val captures: MutableList<CaptureSlot> = mutableListOf(),
+        val captureMap: MutableMap<String, CaptureSlot> = mutableMapOf()
+    )
+
+    private fun recordCaptureSlot(name: String, slotLoc: SlotLocation) {
+        val plan = capturePlanStack.lastOrNull() ?: return
+        if (plan.captureMap.containsKey(name)) return
+        val capture = CaptureSlot(
+            name = name,
+        )
+        plan.captureMap[name] = capture
+        plan.captures += capture
+        if (!plan.slotPlan.slots.containsKey(name)) {
+            plan.slotPlan.slots[name] = SlotEntry(
+                plan.slotPlan.nextIndex,
+                isMutable = slotLoc.isMutable,
+                isDelegated = slotLoc.isDelegated
+            )
+            plan.slotPlan.nextIndex += 1
+        }
+    }
+
+    private fun captureLocalRef(name: String, slotLoc: SlotLocation, pos: Pos): LocalSlotRef? {
+        if (capturePlanStack.isEmpty() || slotLoc.depth == 0) return null
+        recordCaptureSlot(name, slotLoc)
+        val plan = capturePlanStack.lastOrNull() ?: return null
+        val entry = plan.slotPlan.slots[name] ?: return null
+        return LocalSlotRef(
+            name,
+            entry.index,
+            plan.slotPlan.id,
+            entry.isMutable,
+            entry.isDelegated,
+            pos,
+            strictSlotRefs,
+            captureOwnerScopeId = slotLoc.scopeId,
+            captureOwnerSlot = slotLoc.slot
+        )
+    }
+
+    private fun captureSlotRef(name: String, pos: Pos): ObjRef? {
+        if (capturePlanStack.isEmpty()) return null
+        if (name == "this") return null
+        val slotLoc = lookupSlotLocation(name) ?: return null
+        captureLocalRef(name, slotLoc, pos)?.let { return it }
+        if (slotLoc.depth > 0) {
+            recordCaptureSlot(name, slotLoc)
+        }
+        return LocalSlotRef(
+            name,
+            slotLoc.slot,
+            slotLoc.scopeId,
+            slotLoc.isMutable,
+            slotLoc.isDelegated,
+            pos,
+            strictSlotRefs
+        )
+    }
 
     private fun containsLoopControl(stmt: Statement, inLoop: Boolean = false): Boolean {
         val target = if (stmt is BytecodeStatement) stmt.original else stmt
@@ -501,7 +778,7 @@ class Compiler(
             is BlockStatement -> {
                 val unwrapped = stmt.statements().map { unwrapBytecodeDeep(it) }
                 val script = Script(stmt.block.pos, unwrapped)
-                BlockStatement(script, stmt.slotPlan, stmt.pos)
+                BlockStatement(script, stmt.slotPlan, stmt.captureSlots, stmt.pos)
             }
             is VarDeclStatement -> {
                 val init = stmt.initializer?.let { unwrapBytecodeDeep(it) }
@@ -512,7 +789,7 @@ class Compiler(
                     init,
                     stmt.isTransient,
                     stmt.slotIndex,
-                    stmt.slotDepth,
+                    stmt.scopeId,
                     stmt.pos
                 )
             }
@@ -767,15 +1044,36 @@ class Compiler(
                                     val parsed = parseArgs()
                                     val args = parsed.first
                                     val tailBlock = parsed.second
+                                    if (left is LocalVarRef && left.name == "scope") {
+                                        val first = args.firstOrNull()?.value
+                                        val const = (first as? ExpressionStatement)?.ref as? ConstRef
+                                        val name = const?.constValue as? ObjString
+                                        if (name != null) {
+                                            resolutionSink?.referenceReflection(name.value, next.pos)
+                                        }
+                                    }
                                     isCall = true
                                     operand = when (left) {
                                         is LocalVarRef -> if (left.name == "this") {
+                                            resolutionSink?.referenceMember(next.value, next.pos)
                                             ThisMethodSlotCallRef(next.value, args, tailBlock, isOptional)
+                                        } else if (left.name == "scope") {
+                                            if (next.value == "get" || next.value == "set") {
+                                                val first = args.firstOrNull()?.value
+                                                val const = (first as? ExpressionStatement)?.ref as? ConstRef
+                                                val name = const?.constValue as? ObjString
+                                                if (name != null) {
+                                                    resolutionSink?.referenceReflection(name.value, next.pos)
+                                                }
+                                            }
+                                            MethodCallRef(left, next.value, args, tailBlock, isOptional)
                                         } else {
                                             MethodCallRef(left, next.value, args, tailBlock, isOptional)
                                         }
                                         is QualifiedThisRef ->
-                                            QualifiedThisMethodSlotCallRef(left.typeName, next.value, args, tailBlock, isOptional)
+                                            QualifiedThisMethodSlotCallRef(left.typeName, next.value, args, tailBlock, isOptional).also {
+                                                resolutionSink?.referenceMember(next.value, next.pos, left.typeName)
+                                            }
                                         else -> MethodCallRef(left, next.value, args, tailBlock, isOptional)
                                     }
                                 }
@@ -790,12 +1088,25 @@ class Compiler(
                                     val args = listOf(ParsedArgument(ExpressionStatement(lambda, argPos), next.pos))
                                     operand = when (left) {
                                         is LocalVarRef -> if (left.name == "this") {
+                                            resolutionSink?.referenceMember(next.value, next.pos)
                                             ThisMethodSlotCallRef(next.value, args, true, isOptional)
+                                        } else if (left.name == "scope") {
+                                            if (next.value == "get" || next.value == "set") {
+                                                val first = args.firstOrNull()?.value
+                                                val const = (first as? ExpressionStatement)?.ref as? ConstRef
+                                                val name = const?.constValue as? ObjString
+                                                if (name != null) {
+                                                    resolutionSink?.referenceReflection(name.value, next.pos)
+                                                }
+                                            }
+                                            MethodCallRef(left, next.value, args, true, isOptional)
                                         } else {
                                             MethodCallRef(left, next.value, args, true, isOptional)
                                         }
                                         is QualifiedThisRef ->
-                                            QualifiedThisMethodSlotCallRef(left.typeName, next.value, args, true, isOptional)
+                                            QualifiedThisMethodSlotCallRef(left.typeName, next.value, args, true, isOptional).also {
+                                                resolutionSink?.referenceMember(next.value, next.pos, left.typeName)
+                                            }
                                         else -> MethodCallRef(left, next.value, args, true, isOptional)
                                     }
                                 }
@@ -806,11 +1117,14 @@ class Compiler(
                         if (!isCall) {
                             operand = when (left) {
                                 is LocalVarRef -> if (left.name == "this") {
+                                    resolutionSink?.referenceMember(next.value, next.pos)
                                     ThisFieldSlotRef(next.value, isOptional)
                                 } else {
                                     FieldRef(left, next.value, isOptional)
                                 }
-                                is QualifiedThisRef -> QualifiedThisFieldSlotRef(left.typeName, next.value, isOptional)
+                                is QualifiedThisRef -> QualifiedThisFieldSlotRef(left.typeName, next.value, isOptional).also {
+                                    resolutionSink?.referenceMember(next.value, next.pos, left.typeName)
+                                }
                                 else -> FieldRef(left, next.value, isOptional)
                             }
                         }
@@ -906,11 +1220,14 @@ class Compiler(
                             // is RW:
                             operand = when (left) {
                                 is LocalVarRef -> if (left.name == "this") {
+                                    resolutionSink?.referenceMember(t.value, t.pos)
                                     ThisFieldSlotRef(t.value, false)
                                 } else {
                                     FieldRef(left, t.value, false)
                                 }
-                                is QualifiedThisRef -> QualifiedThisFieldSlotRef(left.typeName, t.value, false)
+                                is QualifiedThisRef -> QualifiedThisFieldSlotRef(left.typeName, t.value, false).also {
+                                    resolutionSink?.referenceMember(t.value, t.pos, left.typeName)
+                                }
                                 else -> FieldRef(left, t.value, false)
                             }
                         } ?: run {
@@ -1024,25 +1341,34 @@ class Compiler(
 
         label?.let { cc.labels.add(it) }
         slotPlanStack.add(paramSlotPlan)
+        val capturePlan = CapturePlan(paramSlotPlan)
+        capturePlanStack.add(capturePlan)
         val parsedBody = try {
-            inCodeContext(CodeContext.Function("<lambda>")) {
+            inCodeContext(CodeContext.Function("<lambda>", implicitThisMembers = true)) {
                 val returnLabels = label?.let { setOf(it) } ?: emptySet()
                 returnLabelStack.addLast(returnLabels)
                 try {
+                    resolutionSink?.enterScope(ScopeKind.FUNCTION, startPos, "<lambda>")
+                    for (param in slotParamNames) {
+                        resolutionSink?.declareSymbol(param, SymbolKind.PARAM, isMutable = false, pos = startPos)
+                    }
                     withLocalNames(slotParamNames.toSet()) {
                         parseBlock(skipLeadingBrace = true)
                     }
                 } finally {
+                    resolutionSink?.exitScope(cc.currentPos())
                     returnLabelStack.removeLast()
                 }
             }
         } finally {
+            capturePlanStack.removeLast()
             slotPlanStack.removeLast()
         }
         val body = unwrapBytecodeDeep(parsedBody)
         label?.let { cc.labels.remove(it) }
 
         val paramSlotPlanSnapshot = slotPlanIndices(paramSlotPlan)
+        val captureSlots = capturePlan.captures.toList()
         return ValueFnRef { closureScope ->
             val stmt = object : Statement() {
                 override val pos: Pos = body.pos
@@ -1050,6 +1376,13 @@ class Compiler(
                     // and the source closure of the lambda which might have other thisObj.
                     val context = scope.applyClosure(closureScope)
                     if (paramSlotPlanSnapshot.isNotEmpty()) context.applySlotPlan(paramSlotPlanSnapshot)
+                    if (captureSlots.isNotEmpty()) {
+                        for (capture in captureSlots) {
+                            val rec = closureScope.resolveCaptureRecord(capture.name)
+                                ?: closureScope.raiseSymbolNotFound("symbol ${capture.name} not found")
+                            context.updateSlotFor(capture.name, rec)
+                        }
+                    }
                     // Execute lambda body in a closure-aware context. Blocks inside the lambda
                     // will create child scopes as usual, so re-declarations inside loops work.
                     if (argsDeclaration == null) {
@@ -1216,7 +1549,8 @@ class Compiler(
                         if (next.type == Token.Type.RBRACE) cc.previous()
                         // Duplicate detection for literals only
                         if (!usedKeys.add(keyName)) throw ScriptError(t0.pos, "duplicate key '$keyName'")
-                        entries += MapLiteralEntry.Named(keyName, LocalVarRef(keyName, t0.pos))
+                        resolutionSink?.reference(keyName, t0.pos)
+                        entries += MapLiteralEntry.Named(keyName, resolveIdentifierRef(keyName, t0.pos))
                         // If the token was COMMA, the loop continues; if it's RBRACE, next iteration will end
                     } else {
                         // There is a value expression: push back token and parse expression
@@ -1370,6 +1704,8 @@ class Compiler(
         var first = true
         val typeStart = cc.currentPos()
         var lastEnd = typeStart
+        var lastName: String? = null
+        var lastPos: Pos? = null
         while (true) {
             val idTok =
                 if (first) cc.requireToken(Token.Type.ID, "type name or type expression required") else cc.requireToken(
@@ -1379,6 +1715,8 @@ class Compiler(
             first = false
             segments += MiniTypeName.Segment(idTok.value, MiniRange(idTok.pos, idTok.pos))
             lastEnd = cc.currentPos()
+            lastName = idTok.value
+            lastPos = idTok.pos
             val dotPos = cc.savePos()
             val t = cc.next()
             if (t.type == Token.Type.DOT) {
@@ -1390,6 +1728,14 @@ class Compiler(
             }
         }
 
+        val qualified = segments.joinToString(".") { it.name }
+        if (segments.size > 1) {
+            lastPos?.let { pos -> resolutionSink?.reference(qualified, pos) }
+        } else {
+            lastName?.let { name ->
+                lastPos?.let { pos -> resolutionSink?.reference(name, pos) }
+            }
+        }
         // Helper to build MiniTypeRef (base or generic)
         fun buildBaseRef(rangeEnd: Pos, args: List<MiniTypeRef>?, nullable: Boolean): MiniTypeRef {
             val base = MiniTypeName(MiniRange(typeStart, rangeEnd), segments.toList(), nullable = false)
@@ -1440,7 +1786,6 @@ class Compiler(
 
         val miniRef = buildBaseRef(if (miniArgs != null) endPos else lastEnd, miniArgs, isNullable)
         // Semantic: keep simple for now, just use qualified base name with nullable flag
-        val qualified = segments.joinToString(".") { it.name }
         val sem = if (semArgs != null) TypeDecl.Generic(qualified, semArgs, isNullable)
         else TypeDecl.Simple(qualified, isNullable)
         return Pair(sem, miniRef)
@@ -1464,7 +1809,7 @@ class Compiler(
                     // Check for shorthand: name: (comma or rparen)
                     val next = cc.peekNextNonWhitespace()
                     if (next.type == Token.Type.COMMA || next.type == Token.Type.RPAREN) {
-                        val localVar = LocalVarRef(name, t1.pos)
+                        val localVar = resolveIdentifierRef(name, t1.pos)
                         val argPos = t1.pos
                         return ParsedArgument(ExpressionStatement(localVar, argPos), t1.pos, isSplat = false, name = name)
                     }
@@ -1527,14 +1872,14 @@ class Compiler(
         suspend fun tryParseNamedArg(): ParsedArgument? {
             val save = cc.savePos()
             val t1 = cc.next()
-            if (t1.type == Token.Type.ID) {
+                if (t1.type == Token.Type.ID) {
                 val t2 = cc.next()
                 if (t2.type == Token.Type.COLON) {
                     val name = t1.value
                     // Check for shorthand: name: (comma or rparen)
                     val next = cc.peekNextNonWhitespace()
                     if (next.type == Token.Type.COMMA || next.type == Token.Type.RPAREN) {
-                        val localVar = LocalVarRef(name, t1.pos)
+                        val localVar = resolveIdentifierRef(name, t1.pos)
                         val argPos = t1.pos
                         return ParsedArgument(ExpressionStatement(localVar, argPos), t1.pos, isSplat = false, name = name)
                     }
@@ -1635,11 +1980,12 @@ class Compiler(
                     val pos = cc.savePos()
                     val next = cc.next()
                     if (next.pos.line == t.pos.line && next.type == Token.Type.ATLABEL) {
+                        resolutionSink?.reference(next.value, next.pos)
                         QualifiedThisRef(next.value, t.pos)
                     } else {
                         cc.restorePos(pos)
                         // plain this
-                        LocalVarRef("this", t.pos)
+                        resolveIdentifierRef("this", t.pos)
                     }
                 } else when (t.value) {
                     "void" -> ConstRef(ObjVoid.asReadonly)
@@ -1647,27 +1993,7 @@ class Compiler(
                     "true" -> ConstRef(ObjTrue.asReadonly)
                     "false" -> ConstRef(ObjFalse.asReadonly)
                     else -> {
-                        val slotLoc = lookupSlotLocation(t.value)
-                        val inClassCtx = codeContexts.any { it is CodeContext.ClassBody }
-                        when {
-                            slotLoc != null -> {
-                                val scopeDepth = slotPlanStack.size - 1 - slotLoc.depth
-                                LocalSlotRef(
-                                    t.value,
-                                    slotLoc.slot,
-                                    slotLoc.depth,
-                                    scopeDepth,
-                                    slotLoc.isMutable,
-                                    slotLoc.isDelegated,
-                                    t.pos
-                                )
-                            }
-                            PerfFlags.EMIT_FAST_LOCAL_REFS && !useBytecodeStatements &&
-                                (currentLocalNames?.contains(t.value) == true) ->
-                                FastLocalVarRef(t.value, t.pos)
-                            inClassCtx -> ImplicitThisMemberRef(t.value, t.pos)
-                            else -> LocalVarRef(t.value, t.pos)
-                        }
+                        resolveIdentifierRef(t.value, t.pos)
                     }
                 }
             }
@@ -1706,6 +2032,7 @@ class Compiler(
 
     suspend fun parseAnnotation(t: Token): (suspend (Scope, ObjString, Statement) -> Statement) {
         val extraArgs = parseArgsOrNull()
+        resolutionSink?.reference(t.value, t.pos)
 //        println("annotation ${t.value}: args: $extraArgs")
         return { scope, name, body ->
             val extras = extraArgs?.first?.toArguments(scope, extraArgs.second)?.list
@@ -2140,7 +2467,7 @@ class Compiler(
             for ((name, idx) in basePlan) {
                 newPlan[name] = idx + 1
             }
-            return BlockStatement(stmt.block, newPlan, stmt.pos)
+            return BlockStatement(stmt.block, newPlan, stmt.captureSlots, stmt.pos)
         }
 
         val body = unwrapBytecodeDeep(parseBlock())
@@ -2162,6 +2489,7 @@ class Compiler(
                         if (t.type != Token.Type.ID)
                             throw ScriptError(t.pos, "expected exception class name")
                         exClassNames += t.value
+                        resolutionSink?.reference(t.value, t.pos)
                         t = cc.next()
                         when (t.type) {
                             Token.Type.COMMA -> {
@@ -2180,17 +2508,28 @@ class Compiler(
                     exClassNames += "Exception"
                     cc.skipTokenOfType(Token.Type.RPAREN)
                 }
-                val block = withCatchSlot(unwrapBytecodeDeep(parseBlock()), catchVar.value)
+                val block = try {
+                    resolutionSink?.enterScope(ScopeKind.BLOCK, catchVar.pos, null)
+                    resolutionSink?.declareSymbol(catchVar.value, SymbolKind.LOCAL, isMutable = false, pos = catchVar.pos)
+                    withCatchSlot(unwrapBytecodeDeep(parseBlock()), catchVar.value)
+                } finally {
+                    resolutionSink?.exitScope(cc.currentPos())
+                }
                 catches += CatchBlockData(catchVar, exClassNames, block)
                 cc.skipTokens(Token.Type.NEWLINE)
                 t = cc.next()
             } else {
                 // no (e: Exception) block: should be the shortest variant `catch { ... }`
                 cc.skipTokenOfType(Token.Type.LBRACE, "expected catch(...) or catch { ... } here")
-                catches += CatchBlockData(
-                    Token("it", cc.currentPos(), Token.Type.ID), listOf("Exception"),
-                    withCatchSlot(unwrapBytecodeDeep(parseBlock(true)), "it")
-                )
+                val itToken = Token("it", cc.currentPos(), Token.Type.ID)
+                val block = try {
+                    resolutionSink?.enterScope(ScopeKind.BLOCK, itToken.pos, null)
+                    resolutionSink?.declareSymbol(itToken.value, SymbolKind.LOCAL, isMutable = false, pos = itToken.pos)
+                    withCatchSlot(unwrapBytecodeDeep(parseBlock(true)), itToken.value)
+                } finally {
+                    resolutionSink?.exitScope(cc.currentPos())
+                }
+                catches += CatchBlockData(itToken, listOf("Exception"), block)
                 t = cc.next()
             }
         }
@@ -2263,6 +2602,7 @@ class Compiler(
         val doc = pendingDeclDoc ?: consumePendingDoc()
         pendingDeclDoc = null
         pendingDeclStart = null
+        resolutionSink?.declareSymbol(nameToken.value, SymbolKind.ENUM, isMutable = false, pos = nameToken.pos)
         // so far only simplest enums:
         val names = mutableListOf<String>()
         val positions = mutableListOf<Pos>()
@@ -2325,6 +2665,9 @@ class Compiler(
 
         val startPos = pendingDeclStart ?: nameToken?.pos ?: cc.current().pos
         val className = nameToken?.value ?: generateAnonName(startPos)
+        if (nameToken != null) {
+            resolutionSink?.declareSymbol(nameToken.value, SymbolKind.CLASS, isMutable = false, pos = nameToken.pos)
+        }
 
         val doc = pendingDeclDoc ?: consumePendingDoc()
         pendingDeclDoc = null
@@ -2337,6 +2680,7 @@ class Compiler(
         if (cc.skipTokenOfType(Token.Type.COLON, isOptional = true)) {
             do {
                 val baseId = cc.requireToken(Token.Type.ID, "base class name expected")
+                resolutionSink?.reference(baseId.value, baseId.pos)
                 var argsList: List<ParsedArgument>? = null
                 if (cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true)) {
                     argsList = parseArgsNoTailBlock()
@@ -2370,14 +2714,17 @@ class Compiler(
                     miniSink?.onEnterClass(node)
                 }
                 val bodyStart = nextBody.pos
-                val classSlotPlan = SlotPlan(mutableMapOf(), 0)
+                val classSlotPlan = SlotPlan(mutableMapOf(), 0, nextScopeId++)
                 slotPlanStack.add(classSlotPlan)
+                resolutionSink?.declareClass(className, baseSpecs.map { it.name }, startPos)
+                resolutionSink?.enterScope(ScopeKind.CLASS, startPos, className, baseSpecs.map { it.name })
                 val st = try {
                     withLocalNames(emptySet()) {
                         parseScript()
                     }
                 } finally {
                     slotPlanStack.removeLast()
+                    resolutionSink?.exitScope(cc.currentPos())
                 }
                 val rbTok = cc.next()
                 if (rbTok.type != Token.Type.RBRACE) throw ScriptError(rbTok.pos, "unbalanced braces in object body")
@@ -2399,6 +2746,7 @@ class Compiler(
                     )
                     miniSink?.onClassDecl(node)
                 }
+                resolutionSink?.declareClass(className, baseSpecs.map { it.name }, startPos)
                 cc.restorePos(saved)
                 null
             }
@@ -2446,6 +2794,7 @@ class Compiler(
         val doc = pendingDeclDoc ?: consumePendingDoc()
         pendingDeclDoc = null
         pendingDeclStart = null
+        resolutionSink?.declareSymbol(nameToken.value, SymbolKind.CLASS, isMutable = false, pos = nameToken.pos)
         return inCodeContext(CodeContext.ClassBody(nameToken.value, isExtern = isExtern)) {
             val constructorArgsDeclaration =
                 if (cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true))
@@ -2465,6 +2814,7 @@ class Compiler(
             if (cc.skipTokenOfType(Token.Type.COLON, isOptional = true)) {
                 do {
                     val baseId = cc.requireToken(Token.Type.ID, "base class name expected")
+                    resolutionSink?.reference(baseId.value, baseId.pos)
                     var argsList: List<ParsedArgument>? = null
                     // Optional constructor args of the base — parse and ignore for now (MVP), just to consume tokens
                     if (cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true)) {
@@ -2516,14 +2866,27 @@ class Compiler(
                     }
                     // parse body
                     val bodyStart = next.pos
-                    val classSlotPlan = SlotPlan(mutableMapOf(), 0)
+                    val classSlotPlan = SlotPlan(mutableMapOf(), 0, nextScopeId++)
                     slotPlanStack.add(classSlotPlan)
+                    constructorArgsDeclaration?.params?.forEach { param ->
+                        val mutable = param.accessType?.isMutable ?: false
+                        declareSlotNameIn(classSlotPlan, param.name, mutable, isDelegated = false)
+                    }
+                    resolutionSink?.declareClass(nameToken.value, baseSpecs.map { it.name }, startPos)
+                    resolutionSink?.enterScope(ScopeKind.CLASS, startPos, nameToken.value, baseSpecs.map { it.name })
+                    constructorArgsDeclaration?.params?.forEach { param ->
+                        val accessType = param.accessType
+                        val kind = if (accessType != null) SymbolKind.MEMBER else SymbolKind.PARAM
+                        val mutable = accessType?.isMutable ?: false
+                        resolutionSink?.declareSymbol(param.name, kind, mutable, param.pos)
+                    }
                     val st = try {
                         withLocalNames(constructorArgsDeclaration?.params?.map { it.name }?.toSet() ?: emptySet()) {
-                        parseScript()
+                            parseScript()
                         }
                     } finally {
                         slotPlanStack.removeLast()
+                        resolutionSink?.exitScope(cc.currentPos())
                     }
                     val rbTok = cc.next()
                     if (rbTok.type != Token.Type.RBRACE) throw ScriptError(rbTok.pos, "unbalanced braces in class body")
@@ -2545,6 +2908,7 @@ class Compiler(
                         )
                         miniSink?.onClassDecl(node)
                     }
+                    resolutionSink?.declareClass(nameToken.value, baseSpecs.map { it.name }, startPos)
                     // restore if no body starts here
                     cc.restorePos(saved)
                     null
@@ -2677,10 +3041,12 @@ class Compiler(
             // Expose the loop variable name to the parser so identifiers inside the loop body
             // can be emitted as FastLocalVarRef when enabled.
             val namesForLoop = (currentLocalNames?.toSet() ?: emptySet()) + tVar.value
-            val loopSlotPlan = SlotPlan(mutableMapOf(), 0)
+            val loopSlotPlan = SlotPlan(mutableMapOf(), 0, nextScopeId++)
             slotPlanStack.add(loopSlotPlan)
             declareSlotName(tVar.value, isMutable = true, isDelegated = false)
             val (canBreak, body, elseStatement) = try {
+                resolutionSink?.enterScope(ScopeKind.BLOCK, tVar.pos, null)
+                resolutionSink?.declareSymbol(tVar.value, SymbolKind.LOCAL, isMutable = true, pos = tVar.pos)
                 withLocalNames(namesForLoop) {
                     val loopParsed = cc.parseLoop {
                         if (cc.current().type == Token.Type.LBRACE) parseBlock()
@@ -2697,6 +3063,7 @@ class Compiler(
                     Triple(loopParsed.first, loopParsed.second, elseStmt)
                 }
             } finally {
+                resolutionSink?.exitScope(cc.currentPos())
                 slotPlanStack.removeLast()
             }
             val loopSlotPlanSnapshot = slotPlanIndices(loopSlotPlan)
@@ -2752,7 +3119,7 @@ class Compiler(
     @Suppress("UNUSED_VARIABLE")
     private suspend fun parseDoWhileStatement(): Statement {
         val label = getLabel()?.also { cc.labels += it }
-        val loopSlotPlan = SlotPlan(mutableMapOf(), 0)
+        val loopSlotPlan = SlotPlan(mutableMapOf(), 0, nextScopeId++)
         slotPlanStack.add(loopSlotPlan)
         val (canBreak, parsedBody) = try {
             cc.parseLoop {
@@ -2801,7 +3168,7 @@ class Compiler(
             parseExpression() ?: throw ScriptError(start, "Bad while statement: expected expression")
         ensureRparen()
 
-        val loopSlotPlan = SlotPlan(mutableMapOf(), 0)
+        val loopSlotPlan = SlotPlan(mutableMapOf(), 0, nextScopeId++)
         slotPlanStack.add(loopSlotPlan)
         val (canBreak, parsedBody) = try {
             cc.parseLoop {
@@ -2973,6 +3340,7 @@ class Compiler(
         if (cc.peekNextNonWhitespace().type == Token.Type.DOT) {
             cc.nextNonWhitespace() // consume DOT
             extTypeName = name
+            resolutionSink?.reference(extTypeName, start)
             val receiverEnd = Pos(start.source, start.line, start.column + name.length)
             receiverMini = MiniTypeName(
                 range = MiniRange(start, receiverEnd),
@@ -2984,6 +3352,15 @@ class Compiler(
                 throw ScriptError(t.pos, "illegal extension format: expected function name")
             name = t.value
             nameStartPos = t.pos
+        }
+
+        val declKind = if (parentContext is CodeContext.ClassBody) SymbolKind.MEMBER else SymbolKind.FUNCTION
+        resolutionSink?.declareSymbol(name, declKind, isMutable = false, pos = nameStartPos, isOverride = isOverride)
+        if (parentContext is CodeContext.ClassBody && extTypeName == null) {
+            parentContext.declaredMembers.add(name)
+        }
+        if (declKind != SymbolKind.MEMBER) {
+            declareLocalName(name, isMutable = false)
         }
 
         val argsDeclaration: ArgsDeclaration =
@@ -3042,13 +3419,14 @@ class Compiler(
         }
 
         miniSink?.onEnterFunction(node)
-        return inCodeContext(CodeContext.Function(name)) {
+        return inCodeContext(CodeContext.Function(name, implicitThisMembers = extTypeName != null)) {
             cc.labels.add(name)
             outerLabel?.let { cc.labels.add(it) }
 
             val paramNamesList = argsDeclaration.params.map { it.name }
             val paramNames: Set<String> = paramNamesList.toSet()
             val paramSlotPlan = buildParamSlotPlan(paramNamesList)
+            val capturePlan = CapturePlan(paramSlotPlan)
             val rangeParamNames = argsDeclaration.params
                 .filter { isRangeType(it.type) }
                 .map { it.name }
@@ -3058,7 +3436,12 @@ class Compiler(
             currentLocalDeclCount
             localDeclCountStack.add(0)
             slotPlanStack.add(paramSlotPlan)
+            capturePlanStack.add(capturePlan)
             rangeParamNamesStack.add(rangeParamNames)
+            resolutionSink?.enterScope(ScopeKind.FUNCTION, start, name)
+            for (param in argsDeclaration.params) {
+                resolutionSink?.declareSymbol(param.name, SymbolKind.PARAM, isMutable = false, pos = param.pos)
+            }
             val parsedFnStatements = try {
                 val returnLabels = buildSet {
                     add(name)
@@ -3091,13 +3474,15 @@ class Compiler(
                             } else {
                                 parseBlock()
                             }
-                        }
+                    }
                 } finally {
                     returnLabelStack.removeLast()
                 }
             } finally {
                 rangeParamNamesStack.removeLast()
+                capturePlanStack.removeLast()
                 slotPlanStack.removeLast()
+                resolutionSink?.exitScope(cc.currentPos())
             }
             val fnStatements = parsedFnStatements?.let {
                 if (containsUnsupportedForBytecode(it)) unwrapBytecodeDeep(it) else it
@@ -3106,8 +3491,10 @@ class Compiler(
             val fnLocalDecls = localDeclCountStack.removeLastOrNull() ?: 0
 
             var closure: Scope? = null
+            var captureContext: Scope? = null
 
             val paramSlotPlanSnapshot = slotPlanIndices(paramSlotPlan)
+            val captureSlots = capturePlan.captures.toList()
             val fnBody = object : Statement(), BytecodeBodyProvider {
                 override val pos: Pos = t.pos
                 override fun bytecodeBody(): BytecodeStatement? = fnStatements as? BytecodeStatement
@@ -3124,6 +3511,14 @@ class Compiler(
                     val capacityHint = paramNames.size + fnLocalDecls + 4
                     context.hintLocalCapacity(capacityHint)
                     if (paramSlotPlanSnapshot.isNotEmpty()) context.applySlotPlan(paramSlotPlanSnapshot)
+                    val captureBase = captureContext ?: closure
+                    if (captureBase != null && captureSlots.isNotEmpty()) {
+                        for (capture in captureSlots) {
+                            val rec = captureBase.resolveCaptureRecord(capture.name)
+                                ?: captureBase.raiseSymbolNotFound("symbol ${capture.name} not found")
+                            context.updateSlotFor(capture.name, rec)
+                        }
+                    }
 
                     // load params from caller context
                     argsDeclaration.assignToContext(context, callerContext.args, defaultAccessType = AccessType.Val)
@@ -3202,6 +3597,8 @@ class Compiler(
                     // for the function, unless we're in the class scope:
                     if (isStatic || parentContext !is CodeContext.ClassBody)
                         closure = context
+                    if (parentContext is CodeContext.ClassBody && captureSlots.isNotEmpty())
+                        captureContext = context
 
                     val annotatedFnBody = annotation?.invoke(context, ObjString(name), fnBody)
                         ?: fnBody
@@ -3311,15 +3708,19 @@ class Compiler(
             if (t.type != Token.Type.LBRACE)
                 throw ScriptError(t.pos, "Expected block body start: {")
         }
-        val blockSlotPlan = SlotPlan(mutableMapOf(), 0)
+        resolutionSink?.enterScope(ScopeKind.BLOCK, startPos, null)
+        val blockSlotPlan = SlotPlan(mutableMapOf(), 0, nextScopeId++)
         slotPlanStack.add(blockSlotPlan)
+        val capturePlan = CapturePlan(blockSlotPlan)
+        capturePlanStack.add(capturePlan)
         val block = try {
             parseScript()
         } finally {
+            capturePlanStack.removeLast()
             slotPlanStack.removeLast()
         }
         val planSnapshot = slotPlanIndices(blockSlotPlan)
-        val stmt = BlockStatement(block, planSnapshot, startPos)
+        val stmt = BlockStatement(block, planSnapshot, capturePlan.captures.toList(), startPos)
         val wrapped = wrapBytecode(stmt)
         return wrapped.also {
             val t1 = cc.next()
@@ -3329,6 +3730,7 @@ class Compiler(
             val range = MiniRange(startPos, t1.pos)
             lastParsedBlockRange = range
             miniSink?.onBlock(MiniBlock(range))
+            resolutionSink?.exitScope(t1.pos)
         }
     }
 
@@ -3337,8 +3739,19 @@ class Compiler(
         val t = cc.next()
         if (t.type != Token.Type.LBRACE)
             throw ScriptError(t.pos, "Expected block body start: {")
-        val block = parseScript()
-        val stmt = BlockStatement(block, emptyMap(), startPos)
+        resolutionSink?.enterScope(ScopeKind.BLOCK, startPos, null)
+        val blockSlotPlan = SlotPlan(mutableMapOf(), 0, nextScopeId++)
+        slotPlanStack.add(blockSlotPlan)
+        val capturePlan = CapturePlan(blockSlotPlan)
+        capturePlanStack.add(capturePlan)
+        val block = try {
+            parseScript()
+        } finally {
+            capturePlanStack.removeLast()
+            slotPlanStack.removeLast()
+        }
+        val planSnapshot = slotPlanIndices(blockSlotPlan)
+        val stmt = BlockStatement(block, planSnapshot, capturePlan.captures.toList(), startPos)
         val wrapped = wrapBytecode(stmt)
         return wrapped.also {
             val t1 = cc.next()
@@ -3347,6 +3760,7 @@ class Compiler(
             val range = MiniRange(startPos, t1.pos)
             lastParsedBlockRange = range
             miniSink?.onBlock(MiniBlock(range))
+            resolutionSink?.exitScope(t1.pos)
         }
     }
 
@@ -3375,6 +3789,12 @@ class Compiler(
             // Register all names in the pattern
             pattern.forEachVariableWithPos { name, namePos ->
                 declareLocalName(name, isMutable)
+                val declKind = if (codeContexts.lastOrNull() is CodeContext.ClassBody) {
+                    SymbolKind.MEMBER
+                } else {
+                    SymbolKind.LOCAL
+                }
+                resolutionSink?.declareSymbol(name, declKind, isMutable, namePos, isOverride = false)
                 val declRange = MiniRange(namePos, namePos)
                 val node = MiniValDecl(
                     range = declRange,
@@ -3423,6 +3843,7 @@ class Compiler(
             cc.skipWsTokens()
             cc.next() // consume dot
             extTypeName = name
+            resolutionSink?.reference(extTypeName, nextToken.pos)
             val receiverEnd = Pos(nextToken.pos.source, nextToken.pos.line, nextToken.pos.column + name.length)
             receiverMini = MiniTypeName(
                 range = MiniRange(nextToken.pos, receiverEnd),
@@ -3522,6 +3943,15 @@ class Compiler(
 
         // Register the local name at compile time so that subsequent identifiers can be emitted as fast locals
         if (!isStatic) declareLocalName(name, isMutable)
+        val declKind = if (codeContexts.lastOrNull() is CodeContext.ClassBody) {
+            SymbolKind.MEMBER
+        } else {
+            SymbolKind.LOCAL
+        }
+        resolutionSink?.declareSymbol(name, declKind, isMutable, nameStartPos, isOverride = isOverride)
+        if (declKind == SymbolKind.MEMBER && extTypeName == null) {
+            (codeContexts.lastOrNull() as? CodeContext.ClassBody)?.declaredMembers?.add(name)
+        }
 
         val isDelegate = if (isAbstract || actualExtern) {
             if (!isProperty && (effectiveEqToken?.type == Token.Type.ASSIGN || effectiveEqToken?.type == Token.Type.BY))
@@ -3590,8 +4020,8 @@ class Compiler(
         ) {
             val slotPlan = slotPlanStack.lastOrNull()
             val slotIndex = slotPlan?.slots?.get(name)?.index
-            val slotDepth = slotPlan?.let { slotPlanStack.size - 1 }
-            return VarDeclStatement(name, isMutable, visibility, initialExpression, isTransient, slotIndex, slotDepth, start)
+            val scopeId = slotPlan?.id
+            return VarDeclStatement(name, isMutable, visibility, initialExpression, isTransient, slotIndex, scopeId, start)
         }
 
         if (isStatic) {
@@ -3674,13 +4104,13 @@ class Compiler(
                     miniSink?.onEnterFunction(null)
                     getter = if (cc.peekNextNonWhitespace().type == Token.Type.LBRACE) {
                         cc.skipWsTokens()
-                        inCodeContext(CodeContext.Function("<getter>")) {
+                        inCodeContext(CodeContext.Function("<getter>", implicitThisMembers = extTypeName != null)) {
                             parseBlock()
                         }
                     } else if (cc.peekNextNonWhitespace().type == Token.Type.ASSIGN) {
                         cc.skipWsTokens()
                         cc.next() // consume '='
-                        inCodeContext(CodeContext.Function("<getter>")) {
+                        inCodeContext(CodeContext.Function("<getter>", implicitThisMembers = extTypeName != null)) {
                             val expr = parseExpression()
                                 ?: throw ScriptError(cc.current().pos, "Expected getter expression")
                             expr
@@ -3701,7 +4131,7 @@ class Compiler(
                     miniSink?.onEnterFunction(null)
                     setter = if (cc.peekNextNonWhitespace().type == Token.Type.LBRACE) {
                         cc.skipWsTokens()
-                        val body = inCodeContext(CodeContext.Function("<setter>")) {
+                        val body = inCodeContext(CodeContext.Function("<setter>", implicitThisMembers = extTypeName != null)) {
                             parseBlock()
                         }
                         object : Statement() {
@@ -3715,7 +4145,7 @@ class Compiler(
                     } else if (cc.peekNextNonWhitespace().type == Token.Type.ASSIGN) {
                         cc.skipWsTokens()
                         cc.next() // consume '='
-                        val expr = inCodeContext(CodeContext.Function("<setter>")) {
+                        val expr = inCodeContext(CodeContext.Function("<setter>", implicitThisMembers = extTypeName != null)) {
                             parseExpression()
                                 ?: throw ScriptError(cc.current().pos, "Expected setter expression")
                         }
@@ -3746,7 +4176,7 @@ class Compiler(
                             miniSink?.onEnterFunction(null)
                             val finalSetter = if (cc.peekNextNonWhitespace().type == Token.Type.LBRACE) {
                                 cc.skipWsTokens()
-                                val body = inCodeContext(CodeContext.Function("<setter>")) {
+                                val body = inCodeContext(CodeContext.Function("<setter>", implicitThisMembers = extTypeName != null)) {
                                     parseBlock()
                                 }
                                 object : Statement() {
@@ -3760,7 +4190,7 @@ class Compiler(
                             } else if (cc.peekNextNonWhitespace().type == Token.Type.ASSIGN) {
                                 cc.skipWsTokens()
                                 cc.next() // consume '='
-                                val st = inCodeContext(CodeContext.Function("<setter>")) {
+                                val st = inCodeContext(CodeContext.Function("<setter>", implicitThisMembers = extTypeName != null)) {
                                     parseExpression() ?: throw ScriptError(
                                         cc.current().pos,
                                         "Expected setter expression"
@@ -4089,6 +4519,10 @@ class Compiler(
             return Compiler(CompilerContext(parseLyng(source)), importManager).parseScript()
         }
 
+        suspend fun dryRun(source: Source, importManager: ImportProvider): ResolutionReport {
+            return CompileTimeResolver.dryRun(source, importManager)
+        }
+
         /**
          * Compile [source] while streaming a Mini-AST into the provided [sink].
          * When [sink] is null, behaves like [compile].
@@ -4098,16 +4532,34 @@ class Compiler(
             importManager: ImportProvider,
             sink: MiniAstSink?
         ): Script {
-            return Compiler(
-                CompilerContext(parseLyng(source)),
-                importManager,
-                Settings(miniAstSink = sink)
-            ).parseScript()
+            return compileWithResolution(source, importManager, sink, null)
         }
 
         /** Convenience overload to compile raw [code] with a Mini-AST [sink]. */
         suspend fun compileWithMini(code: String, sink: MiniAstSink?): Script =
             compileWithMini(Source("<eval>", code), Script.defaultImportManager, sink)
+
+        suspend fun compileWithResolution(
+            source: Source,
+            importManager: ImportProvider,
+            miniSink: MiniAstSink? = null,
+            resolutionSink: ResolutionSink? = null,
+            useBytecodeStatements: Boolean = true,
+            strictSlotRefs: Boolean = false,
+            allowUnresolvedRefs: Boolean = false
+        ): Script {
+            return Compiler(
+                CompilerContext(parseLyng(source)),
+                importManager,
+                Settings(
+                    miniAstSink = miniSink,
+                    resolutionSink = resolutionSink,
+                    useBytecodeStatements = useBytecodeStatements,
+                    strictSlotRefs = strictSlotRefs,
+                    allowUnresolvedRefs = allowUnresolvedRefs
+                )
+            ).parseScript()
+        }
 
         private var lastPriority = 0
 
