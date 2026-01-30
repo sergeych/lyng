@@ -20,7 +20,6 @@ package net.sergeych.lyng.miniast
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.Compiler
 import net.sergeych.lyng.binding.Binder
-import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
