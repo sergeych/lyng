@@ -512,7 +512,6 @@ class ScriptTest {
         assertEquals("foo17", eval(""" "foo" + 17 """).toString())
     }
 
-    @Ignore("incremental enable")
     @Test
     fun eqNeqTest() = runTest {
         assertEquals(ObjBool(true), eval("val x = 2; x == 2"))
@@ -529,7 +528,6 @@ class ScriptTest {
         assertTrue { eval("2 == 2 && 3 != 4").toBool() }
     }
 
-    @Ignore("incremental enable")
     @Test
     fun logicTest() = runTest {
         assertEquals(ObjFalse, eval("true && false"))
@@ -546,7 +544,6 @@ class ScriptTest {
         assertEquals(ObjBool(true), eval("!false"))
     }
 
-    @Ignore("incremental enable")
     @Test
     fun gtLtTest() = runTest {
         assertTrue { eval("3 > 2").toBool() }
@@ -635,7 +632,6 @@ class ScriptTest {
         assertEquals("too much", scope.eval("test1(100)").toString())
     }
 
-    @Ignore("incremental enable")
     @Test
     fun lateInitTest() = runTest {
         assertEquals(
