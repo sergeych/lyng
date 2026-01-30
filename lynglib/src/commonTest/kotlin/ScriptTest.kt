@@ -4092,7 +4092,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testInlineMapLiteral() = runTest {
         eval(
@@ -4106,7 +4105,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testCommentsInClassConstructor() = runTest {
         eval(
@@ -4127,7 +4125,6 @@ class ScriptTest {
     @Serializable
     data class JSTest1(val foo: String, val one: Int, val ok: Boolean)
 
-    @Ignore("incremental enable")
     @Test
     fun testToJson() = runTest {
         val x = eval("""{ "foo": "bar", "one": 1, "ok": true }""")
@@ -4141,7 +4138,6 @@ class ScriptTest {
         assertEquals(JSTest1("bar", 1, true), x.decodeSerializable<JSTest1>())
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testJsonTime() = runTest {
         val now = Clock.System.now()
