@@ -2471,7 +2471,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testMatchingOperator2() = runTest {
         eval(
@@ -2500,7 +2499,6 @@ class ScriptTest {
 //        )
 //    }
 
-    @Ignore("incremental enable")
     @Test
     fun testWhenSample1() = runTest {
         eval(
@@ -2520,7 +2518,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testWhenSample2() = runTest {
         eval(
@@ -2543,7 +2540,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testNull1() = runTest {
         eval(
@@ -2577,7 +2573,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testSubstringRangeFailure() = runTest {
         eval(
@@ -2588,7 +2583,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun passingOpenEndedRangeAsParam() = runTest {
         eval(
@@ -2601,7 +2595,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testCollectionStructure() = runTest {
         eval(
@@ -2628,7 +2621,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testSet() = runTest {
         eval(
@@ -2655,7 +2647,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testSet2() = runTest {
         eval(
@@ -2666,7 +2657,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testSetAddRemoveSet() = runTest {
         eval(
