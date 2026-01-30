@@ -21,6 +21,7 @@ import net.sergeych.lyng.obj.Obj
 class BlockStatement(
     val block: Script,
     val slotPlan: Map<String, Int>,
+    val captureSlots: List<CaptureSlot> = emptyList(),
     private val startPos: Pos,
 ) : Statement() {
     override val pos: Pos = startPos
@@ -28,8 +29,16 @@ class BlockStatement(
     override suspend fun execute(scope: Scope): Obj {
         val target = if (scope.skipScopeCreation) scope else scope.createChildScope(startPos)
         if (slotPlan.isNotEmpty()) target.applySlotPlan(slotPlan)
+        if (captureSlots.isNotEmpty()) {
+            for (capture in captureSlots) {
+                val rec = scope.resolveCaptureRecord(capture.name)
+                    ?: scope.raiseSymbolNotFound("symbol ${capture.name} not found")
+                target.updateSlotFor(capture.name, rec)
+            }
+        }
         return block.execute(target)
     }
 
     fun statements(): List<Statement> = block.debugStatements()
+
 }

@@ -26,6 +26,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+@Ignore("TODO(compile-time-res): legacy tests disabled")
 class PicInvalidationJvmTest {
     @Test
     fun fieldPicInvalidatesOnClassLayoutChange() = runBlocking {

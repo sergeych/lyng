@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,11 +17,6 @@
 
 package net.sergeych.lyng
 
-sealed class CodeContext {
-    class Module(@Suppress("unused") val packageName: String?): CodeContext()
-    class Function(val name: String, val implicitThisMembers: Boolean = false): CodeContext()
-    class ClassBody(val name: String, val isExtern: Boolean = false): CodeContext() {
-        val pendingInitializations = mutableMapOf<String, Pos>()
-        val declaredMembers = mutableSetOf<String>()
-    }
-}
+data class CaptureSlot(
+    val name: String,
+)

@@ -1917,6 +1917,7 @@ class ThisMethodSlotCallRef(
  * Reference to a local/visible variable by name (Phase A: scope lookup).
  */
 class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
+    internal fun pos(): Pos = atPos
     override fun forEachVariable(block: (String) -> Unit) {
         block(name)
     }
@@ -2287,14 +2288,7 @@ class ImplicitThisMemberRef(
         val caller = scope.currentClassCtx
         val th = scope.thisObj
 
-        // 1) locals in the same `this` chain
-        var s: Scope? = scope
-        while (s != null && s.thisObj === th) {
-            scope.tryGetLocalRecord(s, name, caller)?.let { return it }
-            s = s.parent
-        }
-
-        // 2) member slots on this instance
+        // member slots on this instance
         if (th is ObjInstance) {
             // private member access for current class context
             caller?.let { c ->
@@ -2326,14 +2320,7 @@ class ImplicitThisMemberRef(
             }
         }
 
-        // 3) fallback to normal scope resolution (globals/outer scopes)
-        scope[name]?.let { return it }
-        try {
-            return th.readField(scope, name)
-        } catch (e: ExecutionError) {
-            if ((e.message ?: "").contains("no such field: $name")) scope.raiseSymbolNotFound(name)
-            throw e
-        }
+        scope.raiseSymbolNotFound(name)
     }
 
     override suspend fun evalValue(scope: Scope): Obj {
@@ -2346,18 +2333,7 @@ class ImplicitThisMemberRef(
         val caller = scope.currentClassCtx
         val th = scope.thisObj
 
-        // 1) locals in the same `this` chain
-        var s: Scope? = scope
-        while (s != null && s.thisObj === th) {
-            val rec = scope.tryGetLocalRecord(s, name, caller)
-            if (rec != null) {
-                scope.assign(rec, name, newValue)
-                return
-            }
-            s = s.parent
-        }
-
-        // 2) member slots on this instance
+        // member slots on this instance
         if (th is ObjInstance) {
             val key = th.objClass.publicMemberResolution[name] ?: name
             th.fieldRecordForKey(key)?.let { rec ->
@@ -2388,12 +2364,7 @@ class ImplicitThisMemberRef(
             }
         }
 
-        // 3) fallback to normal scope resolution
-        scope[name]?.let { stored ->
-            scope.assign(stored, name, newValue)
-            return
-        }
-        th.writeField(scope, name, newValue)
+        scope.raiseSymbolNotFound(name)
     }
 }
 
@@ -2409,22 +2380,30 @@ class ImplicitThisMethodCallRef(
     private val atPos: Pos
 ) : ObjRef {
     private val memberRef = ImplicitThisMemberRef(name, atPos)
+    internal fun methodName(): String = name
+    internal fun arguments(): List<ParsedArgument> = args
+    internal fun hasTailBlock(): Boolean = tailBlock
+    internal fun optionalInvoke(): Boolean = isOptional
 
     override suspend fun get(scope: Scope): ObjRecord = evalValue(scope).asReadonly
 
     override suspend fun evalValue(scope: Scope): Obj {
         scope.pos = atPos
-        val callee = memberRef.evalValue(scope)
-        if (callee == ObjNull && isOptional) return ObjNull
         val callArgs = args.toArguments(scope, tailBlock)
-        val usePool = PerfFlags.SCOPE_POOL
-        return if (usePool) {
-            scope.withChildFrame(callArgs) { child ->
-                callee.callOn(child)
+        val localRecord = scope.chainLookupIgnoreClosure(name, followClosure = true, caller = scope.currentClassCtx)
+        if (localRecord != null) {
+            val callee = scope.resolve(localRecord, name)
+            if (callee == ObjNull && isOptional) return ObjNull
+            val usePool = PerfFlags.SCOPE_POOL
+            return if (usePool) {
+                scope.withChildFrame(callArgs) { child ->
+                    callee.callOn(child)
+                }
+            } else {
+                callee.callOn(scope.createChildScope(scope.pos, callArgs))
             }
-        } else {
-            callee.callOn(scope.createChildScope(scope.pos, callArgs))
         }
+        return scope.thisObj.invokeInstanceMethod(scope, name, callArgs)
     }
 }
 
@@ -2435,57 +2414,31 @@ class ImplicitThisMethodCallRef(
 class LocalSlotRef(
     val name: String,
     internal val slot: Int,
-    internal val depth: Int,
-    internal val scopeDepth: Int,
+    internal val scopeId: Int,
     internal val isMutable: Boolean,
     internal val isDelegated: Boolean,
     private val atPos: Pos,
+    private val strict: Boolean = false,
+    internal val captureOwnerScopeId: Int? = null,
+    internal val captureOwnerSlot: Int? = null,
 ) : ObjRef {
+    internal fun pos(): Pos = atPos
     override fun forEachVariable(block: (String) -> Unit) {
         block(name)
     }
 
     private val fallbackRef = LocalVarRef(name, atPos)
-    private var cachedFrameId: Long = 0L
-    private var cachedOwner: Scope? = null
-    private var cachedOwnerVerified: Boolean = false
-
-    private fun resolveOwner(scope: Scope): Scope? {
-        if (cachedOwner != null && cachedFrameId == scope.frameId && cachedOwnerVerified) {
-            val cached = cachedOwner!!
-            val candidate = if (depth == 0) scope else {
-                var s: Scope? = scope
-                var remaining = depth
-                while (s != null && remaining > 0) {
-                    s = s.parent
-                    remaining--
-                }
-                s
-            }
-            if (candidate === cached && candidate?.getSlotIndexOf(name) == slot) return cached
-        }
-        var s: Scope? = scope
-        var remaining = depth
-        while (s != null && remaining > 0) {
-            s = s.parent
-            remaining--
-        }
-        if (s == null || s.getSlotIndexOf(name) != slot) {
-            cachedOwner = null
-            cachedOwnerVerified = false
-            cachedFrameId = scope.frameId
-            return null
-        }
-        cachedOwner = s
-        cachedOwnerVerified = true
-        cachedFrameId = scope.frameId
-        return s
+    private fun resolveOwner(scope: Scope): Scope {
+        return scope
     }
 
     override suspend fun get(scope: Scope): ObjRecord {
         scope.pos = atPos
-        val owner = resolveOwner(scope) ?: return fallbackRef.get(scope)
-        if (slot < 0 || slot >= owner.slotCount()) return fallbackRef.get(scope)
+        val owner = resolveOwner(scope)
+        if (slot < 0 || slot >= owner.slotCount()) {
+            if (strict) scope.raiseError("slot index out of range for $name")
+            return fallbackRef.get(scope)
+        }
         val rec = owner.getSlotRecord(slot)
         if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)) {
             scope.raiseError(ObjIllegalAccessException(scope, "private field access"))
@@ -2495,8 +2448,11 @@ class LocalSlotRef(
 
     override suspend fun evalValue(scope: Scope): Obj {
         scope.pos = atPos
-        val owner = resolveOwner(scope) ?: return fallbackRef.evalValue(scope)
-        if (slot < 0 || slot >= owner.slotCount()) return fallbackRef.evalValue(scope)
+        val owner = resolveOwner(scope)
+        if (slot < 0 || slot >= owner.slotCount()) {
+            if (strict) scope.raiseError("slot index out of range for $name")
+            return fallbackRef.evalValue(scope)
+        }
         val rec = owner.getSlotRecord(slot)
         if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)) {
             scope.raiseError(ObjIllegalAccessException(scope, "private field access"))
@@ -2506,11 +2462,9 @@ class LocalSlotRef(
 
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
         scope.pos = atPos
-        val owner = resolveOwner(scope) ?: run {
-            fallbackRef.setAt(pos, scope, newValue)
-            return
-        }
+        val owner = resolveOwner(scope)
         if (slot < 0 || slot >= owner.slotCount()) {
+            if (strict) scope.raiseError("slot index out of range for $name")
             fallbackRef.setAt(pos, scope, newValue)
             return
         }

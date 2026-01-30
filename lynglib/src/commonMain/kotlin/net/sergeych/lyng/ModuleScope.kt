@@ -59,6 +59,7 @@ class ModuleScope(
                         // when importing records, we keep track of its package (not otherwise needed)
                         if (record.importedFrom == null) record.importedFrom = this
                         scope.objects[newName] = record
+                        scope.updateSlotFor(newName, record)
                     }
                 }
             }
@@ -91,5 +92,4 @@ class ModuleScope(
             super.get(name)
     }
 }
-
 

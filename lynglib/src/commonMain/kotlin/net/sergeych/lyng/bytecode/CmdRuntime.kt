@@ -1549,6 +1549,9 @@ class CmdFrame(
 
     fun pushScope(plan: Map<String, Int>, captures: List<String>) {
         val parentScope = scope
+        if (captures.isNotEmpty()) {
+            syncFrameToScope()
+        }
         val captureRecords = if (captures.isNotEmpty()) {
             captures.map { name ->
                 val rec = parentScope.resolveCaptureRecord(name)
@@ -1557,9 +1560,6 @@ class CmdFrame(
             }
         } else {
             emptyList()
-        }
-        if (shouldSyncLocalCaptures(captures)) {
-            syncFrameToScope()
         }
         if (scope.skipScopeCreation) {
             val snapshot = scope.applySlotPlanWithSnapshot(plan)
@@ -1597,7 +1597,7 @@ class CmdFrame(
             ?: error("Scope stack underflow in POP_SCOPE")
         val captures = captureStack.removeLastOrNull() ?: emptyList()
         scopeDepth -= 1
-        if (shouldSyncLocalCaptures(captures)) {
+        if (captures.isNotEmpty()) {
             syncFrameToScope()
         }
     }

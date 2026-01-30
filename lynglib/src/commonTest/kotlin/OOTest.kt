@@ -27,7 +27,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFails
 
-@Ignore("TODO(bytecode-only): uses fallback")
+@Ignore
 class OOTest {
     @Test
     fun testClassProps() = runTest {

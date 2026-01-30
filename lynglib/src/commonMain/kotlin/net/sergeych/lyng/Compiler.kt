@@ -132,27 +132,29 @@ class Compiler(
                                 val nameToken = nextNonWs()
                                 if (nameToken.type != Token.Type.ID) continue
                                 val afterName = cc.peekNextNonWhitespace()
-                                val fnName = if (afterName.type == Token.Type.DOT) {
+                                if (afterName.type == Token.Type.DOT) {
                                     cc.nextNonWhitespace()
                                     val actual = cc.nextNonWhitespace()
-                                    if (actual.type == Token.Type.ID) actual.value else null
-                                } else nameToken.value
-                                if (fnName != null) {
-                                    declareSlotNameIn(plan, fnName, isMutable = false, isDelegated = false)
+                                    if (actual.type == Token.Type.ID) {
+                                        extensionNames.add(actual.value)
+                                    }
+                                    continue
                                 }
+                                declareSlotNameIn(plan, nameToken.value, isMutable = false, isDelegated = false)
                             }
                             "val", "var" -> {
                                 val nameToken = nextNonWs()
                                 if (nameToken.type != Token.Type.ID) continue
                                 val afterName = cc.peekNextNonWhitespace()
-                                val varName = if (afterName.type == Token.Type.DOT) {
+                                if (afterName.type == Token.Type.DOT) {
                                     cc.nextNonWhitespace()
                                     val actual = cc.nextNonWhitespace()
-                                    if (actual.type == Token.Type.ID) actual.value else null
-                                } else nameToken.value
-                                if (varName != null) {
-                                    declareSlotNameIn(plan, varName, isMutable = t.value == "var", isDelegated = false)
+                                    if (actual.type == Token.Type.ID) {
+                                        extensionNames.add(actual.value)
+                                    }
+                                    continue
                                 }
+                                declareSlotNameIn(plan, nameToken.value, isMutable = t.value == "var", isDelegated = false)
                             }
                             "class", "object" -> {
                                 val nameToken = nextNonWs()
@@ -231,6 +233,22 @@ class Compiler(
                 resolutionSink?.reference(name, pos)
                 return ref
             }
+            val captureOwner = capturePlanStack.lastOrNull()?.captureOwners?.get(name)
+            if (slotLoc.depth == 0 && captureOwner != null) {
+                val ref = LocalSlotRef(
+                    name,
+                    slotLoc.slot,
+                    slotLoc.scopeId,
+                    slotLoc.isMutable,
+                    slotLoc.isDelegated,
+                    pos,
+                    strictSlotRefs,
+                    captureOwnerScopeId = captureOwner.scopeId,
+                    captureOwnerSlot = captureOwner.slot
+                )
+                resolutionSink?.reference(name, pos)
+                return ref
+            }
             val ref = LocalSlotRef(
                 name,
                 slotLoc.slot,
@@ -300,6 +318,11 @@ class Compiler(
         if (implicitThis) {
             resolutionSink?.referenceMember(name, pos)
             return ImplicitThisMemberRef(name, pos)
+        }
+        val classContext = codeContexts.any { ctx -> ctx is CodeContext.ClassBody }
+        if (classContext && extensionNames.contains(name)) {
+            resolutionSink?.referenceMember(name, pos)
+            return LocalVarRef(name, pos)
         }
         resolutionSink?.reference(name, pos)
         if (allowUnresolvedRefs) {
@@ -611,6 +634,7 @@ class Compiler(
     private val allowUnresolvedRefs: Boolean = settings.allowUnresolvedRefs
     private val returnLabelStack = ArrayDeque<Set<String>>()
     private val rangeParamNamesStack = mutableListOf<Set<String>>()
+    private val extensionNames = mutableSetOf<String>()
     private val currentRangeParamNames: Set<String>
         get() = rangeParamNamesStack.lastOrNull() ?: emptySet()
     private val capturePlanStack = mutableListOf<CapturePlan>()
@@ -618,7 +642,8 @@ class Compiler(
     private data class CapturePlan(
         val slotPlan: SlotPlan,
         val captures: MutableList<CaptureSlot> = mutableListOf(),
-        val captureMap: MutableMap<String, CaptureSlot> = mutableMapOf()
+        val captureMap: MutableMap<String, CaptureSlot> = mutableMapOf(),
+        val captureOwners: MutableMap<String, SlotLocation> = mutableMapOf()
     )
 
     private fun recordCaptureSlot(name: String, slotLoc: SlotLocation) {
@@ -628,6 +653,7 @@ class Compiler(
             name = name,
         )
         plan.captureMap[name] = capture
+        plan.captureOwners[name] = slotLoc
         plan.captures += capture
         if (!plan.slotPlan.slots.containsKey(name)) {
             plan.slotPlan.slots[name] = SlotEntry(
@@ -1383,7 +1409,7 @@ class Compiler(
                     // and the source closure of the lambda which might have other thisObj.
                     val context = scope.applyClosure(closureScope)
                     if (paramSlotPlanSnapshot.isNotEmpty()) context.applySlotPlan(paramSlotPlanSnapshot)
-                    if (captureSlots.isNotEmpty()) {
+                    if (captureSlots.isNotEmpty() && context !is ApplyScope) {
                         for (capture in captureSlots) {
                             val rec = closureScope.resolveCaptureRecord(capture.name)
                                 ?: closureScope.raiseSymbolNotFound("symbol ${capture.name} not found")
@@ -1949,6 +1975,28 @@ class Compiler(
         return when (left) {
             is ImplicitThisMemberRef ->
                 ImplicitThisMethodCallRef(left.name, args, detectedBlockArgument, isOptional, left.atPos)
+            is LocalVarRef -> {
+                val classContext = codeContexts.any { ctx -> ctx is CodeContext.ClassBody }
+                val implicitThis = codeContexts.any { ctx ->
+                    (ctx as? CodeContext.Function)?.implicitThisMembers == true
+                }
+                if ((classContext || implicitThis) && extensionNames.contains(left.name)) {
+                    ImplicitThisMethodCallRef(left.name, args, detectedBlockArgument, isOptional, left.pos())
+                } else {
+                    CallRef(left, args, detectedBlockArgument, isOptional)
+                }
+            }
+            is LocalSlotRef -> {
+                val classContext = codeContexts.any { ctx -> ctx is CodeContext.ClassBody }
+                val implicitThis = codeContexts.any { ctx ->
+                    (ctx as? CodeContext.Function)?.implicitThisMembers == true
+                }
+                if ((classContext || implicitThis) && extensionNames.contains(left.name)) {
+                    ImplicitThisMethodCallRef(left.name, args, detectedBlockArgument, isOptional, left.pos())
+                } else {
+                    CallRef(left, args, detectedBlockArgument, isOptional)
+                }
+            }
             else -> CallRef(left, args, detectedBlockArgument, isOptional)
         }
     }

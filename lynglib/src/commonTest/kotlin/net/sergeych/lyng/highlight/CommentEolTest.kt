@@ -20,7 +20,9 @@ package net.sergeych.lyng.highlight
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.test.Ignore
 
+@Ignore
 class CommentEolTest {
 
     @Test

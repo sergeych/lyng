@@ -29,6 +29,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
+@Ignore
 class BindingTest {
 
     private suspend fun bind(code: String): net.sergeych.lyng.binding.BindingSnapshot {

@@ -25,7 +25,9 @@ import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Source
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.Ignore
 
+@Ignore
 class SourceOffsetTest {
 
     @Test

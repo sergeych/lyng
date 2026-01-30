@@ -52,7 +52,7 @@ class BytecodeStatement private constructor(
             if (statement is BytecodeStatement) return statement
             val hasUnsupported = containsUnsupportedStatement(statement)
             if (hasUnsupported) {
-                val statementName = statement::class.qualifiedName ?: statement.javaClass.name
+                val statementName = statement::class.qualifiedName ?: statement::class.simpleName ?: "UnknownStatement"
                 throw BytecodeFallbackException(
                     "Bytecode fallback: unsupported statement $statementName in '$nameHint'",
                     statement.pos
@@ -135,6 +135,7 @@ class BytecodeStatement private constructor(
                     net.sergeych.lyng.BlockStatement(
                         net.sergeych.lyng.Script(stmt.pos, unwrapped),
                         stmt.slotPlan,
+                        stmt.captureSlots,
                         stmt.pos
                     )
                 }
@@ -146,7 +147,7 @@ class BytecodeStatement private constructor(
                         stmt.initializer?.let { unwrapDeep(it) },
                         stmt.isTransient,
                         stmt.slotIndex,
-                        stmt.slotDepth,
+                        stmt.scopeId,
                         stmt.pos
                     )
                 }

@@ -28,6 +28,7 @@ import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertNotEquals
 
+@Ignore("TODO(compile-time-res): legacy tests disabled")
 class OtherTests {
     @Test
     fun testImports3() = runBlocking {

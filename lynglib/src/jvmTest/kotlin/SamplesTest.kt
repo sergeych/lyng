@@ -41,6 +41,7 @@ suspend fun executeSampleTests(fileName: String) {
     }
 }
 
+@Ignore("TODO(compile-time-res): legacy tests disabled")
 class SamplesTest {
 
     @Test

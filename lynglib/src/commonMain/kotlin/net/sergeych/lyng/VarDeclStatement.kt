@@ -27,7 +27,7 @@ class VarDeclStatement(
     val initializer: Statement?,
     val isTransient: Boolean,
     val slotIndex: Int?,
-    val slotDepth: Int?,
+    val scopeId: Int?,
     private val startPos: Pos,
 ) : Statement() {
     override val pos: Pos = startPos

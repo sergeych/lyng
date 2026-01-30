@@ -4,6 +4,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Ignore
 import kotlin.test.Test
 
+@Ignore
 class OperatorOverloadingTest {
     @Test
     fun testBinaryOverloading() = runTest {

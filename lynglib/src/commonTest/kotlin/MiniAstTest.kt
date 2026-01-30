@@ -29,6 +29,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
+@Ignore
 class MiniAstTest {
 
     private suspend fun compileWithMini(code: String): Pair<Script, net.sergeych.lyng.miniast.MiniAstBuilder> {

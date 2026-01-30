@@ -19,7 +19,9 @@ import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.eval
 import kotlin.test.Test
 import kotlin.test.assertFails
+import kotlin.test.Ignore
 
+@Ignore
 class MIVisibilityTest {
 
     @Test

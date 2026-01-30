@@ -1107,7 +1107,6 @@ class ScriptTest {
         assertEquals(11, cxt.eval("x").toInt())
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testValVarConverting() = runTest {
         eval(
@@ -1455,7 +1454,6 @@ class ScriptTest {
         println(a)
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testLambdaWithIt1() = runTest {
         eval(
@@ -1472,7 +1470,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testLambdaWithIt2() = runTest {
         eval(
@@ -1485,7 +1482,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testLambdaWithIt3() = runTest {
         eval(
@@ -1499,7 +1495,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testLambdaWithArgs() = runTest {
         eval(
@@ -1517,7 +1512,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testCaptureLocals() = runTest {
         eval(
@@ -1544,7 +1538,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testInstanceCallScopeIsCorrect() = runTest {
         eval(
@@ -1575,7 +1568,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testAppliedScopes() = runTest {
         eval(
@@ -1621,7 +1613,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testLambdaWithArgsEllipsis() = runTest {
         eval(
@@ -1637,7 +1628,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testLambdaWithBadArgs() = runTest {
         assertFails {
@@ -1653,7 +1643,6 @@ class ScriptTest {
         }
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testWhileExecuteElseIfNotExecuted() = runTest {
         assertEquals(
@@ -1668,7 +1657,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testIsPrimeSampleBug() = runTest {
         eval(
@@ -1689,7 +1677,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testLambdaAsFnCallArg() = runTest {
         eval(
@@ -1704,7 +1691,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testNewFnParser() = runTest {
         eval(
@@ -1716,7 +1702,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testSpoilArgsBug() = runTest {
         eval(
@@ -1736,7 +1721,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testSpoilLamdaArgsBug() = runTest {
         eval(
@@ -1756,7 +1740,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun commentBlocksShouldNotAlterBehavior() = runTest {
         eval(

@@ -259,10 +259,41 @@ class BytecodeCompiler(
                 updateSlotType(slot, SlotType.OBJ)
                 CompiledValue(slot, SlotType.OBJ)
             }
-            is ImplicitThisMethodCallRef -> compileEvalRef(ref)
+            is ImplicitThisMethodCallRef -> compileImplicitThisMethodCall(ref)
             is IndexRef -> compileIndexRef(ref)
             else -> null
         }
+    }
+
+    private fun compileImplicitThisMethodCall(ref: ImplicitThisMethodCallRef): CompiledValue? {
+        val receiver = compileNameLookup("this")
+        val methodId = builder.addConst(BytecodeConst.StringVal(ref.methodName()))
+        if (methodId > 0xFFFF) return null
+        val dst = allocSlot()
+        if (!ref.optionalInvoke()) {
+            val args = compileCallArgs(ref.arguments(), ref.hasTailBlock()) ?: return null
+            val encodedCount = encodeCallArgCount(args) ?: return null
+            builder.emit(Opcode.CALL_VIRTUAL, receiver.slot, methodId, args.base, encodedCount, dst)
+            return CompiledValue(dst, SlotType.OBJ)
+        }
+        val nullSlot = allocSlot()
+        builder.emit(Opcode.CONST_NULL, nullSlot)
+        val cmpSlot = allocSlot()
+        builder.emit(Opcode.CMP_REF_EQ_OBJ, receiver.slot, nullSlot, cmpSlot)
+        val nullLabel = builder.label()
+        val endLabel = builder.label()
+        builder.emit(
+            Opcode.JMP_IF_TRUE,
+            listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
+        )
+        val args = compileCallArgs(ref.arguments(), ref.hasTailBlock()) ?: return null
+        val encodedCount = encodeCallArgCount(args) ?: return null
+        builder.emit(Opcode.CALL_VIRTUAL, receiver.slot, methodId, args.base, encodedCount, dst)
+        builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
+        builder.mark(nullLabel)
+        builder.emit(Opcode.CONST_NULL, dst)
+        builder.mark(endLabel)
+        return CompiledValue(dst, SlotType.OBJ)
     }
 
     private fun compileConst(obj: Obj): CompiledValue? {
@@ -1743,6 +1774,42 @@ class BytecodeCompiler(
     }
 
     private fun compileCall(ref: CallRef): CompiledValue? {
+        val localTarget = ref.target as? LocalVarRef
+        if (localTarget != null) {
+            val direct = resolveDirectNameSlot(localTarget.name)
+            if (direct == null) {
+                val thisSlot = resolveDirectNameSlot("this")
+                if (thisSlot != null) {
+                    val methodId = builder.addConst(BytecodeConst.StringVal(localTarget.name))
+                    if (methodId > 0xFFFF) return null
+                    val dst = allocSlot()
+                    if (!ref.isOptionalInvoke) {
+                        val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
+                        val encodedCount = encodeCallArgCount(args) ?: return null
+                        builder.emit(Opcode.CALL_VIRTUAL, thisSlot.slot, methodId, args.base, encodedCount, dst)
+                        return CompiledValue(dst, SlotType.OBJ)
+                    }
+                    val nullSlot = allocSlot()
+                    builder.emit(Opcode.CONST_NULL, nullSlot)
+                    val cmpSlot = allocSlot()
+                    builder.emit(Opcode.CMP_REF_EQ_OBJ, thisSlot.slot, nullSlot, cmpSlot)
+                    val nullLabel = builder.label()
+                    val endLabel = builder.label()
+                    builder.emit(
+                        Opcode.JMP_IF_TRUE,
+                        listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
+                    )
+                    val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
+                    val encodedCount = encodeCallArgCount(args) ?: return null
+                    builder.emit(Opcode.CALL_VIRTUAL, thisSlot.slot, methodId, args.base, encodedCount, dst)
+                    builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
+                    builder.mark(nullLabel)
+                    builder.emit(Opcode.CONST_NULL, dst)
+                    builder.mark(endLabel)
+                    return CompiledValue(dst, SlotType.OBJ)
+                }
+            }
+        }
         val fieldTarget = ref.target as? FieldRef
         if (fieldTarget != null) {
             val receiver = compileRefWithFallback(fieldTarget.target, null, Pos.builtIn) ?: return null
@@ -1800,6 +1867,32 @@ class BytecodeCompiler(
         builder.emit(Opcode.CONST_NULL, dst)
         builder.mark(endLabel)
         return CompiledValue(dst, SlotType.OBJ)
+    }
+
+    private fun resolveDirectNameSlot(name: String): CompiledValue? {
+        if (!allowLocalSlots) return null
+        if (pendingScopeNameRefs.contains(name)) return null
+        if (!forceScopeSlots) {
+            scopeSlotIndexByName[name]?.let { slot ->
+                val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
+                return CompiledValue(slot, resolved)
+            }
+            loopSlotOverrides[name]?.let { slot ->
+                val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
+                return CompiledValue(slot, resolved)
+            }
+            localSlotIndexByName[name]?.let { localIndex ->
+                val slot = scopeSlotCount + localIndex
+                val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
+                return CompiledValue(slot, resolved)
+            }
+            return null
+        }
+        scopeSlotIndexByName[name]?.let { slot ->
+            val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
+            return CompiledValue(slot, resolved)
+        }
+        return null
     }
 
     private fun compileMethodCall(ref: MethodCallRef): CompiledValue? {
@@ -2899,9 +2992,11 @@ class BytecodeCompiler(
 
     private fun ensureScopeAddr(scopeSlot: Int): Int {
         val existing = addrSlotByScopeSlot[scopeSlot]
-        if (existing != null) return existing
-        val addrSlot = nextAddrSlot++
-        addrSlotByScopeSlot[scopeSlot] = addrSlot
+        val addrSlot = existing ?: run {
+            val created = nextAddrSlot++
+            addrSlotByScopeSlot[scopeSlot] = created
+            created
+        }
         builder.emit(Opcode.RESOLVE_SCOPE_SLOT, scopeSlot, addrSlot)
         return addrSlot
     }

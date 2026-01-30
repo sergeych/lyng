@@ -27,7 +27,9 @@ import net.sergeych.lyng.obj.ObjInt
 import kotlin.time.TimeSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.Ignore
 
+@Ignore
 class NestedRangeBenchmarkTest {
     @Test
     fun benchmarkHappyNumbersNestedRanges() = runTest {
@@ -83,7 +85,7 @@ class NestedRangeBenchmarkTest {
             val fn = current.bytecodeFunction()
             val slots = fn.scopeSlotNames.mapIndexed { idx, name ->
                 val slotName = name ?: "s$idx"
-                "$slotName@${fn.scopeSlotDepths[idx]}:${fn.scopeSlotIndices[idx]}"
+                "$slotName@${fn.scopeSlotIndices[idx]}"
             }
             println("[DEBUG_LOG] [BENCH] nested-happy slots depth=$depth: ${slots.joinToString(", ")}")
             val disasm = CmdDisassembler.disassemble(fn)

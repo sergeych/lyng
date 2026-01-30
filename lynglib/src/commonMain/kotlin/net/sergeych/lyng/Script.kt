@@ -32,15 +32,31 @@ import kotlin.math.*
 class Script(
     override val pos: Pos,
     private val statements: List<Statement> = emptyList(),
+    private val moduleSlotPlan: Map<String, Int> = emptyMap(),
 //    private val catchReturn: Boolean = false,
 ) : Statement() {
 
     override suspend fun execute(scope: Scope): Obj {
+        if (moduleSlotPlan.isNotEmpty()) {
+            scope.applySlotPlan(moduleSlotPlan)
+            seedModuleSlots(scope)
+        }
         var lastResult: Obj = ObjVoid
         for (s in statements) {
             lastResult = s.execute(scope)
         }
         return lastResult
+    }
+
+    private fun seedModuleSlots(scope: Scope) {
+        val parent = scope.parent ?: return
+        for (name in moduleSlotPlan.keys) {
+            if (scope.objects.containsKey(name)) {
+                scope.updateSlotFor(name, scope.objects[name]!!)
+                continue
+            }
+            parent.get(name)?.let { scope.updateSlotFor(name, it) }
+        }
     }
 
     internal fun debugStatements(): List<Statement> = statements

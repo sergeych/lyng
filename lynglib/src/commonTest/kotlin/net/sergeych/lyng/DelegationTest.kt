@@ -21,7 +21,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Ignore
 import kotlin.test.Test
 
-@Ignore("TODO(bytecode-only): uses fallback")
+@Ignore
 class DelegationTest {
 
     @Test

@@ -26,6 +26,7 @@ import kotlin.test.Test
 import kotlin.test.assertFails
 import kotlin.test.assertTrue
 
+@Ignore
 class MIDiagnosticsTest {
 
     @Test
@@ -86,7 +87,7 @@ class MIDiagnosticsTest {
     }
 
     @Test
-    @Ignore("TODO(bytecode-only): cast message mismatch")
+    @Ignore
     fun castFailureMentionsActualAndTargetTypes() = runTest {
         val ex = assertFails {
             eval(

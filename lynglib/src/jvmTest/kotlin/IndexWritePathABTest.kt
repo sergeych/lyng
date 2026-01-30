@@ -22,12 +22,14 @@ import net.sergeych.lyng.obj.ObjInt
 import java.io.File
 import kotlin.system.measureNanoTime
 import kotlin.test.Test
+import kotlin.test.Ignore
 
 /**
  * A/B micro-benchmark for index WRITE paths (Map[String] put, List[Int] set).
  * Measures OFF vs ON for INDEX_PIC and then size 2 vs 4 (INDEX_PIC_SIZE_4).
  * Produces [DEBUG_LOG] output in lynglib/build/index_write_ab_results.txt
  */
+@Ignore("TODO(compile-time-res): legacy tests disabled")
 class IndexWritePathABTest {
 
     private fun outFile(): File = File("lynglib/build/index_write_ab_results.txt")

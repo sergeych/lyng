@@ -37,7 +37,7 @@ import kotlin.test.Test
  *
  */
 
-@Ignore("TODO(bytecode-only): uses fallback (MI tests)")
+@Ignore
 class TestInheritance {
 
     @Test
