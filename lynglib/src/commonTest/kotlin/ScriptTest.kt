@@ -2561,7 +2561,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testSprintf() = runTest {
         eval(
@@ -5182,7 +5181,6 @@ class ScriptTest {
         assertEquals(ObjInt(12), result)
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testForInIterableUnknownTypeDisasm() = runTest {
         val scope = Script.newScope()
@@ -5205,7 +5203,6 @@ class ScriptTest {
         assertEquals(ObjInt(4), r2)
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testReturnBreakValueBytecodeDisasm() = runTest {
         val scope = Script.newScope()
@@ -5264,7 +5261,6 @@ class ScriptTest {
         assertEquals(ObjFalse, scope.eval("isInt(\"42\")"))
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testFilterBug() = runTest {
         eval(
