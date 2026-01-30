@@ -2288,6 +2288,13 @@ class ImplicitThisMemberRef(
         val caller = scope.currentClassCtx
         val th = scope.thisObj
 
+        if (th is ObjClass) {
+            return th.readField(scope, name)
+        }
+        if (th != null && th !is ObjInstance) {
+            return th.readField(scope, name)
+        }
+
         // member slots on this instance
         if (th is ObjInstance) {
             // private member access for current class context
@@ -2332,6 +2339,15 @@ class ImplicitThisMemberRef(
         scope.pos = atPos
         val caller = scope.currentClassCtx
         val th = scope.thisObj
+
+        if (th is ObjClass) {
+            th.writeField(scope, name, newValue)
+            return
+        }
+        if (th != null && th !is ObjInstance) {
+            th.writeField(scope, name, newValue)
+            return
+        }
 
         // member slots on this instance
         if (th is ObjInstance) {

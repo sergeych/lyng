@@ -23,5 +23,6 @@ sealed class CodeContext {
     class ClassBody(val name: String, val isExtern: Boolean = false): CodeContext() {
         val pendingInitializations = mutableMapOf<String, Pos>()
         val declaredMembers = mutableSetOf<String>()
+        var slotPlanId: Int? = null
     }
 }

@@ -3725,7 +3725,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testExceptionSerializationPlain() = runTest {
         eval(
@@ -4704,7 +4703,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable: expression-body methods not resolved yet")
     @Test
     fun testFunMiniDeclaration() = runTest {
         eval(
@@ -4793,7 +4791,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable: ctor params in superclass call not resolved yet")
     @Test
     fun testExceptionToString() = runTest {
         eval(
@@ -4926,7 +4923,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable: capture of static var inside run block not resolved")
     @Test
     fun realWorldCaptureProblem() = runTest {
         eval(
@@ -5120,7 +5116,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable: for-in over String in disasm sample not yet supported")
     @Test
     fun testForInIterableDisasm() = runTest {
         val scope = Script.newScope()
@@ -5148,7 +5143,6 @@ class ScriptTest {
         println("[DEBUG_LOG] type(\"153\")=${r2.inspect(scope)}")
     }
 
-    @Ignore("incremental enable: for-in bytecode over iterable returns 0")
     @Test
     fun testForInIterableBytecode() = runTest {
         val result = eval(

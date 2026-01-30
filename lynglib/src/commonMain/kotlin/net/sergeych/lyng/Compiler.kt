@@ -295,6 +295,14 @@ class Compiler(
         }
         val slotLoc = lookupSlotLocation(name, includeModule = false)
         if (slotLoc != null) {
+            val classCtx = codeContexts.lastOrNull { it is CodeContext.ClassBody } as? CodeContext.ClassBody
+            if (slotLoc.depth > 0 &&
+                classCtx?.slotPlanId == slotLoc.scopeId &&
+                classCtx.declaredMembers.contains(name)
+            ) {
+                resolutionSink?.referenceMember(name, pos)
+                return ImplicitThisMemberRef(name, pos)
+            }
             captureLocalRef(name, slotLoc, pos)?.let { ref ->
                 resolutionSink?.reference(name, pos)
                 return ref
@@ -868,6 +876,20 @@ class Compiler(
             is ContinueStatement -> false
             is ReturnStatement -> target.resultExpr?.let { containsUnsupportedForBytecode(it) } ?: false
             is ThrowStatement -> containsUnsupportedForBytecode(target.throwExpr)
+            is WhenStatement -> {
+                containsUnsupportedForBytecode(target.value) ||
+                    target.cases.any { case ->
+                        case.conditions.any { cond ->
+                            when (cond) {
+                                is WhenEqualsCondition -> containsUnsupportedForBytecode(cond.expr)
+                                is WhenInCondition -> containsUnsupportedForBytecode(cond.expr)
+                                is WhenIsCondition -> false
+                                else -> true
+                            }
+                        } || containsUnsupportedForBytecode(case.block)
+                    } ||
+                    (target.elseCase?.let { containsUnsupportedForBytecode(it) } ?: false)
+            }
             else -> true
         }
     }
@@ -2962,6 +2984,18 @@ class Compiler(
                     "Bad class declaration: expected ')' at the end of the primary constructor"
                 )
 
+            val classSlotPlan = SlotPlan(mutableMapOf(), 0, nextScopeId++)
+            classCtx?.slotPlanId = classSlotPlan.id
+            constructorArgsDeclaration?.params?.forEach { param ->
+                val mutable = param.accessType?.isMutable ?: false
+                declareSlotNameIn(classSlotPlan, param.name, mutable, isDelegated = false)
+            }
+            constructorArgsDeclaration?.params?.forEach { param ->
+                if (param.accessType != null) {
+                    classCtx?.declaredMembers?.add(param.name)
+                }
+            }
+
             // Optional base list: ":" Base ("," Base)* where Base := ID ( "(" args? ")" )?
             data class BaseSpec(val name: String, val args: List<ParsedArgument>?)
 
@@ -2983,12 +3017,6 @@ class Compiler(
             cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
 
             pushInitScope()
-            constructorArgsDeclaration?.params?.forEach { param ->
-                if (param.accessType != null) {
-                    classCtx?.declaredMembers?.add(param.name)
-                }
-            }
-
             // Robust body detection: peek next non-whitespace token; if it's '{', consume and parse the body
             var classBodyRange: MiniRange? = null
             val bodyInit: Statement? = run {
@@ -3026,12 +3054,7 @@ class Compiler(
                     }
                     // parse body
                     val bodyStart = next.pos
-                    val classSlotPlan = SlotPlan(mutableMapOf(), 0, nextScopeId++)
                     slotPlanStack.add(classSlotPlan)
-                    constructorArgsDeclaration?.params?.forEach { param ->
-                        val mutable = param.accessType?.isMutable ?: false
-                        declareSlotNameIn(classSlotPlan, param.name, mutable, isDelegated = false)
-                    }
                     resolutionSink?.declareClass(nameToken.value, baseSpecs.map { it.name }, startPos)
                     resolutionSink?.enterScope(ScopeKind.CLASS, startPos, nameToken.value, baseSpecs.map { it.name })
                     constructorArgsDeclaration?.params?.forEach { param ->
@@ -3583,7 +3606,8 @@ class Compiler(
         }
 
         miniSink?.onEnterFunction(node)
-        return inCodeContext(CodeContext.Function(name, implicitThisMembers = extTypeName != null)) {
+        val implicitThisMembers = extTypeName != null || (parentContext is CodeContext.ClassBody && !isStatic)
+        return inCodeContext(CodeContext.Function(name, implicitThisMembers = implicitThisMembers)) {
             cc.labels.add(name)
             outerLabel?.let { cc.labels.add(it) }
 
@@ -3629,12 +3653,10 @@ class Compiler(
                                 cc.nextNonWhitespace() // consume '='
                                 if (cc.peekNextNonWhitespace().value == "return")
                                     throw ScriptError(cc.currentPos(), "return is not allowed in shorthand function")
-                                val expr = parseExpression() ?: throw ScriptError(cc.currentPos(), "Expected function body expression")
-                                // Shorthand function returns the expression value
-                                object : Statement() {
-                                    override val pos: Pos = expr.pos
-                                    override suspend fun execute(scope: Scope): Obj = expr.execute(scope)
-                                }
+                                val exprStmt = parseExpression()
+                                    ?: throw ScriptError(cc.currentPos(), "Expected function body expression")
+                                // Shorthand function returns the expression value.
+                                exprStmt
                             } else {
                                 parseBlock()
                             }

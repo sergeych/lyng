@@ -26,6 +26,7 @@ import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Statement
 import net.sergeych.lyng.ToBoolStatement
 import net.sergeych.lyng.VarDeclStatement
+import net.sergeych.lyng.Visibility
 import net.sergeych.lyng.WhenCondition
 import net.sergeych.lyng.WhenEqualsCondition
 import net.sergeych.lyng.WhenInCondition
@@ -1467,6 +1468,13 @@ class BytecodeCompiler(
                         builder.emit(realOp, left, rhs.slot, out)
                         CompiledValue(out, SlotType.REAL)
                     }
+                    SlotType.OBJ -> {
+                        if (objOp == null) return null
+                        val leftObj = allocSlot()
+                        builder.emit(Opcode.BOX_OBJ, out, leftObj)
+                        builder.emit(objOp, leftObj, rhs.slot, out)
+                        CompiledValue(out, SlotType.OBJ)
+                    }
                     else -> null
                 }
             }
@@ -1482,6 +1490,13 @@ class BytecodeCompiler(
                         builder.emit(Opcode.INT_TO_REAL, rhs.slot, right)
                         builder.emit(realOp, out, right, out)
                         CompiledValue(out, SlotType.REAL)
+                    }
+                    SlotType.OBJ -> {
+                        if (objOp == null) return null
+                        val leftObj = allocSlot()
+                        builder.emit(Opcode.BOX_OBJ, out, leftObj)
+                        builder.emit(objOp, leftObj, rhs.slot, out)
+                        CompiledValue(out, SlotType.OBJ)
                     }
                     else -> null
                 }
@@ -2578,6 +2593,18 @@ class BytecodeCompiler(
             usedOverride = true
             slot
         }
+        val loopDeclId = if (usedOverride) {
+            builder.addConst(
+                BytecodeConst.LocalDecl(
+                    stmt.loopVarName,
+                    true,
+                    Visibility.Public,
+                    isTransient = false
+                )
+            )
+        } else {
+            -1
+        }
 
         try {
         if (range == null && rangeRef == null && typedRangeLocal == null) {
@@ -2623,6 +2650,9 @@ class BytecodeCompiler(
             builder.emit(Opcode.MOVE_OBJ, nextObj.slot, loopSlotId)
             updateSlotType(loopSlotId, SlotType.OBJ)
             updateSlotTypeByName(stmt.loopVarName, SlotType.OBJ)
+            if (usedOverride) {
+                builder.emit(Opcode.DECL_LOCAL, loopDeclId, loopSlotId)
+            }
 
             loopStack.addLast(
                 LoopContext(
@@ -2719,6 +2749,9 @@ class BytecodeCompiler(
                 builder.emit(Opcode.MOVE_INT, iSlot, loopSlotId)
                 updateSlotType(loopSlotId, SlotType.INT)
                 updateSlotTypeByName(stmt.loopVarName, SlotType.INT)
+                if (usedOverride) {
+                    builder.emit(Opcode.DECL_LOCAL, loopDeclId, loopSlotId)
+                }
                 loopStack.addLast(
                     LoopContext(
                         stmt.label,
@@ -2785,6 +2818,9 @@ class BytecodeCompiler(
         builder.emit(Opcode.MOVE_INT, iSlot, loopSlotId)
         updateSlotType(loopSlotId, SlotType.INT)
         updateSlotTypeByName(stmt.loopVarName, SlotType.INT)
+        if (usedOverride) {
+            builder.emit(Opcode.DECL_LOCAL, loopDeclId, loopSlotId)
+        }
         loopStack.addLast(
             LoopContext(
                 stmt.label,
