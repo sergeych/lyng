@@ -101,11 +101,16 @@ class Compiler(
 
     private fun moduleSlotPlan(): SlotPlan? = slotPlanStack.firstOrNull()
 
-    private fun seedSlotPlanFromScope(scope: Scope) {
+    private fun seedSlotPlanFromScope(scope: Scope, includeParents: Boolean = false) {
         val plan = moduleSlotPlan() ?: return
-        for ((name, record) in scope.objects) {
-            if (!record.visibility.isPublic) continue
-            declareSlotNameIn(plan, name, record.isMutable, record.type == ObjRecord.Type.Delegated)
+        var current: Scope? = scope
+        while (current != null) {
+            for ((name, record) in current.objects) {
+                if (!record.visibility.isPublic) continue
+                declareSlotNameIn(plan, name, record.isMutable, record.type == ObjRecord.Type.Delegated)
+            }
+            if (!includeParents) return
+            current = current.parent
         }
     }
 
@@ -399,6 +404,9 @@ class Compiler(
             return LocalVarRef(name, pos)
         }
         resolutionSink?.reference(name, pos)
+        seedScope?.chainLookupIgnoreClosure(name)?.let {
+            return LocalVarRef(name, pos)
+        }
         if (allowUnresolvedRefs || (name.isNotEmpty() && name[0].isUpperCase())) {
             return LocalVarRef(name, pos)
         }

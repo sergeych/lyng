@@ -2575,6 +2575,12 @@ class BytecodeCompiler(
             rangeRef = extractRangeFromLocal(stmt.source)
         }
         val typedRangeLocal = if (range == null && rangeRef == null) extractTypedRangeLocal(stmt.source) else null
+        val useLoopScope = stmt.loopSlotPlan.isNotEmpty()
+        val planId = if (useLoopScope) {
+            builder.addConst(BytecodeConst.SlotPlan(stmt.loopSlotPlan, emptyList()))
+        } else {
+            -1
+        }
         val loopLocalIndex = localSlotIndexByName[stmt.loopVarName]
         var usedOverride = false
         val loopSlotId = when {
@@ -2631,6 +2637,10 @@ class BytecodeCompiler(
             val loopLabel = builder.label()
             val continueLabel = builder.label()
             val endLabel = builder.label()
+            if (useLoopScope) {
+                builder.emit(Opcode.PUSH_SCOPE, planId)
+                resetAddrCache()
+            }
             builder.mark(loopLabel)
 
             val hasNextSlot = allocSlot()
@@ -2694,6 +2704,10 @@ class BytecodeCompiler(
                 }
                 builder.mark(afterElse)
             }
+            if (useLoopScope) {
+                builder.emit(Opcode.POP_SCOPE)
+                resetAddrCache()
+            }
             return resultSlot
         }
 
@@ -2739,6 +2753,10 @@ class BytecodeCompiler(
                 val continueLabel = builder.label()
                 val endLabel = builder.label()
                 val doneLabel = builder.label()
+                if (useLoopScope) {
+                    builder.emit(Opcode.PUSH_SCOPE, planId)
+                    resetAddrCache()
+                }
                 builder.mark(loopLabel)
                 val cmpSlot = allocSlot()
                 builder.emit(Opcode.CMP_GTE_INT, iSlot, endSlot, cmpSlot)
@@ -2786,6 +2804,10 @@ class BytecodeCompiler(
                     }
                     builder.mark(afterElse)
                 }
+                if (useLoopScope) {
+                    builder.emit(Opcode.POP_SCOPE)
+                    resetAddrCache()
+                }
                 builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(doneLabel)))
                 builder.mark(badRangeLabel)
                 val msgId = builder.addConst(BytecodeConst.StringVal("expected Int range"))
@@ -2808,6 +2830,10 @@ class BytecodeCompiler(
         val loopLabel = builder.label()
         val continueLabel = builder.label()
         val endLabel = builder.label()
+        if (useLoopScope) {
+            builder.emit(Opcode.PUSH_SCOPE, planId)
+            resetAddrCache()
+        }
         builder.mark(loopLabel)
         val cmpSlot = allocSlot()
         builder.emit(Opcode.CMP_GTE_INT, iSlot, endSlot, cmpSlot)
@@ -2854,6 +2880,10 @@ class BytecodeCompiler(
                 builder.emit(Opcode.MOVE_OBJ, elseObj.slot, resultSlot)
             }
             builder.mark(afterElse)
+        }
+        if (useLoopScope) {
+            builder.emit(Opcode.POP_SCOPE)
+            resetAddrCache()
         }
         return resultSlot
         } finally {

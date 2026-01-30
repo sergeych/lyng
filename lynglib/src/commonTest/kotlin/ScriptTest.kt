@@ -905,7 +905,6 @@ class ScriptTest {
         eval(code)
     }
 
-    @Ignore("bytecode fallback in labeled break")
     @Test
     fun whileNonLocalBreakTest() = runTest {
         assertEquals(
@@ -3752,7 +3751,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable: closure capture in acc?.let { acc + f(x) } mis-evaluates")
     @Test
     fun testThisInClosure() = runTest {
         eval(
@@ -4428,7 +4426,6 @@ class ScriptTest {
         println(r)
     }
 
-    @Ignore("incremental enable: parent scope capture for child eval not wired")
     @Test
     fun testScopeShortCircuit() = runTest() {
         val baseScope = Script.newScope()
@@ -4862,7 +4859,6 @@ class ScriptTest {
         assertContains(x1.message!!, "tc2")
     }
 
-    @Ignore("incremental enable: filtered stack trace missing source frame")
     @Test
     fun testFilterStackTrace() = runTest {
         var x = try {
