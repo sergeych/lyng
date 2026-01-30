@@ -1755,7 +1755,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testShuttle() = runTest {
         eval(
@@ -1768,7 +1767,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testSimpleStruct() = runTest {
         val c = Scope()
@@ -1790,7 +1788,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testNonAssignalbeFieldInStruct() = runTest {
         val c = Scope()
@@ -1808,7 +1805,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testStructBodyVal() = runTest {
         val c = Scope()
@@ -1831,7 +1827,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testStructBodyFun() = runTest {
         val c = Scope()
@@ -1852,7 +1847,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testPrivateConstructorParams() = runTest {
         val c = Scope()
@@ -1866,7 +1860,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testLBraceMethodCall() = runTest {
         eval(
@@ -1882,7 +1875,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testLBraceFnCall() = runTest {
         eval(
@@ -1895,7 +1887,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testClasstoString() = runTest {
         eval(
@@ -1912,7 +1903,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testClassDefaultCompare() = runTest {
         eval(
