@@ -3977,7 +3977,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testCallAndResultOrder() = runTest {
         eval(
@@ -4001,7 +4000,6 @@ class ScriptTest {
 
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testIterableMinMax() = runTest {
         eval(
@@ -4014,7 +4012,6 @@ class ScriptTest {
     }
 
 
-    @Ignore("incremental enable")
     @Test
     fun testParserOverflow() = runTest {
         try {
@@ -4082,7 +4079,6 @@ class ScriptTest {
 //        """.trimIndent())
 //    }
 
-    @Ignore("incremental enable")
     @Test
     fun testInlineArrayLiteral() = runTest {
         eval(
