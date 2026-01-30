@@ -346,6 +346,23 @@ class Script(
             addFn("run") {
                 requireOnlyArg<Statement>().execute(this)
             }
+            addFn("cached") {
+                val builder = requireOnlyArg<Statement>()
+                val capturedScope = this
+                var calculated = false
+                var cachedValue: Obj = ObjVoid
+                val thunk = object : Statement() {
+                    override val pos: Pos = Pos.builtIn
+                    override suspend fun execute(scope: Scope): Obj {
+                        if (!calculated) {
+                            cachedValue = builder.execute(capturedScope)
+                            calculated = true
+                        }
+                        return cachedValue
+                    }
+                }
+                thunk
+            }
 
             addVoidFn("delay") {
                 val a = args.firstAndOnly()

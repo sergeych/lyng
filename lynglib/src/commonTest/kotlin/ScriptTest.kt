@@ -3564,7 +3564,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun cachedTest() = runTest {
         eval(
@@ -3608,14 +3607,12 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable: run helper not resolved in new compiler")
     @Test
     fun testElvisAndThrow2() = runTest {
         eval(
             """
             val t = "112"
             val x = t ?: run { throw "testx" }
-            }
             assertEquals( "112", x)
         """.trimIndent()
         )
@@ -4383,28 +4380,23 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable: unresolved names are now compile-time errors")
     @Test
     fun testHangOnNonexistingMethod() = runTest {
-        eval(
-            """
-            class T(someList) {
-                fun f() {
-                    nonExistingMethod()
+        assertFailsWith<ScriptError> {
+            eval(
+                """
+                class T(someList) {
+                    fun f() {
+                        nonExistingMethod()
+                    }
                 }
-            }
-            val t = T([1,2])
-            try {
-            for( i in 1..10 ) {
+                val t = T([1,2])
+                for( i in 1..10 ) {
                     t.f()
                 }
-            }
-            catch(t: SymbolNotFound) {
-                println(t::class)
-                // ok
-            }
-        """
-        )
+                """.trimIndent()
+            )
+        }
     }
 
     @Test
@@ -4537,7 +4529,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable: cached helper not resolved in new compiler")
     @Test
     fun testCached() = runTest {
         eval(
@@ -4935,7 +4926,7 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable: run helper not resolved in new compiler")
+    @Ignore("incremental enable: capture of static var inside run block not resolved")
     @Test
     fun realWorldCaptureProblem() = runTest {
         eval(
