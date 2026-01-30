@@ -4785,7 +4785,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testUserExceptionClass() = runTest {
         eval(
@@ -4811,7 +4810,7 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
+    @Ignore("incremental enable: ctor params in superclass call not resolved yet")
     @Test
     fun testExceptionToString() = runTest {
         eval(
@@ -4828,7 +4827,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testAssertThrowsUserException() = runTest {
         eval(
@@ -4851,7 +4849,7 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
+    @Ignore("incremental enable: raiseAsExecutionError missing source name in trace")
     @Test
     fun testRaiseAsError() = runTest {
         var x = evalNamed(
@@ -4887,7 +4885,7 @@ class ScriptTest {
         assertContains(x1.message!!, "tc2")
     }
 
-    @Ignore("incremental enable")
+    @Ignore("incremental enable: filtered stack trace missing source frame")
     @Test
     fun testFilterStackTrace() = runTest {
         var x = try {
@@ -4913,7 +4911,7 @@ class ScriptTest {
     }
 
 
-    @Ignore("incremental enable")
+    @Ignore("incremental enable: exception helper missing source info")
     @Test
     fun testLyngToKotlinExceptionHelpers() = runTest {
         var x = evalNamed(
@@ -4930,7 +4928,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testMapIteralAmbiguity() = runTest {
         eval(
@@ -5009,7 +5006,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testMethodLocals() = runTest() {
         eval(
