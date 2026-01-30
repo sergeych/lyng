@@ -4152,7 +4152,6 @@ class ScriptTest {
         assertTrue((now - x).absoluteValue < 2.seconds)
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testJsonNull() = runTest {
         val x = eval("""null""".trimIndent()).decodeSerializable<Instant?>()
@@ -4160,7 +4159,6 @@ class ScriptTest {
         assertNull(x)
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testInstanceVars() = runTest {
         var x = eval(
@@ -4196,7 +4194,6 @@ class ScriptTest {
         println(x.serializingVars.map { "${it.key}=${it.value.value}" })
     }
 
-    @Ignore("incremental enable")
     @Test
     fun memberValCantBeAssigned() = runTest {
         eval(
@@ -4223,7 +4220,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testClassToJson() = runTest {
         eval(
