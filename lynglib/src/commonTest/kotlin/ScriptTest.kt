@@ -4390,7 +4390,7 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
+    @Ignore("incremental enable: unresolved names are now compile-time errors")
     @Test
     fun testHangOnNonexistingMethod() = runTest {
         eval(
@@ -4414,7 +4414,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testUsingClassConstructorVars() = runTest {
         val r = eval(
@@ -4447,7 +4446,7 @@ class ScriptTest {
         println(r)
     }
 
-    @Ignore("incremental enable")
+    @Ignore("incremental enable: parent scope capture for child eval not wired")
     @Test
     fun testScopeShortCircuit() = runTest() {
         val baseScope = Script.newScope()
@@ -4513,7 +4512,6 @@ class ScriptTest {
         assertEquals(51, r.toInt())
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testFirstInEnum() = runTest {
         eval(
@@ -4531,7 +4529,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testAutoSplatArgs() = runTest {
         eval(
@@ -4547,7 +4544,7 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
+    @Ignore("incremental enable: cached helper not resolved in new compiler")
     @Test
     fun testCached() = runTest {
         eval(
@@ -4634,7 +4631,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testProperlyReportExceptionPos() = runTest {
         var x = assertFailsWith<ExecutionError> {
