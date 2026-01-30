@@ -3706,7 +3706,7 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
+    @Ignore("incremental enable: stackTrace member not resolved in bytecode path")
     @Test
     fun testExceptionSerialization() = runTest {
         eval(
@@ -3764,7 +3764,7 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
+    @Ignore("incremental enable: closure capture in acc?.let { acc + f(x) } mis-evaluates")
     @Test
     fun testThisInClosure() = runTest {
         eval(
@@ -3788,7 +3788,7 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
+    @Ignore("incremental enable: flow/closure capture in flow builder not working yet")
     @Test
     fun testThisInFlowClosure() = runTest {
         eval(
@@ -3807,7 +3807,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testSum() = runTest {
         eval(
@@ -3822,7 +3821,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testSort() = runTest {
         eval(
@@ -3836,7 +3834,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testListSortInPlace() = runTest {
         eval(
@@ -3856,7 +3853,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun binarySearchTest() = runTest {
         eval(
