@@ -171,7 +171,7 @@ class ScriptTest {
         }
     }
 
-    @Ignore("incremental enable")
+    @Ignore("Scope.eval should seed compile-time symbols from current scope")
     @Test
     fun testForLoopDoesNotCancelOnNaturalCompletion() = runTest {
         val scope = Script.newScope()
@@ -345,7 +345,6 @@ class ScriptTest {
 //        assertEquals(Token(")", src.posAt(1, 17), Token.Type.RPAREN), p.next())
 //    }
 
-    @Ignore("incremental enable")
     @Test
     fun parse1Test() {
         val src = "2 + 7".toSource()
@@ -357,7 +356,6 @@ class ScriptTest {
         assertEquals(Token("7", src.posAt(0, 4), Token.Type.INT), p.next())
     }
 
-    @Ignore("incremental enable")
     @Test
     fun compileNumbersTest() = runTest {
         assertEquals(ObjInt(17), eval("17"))
@@ -374,7 +372,6 @@ class ScriptTest {
         assertEquals(ObjReal(314.0), eval("100\n 3.14e2"))
     }
 
-    @Ignore("incremental enable")
     @Test
     fun compileBuiltinCallsTest() = runTest {
 //        println(eval("π"))
@@ -387,7 +384,7 @@ class ScriptTest {
         assertTrue(eval("sin(π)").toDouble() - 1 < 0.000001)
     }
 
-    @Ignore("incremental enable")
+    @Ignore("Scope.eval should seed compile-time symbols from current scope")
     @Test
     fun varsAndConstsTest() = runTest {
         val scope = Scope(pos = Pos.builtIn)
@@ -454,7 +451,6 @@ class ScriptTest {
         assertEquals(37, scope.eval("foo(3,14)").toInt())
     }
 
-    @Ignore("incremental enable")
     @Test
     fun nullAndVoidTest() = runTest {
         val scope = Scope(pos = Pos.builtIn)
