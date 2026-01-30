@@ -179,6 +179,63 @@ class Compiler(
         }
     }
 
+    private fun predeclareClassMembers(target: MutableSet<String>) {
+        val saved = cc.savePos()
+        var depth = 0
+        val modifiers = setOf(
+            "public", "private", "protected", "internal",
+            "override", "abstract", "extern", "static", "transient"
+        )
+        fun nextNonWs(): Token {
+            var t = cc.next()
+            while (t.type == Token.Type.NEWLINE || t.type == Token.Type.SINGLE_LINE_COMMENT || t.type == Token.Type.MULTILINE_COMMENT) {
+                t = cc.next()
+            }
+            return t
+        }
+        try {
+            while (cc.hasNext()) {
+                var t = cc.next()
+                when (t.type) {
+                    Token.Type.LBRACE -> depth++
+                    Token.Type.RBRACE -> if (depth == 0) break else depth--
+                    Token.Type.ID -> if (depth == 0) {
+                        while (t.type == Token.Type.ID && t.value in modifiers) {
+                            t = nextNonWs()
+                        }
+                        when (t.value) {
+                            "fun", "fn", "val", "var" -> {
+                                val nameToken = nextNonWs()
+                                if (nameToken.type == Token.Type.ID) {
+                                    val afterName = cc.peekNextNonWhitespace()
+                                    if (afterName.type != Token.Type.DOT) {
+                                        target.add(nameToken.value)
+                                    }
+                                }
+                            }
+                            "class", "object" -> {
+                                val nameToken = nextNonWs()
+                                if (nameToken.type == Token.Type.ID) {
+                                    target.add(nameToken.value)
+                                }
+                            }
+                            "enum" -> {
+                                val next = nextNonWs()
+                                val nameToken = if (next.type == Token.Type.ID && next.value == "class") nextNonWs() else next
+                                if (nameToken.type == Token.Type.ID) {
+                                    target.add(nameToken.value)
+                                }
+                            }
+                        }
+                    }
+                    else -> {}
+                }
+            }
+        } finally {
+            cc.restorePos(saved)
+        }
+    }
+
     private fun buildParamSlotPlan(names: List<String>): SlotPlan {
         val map = mutableMapOf<String, Int>()
         var idx = 0
@@ -227,6 +284,10 @@ class Compiler(
             resolutionSink?.reference(name, pos)
             val value = ObjString(packageName ?: "unknown").asReadonly
             return ConstRef(value)
+        }
+        if (name == "$~") {
+            resolutionSink?.reference(name, pos)
+            return LocalVarRef(name, pos)
         }
         if (name == "this") {
             resolutionSink?.reference(name, pos)
@@ -1415,8 +1476,20 @@ class Compiler(
                     // and the source closure of the lambda which might have other thisObj.
                     val context = scope.applyClosure(closureScope)
                     if (paramSlotPlanSnapshot.isNotEmpty()) context.applySlotPlan(paramSlotPlanSnapshot)
-                    if (captureSlots.isNotEmpty() && context !is ApplyScope) {
+                    if (captureSlots.isNotEmpty()) {
+                        val moduleScope = if (context is ApplyScope) {
+                            var s: Scope? = closureScope
+                            while (s != null && s !is ModuleScope) {
+                                s = s.parent
+                            }
+                            s as? ModuleScope
+                        } else {
+                            null
+                        }
                         for (capture in captureSlots) {
+                            if (moduleScope != null && moduleScope.getLocalRecordDirect(capture.name) != null) {
+                                continue
+                            }
                             val rec = closureScope.resolveCaptureRecord(capture.name)
                                 ?: closureScope.raiseSymbolNotFound("symbol ${capture.name} not found")
                             context.updateSlotFor(capture.name, rec)
@@ -2530,6 +2603,11 @@ class Compiler(
             }
             return BlockStatement(stmt.block, newPlan, stmt.captureSlots, stmt.pos)
         }
+        fun stripCatchCaptures(block: Statement): Statement {
+            val stmt = block as? BlockStatement ?: return block
+            if (stmt.captureSlots.isEmpty()) return stmt
+            return BlockStatement(stmt.block, stmt.slotPlan, emptyList(), stmt.pos)
+        }
 
         val body = unwrapBytecodeDeep(parseBlock())
         val catches = mutableListOf<CatchBlockData>()
@@ -2572,7 +2650,12 @@ class Compiler(
                 val block = try {
                     resolutionSink?.enterScope(ScopeKind.BLOCK, catchVar.pos, null)
                     resolutionSink?.declareSymbol(catchVar.value, SymbolKind.LOCAL, isMutable = false, pos = catchVar.pos)
-                    withCatchSlot(unwrapBytecodeDeep(parseBlockWithPredeclared(listOf(catchVar.value to false))), catchVar.value)
+                    stripCatchCaptures(
+                        withCatchSlot(
+                            unwrapBytecodeDeep(parseBlockWithPredeclared(listOf(catchVar.value to false))),
+                            catchVar.value
+                        )
+                    )
                 } finally {
                     resolutionSink?.exitScope(cc.currentPos())
                 }
@@ -2586,9 +2669,11 @@ class Compiler(
                 val block = try {
                     resolutionSink?.enterScope(ScopeKind.BLOCK, itToken.pos, null)
                     resolutionSink?.declareSymbol(itToken.value, SymbolKind.LOCAL, isMutable = false, pos = itToken.pos)
-                    withCatchSlot(
-                        unwrapBytecodeDeep(parseBlockWithPredeclared(listOf(itToken.value to false), skipLeadingBrace = true)),
-                        itToken.value
+                    stripCatchCaptures(
+                        withCatchSlot(
+                            unwrapBytecodeDeep(parseBlockWithPredeclared(listOf(itToken.value to false), skipLeadingBrace = true)),
+                            itToken.value
+                        )
                     )
                 } finally {
                     resolutionSink?.exitScope(cc.currentPos())
@@ -2860,6 +2945,7 @@ class Compiler(
         pendingDeclStart = null
         resolutionSink?.declareSymbol(nameToken.value, SymbolKind.CLASS, isMutable = false, pos = nameToken.pos)
         return inCodeContext(CodeContext.ClassBody(nameToken.value, isExtern = isExtern)) {
+            val classCtx = codeContexts.lastOrNull() as? CodeContext.ClassBody
             val constructorArgsDeclaration =
                 if (cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true))
                     parseArgsDeclaration(isClassDeclaration = true)
@@ -2892,6 +2978,11 @@ class Compiler(
             cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
 
             pushInitScope()
+            constructorArgsDeclaration?.params?.forEach { param ->
+                if (param.accessType != null) {
+                    classCtx?.declaredMembers?.add(param.name)
+                }
+            }
 
             // Robust body detection: peek next non-whitespace token; if it's '{', consume and parse the body
             var classBodyRange: MiniRange? = null
@@ -2945,6 +3036,7 @@ class Compiler(
                         resolutionSink?.declareSymbol(param.name, kind, mutable, param.pos)
                     }
                     val st = try {
+                        classCtx?.let { predeclareClassMembers(it.declaredMembers) }
                         withLocalNames(constructorArgsDeclaration?.params?.map { it.name }?.toSet() ?: emptySet()) {
                             parseScript()
                         }

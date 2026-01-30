@@ -407,6 +407,12 @@ open class Scope(
 
     fun updateSlotFor(name: String, record: ObjRecord) {
         nameToSlot[name]?.let { slots[it] = record }
+        if (objects[name] == null) {
+            objects[name] = record
+        }
+        if (localBindings[name] == null) {
+            localBindings[name] = record
+        }
     }
 
     /**

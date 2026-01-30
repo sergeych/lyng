@@ -2184,7 +2184,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testAccessEHData() = runTest {
         eval(
@@ -2207,7 +2206,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testTryFinally() = runTest {
         val c = Scope()
@@ -2231,7 +2229,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testThrowFromKotlin() = runTest {
         val c = Script.newScope()
@@ -2256,7 +2253,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testReturnValue1() = runTest {
         val r = eval(
@@ -2278,7 +2274,6 @@ class ScriptTest {
         assertEquals("111", r.toString())
     }
 
-    @Ignore("incremental enable")
     @Test
     fun doWhileValuesTest() = runTest {
         eval(
@@ -2323,7 +2318,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun doWhileValuesLabelTest() = runTest {
         withTimeout(5.seconds) {
@@ -2357,7 +2351,6 @@ class ScriptTest {
         }
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testSimpleWhen() = runTest {
         eval(
@@ -2382,7 +2375,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testWhenIs() = runTest {
         eval(
@@ -2413,7 +2405,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testWhenIn() = runTest {
         eval(
@@ -2453,7 +2444,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testParseSpecialVars() {
         val l = parseLyng("$~".toSource("test$~"))
@@ -2462,7 +2452,6 @@ class ScriptTest {
         assertEquals("$~", l[0].value)
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testMatchOperator() = runTest {
         eval(

@@ -80,6 +80,22 @@ class BytecodeCompiler(
             is net.sergeych.lyng.ForInStatement -> compileForIn(name, stmt)
             is net.sergeych.lyng.DoWhileStatement -> compileDoWhile(name, stmt)
             is net.sergeych.lyng.WhileStatement -> compileWhile(name, stmt)
+            is net.sergeych.lyng.WhenStatement -> {
+                val value = compileWhen(stmt, true) ?: return null
+                builder.emit(Opcode.RET, value.slot)
+                val localCount = maxOf(nextSlot, value.slot + 1) - scopeSlotCount
+                builder.build(
+                    name,
+                    localCount,
+                    addrCount = nextAddrSlot,
+                    returnLabels = returnLabels,
+                    scopeSlotIndices,
+                    scopeSlotNames,
+                    scopeSlotIsModule,
+                    localSlotNames,
+                    localSlotMutables
+                )
+            }
             is BlockStatement -> compileBlock(name, stmt)
             is VarDeclStatement -> compileVarDecl(name, stmt)
             is net.sergeych.lyng.ThrowStatement -> compileThrowStatement(name, stmt)

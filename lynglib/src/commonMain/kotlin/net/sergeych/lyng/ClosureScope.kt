@@ -71,7 +71,8 @@ class ClosureScope(val callScope: Scope, val closureScope: Scope) :
     }
 }
 
-class ApplyScope(callScope: Scope, val applied: Scope) : Scope(callScope.parent?.parent ?: callScope.parent ?: callScope, thisObj = applied.thisObj) {
+class ApplyScope(val callScope: Scope, val applied: Scope) :
+    Scope(callScope.parent?.parent ?: callScope.parent ?: callScope, thisObj = applied.thisObj) {
 
     override fun get(name: String): ObjRecord? {
         return applied.get(name) ?: super.get(name)

@@ -30,9 +30,15 @@ class BlockStatement(
         val target = if (scope.skipScopeCreation) scope else scope.createChildScope(startPos)
         if (slotPlan.isNotEmpty()) target.applySlotPlan(slotPlan)
         if (captureSlots.isNotEmpty()) {
+            val applyScope = scope as? ApplyScope
             for (capture in captureSlots) {
-                val rec = scope.resolveCaptureRecord(capture.name)
-                    ?: scope.raiseSymbolNotFound("symbol ${capture.name} not found")
+                val rec = if (applyScope != null) {
+                    applyScope.resolveCaptureRecord(capture.name)
+                        ?: applyScope.callScope.resolveCaptureRecord(capture.name)
+                } else {
+                    scope.resolveCaptureRecord(capture.name)
+                } ?: (applyScope?.callScope ?: scope)
+                    .raiseSymbolNotFound("symbol ${capture.name} not found")
                 target.updateSlotFor(capture.name, rec)
             }
         }
