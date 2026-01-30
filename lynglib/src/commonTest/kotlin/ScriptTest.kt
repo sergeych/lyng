@@ -4318,7 +4318,6 @@ class ScriptTest {
         assertEquals(TestJson4(TestEnum.One), x)
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testStringLast() = runTest {
         eval(
@@ -4328,7 +4327,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testStringMul() = runTest {
         eval(
@@ -4339,7 +4337,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testLogicalNot() = runTest {
         eval(
@@ -4378,7 +4375,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testHangOnPrintlnInMethods() = runTest {
         eval(
