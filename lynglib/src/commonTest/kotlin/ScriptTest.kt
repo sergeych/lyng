@@ -4240,7 +4240,6 @@ class ScriptTest {
 
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testCustomClassToJson() = runTest {
         eval(
@@ -4266,7 +4265,6 @@ class ScriptTest {
         val inner: Map<String, Int>
     )
 
-    @Ignore("incremental enable")
     @Test
     fun deserializeMapWithJsonTest() = runTest {
         val x = eval(
@@ -4284,7 +4282,6 @@ class ScriptTest {
         val inner: JsonObject
     )
 
-    @Ignore("incremental enable")
     @Test
     fun deserializeAnyMapWithJsonTest() = runTest {
         val x = eval(
@@ -4309,7 +4306,6 @@ class ScriptTest {
     @Serializable
     data class TestJson4(val value: TestEnum)
 
-    @Ignore("incremental enable")
     @Test
     fun deserializeEnumJsonTest() = runTest {
         val x = eval(
