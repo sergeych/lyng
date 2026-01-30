@@ -1917,7 +1917,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testAccessShortcuts() {
         assertTrue(Visibility.Public.isPublic)
@@ -1925,7 +1924,6 @@ class ScriptTest {
         assertFalse(Visibility.Protected.isPublic)
     }
 
-    @Ignore("incremental enable")
     @Test
     fun segfault1Test() = runTest {
         eval(
@@ -1955,7 +1953,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testIntExponentRealForm() = runTest {
         when (val x = eval("1e-6").toString()) {
@@ -1965,7 +1962,6 @@ class ScriptTest {
 //        assertEquals("1.0E-6", eval("1e-6").toString())
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testCallLastBlockAfterDetault() = runTest {
         eval(
@@ -1980,7 +1976,6 @@ class ScriptTest {
 
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testCallLastBlockWithEllipsis() = runTest {
         eval(
@@ -1996,7 +1991,6 @@ class ScriptTest {
 
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testMethodCallLastBlockAfterDefault() = runTest {
         eval(
