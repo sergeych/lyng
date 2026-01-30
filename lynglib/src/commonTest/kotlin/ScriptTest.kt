@@ -131,7 +131,6 @@ class ScriptTest {
     }
 
     // --- Helpers to test iterator cancellation semantics ---
-@Ignore
     class ObjTestIterable : Obj() {
 
         var cancelCount: Int = 0
@@ -148,7 +147,6 @@ class ScriptTest {
         }
     }
 
-@Ignore
     class ObjTestIterator(private val owner: ObjTestIterable) : Obj() {
         override val objClass: ObjClass = type
         private var i = 0
@@ -171,7 +169,6 @@ class ScriptTest {
         }
     }
 
-    @Ignore("Scope.eval should seed compile-time symbols from current scope")
     @Test
     fun testForLoopDoesNotCancelOnNaturalCompletion() = runTest {
         val scope = Script.newScope()
@@ -189,7 +186,6 @@ class ScriptTest {
         assertEquals(0, ti.cancelCount)
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testForLoopCancelsOnBreak() = runTest {
         val scope = Script.newScope()
@@ -205,7 +201,6 @@ class ScriptTest {
         assertEquals(1, ti.cancelCount)
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testForLoopCancelsOnException() = runTest {
         val scope = Script.newScope()
@@ -384,7 +379,6 @@ class ScriptTest {
         assertTrue(eval("sin(π)").toDouble() - 1 < 0.000001)
     }
 
-    @Ignore("Scope.eval should seed compile-time symbols from current scope")
     @Test
     fun varsAndConstsTest() = runTest {
         val scope = Scope(pos = Pos.builtIn)
@@ -406,7 +400,6 @@ class ScriptTest {
         assertEquals(5, scope.eval("b").toInt())
     }
 
-    @Ignore("incremental enable")
     @Test
     fun functionTest() = runTest {
         val scope = Scope(pos = Pos.builtIn)
@@ -433,7 +426,6 @@ class ScriptTest {
         assertEquals(14, scope.eval("bar(3)").toInt())
     }
 
-    @Ignore("incremental enable")
     @Test
     fun simpleClosureTest() = runTest {
         val scope = Scope(pos = Pos.builtIn)
@@ -559,7 +551,6 @@ class ScriptTest {
         assertFalse { eval("4 <= 3").toBool() }
     }
 
-    @Ignore("incremental enable")
     @Test
     fun ifTest() = runTest {
         // if - single line
@@ -759,7 +750,6 @@ class ScriptTest {
         assertEquals(ObjInt(5), c["c"]?.value)
     }
 
-    @Ignore("Scope.eval should seed compile-time symbols from current scope")
     @Test
     fun testAssignArgumentsEndEllipsis() = runTest {
         // equal args,
@@ -787,7 +777,6 @@ class ScriptTest {
         c.eval("assert( b == [] )")
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testAssignArgumentsStartEllipsis() = runTest {
         val ttEnd = Token.Type.RBRACE
@@ -822,7 +811,6 @@ class ScriptTest {
         }
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testAssignArgumentsMiddleEllipsis() = runTest {
         val ttEnd = Token.Type.RBRACE

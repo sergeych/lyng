@@ -2116,6 +2116,7 @@ class BytecodeCompiler(
                         compileRefWithFallback(ref, null, target.pos)
                     }
                 }
+                is VarDeclStatement -> emitVarDecl(target)
                 is IfStatement -> compileIfStatement(target)
                 is net.sergeych.lyng.ForInStatement -> {
                     val resultSlot = emitForIn(target, false) ?: return null

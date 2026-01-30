@@ -1522,6 +1522,19 @@ class CmdFrame(
         }
     }
 
+    private fun shouldSyncLocalCaptures(captures: List<String>): Boolean {
+        if (captures.isEmpty()) return false
+        val localNames = fn.localSlotNames
+        if (localNames.isEmpty()) return false
+        for (capture in captures) {
+            for (local in localNames) {
+                if (local == null) continue
+                if (local == capture) return true
+            }
+        }
+        return false
+    }
+
     private fun resolveModuleScope(scope: Scope): Scope {
         var current: Scope? = scope
         var last: Scope = scope
@@ -1545,7 +1558,7 @@ class CmdFrame(
         } else {
             emptyList()
         }
-        if (captures.isNotEmpty() && fn.localSlotNames.isNotEmpty()) {
+        if (shouldSyncLocalCaptures(captures)) {
             syncFrameToScope()
         }
         if (scope.skipScopeCreation) {
@@ -1584,8 +1597,8 @@ class CmdFrame(
             ?: error("Scope stack underflow in POP_SCOPE")
         val captures = captureStack.removeLastOrNull() ?: emptyList()
         scopeDepth -= 1
-        if (captures.isNotEmpty() && fn.localSlotNames.isNotEmpty()) {
-            syncScopeToFrame()
+        if (shouldSyncLocalCaptures(captures)) {
+            syncFrameToScope()
         }
     }
 
