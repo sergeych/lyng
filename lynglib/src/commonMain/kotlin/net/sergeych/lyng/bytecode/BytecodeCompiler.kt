@@ -17,6 +17,7 @@
 package net.sergeych.lyng.bytecode
 
 import net.sergeych.lyng.BlockStatement
+import net.sergeych.lyng.DelegatedVarDeclStatement
 import net.sergeych.lyng.DestructuringVarDeclStatement
 import net.sergeych.lyng.ExpressionStatement
 import net.sergeych.lyng.IfStatement
@@ -98,6 +99,22 @@ class BytecodeCompiler(
             }
             is BlockStatement -> compileBlock(name, stmt)
             is VarDeclStatement -> compileVarDecl(name, stmt)
+            is DelegatedVarDeclStatement -> {
+                val value = emitStatementEval(stmt)
+                builder.emit(Opcode.RET, value.slot)
+                val localCount = maxOf(nextSlot, value.slot + 1) - scopeSlotCount
+                builder.build(
+                    name,
+                    localCount,
+                    addrCount = nextAddrSlot,
+                    returnLabels = returnLabels,
+                    scopeSlotIndices,
+                    scopeSlotNames,
+                    scopeSlotIsModule,
+                    localSlotNames,
+                    localSlotMutables
+                )
+            }
             is net.sergeych.lyng.ThrowStatement -> compileThrowStatement(name, stmt)
             is net.sergeych.lyng.ExtensionPropertyDeclStatement -> compileExtensionPropertyDecl(name, stmt)
             is net.sergeych.lyng.TryStatement -> {
@@ -196,7 +213,7 @@ class BytecodeCompiler(
                     return compileNameLookup(ref.name)
                 }
                 if (!allowLocalSlots) return null
-                if (ref.isDelegated) return null
+                if (ref.isDelegated) return compileEvalRef(ref)
                 if (ref.name.isEmpty()) return null
                 if (ref.captureOwnerScopeId == null && refScopeId(ref) == 0) {
                     val byName = scopeSlotIndexByName[ref.name]
@@ -2284,6 +2301,7 @@ class BytecodeCompiler(
                 }
                 is BlockStatement -> emitBlock(target, true)
                 is VarDeclStatement -> emitVarDecl(target)
+                is DelegatedVarDeclStatement -> emitStatementEval(target)
                 is DestructuringVarDeclStatement -> emitStatementEval(target)
                 is net.sergeych.lyng.ExtensionPropertyDeclStatement -> emitExtensionPropertyDecl(target)
                 is net.sergeych.lyng.ClassDeclStatement -> emitStatementEval(target)
@@ -2310,6 +2328,7 @@ class BytecodeCompiler(
                     }
                 }
                 is VarDeclStatement -> emitVarDecl(target)
+                is DelegatedVarDeclStatement -> emitStatementEval(target)
                 is IfStatement -> compileIfStatement(target)
                 is net.sergeych.lyng.ForInStatement -> {
                     val resultSlot = emitForIn(target, false) ?: return null

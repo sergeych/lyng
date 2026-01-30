@@ -101,6 +101,8 @@ class BytecodeStatement private constructor(
                     target.statements().any { containsUnsupportedStatement(it) }
                 is net.sergeych.lyng.VarDeclStatement ->
                     target.initializer?.let { containsUnsupportedStatement(it) } ?: false
+                is net.sergeych.lyng.DelegatedVarDeclStatement ->
+                    containsUnsupportedStatement(target.initializer)
                 is net.sergeych.lyng.DestructuringVarDeclStatement ->
                     containsUnsupportedStatement(target.initializer)
                 is net.sergeych.lyng.BreakStatement ->

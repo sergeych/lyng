@@ -3029,7 +3029,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testMapAsDelegate() = runTest {
         eval(
@@ -3330,7 +3329,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testInstantComponents() = runTest {
         eval(
@@ -3364,7 +3362,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testDoubleImports() = runTest {
         val s = Scope.new()
@@ -3409,7 +3406,6 @@ class ScriptTest {
 
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testIndexIntIncrements() = runTest {
         eval(
@@ -3430,7 +3426,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testIndexIntDecrements() = runTest {
         eval(
@@ -3451,7 +3446,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testRangeToList() = runTest {
         val x = eval("""(1..10).toList()""") as ObjList
@@ -3460,7 +3454,6 @@ class ScriptTest {
         println(y.list)
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testMultilineStrings() = runTest {
         assertEquals(
@@ -3502,7 +3495,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun tesFunAnnotation() = runTest {
         eval(
@@ -3647,7 +3639,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testNewlinesAnsCommentsInExpressions() = runTest {
         assertEquals(
@@ -3669,7 +3660,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testNotExpressionWithoutWs() = runTest {
         eval(
@@ -3686,7 +3676,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testMultilineFnDeclaration() = runTest {
         eval(

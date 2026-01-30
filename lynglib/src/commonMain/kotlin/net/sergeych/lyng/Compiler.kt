@@ -4217,10 +4217,20 @@ class Compiler(
             extTypeName == null &&
             !isStatic &&
             !isProperty &&
-            !isDelegate &&
             !actualExtern &&
             !isAbstract
         ) {
+            if (isDelegate) {
+                val initExpr = initialExpression ?: throw ScriptError(start, "Delegate must be initialized")
+                return DelegatedVarDeclStatement(
+                    name,
+                    isMutable,
+                    visibility,
+                    initExpr,
+                    isTransient,
+                    start
+                )
+            }
             val slotPlan = slotPlanStack.lastOrNull()
             val slotIndex = slotPlan?.slots?.get(name)?.index
             val scopeId = slotPlan?.id
