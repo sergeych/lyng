@@ -458,6 +458,7 @@ class Compiler(
         val needsSlotPlan = slotPlanStack.isEmpty()
         if (needsSlotPlan) {
             slotPlanStack.add(SlotPlan(mutableMapOf(), 0, nextScopeId++))
+            declareSlotNameIn(slotPlanStack.last(), "__PACKAGE__", isMutable = false, isDelegated = false)
             seedSlotPlanFromScope(importManager.rootScope)
             predeclareTopLevelSymbols()
         }

@@ -21,6 +21,7 @@
 
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.eval
+import kotlin.test.Ignore
 import kotlin.test.Test
 
 class ScriptTest_OptionalAssign {

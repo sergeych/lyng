@@ -37,6 +37,7 @@ import kotlin.test.*
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
+import kotlin.test.Ignore
 
 /*
  * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
@@ -54,14 +55,15 @@ import kotlin.time.Instant
  * limitations under the License.
  *
  */
-@Ignore("TODO(bytecode-only): uses fallback")
 class ScriptTest {
+    @Ignore("incremental enable")
     @Test
     fun testVersion() {
         println("--------------------------------------------")
         println("version = ${LyngVersion}")
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testClosureSeesCallerLocalsInLaunch() = runTest {
         val scope = Script.newScope()
@@ -80,6 +82,7 @@ class ScriptTest {
         assertEquals(1L, (res as ObjInt).value)
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testClosureResolvesGlobalsInLaunch() = runTest {
         val scope = Script.newScope()
@@ -131,6 +134,7 @@ class ScriptTest {
     }
 
     // --- Helpers to test iterator cancellation semantics ---
+@Ignore
     class ObjTestIterable : Obj() {
 
         var cancelCount: Int = 0
@@ -147,6 +151,7 @@ class ScriptTest {
         }
     }
 
+@Ignore
     class ObjTestIterator(private val owner: ObjTestIterable) : Obj() {
         override val objClass: ObjClass = type
         private var i = 0
@@ -169,6 +174,7 @@ class ScriptTest {
         }
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testForLoopDoesNotCancelOnNaturalCompletion() = runTest {
         val scope = Script.newScope()
@@ -186,6 +192,7 @@ class ScriptTest {
         assertEquals(0, ti.cancelCount)
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testForLoopCancelsOnBreak() = runTest {
         val scope = Script.newScope()
@@ -201,6 +208,7 @@ class ScriptTest {
         assertEquals(1, ti.cancelCount)
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testForLoopCancelsOnException() = runTest {
         val scope = Script.newScope()
@@ -221,6 +229,7 @@ class ScriptTest {
         assertEquals(1, ti.cancelCount)
     }
 
+    @Ignore("incremental enable")
     @Test
     fun parseNewlines() {
         fun check(expected: String, type: Token.Type, row: Int, col: Int, src: String, offset: Int = 0) {
@@ -239,6 +248,7 @@ class ScriptTest {
 
     }
 
+    @Ignore("incremental enable")
     @Test
     fun parseNumbersTest() {
         fun check(expected: String, type: Token.Type, row: Int, col: Int, src: String, offset: Int = 0) {
@@ -281,6 +291,7 @@ class ScriptTest {
 
     }
 
+    @Ignore("incremental enable")
     @Test
     fun parseRangeTest() {
         var tt = parseLyng("5 .. 4".toSource())
@@ -296,6 +307,7 @@ class ScriptTest {
         assertEquals(Token.Type.INT, tt[2].type)
     }
 
+    @Ignore("incremental enable")
     @Test
     fun parseInTest() {
         var tt = parseLyng("5 in 4".toSource())
@@ -311,6 +323,7 @@ class ScriptTest {
         assertEquals(Token.Type.INT, tt[2].type)
     }
 
+    @Ignore("incremental enable")
     @Test
     fun parserLabelsTest() {
         val src = "label@ break@label".toSource()
@@ -340,6 +353,7 @@ class ScriptTest {
 //        assertEquals(Token(")", src.posAt(1, 17), Token.Type.RPAREN), p.next())
 //    }
 
+    @Ignore("incremental enable")
     @Test
     fun parse1Test() {
         val src = "2 + 7".toSource()
@@ -351,6 +365,7 @@ class ScriptTest {
         assertEquals(Token("7", src.posAt(0, 4), Token.Type.INT), p.next())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun compileNumbersTest() = runTest {
         assertEquals(ObjInt(17), eval("17"))
@@ -367,6 +382,7 @@ class ScriptTest {
         assertEquals(ObjReal(314.0), eval("100\n 3.14e2"))
     }
 
+    @Ignore("incremental enable")
     @Test
     fun compileBuiltinCallsTest() = runTest {
 //        println(eval("π"))
@@ -379,6 +395,7 @@ class ScriptTest {
         assertTrue(eval("sin(π)").toDouble() - 1 < 0.000001)
     }
 
+    @Ignore("incremental enable")
     @Test
     fun varsAndConstsTest() = runTest {
         val scope = Scope(pos = Pos.builtIn)
@@ -400,6 +417,7 @@ class ScriptTest {
         assertEquals(5, scope.eval("b").toInt())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun functionTest() = runTest {
         val scope = Scope(pos = Pos.builtIn)
@@ -426,6 +444,7 @@ class ScriptTest {
         assertEquals(14, scope.eval("bar(3)").toInt())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun simpleClosureTest() = runTest {
         val scope = Scope(pos = Pos.builtIn)
@@ -443,6 +462,7 @@ class ScriptTest {
         assertEquals(37, scope.eval("foo(3,14)").toInt())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun nullAndVoidTest() = runTest {
         val scope = Scope(pos = Pos.builtIn)
@@ -450,6 +470,7 @@ class ScriptTest {
         assertEquals(ObjNull, scope.eval("null"))
     }
 
+    @Ignore("incremental enable")
     @Test
     fun arithmeticOperatorsTest() = runTest {
         assertEquals(2, eval("5/2").toInt())
@@ -469,6 +490,7 @@ class ScriptTest {
         assertEquals(3.0, eval("round(5.1/2)").toDouble())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun arithmetics() = runTest {
         // integer
@@ -490,6 +512,7 @@ class ScriptTest {
         assertEquals(2.5, eval("5.0 / 2.0").toDouble())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun arithmeticParenthesisTest() = runTest {
         assertEquals(17, eval("2.0 + 3 * 5").toInt())
@@ -498,12 +521,14 @@ class ScriptTest {
         assertEquals(24, eval("(2 + 3) * 5 -1").toInt())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun stringOpTest() = runTest {
         assertEquals("foobar", eval(""" "foo" + "bar" """).toString())
         assertEquals("foo17", eval(""" "foo" + 17 """).toString())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun eqNeqTest() = runTest {
         assertEquals(ObjBool(true), eval("val x = 2; x == 2"))
@@ -520,6 +545,7 @@ class ScriptTest {
         assertTrue { eval("2 == 2 && 3 != 4").toBool() }
     }
 
+    @Ignore("incremental enable")
     @Test
     fun logicTest() = runTest {
         assertEquals(ObjFalse, eval("true && false"))
@@ -536,6 +562,7 @@ class ScriptTest {
         assertEquals(ObjBool(true), eval("!false"))
     }
 
+    @Ignore("incremental enable")
     @Test
     fun gtLtTest() = runTest {
         assertTrue { eval("3 > 2").toBool() }
@@ -551,6 +578,7 @@ class ScriptTest {
         assertFalse { eval("4 <= 3").toBool() }
     }
 
+    @Ignore("incremental enable")
     @Test
     fun ifTest() = runTest {
         // if - single line
@@ -623,6 +651,7 @@ class ScriptTest {
         assertEquals("too much", scope.eval("test1(100)").toString())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun lateInitTest() = runTest {
         assertEquals(
@@ -643,6 +672,7 @@ class ScriptTest {
 
     }
 
+    @Ignore("incremental enable")
     @Test
     fun whileAssignTest() = runTest {
         eval(
@@ -655,6 +685,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun whileTest() = runTest {
         assertEquals(
@@ -709,6 +740,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testAssignArgumentsNoEllipsis() = runTest {
         // equal args, no ellipsis, no defaults, ok
@@ -750,6 +782,7 @@ class ScriptTest {
         assertEquals(ObjInt(5), c["c"]?.value)
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testAssignArgumentsEndEllipsis() = runTest {
         // equal args,
@@ -777,6 +810,7 @@ class ScriptTest {
         c.eval("assert( b == [] )")
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testAssignArgumentsStartEllipsis() = runTest {
         val ttEnd = Token.Type.RBRACE
@@ -811,6 +845,7 @@ class ScriptTest {
         }
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testAssignArgumentsMiddleEllipsis() = runTest {
         val ttEnd = Token.Type.RBRACE
@@ -849,6 +884,7 @@ class ScriptTest {
         }
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testWhileBlockIsolation1() = runTest {
         eval(
@@ -865,6 +901,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testWhileBlockIsolation2() = runTest {
         assertFails {
@@ -881,6 +918,7 @@ class ScriptTest {
         }
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testWhileBlockIsolation3() = runTest {
         eval(
@@ -906,6 +944,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun whileNonLocalBreakTest() = runTest {
         assertEquals(
@@ -927,6 +966,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun bookTest0() = runTest {
         assertEquals(
@@ -954,6 +994,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testIncr() = runTest {
         val c = Scope()
@@ -966,6 +1007,7 @@ class ScriptTest {
         assertEquals(12, c.eval("x").toInt())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testDecr() = runTest {
         val c = Scope()
@@ -977,6 +1019,7 @@ class ScriptTest {
         assertEquals(5, c.eval("x").toInt())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testDecrIncr() = runTest {
         val c = Scope()
@@ -991,6 +1034,7 @@ class ScriptTest {
         assertEquals(7, c.eval("x + 0").toInt())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testDecrIncr2() = runTest {
         val c = Scope()
@@ -1009,6 +1053,7 @@ class ScriptTest {
                 .toInt())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testDecrIncr3() = runTest {
         val c = Scope()
@@ -1021,6 +1066,7 @@ class ScriptTest {
         assertEquals(11, c.eval("x").toInt())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testIncrAndDecr() = runTest {
         val c = Scope()
@@ -1041,6 +1087,7 @@ class ScriptTest {
 //        assertEquals( "4", c.eval("x+0").toString())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun bookTest2() = runTest {
         val src = """
@@ -1055,6 +1102,7 @@ class ScriptTest {
         eval(src)
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testAssign1() = runTest {
         assertEquals(10, eval("var x = 5; x=10; x").toInt())
@@ -1070,6 +1118,7 @@ class ScriptTest {
         assertEquals(10, ctx.eval("b").toInt())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testAssign2() = runTest {
         val ctx = Scope()
@@ -1088,6 +1137,7 @@ class ScriptTest {
         assertEquals(2, ctx.eval("x %= 5").toInt())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testVals() = runTest {
         val cxt = Scope()
@@ -1105,6 +1155,7 @@ class ScriptTest {
         assertEquals(11, cxt.eval("x").toInt())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testValVarConverting() = runTest {
         eval(
@@ -1137,6 +1188,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testListLiteral() = runTest {
         eval(
@@ -1171,6 +1223,7 @@ class ScriptTest {
 
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testListLiteralSpread() = runTest {
         eval(
@@ -1186,6 +1239,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testListSize() = runTest {
         eval(
@@ -1197,6 +1251,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testArrayCompare() = runTest {
         eval(
@@ -1211,6 +1266,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun forLoop1() = runTest {
         eval(
@@ -1238,6 +1294,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun forLoop2() = runTest {
         println(
@@ -1257,6 +1314,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testIntClosedRangeInclusive() = runTest {
         eval(
@@ -1291,6 +1349,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testIntClosedRangeExclusive() = runTest {
         eval(
@@ -1327,6 +1386,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testIntClosedRangeInExclusive() = runTest {
         eval(
@@ -1337,6 +1397,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testOpenStartRanges() = runTest {
         eval(
@@ -1362,6 +1423,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testOpenEndRanges() = runTest {
         eval(
@@ -1374,6 +1436,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testOpenEndRanges2() = runTest {
         eval(
@@ -1391,6 +1454,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testOpenEndRanges3() = runTest {
         eval(
@@ -1403,6 +1467,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testCharacterRange() = runTest {
         eval(
@@ -1417,6 +1482,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testIs() = runTest {
         eval(
@@ -1432,6 +1498,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testForRange() = runTest {
         eval(
@@ -1452,6 +1519,7 @@ class ScriptTest {
         println(a)
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testLambdaWithIt1() = runTest {
         eval(
@@ -1468,6 +1536,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testLambdaWithIt2() = runTest {
         eval(
@@ -1480,6 +1549,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testLambdaWithIt3() = runTest {
         eval(
@@ -1493,6 +1563,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testLambdaWithArgs() = runTest {
         eval(
@@ -1510,6 +1581,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testCaptureLocals() = runTest {
         eval(
@@ -1536,6 +1608,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testInstanceCallScopeIsCorrect() = runTest {
         eval(
@@ -1566,6 +1639,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testAppliedScopes() = runTest {
         eval(
@@ -1611,6 +1685,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testLambdaWithArgsEllipsis() = runTest {
         eval(
@@ -1626,6 +1701,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testLambdaWithBadArgs() = runTest {
         assertFails {
@@ -1641,6 +1717,7 @@ class ScriptTest {
         }
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testWhileExecuteElseIfNotExecuted() = runTest {
         assertEquals(
@@ -1655,6 +1732,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testIsPrimeSampleBug() = runTest {
         eval(
@@ -1675,6 +1753,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testLambdaAsFnCallArg() = runTest {
         eval(
@@ -1689,6 +1768,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testNewFnParser() = runTest {
         eval(
@@ -1700,6 +1780,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testSpoilArgsBug() = runTest {
         eval(
@@ -1719,6 +1800,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testSpoilLamdaArgsBug() = runTest {
         eval(
@@ -1738,6 +1820,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun commentBlocksShouldNotAlterBehavior() = runTest {
         eval(
@@ -1753,6 +1836,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testShuttle() = runTest {
         eval(
@@ -1765,6 +1849,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testSimpleStruct() = runTest {
         val c = Scope()
@@ -1786,6 +1871,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testNonAssignalbeFieldInStruct() = runTest {
         val c = Scope()
@@ -1803,6 +1889,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testStructBodyVal() = runTest {
         val c = Scope()
@@ -1825,6 +1912,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testStructBodyFun() = runTest {
         val c = Scope()
@@ -1845,6 +1933,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testPrivateConstructorParams() = runTest {
         val c = Scope()
@@ -1858,6 +1947,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testLBraceMethodCall() = runTest {
         eval(
@@ -1873,6 +1963,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testLBraceFnCall() = runTest {
         eval(
@@ -1885,6 +1976,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testClasstoString() = runTest {
         eval(
@@ -1901,6 +1993,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testClassDefaultCompare() = runTest {
         eval(
@@ -1915,6 +2008,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testAccessShortcuts() {
         assertTrue(Visibility.Public.isPublic)
@@ -1922,6 +2016,7 @@ class ScriptTest {
         assertFalse(Visibility.Protected.isPublic)
     }
 
+    @Ignore("incremental enable")
     @Test
     fun segfault1Test() = runTest {
         eval(
@@ -1951,6 +2046,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testIntExponentRealForm() = runTest {
         when (val x = eval("1e-6").toString()) {
@@ -1960,6 +2056,7 @@ class ScriptTest {
 //        assertEquals("1.0E-6", eval("1e-6").toString())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testCallLastBlockAfterDetault() = runTest {
         eval(
@@ -1974,6 +2071,7 @@ class ScriptTest {
 
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testCallLastBlockWithEllipsis() = runTest {
         eval(
@@ -1989,6 +2087,7 @@ class ScriptTest {
 
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testMethodCallLastBlockAfterDefault() = runTest {
         eval(
@@ -2006,6 +2105,7 @@ class ScriptTest {
 
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testMethodCallLastBlockWithEllipsis() = runTest {
         eval(
@@ -2024,6 +2124,7 @@ class ScriptTest {
 
     }
 
+    @Ignore("incremental enable")
     @Test
     fun nationalCharsTest() = runTest {
         eval(
@@ -2047,6 +2148,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun doWhileSimpleTest() = runTest {
         eval(
@@ -2061,6 +2163,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testFailDoWhileSample1() = runTest {
         eval(
@@ -2075,6 +2178,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testForContinue() = runTest {
         eval(
@@ -2090,6 +2194,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testForLabelNreakTest() = runTest {
         eval(
@@ -2112,6 +2217,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testThrowExisting() = runTest {
         eval(
@@ -2141,6 +2247,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testCatchShort1() = runTest {
         eval(
@@ -2165,6 +2272,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testCatchShort2() = runTest {
         eval(
@@ -2182,6 +2290,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testAccessEHData() = runTest {
         eval(
@@ -2204,6 +2313,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testTryFinally() = runTest {
         val c = Scope()
@@ -2227,6 +2337,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testThrowFromKotlin() = runTest {
         val c = Script.newScope()
@@ -2251,6 +2362,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testReturnValue1() = runTest {
         val r = eval(
@@ -2272,6 +2384,7 @@ class ScriptTest {
         assertEquals("111", r.toString())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun doWhileValuesTest() = runTest {
         eval(
@@ -2316,6 +2429,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun doWhileValuesLabelTest() = runTest {
         withTimeout(5.seconds) {
@@ -2349,6 +2463,7 @@ class ScriptTest {
         }
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testSimpleWhen() = runTest {
         eval(
@@ -2373,6 +2488,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testWhenIs() = runTest {
         eval(
@@ -2403,6 +2519,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testWhenIn() = runTest {
         eval(
@@ -2442,6 +2559,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testParseSpecialVars() {
         val l = parseLyng("$~".toSource("test$~"))
@@ -2450,6 +2568,7 @@ class ScriptTest {
         assertEquals("$~", l[0].value)
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testMatchOperator() = runTest {
         eval(
@@ -2469,6 +2588,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testMatchingOperator2() = runTest {
         eval(
@@ -2497,6 +2617,7 @@ class ScriptTest {
 //        )
 //    }
 
+    @Ignore("incremental enable")
     @Test
     fun testWhenSample1() = runTest {
         eval(
@@ -2516,6 +2637,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testWhenSample2() = runTest {
         eval(
@@ -2538,6 +2660,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testNull1() = runTest {
         eval(
@@ -2559,6 +2682,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testSprintf() = runTest {
         eval(
@@ -2570,6 +2694,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testSubstringRangeFailure() = runTest {
         eval(
@@ -2580,6 +2705,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun passingOpenEndedRangeAsParam() = runTest {
         eval(
@@ -2592,6 +2718,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testCollectionStructure() = runTest {
         eval(
@@ -2618,6 +2745,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testSet() = runTest {
         eval(
@@ -2644,6 +2772,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testSet2() = runTest {
         eval(
@@ -2654,6 +2783,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testSetAddRemoveSet() = runTest {
         eval(
@@ -2668,6 +2798,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testLet() = runTest {
         eval(
@@ -2681,6 +2812,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testApply() = runTest {
         eval(
@@ -2695,6 +2827,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testApplyThis() = runTest {
         eval(
@@ -2711,6 +2844,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testApplyFromStatic() = runTest {
         eval(
@@ -2732,6 +2866,7 @@ class ScriptTest {
         )
     }
 
+@Ignore
     class ObjTestFoo(val value: ObjString) : Obj() {
 
         override val objClass: ObjClass = klass
@@ -2746,6 +2881,7 @@ class ScriptTest {
         }
     }
 
+    @Ignore("incremental enable")
     @Test
     fun TestApplyFromKotlin() = runTest {
         val scope = Script.newScope()
@@ -2761,6 +2897,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testParallels() = runTest {
         withContext(Dispatchers.Default) {
@@ -2787,6 +2924,7 @@ class ScriptTest {
         }
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testParallels2() = runTest {
         withContext(Dispatchers.Default) {
@@ -2834,6 +2972,7 @@ class ScriptTest {
         }
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testExtend() = runTest() {
         eval(
@@ -2867,6 +3006,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testToFlow() = runTest() {
         val c = Scope()
@@ -2875,6 +3015,7 @@ class ScriptTest {
         assertEquals(listOf(1, 2, 3), arr.toFlow(c).map { it.toInt() }.toList())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testAssociateBy() = runTest() {
         eval(
@@ -2902,6 +3043,7 @@ class ScriptTest {
 //        assertEquals("foo1", pm.modules["lyng.foo"]!!.deferredModule.await().eval("foo()").toString())
 //    }
 
+    @Ignore("incremental enable")
     @Test
     fun testImports2() = runTest() {
         val foosrc = """
@@ -2921,6 +3063,7 @@ class ScriptTest {
         assertEquals("foo1", scope.eval(src).toString())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testImports3() = runTest {
         val foosrc = """
@@ -2952,6 +3095,7 @@ class ScriptTest {
         assertEquals("foo1 / bar1", scope.eval(src).toString())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testImportsCircular() = runTest {
         val foosrc = """
@@ -2985,6 +3129,7 @@ class ScriptTest {
         assertEquals("foo1 / bar1", scope.eval(src).toString())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testDefaultImportManager() = runTest {
         val scope = Scope.new()
@@ -3011,6 +3156,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testMaps() = runTest {
         eval(
@@ -3025,6 +3171,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testMapAsDelegate() = runTest {
         eval(
@@ -3043,6 +3190,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testExternDeclarations() = runTest {
         eval(
@@ -3066,6 +3214,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testExternExtension() = runTest {
         eval(
@@ -3076,6 +3225,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testBuffer() = runTest {
         eval(
@@ -3102,6 +3252,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testBufferEncodings() = runTest {
         eval(
@@ -3124,6 +3275,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testBufferCompare() = runTest {
         eval(
@@ -3149,6 +3301,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testInstant() = runTest {
         eval(
@@ -3188,6 +3341,7 @@ class ScriptTest {
         delay(1000)
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testTimeStatics() = runTest {
         eval(
@@ -3209,6 +3363,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testInstantFormatting() = runTest {
         eval(
@@ -3223,6 +3378,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testDateTimeComprehensive() = runTest {
         eval(
@@ -3325,6 +3481,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testInstantComponents() = runTest {
         eval(
@@ -3358,6 +3515,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testDoubleImports() = runTest {
         val s = Scope.new()
@@ -3402,6 +3560,7 @@ class ScriptTest {
 
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testIndexIntIncrements() = runTest {
         eval(
@@ -3422,6 +3581,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testIndexIntDecrements() = runTest {
         eval(
@@ -3442,6 +3602,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testRangeToList() = runTest {
         val x = eval("""(1..10).toList()""") as ObjList
@@ -3450,6 +3611,7 @@ class ScriptTest {
         println(y.list)
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testMultilineStrings() = runTest {
         assertEquals(
@@ -3491,6 +3653,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun tesFunAnnotation() = runTest {
         eval(
@@ -3517,6 +3680,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun enumTest() = runTest {
         eval(
@@ -3538,6 +3702,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun enumSerializationTest() = runTest {
         eval(
@@ -3561,6 +3726,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun cachedTest() = runTest {
         eval(
@@ -3581,6 +3747,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testJoinToString() = runTest {
         eval(
@@ -3592,6 +3759,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testElvisAndThrow() = runTest {
         eval(
@@ -3604,6 +3772,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testElvisAndThrow2() = runTest {
         eval(
@@ -3616,6 +3785,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testElvisAndRunThrow() = runTest {
         eval(
@@ -3628,6 +3798,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testNewlinesAnsCommentsInExpressions() = runTest {
         assertEquals(
@@ -3649,6 +3820,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testNotExpressionWithoutWs() = runTest {
         eval(
@@ -3665,6 +3837,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testMultilineFnDeclaration() = runTest {
         eval(
@@ -3684,6 +3857,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testOverridenListToString() = runTest {
         eval(
@@ -3694,6 +3868,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testExceptionSerialization() = runTest {
         eval(
@@ -3722,6 +3897,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testExceptionSerializationPlain() = runTest {
         eval(
@@ -3750,6 +3926,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testThisInClosure() = runTest {
         eval(
@@ -3773,6 +3950,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testThisInFlowClosure() = runTest {
         eval(
@@ -3791,6 +3969,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testSum() = runTest {
         eval(
@@ -3805,6 +3984,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testSort() = runTest {
         eval(
@@ -3818,6 +3998,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testListSortInPlace() = runTest {
         eval(
@@ -3837,6 +4018,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun binarySearchTest() = runTest {
         eval(
@@ -3849,6 +4031,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun binarySearchTest2() = runTest {
         eval(
@@ -3892,6 +4075,7 @@ class ScriptTest {
         }
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testRegex1() = runTest {
         eval(
@@ -3908,6 +4092,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun extensionsMustBeLocalPerScope() = runTest {
         val scope1 = Script.newScope()
@@ -3933,6 +4118,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testThrowReportsSource() = runTest {
         try {
@@ -3950,6 +4136,7 @@ class ScriptTest {
         }
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testRangeIsIterable() = runTest {
         eval(
@@ -3960,6 +4147,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testCallAndResultOrder() = runTest {
         eval(
@@ -3983,6 +4171,7 @@ class ScriptTest {
 
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testIterableMinMax() = runTest {
         eval(
@@ -3995,6 +4184,7 @@ class ScriptTest {
     }
 
 
+    @Ignore("incremental enable")
     @Test
     fun testParserOverflow() = runTest {
         try {
@@ -4062,6 +4252,7 @@ class ScriptTest {
 //        """.trimIndent())
 //    }
 
+    @Ignore("incremental enable")
     @Test
     fun testInlineArrayLiteral() = runTest {
         eval(
@@ -4075,6 +4266,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testInlineMapLiteral() = runTest {
         eval(
@@ -4088,6 +4280,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testCommentsInClassConstructor() = runTest {
         eval(
@@ -4108,6 +4301,7 @@ class ScriptTest {
     @Serializable
     data class JSTest1(val foo: String, val one: Int, val ok: Boolean)
 
+    @Ignore("incremental enable")
     @Test
     fun testToJson() = runTest {
         val x = eval("""{ "foo": "bar", "one": 1, "ok": true }""")
@@ -4121,6 +4315,7 @@ class ScriptTest {
         assertEquals(JSTest1("bar", 1, true), x.decodeSerializable<JSTest1>())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testJsonTime() = runTest {
         val now = Clock.System.now()
@@ -4135,6 +4330,7 @@ class ScriptTest {
         assertTrue((now - x).absoluteValue < 2.seconds)
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testJsonNull() = runTest {
         val x = eval("""null""".trimIndent()).decodeSerializable<Instant?>()
@@ -4142,6 +4338,7 @@ class ScriptTest {
         assertNull(x)
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testInstanceVars() = runTest {
         var x = eval(
@@ -4177,6 +4374,7 @@ class ScriptTest {
         println(x.serializingVars.map { "${it.key}=${it.value.value}" })
     }
 
+    @Ignore("incremental enable")
     @Test
     fun memberValCantBeAssigned() = runTest {
         eval(
@@ -4203,6 +4401,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testClassToJson() = runTest {
         eval(
@@ -4223,6 +4422,7 @@ class ScriptTest {
 
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testCustomClassToJson() = runTest {
         eval(
@@ -4248,6 +4448,7 @@ class ScriptTest {
         val inner: Map<String, Int>
     )
 
+    @Ignore("incremental enable")
     @Test
     fun deserializeMapWithJsonTest() = runTest {
         val x = eval(
@@ -4265,6 +4466,7 @@ class ScriptTest {
         val inner: JsonObject
     )
 
+    @Ignore("incremental enable")
     @Test
     fun deserializeAnyMapWithJsonTest() = runTest {
         val x = eval(
@@ -4289,6 +4491,7 @@ class ScriptTest {
     @Serializable
     data class TestJson4(val value: TestEnum)
 
+    @Ignore("incremental enable")
     @Test
     fun deserializeEnumJsonTest() = runTest {
         val x = eval(
@@ -4301,6 +4504,7 @@ class ScriptTest {
         assertEquals(TestJson4(TestEnum.One), x)
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testStringLast() = runTest {
         eval(
@@ -4310,6 +4514,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testStringMul() = runTest {
         eval(
@@ -4320,6 +4525,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testLogicalNot() = runTest {
         eval(
@@ -4358,6 +4564,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testHangOnPrintlnInMethods() = runTest {
         eval(
@@ -4373,6 +4580,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testHangOnNonexistingMethod() = runTest {
         eval(
@@ -4396,6 +4604,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testUsingClassConstructorVars() = runTest {
         val r = eval(
@@ -4428,6 +4637,7 @@ class ScriptTest {
         println(r)
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testScopeShortCircuit() = runTest() {
         val baseScope = Script.newScope()
@@ -4493,6 +4703,7 @@ class ScriptTest {
         assertEquals(51, r.toInt())
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testFirstInEnum() = runTest {
         eval(
@@ -4510,6 +4721,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testAutoSplatArgs() = runTest {
         eval(
@@ -4525,6 +4737,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testCached() = runTest {
         eval(
@@ -4540,6 +4753,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testCustomToStringBug() = runTest {
         eval(
@@ -4565,6 +4779,7 @@ class ScriptTest {
     }
 
 
+    @Ignore("incremental enable")
     @Test
     fun testDestructuringAssignment() = runTest {
         eval(
@@ -4609,6 +4824,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testProperlyReportExceptionPos() = runTest {
         var x = assertFailsWith<ExecutionError> {
@@ -4646,6 +4862,7 @@ class ScriptTest {
         assertContains(x.message!!, "throw \"success\"")
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testClassAndFunAutoNamedArgs() = runTest {
         // Shorthand for named arguments: name: is equivalent to name: name.
@@ -4699,6 +4916,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testFunMiniDeclaration() = runTest {
         eval(
@@ -4714,6 +4932,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testUserClassExceptions() = runTest {
         eval(
@@ -4735,6 +4954,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testTodo() = runTest {
         eval(
@@ -4748,6 +4968,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testOptOnNullAssignment() = runTest {
         eval(
@@ -4762,6 +4983,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testUserExceptionClass() = runTest {
         eval(
@@ -4787,6 +5009,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testExceptionToString() = runTest {
         eval(
@@ -4803,6 +5026,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testAssertThrowsUserException() = runTest {
         eval(
@@ -4825,6 +5049,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testRaiseAsError() = runTest {
         var x = evalNamed(
@@ -4860,6 +5085,7 @@ class ScriptTest {
         assertContains(x1.message!!, "tc2")
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testFilterStackTrace() = runTest {
         var x = try {
@@ -4885,6 +5111,7 @@ class ScriptTest {
     }
 
 
+    @Ignore("incremental enable")
     @Test
     fun testLyngToKotlinExceptionHelpers() = runTest {
         var x = evalNamed(
@@ -4901,6 +5128,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testMapIteralAmbiguity() = runTest {
         eval(
@@ -4916,6 +5144,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun realWorldCaptureProblem() = runTest {
         eval(
@@ -4942,6 +5171,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testLazyLocals() = runTest() {
         eval(
@@ -4959,6 +5189,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testGetterLocals() = runTest() {
         eval(
@@ -4976,6 +5207,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testMethodLocals() = runTest() {
         eval(
@@ -4993,6 +5225,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testContrcuctorMagicIdBug() = runTest() {
         eval(
@@ -5013,6 +5246,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testLambdaLocals() = runTest() {
         eval(
@@ -5028,6 +5262,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testTypedArgsWithInitializers() = runTest {
         eval(
@@ -5044,6 +5279,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testArgsPriorityWithSplash() = runTest {
         eval(
@@ -5060,6 +5296,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testClamp() = runTest {
         eval(
@@ -5098,6 +5335,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testEmptySpreadList() = runTest {
         eval(
@@ -5108,6 +5346,7 @@ class ScriptTest {
         )
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testForInIterableDisasm() = runTest {
         val scope = Script.newScope()
@@ -5135,6 +5374,7 @@ class ScriptTest {
         println("[DEBUG_LOG] type(\"153\")=${r2.inspect(scope)}")
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testForInIterableBytecode() = runTest {
         val result = eval(
@@ -5150,6 +5390,7 @@ class ScriptTest {
         assertEquals(ObjInt(12), result)
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testForInIterableUnknownTypeDisasm() = runTest {
         val scope = Script.newScope()
@@ -5172,6 +5413,7 @@ class ScriptTest {
         assertEquals(ObjInt(4), r2)
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testReturnBreakValueBytecodeDisasm() = runTest {
         val scope = Script.newScope()
@@ -5202,6 +5444,7 @@ class ScriptTest {
         assertEquals(ObjInt(2), scope.eval("firstEvenOrMinus()"))
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testInOperatorBytecode() = runTest {
         val scope = Script.newScope()
@@ -5216,6 +5459,7 @@ class ScriptTest {
         assertEquals(ObjFalse, scope.eval("inList(5, [1,2,3])"))
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testIsOperatorBytecode() = runTest {
         val scope = Script.newScope()
@@ -5230,6 +5474,7 @@ class ScriptTest {
         assertEquals(ObjFalse, scope.eval("isInt(\"42\")"))
     }
 
+    @Ignore("incremental enable")
     @Test
     fun testFilterBug() = runTest {
         eval(
