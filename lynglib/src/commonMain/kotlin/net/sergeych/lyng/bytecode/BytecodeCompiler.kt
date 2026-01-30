@@ -2942,7 +2942,13 @@ class BytecodeCompiler(
 
     private fun compileBreak(stmt: net.sergeych.lyng.BreakStatement): CompiledValue? {
         val stack = loopStack.toList()
-        val targetIndex = findLoopContextIndex(stmt.label) ?: return null
+        val targetIndex = findLoopContextIndex(stmt.label) ?: run {
+            val labels = stack.joinToString(prefix = "[", postfix = "]") { it.label ?: "<unlabeled>" }
+            throw BytecodeFallbackException(
+                "Bytecode fallback: break label '${stmt.label}' not found in $labels",
+                stmt.pos
+            )
+        }
         val ctx = stack[targetIndex]
         val value = stmt.resultExpr?.let { compileStatementValueOrFallback(it) }
         if (ctx.resultSlot != null) {

@@ -2092,7 +2092,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testForLabelNreakTest() = runTest {
         eval(
@@ -2115,7 +2114,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testThrowExisting() = runTest {
         eval(
@@ -2145,7 +2143,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testCatchShort1() = runTest {
         eval(
@@ -2170,7 +2167,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testCatchShort2() = runTest {
         eval(

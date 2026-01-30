@@ -712,7 +712,8 @@ class Compiler(
     private fun containsLoopControl(stmt: Statement, inLoop: Boolean = false): Boolean {
         val target = if (stmt is BytecodeStatement) stmt.original else stmt
         return when (target) {
-            is BreakStatement, is ContinueStatement -> !inLoop
+            is BreakStatement -> target.label != null || !inLoop
+            is ContinueStatement -> target.label != null || !inLoop
             is IfStatement -> {
                 containsLoopControl(target.ifBody, inLoop) ||
                     (target.elseBody?.let { containsLoopControl(it, inLoop) } ?: false)
@@ -2571,7 +2572,7 @@ class Compiler(
                 val block = try {
                     resolutionSink?.enterScope(ScopeKind.BLOCK, catchVar.pos, null)
                     resolutionSink?.declareSymbol(catchVar.value, SymbolKind.LOCAL, isMutable = false, pos = catchVar.pos)
-                    withCatchSlot(unwrapBytecodeDeep(parseBlock()), catchVar.value)
+                    withCatchSlot(unwrapBytecodeDeep(parseBlockWithPredeclared(listOf(catchVar.value to false))), catchVar.value)
                 } finally {
                     resolutionSink?.exitScope(cc.currentPos())
                 }
@@ -2585,7 +2586,10 @@ class Compiler(
                 val block = try {
                     resolutionSink?.enterScope(ScopeKind.BLOCK, itToken.pos, null)
                     resolutionSink?.declareSymbol(itToken.value, SymbolKind.LOCAL, isMutable = false, pos = itToken.pos)
-                    withCatchSlot(unwrapBytecodeDeep(parseBlock(true)), itToken.value)
+                    withCatchSlot(
+                        unwrapBytecodeDeep(parseBlockWithPredeclared(listOf(itToken.value to false), skipLeadingBrace = true)),
+                        itToken.value
+                    )
                 } finally {
                     resolutionSink?.exitScope(cc.currentPos())
                 }
@@ -3765,6 +3769,13 @@ class Compiler(
     }
 
     private suspend fun parseBlock(skipLeadingBrace: Boolean = false): Statement {
+        return parseBlockWithPredeclared(emptyList(), skipLeadingBrace)
+    }
+
+    private suspend fun parseBlockWithPredeclared(
+        predeclared: List<Pair<String, Boolean>>,
+        skipLeadingBrace: Boolean = false
+    ): Statement {
         val startPos = cc.currentPos()
         if (!skipLeadingBrace) {
             val t = cc.next()
@@ -3773,6 +3784,9 @@ class Compiler(
         }
         resolutionSink?.enterScope(ScopeKind.BLOCK, startPos, null)
         val blockSlotPlan = SlotPlan(mutableMapOf(), 0, nextScopeId++)
+        for ((name, isMutable) in predeclared) {
+            declareSlotNameIn(blockSlotPlan, name, isMutable, isDelegated = false)
+        }
         slotPlanStack.add(blockSlotPlan)
         val capturePlan = CapturePlan(blockSlotPlan)
         capturePlanStack.add(capturePlan)
