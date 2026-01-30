@@ -4586,7 +4586,7 @@ class ScriptTest {
     }
 
 
-    @Ignore("incremental enable")
+    @Ignore("incremental enable: destructuring assignments not implemented in bytecode compiler")
     @Test
     fun testDestructuringAssignment() = runTest {
         eval(
@@ -4668,7 +4668,6 @@ class ScriptTest {
         assertContains(x.message!!, "throw \"success\"")
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testClassAndFunAutoNamedArgs() = runTest {
         // Shorthand for named arguments: name: is equivalent to name: name.
@@ -4722,7 +4721,7 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
+    @Ignore("incremental enable: expression-body methods not resolved yet")
     @Test
     fun testFunMiniDeclaration() = runTest {
         eval(
@@ -4738,7 +4737,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testUserClassExceptions() = runTest {
         eval(
@@ -4760,7 +4758,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testTodo() = runTest {
         eval(
@@ -4774,7 +4771,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testOptOnNullAssignment() = runTest {
         eval(
