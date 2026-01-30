@@ -175,6 +175,9 @@ class BytecodeCompiler(
         return when (ref) {
             is ConstRef -> compileConst(ref.constValue)
             is LocalSlotRef -> {
+                if (ref.name == "__PACKAGE__") {
+                    return compileNameLookup(ref.name)
+                }
                 if (!allowLocalSlots) return null
                 if (ref.isDelegated) return null
                 if (ref.name.isEmpty()) return null
@@ -201,6 +204,9 @@ class BytecodeCompiler(
                 CompiledValue(mapped, resolved)
             }
             is LocalVarRef -> {
+                if (ref.name == "__PACKAGE__") {
+                    return compileNameLookup(ref.name)
+                }
                 if (allowLocalSlots) {
                     if (!forceScopeSlots) {
                     scopeSlotIndexByName[ref.name]?.let { slot ->
@@ -2775,18 +2781,34 @@ class BytecodeCompiler(
         val loopLabel = builder.label()
         val continueLabel = builder.label()
         val endLabel = builder.label()
+        val useLoopScope = stmt.loopSlotPlan.isNotEmpty()
+        val breakLabel = if (useLoopScope) builder.label() else endLabel
+        val planId = if (useLoopScope) {
+            builder.addConst(BytecodeConst.SlotPlan(stmt.loopSlotPlan, emptyList()))
+        } else {
+            -1
+        }
         builder.mark(loopLabel)
+        if (useLoopScope) {
+            builder.emit(Opcode.PUSH_SCOPE, planId)
+            resetAddrCache()
+        }
         loopStack.addLast(
             LoopContext(
                 stmt.label,
-                endLabel,
+                breakLabel,
                 continueLabel,
                 breakFlagSlot,
                 if (wantResult) resultSlot else null,
                 hasIterator = false
             )
         )
-        val bodyValue = compileStatementValueOrFallback(stmt.body, wantResult) ?: return null
+        val bodyTarget = if (stmt.body is BytecodeStatement) stmt.body.original else stmt.body
+        val bodyValue = if (useLoopScope && bodyTarget is BlockStatement) {
+            emitInlineBlock(bodyTarget, wantResult)
+        } else {
+            compileStatementValueOrFallback(stmt.body, wantResult)
+        } ?: return null
         loopStack.removeLast()
         if (wantResult) {
             val bodyObj = ensureObjSlot(bodyValue)
@@ -2795,10 +2817,20 @@ class BytecodeCompiler(
         builder.mark(continueLabel)
         val condition = compileCondition(stmt.condition, stmt.pos) ?: return null
         if (condition.type != SlotType.BOOL) return null
+        if (useLoopScope) {
+            builder.emit(Opcode.POP_SCOPE)
+            resetAddrCache()
+        }
         builder.emit(
             Opcode.JMP_IF_TRUE,
             listOf(CmdBuilder.Operand.IntVal(condition.slot), CmdBuilder.Operand.LabelRef(loopLabel))
         )
+        if (useLoopScope) {
+            builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
+            builder.mark(breakLabel)
+            builder.emit(Opcode.POP_SCOPE)
+            resetAddrCache()
+        }
 
         builder.mark(endLabel)
         if (stmt.elseStatement != null) {

@@ -2008,7 +2008,6 @@ class ScriptTest {
 
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testMethodCallLastBlockWithEllipsis() = runTest {
         eval(
@@ -2027,7 +2026,6 @@ class ScriptTest {
 
     }
 
-    @Ignore("incremental enable")
     @Test
     fun nationalCharsTest() = runTest {
         eval(
@@ -2051,7 +2049,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun doWhileSimpleTest() = runTest {
         eval(
@@ -2066,7 +2063,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testFailDoWhileSample1() = runTest {
         eval(
@@ -2081,7 +2077,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testForContinue() = runTest {
         eval(

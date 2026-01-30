@@ -223,6 +223,11 @@ class Compiler(
     }
 
     private fun resolveIdentifierRef(name: String, pos: Pos): ObjRef {
+        if (name == "__PACKAGE__") {
+            resolutionSink?.reference(name, pos)
+            val value = ObjString(packageName ?: "unknown").asReadonly
+            return ConstRef(value)
+        }
         if (name == "this") {
             resolutionSink?.reference(name, pos)
             return LocalVarRef(name, pos)
@@ -3176,10 +3181,13 @@ class Compiler(
         val label = getLabel()?.also { cc.labels += it }
         val loopSlotPlan = SlotPlan(mutableMapOf(), 0, nextScopeId++)
         slotPlanStack.add(loopSlotPlan)
+        var conditionSlotPlan: SlotPlan = loopSlotPlan
         val (canBreak, parsedBody) = try {
             cc.parseLoop {
                 if (cc.current().type == Token.Type.LBRACE) {
-                    parseLoopBlock()
+                    val (blockStmt, blockPlan) = parseLoopBlockWithPlan()
+                    conditionSlotPlan = blockPlan
+                    blockStmt
                 } else {
                     parseStatement() ?: throw ScriptError(cc.currentPos(), "Bad do-while statement: expected body statement")
                 }
@@ -3196,7 +3204,7 @@ class Compiler(
             throw ScriptError(tWhile.pos, "Expected 'while' after do body")
 
         ensureLparen()
-        slotPlanStack.add(loopSlotPlan)
+        slotPlanStack.add(conditionSlotPlan)
         val condition = try {
             parseExpression() ?: throw ScriptError(cc.currentPos(), "Expected condition after 'while'")
         } finally {
@@ -3212,7 +3220,7 @@ class Compiler(
             cc.previous()
             null
         }
-        val loopPlanSnapshot = slotPlanIndices(loopSlotPlan)
+        val loopPlanSnapshot = slotPlanIndices(conditionSlotPlan)
         return DoWhileStatement(body, condition, elseStatement, label, loopPlanSnapshot, body.pos)
     }
 
@@ -3817,6 +3825,35 @@ class Compiler(
             miniSink?.onBlock(MiniBlock(range))
             resolutionSink?.exitScope(t1.pos)
         }
+    }
+
+    private suspend fun parseLoopBlockWithPlan(): Pair<Statement, SlotPlan> {
+        val startPos = cc.currentPos()
+        val t = cc.next()
+        if (t.type != Token.Type.LBRACE)
+            throw ScriptError(t.pos, "Expected block body start: {")
+        resolutionSink?.enterScope(ScopeKind.BLOCK, startPos, null)
+        val blockSlotPlan = SlotPlan(mutableMapOf(), 0, nextScopeId++)
+        slotPlanStack.add(blockSlotPlan)
+        val capturePlan = CapturePlan(blockSlotPlan)
+        capturePlanStack.add(capturePlan)
+        val block = try {
+            parseScript()
+        } finally {
+            capturePlanStack.removeLast()
+            slotPlanStack.removeLast()
+        }
+        val planSnapshot = slotPlanIndices(blockSlotPlan)
+        val stmt = BlockStatement(block, planSnapshot, capturePlan.captures.toList(), startPos)
+        val wrapped = wrapBytecode(stmt)
+        val t1 = cc.next()
+        if (t1.type != Token.Type.RBRACE)
+            throw ScriptError(t1.pos, "unbalanced braces: expected block body end: }")
+        val range = MiniRange(startPos, t1.pos)
+        lastParsedBlockRange = range
+        miniSink?.onBlock(MiniBlock(range))
+        resolutionSink?.exitScope(t1.pos)
+        return wrapped to blockSlotPlan
     }
 
     private suspend fun parseVarDeclaration(

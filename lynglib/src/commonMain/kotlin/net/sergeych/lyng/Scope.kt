@@ -347,6 +347,13 @@ open class Scope(
 
     open operator fun get(name: String): ObjRecord? {
         if (name == "this") return thisObj.asReadonly
+        if (name == "__PACKAGE__") {
+            var s: Scope? = this
+            while (s != null) {
+                if (s is ModuleScope) return s.packageNameObj
+                s = s.parent
+            }
+        }
 
         // 1. Prefer direct locals/bindings declared in this frame
         tryGetLocalRecord(this, name, currentClassCtx)?.let { return it }
