@@ -244,7 +244,6 @@ class ScriptTest {
 
     }
 
-    @Ignore("incremental enable")
     @Test
     fun parseNumbersTest() {
         fun check(expected: String, type: Token.Type, row: Int, col: Int, src: String, offset: Int = 0) {
@@ -287,7 +286,6 @@ class ScriptTest {
 
     }
 
-    @Ignore("incremental enable")
     @Test
     fun parseRangeTest() {
         var tt = parseLyng("5 .. 4".toSource())
@@ -303,7 +301,6 @@ class ScriptTest {
         assertEquals(Token.Type.INT, tt[2].type)
     }
 
-    @Ignore("incremental enable")
     @Test
     fun parseInTest() {
         var tt = parseLyng("5 in 4".toSource())
@@ -319,7 +316,6 @@ class ScriptTest {
         assertEquals(Token.Type.INT, tt[2].type)
     }
 
-    @Ignore("incremental enable")
     @Test
     fun parserLabelsTest() {
         val src = "label@ break@label".toSource()
