@@ -1186,7 +1186,6 @@ class ScriptTest {
 
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testListLiteralSpread() = runTest {
         eval(
@@ -1213,7 +1212,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testArrayCompare() = runTest {
         eval(
@@ -1228,7 +1226,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun forLoop1() = runTest {
         eval(
@@ -1256,7 +1253,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun forLoop2() = runTest {
         println(
@@ -1276,7 +1272,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testIntClosedRangeInclusive() = runTest {
         eval(
@@ -1311,7 +1306,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testIntClosedRangeExclusive() = runTest {
         eval(
@@ -1348,7 +1342,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testIntClosedRangeInExclusive() = runTest {
         eval(
@@ -1359,7 +1352,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testOpenStartRanges() = runTest {
         eval(
@@ -1385,7 +1377,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testOpenEndRanges() = runTest {
         eval(
@@ -1398,7 +1389,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testOpenEndRanges2() = runTest {
         eval(
