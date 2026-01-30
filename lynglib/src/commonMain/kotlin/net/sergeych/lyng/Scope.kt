@@ -143,6 +143,10 @@ open class Scope(
         return null
     }
 
+    internal fun resolveCaptureRecord(name: String): ObjRecord? {
+        return chainLookupIgnoreClosure(name, followClosure = true, caller = currentClassCtx)
+    }
+
     /**
      * Perform base Scope.get semantics for this frame without delegating into parent.get
      * virtual dispatch. This checks:
@@ -697,9 +701,10 @@ open class Scope(
         eval(code.toSource())
 
     suspend fun eval(source: Source): Obj {
-        return Compiler.compile(
+        return Compiler.compileWithResolution(
             source,
-            currentImportProvider
+            currentImportProvider,
+            seedScope = this
         ).execute(this)
     }
 

@@ -22,22 +22,20 @@ data class CmdFunction(
     val addrCount: Int,
     val returnLabels: Set<String>,
     val scopeSlotCount: Int,
-    val scopeSlotDepths: IntArray,
     val scopeSlotIndices: IntArray,
     val scopeSlotNames: Array<String?>,
+    val scopeSlotIsModule: BooleanArray,
     val localSlotNames: Array<String?>,
     val localSlotMutables: BooleanArray,
-    val localSlotDepths: IntArray,
     val constants: List<BytecodeConst>,
     val fallbackStatements: List<net.sergeych.lyng.Statement>,
     val cmds: Array<Cmd>,
 ) {
     init {
-        require(scopeSlotDepths.size == scopeSlotCount) { "scopeSlotDepths size mismatch" }
         require(scopeSlotIndices.size == scopeSlotCount) { "scopeSlotIndices size mismatch" }
         require(scopeSlotNames.size == scopeSlotCount) { "scopeSlotNames size mismatch" }
+        require(scopeSlotIsModule.size == scopeSlotCount) { "scopeSlotIsModule size mismatch" }
         require(localSlotNames.size == localSlotMutables.size) { "localSlot metadata size mismatch" }
-        require(localSlotNames.size == localSlotDepths.size) { "localSlot depth metadata size mismatch" }
         require(localSlotNames.size <= localCount) { "localSlotNames exceed localCount" }
         require(addrCount >= 0) { "addrCount must be non-negative" }
     }

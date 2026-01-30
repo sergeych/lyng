@@ -328,11 +328,13 @@ class Compiler(
         val useBytecodeStatements: Boolean = true,
         val strictSlotRefs: Boolean = false,
         val allowUnresolvedRefs: Boolean = false,
+        val seedScope: Scope? = null,
     )
 
     // Optional sink for mini-AST streaming (null by default, zero overhead when not used)
     private val miniSink: MiniAstSink? = settings.miniAstSink
     private val resolutionSink: ResolutionSink? = settings.resolutionSink
+    private val seedScope: Scope? = settings.seedScope
     private var resolutionScriptDepth = 0
     private val resolutionPredeclared = mutableSetOf<String>()
 
@@ -451,6 +453,7 @@ class Compiler(
         val atTopLevel = resolutionSink != null && resolutionScriptDepth == 0
         if (atTopLevel) {
             resolutionSink?.enterScope(ScopeKind.MODULE, start, null)
+            seedScope?.let { seedResolutionFromScope(it, start) }
             seedResolutionFromScope(importManager.rootScope, start)
         }
         resolutionScriptDepth++
@@ -459,6 +462,7 @@ class Compiler(
         if (needsSlotPlan) {
             slotPlanStack.add(SlotPlan(mutableMapOf(), 0, nextScopeId++))
             declareSlotNameIn(slotPlanStack.last(), "__PACKAGE__", isMutable = false, isDelegated = false)
+            seedScope?.let { seedSlotPlanFromScope(it) }
             seedSlotPlanFromScope(importManager.rootScope)
             predeclareTopLevelSymbols()
         }
@@ -637,6 +641,8 @@ class Compiler(
 
     private fun captureLocalRef(name: String, slotLoc: SlotLocation, pos: Pos): LocalSlotRef? {
         if (capturePlanStack.isEmpty() || slotLoc.depth == 0) return null
+        val moduleId = moduleSlotPlan()?.id
+        if (moduleId != null && slotLoc.scopeId == moduleId) return null
         recordCaptureSlot(name, slotLoc)
         val plan = capturePlanStack.lastOrNull() ?: return null
         val entry = plan.slotPlan.slots[name] ?: return null
@@ -4547,7 +4553,8 @@ class Compiler(
             resolutionSink: ResolutionSink? = null,
             useBytecodeStatements: Boolean = true,
             strictSlotRefs: Boolean = false,
-            allowUnresolvedRefs: Boolean = false
+            allowUnresolvedRefs: Boolean = false,
+            seedScope: Scope? = null
         ): Script {
             return Compiler(
                 CompilerContext(parseLyng(source)),
@@ -4557,7 +4564,8 @@ class Compiler(
                     resolutionSink = resolutionSink,
                     useBytecodeStatements = useBytecodeStatements,
                     strictSlotRefs = strictSlotRefs,
-                    allowUnresolvedRefs = allowUnresolvedRefs
+                    allowUnresolvedRefs = allowUnresolvedRefs,
+                    seedScope = seedScope
                 )
             ).parseScript()
         }

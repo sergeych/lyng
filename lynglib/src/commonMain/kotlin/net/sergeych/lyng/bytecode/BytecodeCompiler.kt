@@ -43,6 +43,7 @@ class BytecodeCompiler(
     private var scopeSlotCount = 0
     private var scopeSlotIndices = IntArray(0)
     private var scopeSlotNames = emptyArray<String?>()
+    private var scopeSlotIsModule = BooleanArray(0)
     private val scopeSlotMap = LinkedHashMap<ScopeSlotKey, Int>()
     private val scopeSlotNameMap = LinkedHashMap<ScopeSlotKey, String>()
     private val scopeSlotIndexByName = LinkedHashMap<String, Int>()
@@ -94,6 +95,7 @@ class BytecodeCompiler(
                     returnLabels = returnLabels,
                     scopeSlotIndices,
                     scopeSlotNames,
+                    scopeSlotIsModule,
                     localSlotNames,
                     localSlotMutables
                 )
@@ -112,6 +114,7 @@ class BytecodeCompiler(
             returnLabels = returnLabels,
             scopeSlotIndices,
             scopeSlotNames,
+            scopeSlotIsModule,
             localSlotNames,
             localSlotMutables
         )
@@ -132,6 +135,7 @@ class BytecodeCompiler(
             returnLabels = returnLabels,
             scopeSlotIndices,
             scopeSlotNames,
+            scopeSlotIsModule,
             localSlotNames,
             localSlotMutables
         )
@@ -149,6 +153,7 @@ class BytecodeCompiler(
             returnLabels = returnLabels,
             scopeSlotIndices,
             scopeSlotNames,
+            scopeSlotIsModule,
             localSlotNames,
             localSlotMutables
         )
@@ -173,7 +178,7 @@ class BytecodeCompiler(
                 if (!allowLocalSlots) return null
                 if (ref.isDelegated) return null
                 if (ref.name.isEmpty()) return null
-                if (ref.captureOwnerScopeId == null) {
+                if (ref.captureOwnerScopeId == null && refScopeId(ref) == 0) {
                     val byName = scopeSlotIndexByName[ref.name]
                     if (byName != null) {
                         val resolved = slotTypes[byName] ?: SlotType.UNKNOWN
@@ -1906,6 +1911,7 @@ class BytecodeCompiler(
             returnLabels = returnLabels,
             scopeSlotIndices,
             scopeSlotNames,
+            scopeSlotIsModule,
             localSlotNames,
             localSlotMutables
         )
@@ -1922,6 +1928,7 @@ class BytecodeCompiler(
             returnLabels = returnLabels,
             scopeSlotIndices,
             scopeSlotNames,
+            scopeSlotIsModule,
             localSlotNames,
             localSlotMutables
         )
@@ -1939,6 +1946,7 @@ class BytecodeCompiler(
             returnLabels = returnLabels,
             scopeSlotIndices,
             scopeSlotNames,
+            scopeSlotIsModule,
             localSlotNames,
             localSlotMutables
         )
@@ -1956,6 +1964,7 @@ class BytecodeCompiler(
             returnLabels = returnLabels,
             scopeSlotIndices,
             scopeSlotNames,
+            scopeSlotIsModule,
             localSlotNames,
             localSlotMutables
         )
@@ -1972,6 +1981,7 @@ class BytecodeCompiler(
             returnLabels = returnLabels,
             scopeSlotIndices,
             scopeSlotNames,
+            scopeSlotIsModule,
             localSlotNames,
             localSlotMutables
         )
@@ -1988,6 +1998,7 @@ class BytecodeCompiler(
             returnLabels = returnLabels,
             scopeSlotIndices,
             scopeSlotNames,
+            scopeSlotIsModule,
             localSlotNames,
             localSlotMutables
         )
@@ -3034,10 +3045,12 @@ class BytecodeCompiler(
         scopeSlotCount = scopeSlotMap.size
         scopeSlotIndices = IntArray(scopeSlotCount)
         scopeSlotNames = arrayOfNulls(scopeSlotCount)
+        scopeSlotIsModule = BooleanArray(scopeSlotCount)
         for ((key, index) in scopeSlotMap) {
             val name = scopeSlotNameMap[key]
             scopeSlotIndices[index] = key.slot
             scopeSlotNames[index] = name
+            scopeSlotIsModule[index] = key.scopeId == 0
         }
         if (allowLocalSlots && localSlotInfoMap.isNotEmpty()) {
             val names = ArrayList<String?>(localSlotInfoMap.size)

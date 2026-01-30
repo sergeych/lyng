@@ -893,11 +893,9 @@ class ScriptTest {
         }
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testWhileBlockIsolation3() = runTest {
-        eval(
-            """
+        val code = """
                 var outer = 7
                 var sum = 0
                 var cnt1 = 0
@@ -916,7 +914,7 @@ class ScriptTest {
                 }
                 println("sum "+sum)
             """.trimIndent()
-        )
+        eval(code)
     }
 
     @Ignore("bytecode fallback in labeled break")
@@ -969,7 +967,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testIncr() = runTest {
         val c = Scope()
@@ -982,7 +979,6 @@ class ScriptTest {
         assertEquals(12, c.eval("x").toInt())
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testDecr() = runTest {
         val c = Scope()
@@ -994,7 +990,6 @@ class ScriptTest {
         assertEquals(5, c.eval("x").toInt())
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testDecrIncr() = runTest {
         val c = Scope()
@@ -1009,7 +1004,6 @@ class ScriptTest {
         assertEquals(7, c.eval("x + 0").toInt())
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testDecrIncr2() = runTest {
         val c = Scope()
@@ -1028,7 +1022,6 @@ class ScriptTest {
                 .toInt())
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testDecrIncr3() = runTest {
         val c = Scope()
@@ -1041,7 +1034,6 @@ class ScriptTest {
         assertEquals(11, c.eval("x").toInt())
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testIncrAndDecr() = runTest {
         val c = Scope()
@@ -1077,7 +1069,6 @@ class ScriptTest {
         eval(src)
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testAssign1() = runTest {
         assertEquals(10, eval("var x = 5; x=10; x").toInt())
@@ -1093,7 +1084,6 @@ class ScriptTest {
         assertEquals(10, ctx.eval("b").toInt())
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testAssign2() = runTest {
         val ctx = Scope()
@@ -1112,7 +1102,6 @@ class ScriptTest {
         assertEquals(2, ctx.eval("x %= 5").toInt())
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testVals() = runTest {
         val cxt = Scope()
@@ -1163,7 +1152,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testListLiteral() = runTest {
         eval(
@@ -1214,7 +1202,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testListSize() = runTest {
         eval(

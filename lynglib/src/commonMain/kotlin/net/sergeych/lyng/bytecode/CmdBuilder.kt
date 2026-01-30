@@ -61,20 +61,20 @@ class CmdBuilder {
         localCount: Int,
         addrCount: Int = 0,
         returnLabels: Set<String> = emptySet(),
-        scopeSlotDepths: IntArray = IntArray(0),
         scopeSlotIndices: IntArray = IntArray(0),
         scopeSlotNames: Array<String?> = emptyArray(),
+        scopeSlotIsModule: BooleanArray = BooleanArray(0),
         localSlotNames: Array<String?> = emptyArray(),
-        localSlotMutables: BooleanArray = BooleanArray(0),
-        localSlotDepths: IntArray = IntArray(0)
+        localSlotMutables: BooleanArray = BooleanArray(0)
     ): CmdFunction {
-        val scopeSlotCount = scopeSlotDepths.size
-        require(scopeSlotIndices.size == scopeSlotCount) { "scope slot mapping size mismatch" }
+        val scopeSlotCount = scopeSlotIndices.size
         require(scopeSlotNames.isEmpty() || scopeSlotNames.size == scopeSlotCount) {
             "scope slot name mapping size mismatch"
         }
+        require(scopeSlotIsModule.isEmpty() || scopeSlotIsModule.size == scopeSlotCount) {
+            "scope slot module mapping size mismatch"
+        }
         require(localSlotNames.size == localSlotMutables.size) { "local slot metadata size mismatch" }
-        require(localSlotNames.size == localSlotDepths.size) { "local slot depth metadata size mismatch" }
         val labelIps = mutableMapOf<Label, Int>()
         for ((label, idx) in labelPositions) {
             labelIps[label] = idx
@@ -103,12 +103,11 @@ class CmdBuilder {
             addrCount = addrCount,
             returnLabels = returnLabels,
             scopeSlotCount = scopeSlotCount,
-            scopeSlotDepths = scopeSlotDepths,
             scopeSlotIndices = scopeSlotIndices,
             scopeSlotNames = if (scopeSlotNames.isEmpty()) Array(scopeSlotCount) { null } else scopeSlotNames,
+            scopeSlotIsModule = if (scopeSlotIsModule.isEmpty()) BooleanArray(scopeSlotCount) else scopeSlotIsModule,
             localSlotNames = localSlotNames,
             localSlotMutables = localSlotMutables,
-            localSlotDepths = localSlotDepths,
             constants = constPool.toList(),
             fallbackStatements = fallbackStatements.toList(),
             cmds = cmds.toTypedArray()

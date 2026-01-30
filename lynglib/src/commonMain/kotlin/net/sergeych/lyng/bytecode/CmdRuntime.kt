@@ -1498,6 +1498,7 @@ class CmdFrame(
 
     var ip: Int = 0
     var scope: Scope = scope0
+    private val moduleScope: Scope = scope0
     val methodCallSites: MutableMap<Int, MethodCallSite> = CmdCallSiteCache.methodCallSites(fn)
 
     internal val scopeStack = ArrayDeque<Scope>()
@@ -1522,6 +1523,15 @@ class CmdFrame(
 
     fun pushScope(plan: Map<String, Int>, captures: List<String>) {
         val parentScope = scope
+        val captureRecords = if (captures.isNotEmpty()) {
+            captures.map { name ->
+                val rec = parentScope.resolveCaptureRecord(name)
+                    ?: parentScope.raiseSymbolNotFound("symbol $name not found")
+                name to rec
+            }
+        } else {
+            emptyList()
+        }
         if (captures.isNotEmpty() && fn.localSlotNames.isNotEmpty()) {
             syncFrameToScope()
         }
@@ -1539,10 +1549,8 @@ class CmdFrame(
                 scope.applySlotPlan(plan)
             }
         }
-        if (captures.isNotEmpty()) {
-            for (name in captures) {
-                val rec = parentScope.resolveCaptureRecord(name)
-                    ?: parentScope.raiseSymbolNotFound("symbol ${name} not found")
+        if (captureRecords.isNotEmpty()) {
+            for ((name, rec) in captureRecords) {
                 scope.updateSlotFor(name, rec)
             }
         }
@@ -1630,7 +1638,7 @@ class CmdFrame(
 
     fun setObj(slot: Int, value: Obj) {
         if (slot < fn.scopeSlotCount) {
-            val target = scope
+            val target = scopeTarget(slot)
             val index = ensureScopeSlot(target, slot)
             target.setSlotValue(index, value)
         } else {
@@ -1657,7 +1665,7 @@ class CmdFrame(
 
     fun setInt(slot: Int, value: Long) {
         if (slot < fn.scopeSlotCount) {
-            val target = scope
+            val target = scopeTarget(slot)
             val index = ensureScopeSlot(target, slot)
             target.setSlotValue(index, ObjInt.of(value))
         } else {
@@ -1686,7 +1694,7 @@ class CmdFrame(
 
     fun setReal(slot: Int, value: Double) {
         if (slot < fn.scopeSlotCount) {
-            val target = scope
+            val target = scopeTarget(slot)
             val index = ensureScopeSlot(target, slot)
             target.setSlotValue(index, ObjReal.of(value))
         } else {
@@ -1713,7 +1721,7 @@ class CmdFrame(
 
     fun setBool(slot: Int, value: Boolean) {
         if (slot < fn.scopeSlotCount) {
-            val target = scope
+            val target = scopeTarget(slot)
             val index = ensureScopeSlot(target, slot)
             target.setSlotValue(index, if (value) ObjTrue else ObjFalse)
         } else {
@@ -1726,7 +1734,7 @@ class CmdFrame(
     }
 
     fun resolveScopeSlotAddr(scopeSlot: Int, addrSlot: Int) {
-        val target = scope
+        val target = scopeTarget(scopeSlot)
         val index = ensureScopeSlot(target, scopeSlot)
         addrScopes[addrSlot] = target
         addrIndices[addrSlot] = index
@@ -1918,6 +1926,14 @@ class CmdFrame(
         return scope
     }
 
+    private fun scopeTarget(slot: Int): Scope {
+        return if (slot < fn.scopeSlotCount && fn.scopeSlotIsModule.getOrNull(slot) == true) {
+            moduleScope
+        } else {
+            scope
+        }
+    }
+
     private fun localSlotToObj(localIndex: Int): Obj {
         return when (frame.getSlotTypeCode(localIndex)) {
             SlotType.INT.code -> ObjInt.of(frame.getInt(localIndex))
@@ -1929,7 +1945,7 @@ class CmdFrame(
     }
 
     private fun getScopeSlotValue(slot: Int): Obj {
-        val target = scope
+        val target = scopeTarget(slot)
         val index = ensureScopeSlot(target, slot)
         val record = target.getSlotRecord(index)
         if (record.value !== ObjUnset) return record.value
