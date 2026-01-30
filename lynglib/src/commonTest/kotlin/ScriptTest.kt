@@ -5023,7 +5023,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testContrcuctorMagicIdBug() = runTest() {
         eval(
@@ -5044,7 +5043,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testLambdaLocals() = runTest() {
         eval(
@@ -5060,7 +5058,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testTypedArgsWithInitializers() = runTest {
         eval(
@@ -5077,7 +5074,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testArgsPriorityWithSplash() = runTest {
         eval(
