@@ -3520,7 +3520,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun enumTest() = runTest {
         eval(
@@ -3542,7 +3541,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun enumSerializationTest() = runTest {
         eval(
@@ -3587,7 +3585,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testJoinToString() = runTest {
         eval(
@@ -3599,7 +3596,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testElvisAndThrow() = runTest {
         eval(
