@@ -652,7 +652,6 @@ class ScriptTest {
 
     }
 
-    @Ignore("incremental enable")
     @Test
     fun whileAssignTest() = runTest {
         eval(
@@ -665,7 +664,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun whileTest() = runTest {
         assertEquals(
@@ -720,7 +718,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testAssignArgumentsNoEllipsis() = runTest {
         // equal args, no ellipsis, no defaults, ok
@@ -762,7 +759,7 @@ class ScriptTest {
         assertEquals(ObjInt(5), c["c"]?.value)
     }
 
-    @Ignore("incremental enable")
+    @Ignore("Scope.eval should seed compile-time symbols from current scope")
     @Test
     fun testAssignArgumentsEndEllipsis() = runTest {
         // equal args,
@@ -864,7 +861,6 @@ class ScriptTest {
         }
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testWhileBlockIsolation1() = runTest {
         eval(
@@ -881,7 +877,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testWhileBlockIsolation2() = runTest {
         assertFails {
@@ -924,7 +919,7 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
+    @Ignore("bytecode fallback in labeled break")
     @Test
     fun whileNonLocalBreakTest() = runTest {
         assertEquals(

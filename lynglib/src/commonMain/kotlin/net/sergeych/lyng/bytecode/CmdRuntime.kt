@@ -298,7 +298,7 @@ class CmdStoreBoolAddr(internal val src: Int, internal val addrSlot: Int) : Cmd(
 
 class CmdIntToReal(internal val src: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setReal(dst, frame.getInt(src).toDouble())
+        frame.setReal(dst, frame.getReal(src))
         return
     }
 }
@@ -319,7 +319,7 @@ class CmdBoolToInt(internal val src: Int, internal val dst: Int) : Cmd() {
 
 class CmdIntToBool(internal val src: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setBool(dst, frame.getInt(src) != 0L)
+        frame.setBool(dst, frame.getBool(src))
         return
     }
 }
@@ -1039,7 +1039,7 @@ class CmdPushScope(internal val planId: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         val planConst = frame.fn.constants[planId] as? BytecodeConst.SlotPlan
             ?: error("PUSH_SCOPE expects SlotPlan at $planId")
-        frame.pushScope(planConst.plan)
+        frame.pushScope(planConst.plan, planConst.captures)
         return
     }
 }
@@ -1504,6 +1504,7 @@ class CmdFrame(
     internal val scopeVirtualStack = ArrayDeque<Boolean>()
     internal val slotPlanStack = ArrayDeque<Map<String, Int?>>()
     internal val slotPlanScopeStack = ArrayDeque<Boolean>()
+    private val captureStack = ArrayDeque<List<String>>()
     private var scopeDepth = 0
     private var virtualDepth = 0
     private val iterStack = ArrayDeque<Obj>()
@@ -1519,7 +1520,11 @@ class CmdFrame(
         }
     }
 
-    fun pushScope(plan: Map<String, Int>) {
+    fun pushScope(plan: Map<String, Int>, captures: List<String>) {
+        val parentScope = scope
+        if (captures.isNotEmpty() && fn.localSlotNames.isNotEmpty()) {
+            syncFrameToScope()
+        }
         if (scope.skipScopeCreation) {
             val snapshot = scope.applySlotPlanWithSnapshot(plan)
             slotPlanStack.addLast(snapshot)
@@ -1534,6 +1539,14 @@ class CmdFrame(
                 scope.applySlotPlan(plan)
             }
         }
+        if (captures.isNotEmpty()) {
+            for (name in captures) {
+                val rec = parentScope.resolveCaptureRecord(name)
+                    ?: parentScope.raiseSymbolNotFound("symbol ${name} not found")
+                scope.updateSlotFor(name, rec)
+            }
+        }
+        captureStack.addLast(captures)
         scopeDepth += 1
     }
 
@@ -1548,7 +1561,11 @@ class CmdFrame(
         }
         scope = scopeStack.removeLastOrNull()
             ?: error("Scope stack underflow in POP_SCOPE")
+        val captures = captureStack.removeLastOrNull() ?: emptyList()
         scopeDepth -= 1
+        if (captures.isNotEmpty() && fn.localSlotNames.isNotEmpty()) {
+            syncScopeToFrame()
+        }
     }
 
     fun pushIterator(iter: Obj) {
@@ -1613,7 +1630,7 @@ class CmdFrame(
 
     fun setObj(slot: Int, value: Obj) {
         if (slot < fn.scopeSlotCount) {
-            val target = resolveScope(scope, fn.scopeSlotDepths[slot])
+            val target = scope
             val index = ensureScopeSlot(target, slot)
             target.setSlotValue(index, value)
         } else {
@@ -1625,7 +1642,14 @@ class CmdFrame(
         return if (slot < fn.scopeSlotCount) {
             getScopeSlotValue(slot).toLong()
         } else {
-            frame.getInt(slot - fn.scopeSlotCount)
+            val local = slot - fn.scopeSlotCount
+            when (frame.getSlotTypeCode(local)) {
+                SlotType.INT.code -> frame.getInt(local)
+                SlotType.REAL.code -> frame.getReal(local).toLong()
+                SlotType.BOOL.code -> if (frame.getBool(local)) 1L else 0L
+                SlotType.OBJ.code -> frame.getObj(local).toLong()
+                else -> 0L
+            }
         }
     }
 
@@ -1633,7 +1657,7 @@ class CmdFrame(
 
     fun setInt(slot: Int, value: Long) {
         if (slot < fn.scopeSlotCount) {
-            val target = resolveScope(scope, fn.scopeSlotDepths[slot])
+            val target = scope
             val index = ensureScopeSlot(target, slot)
             target.setSlotValue(index, ObjInt.of(value))
         } else {
@@ -1649,13 +1673,20 @@ class CmdFrame(
         return if (slot < fn.scopeSlotCount) {
             getScopeSlotValue(slot).toDouble()
         } else {
-            frame.getReal(slot - fn.scopeSlotCount)
+            val local = slot - fn.scopeSlotCount
+            when (frame.getSlotTypeCode(local)) {
+                SlotType.REAL.code -> frame.getReal(local)
+                SlotType.INT.code -> frame.getInt(local).toDouble()
+                SlotType.BOOL.code -> if (frame.getBool(local)) 1.0 else 0.0
+                SlotType.OBJ.code -> frame.getObj(local).toDouble()
+                else -> 0.0
+            }
         }
     }
 
     fun setReal(slot: Int, value: Double) {
         if (slot < fn.scopeSlotCount) {
-            val target = resolveScope(scope, fn.scopeSlotDepths[slot])
+            val target = scope
             val index = ensureScopeSlot(target, slot)
             target.setSlotValue(index, ObjReal.of(value))
         } else {
@@ -1667,7 +1698,14 @@ class CmdFrame(
         return if (slot < fn.scopeSlotCount) {
             getScopeSlotValue(slot).toBool()
         } else {
-            frame.getBool(slot - fn.scopeSlotCount)
+            val local = slot - fn.scopeSlotCount
+            when (frame.getSlotTypeCode(local)) {
+                SlotType.BOOL.code -> frame.getBool(local)
+                SlotType.INT.code -> frame.getInt(local) != 0L
+                SlotType.REAL.code -> frame.getReal(local) != 0.0
+                SlotType.OBJ.code -> frame.getObj(local).toBool()
+                else -> false
+            }
         }
     }
 
@@ -1675,7 +1713,7 @@ class CmdFrame(
 
     fun setBool(slot: Int, value: Boolean) {
         if (slot < fn.scopeSlotCount) {
-            val target = resolveScope(scope, fn.scopeSlotDepths[slot])
+            val target = scope
             val index = ensureScopeSlot(target, slot)
             target.setSlotValue(index, if (value) ObjTrue else ObjFalse)
         } else {
@@ -1688,7 +1726,7 @@ class CmdFrame(
     }
 
     fun resolveScopeSlotAddr(scopeSlot: Int, addrSlot: Int) {
-        val target = resolveScope(scope, fn.scopeSlotDepths[scopeSlot])
+        val target = scope
         val index = ensureScopeSlot(target, scopeSlot)
         addrScopes[addrSlot] = target
         addrIndices[addrSlot] = index
@@ -1877,10 +1915,7 @@ class CmdFrame(
     }
 
     private fun resolveLocalScope(localIndex: Int): Scope? {
-        val depth = fn.localSlotDepths.getOrNull(localIndex) ?: return scope
-        val relativeDepth = scopeDepth - depth
-        if (relativeDepth < 0) return null
-        return if (relativeDepth == 0) scope else resolveScope(scope, relativeDepth)
+        return scope
     }
 
     private fun localSlotToObj(localIndex: Int): Obj {
@@ -1894,7 +1929,7 @@ class CmdFrame(
     }
 
     private fun getScopeSlotValue(slot: Int): Obj {
-        val target = resolveScope(scope, fn.scopeSlotDepths[slot])
+        val target = scope
         val index = ensureScopeSlot(target, slot)
         val record = target.getSlotRecord(index)
         if (record.value !== ObjUnset) return record.value
@@ -1933,8 +1968,10 @@ class CmdFrame(
             if (existing != null) return existing
         }
         val index = fn.scopeSlotIndices[slot]
-        if (index < target.slotCount) return index
-        if (name == null) return index
+        if (name == null) {
+            if (index < target.slotCount) return index
+            return index
+        }
         target.applySlotPlan(mapOf(name to index))
         val existing = target.getLocalRecordDirect(name)
         if (existing != null) {
@@ -1948,18 +1985,5 @@ class CmdFrame(
         return index
     }
 
-    private fun resolveScope(start: Scope, depth: Int): Scope {
-        if (depth == 0) return start
-        var effectiveDepth = depth
-        if (virtualDepth > 0) {
-            if (effectiveDepth <= virtualDepth) return start
-            effectiveDepth -= virtualDepth
-        }
-        val next = when (start) {
-            is net.sergeych.lyng.ClosureScope -> start.closureScope
-            else -> start.parent
-        }
-        return next?.let { resolveScope(it, effectiveDepth - 1) }
-            ?: error("Scope depth $depth is out of range")
-    }
+    // Scope depth resolution is no longer used; all scope slots are resolved against the current frame.
 }
