@@ -458,7 +458,6 @@ class ScriptTest {
         assertEquals(ObjNull, scope.eval("null"))
     }
 
-    @Ignore("incremental enable")
     @Test
     fun arithmeticOperatorsTest() = runTest {
         assertEquals(2, eval("5/2").toInt())
@@ -478,7 +477,6 @@ class ScriptTest {
         assertEquals(3.0, eval("round(5.1/2)").toDouble())
     }
 
-    @Ignore("incremental enable")
     @Test
     fun arithmetics() = runTest {
         // integer
@@ -500,7 +498,6 @@ class ScriptTest {
         assertEquals(2.5, eval("5.0 / 2.0").toDouble())
     }
 
-    @Ignore("incremental enable")
     @Test
     fun arithmeticParenthesisTest() = runTest {
         assertEquals(17, eval("2.0 + 3 * 5").toInt())
@@ -509,7 +506,6 @@ class ScriptTest {
         assertEquals(24, eval("(2 + 3) * 5 -1").toInt())
     }
 
-    @Ignore("incremental enable")
     @Test
     fun stringOpTest() = runTest {
         assertEquals("foobar", eval(""" "foo" + "bar" """).toString())
