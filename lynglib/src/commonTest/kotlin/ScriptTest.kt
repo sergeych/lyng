@@ -56,14 +56,12 @@ import kotlin.test.Ignore
  *
  */
 class ScriptTest {
-    @Ignore("incremental enable")
     @Test
     fun testVersion() {
         println("--------------------------------------------")
         println("version = ${LyngVersion}")
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testClosureSeesCallerLocalsInLaunch() = runTest {
         val scope = Script.newScope()
@@ -82,7 +80,6 @@ class ScriptTest {
         assertEquals(1L, (res as ObjInt).value)
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testClosureResolvesGlobalsInLaunch() = runTest {
         val scope = Script.newScope()
@@ -229,7 +226,6 @@ class ScriptTest {
         assertEquals(1, ti.cancelCount)
     }
 
-    @Ignore("incremental enable")
     @Test
     fun parseNewlines() {
         fun check(expected: String, type: Token.Type, row: Int, col: Int, src: String, offset: Int = 0) {
