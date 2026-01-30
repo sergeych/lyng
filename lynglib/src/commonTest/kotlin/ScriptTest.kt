@@ -3608,7 +3608,7 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
+    @Ignore("incremental enable: run helper not resolved in new compiler")
     @Test
     fun testElvisAndThrow2() = runTest {
         eval(
@@ -3621,7 +3621,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testElvisAndRunThrow() = runTest {
         eval(
@@ -3690,7 +3689,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testOverridenListToString() = runTest {
         eval(
@@ -4555,7 +4553,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testCustomToStringBug() = runTest {
         eval(
@@ -4938,7 +4935,7 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
+    @Ignore("incremental enable: run helper not resolved in new compiler")
     @Test
     fun realWorldCaptureProblem() = runTest {
         eval(
@@ -4965,7 +4962,7 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
+    @Ignore("incremental enable: lazy delegate not resolved in new compiler")
     @Test
     fun testLazyLocals() = runTest() {
         eval(
@@ -4983,7 +4980,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testGetterLocals() = runTest() {
         eval(

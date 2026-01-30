@@ -343,6 +343,9 @@ class Script(
                 this.trace(args.getOrNull(0)?.toString() ?: "")
                 ObjVoid
             }
+            addFn("run") {
+                requireOnlyArg<Statement>().execute(this)
+            }
 
             addVoidFn("delay") {
                 val a = args.firstAndOnly()
