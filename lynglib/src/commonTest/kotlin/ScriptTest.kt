@@ -3865,7 +3865,7 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
+    @Ignore("incremental enable: extension resolution for toList in chained call")
     @Test
     fun binarySearchTest2() = runTest {
         eval(
@@ -3909,7 +3909,6 @@ class ScriptTest {
         }
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testRegex1() = runTest {
         eval(
@@ -3926,7 +3925,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun extensionsMustBeLocalPerScope() = runTest {
         val scope1 = Script.newScope()
@@ -3952,7 +3950,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testThrowReportsSource() = runTest {
         try {
@@ -3970,7 +3967,6 @@ class ScriptTest {
         }
     }
 
-    @Ignore("incremental enable")
     @Test
     fun testRangeIsIterable() = runTest {
         eval(
