@@ -67,24 +67,40 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
                 for (i in params.indices) {
                     val a = params[i]
                     val value = arguments.list[i]
-                    scope.addItem(a.name, (a.accessType ?: defaultAccessType).isMutable,
+                    val recordType = if (declaringClass != null && a.accessType != null) {
+                        ObjRecord.Type.ConstructorField
+                    } else {
+                        ObjRecord.Type.Argument
+                    }
+                    scope.addItem(
+                        a.name,
+                        (a.accessType ?: defaultAccessType).isMutable,
                         value.byValueCopy(),
                         a.visibility ?: defaultVisibility,
-                        recordType = ObjRecord.Type.Argument,
+                        recordType = recordType,
                         declaringClass = declaringClass,
-                        isTransient = a.isTransient)
+                        isTransient = a.isTransient
+                    )
                 }
                 return
             }
         }
 
         fun assign(a: Item, value: Obj) {
-            scope.addItem(a.name, (a.accessType ?: defaultAccessType).isMutable,
+            val recordType = if (declaringClass != null && a.accessType != null) {
+                ObjRecord.Type.ConstructorField
+            } else {
+                ObjRecord.Type.Argument
+            }
+            scope.addItem(
+                a.name,
+                (a.accessType ?: defaultAccessType).isMutable,
                 value.byValueCopy(),
                 a.visibility ?: defaultVisibility,
-                recordType = ObjRecord.Type.Argument,
+                recordType = recordType,
                 declaringClass = declaringClass,
-                isTransient = a.isTransient)
+                isTransient = a.isTransient
+            )
         }
 
         // Prepare positional args and parameter count, handle tail-block binding

@@ -725,7 +725,8 @@ open class Obj {
                 (thisObj as? ObjInstance)?.let {
                     body.callOn(ApplyScope(this, it.instanceScope))
                 } ?: run {
-                    body.callOn(this)
+                    val appliedScope = createChildScope(newThisObj = thisObj)
+                    body.callOn(ApplyScope(this, appliedScope))
                 }
                 thisObj
             }

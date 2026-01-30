@@ -391,7 +391,7 @@ class Compiler(
             return LocalVarRef(name, pos)
         }
         resolutionSink?.reference(name, pos)
-        if (allowUnresolvedRefs) {
+        if (allowUnresolvedRefs || (name.isNotEmpty() && name[0].isUpperCase())) {
             return LocalVarRef(name, pos)
         }
         throw ScriptError(pos, "unresolved name: $name")
@@ -1741,6 +1741,11 @@ class Compiler(
 
                         else -> null
                     }
+                    val effectiveAccess = if (isClassDeclaration && access == null) {
+                        AccessType.Var
+                    } else {
+                        access
+                    }
 
                     // type information (semantic + mini syntax)
                     val (typeInfo, miniType) = parseTypeDeclarationWithMini()
@@ -1757,7 +1762,7 @@ class Compiler(
                         t.pos,
                         isEllipsis,
                         defaultValue,
-                        access,
+                        effectiveAccess,
                         visibility,
                         isTransient
                     )

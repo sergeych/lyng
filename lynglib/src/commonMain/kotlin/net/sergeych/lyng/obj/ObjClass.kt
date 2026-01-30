@@ -118,28 +118,34 @@ open class ObjClass(
 
     /**
      * Map of public member names to their effective storage keys in instanceScope.objects.
-     * This is pre-calculated to avoid MRO traversal and string concatenation during common access.
+     * Cached and invalidated by layoutVersion to reflect newly added members.
      */
-    val publicMemberResolution: Map<String, String> by lazy {
-        val res = mutableMapOf<String, String>()
-        // Traverse MRO in REVERSED order so that child classes override parent classes in the map.
-        for (cls in mro.reversed()) {
-            if (cls.className == "Obj") continue
-            for ((name, rec) in cls.members) {
-                if (rec.visibility == Visibility.Public) {
-                    val key = if (rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.ConstructorField || rec.type == ObjRecord.Type.Delegated) cls.mangledName(name) else name
-                    res[name] = key
+    private var publicMemberResolutionVersion: Int = -1
+    private var publicMemberResolutionCache: Map<String, String> = emptyMap()
+    val publicMemberResolution: Map<String, String>
+        get() {
+            if (publicMemberResolutionVersion == layoutVersion) return publicMemberResolutionCache
+            val res = mutableMapOf<String, String>()
+            // Traverse MRO in REVERSED order so that child classes override parent classes in the map.
+            for (cls in mro.reversed()) {
+                if (cls.className == "Obj") continue
+                for ((name, rec) in cls.members) {
+                    if (rec.visibility == Visibility.Public) {
+                        val key = if (rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.ConstructorField || rec.type == ObjRecord.Type.Delegated) cls.mangledName(name) else name
+                        res[name] = key
+                    }
+                }
+                cls.classScope?.objects?.forEach { (name, rec) ->
+                    if (rec.visibility == Visibility.Public && (rec.value is Statement || rec.type == ObjRecord.Type.Delegated)) {
+                        val key = if (rec.type == ObjRecord.Type.Delegated) cls.mangledName(name) else name
+                        res[name] = key
+                    }
                 }
             }
-            cls.classScope?.objects?.forEach { (name, rec) ->
-                if (rec.visibility == Visibility.Public && (rec.value is Statement || rec.type == ObjRecord.Type.Delegated)) {
-                    val key = if (rec.type == ObjRecord.Type.Delegated) cls.mangledName(name) else name
-                    res[name] = key
-                }
-            }
+            publicMemberResolutionCache = res
+            publicMemberResolutionVersion = layoutVersion
+            return res
         }
-        res
-    }
 
     val classNameObj by lazy { ObjString(className) }
 

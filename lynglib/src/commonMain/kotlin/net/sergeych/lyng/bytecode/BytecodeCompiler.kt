@@ -190,6 +190,7 @@ class BytecodeCompiler(
     private fun compileRef(ref: ObjRef): CompiledValue? {
         return when (ref) {
             is ConstRef -> compileConst(ref.constValue)
+            is IncDecRef -> compileIncDec(ref, true)
             is LocalSlotRef -> {
                 if (ref.name == "__PACKAGE__") {
                     return compileNameLookup(ref.name)
@@ -1623,6 +1624,83 @@ class BytecodeCompiler(
             }
                 else -> null
             }
+        }
+
+        val thisFieldTarget = ref.target as? ThisFieldSlotRef
+        if (thisFieldTarget != null) {
+            val nameId = builder.addConst(BytecodeConst.StringVal(thisFieldTarget.name))
+            if (nameId > 0xFFFF) return null
+            val current = allocSlot()
+            builder.emit(Opcode.GET_THIS_MEMBER, nameId, current)
+            updateSlotType(current, SlotType.OBJ)
+            val oneSlot = allocSlot()
+            val oneId = builder.addConst(BytecodeConst.ObjRef(ObjInt.One))
+            builder.emit(Opcode.CONST_OBJ, oneId, oneSlot)
+            updateSlotType(oneSlot, SlotType.OBJ)
+            val result = allocSlot()
+            val op = if (ref.isIncrement) Opcode.ADD_OBJ else Opcode.SUB_OBJ
+            if (wantResult && ref.isPost) {
+                val old = allocSlot()
+                builder.emit(Opcode.MOVE_OBJ, current, old)
+                builder.emit(op, current, oneSlot, result)
+                builder.emit(Opcode.SET_THIS_MEMBER, nameId, result)
+                return CompiledValue(old, SlotType.OBJ)
+            }
+            builder.emit(op, current, oneSlot, result)
+            builder.emit(Opcode.SET_THIS_MEMBER, nameId, result)
+            return CompiledValue(result, SlotType.OBJ)
+        }
+
+        val implicitTarget = ref.target as? ImplicitThisMemberRef
+        if (implicitTarget != null) {
+            val nameId = builder.addConst(BytecodeConst.StringVal(implicitTarget.name))
+            if (nameId > 0xFFFF) return null
+            val current = allocSlot()
+            builder.emit(Opcode.GET_THIS_MEMBER, nameId, current)
+            updateSlotType(current, SlotType.OBJ)
+            val oneSlot = allocSlot()
+            val oneId = builder.addConst(BytecodeConst.ObjRef(ObjInt.One))
+            builder.emit(Opcode.CONST_OBJ, oneId, oneSlot)
+            updateSlotType(oneSlot, SlotType.OBJ)
+            val result = allocSlot()
+            val op = if (ref.isIncrement) Opcode.ADD_OBJ else Opcode.SUB_OBJ
+            if (wantResult && ref.isPost) {
+                val old = allocSlot()
+                builder.emit(Opcode.MOVE_OBJ, current, old)
+                builder.emit(op, current, oneSlot, result)
+                builder.emit(Opcode.SET_THIS_MEMBER, nameId, result)
+                return CompiledValue(old, SlotType.OBJ)
+            }
+            builder.emit(op, current, oneSlot, result)
+            builder.emit(Opcode.SET_THIS_MEMBER, nameId, result)
+            return CompiledValue(result, SlotType.OBJ)
+        }
+
+        val fieldTarget = ref.target as? FieldRef
+        if (fieldTarget != null) {
+            if (fieldTarget.isOptional) return null
+            val receiver = compileRefWithFallback(fieldTarget.target, null, Pos.builtIn) ?: return null
+            val nameId = builder.addConst(BytecodeConst.StringVal(fieldTarget.name))
+            if (nameId > 0xFFFF) return null
+            val current = allocSlot()
+            builder.emit(Opcode.GET_FIELD, receiver.slot, nameId, current)
+            updateSlotType(current, SlotType.OBJ)
+            val oneSlot = allocSlot()
+            val oneId = builder.addConst(BytecodeConst.ObjRef(ObjInt.One))
+            builder.emit(Opcode.CONST_OBJ, oneId, oneSlot)
+            updateSlotType(oneSlot, SlotType.OBJ)
+            val result = allocSlot()
+            val op = if (ref.isIncrement) Opcode.ADD_OBJ else Opcode.SUB_OBJ
+            if (wantResult && ref.isPost) {
+                val old = allocSlot()
+                builder.emit(Opcode.MOVE_OBJ, current, old)
+                builder.emit(op, current, oneSlot, result)
+                builder.emit(Opcode.SET_FIELD, receiver.slot, nameId, result)
+                return CompiledValue(old, SlotType.OBJ)
+            }
+            builder.emit(op, current, oneSlot, result)
+            builder.emit(Opcode.SET_FIELD, receiver.slot, nameId, result)
+            return CompiledValue(result, SlotType.OBJ)
         }
 
         val indexTarget = ref.target as? IndexRef ?: return null
