@@ -817,11 +817,25 @@ open class Scope(
         val trimmed = qualifiedName.trim()
         if (trimmed.isEmpty()) raiseSymbolNotFound("empty identifier")
         val parts = trimmed.split('.')
-        var ref: ObjRef = LocalVarRef(parts[0], Pos.builtIn)
-        for (i in 1 until parts.size) {
-            ref = FieldRef(ref, parts[i], false)
+        val first = parts[0]
+        val ref: ObjRef = if (first == "this") {
+            ConstRef(thisObj.asReadonly)
+        } else {
+            var s: Scope? = this
+            var slot: Int? = null
+            var guard = 0
+            while (s != null && guard++ < 1024 && slot == null) {
+                slot = s.getSlotIndexOf(first)
+                s = s.parent
+            }
+            if (slot == null) raiseSymbolNotFound(first)
+            LocalSlotRef(first, slot, 0, isMutable = false, isDelegated = false, Pos.builtIn, strict = true)
         }
-        return ref.evalValue(this)
+        var ref0: ObjRef = ref
+        for (i in 1 until parts.size) {
+            ref0 = FieldRef(ref0, parts[i], false)
+        }
+        return ref0.evalValue(this)
     }
 
     suspend fun resolve(rec: ObjRecord, name: String): Obj {

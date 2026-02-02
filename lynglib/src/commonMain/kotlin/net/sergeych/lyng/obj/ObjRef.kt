@@ -1832,98 +1832,47 @@ class LocalVarRef(val name: String, private val atPos: Pos) : ObjRef {
 
     override suspend fun get(scope: Scope): ObjRecord {
         scope.pos = atPos
-        if (!PerfFlags.LOCAL_SLOT_PIC) {
-            scope.getSlotIndexOf(name)?.let {
-                if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.localVarPicHit++
-                return scope.getSlotRecord(it)
-            }
-            if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.localVarPicMiss++
-            // 2) Fallback to current-scope object or field on `this`
-            scope[name]?.let { return it }
-            try {
-                return scope.thisObj.readField(scope, name)
-            } catch (e: ExecutionError) {
-                // Map missing symbol during unqualified lookup to SymbolNotFound (SymbolNotDefinedException)
-                // to preserve legacy behavior expected by tests.
-                if ((e.message ?: "").contains("no such field: $name")) scope.raiseSymbolNotFound(name)
-                throw e
-            }
-        }
+        if (name == "this") return scope.thisObj.asReadonly
         val hit = (cachedFrameId == scope.frameId && cachedSlot >= 0 && cachedSlot < scope.slotCount())
         val slot = if (hit) cachedSlot else resolveSlot(scope)
         if (slot >= 0) {
             val rec = scope.getSlotRecord(slot)
-            if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)) {
-                // Not visible via slot, fallback to other lookups
-            } else {
-                if (PerfFlags.PIC_DEBUG_COUNTERS) {
-                    if (hit) PerfStats.localVarPicHit++ else PerfStats.localVarPicMiss++
-                }
-                return rec
+            if (rec.declaringClass != null &&
+                !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)
+            ) {
+                scope.raiseError(ObjIllegalAccessException(scope, "private field access"))
             }
+            if (PerfFlags.PIC_DEBUG_COUNTERS) {
+                if (hit) PerfStats.localVarPicHit++ else PerfStats.localVarPicMiss++
+            }
+            return rec
         }
-        if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.localVarPicMiss++
-        // 2) Fallback name in scope or field on `this`
-        scope[name]?.let { return it }
-        try {
-            return scope.thisObj.readField(scope, name)
-        } catch (e: ExecutionError) {
-            if ((e.message ?: "").contains("no such field: $name")) scope.raiseSymbolNotFound(name)
-            throw e
-        }
+        scope.raiseSymbolNotFound(name)
     }
 
     override suspend fun evalValue(scope: Scope): Obj {
         scope.pos = atPos
+        if (name == "this") return scope.thisObj
         scope.getSlotIndexOf(name)?.let { return scope.resolve(scope.getSlotRecord(it), name) }
-        // fallback to current-scope object or field on `this`
-        scope[name]?.let { return scope.resolve(it, name) }
-        return try {
-            scope.thisObj.readField(scope, name).value
-        } catch (e: ExecutionError) {
-            if ((e.message ?: "").contains("no such field: $name")) scope.raiseSymbolNotFound(name)
-            throw e
-        }
+        scope.raiseSymbolNotFound(name)
     }
 
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
         scope.pos = atPos
-        if (!PerfFlags.LOCAL_SLOT_PIC) {
-            scope.getSlotIndexOf(name)?.let {
-                val rec = scope.getSlotRecord(it)
-                scope.assign(rec, name, newValue)
-                return
-            }
-            scope.chainLookupIgnoreClosure(name, followClosure = true, caller = scope.currentClassCtx)?.let { rec ->
-                scope.assign(rec, name, newValue)
-                return
-            }
-            scope[name]?.let { stored ->
-                scope.assign(stored, name, newValue)
-                return
-            }
-            // Fallback: write to field on `this`
-            scope.thisObj.writeField(scope, name, newValue)
-            return
-        }
-        val slot = if (cachedFrameId == scope.frameId && cachedSlot >= 0 && cachedSlot < scope.slotCount()) cachedSlot else resolveSlot(scope)
+        if (name == "this") scope.raiseError("can't assign to this")
+        val slot =
+            if (cachedFrameId == scope.frameId && cachedSlot >= 0 && cachedSlot < scope.slotCount()) cachedSlot
+            else resolveSlot(scope)
         if (slot >= 0) {
             val rec = scope.getSlotRecord(slot)
-            if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)) {
+            if (rec.declaringClass == null ||
+                canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)
+            ) {
                 scope.assign(rec, name, newValue)
                 return
             }
         }
-        scope.chainLookupIgnoreClosure(name, followClosure = true, caller = scope.currentClassCtx)?.let { rec ->
-            scope.assign(rec, name, newValue)
-            return
-        }
-        scope[name]?.let { stored ->
-            scope.assign(stored, name, newValue)
-            return
-        }
-        scope.thisObj.writeField(scope, name, newValue)
-        return
+        scope.raiseSymbolNotFound(name)
     }
 }
 
@@ -2029,34 +1978,7 @@ class FastLocalVarRef(
                 return rec
             }
         }
-        // Try per-frame local binding maps in the ancestry first (locals declared in frames)
-        run {
-            var s: Scope? = scope
-            var guard = 0
-            while (s != null) {
-                s.localBindings[name]?.let { return it }
-                val next = s.parent
-                if (next === s) break
-                s = next
-                if (++guard > 4096) break
-            }
-        }
-        // Try to find a direct local binding in the current ancestry (without invoking name resolution that may prefer fields)
-        run {
-            var s: Scope? = scope
-            var guard = 0
-            while (s != null) {
-                s.objects[name]?.let { return it }
-                val next = s.parent
-                if (next === s) break
-                s = next
-                if (++guard > 4096) break
-            }
-        }
-        // Fallback to standard name lookup (locals or closure chain) if the slot owner changed across suspension
-        scope[name]?.let { return it }
-        // As a last resort, treat as field on `this`
-        return scope.thisObj.readField(scope, name)
+        scope.raiseSymbolNotFound(name)
     }
 
     override suspend fun evalValue(scope: Scope): Obj {
@@ -2070,39 +1992,7 @@ class FastLocalVarRef(
                 return scope.resolve(rec, name)
             }
         }
-        // Try per-frame local binding maps in the ancestry first
-        run {
-            var s: Scope? = scope
-            var guard = 0
-            while (s != null) {
-                s.localBindings[name]?.let { 
-                    return s.resolve(it, name) 
-                }
-                val next = s.parent
-                if (next === s) break
-                s = next
-                if (++guard > 4096) break
-            }
-        }
-        // Try to find a direct local binding in the current ancestry first
-        run {
-            var s: Scope? = scope
-            var guard = 0
-            while (s != null) {
-                s.objects[name]?.let { 
-                    return s.resolve(it, name) 
-                }
-                val next = s.parent
-                if (next === s) break
-                s = next
-                if (++guard > 4096) break
-            }
-        }
-        // Fallback to standard name lookup (locals or closure chain)
-        scope[name]?.let { 
-            return scope.resolve(it, name) 
-        }
-        return scope.thisObj.readField(scope, name).value
+        scope.raiseSymbolNotFound(name)
     }
 
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
@@ -2117,29 +2007,7 @@ class FastLocalVarRef(
                 return
             }
         }
-        // Try per-frame local binding maps in the ancestry first
-        run {
-            var s: Scope? = scope
-            var guard = 0
-            while (s != null) {
-                val rec = s.localBindings[name]
-                if (rec != null) {
-                    s.assign(rec, name, newValue)
-                    return
-                }
-                val next = s.parent
-                if (next === s) break
-                s = next
-                if (++guard > 4096) break
-            }
-        }
-        // Fallback to standard name lookup
-        scope[name]?.let { stored ->
-            scope.assign(stored, name, newValue)
-            return
-        }
-        scope.thisObj.writeField(scope, name, newValue)
-        return
+        scope.raiseSymbolNotFound(name)
     }
 }
 
@@ -2287,18 +2155,22 @@ class LocalSlotRef(
     override fun forEachVariable(block: (String) -> Unit) {
         block(name)
     }
-
-    private val fallbackRef = LocalVarRef(name, atPos)
-    private fun resolveOwner(scope: Scope): Scope {
-        return scope
+    private fun resolveOwner(scope: Scope): Scope? {
+        var s: Scope? = scope
+        var guard = 0
+        while (s != null && guard++ < 1024) {
+            val idx = s.getSlotIndexOf(name)
+            if (idx != null && idx == slot) return s
+            s = s.parent
+        }
+        return null
     }
 
     override suspend fun get(scope: Scope): ObjRecord {
         scope.pos = atPos
-        val owner = resolveOwner(scope)
+        val owner = resolveOwner(scope) ?: scope.raiseError("slot owner not found for $name")
         if (slot < 0 || slot >= owner.slotCount()) {
-            if (strict) scope.raiseError("slot index out of range for $name")
-            return fallbackRef.get(scope)
+            scope.raiseError("slot index out of range for $name")
         }
         val rec = owner.getSlotRecord(slot)
         if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)) {
@@ -2309,10 +2181,9 @@ class LocalSlotRef(
 
     override suspend fun evalValue(scope: Scope): Obj {
         scope.pos = atPos
-        val owner = resolveOwner(scope)
+        val owner = resolveOwner(scope) ?: scope.raiseError("slot owner not found for $name")
         if (slot < 0 || slot >= owner.slotCount()) {
-            if (strict) scope.raiseError("slot index out of range for $name")
-            return fallbackRef.evalValue(scope)
+            scope.raiseError("slot index out of range for $name")
         }
         val rec = owner.getSlotRecord(slot)
         if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)) {
@@ -2323,11 +2194,9 @@ class LocalSlotRef(
 
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
         scope.pos = atPos
-        val owner = resolveOwner(scope)
+        val owner = resolveOwner(scope) ?: scope.raiseError("slot owner not found for $name")
         if (slot < 0 || slot >= owner.slotCount()) {
-            if (strict) scope.raiseError("slot index out of range for $name")
-            fallbackRef.setAt(pos, scope, newValue)
-            return
+            scope.raiseError("slot index out of range for $name")
         }
         val rec = owner.getSlotRecord(slot)
         if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)) {

@@ -2483,6 +2483,7 @@ class BytecodeCompiler(
     }
 
     private fun compileWhen(stmt: WhenStatement, wantResult: Boolean): CompiledValue? {
+        val subjectRef = extractFlowTypeSubject(stmt.value)
         val subjectValue = compileStatementValueOrFallback(stmt.value) ?: return null
         val subjectObj = ensureObjSlot(subjectValue)
         val resultSlot = allocSlot()
@@ -2504,11 +2505,14 @@ class BytecodeCompiler(
             }
             builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(nextCaseLabel)))
             builder.mark(caseLabel)
+            val caseOverride = flowTypeOverrideForWhenCase(subjectRef, case.conditions)
+            val caseRestore = applyFlowTypeOverride(caseOverride)
             val bodyValue = compileStatementValueOrFallback(case.block, wantResult) ?: return null
             if (wantResult) {
                 val bodyObj = ensureObjSlot(bodyValue)
                 builder.emit(Opcode.MOVE_OBJ, bodyObj.slot, resultSlot)
             }
+            restoreFlowTypeOverride(caseRestore)
             builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
             builder.mark(nextCaseLabel)
         }
@@ -3952,11 +3956,15 @@ class BytecodeCompiler(
             Opcode.JMP_IF_FALSE,
             listOf(CmdBuilder.Operand.IntVal(condition.slot), CmdBuilder.Operand.LabelRef(elseLabel))
         )
+        val thenRestore = applyFlowTypeOverride(flowTypeOverrideForIf(stmt.condition, applyForThen = true))
         compileStatementValueOrFallback(stmt.ifBody, false) ?: return null
+        restoreFlowTypeOverride(thenRestore)
         builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
         builder.mark(elseLabel)
         stmt.elseBody?.let {
+            val elseRestore = applyFlowTypeOverride(flowTypeOverrideForIf(stmt.condition, applyForThen = false))
             compileStatementValueOrFallback(it, false) ?: return null
+            restoreFlowTypeOverride(elseRestore)
         }
         builder.mark(endLabel)
         return condition
@@ -3985,13 +3993,17 @@ class BytecodeCompiler(
             Opcode.JMP_IF_FALSE,
             listOf(CmdBuilder.Operand.IntVal(condition.slot), CmdBuilder.Operand.LabelRef(elseLabel))
         )
+        val thenRestore = applyFlowTypeOverride(flowTypeOverrideForIf(stmt.condition, applyForThen = true))
         val thenValue = compileStatementValueOrFallback(stmt.ifBody) ?: return null
+        restoreFlowTypeOverride(thenRestore)
         val thenObj = ensureObjSlot(thenValue)
         builder.emit(Opcode.MOVE_OBJ, thenObj.slot, resultSlot)
         builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
         builder.mark(elseLabel)
         if (stmt.elseBody != null) {
+            val elseRestore = applyFlowTypeOverride(flowTypeOverrideForIf(stmt.condition, applyForThen = false))
             val elseValue = compileStatementValueOrFallback(stmt.elseBody) ?: return null
+            restoreFlowTypeOverride(elseRestore)
             val elseObj = ensureObjSlot(elseValue)
             builder.emit(Opcode.MOVE_OBJ, elseObj.slot, resultSlot)
         } else {
@@ -4012,6 +4024,91 @@ class BytecodeCompiler(
                     "Bytecode fallback: unsupported condition",
                     pos
                 )
+            }
+        }
+    }
+
+    private data class FlowTypeSubject(val name: String, val slot: Int?)
+    private data class FlowTypeInfo(val name: String, val slot: Int?, val cls: ObjClass)
+    private data class FlowTypeRestore(
+        val name: String,
+        val prevNameClass: ObjClass?,
+        val slot: Int?,
+        val prevSlotClass: ObjClass?,
+    )
+
+    private fun extractFlowTypeSubject(stmt: Statement): FlowTypeSubject? {
+        val target = if (stmt is BytecodeStatement) stmt.original else stmt
+        val expr = target as? ExpressionStatement ?: return null
+        return flowTypeSubjectFromRef(expr.ref)
+    }
+
+    private fun flowTypeSubjectFromRef(ref: ObjRef): FlowTypeSubject? {
+        return when (ref) {
+            is LocalSlotRef -> FlowTypeSubject(ref.name, resolveSlot(ref))
+            is LocalVarRef -> FlowTypeSubject(ref.name, resolveDirectNameSlot(ref.name)?.slot)
+            else -> null
+        }
+    }
+
+    private fun flowTypeOverrideForIf(condition: Statement, applyForThen: Boolean): FlowTypeInfo? {
+        val target = if (condition is BytecodeStatement) condition.original else condition
+        val expr = target as? ExpressionStatement ?: return null
+        val ref = expr.ref as? BinaryOpRef ?: return null
+        val op = binaryOp(ref)
+        val apply = when (op) {
+            BinOp.IS -> applyForThen
+            BinOp.NOTIS -> !applyForThen
+            else -> false
+        }
+        if (!apply) return null
+        val cls = resolveTypeRefClass(binaryRight(ref)) ?: return null
+        return flowTypeInfoForRef(binaryLeft(ref), cls)
+    }
+
+    private fun flowTypeOverrideForWhenCase(
+        subject: FlowTypeSubject?,
+        conditions: List<WhenCondition>
+    ): FlowTypeInfo? {
+        if (subject == null || conditions.size != 1) return null
+        val cond = conditions.first() as? WhenIsCondition ?: return null
+        if (cond.negated) return null
+        val expr = cond.expr as? ExpressionStatement ?: return null
+        val cls = resolveTypeRefClass(expr.ref) ?: return null
+        return FlowTypeInfo(subject.name, subject.slot, cls)
+    }
+
+    private fun flowTypeInfoForRef(ref: ObjRef, cls: ObjClass): FlowTypeInfo? {
+        return when (ref) {
+            is LocalSlotRef -> FlowTypeInfo(ref.name, resolveSlot(ref), cls)
+            is LocalVarRef -> FlowTypeInfo(ref.name, resolveDirectNameSlot(ref.name)?.slot, cls)
+            else -> null
+        }
+    }
+
+    private fun applyFlowTypeOverride(info: FlowTypeInfo?): FlowTypeRestore? {
+        if (info == null) return null
+        val prevNameClass = nameObjClass[info.name]
+        nameObjClass[info.name] = info.cls
+        val prevSlotClass = info.slot?.let { slotObjClass[it] }
+        if (info.slot != null) {
+            slotObjClass[info.slot] = info.cls
+        }
+        return FlowTypeRestore(info.name, prevNameClass, info.slot, prevSlotClass)
+    }
+
+    private fun restoreFlowTypeOverride(restore: FlowTypeRestore?) {
+        if (restore == null) return
+        if (restore.prevNameClass == null) {
+            nameObjClass.remove(restore.name)
+        } else {
+            nameObjClass[restore.name] = restore.prevNameClass
+        }
+        if (restore.slot != null) {
+            if (restore.prevSlotClass == null) {
+                slotObjClass.remove(restore.slot)
+            } else {
+                slotObjClass[restore.slot] = restore.prevSlotClass
             }
         }
     }

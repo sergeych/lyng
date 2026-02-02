@@ -529,10 +529,7 @@ class Compiler(
             return LocalVarRef(name, pos)
         }
         resolutionSink?.reference(name, pos)
-        seedScope?.chainLookupIgnoreClosure(name)?.let {
-            return LocalVarRef(name, pos)
-        }
-        if (allowUnresolvedRefs || (name.isNotEmpty() && name[0].isUpperCase())) {
+        if (allowUnresolvedRefs) {
             return LocalVarRef(name, pos)
         }
         throw ScriptError(pos, "unresolved name: $name")
@@ -556,7 +553,7 @@ class Compiler(
         val miniAstSink: MiniAstSink? = null,
         val resolutionSink: ResolutionSink? = null,
         val useBytecodeStatements: Boolean = true,
-        val strictSlotRefs: Boolean = false,
+        val strictSlotRefs: Boolean = true,
         val allowUnresolvedRefs: Boolean = false,
         val seedScope: Scope? = null,
     )
@@ -5485,7 +5482,7 @@ class Compiler(
             miniSink: MiniAstSink? = null,
             resolutionSink: ResolutionSink? = null,
             useBytecodeStatements: Boolean = true,
-            strictSlotRefs: Boolean = false,
+            strictSlotRefs: Boolean = true,
             allowUnresolvedRefs: Boolean = false,
             seedScope: Scope? = null
         ): Script {
