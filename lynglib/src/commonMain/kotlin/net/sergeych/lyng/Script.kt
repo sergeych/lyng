@@ -428,8 +428,11 @@ class Script(
             addConst("CompletableDeferred", ObjCompletableDeferred.type)
             addConst("Mutex", ObjMutex.type)
             addConst("Flow", ObjFlow.type)
+            addConst("FlowBuilder", ObjFlowBuilder.type)
 
             addConst("Regex", ObjRegex.type)
+            addConst("RegexMatch", ObjRegexMatch.type)
+            addConst("MapEntry", ObjMapEntry.type)
 
             addFn("launch") {
                 val callable = requireOnlyArg<Statement>()
@@ -443,7 +446,7 @@ class Script(
                 ObjVoid
             }
 
-            addFn("flow") {
+            addFn("flow", callSignature = CallSignature(tailBlockReceiverType = "FlowBuilder")) {
                 // important is: current context contains closure often used in call;
                 // we'll need it for the producer
                 ObjFlow(requireOnlyArg<Statement>(), this)

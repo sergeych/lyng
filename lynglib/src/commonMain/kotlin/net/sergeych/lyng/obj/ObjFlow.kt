@@ -81,8 +81,8 @@ private fun createLyngFlowInput(scope: Scope, producer: Statement): ReceiveChann
         } catch (x: ScriptFlowIsNoMoreCollected) {
             // premature flow closing, OK
         } catch (x: Exception) {
-            // Suppress stack traces in background producer to avoid noisy stderr during tests.
-            // If needed, consider routing to a logger in the future.
+            channel.close(x)
+            return@globalLaunch
         }
         channel.close()
     }
@@ -107,9 +107,7 @@ class ObjFlow(val producer: Statement, val scope: Scope) : Obj() {
             ) {
                 val objFlow = thisAs<ObjFlow>()
                 ObjFlowIterator(statement {
-                    objFlow.producer.execute(
-                        ClosureScope(this, objFlow.scope)
-                    )
+                    objFlow.producer.execute(this)
                 })
             }
         }
@@ -137,6 +135,7 @@ class ObjFlowIterator(val producer: Statement) : Obj() {
         // cold start:
         if (channel == null) channel = createLyngFlowInput(scope, producer)
         if (nextItem == null) nextItem = channel!!.receiveCatching()
+        nextItem?.exceptionOrNull()?.let { throw it }
         return ObjBool(nextItem!!.isSuccess)
     }
 

@@ -19,10 +19,10 @@ class ScopeCycleRegressionTest {
                     }
                 }
 
-                fun ll() { Whatever() }
+                fun ll(): Whatever { Whatever() }
 
                 fun callTest1() {
-                    val l = ll()
+                    val l: Whatever = ll()
                     l.something()
                     "ok"
                 }

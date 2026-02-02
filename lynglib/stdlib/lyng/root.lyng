@@ -1,5 +1,23 @@
 package lyng.stdlib
 
+// desired type: FlowBuilder.()->void (function types not yet supported in type grammar)
+extern fun flow(builder)
+
+/* Built-in exception type. */
+extern class Exception
+extern class IllegalArgumentException
+extern class NotImplementedException
+extern class Delegate
+
+// Built-in math helpers (implemented in host runtime).
+extern fun abs(x)
+extern fun ln(x)
+extern fun pow(x, y)
+extern fun sqrt(x)
+
+// Last regex match result, updated by =~ / !~.
+var $~ = null
+
 /*
     Wrap a builder into a zero-argument thunk that computes once and caches the result.
     The first call invokes builder() and stores the value; subsequent calls return the cached value.
@@ -33,8 +51,8 @@ fun Iterable.filterFlow(predicate): Flow {
     Filter this iterable and return List of elements
 */
 fun Iterable.filter(predicate) {
-    val result = []
-    for( item in this ) if( predicate(item) ) result.add(item)
+    var result: List = List()
+    for( item in this ) if( predicate(item) ) result += item
     result
 }
 
@@ -70,7 +88,7 @@ fun Iterable.drop(n) {
 
 /* Return the first element or throw if the iterable is empty. */
 val Iterable.first get() {
-    val i = iterator()
+    val i: Iterator = iterator()
     if( !i.hasNext() ) throw NoSuchElementException()
         i.next().also { i.cancelIteration() }
 }
@@ -157,7 +175,7 @@ fun Iterable.all(predicate): Bool {
 
 /* Sum all elements; returns null for empty collections. */
 fun Iterable.sum() {
-    val i = iterator()
+    val i: Iterator = iterator()
     if( i.hasNext() ) {
         var result = i.next()
         while( i.hasNext() ) result += i.next()
@@ -168,7 +186,7 @@ fun Iterable.sum() {
 
 /* Sum mapped values of elements; returns null for empty collections. */
 fun Iterable.sumOf(f) {
-    val i = iterator()
+    val i: Iterator = iterator()
     if( i.hasNext() ) {
         var result = f(i.next())
         while( i.hasNext() ) result += f(i.next())
@@ -179,7 +197,7 @@ fun Iterable.sumOf(f) {
 
 /* Minimum value of the given function applied to elements of the collection. */
 fun Iterable.minOf( lambda ) {
-    val i = iterator()
+    val i: Iterator = iterator()
     var minimum = lambda( i.next() )
     while( i.hasNext() ) {
         val x = lambda(i.next())
@@ -190,7 +208,7 @@ fun Iterable.minOf( lambda ) {
 
 /* Maximum value of the given function applied to elements of the collection. */
 fun Iterable.maxOf( lambda ) {
-    val i = iterator()
+    val i: Iterator = iterator()
     var maximum = lambda( i.next() )
     while( i.hasNext() ) {
         val x = lambda(i.next())
@@ -211,7 +229,9 @@ fun Iterable.sortedBy(predicate) {
 
 /* Return a shuffled copy of the iterable as a list. */
 fun Iterable.shuffled() {
-    toList.apply { shuffle() }
+    val list: List = toList
+    list.shuffle()
+    list
 }
 
 /*
@@ -219,9 +239,9 @@ fun Iterable.shuffled() {
     @return List
 */
 fun Iterable.flatten() {
-    val result = []
+    var result: List = List()
     forEach { i ->
-        i.forEach { result.add(it) }
+        i.forEach { result += it }
     }
     result
 }
@@ -231,12 +251,20 @@ fun Iterable.flatten() {
     invoked on each element of original collection.
 */
 fun Iterable.flatMap(transform): List {
-    map(transform).flatten()
+    val mapped: List = map(transform)
+    mapped.flatten()
 }
 
 /* Return string representation like [a,b,c]. */
 override fun List.toString() {
-    "[" + joinToString(",") + "]"
+    var first = true
+    var result = "["
+    for (item in this) {
+        if (!first) result += ","
+        result += item.toString()
+        first = false
+    }
+    result + "]"
 }
 
 /* Sort list in-place by key selector. */
@@ -259,7 +287,9 @@ fun Exception.printStackTrace() {
 /* Compile this string into a regular expression. */
 val String.re get() = Regex(this)
 
-fun TODO(message=null) = throw NotImplementedException(message ?: "not implemented")
+fun TODO(message=null) {
+    throw "not implemented"
+}
 
 /*
     Provides different access types for delegates.
@@ -313,7 +343,7 @@ class lazy(creatorParam) : Delegate {
     private var value = Unset
 
     override fun bind(name, access, thisRef) {
-        if (access != DelegateAccess.Val) throw "lazy delegate can only be used with 'val'"
+        if (access.toString() != "DelegateAccess.Val") throw "lazy delegate can only be used with 'val'"
         this
     }
 
@@ -334,6 +364,6 @@ class StackTraceEntry(
     val at by lazy { "%s:%s:%s"(sourceName,line+1,column+1) }
     /* Formatted representation: source:line:column: text. */
     override fun toString() {
-        "%s: %s"(at, sourceString.trim())
+        "%s: %s"(at, sourceString)
     }
 }

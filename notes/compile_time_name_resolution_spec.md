@@ -7,8 +7,9 @@
 - Keep metaprogramming via explicit reflective APIs only.
 
 ## Non-Goals (initial phase)
-- Dynamic by-name lookup as part of core execution path.
-- Runtime scope walking to discover names.
+- firbidden: Dynamic by-name lookup as part of core execution path.
+
+- forbidden: Runtime scope walking to discover names.
 
 ## Overview
 Compilation is split into two passes:

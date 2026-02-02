@@ -49,6 +49,7 @@ class BytecodeStatement private constructor(
             allowLocalSlots: Boolean,
             returnLabels: Set<String> = emptySet(),
             rangeLocalNames: Set<String> = emptySet(),
+            allowedScopeNames: Set<String>? = null,
         ): Statement {
             if (statement is BytecodeStatement) return statement
             val hasUnsupported = containsUnsupportedStatement(statement)
@@ -63,7 +64,8 @@ class BytecodeStatement private constructor(
             val compiler = BytecodeCompiler(
                 allowLocalSlots = safeLocals,
                 returnLabels = returnLabels,
-                rangeLocalNames = rangeLocalNames
+                rangeLocalNames = rangeLocalNames,
+                allowedScopeNames = allowedScopeNames
             )
             val compiled = compiler.compileStatement(nameHint, statement)
             val fn = compiled ?: throw BytecodeFallbackException(
@@ -76,7 +78,14 @@ class BytecodeStatement private constructor(
         private fun containsUnsupportedStatement(stmt: Statement): Boolean {
             val target = if (stmt is BytecodeStatement) stmt.original else stmt
             return when (target) {
-                is net.sergeych.lyng.ExpressionStatement -> false
+                is net.sergeych.lyng.ExpressionStatement -> {
+                    val ref = target.ref
+                    if (ref is net.sergeych.lyng.obj.StatementRef) {
+                        containsUnsupportedStatement(ref.statement)
+                    } else {
+                        false
+                    }
+                }
                 is net.sergeych.lyng.IfStatement -> {
                     containsUnsupportedStatement(target.condition) ||
                         containsUnsupportedStatement(target.ifBody) ||
@@ -100,6 +109,8 @@ class BytecodeStatement private constructor(
                 }
                 is net.sergeych.lyng.BlockStatement ->
                     target.statements().any { containsUnsupportedStatement(it) }
+                is net.sergeych.lyng.InlineBlockStatement ->
+                    target.statements().any { containsUnsupportedStatement(it) }
                 is net.sergeych.lyng.VarDeclStatement ->
                     target.initializer?.let { containsUnsupportedStatement(it) } ?: false
                 is net.sergeych.lyng.DelegatedVarDeclStatement ->
@@ -117,7 +128,7 @@ class BytecodeStatement private constructor(
                 is net.sergeych.lyng.ClassDeclStatement -> false
                 is net.sergeych.lyng.FunctionDeclStatement -> false
                 is net.sergeych.lyng.EnumDeclStatement -> false
-                is net.sergeych.lyng.TryStatement -> false
+                is net.sergeych.lyng.TryStatement -> true
                 is net.sergeych.lyng.WhenStatement -> {
                     containsUnsupportedStatement(target.value) ||
                         target.cases.any { case ->
@@ -151,7 +162,8 @@ class BytecodeStatement private constructor(
                         stmt.isTransient,
                         stmt.slotIndex,
                         stmt.scopeId,
-                        stmt.pos
+                        stmt.pos,
+                        stmt.initializerObjClass
                     )
                 }
                 is net.sergeych.lyng.DestructuringVarDeclStatement -> {

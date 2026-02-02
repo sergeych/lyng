@@ -31,11 +31,12 @@ class ParallelLocalScopeTest {
         eval(
             """
             class AtomicCounter {
-                private val m = Mutex()
+                private val m: Mutex = Mutex()
                 private var counter = 0
 
                 fun increment() {
-                    m.withLock {
+                    val mm: Mutex = m
+                    mm.withLock {
                         val a = counter
                         delay(1)
                         counter = a + 1

@@ -39,10 +39,11 @@ inline fun <reified T : Obj> Scope.addFnDoc(
     returns: TypeDoc? = null,
     tags: Map<String, List<String>> = emptyMap(),
     moduleName: String? = null,
+    callSignature: net.sergeych.lyng.CallSignature? = null,
     crossinline fn: suspend Scope.() -> T
 ) {
     // Register runtime function(s)
-    addFn(*names) { fn() }
+    addFn(*names, callSignature = callSignature) { fn() }
     // Determine module
     val mod = moduleName ?: findModuleNameOrUnknown()
     // Register docs once per name

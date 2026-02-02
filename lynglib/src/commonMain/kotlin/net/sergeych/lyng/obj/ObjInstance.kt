@@ -61,6 +61,14 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         return if (idx >= 0 && idx < methodSlots.size) methodSlots[idx] else null
     }
 
+    internal fun fieldRecordForId(fieldId: Int): ObjRecord? {
+        return if (fieldId >= 0 && fieldId < fieldSlots.size) fieldSlots[fieldId] else null
+    }
+
+    internal fun methodRecordForId(methodId: Int): ObjRecord? {
+        return if (methodId >= 0 && methodId < methodSlots.size) methodSlots[methodId] else null
+    }
+
     override suspend fun readField(scope: Scope, name: String): ObjRecord {
         val caller = scope.currentClassCtx
         

@@ -51,7 +51,8 @@ class ScriptSubsetJvmTest_Additions4 {
     @Test
     fun optionalChainingDeep_jvm_only() = runBlocking {
         val code = """
-            class A() { fun b() { null } }
+            class B() { val c = 7 }
+            class A() { fun b(): B? { null } }
             val a = A()
             val r1 = a?.b()?.c
             val r2 = (a?.b()?.c ?: 7)
@@ -64,7 +65,7 @@ class ScriptSubsetJvmTest_Additions4 {
     @Test
     fun whenExpressionBasics_jvm_only() = runBlocking {
         val code = """
-            fun f(x) {
+            fun f(x: Int) {
                 when(x) {
                     0 -> 100
                     1 -> 200
@@ -80,7 +81,7 @@ class ScriptSubsetJvmTest_Additions4 {
     @Test
     fun tryCatchFinallyWithReturn_jvm_only() = runBlocking {
         val code = """
-            fun g(x) {
+            fun g(x: Int) {
                 var t = 0
                 try {
                     if (x < 0) throw("oops")
@@ -102,7 +103,7 @@ class ScriptSubsetJvmTest_Additions4 {
     @Test
     fun pooling_edge_case_closure_and_exception_jvm_only() = runBlocking {
         val code = """
-            fun maker(base) { { base + 1 } }
+            fun maker(base: Int) { { base + 1 } }
             val c = maker(41)
             var r = 0
             try {

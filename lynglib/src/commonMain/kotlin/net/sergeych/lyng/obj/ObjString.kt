@@ -22,8 +22,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.PerfFlags
+import net.sergeych.lyng.Pos
 import net.sergeych.lyng.RegexCache
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.Statement
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
@@ -338,6 +340,36 @@ data class ObjString(val value: String) : Obj() {
                     }
                 )
             }
+            createField(
+                name = "re",
+                initialValue = ObjProperty(
+                    name = "re",
+                    getter = object : Statement() {
+                        override val pos: Pos = Pos.builtIn
+
+                        override suspend fun execute(scope: Scope): Obj {
+                            val pattern = (scope.thisObj as ObjString).value
+                            val re = if (PerfFlags.REGEX_CACHE) RegexCache.get(pattern) else pattern.toRegex()
+                            return ObjRegex(re)
+                        }
+                    },
+                    setter = null
+                ),
+                type = ObjRecord.Type.Property
+            )
+            createField(
+                name = "operatorMatch",
+                initialValue = object : Statement() {
+                    override val pos: Pos = Pos.builtIn
+
+                    override suspend fun execute(scope: Scope): Obj {
+                        val other = scope.args.firstAndOnly(pos)
+                        val targetScope = scope.parent ?: scope
+                        return (scope.thisObj as ObjString).operatorMatch(targetScope, other)
+                    }
+                },
+                type = ObjRecord.Type.Fun
+            )
         }
     }
 }

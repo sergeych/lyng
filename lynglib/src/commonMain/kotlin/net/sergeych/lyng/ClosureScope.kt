@@ -26,12 +26,25 @@ import net.sergeych.lyng.obj.ObjRecord
  * Inherits [Scope.args] and [Scope.thisObj] from [callScope] and adds lookup for symbols
  * from [closureScope] with proper precedence
  */
-class ClosureScope(val callScope: Scope, val closureScope: Scope) :
+class ClosureScope(
+    val callScope: Scope,
+    val closureScope: Scope,
+    private val preferredThisType: String? = null
+) :
     // Important: use closureScope.thisObj so unqualified members (e.g., fields) resolve to the instance
     // we captured, not to the caller's `this` (e.g., FlowBuilder).
     Scope(callScope, callScope.args, thisObj = closureScope.thisObj) {
 
     init {
+        val desired = preferredThisType?.let { typeName ->
+            callScope.thisVariants.firstOrNull { it.objClass.className == typeName }
+        }
+        val primaryThis = closureScope.thisObj
+        val merged = ArrayList<Obj>(callScope.thisVariants.size + closureScope.thisVariants.size + 1)
+        desired?.let { merged.add(it) }
+        merged.addAll(callScope.thisVariants)
+        merged.addAll(closureScope.thisVariants)
+        setThisVariants(primaryThis, merged)
         // Preserve the lexical class context of the closure by default. This ensures that lambdas
         // created inside a class method keep access to that class's private/protected members even
         // when executed from within another object's method (e.g., Mutex.withLock), which may set
@@ -72,14 +85,14 @@ class ClosureScope(val callScope: Scope, val closureScope: Scope) :
 }
 
 class ApplyScope(val callScope: Scope, val applied: Scope) :
-    Scope(callScope.parent?.parent ?: callScope.parent ?: callScope, thisObj = applied.thisObj) {
+    Scope(callScope, thisObj = applied.thisObj) {
 
     override fun get(name: String): ObjRecord? {
         return applied.get(name) ?: super.get(name)
     }
 
-    override fun applyClosure(closure: Scope): Scope {
-        return this
+    override fun applyClosure(closure: Scope, preferredThisType: String?): Scope {
+        return ClosureScope(this, closure, preferredThisType)
     }
 
 }

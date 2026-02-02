@@ -81,7 +81,7 @@ class ScriptSubsetJvmTest_Additions5 {
     fun pooled_frames_closure_this_capture_jvm_only() = runBlocking {
         val code = """
             class Box() { var x = 40; fun inc() { x = x + 1 } fun get() { x } }
-            fun make(block) { block }
+            fun make(block: () -> Int) { block }
             val b = Box()
             val f = make { b.inc(); b.get() }
             var r = 0

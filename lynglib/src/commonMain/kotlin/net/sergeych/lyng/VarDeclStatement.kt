@@ -17,8 +17,10 @@
 package net.sergeych.lyng
 
 import net.sergeych.lyng.obj.Obj
+import net.sergeych.lyng.obj.ObjClass
 import net.sergeych.lyng.obj.ObjNull
 import net.sergeych.lyng.obj.ObjRecord
+import net.sergeych.lyng.obj.ObjUnset
 
 class VarDeclStatement(
     val name: String,
@@ -29,11 +31,12 @@ class VarDeclStatement(
     val slotIndex: Int?,
     val scopeId: Int?,
     private val startPos: Pos,
+    val initializerObjClass: ObjClass? = null,
 ) : Statement() {
     override val pos: Pos = startPos
 
     override suspend fun execute(context: Scope): Obj {
-        val initValue = initializer?.execute(context)?.byValueCopy() ?: ObjNull
+        val initValue = initializer?.execute(context)?.byValueCopy() ?: ObjUnset
         context.addItem(
             name,
             isMutable,

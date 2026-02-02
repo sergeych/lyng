@@ -52,6 +52,8 @@ open class Scope(
     var currentClassCtx: net.sergeych.lyng.obj.ObjClass? = parent?.currentClassCtx
     // Unique id per scope frame for PICs; regenerated on each borrow from the pool.
     var frameId: Long = nextFrameId()
+    @PublishedApi
+    internal val thisVariants: MutableList<Obj> = mutableListOf()
 
     // Fast-path storage for local variables/arguments accessed by slot index.
     // Enabled by default for child scopes; module/class scopes can ignore it.
@@ -65,6 +67,21 @@ open class Scope(
     internal val localBindings: MutableMap<String, ObjRecord> = mutableMapOf()
 
     internal val extensions: MutableMap<ObjClass, MutableMap<String, ObjRecord>> = mutableMapOf()
+
+    init {
+        setThisVariants(thisObj, parent?.thisVariants ?: emptyList())
+    }
+
+    internal fun setThisVariants(primary: Obj, extras: List<Obj>) {
+        thisObj = primary
+        thisVariants.clear()
+        thisVariants.add(primary)
+        for (obj in extras) {
+            if (obj !== primary && !thisVariants.contains(obj)) {
+                thisVariants.add(obj)
+            }
+        }
+    }
 
     fun addExtension(cls: ObjClass, name: String, record: ObjRecord) {
         extensions.getOrPut(cls) { mutableMapOf() }[name] = record
@@ -340,11 +357,8 @@ open class Scope(
     }
 
     inline fun <reified T : Obj> thisAs(): T {
-        var s: Scope? = this
-        while (s != null) {
-            val t = s.thisObj
-            if (t is T) return t
-            s = s.parent
+        for (obj in thisVariants) {
+            if (obj is T) return obj
         }
         raiseClassCastError("Cannot cast ${thisObj.objClass.className} to ${T::class.simpleName}")
     }
@@ -406,6 +420,8 @@ open class Scope(
         get() = slots.size
 
     fun getSlotIndexOf(name: String): Int? = nameToSlot[name]
+
+    internal fun slotNameToIndexSnapshot(): Map<String, Int> = nameToSlot.toMap()
     fun allocateSlotFor(name: String, record: ObjRecord): Int {
         val idx = slots.size
         slots.add(record)
@@ -490,6 +506,7 @@ open class Scope(
         this.parent = null
         this.skipScopeCreation = false
         this.currentClassCtx = null
+        thisVariants.clear()
         objects.clear()
         slots.clear()
         nameToSlot.clear()
@@ -520,7 +537,7 @@ open class Scope(
         this.parent = parent
         this.args = args
         this.pos = pos
-        this.thisObj = thisObj
+        setThisVariants(thisObj, parent?.thisVariants ?: emptyList())
         // Pre-size local slots for upcoming parameter assignment where possible
         reserveLocalCapacity(args.list.size + 4)
     }
@@ -609,7 +626,10 @@ open class Scope(
         isAbstract: Boolean = false,
         isClosed: Boolean = false,
         isOverride: Boolean = false,
-        isTransient: Boolean = false
+        isTransient: Boolean = false,
+        callSignature: CallSignature? = null,
+        fieldId: Int? = null,
+        methodId: Int? = null
     ): ObjRecord {
         val rec = ObjRecord(
             value, isMutable, visibility, writeVisibility,
@@ -618,15 +638,19 @@ open class Scope(
             isAbstract = isAbstract,
             isClosed = isClosed,
             isOverride = isOverride,
-            isTransient = isTransient
+            isTransient = isTransient,
+            callSignature = callSignature,
+            memberName = name,
+            fieldId = fieldId,
+            methodId = methodId
         )
         objects[name] = rec
         bumpClassLayoutIfNeeded(name, value, recordType)
         if (recordType == ObjRecord.Type.Field || recordType == ObjRecord.Type.ConstructorField) {
             val inst = thisObj as? net.sergeych.lyng.obj.ObjInstance
             if (inst != null) {
-                val slot = inst.objClass.fieldSlotForKey(name)
-                if (slot != null) inst.setFieldSlotRecord(slot.slot, rec)
+                val slotId = rec.fieldId ?: inst.objClass.fieldSlotForKey(name)?.slot
+                if (slotId != null) inst.setFieldSlotRecord(slotId, rec)
             }
         }
         if (value is Statement ||
@@ -635,8 +659,8 @@ open class Scope(
             recordType == ObjRecord.Type.Property) {
             val inst = thisObj as? net.sergeych.lyng.obj.ObjInstance
             if (inst != null) {
-                val slot = inst.objClass.methodSlotForKey(name)
-                if (slot != null) inst.setMethodSlotRecord(slot.slot, rec)
+                val slotId = rec.methodId ?: inst.objClass.methodSlotForKey(name)?.slot
+                if (slotId != null) inst.setMethodSlotRecord(slotId, rec)
             }
         }
         // Index this binding within the current frame to help resolve locals across suspension
@@ -697,7 +721,7 @@ open class Scope(
         return CmdDisassembler.disassemble(bytecode)
     }
 
-    fun addFn(vararg names: String, fn: suspend Scope.() -> Obj) {
+    fun addFn(vararg names: String, callSignature: CallSignature? = null, fn: suspend Scope.() -> Obj) {
         val newFn = object : Statement() {
             override val pos: Pos = Pos.builtIn
 
@@ -708,7 +732,9 @@ open class Scope(
             addItem(
                 name,
                 false,
-                newFn
+                newFn,
+                recordType = ObjRecord.Type.Fun,
+                callSignature = callSignature
             )
         }
     }
@@ -778,7 +804,8 @@ open class Scope(
         println("--------------------")
     }
 
-    open fun applyClosure(closure: Scope): Scope = ClosureScope(this, closure)
+    open fun applyClosure(closure: Scope, preferredThisType: String? = null): Scope =
+        ClosureScope(this, closure, preferredThisType)
 
     /**
      * Resolve and evaluate a qualified identifier exactly as compiled code would.

@@ -65,7 +65,7 @@ class ScriptSubsetJvmTest_Additions {
     fun elvisAndLogicalChains_jvm_only() = runBlocking {
         val n = 10000
         val code = """
-            val maybe = null
+            val maybe: Int? = null
             var s = 0
             var i = 0
             while (i < $n) {
@@ -92,7 +92,7 @@ class ScriptSubsetJvmTest_Additions {
     fun sortedInsertWithBinarySearch_jvm_only() = runBlocking {
         val code = """
             val src = [3,1,2]
-            val result = []
+            val result: List<Int> = []
             for (x in src) {
                 val i = result.binarySearch(x)
                 result.insertAt(if (i < 0) -i-1 else i, x)
@@ -113,7 +113,7 @@ class ScriptSubsetJvmTest_Additions2 {
     fun optionalMethodCallWithElvis_jvm_only() = runBlocking {
         val code = """
             class C() { fun get() { 5 } }
-            val a = null
+            val a: C? = null
             (a?.get() ?: 7)
         """.trimIndent()
         val r = evalInt(code)

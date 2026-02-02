@@ -124,17 +124,7 @@ open class Obj {
             }
         }
 
-        // 2. Extensions in scope
-        val extension = scope.findExtension(objClass, name)
-        if (extension != null) {
-            if (extension.type == ObjRecord.Type.Property) {
-                if (args.isEmpty()) return (extension.value as ObjProperty).callGetter(scope, this, extension.declaringClass)
-            } else if (extension.type != ObjRecord.Type.Delegated) {
-                return extension.value.invoke(scope, this, args)
-            }
-        }
-
-        // 3. Root object fallback
+        // 2. Root object fallback
         for (cls in objClass.mro) {
             if (cls.className == "Obj") {
                 cls.members[name]?.let { rec ->
@@ -181,7 +171,7 @@ open class Obj {
 
     open suspend fun equals(scope: Scope, other: Obj): Boolean {
         if (other === this) return true
-        val m = objClass.getInstanceMemberOrNull("equals") ?: scope.findExtension(objClass, "equals")
+        val m = objClass.getInstanceMemberOrNull("equals")
         if (m != null) {
             return invokeInstanceMethod(scope, "equals", Arguments(other)).toBool()
         }
@@ -375,7 +365,7 @@ open class Obj {
      * to generate it as 'this = this + other', reassigning its variable
      */
     open suspend fun plusAssign(scope: Scope, other: Obj): Obj? {
-        val m = objClass.getInstanceMemberOrNull("plusAssign") ?: scope.findExtension(objClass, "plusAssign")
+        val m = objClass.getInstanceMemberOrNull("plusAssign")
         return if (m != null) {
             invokeInstanceMethod(scope, "plusAssign", Arguments(other))
         } else null
@@ -385,28 +375,28 @@ open class Obj {
      * `-=` operations, see [plusAssign]
      */
     open suspend fun minusAssign(scope: Scope, other: Obj): Obj? {
-        val m = objClass.getInstanceMemberOrNull("minusAssign") ?: scope.findExtension(objClass, "minusAssign")
+        val m = objClass.getInstanceMemberOrNull("minusAssign")
         return if (m != null) {
             invokeInstanceMethod(scope, "minusAssign", Arguments(other))
         } else null
     }
 
     open suspend fun mulAssign(scope: Scope, other: Obj): Obj? {
-        val m = objClass.getInstanceMemberOrNull("mulAssign") ?: scope.findExtension(objClass, "mulAssign")
+        val m = objClass.getInstanceMemberOrNull("mulAssign")
         return if (m != null) {
             invokeInstanceMethod(scope, "mulAssign", Arguments(other))
         } else null
     }
 
     open suspend fun divAssign(scope: Scope, other: Obj): Obj? {
-        val m = objClass.getInstanceMemberOrNull("divAssign") ?: scope.findExtension(objClass, "divAssign")
+        val m = objClass.getInstanceMemberOrNull("divAssign")
         return if (m != null) {
             invokeInstanceMethod(scope, "divAssign", Arguments(other))
         } else null
     }
 
     open suspend fun modAssign(scope: Scope, other: Obj): Obj? {
-        val m = objClass.getInstanceMemberOrNull("modAssign") ?: scope.findExtension(objClass, "modAssign")
+        val m = objClass.getInstanceMemberOrNull("modAssign")
         return if (m != null) {
             invokeInstanceMethod(scope, "modAssign", Arguments(other))
         } else null
@@ -467,16 +457,7 @@ open class Obj {
             }
         }
 
-        // 2. Extensions
-        val extension = scope.findExtension(objClass, name)
-        if (extension != null) {
-            val resolved = resolveRecord(scope, extension, name, extension.declaringClass)
-            if (resolved.type == ObjRecord.Type.Fun && resolved.value is Statement)
-                return resolved.copy(value = resolved.value.invoke(scope, this, Arguments.EMPTY, extension.declaringClass))
-            return resolved
-        }
-
-        // 3. Root fallback
+        // 2. Root fallback
         for (cls in objClass.mro) {
             if (cls.className == "Obj") {
                 cls.members[name]?.let { rec ->
@@ -558,11 +539,7 @@ open class Obj {
                 }
             }
         }
-        // 2. Extensions
-        if (field == null) {
-            field = scope.findExtension(objClass, name)
-        }
-        // 3. Root fallback
+        // 2. Root fallback
         if (field == null) {
             for (cls in objClass.mro) {
                 if (cls.className == "Obj") {

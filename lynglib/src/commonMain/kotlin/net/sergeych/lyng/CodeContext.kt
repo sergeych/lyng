@@ -19,10 +19,19 @@ package net.sergeych.lyng
 
 sealed class CodeContext {
     class Module(@Suppress("unused") val packageName: String?): CodeContext()
-    class Function(val name: String, val implicitThisMembers: Boolean = false): CodeContext()
+    class Function(
+        val name: String,
+        val implicitThisMembers: Boolean = false,
+        val implicitThisTypeName: String? = null
+    ): CodeContext()
     class ClassBody(val name: String, val isExtern: Boolean = false): CodeContext() {
         val pendingInitializations = mutableMapOf<String, Pos>()
         val declaredMembers = mutableSetOf<String>()
+        val memberOverrides = mutableMapOf<String, Boolean>()
+        val memberFieldIds = mutableMapOf<String, Int>()
+        val memberMethodIds = mutableMapOf<String, Int>()
+        var nextFieldId: Int = 0
+        var nextMethodId: Int = 0
         var slotPlanId: Int? = null
     }
 }

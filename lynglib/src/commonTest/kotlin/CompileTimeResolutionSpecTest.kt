@@ -65,7 +65,7 @@ class CompileTimeResolutionSpecTest {
         val report = dryRun(
             """
             val G = 10
-            fun f(x) = x + G
+            fun f(x=0) = x + G
             """
         )
         assertTrue(report.errors.isEmpty())
@@ -162,7 +162,7 @@ class CompileTimeResolutionSpecTest {
     fun parameterShadowingAllowed() = runTest {
         val report = dryRun(
             """
-            fun f(a) {
+            fun f(a=0) {
                 var a = a * 10
                 a
             }

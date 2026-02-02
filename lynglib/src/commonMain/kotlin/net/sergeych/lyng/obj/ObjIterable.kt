@@ -29,6 +29,12 @@ import net.sergeych.lyng.miniast.type
  */
 val ObjIterable by lazy {
     ObjClass("Iterable").apply {
+        addFn(
+            name = "iterator",
+            isAbstract = true,
+            isClosed = false,
+            code = null
+        )
 
         addPropertyDoc(
             name = "toList",

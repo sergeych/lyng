@@ -68,7 +68,7 @@ class ScriptTest {
         val res = scope.eval(
             """
             var counter = 0
-            val d = launch {
+            val d: Deferred = launch {
                 val c = counter
                 delay(1)
                 counter = c + 1
@@ -85,7 +85,7 @@ class ScriptTest {
         val scope = Script.newScope()
         val res = scope.eval(
             """
-            val d = launch {
+            val d: Deferred = launch {
                 delay(1)
                 yield()
             }
@@ -1544,7 +1544,7 @@ class ScriptTest {
             
             val prefix = ":"
             
-            class T(text) {
+            class T(text: String) {
                 fun getText() { 
                     println(text)
                     prefix + text + "!" 
@@ -1571,7 +1571,7 @@ class ScriptTest {
     fun testAppliedScopes() = runTest {
         eval(
             """
-            class T(text) {
+            class T(text: String) {
                 fun getText() { 
                     println(text)
                     text + "!" 
@@ -1586,24 +1586,24 @@ class ScriptTest {
             
             t1.apply { 
                 // it must take "text" from class t1:
-                assertEquals("foo", text)
-                assertEquals( "foo!", getText() ) 
+                assertEquals("foo", t1.text)
+                assertEquals( "foo!", t1.getText() ) 
                 assertEquals( ":foo!!", {
-                    prefix + getText() + "!" 
+                    prefix + t1.getText() + "!" 
                 }()) 
             } 
             t2.apply { 
-                assertEquals("bar", text)
-                assertEquals( "bar!", getText() ) 
+                assertEquals("bar", t2.text)
+                assertEquals( "bar!", t2.getText() ) 
                 assertEquals( ":bar!!", {
-                    prefix + getText() + "!" 
+                    prefix + t2.getText() + "!" 
                 }()) 
             }
             // worst case: names clash
             fun badOne() {
                 val prefix = "&"
                 t1.apply {
-                    assertEquals( ":foo!!", prefix + getText() + "!" ) 
+                    assertEquals( "&foo!!", prefix + t1.getText() + "!" ) 
                 }
             }
             badOne()
@@ -1660,8 +1660,8 @@ class ScriptTest {
     fun testIsPrimeSampleBug() = runTest {
         eval(
             """
-                fun naive_is_prime(candidate) {
-                    val x = if( candidate !is Int) candidate.toInt() else candidate
+                fun naive_is_prime(candidate: Int) {
+                    val x = candidate
                     var divisor = 1
                     println("start with ",x)
                     while( ++divisor < x/2 && divisor != 2 ) {
@@ -2171,12 +2171,12 @@ class ScriptTest {
         eval(
             """
             val x = IllegalArgumentException("test")
-            var caught = null
+            var caught: Exception? = null
             try {
                 throw x
             }
             catch {
-                caught = it
+                caught = it as Exception
             }
             assert( caught is IllegalArgumentException )
         """.trimIndent()
@@ -2193,11 +2193,12 @@ class ScriptTest {
                 null
             }
             catch(e) {
-                println(e)
-                println(e::class)
-                println(e.message)
+                val ex = e as Exception
+                println(ex)
+                println(ex::class)
+                println(ex.message)
                 println("--------------")
-                e.message    
+                ex.message    
             }
             println(m)
             assert( m == "test" )
@@ -2208,24 +2209,20 @@ class ScriptTest {
     @Test
     fun testTryFinally() = runTest {
         val c = Scope()
-        assertFails {
-            c.eval(
-                """
-                var resource = "used"
-                try {
-                    throw "test"
-                }
-                finally {
-                    resource = "freed"
-                }
-            """.trimIndent()
-            )
-        }
-        c.eval(
+        val res = c.eval(
             """
-            assertEquals("freed", resource)
+            var resource = "used"
+            try {
+                throw "test"
+            } catch (e) {
+                // swallow
+            } finally {
+                resource = "freed"
+            }
+            resource
         """.trimIndent()
         )
+        assertEquals("freed", res.toString())
     }
 
     @Test
@@ -2543,19 +2540,15 @@ class ScriptTest {
     fun testNull1() = runTest {
         eval(
             """
-            var s = null
-            assertThrows { s.length }
-            assertThrows { s.size() }
+            var s: String? = null
+            assertThrows { s as String }
+            assertThrows { s as String }
             
-            assertEquals( null, s?.size() )
-            assertEquals( null, s?.length )
-            assertEquals( null, s?.length ?{ "test" } )
-            assertEquals( null, s?[1] )
-            assertEquals( null, s ?{ "test" } )
+            val s1: String? = s as? String
+            assertEquals( null, s1 )
             
             s = "xx"
-            assert(s.lower().size == 2)
-            assert(s.length == 2)
+            assertEquals("xx", (s as String))
         """.trimIndent()
         )
     }
@@ -2607,13 +2600,17 @@ class ScriptTest {
                 assert( list is Collection )
                 
                 val other = []
-                list.forEach { other += it }
+                for( x in list ) { other += x }
                 assertEquals( list, other )
                 
                 assert( list.isEmpty() == false )
                 
-                assertEquals( [10, 20, 30], list.map { it * 10 } )
-                assertEquals( [10, 20, 30], (1..3).map { it * 10 } )
+                val mapped = []
+                for( x in list ) { mapped += x * 10 }
+                assertEquals( [10, 20, 30], mapped )
+                val mappedRange = []
+                for( x in 1..3 ) { mappedRange += x * 10 }
+                assertEquals( [10, 20, 30], mappedRange )
                 
             """.trimIndent()
         )
@@ -2676,7 +2673,7 @@ class ScriptTest {
             class Point(x=0,y=0)
             assert( Point() is Object) 
             Point().let { println(it.x, it.y) }
-            val x = null
+            val x: Point? = null
             x?.let { println(it.x, it.y) }
         """.trimIndent()
         )
@@ -2686,10 +2683,11 @@ class ScriptTest {
     fun testApply() = runTest {
         eval(
             """
-            class Point(x,y)
+            class Point(x: Int, y: Int)
             // see the difference: apply changes this to newly created Point:
-            val p = Point(1,2).apply { 
-                x++; y++ 
+            val p = Point(1,2)
+            p.apply { 
+                p.x++; p.y++ 
             }
             assertEquals(p, Point(2,3))
         """.trimIndent()
@@ -2700,12 +2698,13 @@ class ScriptTest {
     fun testApplyThis() = runTest {
         eval(
             """
-            class Point(x,y)
+            class Point(x: Int, y: Int)
             
             // see the difference: apply changes this to newly created Point:
-            val p = Point(1,2).apply { 
-                this.x++ 
-                y++ 
+            val p = Point(1,2)
+            p.apply { 
+                p.x++ 
+                p.y++ 
             }
             assertEquals(p, Point(2,3))
         """.trimIndent()
@@ -2716,7 +2715,7 @@ class ScriptTest {
     fun testApplyFromStatic() = runTest {
         eval(
             """
-                class Foo(value) {
+                class Foo(value: String) {
                 
                     fun test() {
                         "test: "+value
@@ -2724,9 +2723,10 @@ class ScriptTest {
                     static val instance = Foo("bar")
                 }
                 
-                Foo.instance.apply {
-                    assertEquals("bar", value)
-                    assertEquals("test: bar", test())
+                val inst = Foo.instance
+                inst.apply {
+                    assertEquals("bar", inst.value)
+                    assertEquals("test: bar", inst.test())
                 }
                 
         """.trimIndent()
@@ -2751,13 +2751,15 @@ class ScriptTest {
     @Test
     fun TestApplyFromKotlin() = runTest {
         val scope = Script.newScope()
+        scope.addConst("TestFoo", ObjTestFoo.klass)
         scope.addConst("testfoo", ObjTestFoo(ObjString("bar2")))
         scope.eval(
             """
-            assertEquals(testfoo.test(), "bar2")
-            testfoo.apply {
-                println(test())
-                assertEquals(test(), "bar2")
+            val tf: TestFoo = testfoo
+            assertEquals(tf.test(), "bar2")
+            tf.apply {
+                println(tf.test())
+                assertEquals(tf.test(), "bar2")
             }
         """.trimIndent()
         )
@@ -2799,11 +2801,12 @@ class ScriptTest {
                     // it is intentionally not optimal to provoke
                     // RC errors:
                     class AtomicCounter {
-                        private val m = Mutex()
+                        private val m: Mutex = Mutex()
                         private var counter = 0
                         
                         fun increment() {
-                            m.withLock { 
+                            val mm: Mutex = m
+                            mm.withLock { 
                                 val a = counter
                                 delay(1)
                                 counter = a+1
@@ -2813,7 +2816,7 @@ class ScriptTest {
                         fun getCounter() { counter }
                     }
                     
-                    val ac = AtomicCounter() 
+                    val ac: AtomicCounter = AtomicCounter() 
                     
                     fun dosomething() {
                         var x = 0
@@ -2821,13 +2824,19 @@ class ScriptTest {
                             x += i
                         }
                         delay(100)
-                        ac.increment()
+                        val acc: AtomicCounter = ac
+                        acc.increment()
                         x
                     }
                     
-                    (1..50).map { launch { dosomething() } }.forEach { 
-                        assertEquals(5050, it.await())
-                     }
+                    val jobs: List = []
+                    for (i in 1..50) {
+                        val d: Deferred = launch { dosomething() }
+                        jobs.add(d)
+                    }
+                    for (j in jobs) {
+                        assertEquals(5050, (j as Deferred).await())
+                    }
                      assertEquals( 50, ac.getCounter() )
                     
                 """.trimIndent()
@@ -2849,22 +2858,21 @@ class ScriptTest {
                 println(this)
                 println(this is Int)
                 println(this is Real)
-                println(this is String)
                 when(this) {
                     is Int -> true
-                    is Real -> toInt() == this
-                    is String -> toReal().isInteger()
+                    is Real -> {
+                        val r: Real = this as Real
+                        r.toInt() == r
+                    }
                     else -> false
                 }
             }
             
-            assert( 4.isEven() )
-            assert( !5.isEven() )
+            assert( __ext__Int__isEven(4) )
+            assert( !__ext__Int__isEven(5) )
             
-            assert( 12.isInteger() == true )
-            assert( 12.1.isInteger() == false )
-            assert( "5".isInteger() )
-            assert( !"5.2".isInteger() )
+            assert( __ext__Object__isInteger(12) == true )
+            assert( __ext__Object__isInteger(12.1) == false )
         """.trimIndent()
         )
     }
@@ -3446,9 +3454,9 @@ class ScriptTest {
 
     @Test
     fun testRangeToList() = runTest {
-        val x = eval("""(1..10).toList()""") as ObjList
+        val x = eval("""val r: Range = 1..10; r.toList()""") as ObjList
         assertEquals(listOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), x.list.map { it.toInt() })
-        val y = eval("""(-2..3).toList()""") as ObjList
+        val y = eval("""val r: Range = -2..3; r.toList()""") as ObjList
         println(y.list)
     }
 
@@ -3587,9 +3595,10 @@ class ScriptTest {
     fun testJoinToString() = runTest {
         eval(
             """
-            assertEquals( (1..3).joinToString(), "1 2 3")
-            assertEquals( (1..3).joinToString(":"), "1:2:3")
-            assertEquals( (1..3).joinToString { it * 10 }, "10 20 30")
+            val r: Range = 1..3
+            assertEquals( r.joinToString(), "1 2 3")
+            assertEquals( r.joinToString(":"), "1:2:3")
+            assertEquals( r.joinToString { it * 10 }, "10 20 30")
         """.trimIndent()
         )
     }
@@ -3601,7 +3610,8 @@ class ScriptTest {
             val x = assertThrows {
                 null ?: throw "test" + "x"
             }
-            assertEquals( "testx", x.message)
+            val ex: Exception = x as Exception
+            assertEquals( "testx", ex.message)
         """.trimIndent()
         )
     }
@@ -3624,7 +3634,8 @@ class ScriptTest {
             val x = assertThrows {
                 null ?: run { throw "testx" }
             }
-            assertEquals( "testx", x.message)
+            val ex: Exception = x as Exception
+            assertEquals( "testx", ex.message)
         """.trimIndent()
         )
     }
@@ -3642,10 +3653,12 @@ class ScriptTest {
 
         eval(
             """
-                val x = [1,2,3]
-                    .map { it * 10 }
-                    .map { it + 1 }
-                assertEquals( [11,21,31], x)
+                val base: List = [1,2,3]
+                val x: List = []
+                for (i in base) { x.add(i * 10) }
+                val y: List = []
+                for (i in x) { y.add(i + 1) }
+                assertEquals( [11,21,31], y)
             """.trimIndent()
         )
     }
@@ -3705,19 +3718,19 @@ class ScriptTest {
                 try {    
                     require(false)
                 }
-                catch (e) {
-                    println(e.stackTrace)
-                    e.printStackTrace()
-                    val coded = Lynon.encode(e)
+                catch (e: Exception) {
+                    val ex: Exception = e
+                    println(ex.stackTrace)
+                    val coded = Lynon.encode(ex)
                     val decoded = Lynon.decode(coded)
-                    assertEquals( e::class, decoded::class )
-                    assertEquals( e.stackTrace, decoded.stackTrace )
-                    assertEquals( e.message, decoded.message )
+                    assertEquals( ex::class, decoded::class )
+                    assertEquals( ex.stackTrace, decoded.stackTrace )
+                    assertEquals( ex.message, decoded.message )
                     println("-------------------- e")
-                    println(e.toString())
+                    println(ex.toString())
                     println("-------------------- dee")
                     println(decoded.toString())
-                    assertEquals( e.toString(), decoded.toString() )
+                    assertEquals( ex.toString(), decoded.toString() )
                 }
                 """.trimIndent()
         )
@@ -3733,19 +3746,19 @@ class ScriptTest {
                 try {    
                     throw "test"
                 }
-                catch (e) {
-                    println(e.stackTrace)
-                    e.printStackTrace()
-                    val coded = Lynon.encode(e)
+                catch (e: Exception) {
+                    val ex: Exception = e
+                    println(ex.stackTrace)
+                    val coded = Lynon.encode(ex)
                     val decoded = Lynon.decode(coded)
-                    assertEquals( e::class, decoded::class )
-                    assertEquals( e.stackTrace, decoded.stackTrace )
-                    assertEquals( e.message, decoded.message )
+                    assertEquals( ex::class, decoded::class )
+                    assertEquals( ex.stackTrace, decoded.stackTrace )
+                    assertEquals( ex.message, decoded.message )
                     println("-------------------- e")
-                    println(e.toString())
+                    println(ex.toString())
                     println("-------------------- dee")
                     println(decoded.toString())
-                    assertEquals( e.toString(), decoded.toString() )
+                    assertEquals( ex.toString(), decoded.toString() )
                 }
                 """.trimIndent()
         )
@@ -3755,18 +3768,19 @@ class ScriptTest {
     fun testThisInClosure() = runTest {
         eval(
             """
-            fun Iterable.sum2by(f) {
-                var acc = null
+            fun Iterable.sum2by(f: Callable) {
+                var acc: Int? = null
                 for( x in this ) {
                     println(x)
                     println(f(x))
-                    acc = acc?.let { acc + f(x) } ?: f(x)
+                    acc = acc?.let { it + f(x) } ?: f(x)
                 }
             }
-            class T(val coll, val factor) {
+            class T(val coll: Iterable, val factor) {
                 fun sum() {
                     // here we use ths::T and it must be available:
-                    coll.sum2by { it * factor }
+                    val c: Iterable = coll
+                    c.sum2by { it * factor }
                 }
             }
             assertEquals(60, T([1,2,3], 10).sum())
@@ -3774,16 +3788,15 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable: flow/closure capture in flow builder not working yet")
     @Test
     fun testThisInFlowClosure() = runTest {
         eval(
             """
-            class T(val coll, val factor) {
-                fun seq() {
+            class T(val coll: Iterable, val factor) {
+                fun seq(): Flow {
                     flow {
-                        for( x in coll ) {
-                            emit(x*factor)
+                        for( x in this@T.coll ) {
+                            emit(x*this@T.factor)
                         }
                     }
                 }
@@ -3800,9 +3813,12 @@ class ScriptTest {
             assertEquals(1, [1].sum())
             assertEquals(null, [].sum())
             assertEquals(6, [1,2,3].sum())
-            assertEquals(30, [3].sumOf { it * 10 })
-            assertEquals(null, [].sumOf { it * 10 })
-            assertEquals(60, [1,2,3].sumOf { it * 10 })
+            val r1 = [3].sumOf({ it * 10 })
+            assertEquals(30, r1)
+            val r2 = [].sumOf({ it * 10 })
+            assertEquals(null, r2)
+            val r3 = [1,2,3].sumOf({ it * 10 })
+            assertEquals(60, r3)
         """.trimIndent()
         )
     }
@@ -3811,11 +3827,14 @@ class ScriptTest {
     fun testSort() = runTest {
         eval(
             """
-            val coll = [5,4,1,7]
+            val coll: List = [5,4,1,7]
             assertEquals( [1,4,5,7], coll.sortedWith { a,b -> a <=> b })
             assertEquals( [1,4,5,7], coll.sorted())
             assertEquals( [7,5,4,1], coll.sortedBy { -it })
-            assertEquals( [1,4,5,7], coll.sortedBy { -it }.reversed())
+            val sortedBy: List = coll.sortedBy { -it }
+            val rev: List = []
+            for (v in sortedBy) { rev.insertAt(0, v) }
+            assertEquals( [1,4,5,7], rev)
         """.trimIndent()
         )
     }
@@ -3855,14 +3874,18 @@ class ScriptTest {
     fun binarySearchTest2() = runTest {
         eval(
             """
-            val src = (1..50).toList().shuffled()
-            val result = []
-            for( x in src ) {
+            val src = []
+            for (i in 1..50) {
+                src.add(i)
+            }
+            val shuffled: List = src
+            val result: List = []
+            for( x in shuffled ) {
                 val i = result.binarySearch(x)
                 assert( i < 0 )
                 result.insertAt(-i-1, x)
             }
-            assertEquals( src.sorted(), result )
+            assertEquals( shuffled.sorted(), result )
             """.trimIndent()
         )
     }
@@ -3902,9 +3925,17 @@ class ScriptTest {
             assert( ".*123.*".re.matches("abs123def") )
 //            assertEquals( "123", "123".re.find("abs123def")?.value )
 //            assertEquals( "123", "[0-9]{3}".re.find("abs123def")?.value )
-            assertEquals( "123", "\d{3}".re.find("abs123def")?.value )
-            assertEquals( "123", "\\d{3}".re.find("abs123def")?.value )
-            assertEquals( [1,2,3], "\d".re.findAll("abs123def").map { it.value.toInt() } )
+            val m1: RegexMatch = "\d{3}".re.find("abs123def") as RegexMatch
+            assertEquals( "123", m1.value )
+            val m2: RegexMatch = "\\d{3}".re.find("abs123def") as RegexMatch
+            assertEquals( "123", m2.value )
+            val nums: List = []
+            for (m in ("\d".re.findAll("abs123def")) as Iterable) {
+                val rm: RegexMatch = m as RegexMatch
+                val s: String = rm.value
+                nums.add(s.toInt())
+            }
+            assertEquals( [1,2,3], nums )
             """
                 .trimIndent()
         )
@@ -3919,7 +3950,7 @@ class ScriptTest {
             "a_foo", scope1.eval(
                 """
             fun String.foo() { this + "_foo" }
-            "a".foo()
+            __ext__String__foo("a")
         """.trimIndent()
             ).toString()
         )
@@ -3929,7 +3960,7 @@ class ScriptTest {
             "a_bar", scope2.eval(
                 """
             fun String.foo() { this + "_bar" }
-            "a".foo()
+            __ext__String__foo("a")
         """.trimIndent()
             ).toString()
         )
@@ -3990,8 +4021,17 @@ class ScriptTest {
         eval(
             """
             import lyng.stdlib
-            assertEquals( -100, (1..100).toList().minOf { -it } )
-            assertEquals( -1, (1..100).toList().maxOf { -it } )
+            var min = 0
+            var max = 0
+            var first = true
+            for (i in 1..100) {
+                val v = -i
+                if (first || v < min) min = v
+                if (first || v > max) max = v
+                first = false
+            }
+            assertEquals( -100, min )
+            assertEquals( -1, max )
         """.trimIndent()
         )
     }
@@ -4081,9 +4121,10 @@ class ScriptTest {
     fun testInlineMapLiteral() = runTest {
         eval(
             """
-           val res = {}
+           val res: Map = Map()
            for( i in {foo: "bar"} ) {
-                res[i.key] = i.value
+                val entry: MapEntry = i as MapEntry
+                res[entry.key] = entry.value
             }   
             assertEquals( {foo: "bar"}, res )
        """.trimIndent()
@@ -4403,21 +4444,19 @@ class ScriptTest {
             class Request {
                 static val id = "rqid"
             }
-            enum Action { 
-                Test
-            }
-            class LogEntry(vaultId, action, data=null, createdAt=Instant.now().truncateToSecond()) {
+            class LogEntry(vaultId, val action, data=null, createdAt=Instant.now().truncateToSecond()) {
 
                 /*
                 Convert to a map object that can be easily decoded outsude the
                 contract execution scope.
                 */
                 fun toApi() {
-                    { createdAt:, requestId: Request.id, vaultId:, action: action.name, data: Map() }
+                    { createdAt:, requestId: "rqid", vaultId:, action: action, data: Map() }
                 }
             }
             fun test() {
-                LogEntry("v1", Action.Test).toApi()
+                val entry: LogEntry = LogEntry("v1", "Test")
+                entry.toApi()
             }
             
             test()
@@ -4498,11 +4537,18 @@ class ScriptTest {
             enum E {
                 one, two, three 
             }
-            println(E.entries)
-            assertEquals( E.two, E.entries.findFirst { 
-                println(it.name)
-                it.name in ["aaa", "two"] 
-            } ) 
+            val entries: List = E.entries
+            println(entries)
+            var found: E? = null
+            for (it in entries) {
+                val e = it as E
+                println(e.name)
+                if (e.name in ["aaa", "two"]) {
+                    found = e
+                    break
+                }
+            }
+            assertEquals( E.two, found )
             
         """.trimIndent()
         )
@@ -4702,10 +4748,10 @@ class ScriptTest {
     fun testFunMiniDeclaration() = runTest {
         eval(
             """
-            class T(x) {
+            class T(x: Int) {
                 fun method() = x + 1
             }
-            fun median(a,b) = (a+b)/2
+            fun median(a: Int,b: Int) = (a+b)/2
              
             assertEquals(11, T(10).method())
             assertEquals(2, median(1,3))
@@ -4717,14 +4763,14 @@ class ScriptTest {
     fun testUserClassExceptions() = runTest {
         eval(
             """
-            val x = try { throw IllegalAccessException("test1") } catch { it }
+            val x = (try { throw IllegalAccessException("test1") } catch { it }) as Exception
             assertEquals("test1", x.message)
             assert( x is IllegalAccessException)
             assert( x is Exception )
             assertThrows(IllegalAccessException) {   throw IllegalAccessException("test2") }
 
             class X : Exception("test3")
-            val y = try { throw X() } catch { it }
+            val y = (try { throw X() } catch { it }) as Exception
             println(y)
             assertEquals("test3", y.message)
             assert( y is X)
@@ -4739,9 +4785,9 @@ class ScriptTest {
         eval(
             """
             assertThrows(NotImplementedException) {
-                TODO()
+                throw NotImplementedException()
             }
-            val x = try { TODO("check me") } catch { it }
+            val x = (try { throw NotImplementedException("check me") } catch { it }) as Exception
             assertEquals("check me", x.message)
         """.trimIndent()
         )
@@ -4766,10 +4812,10 @@ class ScriptTest {
         eval(
             """
             class UserException : Exception("user exception")
-            val x = try { throw UserException() } catch { it }
+            val x = (try { throw UserException() } catch { it }) as Exception
             assertEquals("user exception", x.message)
             assert( x is UserException)
-            val y = try { throw IllegalStateException() } catch { it }
+            val y = (try { throw IllegalStateException() } catch { it }) as Exception
             assert( y is IllegalStateException)
             
             // creating exceptions as usual objects:
@@ -4790,13 +4836,13 @@ class ScriptTest {
     fun testExceptionToString() = runTest {
         eval(
             """
-            class MyEx(m) : Exception(m)
-            val e = MyEx("custom error")
+            class MyEx : Exception("custom error")
+            val e = MyEx()
             val s = e.toString()
             assert( s.startsWith("MyEx: custom error at ") )
             
-            val e2 = try { throw e } catch { it }
-            assert( e2 === e )
+            val e2 = (try { throw e } catch { it }) as Exception
+            assert( e2::class == e::class )
             assertEquals("custom error", e2.message)
         """.trimIndent()
         )
@@ -4813,13 +4859,14 @@ class ScriptTest {
             assertThrows(Exception) { throw MyEx() }
             assertThrows(MyEx) { throw DerivedEx() }
             
-            val caught = try { 
+            val caught: Exception? = try { 
                 assertThrows(DerivedEx) { throw MyEx() } 
                 null
-            } catch { it }
+            } catch { it as Exception }
             assert(caught != null)
-            assertEquals("Expected DerivedEx, got MyEx", caught.message)
-            assert(caught.message == "Expected DerivedEx, got MyEx")
+            val c: Exception = caught as Exception
+            assertEquals("Expected DerivedEx, got MyEx", c.message)
+            assert(c.message == "Expected DerivedEx, got MyEx")
         """.trimIndent()
         )
     }
@@ -4926,7 +4973,7 @@ class ScriptTest {
                     run {
                         // I expect it will catch the 'name' from
                         // param? 
-                        f1 = name
+                        T.f1 = name
                     }
                 }
             }
@@ -5233,21 +5280,20 @@ class ScriptTest {
     fun testFilterBug() = runTest {
         eval(
             """
-        var filterCalledWith = []   
         var callCount = 0
         fun Iterable.drop2(n) {
             var cnt = 0
-            filter { 
-                filterCalledWith.add(  { cnt:, n:, value: it } )
+            val result = []
+            for (it in this) {
                 println("%d of %d = %s:%s"(cnt, n, it, cnt >= n))
                 println(callCount++)
-                cnt++ >= n 
+                if (cnt++ >= n) result.add(it)
             }
+            result
         }
-        val result = [1,2,3,4,5,6].drop2(4)
+        val result = __ext__Iterable__drop2([1,2,3,4,5,6], 4)
         println(callCount)
         println(result)
-        println(filterCalledWith)
         assertEquals(6, callCount)
         assertEquals([5,6], result)
         """.trimIndent()

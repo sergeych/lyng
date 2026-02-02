@@ -49,7 +49,8 @@ class ScriptSubsetJvmTest {
     @Test
     fun optionalChainingIndexField_jvm_only() = runBlocking {
         val code = """
-            val a = null
+            class C() { var x = 1 }
+            val a: C? = null
             val r1 = a?.x
             val lst = [1,2,3]
             val r2 = lst[1]

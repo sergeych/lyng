@@ -152,6 +152,28 @@ class CmdConstBool(internal val constId: Int, internal val dst: Int) : Cmd() {
     }
 }
 
+class CmdLoadThis(internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setObj(dst, frame.scope.thisObj)
+        return
+    }
+}
+
+class CmdLoadThisVariant(
+    internal val typeId: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val typeConst = frame.fn.constants.getOrNull(typeId) as? BytecodeConst.StringVal
+            ?: error("LOAD_THIS_VARIANT expects StringVal at $typeId")
+        val typeName = typeConst.value
+        val receiver = frame.scope.thisVariants.firstOrNull { it.isInstanceOf(typeName) }
+            ?: frame.scope.raiseClassCastError("Cannot cast ${frame.scope.thisObj.objClass.className} to $typeName")
+        frame.setObj(dst, receiver)
+        return
+    }
+}
+
 class CmdMakeRange(
     internal val startSlot: Int,
     internal val endSlot: Int,
@@ -1146,20 +1168,7 @@ class CmdCallVirtual(
     internal val dst: Int,
 ) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncFrameToScope()
-        }
-        val receiver = frame.slotToObj(recvSlot)
-        val nameConst = frame.fn.constants.getOrNull(methodId) as? BytecodeConst.StringVal
-            ?: error("CALL_VIRTUAL expects StringVal at $methodId")
-        val args = frame.buildArguments(argBase, argCount)
-        val site = frame.methodCallSites.getOrPut(frame.ip - 1) { MethodCallSite(nameConst.value) }
-        val result = site.invoke(frame.scope, receiver, args)
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncScopeToFrame()
-        }
-        frame.storeObjResult(dst, result)
-        return
+        frame.scope.raiseError("CALL_VIRTUAL is not allowed: compile-time member resolution is required")
     }
 }
 
@@ -1313,38 +1322,87 @@ class CmdListLiteral(
     }
 }
 
-class CmdGetThisMember(
-    internal val nameId: Int,
+class CmdGetMemberSlot(
+    internal val recvSlot: Int,
+    internal val fieldId: Int,
+    internal val methodId: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val receiver = frame.slotToObj(recvSlot)
+        val inst = receiver as? ObjInstance
+        val fieldRec = if (fieldId >= 0) {
+            inst?.fieldRecordForId(fieldId) ?: receiver.objClass.fieldRecordForId(fieldId)
+        } else null
+        val rec = fieldRec ?: run {
+            if (methodId >= 0) {
+                inst?.methodRecordForId(methodId) ?: receiver.objClass.methodRecordForId(methodId)
+            } else null
+        } ?: frame.scope.raiseSymbolNotFound("member")
+        val name = rec.memberName ?: "<member>"
+        val resolved = receiver.resolveRecord(frame.scope, rec, name, rec.declaringClass)
+        frame.storeObjResult(dst, resolved.value)
+        return
+    }
+}
+
+class CmdSetMemberSlot(
+    internal val recvSlot: Int,
+    internal val fieldId: Int,
+    internal val methodId: Int,
+    internal val valueSlot: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val receiver = frame.slotToObj(recvSlot)
+        val inst = receiver as? ObjInstance
+        val fieldRec = if (fieldId >= 0) {
+            inst?.fieldRecordForId(fieldId) ?: receiver.objClass.fieldRecordForId(fieldId)
+        } else null
+        val rec = fieldRec ?: run {
+            if (methodId >= 0) {
+                inst?.methodRecordForId(methodId) ?: receiver.objClass.methodRecordForId(methodId)
+            } else null
+        } ?: frame.scope.raiseSymbolNotFound("member")
+        val name = rec.memberName ?: "<member>"
+        frame.scope.assign(rec, name, frame.slotToObj(valueSlot))
+        return
+    }
+}
+
+class CmdCallMemberSlot(
+    internal val recvSlot: Int,
+    internal val methodId: Int,
+    internal val argBase: Int,
+    internal val argCount: Int,
     internal val dst: Int,
 ) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         if (frame.fn.localSlotNames.isNotEmpty()) {
             frame.syncFrameToScope()
         }
-        val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
-            ?: error("GET_THIS_MEMBER expects StringVal at $nameId")
-        val ref = net.sergeych.lyng.obj.ImplicitThisMemberRef(nameConst.value, frame.scope.pos)
-        val result = ref.evalValue(frame.scope)
-        frame.storeObjResult(dst, result)
-        return
-    }
-}
-
-class CmdSetThisMember(
-    internal val nameId: Int,
-    internal val valueSlot: Int,
-) : Cmd() {
-    override suspend fun perform(frame: CmdFrame) {
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncFrameToScope()
+        val receiver = frame.slotToObj(recvSlot)
+        val inst = receiver as? ObjInstance
+        val rec = inst?.methodRecordForId(methodId)
+            ?: receiver.objClass.methodRecordForId(methodId)
+            ?: frame.scope.raiseError("member id $methodId not found on ${receiver.objClass.className}")
+        val callArgs = frame.buildArguments(argBase, argCount)
+        val name = rec.memberName ?: "<member>"
+        val decl = rec.declaringClass ?: receiver.objClass
+        val result = when (rec.type) {
+            ObjRecord.Type.Property -> {
+                if (callArgs.isEmpty()) (rec.value as ObjProperty).callGetter(frame.scope, receiver, decl)
+                else frame.scope.raiseError("property $name cannot be called with arguments")
+            }
+            ObjRecord.Type.Fun, ObjRecord.Type.Delegated -> {
+                val callScope = inst?.instanceScope ?: frame.scope
+                rec.value.invoke(callScope, receiver, callArgs, decl)
+            }
+            else -> frame.scope.raiseError("member $name is not callable")
         }
-        val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
-            ?: error("SET_THIS_MEMBER expects StringVal at $nameId")
-        val ref = net.sergeych.lyng.obj.ImplicitThisMemberRef(nameConst.value, frame.scope.pos)
-        ref.setAt(frame.scope.pos, frame.scope, frame.slotToObj(valueSlot))
         if (frame.fn.localSlotNames.isNotEmpty()) {
             frame.syncScopeToFrame()
         }
+        frame.storeObjResult(dst, result)
         return
     }
 }
@@ -1449,13 +1507,13 @@ class CmdEvalStmt(internal val id: Int, internal val dst: Int) : Cmd() {
     }
 }
 
-class CmdEvalValueFn(internal val id: Int, internal val dst: Int) : Cmd() {
+class CmdMakeValueFn(internal val id: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         if (frame.fn.localSlotNames.isNotEmpty()) {
             frame.syncFrameToScope()
         }
         val valueFn = frame.fn.constants.getOrNull(id) as? BytecodeConst.ValueFn
-            ?: error("EVAL_VALUE_FN expects ValueFn at $id")
+            ?: error("MAKE_VALUE_FN expects ValueFn at $id")
         val result = valueFn.fn(frame.scope).value
         if (frame.fn.localSlotNames.isNotEmpty()) {
             frame.syncScopeToFrame()

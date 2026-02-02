@@ -66,7 +66,10 @@ object CmdDisassembler {
             is CmdConstIntLocal -> Opcode.CONST_INT to intArrayOf(cmd.constId, cmd.dst + fn.scopeSlotCount)
             is CmdConstReal -> Opcode.CONST_REAL to intArrayOf(cmd.constId, cmd.dst)
             is CmdConstBool -> Opcode.CONST_BOOL to intArrayOf(cmd.constId, cmd.dst)
+            is CmdLoadThis -> Opcode.LOAD_THIS to intArrayOf(cmd.dst)
+            is CmdLoadThisVariant -> Opcode.LOAD_THIS_VARIANT to intArrayOf(cmd.typeId, cmd.dst)
             is CmdConstNull -> Opcode.CONST_NULL to intArrayOf(cmd.dst)
+            is CmdMakeValueFn -> Opcode.MAKE_VALUE_FN to intArrayOf(cmd.id, cmd.dst)
             is CmdBoxObj -> Opcode.BOX_OBJ to intArrayOf(cmd.src, cmd.dst)
             is CmdObjToBool -> Opcode.OBJ_TO_BOOL to intArrayOf(cmd.src, cmd.dst)
             is CmdCheckIs -> Opcode.CHECK_IS to intArrayOf(cmd.objSlot, cmd.typeSlot, cmd.dst)
@@ -178,23 +181,19 @@ object CmdDisassembler {
             is CmdDeclExtProperty -> Opcode.DECL_EXT_PROPERTY to intArrayOf(cmd.constId, cmd.slot)
             is CmdCallDirect -> Opcode.CALL_DIRECT to intArrayOf(cmd.id, cmd.argBase, cmd.argCount, cmd.dst)
             is CmdCallVirtual -> Opcode.CALL_VIRTUAL to intArrayOf(cmd.recvSlot, cmd.methodId, cmd.argBase, cmd.argCount, cmd.dst)
-            is CmdCallFallback -> Opcode.CALL_FALLBACK to intArrayOf(cmd.id, cmd.argBase, cmd.argCount, cmd.dst)
+            is CmdCallMemberSlot -> Opcode.CALL_MEMBER_SLOT to intArrayOf(cmd.recvSlot, cmd.methodId, cmd.argBase, cmd.argCount, cmd.dst)
             is CmdCallSlot -> Opcode.CALL_SLOT to intArrayOf(cmd.calleeSlot, cmd.argBase, cmd.argCount, cmd.dst)
             is CmdGetField -> Opcode.GET_FIELD to intArrayOf(cmd.recvSlot, cmd.fieldId, cmd.dst)
             is CmdSetField -> Opcode.SET_FIELD to intArrayOf(cmd.recvSlot, cmd.fieldId, cmd.valueSlot)
-            is CmdGetName -> Opcode.GET_NAME to intArrayOf(cmd.nameId, cmd.dst)
             is CmdGetIndex -> Opcode.GET_INDEX to intArrayOf(cmd.targetSlot, cmd.indexSlot, cmd.dst)
             is CmdSetIndex -> Opcode.SET_INDEX to intArrayOf(cmd.targetSlot, cmd.indexSlot, cmd.valueSlot)
             is CmdListLiteral -> Opcode.LIST_LITERAL to intArrayOf(cmd.planId, cmd.baseSlot, cmd.count, cmd.dst)
-            is CmdGetThisMember -> Opcode.GET_THIS_MEMBER to intArrayOf(cmd.nameId, cmd.dst)
-            is CmdSetThisMember -> Opcode.SET_THIS_MEMBER to intArrayOf(cmd.nameId, cmd.valueSlot)
-            is CmdEvalFallback -> Opcode.EVAL_FALLBACK to intArrayOf(cmd.id, cmd.dst)
-            is CmdEvalRef -> Opcode.EVAL_REF to intArrayOf(cmd.id, cmd.dst)
-            is CmdEvalStmt -> Opcode.EVAL_STMT to intArrayOf(cmd.id, cmd.dst)
-            is CmdEvalValueFn -> Opcode.EVAL_VALUE_FN to intArrayOf(cmd.id, cmd.dst)
+            is CmdGetMemberSlot -> Opcode.GET_MEMBER_SLOT to intArrayOf(cmd.recvSlot, cmd.fieldId, cmd.methodId, cmd.dst)
+            is CmdSetMemberSlot -> Opcode.SET_MEMBER_SLOT to intArrayOf(cmd.recvSlot, cmd.fieldId, cmd.methodId, cmd.valueSlot)
             is CmdIterPush -> Opcode.ITER_PUSH to intArrayOf(cmd.iterSlot)
             is CmdIterPop -> Opcode.ITER_POP to intArrayOf()
             is CmdIterCancel -> Opcode.ITER_CANCEL to intArrayOf()
+            else -> error("Unsupported cmd in disassembler: ${cmd::class.simpleName}")
         }
     }
 
@@ -231,7 +230,7 @@ object CmdDisassembler {
                 listOf(OperandKind.SLOT, OperandKind.ADDR)
             Opcode.CONST_NULL ->
                 listOf(OperandKind.SLOT)
-            Opcode.CONST_OBJ, Opcode.CONST_INT, Opcode.CONST_REAL, Opcode.CONST_BOOL ->
+            Opcode.CONST_OBJ, Opcode.CONST_INT, Opcode.CONST_REAL, Opcode.CONST_BOOL, Opcode.MAKE_VALUE_FN ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.PUSH_SCOPE, Opcode.PUSH_SLOT_PLAN ->
                 listOf(OperandKind.CONST)
@@ -255,36 +254,36 @@ object CmdDisassembler {
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.ASSIGN_OP_OBJ ->
                 listOf(OperandKind.ID, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.CONST)
-            Opcode.INC_INT, Opcode.DEC_INT, Opcode.RET, Opcode.ITER_PUSH ->
+            Opcode.INC_INT, Opcode.DEC_INT, Opcode.RET, Opcode.ITER_PUSH, Opcode.LOAD_THIS ->
                 listOf(OperandKind.SLOT)
+            Opcode.LOAD_THIS_VARIANT ->
+                listOf(OperandKind.ID, OperandKind.SLOT)
             Opcode.JMP ->
                 listOf(OperandKind.IP)
             Opcode.JMP_IF_TRUE, Opcode.JMP_IF_FALSE ->
                 listOf(OperandKind.SLOT, OperandKind.IP)
-            Opcode.CALL_DIRECT, Opcode.CALL_FALLBACK ->
+            Opcode.CALL_DIRECT ->
                 listOf(OperandKind.ID, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
             Opcode.CALL_SLOT ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
             Opcode.CALL_VIRTUAL ->
                 listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
+            Opcode.CALL_MEMBER_SLOT ->
+                listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
             Opcode.GET_FIELD ->
                 listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT)
             Opcode.SET_FIELD ->
                 listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT)
-            Opcode.GET_NAME ->
-                listOf(OperandKind.ID, OperandKind.SLOT)
             Opcode.GET_INDEX ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.SET_INDEX ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.LIST_LITERAL ->
                 listOf(OperandKind.CONST, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
-            Opcode.GET_THIS_MEMBER ->
-                listOf(OperandKind.ID, OperandKind.SLOT)
-            Opcode.SET_THIS_MEMBER ->
-                listOf(OperandKind.ID, OperandKind.SLOT)
-            Opcode.EVAL_FALLBACK, Opcode.EVAL_REF, Opcode.EVAL_STMT, Opcode.EVAL_VALUE_FN ->
-                listOf(OperandKind.ID, OperandKind.SLOT)
+            Opcode.GET_MEMBER_SLOT ->
+                listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.ID, OperandKind.SLOT)
+            Opcode.SET_MEMBER_SLOT ->
+                listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.ID, OperandKind.SLOT)
         }
     }
 }

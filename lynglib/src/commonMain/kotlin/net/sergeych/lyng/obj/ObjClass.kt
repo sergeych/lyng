@@ -275,6 +275,11 @@ open class ObjClass(
     internal data class FieldSlot(val slot: Int, val record: ObjRecord)
     internal data class ResolvedMember(val record: ObjRecord, val declaringClass: ObjClass)
     internal data class MethodSlot(val slot: Int, val record: ObjRecord)
+    private var nextFieldId: Int = 0
+    private var nextMethodId: Int = 0
+    private val fieldIdMap: MutableMap<String, Int> = mutableMapOf()
+    private val methodIdMap: MutableMap<String, Int> = mutableMapOf()
+    private var methodIdSeeded: Boolean = false
     private var fieldSlotLayoutVersion: Int = -1
     private var fieldSlotMap: Map<String, FieldSlot> = emptyMap()
     private var fieldSlotCount: Int = 0
@@ -287,19 +292,29 @@ open class ObjClass(
     private fun ensureFieldSlots(): Map<String, FieldSlot> {
         if (fieldSlotLayoutVersion == layoutVersion) return fieldSlotMap
         val res = mutableMapOf<String, FieldSlot>()
-        var idx = 0
+        var maxId = -1
         for (cls in mro) {
             for ((name, rec) in cls.members) {
                 if (rec.isAbstract) continue
                 if (rec.type != ObjRecord.Type.Field && rec.type != ObjRecord.Type.ConstructorField) continue
                 val key = cls.mangledName(name)
                 if (res.containsKey(key)) continue
-                res[key] = FieldSlot(idx, rec)
-                idx += 1
+                val fieldId = rec.fieldId ?: cls.assignFieldId(name, rec)
+                res[key] = FieldSlot(fieldId, rec)
+                if (fieldId > maxId) maxId = fieldId
+            }
+            cls.classScope?.objects?.forEach { (name, rec) ->
+                if (rec.isAbstract) return@forEach
+                if (rec.type != ObjRecord.Type.Field && rec.type != ObjRecord.Type.ConstructorField) return@forEach
+                val key = cls.mangledName(name)
+                if (res.containsKey(key)) return@forEach
+                val fieldId = rec.fieldId ?: cls.assignFieldId(name, rec)
+                res[key] = FieldSlot(fieldId, rec)
+                if (fieldId > maxId) maxId = fieldId
             }
         }
         fieldSlotMap = res
-        fieldSlotCount = idx
+        fieldSlotCount = maxId + 1
         fieldSlotLayoutVersion = layoutVersion
         return fieldSlotMap
     }
@@ -308,7 +323,6 @@ open class ObjClass(
         if (instanceMemberLayoutVersion == layoutVersion) return instanceMemberCache
         val res = mutableMapOf<String, ResolvedMember>()
         for (cls in mro) {
-            if (cls.className == "Obj") break
             for ((name, rec) in cls.members) {
                 if (rec.isAbstract) continue
                 if (res.containsKey(name)) continue
@@ -330,7 +344,7 @@ open class ObjClass(
     private fun ensureMethodSlots(): Map<String, MethodSlot> {
         if (methodSlotLayoutVersion == layoutVersion) return methodSlotMap
         val res = mutableMapOf<String, MethodSlot>()
-        var idx = 0
+        var maxId = -1
         for (cls in mro) {
             if (cls.className == "Obj") break
             for ((name, rec) in cls.members) {
@@ -343,8 +357,9 @@ open class ObjClass(
                 }
                 val key = if (rec.visibility == Visibility.Private || rec.type == ObjRecord.Type.Delegated) cls.mangledName(name) else name
                 if (res.containsKey(key)) continue
-                res[key] = MethodSlot(idx, rec)
-                idx += 1
+                val methodId = rec.methodId ?: cls.assignMethodId(name, rec)
+                res[key] = MethodSlot(methodId, rec)
+                if (methodId > maxId) maxId = methodId
             }
             cls.classScope?.objects?.forEach { (name, rec) ->
                 if (rec.isAbstract) return@forEach
@@ -353,12 +368,13 @@ open class ObjClass(
                     rec.type != ObjRecord.Type.Property) return@forEach
                 val key = if (rec.visibility == Visibility.Private || rec.type == ObjRecord.Type.Delegated) cls.mangledName(name) else name
                 if (res.containsKey(key)) return@forEach
-                res[key] = MethodSlot(idx, rec)
-                idx += 1
+                val methodId = rec.methodId ?: cls.assignMethodId(name, rec)
+                res[key] = MethodSlot(methodId, rec)
+                if (methodId > maxId) maxId = methodId
             }
         }
         methodSlotMap = res
-        methodSlotCount = idx
+        methodSlotCount = maxId + 1
         methodSlotLayoutVersion = layoutVersion
         return methodSlotMap
     }
@@ -374,6 +390,10 @@ open class ObjClass(
     }
 
     internal fun fieldSlotMap(): Map<String, FieldSlot> = ensureFieldSlots()
+    internal fun fieldRecordForId(fieldId: Int): ObjRecord? {
+        ensureFieldSlots()
+        return fieldSlotMap.values.firstOrNull { it.slot == fieldId }?.record
+    }
     internal fun resolveInstanceMember(name: String): ResolvedMember? = ensureInstanceMemberCache()[name]
     internal fun methodSlotCount(): Int {
         ensureMethodSlots()
@@ -384,6 +404,117 @@ open class ObjClass(
         return methodSlotMap[key]
     }
     internal fun methodSlotMap(): Map<String, MethodSlot> = ensureMethodSlots()
+    internal fun methodRecordForId(methodId: Int): ObjRecord? {
+        ensureMethodSlots()
+        methodSlotMap.values.firstOrNull { it.slot == methodId }?.record?.let { return it }
+        // Fallback to scanning the MRO in case a parent method id was added after slot cache creation.
+        for (cls in mro) {
+            for ((_, rec) in cls.members) {
+                if (rec.methodId == methodId) return rec
+            }
+            cls.classScope?.objects?.forEach { (_, rec) ->
+                if (rec.methodId == methodId) return rec
+            }
+        }
+        return null
+    }
+
+    internal fun instanceFieldIdMap(): Map<String, Int> {
+        val result = mutableMapOf<String, Int>()
+        for (cls in mro) {
+            if (cls.className == "Obj") break
+            for ((name, rec) in cls.members) {
+                if (rec.isAbstract) continue
+                if (rec.type != ObjRecord.Type.Field && rec.type != ObjRecord.Type.ConstructorField) continue
+                if (rec.visibility == Visibility.Private) continue
+                val id = rec.fieldId ?: cls.assignFieldId(name, rec)
+                result.putIfAbsent(name, id)
+            }
+            cls.classScope?.objects?.forEach { (name, rec) ->
+                if (rec.isAbstract) return@forEach
+                if (rec.type != ObjRecord.Type.Field && rec.type != ObjRecord.Type.ConstructorField) return@forEach
+                if (rec.visibility == Visibility.Private) return@forEach
+                val id = rec.fieldId ?: cls.assignFieldId(name, rec)
+                result.putIfAbsent(name, id)
+            }
+        }
+        return result
+    }
+
+    internal fun instanceMethodIdMap(includeAbstract: Boolean = false): Map<String, Int> {
+        val result = mutableMapOf<String, Int>()
+        for (cls in mro) {
+            for ((name, rec) in cls.members) {
+                if (!includeAbstract && rec.isAbstract) continue
+                if (rec.visibility == Visibility.Private) continue
+                if (rec.type != ObjRecord.Type.Fun &&
+                    rec.type != ObjRecord.Type.Property &&
+                    rec.type != ObjRecord.Type.Delegated) continue
+                val id = rec.methodId ?: cls.assignMethodId(name, rec)
+                result.putIfAbsent(name, id)
+            }
+            cls.classScope?.objects?.forEach { (name, rec) ->
+                if (!includeAbstract && rec.isAbstract) return@forEach
+                if (rec.visibility == Visibility.Private) return@forEach
+                if (rec.type != ObjRecord.Type.Fun &&
+                    rec.type != ObjRecord.Type.Property &&
+                    rec.type != ObjRecord.Type.Delegated) return@forEach
+                val id = rec.methodId ?: cls.assignMethodId(name, rec)
+                result.putIfAbsent(name, id)
+            }
+        }
+        return result
+    }
+
+    private fun assignFieldId(name: String, rec: ObjRecord): Int {
+        val existingId = rec.fieldId
+        if (existingId != null) {
+            fieldIdMap[name] = existingId
+            return existingId
+        }
+        val id = fieldIdMap.getOrPut(name) { nextFieldId++ }
+        return id
+    }
+
+    private fun assignMethodId(name: String, rec: ObjRecord): Int {
+        ensureMethodIdSeeded()
+        val existingId = rec.methodId
+        if (existingId != null) {
+            methodIdMap[name] = existingId
+            return existingId
+        }
+        val id = methodIdMap.getOrPut(name) { nextMethodId++ }
+        return id
+    }
+
+    private fun ensureMethodIdSeeded() {
+        if (methodIdSeeded) return
+        var maxId = -1
+        for (cls in mroParents) {
+            for ((name, rec) in cls.members) {
+                if (rec.type != ObjRecord.Type.Fun &&
+                    rec.type != ObjRecord.Type.Property &&
+                    rec.type != ObjRecord.Type.Delegated
+                ) continue
+                val id = rec.methodId ?: cls.assignMethodId(name, rec)
+                methodIdMap.putIfAbsent(name, id)
+                if (id > maxId) maxId = id
+            }
+            cls.classScope?.objects?.forEach { (name, rec) ->
+                if (rec.type != ObjRecord.Type.Fun &&
+                    rec.type != ObjRecord.Type.Property &&
+                    rec.type != ObjRecord.Type.Delegated
+                ) return@forEach
+                val id = rec.methodId ?: cls.assignMethodId(name, rec)
+                methodIdMap.putIfAbsent(name, id)
+                if (id > maxId) maxId = id
+            }
+        }
+        if (nextMethodId <= maxId) {
+            nextMethodId = maxId + 1
+        }
+        methodIdSeeded = true
+    }
 
     override fun toString(): String = className
 
@@ -618,12 +749,15 @@ open class ObjClass(
         isOverride: Boolean = false,
         isTransient: Boolean = false,
         type: ObjRecord.Type = ObjRecord.Type.Field,
+        fieldId: Int? = null,
+        methodId: Int? = null,
     ): ObjRecord {
         // Validation of override rules: only for non-system declarations
+        var existing: ObjRecord? = null
+        var actualOverride = false
         if (pos != Pos.builtIn) {
             // Only consider TRUE instance members from ancestors for overrides
-            val existing = getInstanceMemberOrNull(name, includeAbstract = true, includeStatic = false)
-            var actualOverride = false
+            existing = getInstanceMemberOrNull(name, includeAbstract = true, includeStatic = false)
             if (existing != null && existing.declaringClass != this) {
                 // If the existing member is private in the ancestor, it's not visible for overriding.
                 // It should be treated as a new member in this class.
@@ -654,6 +788,56 @@ open class ObjClass(
             throw ScriptError(pos, "$name is already defined in $objClass")
         
         // Install/override in this class
+        val effectiveFieldId = if (type == ObjRecord.Type.Field || type == ObjRecord.Type.ConstructorField) {
+            fieldId ?: fieldIdMap[name]?.let { it } ?: run {
+                fieldIdMap[name] = nextFieldId
+                nextFieldId++
+                fieldIdMap[name]!!
+            }
+        } else {
+            fieldId
+        }
+        val inheritedCandidate = run {
+            var found: ObjRecord? = null
+            for (cls in mro) {
+                if (cls === this) continue
+                if (cls.className == "Obj") break
+                cls.members[name]?.let {
+                    found = it
+                    return@run found
+                }
+            }
+            found
+        }
+        if (type == ObjRecord.Type.Fun ||
+            type == ObjRecord.Type.Property ||
+            type == ObjRecord.Type.Delegated
+        ) {
+            ensureMethodIdSeeded()
+        }
+        val effectiveMethodId = if (type == ObjRecord.Type.Fun ||
+            type == ObjRecord.Type.Property ||
+            type == ObjRecord.Type.Delegated
+        ) {
+            val inherited = if (actualOverride) {
+                existing?.methodId
+            } else {
+                val candidate = inheritedCandidate
+                if (candidate != null &&
+                    candidate.declaringClass != this &&
+                    (candidate.visibility.isPublic || canAccessMember(candidate.visibility, candidate.declaringClass, this, name))
+                ) {
+                    candidate.methodId
+                } else null
+            }
+            methodId ?: inherited ?: methodIdMap[name]?.let { it } ?: run {
+                methodIdMap[name] = nextMethodId
+                nextMethodId++
+                methodIdMap[name]!!
+            }
+        } else {
+            methodId
+        }
         val rec = ObjRecord(
             initialValue, isMutable, visibility, writeVisibility, 
             declaringClass = declaringClass,
@@ -661,7 +845,10 @@ open class ObjClass(
             isClosed = isClosed,
             isOverride = isOverride,
             isTransient = isTransient,
-            type = type
+            type = type,
+            memberName = name,
+            fieldId = effectiveFieldId,
+            methodId = effectiveMethodId
         )
         members[name] = rec
         // Structural change: bump layout version for PIC invalidation
@@ -682,13 +869,52 @@ open class ObjClass(
         writeVisibility: Visibility? = null,
         pos: Pos = Pos.builtIn,
         isTransient: Boolean = false,
-        type: ObjRecord.Type = ObjRecord.Type.Field
+        type: ObjRecord.Type = ObjRecord.Type.Field,
+        fieldId: Int? = null,
+        methodId: Int? = null
     ): ObjRecord {
         initClassScope()
         val existing = classScope!!.objects[name]
         if (existing != null)
             throw ScriptError(pos, "$name is already defined in $objClass or one of its supertypes")
-        val rec = classScope!!.addItem(name, isMutable, initialValue, visibility, writeVisibility, recordType = type, isTransient = isTransient)
+        val effectiveFieldId = if (type == ObjRecord.Type.Field || type == ObjRecord.Type.ConstructorField) {
+            fieldId ?: fieldIdMap[name]?.let { it } ?: run {
+                fieldIdMap[name] = nextFieldId
+                nextFieldId++
+                fieldIdMap[name]!!
+            }
+        } else {
+            fieldId
+        }
+        if (type == ObjRecord.Type.Fun ||
+            type == ObjRecord.Type.Property ||
+            type == ObjRecord.Type.Delegated
+        ) {
+            ensureMethodIdSeeded()
+        }
+        val effectiveMethodId = if (type == ObjRecord.Type.Fun ||
+            type == ObjRecord.Type.Property ||
+            type == ObjRecord.Type.Delegated
+        ) {
+            methodId ?: methodIdMap[name]?.let { it } ?: run {
+                methodIdMap[name] = nextMethodId
+                nextMethodId++
+                methodIdMap[name]!!
+            }
+        } else {
+            methodId
+        }
+        val rec = classScope!!.addItem(
+            name,
+            isMutable,
+            initialValue,
+            visibility,
+            writeVisibility,
+            recordType = type,
+            isTransient = isTransient,
+            fieldId = effectiveFieldId,
+            methodId = effectiveMethodId
+        )
         // Structural change: bump layout version for PIC invalidation
         layoutVersion += 1
         return rec
@@ -704,13 +930,15 @@ open class ObjClass(
         isClosed: Boolean = false,
         isOverride: Boolean = false,
         pos: Pos = Pos.builtIn,
+        methodId: Int? = null,
         code: (suspend Scope.() -> Obj)? = null
     ) {
         val stmt = code?.let { statement { it() } } ?: ObjNull
         createField(
             name, stmt, isMutable, visibility, writeVisibility, pos, declaringClass,
             isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride,
-            type = ObjRecord.Type.Fun
+            type = ObjRecord.Type.Fun,
+            methodId = methodId
         )
     }
 
@@ -727,7 +955,8 @@ open class ObjClass(
         isClosed: Boolean = false,
         isOverride: Boolean = false,
         pos: Pos = Pos.builtIn,
-        prop: ObjProperty? = null
+        prop: ObjProperty? = null,
+        methodId: Int? = null
     ) {
         val g = getter?.let { statement { it() } }
         val s = setter?.let { statement { it(requiredArg(0)); ObjVoid } }
@@ -735,7 +964,8 @@ open class ObjClass(
         createField(
             name, finalProp, false, visibility, writeVisibility, pos, declaringClass,
             isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride,
-            type = ObjRecord.Type.Property
+            type = ObjRecord.Type.Property,
+            methodId = methodId
         )
     }
 

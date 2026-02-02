@@ -137,7 +137,7 @@ class CmdBuilder {
                 listOf(OperandKind.SLOT, OperandKind.ADDR)
             Opcode.CONST_NULL ->
                 listOf(OperandKind.SLOT)
-            Opcode.CONST_OBJ, Opcode.CONST_INT, Opcode.CONST_REAL, Opcode.CONST_BOOL ->
+            Opcode.CONST_OBJ, Opcode.CONST_INT, Opcode.CONST_REAL, Opcode.CONST_BOOL, Opcode.MAKE_VALUE_FN ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.PUSH_SCOPE, Opcode.PUSH_SLOT_PLAN ->
                 listOf(OperandKind.CONST)
@@ -161,14 +161,18 @@ class CmdBuilder {
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.ASSIGN_OP_OBJ ->
                 listOf(OperandKind.ID, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.CONST)
-            Opcode.INC_INT, Opcode.DEC_INT, Opcode.RET ->
+            Opcode.INC_INT, Opcode.DEC_INT, Opcode.RET, Opcode.LOAD_THIS ->
                 listOf(OperandKind.SLOT)
+            Opcode.LOAD_THIS_VARIANT ->
+                listOf(OperandKind.ID, OperandKind.SLOT)
             Opcode.JMP ->
                 listOf(OperandKind.IP)
             Opcode.JMP_IF_TRUE, Opcode.JMP_IF_FALSE ->
                 listOf(OperandKind.SLOT, OperandKind.IP)
-            Opcode.CALL_DIRECT, Opcode.CALL_FALLBACK ->
+            Opcode.CALL_DIRECT ->
                 listOf(OperandKind.ID, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
+            Opcode.CALL_MEMBER_SLOT ->
+                listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
             Opcode.CALL_SLOT ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
             Opcode.CALL_VIRTUAL ->
@@ -177,8 +181,6 @@ class CmdBuilder {
                 listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT)
             Opcode.SET_FIELD ->
                 listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT)
-            Opcode.GET_NAME ->
-                listOf(OperandKind.ID, OperandKind.SLOT)
             Opcode.GET_INDEX ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.SET_INDEX ->
@@ -187,12 +189,10 @@ class CmdBuilder {
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.LIST_LITERAL ->
                 listOf(OperandKind.CONST, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
-            Opcode.GET_THIS_MEMBER ->
-                listOf(OperandKind.ID, OperandKind.SLOT)
-            Opcode.SET_THIS_MEMBER ->
-                listOf(OperandKind.ID, OperandKind.SLOT)
-            Opcode.EVAL_FALLBACK, Opcode.EVAL_REF, Opcode.EVAL_STMT, Opcode.EVAL_VALUE_FN ->
-                listOf(OperandKind.ID, OperandKind.SLOT)
+            Opcode.GET_MEMBER_SLOT ->
+                listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.ID, OperandKind.SLOT)
+            Opcode.SET_MEMBER_SLOT ->
+                listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.ID, OperandKind.SLOT)
             Opcode.ITER_PUSH ->
                 listOf(OperandKind.SLOT)
             Opcode.ITER_POP, Opcode.ITER_CANCEL ->
@@ -229,9 +229,12 @@ class CmdBuilder {
             Opcode.CONST_REAL -> CmdConstReal(operands[0], operands[1])
             Opcode.CONST_BOOL -> CmdConstBool(operands[0], operands[1])
             Opcode.CONST_NULL -> CmdConstNull(operands[0])
+            Opcode.MAKE_VALUE_FN -> CmdMakeValueFn(operands[0], operands[1])
             Opcode.BOX_OBJ -> CmdBoxObj(operands[0], operands[1])
             Opcode.OBJ_TO_BOOL -> CmdObjToBool(operands[0], operands[1])
             Opcode.RANGE_INT_BOUNDS -> CmdRangeIntBounds(operands[0], operands[1], operands[2], operands[3])
+            Opcode.LOAD_THIS -> CmdLoadThis(operands[0])
+            Opcode.LOAD_THIS_VARIANT -> CmdLoadThisVariant(operands[0], operands[1])
             Opcode.MAKE_RANGE -> CmdMakeRange(operands[0], operands[1], operands[2], operands[3])
             Opcode.CHECK_IS -> CmdCheckIs(operands[0], operands[1], operands[2])
             Opcode.ASSERT_IS -> CmdAssertIs(operands[0], operands[1])
@@ -378,21 +381,16 @@ class CmdBuilder {
             Opcode.DECL_LOCAL -> CmdDeclLocal(operands[0], operands[1])
             Opcode.DECL_EXT_PROPERTY -> CmdDeclExtProperty(operands[0], operands[1])
             Opcode.CALL_DIRECT -> CmdCallDirect(operands[0], operands[1], operands[2], operands[3])
+            Opcode.CALL_MEMBER_SLOT -> CmdCallMemberSlot(operands[0], operands[1], operands[2], operands[3], operands[4])
             Opcode.CALL_VIRTUAL -> CmdCallVirtual(operands[0], operands[1], operands[2], operands[3], operands[4])
-            Opcode.CALL_FALLBACK -> CmdCallFallback(operands[0], operands[1], operands[2], operands[3])
             Opcode.CALL_SLOT -> CmdCallSlot(operands[0], operands[1], operands[2], operands[3])
             Opcode.GET_FIELD -> CmdGetField(operands[0], operands[1], operands[2])
             Opcode.SET_FIELD -> CmdSetField(operands[0], operands[1], operands[2])
-            Opcode.GET_NAME -> CmdGetName(operands[0], operands[1])
             Opcode.GET_INDEX -> CmdGetIndex(operands[0], operands[1], operands[2])
             Opcode.SET_INDEX -> CmdSetIndex(operands[0], operands[1], operands[2])
             Opcode.LIST_LITERAL -> CmdListLiteral(operands[0], operands[1], operands[2], operands[3])
-            Opcode.GET_THIS_MEMBER -> CmdGetThisMember(operands[0], operands[1])
-            Opcode.SET_THIS_MEMBER -> CmdSetThisMember(operands[0], operands[1])
-            Opcode.EVAL_FALLBACK -> CmdEvalFallback(operands[0], operands[1])
-            Opcode.EVAL_REF -> CmdEvalRef(operands[0], operands[1])
-            Opcode.EVAL_STMT -> CmdEvalStmt(operands[0], operands[1])
-            Opcode.EVAL_VALUE_FN -> CmdEvalValueFn(operands[0], operands[1])
+            Opcode.GET_MEMBER_SLOT -> CmdGetMemberSlot(operands[0], operands[1], operands[2], operands[3])
+            Opcode.SET_MEMBER_SLOT -> CmdSetMemberSlot(operands[0], operands[1], operands[2], operands[3])
             Opcode.ITER_PUSH -> CmdIterPush(operands[0])
             Opcode.ITER_POP -> CmdIterPop()
             Opcode.ITER_CANCEL -> CmdIterCancel()
