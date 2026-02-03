@@ -8,6 +8,18 @@ extern class IllegalArgumentException
 extern class NotImplementedException
 extern class Delegate
 
+extern class Iterable<T> {
+    fun iterator(): Iterator<T>
+    fun toList(): List<T>
+}
+
+extern class Iterator<T> {
+    fun hasNext(): Bool
+    fun next(): T
+    fun cancelIteration(): Void
+    fun toList(): List<T>
+}
+
 // Built-in math helpers (implemented in host runtime).
 extern fun abs(x: Object): Real
 extern fun ln(x: Object): Real
