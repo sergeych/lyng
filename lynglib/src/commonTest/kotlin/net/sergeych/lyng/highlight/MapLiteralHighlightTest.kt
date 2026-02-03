@@ -21,7 +21,7 @@ import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
-@Ignore("Highlight tests postponed until ScriptTest baseline is restored")
+@Ignore
 class MapLiteralHighlightTest {
 
     private fun spansToLabeled(text: String, spans: List<HighlightSpan>): List<Pair<String, HighlightKind>> =

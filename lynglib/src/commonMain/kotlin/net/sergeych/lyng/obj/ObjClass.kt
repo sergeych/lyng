@@ -428,14 +428,14 @@ open class ObjClass(
                 if (rec.type != ObjRecord.Type.Field && rec.type != ObjRecord.Type.ConstructorField) continue
                 if (rec.visibility == Visibility.Private) continue
                 val id = rec.fieldId ?: cls.assignFieldId(name, rec)
-                result.putIfAbsent(name, id)
+                if (!result.containsKey(name)) result[name] = id
             }
             cls.classScope?.objects?.forEach { (name, rec) ->
                 if (rec.isAbstract) return@forEach
                 if (rec.type != ObjRecord.Type.Field && rec.type != ObjRecord.Type.ConstructorField) return@forEach
                 if (rec.visibility == Visibility.Private) return@forEach
                 val id = rec.fieldId ?: cls.assignFieldId(name, rec)
-                result.putIfAbsent(name, id)
+                if (!result.containsKey(name)) result[name] = id
             }
         }
         return result
@@ -451,7 +451,7 @@ open class ObjClass(
                     rec.type != ObjRecord.Type.Property &&
                     rec.type != ObjRecord.Type.Delegated) continue
                 val id = rec.methodId ?: cls.assignMethodId(name, rec)
-                result.putIfAbsent(name, id)
+                if (!result.containsKey(name)) result[name] = id
             }
             cls.classScope?.objects?.forEach { (name, rec) ->
                 if (!includeAbstract && rec.isAbstract) return@forEach
@@ -460,7 +460,7 @@ open class ObjClass(
                     rec.type != ObjRecord.Type.Property &&
                     rec.type != ObjRecord.Type.Delegated) return@forEach
                 val id = rec.methodId ?: cls.assignMethodId(name, rec)
-                result.putIfAbsent(name, id)
+                if (!result.containsKey(name)) result[name] = id
             }
         }
         return result
@@ -497,7 +497,7 @@ open class ObjClass(
                     rec.type != ObjRecord.Type.Delegated
                 ) continue
                 val id = rec.methodId ?: cls.assignMethodId(name, rec)
-                methodIdMap.putIfAbsent(name, id)
+                if (!methodIdMap.containsKey(name)) methodIdMap[name] = id
                 if (id > maxId) maxId = id
             }
             cls.classScope?.objects?.forEach { (name, rec) ->
@@ -506,7 +506,7 @@ open class ObjClass(
                     rec.type != ObjRecord.Type.Delegated
                 ) return@forEach
                 val id = rec.methodId ?: cls.assignMethodId(name, rec)
-                methodIdMap.putIfAbsent(name, id)
+                if (!methodIdMap.containsKey(name)) methodIdMap[name] = id
                 if (id > maxId) maxId = id
             }
         }

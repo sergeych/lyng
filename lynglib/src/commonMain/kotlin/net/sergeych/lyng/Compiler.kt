@@ -364,13 +364,15 @@ class Compiler(
         for (base in allBaseNames) {
             val info = resolveCompileClassInfo(base) ?: continue
             for ((name, id) in info.fieldIds) {
-                val prev = fieldIds.putIfAbsent(name, id)
-                if (prev != null && prev != id) fieldConflicts.add(name)
+                val prev = fieldIds[name]
+                if (prev == null) fieldIds[name] = id
+                else if (prev != id) fieldConflicts.add(name)
                 if (id > maxFieldId) maxFieldId = id
             }
             for ((name, id) in info.methodIds) {
-                val prev = methodIds.putIfAbsent(name, id)
-                if (prev != null && prev != id) methodConflicts.add(name)
+                val prev = methodIds[name]
+                if (prev == null) methodIds[name] = id
+                else if (prev != id) methodConflicts.add(name)
                 if (id > maxMethodId) maxMethodId = id
             }
         }
