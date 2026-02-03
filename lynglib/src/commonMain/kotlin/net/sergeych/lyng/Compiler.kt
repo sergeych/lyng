@@ -439,11 +439,56 @@ class Compiler(
     }
 
     private fun currentTypeParams(): Set<String> {
+        val result = mutableSetOf<String>()
         for (ctx in codeContexts.asReversed()) {
-            val fn = ctx as? CodeContext.Function ?: continue
-            if (fn.typeParams.isNotEmpty()) return fn.typeParams
+            when (ctx) {
+                is CodeContext.Function -> result.addAll(ctx.typeParams)
+                is CodeContext.ClassBody -> result.addAll(ctx.typeParams)
+                else -> {}
+            }
         }
-        return emptySet()
+        return result
+    }
+
+    private fun parseTypeParamList(): List<TypeDecl.TypeParam> {
+        if (cc.peekNextNonWhitespace().type != Token.Type.LT) return emptyList()
+        val typeParams = mutableListOf<TypeDecl.TypeParam>()
+        cc.nextNonWhitespace()
+        while (true) {
+            val varianceToken = cc.peekNextNonWhitespace()
+            val variance = when (varianceToken.value) {
+                "in" -> {
+                    cc.nextNonWhitespace()
+                    TypeDecl.Variance.In
+                }
+                "out" -> {
+                    cc.nextNonWhitespace()
+                    TypeDecl.Variance.Out
+                }
+                else -> TypeDecl.Variance.Invariant
+            }
+            val idTok = cc.requireToken(Token.Type.ID, "type parameter name expected")
+            var bound: TypeDecl? = null
+            var defaultType: TypeDecl? = null
+            if (cc.skipTokenOfType(Token.Type.COLON, isOptional = true)) {
+                bound = parseTypeExpressionWithMini().first
+            }
+            if (cc.skipTokenOfType(Token.Type.ASSIGN, isOptional = true)) {
+                defaultType = parseTypeExpressionWithMini().first
+            }
+            typeParams.add(TypeDecl.TypeParam(idTok.value, variance, bound, defaultType))
+            val sep = cc.nextNonWhitespace()
+            when (sep.type) {
+                Token.Type.COMMA -> continue
+                Token.Type.GT -> break
+                Token.Type.SHR -> {
+                    cc.pushPendingGT()
+                    break
+                }
+                else -> sep.raiseSyntax("expected ',' or '>' in type parameter list")
+            }
+        }
+        return typeParams
     }
 
     private fun lookupSlotLocation(name: String, includeModule: Boolean = true): SlotLocation? {
@@ -3702,6 +3747,9 @@ class Compiler(
         resolutionSink?.declareSymbol(nameToken.value, SymbolKind.CLASS, isMutable = false, pos = nameToken.pos)
         return inCodeContext(CodeContext.ClassBody(nameToken.value, isExtern = isExtern)) {
             val classCtx = codeContexts.lastOrNull() as? CodeContext.ClassBody
+            val typeParamDecls = parseTypeParamList()
+            classCtx?.typeParamDecls = typeParamDecls
+            classCtx?.typeParams = typeParamDecls.map { it.name }.toSet()
             val constructorArgsDeclaration =
                 if (cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true))
                     parseArgsDeclaration(isClassDeclaration = true)
@@ -3731,15 +3779,19 @@ class Compiler(
             val baseSpecs = mutableListOf<BaseSpec>()
             if (cc.skipTokenOfType(Token.Type.COLON, isOptional = true)) {
                 do {
-                    val baseId = cc.requireToken(Token.Type.ID, "base class name expected")
-                    resolutionSink?.reference(baseId.value, baseId.pos)
+                    val (baseDecl, _) = parseSimpleTypeExpressionWithMini()
+                    val baseName = when (baseDecl) {
+                        is TypeDecl.Simple -> baseDecl.name
+                        is TypeDecl.Generic -> baseDecl.name
+                        else -> throw ScriptError(cc.currentPos(), "base class name expected")
+                    }
                     var argsList: List<ParsedArgument>? = null
                     // Optional constructor args of the base — parse and ignore for now (MVP), just to consume tokens
                     if (cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true)) {
                         // Parse args without consuming any following block so that a class body can follow safely
                         argsList = parseArgsNoTailBlock()
                     }
-                    baseSpecs += BaseSpec(baseId.value, argsList)
+                    baseSpecs += BaseSpec(baseName, argsList)
                 } while (cc.skipTokenOfType(Token.Type.COMMA, isOptional = true))
             }
 
@@ -4360,24 +4412,8 @@ class Compiler(
             declareLocalName(extensionWrapperName, isMutable = false)
         }
 
-        val typeParams = mutableSetOf<String>()
-        if (cc.peekNextNonWhitespace().type == Token.Type.LT) {
-            cc.nextNonWhitespace()
-            while (true) {
-                val idTok = cc.requireToken(Token.Type.ID, "type parameter name expected")
-                typeParams.add(idTok.value)
-                val sep = cc.nextNonWhitespace()
-                when (sep.type) {
-                    Token.Type.COMMA -> continue
-                    Token.Type.GT -> break
-                    Token.Type.SHR -> {
-                        cc.pushPendingGT()
-                        break
-                    }
-                    else -> sep.raiseSyntax("expected ',' or '>' in type parameter list")
-                }
-            }
-        }
+        val typeParamDecls = parseTypeParamList()
+        val typeParams = typeParamDecls.map { it.name }.toSet()
 
         val argsDeclaration: ArgsDeclaration =
             if (cc.peekNextNonWhitespace().type == Token.Type.LPAREN) {
@@ -4441,7 +4477,8 @@ class Compiler(
                 name,
                 implicitThisMembers = implicitThisMembers,
                 implicitThisTypeName = extTypeName,
-                typeParams = typeParams
+                typeParams = typeParams,
+                typeParamDecls = typeParamDecls
             )
         ) {
             cc.labels.add(name)

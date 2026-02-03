@@ -1,7 +1,6 @@
 package lyng.stdlib
 
-// desired type: FlowBuilder.()->void (function types not yet supported in type grammar)
-extern fun flow(builder)
+extern fun flow(builder: FlowBuilder.()->Void): Flow
 
 /* Built-in exception type. */
 extern class Exception
@@ -10,10 +9,10 @@ extern class NotImplementedException
 extern class Delegate
 
 // Built-in math helpers (implemented in host runtime).
-extern fun abs(x)
-extern fun ln(x)
-extern fun pow(x, y)
-extern fun sqrt(x)
+extern fun abs(x: Object): Real
+extern fun ln(x: Object): Real
+extern fun pow(x: Object, y: Object): Real
+extern fun sqrt(x: Object): Real
 
 // Last regex match result, updated by =~ / !~.
 var $~ = null
@@ -22,7 +21,7 @@ var $~ = null
     Wrap a builder into a zero-argument thunk that computes once and caches the result.
     The first call invokes builder() and stores the value; subsequent calls return the cached value.
 */
-fun cached(builder) {
+fun cached<T>(builder: ()->T): ()->T {
     var calculated = false
     var value = null
     {
@@ -30,13 +29,13 @@ fun cached(builder) {
             value = builder()
             calculated = true
         }
-        value
+        value as T
     }
 }
 /* Filter elements of this iterable using the provided predicate and provide a flow
     of results. Coudl be used to map infinte flows, etc.
 */
-fun Iterable.filterFlow(predicate): Flow {
+fun Iterable.filterFlow<T>(predicate: (T)->Bool): Flow<T> {
     val list = this
     flow {
         for( item in list ) {
@@ -50,8 +49,8 @@ fun Iterable.filterFlow(predicate): Flow {
 /*
     Filter this iterable and return List of elements
 */
-fun Iterable.filter(predicate) {
-    var result: List = List()
+fun Iterable.filter<T>(predicate: (T)->Bool): List<T> {
+    var result: List<T> = List()
     for( item in this ) if( predicate(item) ) result += item
     result
 }
@@ -59,7 +58,7 @@ fun Iterable.filter(predicate) {
 /*
     Count all items in this iterable for which predicate returns true
 */
-fun Iterable.count(predicate): Int {
+fun Iterable.count<T>(predicate: (T)->Bool): Int {
     var hits = 0
     this.forEach {
         if( predicate(it) ) hits++
@@ -70,24 +69,24 @@ fun Iterable.count(predicate): Int {
     filter out all null elements from this collection (Iterable); flow of
     non-null elements is returned
 */
-fun Iterable.filterFlowNotNull(): Flow {
+fun Iterable.filterFlowNotNull<T>(): Flow<T> {
     filterFlow { it != null }
 }
 
 /* Filter non-null elements and collect them into a List
 */
-fun Iterable.filterNotNull(): List {
+fun Iterable.filterNotNull<T>(): List<T> {
     filter { it != null }
 }
 
 /* Skip the first N elements of this iterable. */
-fun Iterable.drop(n) {
+fun Iterable.drop<T>(n: Int): List<T> {
     var cnt = 0
     filter { cnt++ >= n }
 }
 
 /* Return the first element or throw if the iterable is empty. */
-val Iterable.first get() {
+val Iterable.first: Object get() {
     val i: Iterator = iterator()
     if( !i.hasNext() ) throw NoSuchElementException()
         i.next().also { i.cancelIteration() }
@@ -97,7 +96,7 @@ val Iterable.first get() {
     Return the first element that matches the predicate or throws
     NuSuchElementException
 */
-fun Iterable.findFirst(predicate) {
+fun Iterable.findFirst<T>(predicate: (T)->Bool): T {
     for( x in this ) {
         if( predicate(x) )
             break x
@@ -108,7 +107,7 @@ fun Iterable.findFirst(predicate) {
 /*
     return the first element matching the predicate or null
 */
-fun Iterable.findFirstOrNull(predicate) {
+fun Iterable.findFirstOrNull<T>(predicate: (T)->Bool): T? {
     for( x in this ) {
         if( predicate(x) )
             break x
@@ -118,7 +117,7 @@ fun Iterable.findFirstOrNull(predicate) {
 
 
 /* Return the last element or throw if the iterable is empty. */
-val Iterable.last get() {
+val Iterable.last: Object get() {
     var found = false
     var element = null
     for( i in this ) {
@@ -130,7 +129,7 @@ val Iterable.last get() {
 }
 
 /* Emit all but the last N elements of this iterable. */
-fun Iterable.dropLast(n) {
+fun Iterable.dropLast<T>(n: Int): Flow<T> {
     val list = this
     val buffer = RingBuffer(n)
     flow {
@@ -143,17 +142,17 @@ fun Iterable.dropLast(n) {
 }
 
 /* Return the last N elements of this iterable as a buffer/list. */
-fun Iterable.takeLast(n) {
-    val buffer = RingBuffer(n)
+fun Iterable.takeLast<T>(n: Int): RingBuffer<T> {
+    val buffer: RingBuffer<T> = RingBuffer(n)
     for( item in this ) buffer += item
     buffer
 }
 
 /* Join elements into a string with a separator (separator parameter) and optional transformer. */
-fun Iterable.joinToString(separator=" ", transformer=null) {
+fun Iterable.joinToString<T>(separator: String=" ", transformer: (T)->Object = { it }): String {
     var result = null
     for( part in this ) {
-        val transformed = transformer?(part)?.toString() ?: part.toString()
+        val transformed = transformer(part).toString()
         if( result == null ) result = transformed
         else result += separator + transformed
     }
@@ -161,7 +160,7 @@ fun Iterable.joinToString(separator=" ", transformer=null) {
 }
 
 /* Return true if any element matches the predicate. */
-fun Iterable.any(predicate): Bool {
+fun Iterable.any<T>(predicate: (T)->Bool): Bool {
     for( i in this ) {
         if( predicate(i) )
             break true
@@ -169,12 +168,12 @@ fun Iterable.any(predicate): Bool {
 }
 
 /* Return true if all elements match the predicate. */
-fun Iterable.all(predicate): Bool {
+fun Iterable.all<T>(predicate: (T)->Bool): Bool {
     !any { !predicate(it) }
 }
 
 /* Sum all elements; returns null for empty collections. */
-fun Iterable.sum() {
+fun Iterable.sum<T>(): T? {
     val i: Iterator = iterator()
     if( i.hasNext() ) {
         var result = i.next()
@@ -185,7 +184,7 @@ fun Iterable.sum() {
 }
 
 /* Sum mapped values of elements; returns null for empty collections. */
-fun Iterable.sumOf(f) {
+fun Iterable.sumOf<T,R>(f: (T)->R): R? {
     val i: Iterator = iterator()
     if( i.hasNext() ) {
         var result = f(i.next())
@@ -196,7 +195,7 @@ fun Iterable.sumOf(f) {
 }
 
 /* Minimum value of the given function applied to elements of the collection. */
-fun Iterable.minOf( lambda ) {
+fun Iterable.minOf<T,R>(lambda: (T)->R): R {
     val i: Iterator = iterator()
     var minimum = lambda( i.next() )
     while( i.hasNext() ) {
@@ -207,7 +206,7 @@ fun Iterable.minOf( lambda ) {
 }
 
 /* Maximum value of the given function applied to elements of the collection. */
-fun Iterable.maxOf( lambda ) {
+fun Iterable.maxOf<T,R>(lambda: (T)->R): R {
     val i: Iterator = iterator()
     var maximum = lambda( i.next() )
     while( i.hasNext() ) {
@@ -218,18 +217,18 @@ fun Iterable.maxOf( lambda ) {
 }
 
 /* Return elements sorted by natural order. */
-fun Iterable.sorted() {
+fun Iterable.sorted<T>(): List<T> {
     sortedWith { a, b -> a <=> b }
 }
 
 /* Return elements sorted by the key selector. */
-fun Iterable.sortedBy(predicate) {
+fun Iterable.sortedBy<T,R>(predicate: (T)->R): List<T> {
     sortedWith { a, b -> predicate(a) <=> predicate(b) }
 }
 
 /* Return a shuffled copy of the iterable as a list. */
-fun Iterable.shuffled() {
-    val list: List = toList()
+fun Iterable.shuffled<T>(): List<T> {
+    val list: List<T> = toList()
     list.shuffle()
     list
 }
@@ -238,8 +237,8 @@ fun Iterable.shuffled() {
     Returns a single list of all elements from all collections in the given collection.
     @return List
 */
-fun Iterable.flatten() {
-    var result: List = List()
+fun Iterable.flatten<T>(): List<T> {
+    var result: List<T> = List()
     forEach { i ->
         i.forEach { result += it }
     }
@@ -250,8 +249,8 @@ fun Iterable.flatten() {
     Returns a single list of all elements yielded from results of transform function being
     invoked on each element of original collection.
 */
-fun Iterable.flatMap(transform): List {
-    val mapped: List = map(transform)
+fun Iterable.flatMap<T,R>(transform: (T)->Iterable<R>): List<R> {
+    val mapped: List<Iterable<R>> = map(transform)
     mapped.flatten()
 }
 
@@ -268,26 +267,26 @@ override fun List.toString() {
 }
 
 /* Sort list in-place by key selector. */
-fun List.sortBy(predicate) {
+fun List.sortBy<T,R>(predicate: (T)->R): Void {
     sortWith { a, b -> predicate(a) <=> predicate(b) }
 }
 
 /* Sort list in-place by natural order. */
-fun List.sort() {
+fun List.sort<T>(): Void {
     sortWith { a, b -> a <=> b }
 }
 
 /* Print this exception and its stack trace to standard output. */
-fun Exception.printStackTrace() {
+fun Exception.printStackTrace(): Void {
     println(this)
     for( entry in stackTrace )
         println("\tat "+entry.toString())
 }
 
 /* Compile this string into a regular expression. */
-val String.re get() = Regex(this)
+val String.re: Regex get() = Regex(this)
 
-fun TODO(message=null) {
+fun TODO(message: Object?=null): Void {
     throw "not implemented"
 }
 
@@ -306,21 +305,21 @@ enum DelegateAccess {
     Implementing this interface is optional as Lyng uses dynamic dispatch,
     but it is recommended for documentation and clarity.
 */
-interface Delegate {
+interface Delegate<T,ThisRefType=Void> {
     /* Called when a delegated 'val' or 'var' is read. */
-    fun getValue(thisRef, name) = TODO("delegate getter is not implemented")
+    fun getValue(thisRef: ThisRefType, name: String): T = TODO("delegate getter is not implemented")
 
     /* Called when a delegated 'var' is written. */
-    fun setValue(thisRef, name, newValue) = TODO("delegate setter is not implemented")
+    fun setValue(thisRef: ThisRefType, name: String, newValue: T): Void = TODO("delegate setter is not implemented")
 
     /* Called when a delegated function is invoked. */
-    fun invoke(thisRef, name, args...) = TODO("delegate invoke is not implemented")
+    fun invoke(thisRef: ThisRefType, name: String, args...): Object = TODO("delegate invoke is not implemented")
 
     /*
         Called once during initialization to configure or validate the delegate.
         Should return the delegate object to be used (usually 'this').
     */
-    fun bind(name, access, thisRef) = this
+    fun bind(name: String, access: DelegateAccess, thisRef: ThisRefType): Object = this
 }
 
 /*
@@ -338,19 +337,19 @@ fun with<T,R>(self: T, block: T.()->R): R {
     The provided creator lambda is called once on the first access to compute the value.
     Can only be used with 'val' properties.
 */
-class lazy(creatorParam) : Delegate {
-    private val creator = creatorParam
+class lazy<T>(creatorParam: Object.()->T) : Delegate<T,Object> {
+    private val creator: Object.()->T = creatorParam
     private var value = Unset
 
-    override fun bind(name, access, thisRef) {
+    override fun bind(name: String, access: DelegateAccess, thisRef: Object): Object {
         if (access.toString() != "DelegateAccess.Val") throw "lazy delegate can only be used with 'val'"
         this
     }
 
-    override fun getValue(thisRef, name) {
+    override fun getValue(thisRef: Object, name: String): T {
         if (value == Unset)
             value = with(thisRef,creator)
-        value
+        value as T
     }
 }
 

@@ -22,6 +22,7 @@ package net.sergeych.lyng
 // this is highly experimental and subject to complete redesign
 // very soon
 sealed class TypeDecl(val isNullable:Boolean = false) {
+    enum class Variance { In, Out, Invariant }
     // ??
     data class Function(
         val receiver: TypeDecl?,
@@ -30,6 +31,12 @@ sealed class TypeDecl(val isNullable:Boolean = false) {
         val nullable: Boolean = false
     ) : TypeDecl(nullable)
     data class TypeVar(val name: String, val nullable: Boolean = false) : TypeDecl(nullable)
+    data class TypeParam(
+        val name: String,
+        val variance: Variance = Variance.Invariant,
+        val bound: TypeDecl? = null,
+        val defaultType: TypeDecl? = null
+    )
     object TypeAny : TypeDecl()
     object TypeNullableAny : TypeDecl(true)
 

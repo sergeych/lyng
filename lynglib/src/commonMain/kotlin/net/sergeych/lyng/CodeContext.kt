@@ -23,9 +23,12 @@ sealed class CodeContext {
         val name: String,
         val implicitThisMembers: Boolean = false,
         val implicitThisTypeName: String? = null,
-        val typeParams: Set<String> = emptySet()
+        val typeParams: Set<String> = emptySet(),
+        val typeParamDecls: List<TypeDecl.TypeParam> = emptyList()
     ): CodeContext()
     class ClassBody(val name: String, val isExtern: Boolean = false): CodeContext() {
+        var typeParams: Set<String> = emptySet()
+        var typeParamDecls: List<TypeDecl.TypeParam> = emptyList()
         val pendingInitializations = mutableMapOf<String, Pos>()
         val declaredMembers = mutableSetOf<String>()
         val memberOverrides = mutableMapOf<String, Boolean>()

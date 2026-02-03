@@ -203,7 +203,12 @@ square("3.14")
 
 - Generics runtime model: Are type params reified via hidden Class args always, or only when used (T::class, T is ...)? How does this interact with Kotlin interop?
 
-I think we can omit if not used. For kotlin interop: if the class has at least one `extern` symbol, that means native implementation, we always include type parameters, to kotlin implementation can rely on it.
+Type params are erased by default. Hidden `Class` args are only injected when a type parameter is used in a reified way (`T::class`, `T is`, `is T`, `as T`) or when the class has at least one `extern` symbol (so host implementations can rely on them). Otherwise `T` is compile-time only and runtime uses `Object`.
+
+- Variance syntax:
+  - Declaration-site only, Kotlin-style: `out` (covariant) and `in` (contravariant).
+  - Example: `class Box<out T>`, `class Sink<in T>`.
+  - Bounds remain `T: A & B` or `T: A | B`.
 
 - Member access rules: If a variable is Object (dynamic), is member access a compile-time error, or allowed with fallback (which we are trying to remove)? If error, do we require explicit cast first?
 
