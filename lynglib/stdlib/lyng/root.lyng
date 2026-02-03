@@ -10,6 +10,8 @@ extern class Delegate
 
 extern class Iterable<T> {
     fun iterator(): Iterator<T>
+    fun forEach(action: (T)->Void): Void
+    fun map<R>(transform: (T)->R): List<R>
     fun toList(): List<T>
 }
 

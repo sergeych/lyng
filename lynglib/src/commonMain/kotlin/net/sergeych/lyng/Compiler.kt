@@ -4626,6 +4626,99 @@ class Compiler(
                     val st = try {
                         classCtx?.let { ctx ->
                             predeclareClassMembers(ctx.declaredMembers, ctx.memberOverrides)
+                            val existingExternInfo = if (isExtern) resolveCompileClassInfo(nameToken.value) else null
+                            if (existingExternInfo != null) {
+                                ctx.memberFieldIds.putAll(existingExternInfo.fieldIds)
+                                ctx.memberMethodIds.putAll(existingExternInfo.methodIds)
+                                ctx.nextFieldId = maxOf(ctx.nextFieldId, existingExternInfo.nextFieldId)
+                                ctx.nextMethodId = maxOf(ctx.nextMethodId, existingExternInfo.nextMethodId)
+                                for (member in ctx.declaredMembers) {
+                                    val hasField = member in existingExternInfo.fieldIds
+                                    val hasMethod = member in existingExternInfo.methodIds
+                                    if (!hasField && !hasMethod) {
+                                        throw ScriptError(nameToken.pos, "extern member $member is not found in runtime class ${nameToken.value}")
+                                    }
+                                }
+                                compileClassInfos[nameToken.value] = existingExternInfo
+                            } else {
+                                val baseIds = collectBaseMemberIds(baseSpecs.map { it.name })
+                                ctx.memberFieldIds.putAll(baseIds.fieldIds)
+                                ctx.memberMethodIds.putAll(baseIds.methodIds)
+                                ctx.nextFieldId = maxOf(ctx.nextFieldId, baseIds.nextFieldId)
+                                ctx.nextMethodId = maxOf(ctx.nextMethodId, baseIds.nextMethodId)
+                                for (member in ctx.declaredMembers) {
+                                    val isOverride = ctx.memberOverrides[member] == true
+                                    val hasBaseField = member in baseIds.fieldIds
+                                    val hasBaseMethod = member in baseIds.methodIds
+                                    if (isOverride) {
+                                        if (!hasBaseField && !hasBaseMethod) {
+                                            throw ScriptError(nameToken.pos, "member $member is marked 'override' but does not override anything")
+                                        }
+                                    } else {
+                                        if (hasBaseField || hasBaseMethod) {
+                                            throw ScriptError(nameToken.pos, "member $member overrides parent member but 'override' keyword is missing")
+                                        }
+                                    }
+                                    if (!ctx.memberFieldIds.containsKey(member)) {
+                                        ctx.memberFieldIds[member] = ctx.nextFieldId++
+                                    }
+                                    if (!ctx.memberMethodIds.containsKey(member)) {
+                                        ctx.memberMethodIds[member] = ctx.nextMethodId++
+                                    }
+                                }
+                                compileClassInfos[nameToken.value] = CompileClassInfo(
+                                    name = nameToken.value,
+                                    fieldIds = ctx.memberFieldIds.toMap(),
+                                    methodIds = ctx.memberMethodIds.toMap(),
+                                    nextFieldId = ctx.nextFieldId,
+                                    nextMethodId = ctx.nextMethodId
+                                )
+                            }
+                        }
+                        withLocalNames(constructorArgsDeclaration?.params?.map { it.name }?.toSet() ?: emptySet()) {
+                            parseScript()
+                        }
+                    } finally {
+                        slotPlanStack.removeLast()
+                        resolutionSink?.exitScope(cc.currentPos())
+                    }
+                    val rbTok = cc.next()
+                    if (rbTok.type != Token.Type.RBRACE) throw ScriptError(rbTok.pos, "unbalanced braces in class body")
+                    classBodyRange = MiniRange(bodyStart, rbTok.pos)
+                    miniSink?.onExitClass(rbTok.pos)
+                    st
+                } else {
+                    // No body, but still emit the class
+                    run {
+                        val node = MiniClassDecl(
+                            range = MiniRange(startPos, cc.currentPos()),
+                            name = nameToken.value,
+                            bases = baseSpecs.map { it.name },
+                            bodyRange = null,
+                            ctorFields = ctorFields,
+                            doc = doc,
+                            nameStart = nameToken.pos,
+                            isExtern = isExtern
+                        )
+                        miniSink?.onClassDecl(node)
+                    }
+                    resolutionSink?.declareClass(nameToken.value, baseSpecs.map { it.name }, startPos)
+                    classCtx?.let { ctx ->
+                        val existingExternInfo = if (isExtern) resolveCompileClassInfo(nameToken.value) else null
+                        if (existingExternInfo != null) {
+                            ctx.memberFieldIds.putAll(existingExternInfo.fieldIds)
+                            ctx.memberMethodIds.putAll(existingExternInfo.methodIds)
+                            ctx.nextFieldId = maxOf(ctx.nextFieldId, existingExternInfo.nextFieldId)
+                            ctx.nextMethodId = maxOf(ctx.nextMethodId, existingExternInfo.nextMethodId)
+                            for (member in ctx.declaredMembers) {
+                                val hasField = member in existingExternInfo.fieldIds
+                                val hasMethod = member in existingExternInfo.methodIds
+                                if (!hasField && !hasMethod) {
+                                    throw ScriptError(nameToken.pos, "extern member $member is not found in runtime class ${nameToken.value}")
+                                }
+                            }
+                            compileClassInfos[nameToken.value] = existingExternInfo
+                        } else {
                             val baseIds = collectBaseMemberIds(baseSpecs.map { it.name })
                             ctx.memberFieldIds.putAll(baseIds.fieldIds)
                             ctx.memberMethodIds.putAll(baseIds.methodIds)
@@ -4659,67 +4752,6 @@ class Compiler(
                                 nextMethodId = ctx.nextMethodId
                             )
                         }
-                        withLocalNames(constructorArgsDeclaration?.params?.map { it.name }?.toSet() ?: emptySet()) {
-                            parseScript()
-                        }
-                    } finally {
-                        slotPlanStack.removeLast()
-                        resolutionSink?.exitScope(cc.currentPos())
-                    }
-                    val rbTok = cc.next()
-                    if (rbTok.type != Token.Type.RBRACE) throw ScriptError(rbTok.pos, "unbalanced braces in class body")
-                    classBodyRange = MiniRange(bodyStart, rbTok.pos)
-                    miniSink?.onExitClass(rbTok.pos)
-                    st
-                } else {
-                    // No body, but still emit the class
-                    run {
-                        val node = MiniClassDecl(
-                            range = MiniRange(startPos, cc.currentPos()),
-                            name = nameToken.value,
-                            bases = baseSpecs.map { it.name },
-                            bodyRange = null,
-                            ctorFields = ctorFields,
-                            doc = doc,
-                            nameStart = nameToken.pos,
-                            isExtern = isExtern
-                        )
-                        miniSink?.onClassDecl(node)
-                    }
-                    resolutionSink?.declareClass(nameToken.value, baseSpecs.map { it.name }, startPos)
-                    classCtx?.let { ctx ->
-                        val baseIds = collectBaseMemberIds(baseSpecs.map { it.name })
-                        ctx.memberFieldIds.putAll(baseIds.fieldIds)
-                        ctx.memberMethodIds.putAll(baseIds.methodIds)
-                        ctx.nextFieldId = maxOf(ctx.nextFieldId, baseIds.nextFieldId)
-                        ctx.nextMethodId = maxOf(ctx.nextMethodId, baseIds.nextMethodId)
-                        for (member in ctx.declaredMembers) {
-                            val isOverride = ctx.memberOverrides[member] == true
-                            val hasBaseField = member in baseIds.fieldIds
-                            val hasBaseMethod = member in baseIds.methodIds
-                            if (isOverride) {
-                                if (!hasBaseField && !hasBaseMethod) {
-                                    throw ScriptError(nameToken.pos, "member $member is marked 'override' but does not override anything")
-                                }
-                            } else {
-                                if (hasBaseField || hasBaseMethod) {
-                                    throw ScriptError(nameToken.pos, "member $member overrides parent member but 'override' keyword is missing")
-                                }
-                            }
-                            if (!ctx.memberFieldIds.containsKey(member)) {
-                                ctx.memberFieldIds[member] = ctx.nextFieldId++
-                            }
-                            if (!ctx.memberMethodIds.containsKey(member)) {
-                                ctx.memberMethodIds[member] = ctx.nextMethodId++
-                            }
-                        }
-                        compileClassInfos[nameToken.value] = CompileClassInfo(
-                            name = nameToken.value,
-                            fieldIds = ctx.memberFieldIds.toMap(),
-                            methodIds = ctx.memberMethodIds.toMap(),
-                            nextFieldId = ctx.nextFieldId,
-                            nextMethodId = ctx.nextMethodId
-                        )
                     }
                     // restore if no body starts here
                     cc.restorePos(saved)
