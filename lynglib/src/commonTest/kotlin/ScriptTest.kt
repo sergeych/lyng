@@ -5274,6 +5274,40 @@ class ScriptTest {
     }
 
     @Test
+    fun testGenericBoundsAndReifiedTypeParams() = runTest {
+        val resInt = eval(
+            """
+            fun square<T: Int | Real>(x: T) = x * x
+            square(2)
+            """.trimIndent()
+        )
+        assertEquals(4L, (resInt as ObjInt).value)
+        val resReal = eval(
+            """
+            fun square<T: Int | Real>(x: T) = x * x
+            square(1.5)
+            """.trimIndent()
+        )
+        assertEquals(2.25, (resReal as ObjReal).value, 0.00001)
+        assertFailsWith<ScriptError> {
+            eval(
+                """
+                fun square<T: Int | Real>(x: T) = x * x
+                square("x")
+                """.trimIndent()
+            )
+        }
+
+        val reified = eval(
+            """
+            fun sameType<T>(x: T, y: Object) = y is T
+            sameType(1, "a")
+            """.trimIndent()
+        )
+        assertEquals(false, (reified as ObjBool).value)
+    }
+
+    @Test
     fun testFilterBug() = runTest {
         eval(
             """

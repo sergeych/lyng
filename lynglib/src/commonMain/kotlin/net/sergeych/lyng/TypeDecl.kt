@@ -31,6 +31,8 @@ sealed class TypeDecl(val isNullable:Boolean = false) {
         val nullable: Boolean = false
     ) : TypeDecl(nullable)
     data class TypeVar(val name: String, val nullable: Boolean = false) : TypeDecl(nullable)
+    data class Union(val options: List<TypeDecl>, val nullable: Boolean = false) : TypeDecl(nullable)
+    data class Intersection(val options: List<TypeDecl>, val nullable: Boolean = false) : TypeDecl(nullable)
     data class TypeParam(
         val name: String,
         val variance: Variance = Variance.Invariant,

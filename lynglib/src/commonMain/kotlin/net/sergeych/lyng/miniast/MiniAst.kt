@@ -150,6 +150,18 @@ data class MiniTypeVar(
     val nullable: Boolean
 ) : MiniTypeRef
 
+data class MiniTypeUnion(
+    override val range: MiniRange,
+    val options: List<MiniTypeRef>,
+    val nullable: Boolean
+) : MiniTypeRef
+
+data class MiniTypeIntersection(
+    override val range: MiniRange,
+    val options: List<MiniTypeRef>,
+    val nullable: Boolean
+) : MiniTypeRef
+
 // Script and declarations (lean subset; can be extended later)
 sealed interface MiniNamedDecl : MiniNode {
     val name: String

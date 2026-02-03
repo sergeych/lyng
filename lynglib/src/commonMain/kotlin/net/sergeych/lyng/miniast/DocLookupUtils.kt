@@ -1025,6 +1025,8 @@ object DocLookupUtils {
         is MiniGenericType -> simpleClassNameOf(t.base)
         is MiniFunctionType -> null
         is MiniTypeVar -> null
+        is MiniTypeUnion -> null
+        is MiniTypeIntersection -> null
     }
 
     fun typeOf(t: MiniTypeRef?): String = when (t) {
@@ -1035,6 +1037,8 @@ object DocLookupUtils {
             r + "(" + t.params.joinToString(", ") { typeOf(it) } + ") -> " + typeOf(t.returnType) + (if (t.nullable) "?" else "")
         }
         is MiniTypeVar -> t.name + (if (t.nullable) "?" else "")
+        is MiniTypeUnion -> t.options.joinToString(" | ") { typeOf(it) } + (if (t.nullable) "?" else "")
+        is MiniTypeIntersection -> t.options.joinToString(" & ") { typeOf(it) } + (if (t.nullable) "?" else "")
         null -> ""
     }
 
