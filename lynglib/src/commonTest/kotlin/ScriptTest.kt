@@ -926,7 +926,6 @@ class ScriptTest {
         )
     }
 
-    @Ignore("incremental enable")
     @Test
     fun bookTest0() = runTest {
         assertEquals(
@@ -1041,7 +1040,6 @@ class ScriptTest {
 //        assertEquals( "4", c.eval("x+0").toString())
     }
 
-    @Ignore("incremental enable")
     @Test
     fun bookTest2() = runTest {
         val src = """
@@ -4609,7 +4607,6 @@ class ScriptTest {
     }
 
 
-    @Ignore("incremental enable: destructuring assignments not implemented in bytecode compiler")
     @Test
     fun testDestructuringAssignment() = runTest {
         eval(

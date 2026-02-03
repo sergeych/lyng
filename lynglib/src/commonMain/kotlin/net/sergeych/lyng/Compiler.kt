@@ -1981,6 +1981,39 @@ class Compiler(
         }
     }
 
+    private suspend fun parseDestructuringPattern(): List<ListEntry> {
+        // it should be called after Token.Type.LBRACKET is consumed
+        val entries = mutableListOf<ListEntry>()
+        while (true) {
+            val t = cc.next()
+            when (t.type) {
+                Token.Type.COMMA -> {
+                    // allow trailing/extra commas
+                }
+                Token.Type.RBRACKET -> return entries
+                Token.Type.LBRACKET -> {
+                    val nested = parseDestructuringPattern()
+                    entries += ListEntry.Element(ListLiteralRef(nested))
+                }
+                Token.Type.ELLIPSIS -> {
+                    val id = cc.requireToken(Token.Type.ID, "Expected identifier after ...")
+                    val ref = LocalVarRef(id.value, id.pos)
+                    entries += ListEntry.Spread(ref)
+                }
+                Token.Type.ID -> {
+                    val ref = LocalVarRef(t.value, t.pos)
+                    if (cc.peekNextNonWhitespace().type == Token.Type.ELLIPSIS) {
+                        cc.next()
+                        entries += ListEntry.Spread(ref)
+                    } else {
+                        entries += ListEntry.Element(ref)
+                    }
+                }
+                else -> throw ScriptError(t.pos, "invalid destructuring pattern: expected identifier")
+            }
+        }
+    }
+
     private fun parseScopeOperator(operand: ObjRef?): ObjRef {
         // implement global scope maybe?
         if (operand == null) throw ScriptError(cc.next().pos, "Expecting expression before ::")
@@ -4406,6 +4439,55 @@ class Compiler(
         return parseBlockWithPredeclared(emptyList(), skipLeadingBrace)
     }
 
+    private suspend fun parseExpressionWithPredeclared(
+        predeclared: List<Pair<String, Boolean>>
+    ): Statement {
+        val startPos = cc.currentPos()
+        resolutionSink?.enterScope(ScopeKind.BLOCK, startPos, null)
+        val exprSlotPlan = SlotPlan(mutableMapOf(), 0, nextScopeId++)
+        for ((name, isMutable) in predeclared) {
+            declareSlotNameIn(exprSlotPlan, name, isMutable, isDelegated = false)
+            resolutionSink?.declareSymbol(name, SymbolKind.LOCAL, isMutable, startPos, isOverride = false)
+        }
+        slotPlanStack.add(exprSlotPlan)
+        val capturePlan = CapturePlan(exprSlotPlan)
+        capturePlanStack.add(capturePlan)
+        val expr = try {
+            parseExpression() ?: throw ScriptError(cc.current().pos, "Expected expression")
+        } finally {
+            capturePlanStack.removeLast()
+            slotPlanStack.removeLast()
+        }
+        resolutionSink?.exitScope(cc.currentPos())
+        return expr
+    }
+
+    private suspend fun parseExpressionBlockWithPredeclared(
+        predeclared: List<Pair<String, Boolean>>
+    ): Statement {
+        val startPos = cc.currentPos()
+        resolutionSink?.enterScope(ScopeKind.BLOCK, startPos, null)
+        val blockSlotPlan = SlotPlan(mutableMapOf(), 0, nextScopeId++)
+        for ((name, isMutable) in predeclared) {
+            declareSlotNameIn(blockSlotPlan, name, isMutable, isDelegated = false)
+            resolutionSink?.declareSymbol(name, SymbolKind.LOCAL, isMutable, startPos, isOverride = false)
+        }
+        slotPlanStack.add(blockSlotPlan)
+        val capturePlan = CapturePlan(blockSlotPlan)
+        capturePlanStack.add(capturePlan)
+        val expr = try {
+            parseExpression() ?: throw ScriptError(cc.current().pos, "Expected expression")
+        } finally {
+            capturePlanStack.removeLast()
+            slotPlanStack.removeLast()
+        }
+        val planSnapshot = slotPlanIndices(blockSlotPlan)
+        val block = Script(startPos, listOf(expr))
+        val stmt = BlockStatement(block, planSnapshot, capturePlan.captures.toList(), startPos)
+        resolutionSink?.exitScope(cc.currentPos())
+        return stmt
+    }
+
     private fun resolveInitializerObjClass(initializer: Statement?): ObjClass? {
         if (initializer is BytecodeStatement) {
             val fn = initializer.bytecodeFunction()
@@ -4647,7 +4729,7 @@ class Compiler(
             // Destructuring
             if (isStatic) throw ScriptError(start, "static destructuring is not supported")
 
-            val entries = parseArrayLiteral()
+            val entries = parseDestructuringPattern()
             val pattern = ListLiteralRef(entries)
 
             // Register all names in the pattern
@@ -5043,14 +5125,20 @@ class Compiler(
                                 implicitThisTypeName = extTypeName
                             )
                         ) {
-                            parseBlock()
+                            parseBlockWithPredeclared(listOf(setArgName to true))
                         }
                         object : Statement() {
                             override val pos: Pos = body.pos
                             override suspend fun execute(scope: Scope): Obj {
                                 val value = scope.args.list.firstOrNull() ?: ObjNull
                                 scope.addItem(setArgName, true, value, recordType = ObjRecord.Type.Argument)
-                                return body.execute(scope)
+                                val prev = scope.skipScopeCreation
+                                scope.skipScopeCreation = true
+                                return try {
+                                    body.execute(scope)
+                                } finally {
+                                    scope.skipScopeCreation = prev
+                                }
                             }
                         }
                     } else if (cc.peekNextNonWhitespace().type == Token.Type.ASSIGN) {
@@ -5063,8 +5151,7 @@ class Compiler(
                                 implicitThisTypeName = extTypeName
                             )
                         ) {
-                            parseExpression()
-                                ?: throw ScriptError(cc.current().pos, "Expected setter expression")
+                            parseExpressionBlockWithPredeclared(listOf(setArgName to true))
                         }
                         val st = expr
                         object : Statement() {
@@ -5072,7 +5159,13 @@ class Compiler(
                             override suspend fun execute(scope: Scope): Obj {
                                 val value = scope.args.list.firstOrNull() ?: ObjNull
                                 scope.addItem(setArgName, true, value, recordType = ObjRecord.Type.Argument)
-                                return st.execute(scope)
+                                val prev = scope.skipScopeCreation
+                                scope.skipScopeCreation = true
+                                return try {
+                                    st.execute(scope)
+                                } finally {
+                                    scope.skipScopeCreation = prev
+                                }
                             }
                         }
                     } else {
@@ -5100,14 +5193,20 @@ class Compiler(
                                         implicitThisTypeName = extTypeName
                                     )
                                 ) {
-                                    parseBlock()
+                                    parseBlockWithPredeclared(listOf(setArg.value to true))
                                 }
                                 object : Statement() {
                                     override val pos: Pos = body.pos
                                     override suspend fun execute(scope: Scope): Obj {
                                         val value = scope.args.list.firstOrNull() ?: ObjNull
                                         scope.addItem(setArg.value, true, value, recordType = ObjRecord.Type.Argument)
-                                        return body.execute(scope)
+                                        val prev = scope.skipScopeCreation
+                                        scope.skipScopeCreation = true
+                                        return try {
+                                            body.execute(scope)
+                                        } finally {
+                                            scope.skipScopeCreation = prev
+                                        }
                                     }
                                 }
                             } else if (cc.peekNextNonWhitespace().type == Token.Type.ASSIGN) {
@@ -5120,17 +5219,20 @@ class Compiler(
                                         implicitThisTypeName = extTypeName
                                     )
                                 ) {
-                                    parseExpression() ?: throw ScriptError(
-                                        cc.current().pos,
-                                        "Expected setter expression"
-                                    )
+                                    parseExpressionBlockWithPredeclared(listOf(setArg.value to true))
                                 }
                                 object : Statement() {
                                     override val pos: Pos = st.pos
                                     override suspend fun execute(scope: Scope): Obj {
                                         val value = scope.args.list.firstOrNull() ?: ObjNull
                                         scope.addItem(setArg.value, true, value, recordType = ObjRecord.Type.Argument)
-                                        return st.execute(scope)
+                                        val prev = scope.skipScopeCreation
+                                        scope.skipScopeCreation = true
+                                        return try {
+                                            st.execute(scope)
+                                        } finally {
+                                            scope.skipScopeCreation = prev
+                                        }
                                     }
                                 }
                             } else {
