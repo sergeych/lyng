@@ -103,6 +103,8 @@ class Compiler(
     }
 
     private fun moduleSlotPlan(): SlotPlan? = slotPlanStack.firstOrNull()
+    private val slotTypeByScopeId: MutableMap<Int, MutableMap<Int, ObjClass>> = mutableMapOf()
+    private val nameObjClass: MutableMap<String, ObjClass> = mutableMapOf()
 
     private fun seedSlotPlanFromScope(scope: Scope, includeParents: Boolean = false) {
         val plan = moduleSlotPlan() ?: return
@@ -111,6 +113,36 @@ class Compiler(
             for ((name, record) in current.objects) {
                 if (!record.visibility.isPublic) continue
                 declareSlotNameIn(plan, name, record.isMutable, record.type == ObjRecord.Type.Delegated)
+            }
+            for ((cls, map) in current.extensions) {
+                for ((name, record) in map) {
+                    if (!record.visibility.isPublic) continue
+                    when (record.type) {
+                        ObjRecord.Type.Property -> {
+                            declareSlotNameIn(
+                                plan,
+                                extensionPropertyGetterName(cls.className, name),
+                                isMutable = false,
+                                isDelegated = false
+                            )
+                            val prop = record.value as? ObjProperty
+                            if (prop?.setter != null) {
+                                declareSlotNameIn(
+                                    plan,
+                                    extensionPropertySetterName(cls.className, name),
+                                    isMutable = false,
+                                    isDelegated = false
+                                )
+                            }
+                        }
+                        else -> declareSlotNameIn(
+                            plan,
+                            extensionCallableName(cls.className, name),
+                            isMutable = false,
+                            isDelegated = false
+                        )
+                    }
+                }
             }
             for ((name, slotIndex) in current.slotNameToIndexSnapshot()) {
                 val record = current.getSlotRecord(slotIndex)
@@ -126,6 +158,8 @@ class Compiler(
         val plan = moduleSlotPlan() ?: return
         val saved = cc.savePos()
         var depth = 0
+        var parenDepth = 0
+        var bracketDepth = 0
         fun nextNonWs(): Token {
             var t = cc.next()
             while (t.type == Token.Type.NEWLINE || t.type == Token.Type.SINGLE_LINE_COMMENT || t.type == Token.Type.MULTILINE_COMMENT) {
@@ -139,7 +173,12 @@ class Compiler(
                 when (t.type) {
                     Token.Type.LBRACE -> depth++
                     Token.Type.RBRACE -> if (depth > 0) depth--
+                    Token.Type.LPAREN -> parenDepth++
+                    Token.Type.RPAREN -> if (parenDepth > 0) parenDepth--
+                    Token.Type.LBRACKET -> bracketDepth++
+                    Token.Type.RBRACKET -> if (bracketDepth > 0) bracketDepth--
                     Token.Type.ID -> if (depth == 0) {
+                        if (parenDepth > 0 || bracketDepth > 0) continue
                         when (t.value) {
                             "fun", "fn" -> {
                                 val nameToken = nextNonWs()
@@ -399,6 +438,14 @@ class Compiler(
         return null
     }
 
+    private fun currentTypeParams(): Set<String> {
+        for (ctx in codeContexts.asReversed()) {
+            val fn = ctx as? CodeContext.Function ?: continue
+            if (fn.typeParams.isNotEmpty()) return fn.typeParams
+        }
+        return emptySet()
+    }
+
     private fun lookupSlotLocation(name: String, includeModule: Boolean = true): SlotLocation? {
         for (i in slotPlanStack.indices.reversed()) {
             if (!includeModule && i == 0) continue
@@ -468,6 +515,15 @@ class Compiler(
             val ids = resolveMemberIds(name, pos, null)
             return ImplicitThisMemberRef(name, pos, ids.fieldId, ids.methodId, currentImplicitThisTypeName())
         }
+        val implicitThisMembers = codeContexts.any { ctx ->
+            (ctx as? CodeContext.Function)?.implicitThisMembers == true
+        }
+        val implicitType = if (implicitThisMembers) currentImplicitThisTypeName() else null
+        if (implicitType != null && hasImplicitThisMember(name, implicitType)) {
+            resolutionSink?.referenceMember(name, pos, implicitType)
+            val ids = resolveImplicitThisMemberIds(name, pos, implicitType)
+            return ImplicitThisMemberRef(name, pos, ids.fieldId, ids.methodId, implicitType)
+        }
         val modulePlan = moduleSlotPlan()
         val moduleEntry = modulePlan?.slots?.get(name)
         if (moduleEntry != null) {
@@ -513,15 +569,6 @@ class Compiler(
                 resolutionSink?.reference(name, pos)
                 return ref
             }
-        }
-        val implicitThis = codeContexts.any { ctx ->
-            (ctx as? CodeContext.Function)?.implicitThisMembers == true
-        }
-        if (implicitThis) {
-            val implicitType = currentImplicitThisTypeName()
-            resolutionSink?.referenceMember(name, pos, implicitType)
-            val ids = resolveImplicitThisMemberIds(name, pos, implicitType)
-            return ImplicitThisMemberRef(name, pos, ids.fieldId, ids.methodId, implicitType)
         }
         val classContext = codeContexts.any { ctx -> ctx is CodeContext.ClassBody }
         if (classContext && extensionNames.contains(name)) {
@@ -915,15 +962,35 @@ class Compiler(
     private fun resolveImplicitThisMemberIds(name: String, pos: Pos, implicitTypeName: String?): MemberIds {
         if (implicitTypeName == null) return resolveMemberIds(name, pos, null)
         val info = resolveCompileClassInfo(implicitTypeName)
-            ?: if (allowUnresolvedRefs) return MemberIds(null, null) else throw ScriptError(pos, "unknown type $implicitTypeName")
-        val fieldId = info.fieldIds[name]
-        val methodId = info.methodIds[name]
+        val fieldId = info?.fieldIds?.get(name)
+        val methodId = info?.methodIds?.get(name)
+        if (fieldId == null && methodId == null) {
+            val cls = resolveClassByName(implicitTypeName)
+            if (cls != null) {
+                val fId = cls.instanceFieldIdMap()[name]
+                val mId = cls.instanceMethodIdMap(includeAbstract = true)[name]
+                if (fId != null || mId != null) return MemberIds(fId, mId)
+            }
+        }
         if (fieldId == null && methodId == null) {
             if (hasExtensionFor(implicitTypeName, name)) return MemberIds(null, null)
             if (allowUnresolvedRefs) return MemberIds(null, null)
             throw ScriptError(pos, "unknown member $name on $implicitTypeName")
         }
         return MemberIds(fieldId, methodId)
+    }
+
+    private fun hasImplicitThisMember(name: String, implicitTypeName: String?): Boolean {
+        if (implicitTypeName == null) return false
+        val info = resolveCompileClassInfo(implicitTypeName)
+        if (info != null && (info.fieldIds.containsKey(name) || info.methodIds.containsKey(name))) return true
+        val cls = resolveClassByName(implicitTypeName)
+        if (cls != null) {
+            if (cls.instanceFieldIdMap().containsKey(name) || cls.instanceMethodIdMap(includeAbstract = true).containsKey(name)) {
+                return true
+            }
+        }
+        return hasExtensionFor(implicitTypeName, name)
     }
     private val currentRangeParamNames: Set<String>
         get() = rangeParamNamesStack.lastOrNull() ?: emptySet()
@@ -1443,10 +1510,19 @@ class Compiler(
                 break
             }
 
-            val rvalue = parseExpressionLevel(level + 1)
-                ?: throw ScriptError(opToken.pos, "Expecting expression")
-
-            val res = op.generate(opToken.pos, lvalue!!, rvalue)
+            val res = if (opToken.type == Token.Type.AS || opToken.type == Token.Type.ASNULL) {
+                val (typeDecl, _) = parseTypeExpressionWithMini()
+                val typeRef = typeDeclToTypeRef(typeDecl, opToken.pos)
+                if (opToken.type == Token.Type.AS) {
+                    CastRef(lvalue!!, typeRef, false, opToken.pos)
+                } else {
+                    CastRef(lvalue!!, typeRef, true, opToken.pos)
+                }
+            } else {
+                val rvalue = parseExpressionLevel(level + 1)
+                    ?: throw ScriptError(opToken.pos, "Expecting expression")
+                op.generate(opToken.pos, lvalue!!, rvalue)
+            }
             if (opToken.type == Token.Type.ASSIGN) {
                 val ctx = codeContexts.lastOrNull()
                 if (ctx is CodeContext.ClassBody) {
@@ -1527,7 +1603,10 @@ class Compiler(
                                 Token.Type.LPAREN -> {
                                     cc.next()
                                     // instance method call
-                                    val parsed = parseArgs()
+                                    val receiverType = if (next.value == "apply" || next.value == "run") {
+                                        inferReceiverTypeFromRef(left)
+                                    } else null
+                                    val parsed = parseArgs(receiverType)
                                     val args = parsed.first
                                     val tailBlock = parsed.second
                                     if (left is LocalVarRef && left.name == "scope") {
@@ -1578,7 +1657,10 @@ class Compiler(
                                     // single lambda arg, like assertThrows { ... }
                                     cc.next()
                                     isCall = true
-                                    val lambda = parseLambdaExpression()
+                                    val receiverType = if (next.value == "apply" || next.value == "run") {
+                                        inferReceiverTypeFromRef(left)
+                                    } else null
+                                    val lambda = parseLambdaExpression(receiverType)
                                     val argPos = next.pos
                                     val args = listOf(ParsedArgument(ExpressionStatement(lambda, argPos), next.pos))
                                     operand = when (left) {
@@ -2274,6 +2356,89 @@ class Compiler(
     }
 
     private fun parseTypeExpressionWithMini(): Pair<TypeDecl, MiniTypeRef> {
+        parseFunctionTypeWithMini()?.let { return it }
+        return parseSimpleTypeExpressionWithMini()
+    }
+
+    private fun parseFunctionTypeWithMini(): Pair<TypeDecl, MiniTypeRef>? {
+        val saved = cc.savePos()
+        val startPos = cc.currentPos()
+
+        fun parseParamTypes(): List<Pair<TypeDecl, MiniTypeRef>> {
+            val params = mutableListOf<Pair<TypeDecl, MiniTypeRef>>()
+            cc.skipWsTokens()
+            if (cc.peekNextNonWhitespace().type == Token.Type.RPAREN) {
+                cc.nextNonWhitespace()
+                return params
+            }
+            while (true) {
+                val (paramDecl, paramMini) = parseTypeExpressionWithMini()
+                params += paramDecl to paramMini
+                val sep = cc.nextNonWhitespace()
+                when (sep.type) {
+                    Token.Type.COMMA -> continue
+                    Token.Type.RPAREN -> return params
+                    else -> sep.raiseSyntax("expected ',' or ')' in function type")
+                }
+            }
+        }
+
+        var receiverDecl: TypeDecl? = null
+        var receiverMini: MiniTypeRef? = null
+
+        val first = cc.peekNextNonWhitespace()
+        if (first.type == Token.Type.LPAREN) {
+            cc.nextNonWhitespace()
+        } else {
+            val recv = parseSimpleTypeExpressionWithMini()
+            val dotPos = cc.savePos()
+            if (cc.skipTokenOfType(Token.Type.DOT, isOptional = true) && cc.peekNextNonWhitespace().type == Token.Type.LPAREN) {
+                receiverDecl = recv.first
+                receiverMini = recv.second
+                cc.nextNonWhitespace()
+            } else {
+                cc.restorePos(saved)
+                return null
+            }
+        }
+
+        val params = parseParamTypes()
+        val arrow = cc.nextNonWhitespace()
+        if (arrow.type != Token.Type.ARROW) {
+            cc.restorePos(saved)
+            return null
+        }
+        val (retDecl, retMini) = parseTypeExpressionWithMini()
+
+        val isNullable = if (cc.skipTokenOfType(Token.Type.QUESTION, isOptional = true)) {
+            true
+        } else if (cc.skipTokenOfType(Token.Type.IFNULLASSIGN, isOptional = true)) {
+            cc.pushPendingAssign()
+            true
+        } else false
+
+        val rangeStart = when (receiverMini) {
+            null -> startPos
+            else -> receiverMini.range.start
+        }
+        val rangeEnd = cc.currentPos()
+        val mini = MiniFunctionType(
+            range = MiniRange(rangeStart, rangeEnd),
+            receiver = receiverMini,
+            params = params.map { it.second },
+            returnType = retMini,
+            nullable = isNullable
+        )
+        val sem = TypeDecl.Function(
+            receiver = receiverDecl,
+            params = params.map { it.first },
+            returnType = retDecl,
+            nullable = isNullable
+        )
+        return sem to mini
+    }
+
+    private fun parseSimpleTypeExpressionWithMini(): Pair<TypeDecl, MiniTypeRef> {
         // Parse a qualified base name: ID ('.' ID)*
         val segments = mutableListOf<MiniTypeName.Segment>()
         var first = true
@@ -2295,7 +2460,11 @@ class Compiler(
             val dotPos = cc.savePos()
             val t = cc.next()
             if (t.type == Token.Type.DOT) {
-                // continue
+                val nextAfterDot = cc.peekNextNonWhitespace()
+                if (nextAfterDot.type == Token.Type.LPAREN) {
+                    cc.restorePos(dotPos)
+                    break
+                }
                 continue
             } else {
                 cc.restorePos(dotPos)
@@ -2304,6 +2473,18 @@ class Compiler(
         }
 
         val qualified = segments.joinToString(".") { it.name }
+        val typeParams = currentTypeParams()
+        if (segments.size == 1 && typeParams.contains(qualified)) {
+            val isNullable = if (cc.skipTokenOfType(Token.Type.QUESTION, isOptional = true)) {
+                true
+            } else if (cc.skipTokenOfType(Token.Type.IFNULLASSIGN, isOptional = true)) {
+                cc.pushPendingAssign()
+                true
+            } else false
+            val rangeEnd = cc.currentPos()
+            val miniRef = MiniTypeVar(MiniRange(typeStart, rangeEnd), qualified, isNullable)
+            return TypeDecl.TypeVar(qualified, isNullable) to miniRef
+        }
         if (segments.size > 1) {
             lastPos?.let { pos -> resolutionSink?.reference(qualified, pos) }
         } else {
@@ -2364,6 +2545,44 @@ class Compiler(
         val sem = if (semArgs != null) TypeDecl.Generic(qualified, semArgs, isNullable)
         else TypeDecl.Simple(qualified, isNullable)
         return Pair(sem, miniRef)
+    }
+
+    private fun typeDeclToTypeRef(typeDecl: TypeDecl, pos: Pos): ObjRef {
+        return when (typeDecl) {
+            TypeDecl.TypeAny,
+            TypeDecl.TypeNullableAny,
+            is TypeDecl.TypeVar -> ConstRef(Obj.rootObjectType.asReadonly)
+            else -> {
+                val cls = resolveTypeDeclObjClass(typeDecl)
+                if (cls != null) return ConstRef(cls.asReadonly)
+                val name = typeDeclName(typeDecl)
+                resolveLocalTypeRef(name, pos)?.let { return it }
+                throw ScriptError(pos, "unknown type $name")
+            }
+        }
+    }
+
+    private fun typeDeclName(typeDecl: TypeDecl): String = when (typeDecl) {
+        is TypeDecl.Simple -> typeDecl.name
+        is TypeDecl.Generic -> typeDecl.name
+        is TypeDecl.Function -> "Callable"
+        is TypeDecl.TypeVar -> typeDecl.name
+        TypeDecl.TypeAny -> "Object"
+        TypeDecl.TypeNullableAny -> "Object?"
+    }
+
+    private fun resolveLocalTypeRef(name: String, pos: Pos): ObjRef? {
+        val slotLoc = lookupSlotLocation(name, includeModule = true) ?: return null
+        captureLocalRef(name, slotLoc, pos)?.let { return it }
+        return LocalSlotRef(
+            name,
+            slotLoc.slot,
+            slotLoc.scopeId,
+            slotLoc.isMutable,
+            slotLoc.isDelegated,
+            pos,
+            strictSlotRefs
+        )
     }
 
     /**
@@ -2502,6 +2721,11 @@ class Compiler(
     ): ObjRef {
         var detectedBlockArgument = blockArgument
         val expectedReceiver = tailBlockReceiverType(left)
+        val withReceiver = when (left) {
+            is LocalVarRef -> if (left.name == "with") left.name else null
+            is LocalSlotRef -> if (left.name == "with") left.name else null
+            else -> null
+        }
         val args = if (blockArgument) {
             // Leading '{' has already been consumed by the caller token branch.
             // Parse only the lambda expression as the last argument and DO NOT
@@ -2511,9 +2735,24 @@ class Compiler(
             val callableAccessor = parseLambdaExpression(expectedReceiver)
             listOf(ParsedArgument(ExpressionStatement(callableAccessor, cc.currentPos()), cc.currentPos()))
         } else {
-            val r = parseArgs(expectedReceiver)
-            detectedBlockArgument = r.second
-            r.first
+            if (withReceiver != null) {
+                val parsedArgs = parseArgsNoTailBlock().toMutableList()
+                val pos = cc.savePos()
+                val end = cc.next()
+                if (end.type == Token.Type.LBRACE) {
+                    val receiverType = inferReceiverTypeFromArgs(parsedArgs)
+                    val callableAccessor = parseLambdaExpression(receiverType)
+                    parsedArgs += ParsedArgument(ExpressionStatement(callableAccessor, end.pos), end.pos)
+                    detectedBlockArgument = true
+                } else {
+                    cc.restorePos(pos)
+                }
+                parsedArgs
+            } else {
+                val r = parseArgs(expectedReceiver)
+                detectedBlockArgument = r.second
+                r.first
+            }
         }
         val implicitThisTypeName = currentImplicitThisTypeName()
         return when (left) {
@@ -2568,6 +2807,26 @@ class Compiler(
                 }
             }
             else -> CallRef(left, args, detectedBlockArgument, isOptional)
+        }
+    }
+
+    private fun inferReceiverTypeFromArgs(args: List<ParsedArgument>): String? {
+        val stmt = args.firstOrNull()?.value as? ExpressionStatement ?: return null
+        val ref = stmt.ref
+        val bySlot = (ref as? LocalSlotRef)?.let { slotRef ->
+            slotTypeByScopeId[slotRef.scopeId]?.get(slotRef.slot)
+        }
+        val byName = (ref as? LocalVarRef)?.let { nameObjClass[it.name] }
+        val cls = bySlot ?: byName ?: resolveInitializerObjClass(stmt)
+        return cls?.className
+    }
+
+    private fun inferReceiverTypeFromRef(ref: ObjRef): String? {
+        return when (ref) {
+            is LocalSlotRef -> slotTypeByScopeId[ref.scopeId]?.get(ref.slot)?.className
+            is LocalVarRef -> nameObjClass[ref.name]?.className
+            is QualifiedThisRef -> ref.typeName
+            else -> null
         }
     }
 
@@ -3597,6 +3856,40 @@ class Compiler(
                         miniSink?.onClassDecl(node)
                     }
                     resolutionSink?.declareClass(nameToken.value, baseSpecs.map { it.name }, startPos)
+                    classCtx?.let { ctx ->
+                        val baseIds = collectBaseMemberIds(baseSpecs.map { it.name })
+                        ctx.memberFieldIds.putAll(baseIds.fieldIds)
+                        ctx.memberMethodIds.putAll(baseIds.methodIds)
+                        ctx.nextFieldId = maxOf(ctx.nextFieldId, baseIds.nextFieldId)
+                        ctx.nextMethodId = maxOf(ctx.nextMethodId, baseIds.nextMethodId)
+                        for (member in ctx.declaredMembers) {
+                            val isOverride = ctx.memberOverrides[member] == true
+                            val hasBaseField = member in baseIds.fieldIds
+                            val hasBaseMethod = member in baseIds.methodIds
+                            if (isOverride) {
+                                if (!hasBaseField && !hasBaseMethod) {
+                                    throw ScriptError(nameToken.pos, "member $member is marked 'override' but does not override anything")
+                                }
+                            } else {
+                                if (hasBaseField || hasBaseMethod) {
+                                    throw ScriptError(nameToken.pos, "member $member overrides parent member but 'override' keyword is missing")
+                                }
+                            }
+                            if (!ctx.memberFieldIds.containsKey(member)) {
+                                ctx.memberFieldIds[member] = ctx.nextFieldId++
+                            }
+                            if (!ctx.memberMethodIds.containsKey(member)) {
+                                ctx.memberMethodIds[member] = ctx.nextMethodId++
+                            }
+                        }
+                        compileClassInfos[nameToken.value] = CompileClassInfo(
+                            name = nameToken.value,
+                            fieldIds = ctx.memberFieldIds.toMap(),
+                            methodIds = ctx.memberMethodIds.toMap(),
+                            nextFieldId = ctx.nextFieldId,
+                            nextMethodId = ctx.nextMethodId
+                        )
+                    }
                     // restore if no body starts here
                     cc.restorePos(saved)
                     null
@@ -4067,6 +4360,25 @@ class Compiler(
             declareLocalName(extensionWrapperName, isMutable = false)
         }
 
+        val typeParams = mutableSetOf<String>()
+        if (cc.peekNextNonWhitespace().type == Token.Type.LT) {
+            cc.nextNonWhitespace()
+            while (true) {
+                val idTok = cc.requireToken(Token.Type.ID, "type parameter name expected")
+                typeParams.add(idTok.value)
+                val sep = cc.nextNonWhitespace()
+                when (sep.type) {
+                    Token.Type.COMMA -> continue
+                    Token.Type.GT -> break
+                    Token.Type.SHR -> {
+                        cc.pushPendingGT()
+                        break
+                    }
+                    else -> sep.raiseSyntax("expected ',' or '>' in type parameter list")
+                }
+            }
+        }
+
         val argsDeclaration: ArgsDeclaration =
             if (cc.peekNextNonWhitespace().type == Token.Type.LPAREN) {
                 cc.nextNonWhitespace() // consume (
@@ -4128,7 +4440,8 @@ class Compiler(
             CodeContext.Function(
                 name,
                 implicitThisMembers = implicitThisMembers,
-                implicitThisTypeName = extTypeName
+                implicitThisTypeName = extTypeName,
+                typeParams = typeParams
             )
         ) {
             cc.labels.add(name)
@@ -4545,6 +4858,8 @@ class Compiler(
         val rawName = when (type) {
             is TypeDecl.Simple -> type.name
             is TypeDecl.Generic -> type.name
+            is TypeDecl.Function -> "Callable"
+            is TypeDecl.TypeVar -> return null
             else -> return null
         }
         val name = rawName.substringAfterLast('.')
@@ -4986,6 +5301,12 @@ class Compiler(
             val slotIndex = slotPlan?.slots?.get(name)?.index
             val scopeId = slotPlan?.id
             val initObjClass = resolveInitializerObjClass(initialExpression) ?: resolveTypeDeclObjClass(varTypeDecl)
+            if (initObjClass != null) {
+                if (slotIndex != null && scopeId != null) {
+                    slotTypeByScopeId.getOrPut(scopeId) { mutableMapOf() }[slotIndex] = initObjClass
+                }
+                nameObjClass[name] = initObjClass
+            }
             return VarDeclStatement(
                 name,
                 isMutable,

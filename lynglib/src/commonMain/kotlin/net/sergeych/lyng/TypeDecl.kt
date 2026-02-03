@@ -23,7 +23,13 @@ package net.sergeych.lyng
 // very soon
 sealed class TypeDecl(val isNullable:Boolean = false) {
     // ??
-//    data class Fn(val argTypes: List<ArgsDeclaration.Item>, val retType: TypeDecl) : TypeDecl()
+    data class Function(
+        val receiver: TypeDecl?,
+        val params: List<TypeDecl>,
+        val returnType: TypeDecl,
+        val nullable: Boolean = false
+    ) : TypeDecl(nullable)
+    data class TypeVar(val name: String, val nullable: Boolean = false) : TypeDecl(nullable)
     object TypeAny : TypeDecl()
     object TypeNullableAny : TypeDecl(true)
 

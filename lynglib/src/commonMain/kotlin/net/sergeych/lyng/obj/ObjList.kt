@@ -247,6 +247,10 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
 
     companion object {
         val type = object : ObjClass("List", ObjArray) {
+            override suspend fun callOn(scope: Scope): Obj {
+                return ObjList(scope.args.list.toMutableList())
+            }
+
             override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj {
                 return ObjList(decoder.decodeAnyList(scope))
             }
@@ -518,5 +522,4 @@ fun <T>MutableList<T>.swap(i: Int, j: Int) {
         this[j] = temp
     }
 }
-
 

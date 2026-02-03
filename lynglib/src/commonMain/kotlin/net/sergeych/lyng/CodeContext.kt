@@ -22,7 +22,8 @@ sealed class CodeContext {
     class Function(
         val name: String,
         val implicitThisMembers: Boolean = false,
-        val implicitThisTypeName: String? = null
+        val implicitThisTypeName: String? = null,
+        val typeParams: Set<String> = emptySet()
     ): CodeContext()
     class ClassBody(val name: String, val isExtern: Boolean = false): CodeContext() {
         val pendingInitializations = mutableMapOf<String, Pos>()

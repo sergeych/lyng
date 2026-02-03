@@ -4,7 +4,7 @@ better than even in C++ ;)
 
 ```lyng
 fun t(x) {
-    // x is Object, and x is nullable
+    // x is Object (non-null)
     println(x)
 }
 
@@ -117,6 +117,10 @@ Notes and open questions to answer in this spec:
 
 Not null by default (Object), must be specified with `?` suffix. We use Kotlin-style `!!` for non-null assertion. Therefore we check nullability at compile time, and we throw NPE only at `x!!` or `obj as X` (if obj is nullable, it is same as `obj!! as X`).
 
+Return type inference and nullability:
+- If any branch or return expression is nullable, the inferred return type is nullable.
+- This is independent of whether `return` is used or implicit last-expression rules apply.
+
 - Default type of untyped values: If a parameter has no type and no default, is it Object? (dynamic), or a new top type?
 
 Lets discuss in more details. For example:
@@ -204,6 +208,11 @@ I think we can omit if not used. For kotlin interop: if the class has at least o
 - Member access rules: If a variable is Object (dynamic), is member access a compile-time error, or allowed with fallback (which we are trying to remove)? If error, do we require explicit cast first?
 
 Compile time error unless it is an Object own method. Let's force rewriting existing code in favor of explicit casts. It will repay itself: I laready have a project on Lyng that suffers from implicit casts har to trace errors.
+
+No runtime lookups or fallbacks:
+- All symbol and member resolution must be done at compile time.
+- If an extension is not known at compile time (not imported or declared before use), it is a compile-time error.
+- Runtime lookup is only possible via explicit reflection helpers.
 
 Example:
 ```lyng

@@ -36,20 +36,19 @@ val ObjIterable by lazy {
             code = null
         )
 
-        addPropertyDoc(
+        addFnDoc(
             name = "toList",
             doc = "Collect elements of this iterable into a new list.",
-            type = type("lyng.List"),
-            moduleName = "lyng.stdlib",
-            getter = {
-                val result = mutableListOf<Obj>()
-                val it = this.thisObj.invokeInstanceMethod(this, "iterator")
-                while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
-                    result.add(it.invokeInstanceMethod(this, "next"))
-                }
-                ObjList(result)
+            returns = type("lyng.List"),
+            moduleName = "lyng.stdlib"
+        ) {
+            val result = mutableListOf<Obj>()
+            val it = thisObj.invokeInstanceMethod(this, "iterator")
+            while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
+                result.add(it.invokeInstanceMethod(this, "next"))
             }
-        )
+            ObjList(result)
+        }
 
         // it is not effective, but it is open:
         addFnDoc(

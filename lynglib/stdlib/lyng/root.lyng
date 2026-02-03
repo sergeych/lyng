@@ -229,7 +229,7 @@ fun Iterable.sortedBy(predicate) {
 
 /* Return a shuffled copy of the iterable as a list. */
 fun Iterable.shuffled() {
-    val list: List = toList
+    val list: List = toList()
     list.shuffle()
     list
 }
@@ -327,10 +327,10 @@ interface Delegate {
     Executes the block with `this` set to self and
     returns what the block returns.
 */
-fun with(self, block) {
+fun with<T,R>(self: T, block: T.()->R): R {
     var result = Unset
     self.apply { result = block() }
-    result
+    result as R
 }
 
 /*

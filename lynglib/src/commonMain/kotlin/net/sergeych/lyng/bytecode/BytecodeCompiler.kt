@@ -4368,6 +4368,7 @@ class BytecodeCompiler(
             is ListLiteralRef -> ObjList.type
             is MapLiteralRef -> ObjMap.type
             is RangeRef -> ObjRange.type
+            is StatementRef -> (ref.statement as? ExpressionStatement)?.let { resolveReceiverClass(it.ref) }
             is ConstRef -> when (ref.constValue) {
                 is ObjList -> ObjList.type
                 is ObjMap -> ObjMap.type
@@ -4397,7 +4398,13 @@ class BytecodeCompiler(
                 } else {
                     when (ref.name) {
                         "map",
+                        "mapNotNull",
                         "filter",
+                        "filterNotNull",
+                        "drop",
+                        "take",
+                        "flatMap",
+                        "flatten",
                         "sorted",
                         "sortedBy",
                         "sortedWith",
@@ -4405,6 +4412,9 @@ class BytecodeCompiler(
                         "toList",
                         "shuffle",
                         "shuffled" -> ObjList.type
+                        "dropLast" -> ObjFlow.type
+                        "takeLast" -> ObjRingBuffer.type
+                        "count" -> ObjInt.type
                         "toSet" -> ObjSet.type
                         "toMap" -> ObjMap.type
                         "joinToString" -> ObjString.type
@@ -4429,6 +4439,7 @@ class BytecodeCompiler(
             is ListLiteralRef -> ObjList.type
             is MapLiteralRef -> ObjMap.type
             is RangeRef -> ObjRange.type
+            is StatementRef -> (ref.statement as? ExpressionStatement)?.let { resolveReceiverClassForScopeCollection(it.ref) }
             is ConstRef -> when (ref.constValue) {
                 is ObjList -> ObjList.type
                 is ObjMap -> ObjMap.type
@@ -4449,8 +4460,34 @@ class BytecodeCompiler(
             }
             is MethodCallRef -> {
                 val targetClass = resolveReceiverClassForScopeCollection(ref.receiver) ?: return null
-                if (targetClass == ObjString.type && ref.name == "re" && ref.args.isEmpty() && !ref.isOptional) ObjRegex.type
-                else null
+                if (targetClass == ObjString.type && ref.name == "re" && ref.args.isEmpty() && !ref.isOptional) {
+                    ObjRegex.type
+                } else {
+                    when (ref.name) {
+                        "map",
+                        "mapNotNull",
+                        "filter",
+                        "filterNotNull",
+                        "drop",
+                        "take",
+                        "flatMap",
+                        "flatten",
+                        "sorted",
+                        "sortedBy",
+                        "sortedWith",
+                        "reversed",
+                        "toList",
+                        "shuffle",
+                        "shuffled" -> ObjList.type
+                        "dropLast" -> ObjFlow.type
+                        "takeLast" -> ObjRingBuffer.type
+                        "count" -> ObjInt.type
+                        "toSet" -> ObjSet.type
+                        "toMap" -> ObjMap.type
+                        "joinToString" -> ObjString.type
+                        else -> null
+                    }
+                }
             }
             else -> null
         }
