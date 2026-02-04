@@ -1,10 +1,11 @@
-# Bytecode call-site PIC + fallback gating
+# Bytecode call-site PIC + fallback gating (obsolete)
 
 Changes
 - Added method call PIC path in bytecode VM with new CALL_SLOT/CALL_VIRTUAL opcodes.
 - Fixed FieldRef property/delegate resolution to avoid bypassing ObjRecord delegation.
 - Prevent delegated ObjRecord mutation by returning a resolved copy.
 - Restricted bytecode call compilation to args that are ExpressionStatement (no splat/named/tail-block), fallback otherwise.
+- NOTE: PICs and fallback callsites have been removed; keep this for historical context only.
 
 Rationale
 - Fixes JVM test regressions and avoids premature evaluation of Statement args.

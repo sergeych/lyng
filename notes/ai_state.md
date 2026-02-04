@@ -6,32 +6,16 @@ Module focus: :lynglib
 Current focus
 - Enforce compile-time name/member resolution only; no runtime scope lookup or fallback.
 - Bytecode uses memberId-based ops (CALL_MEMBER_SLOT/GET_MEMBER_SLOT/SET_MEMBER_SLOT).
-- Fallbacks are forbidden and throw BytecodeFallbackException.
+- Runtime lookup opcodes (CALL_VIRTUAL/GET_FIELD/SET_FIELD) and fallback callsites are removed.
 
 Key recent changes
-- Added memberId storage and lookup on ObjClass/ObjInstance; compiler emits memberId ops.
-- Removed GET_THIS_MEMBER/SET_THIS_MEMBER usage from bytecode.
-- Added ObjIterable.iterator() abstract method to ensure methodId exists.
-- Bytecode compiler now throws if receiver type is unknown for member calls.
-- Added static receiver inference attempts (name/slot maps), but still failing for stdlib list usage.
-- Compiler now wraps function bodies into BytecodeStatement when possible.
-- VarDeclStatement now includes initializerObjClass (compile-time type hint).
+- Removed method callsite PICs and fallback opcodes; bytecode now relies on compile-time member ids only.
+- Operator dispatch emits memberId calls when known; falls back to Obj opcodes for allowed built-ins without name lookup.
+- Object members are allowed on unknown types; other members still require a statically known receiver type.
+- Renamed BytecodeFallbackException to BytecodeCompileException.
 
-Known failing test
-- ScriptTest.testForInIterableUnknownTypeDisasm (jvmTest)
-  Failure: BytecodeFallbackException "Member call requires compile-time receiver type: add"
-  Location: stdlib root.lyng filter() -> "val result = []" then "result.add(item)"
-  Current debug shows LocalSlotRef(result) slotClass/nameClass/initClass all null.
-
-Likely cause
-- Initializer type inference for "val result = []" in stdlib is not reaching BytecodeCompiler:
-  - stdlib is generated at build time; initializer is wrapped in BytecodeStatement and losing ListLiteralRef info.
-  - Need a stable compile-time type hint from the compiler or a way to preserve list literal info.
-
-Potential fixes to pursue
-1) Preserve ObjRef for var initializers (e.g., store initializer ref/type in VarDeclStatement).
-2) When initializer is BytecodeStatement, use its CmdFunction to detect list/range literal usage.
-3) Ensure stdlib compilation sets initializerObjClass for list literals.
+Known failing tests
+- None (jvmTest passing).
 
 Files touched recently
 - notes/type_system_spec.md (spec updated)

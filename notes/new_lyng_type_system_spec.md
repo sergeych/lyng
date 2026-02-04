@@ -212,7 +212,7 @@ Type params are erased by default. Hidden `Class` args are only injected when a 
 
 - Member access rules: If a variable is Object (dynamic), is member access a compile-time error, or allowed with fallback (which we are trying to remove)? If error, do we require explicit cast first?
 
-Compile time error unless it is an Object own method. Let's force rewriting existing code in favor of explicit casts. It will repay itself: I laready have a project on Lyng that suffers from implicit casts har to trace errors.
+Compile time error unless it is an Object own method. Object members are always allowed even on unknown types; non-Object members require explicit casts. This avoids runtime lookup while keeping common Object APIs available.
 
 No runtime lookups or fallbacks:
 - All symbol and member resolution must be done at compile time.

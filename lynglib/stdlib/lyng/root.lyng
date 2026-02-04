@@ -291,7 +291,7 @@ override fun List<T>.toString() {
     var result = "["
     for (item in this) {
         if (!first) result += ","
-        result += (item as Object).toString()
+        result += item.toString()
         first = false
     }
     result + "]"
@@ -311,7 +311,7 @@ fun List<T>.sort(): Void {
 fun Exception.printStackTrace(): Void {
     println(this)
     for( entry in stackTrace ) {
-        println("\tat "+(entry as Object).toString())
+        println("\tat "+entry.toString())
     }
 }
 

@@ -2027,10 +2027,14 @@ class BytecodeCompiler(
 
     private fun compileFieldRef(ref: FieldRef): CompiledValue? {
         val receiverClass = resolveReceiverClass(ref.target)
-            ?: throw BytecodeCompileException(
-                "Member access requires compile-time receiver type: ${ref.name}",
-                Pos.builtIn
-            )
+            ?: if (isAllowedObjectMember(ref.name)) {
+                Obj.rootObjectType
+            } else {
+                throw BytecodeCompileException(
+                    "Member access requires compile-time receiver type: ${ref.name}",
+                    Pos.builtIn
+                )
+            }
         val fieldId = receiverClass.instanceFieldIdMap()[ref.name]
         val methodId = receiverClass.instanceMethodIdMap(includeAbstract = true)[ref.name]
         val receiver = compileRefWithFallback(ref.target, null, Pos.builtIn) ?: return null
