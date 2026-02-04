@@ -242,6 +242,7 @@ This metadata drives:
 ## Migration Notes
 - Keep reflection APIs separate to audit usage.
 - Add warnings for member shadowing to surface risky code.
+- Runtime fallback opcodes are removed (CALL_VIRTUAL/GET_FIELD/SET_FIELD); unresolved names or members are compile-time errors.
 
 ## Compatibility Notes (Kotlin interop)
 - Provide minimal Kotlin-facing APIs that mirror compile-time-visible names.

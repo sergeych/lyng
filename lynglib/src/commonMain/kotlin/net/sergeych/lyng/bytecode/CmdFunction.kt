@@ -28,7 +28,6 @@ data class CmdFunction(
     val localSlotNames: Array<String?>,
     val localSlotMutables: BooleanArray,
     val constants: List<BytecodeConst>,
-    val fallbackStatements: List<net.sergeych.lyng.Statement>,
     val cmds: Array<Cmd>,
 ) {
     init {

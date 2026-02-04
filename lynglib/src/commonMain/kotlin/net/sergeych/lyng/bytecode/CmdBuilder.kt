@@ -30,7 +30,6 @@ class CmdBuilder {
     private val constPool = mutableListOf<BytecodeConst>()
     private val labelPositions = mutableMapOf<Label, Int>()
     private var nextLabelId = 0
-    private val fallbackStatements = mutableListOf<net.sergeych.lyng.Statement>()
 
     fun addConst(c: BytecodeConst): Int {
         constPool += c
@@ -49,11 +48,6 @@ class CmdBuilder {
 
     fun mark(label: Label) {
         labelPositions[label] = instructions.size
-    }
-
-    fun addFallback(stmt: net.sergeych.lyng.Statement): Int {
-        fallbackStatements += stmt
-        return fallbackStatements.lastIndex
     }
 
     fun build(
@@ -109,7 +103,6 @@ class CmdBuilder {
             localSlotNames = localSlotNames,
             localSlotMutables = localSlotMutables,
             constants = constPool.toList(),
-            fallbackStatements = fallbackStatements.toList(),
             cmds = cmds.toTypedArray()
         )
     }
@@ -175,12 +168,6 @@ class CmdBuilder {
                 listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
             Opcode.CALL_SLOT ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
-            Opcode.CALL_VIRTUAL ->
-                listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
-            Opcode.GET_FIELD ->
-                listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT)
-            Opcode.SET_FIELD ->
-                listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT)
             Opcode.GET_INDEX ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.SET_INDEX ->
@@ -382,10 +369,7 @@ class CmdBuilder {
             Opcode.DECL_EXT_PROPERTY -> CmdDeclExtProperty(operands[0], operands[1])
             Opcode.CALL_DIRECT -> CmdCallDirect(operands[0], operands[1], operands[2], operands[3])
             Opcode.CALL_MEMBER_SLOT -> CmdCallMemberSlot(operands[0], operands[1], operands[2], operands[3], operands[4])
-            Opcode.CALL_VIRTUAL -> CmdCallVirtual(operands[0], operands[1], operands[2], operands[3], operands[4])
             Opcode.CALL_SLOT -> CmdCallSlot(operands[0], operands[1], operands[2], operands[3])
-            Opcode.GET_FIELD -> CmdGetField(operands[0], operands[1], operands[2])
-            Opcode.SET_FIELD -> CmdSetField(operands[0], operands[1], operands[2])
             Opcode.GET_INDEX -> CmdGetIndex(operands[0], operands[1], operands[2])
             Opcode.SET_INDEX -> CmdSetIndex(operands[0], operands[1], operands[2])
             Opcode.LIST_LITERAL -> CmdListLiteral(operands[0], operands[1], operands[2], operands[3])

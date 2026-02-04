@@ -42,6 +42,8 @@ class BytecodeCompiler(
     private val returnLabels: Set<String> = emptySet(),
     private val rangeLocalNames: Set<String> = emptySet(),
     private val allowedScopeNames: Set<String>? = null,
+    private val slotTypeByScopeId: Map<Int, Map<Int, ObjClass>> = emptyMap(),
+    private val knownNameObjClass: Map<String, ObjClass> = emptyMap(),
 ) {
     private var builder = CmdBuilder()
     private var nextSlot = 0
@@ -281,7 +283,7 @@ class BytecodeCompiler(
             is ThisMethodSlotCallRef -> compileThisMethodSlotCall(ref)
             is StatementRef -> {
                 val compiled = compileStatementValueOrFallback(ref.statement)
-                compiled ?: throw BytecodeFallbackException(
+                compiled ?: throw BytecodeCompileException(
                     "Unsupported StatementRef(${ref.statement::class.simpleName})",
                     Pos.builtIn
                 )
@@ -309,9 +311,9 @@ class BytecodeCompiler(
                 val methodId = ref.methodId ?: -1
                 if (fieldId < 0 && methodId < 0) {
                     val typeName = ref.preferredThisTypeName()
-                        ?: throw BytecodeFallbackException("Missing member id for ${ref.name}", Pos.builtIn)
+                        ?: throw BytecodeCompileException("Missing member id for ${ref.name}", Pos.builtIn)
                     val wrapperName = extensionPropertyGetterName(typeName, ref.name)
-                    val callee = resolveDirectNameSlot(wrapperName) ?: throw BytecodeFallbackException(
+                    val callee = resolveDirectNameSlot(wrapperName) ?: throw BytecodeCompileException(
                         "Missing extension wrapper for ${typeName}.${ref.name}",
                         Pos.builtIn
                     )
@@ -367,12 +369,12 @@ class BytecodeCompiler(
             builder.mark(endLabel)
             return CompiledValue(dst, SlotType.OBJ)
         }
-        val typeName = ref.preferredThisTypeName() ?: throw BytecodeFallbackException(
+        val typeName = ref.preferredThisTypeName() ?: throw BytecodeCompileException(
             "Missing member id for ${ref.methodName()}",
             Pos.builtIn
         )
         val wrapperName = extensionCallableName(typeName, ref.methodName())
-        val callee = resolveDirectNameSlot(wrapperName) ?: throw BytecodeFallbackException(
+        val callee = resolveDirectNameSlot(wrapperName) ?: throw BytecodeCompileException(
             "Missing extension wrapper for ${typeName}.${ref.methodName()}",
             Pos.builtIn
         )
@@ -468,7 +470,7 @@ class BytecodeCompiler(
             is UnaryOpRef -> "UnaryOpRef(${ref.op})"
             else -> ref::class.simpleName ?: "UnknownRef"
         }
-        throw BytecodeFallbackException("Unsupported expression ($refInfo)", Pos.builtIn)
+        throw BytecodeCompileException("Unsupported expression ($refInfo)", Pos.builtIn)
     }
 
     private fun compileListLiteral(ref: ListLiteralRef): CompiledValue? {
@@ -513,7 +515,7 @@ class BytecodeCompiler(
                     builder.emit(Opcode.SET_INDEX, dst, keySlot, value.slot)
                 }
                 is net.sergeych.lyng.obj.MapLiteralEntry.Spread -> {
-                    throw BytecodeFallbackException("Map spread is not supported in bytecode", Pos.builtIn)
+                    throw BytecodeCompileException("Map spread is not supported in bytecode", Pos.builtIn)
                 }
             }
         }
@@ -563,16 +565,7 @@ class BytecodeCompiler(
                     builder.emit(Opcode.NEG_REAL, a.slot, out)
                     CompiledValue(out, SlotType.REAL)
                 }
-                else -> {
-                    val zeroId = builder.addConst(BytecodeConst.IntVal(0))
-                    val zeroSlot = allocSlot()
-                    builder.emit(Opcode.CONST_INT, zeroId, zeroSlot)
-                    updateSlotType(zeroSlot, SlotType.INT)
-                    val obj = ensureObjSlot(a)
-                    builder.emit(Opcode.SUB_OBJ, zeroSlot, obj.slot, out)
-                    updateSlotType(out, SlotType.OBJ)
-                    CompiledValue(out, SlotType.OBJ)
-                }
+                else -> compileObjUnaryOp(unaryOperand(ref), a, "negate", Pos.builtIn)
             }
             UnaryOp.NOT -> {
                 when (a.type) {
@@ -598,9 +591,152 @@ class BytecodeCompiler(
                     builder.emit(Opcode.INV_INT, a.slot, out)
                     return CompiledValue(out, SlotType.INT)
                 }
-                return compileEvalRef(ref)
+                return compileObjUnaryOp(unaryOperand(ref), a, "bitNot", Pos.builtIn)
             }
         }
+    }
+
+    private fun compileObjUnaryOp(
+        ref: ObjRef,
+        value: CompiledValue,
+        memberName: String,
+        pos: Pos
+    ): CompiledValue? {
+        val receiverClass = resolveReceiverClass(ref)
+        val methodId = receiverClass?.instanceMethodIdMap(includeAbstract = true)?.get(memberName)
+        if (methodId != null) {
+            val receiverObj = ensureObjSlot(value)
+            val dst = allocSlot()
+            builder.emit(Opcode.CALL_MEMBER_SLOT, receiverObj.slot, methodId, 0, 0, dst)
+            updateSlotType(dst, SlotType.OBJ)
+            return CompiledValue(dst, SlotType.OBJ)
+        }
+        if (receiverClass == null && memberName == "negate") {
+            val zeroId = builder.addConst(BytecodeConst.IntVal(0))
+            val zeroSlot = allocSlot()
+            builder.emit(Opcode.CONST_INT, zeroId, zeroSlot)
+            updateSlotType(zeroSlot, SlotType.INT)
+            val obj = ensureObjSlot(value)
+            val dst = allocSlot()
+            builder.emit(Opcode.SUB_OBJ, zeroSlot, obj.slot, dst)
+            updateSlotType(dst, SlotType.OBJ)
+            return CompiledValue(dst, SlotType.OBJ)
+        }
+        if (memberName == "negate" && receiverClass in setOf(ObjInt.type, ObjReal.type)) {
+            val zeroId = builder.addConst(BytecodeConst.IntVal(0))
+            val zeroSlot = allocSlot()
+            builder.emit(Opcode.CONST_INT, zeroId, zeroSlot)
+            updateSlotType(zeroSlot, SlotType.INT)
+            val obj = ensureObjSlot(value)
+            val dst = allocSlot()
+            builder.emit(Opcode.SUB_OBJ, zeroSlot, obj.slot, dst)
+            updateSlotType(dst, SlotType.OBJ)
+            return CompiledValue(dst, SlotType.OBJ)
+        }
+        throw BytecodeCompileException(
+            "Unknown member $memberName on ${receiverClass?.className ?: "unknown"}",
+            pos
+        )
+    }
+
+    private fun operatorMemberName(op: BinOp): String? = when (op) {
+        BinOp.PLUS -> "plus"
+        BinOp.MINUS -> "minus"
+        BinOp.STAR -> "mul"
+        BinOp.SLASH -> "div"
+        BinOp.PERCENT -> "mod"
+        BinOp.BAND -> "bitAnd"
+        BinOp.BOR -> "bitOr"
+        BinOp.BXOR -> "bitXor"
+        BinOp.SHL -> "shl"
+        BinOp.SHR -> "shr"
+        else -> null
+    }
+
+    private fun allowKotlinOperatorFallback(receiverClass: ObjClass, op: BinOp): Boolean = when (op) {
+        BinOp.PLUS -> receiverClass in setOf(
+            ObjString.type,
+            ObjInt.type,
+            ObjReal.type,
+            ObjList.type,
+            ObjSet.type,
+            ObjMap.type,
+            ObjBuffer.type,
+            ObjInstant.type,
+            ObjDateTime.type
+        )
+        BinOp.MINUS -> receiverClass in setOf(
+            ObjInt.type,
+            ObjReal.type,
+            ObjSet.type,
+            ObjInstant.type,
+            ObjDateTime.type
+        )
+        BinOp.STAR -> receiverClass in setOf(ObjInt.type, ObjReal.type, ObjString.type)
+        BinOp.SLASH, BinOp.PERCENT -> receiverClass in setOf(ObjInt.type, ObjReal.type)
+        else -> false
+    }
+
+    private fun compileObjBinaryOp(
+        leftRef: ObjRef,
+        leftValue: CompiledValue,
+        rightValue: CompiledValue,
+        op: BinOp,
+        pos: Pos
+    ): CompiledValue? {
+        val memberName = operatorMemberName(op) ?: return null
+        val receiverClass = resolveReceiverClass(leftRef)
+        if (receiverClass == null) {
+            val objOpcode = when (op) {
+                BinOp.PLUS -> Opcode.ADD_OBJ
+                BinOp.MINUS -> Opcode.SUB_OBJ
+                BinOp.STAR -> Opcode.MUL_OBJ
+                BinOp.SLASH -> Opcode.DIV_OBJ
+                BinOp.PERCENT -> Opcode.MOD_OBJ
+                else -> null
+            }
+            if (objOpcode != null) {
+                val receiverObj = ensureObjSlot(leftValue)
+                val argObj = ensureObjSlot(rightValue)
+                val dst = allocSlot()
+                builder.emit(objOpcode, receiverObj.slot, argObj.slot, dst)
+                updateSlotType(dst, SlotType.OBJ)
+                return CompiledValue(dst, SlotType.OBJ)
+            }
+            throw BytecodeCompileException(
+                "Operator requires compile-time receiver type: $memberName",
+                pos
+            )
+        }
+        val methodId = receiverClass.instanceMethodIdMap(includeAbstract = true)[memberName]
+        if (methodId != null) {
+            val receiverObj = ensureObjSlot(leftValue)
+            val argObj = ensureObjSlot(rightValue)
+            val dst = allocSlot()
+            builder.emit(Opcode.CALL_MEMBER_SLOT, receiverObj.slot, methodId, argObj.slot, 1, dst)
+            updateSlotType(dst, SlotType.OBJ)
+            return CompiledValue(dst, SlotType.OBJ)
+        }
+        val objOpcode = when (op) {
+            BinOp.PLUS -> Opcode.ADD_OBJ
+            BinOp.MINUS -> Opcode.SUB_OBJ
+            BinOp.STAR -> Opcode.MUL_OBJ
+            BinOp.SLASH -> Opcode.DIV_OBJ
+            BinOp.PERCENT -> Opcode.MOD_OBJ
+            else -> null
+        }
+        if (objOpcode != null && allowKotlinOperatorFallback(receiverClass, op)) {
+            val receiverObj = ensureObjSlot(leftValue)
+            val argObj = ensureObjSlot(rightValue)
+            val dst = allocSlot()
+            builder.emit(objOpcode, receiverObj.slot, argObj.slot, dst)
+            updateSlotType(dst, SlotType.OBJ)
+            return CompiledValue(dst, SlotType.OBJ)
+        }
+        throw BytecodeCompileException(
+            "Unknown member $memberName on ${receiverClass.className}",
+            pos
+        )
     }
 
     private fun compileBinary(ref: BinaryOpRef): CompiledValue? {
@@ -712,12 +848,12 @@ class BytecodeCompiler(
         if (op == BinOp.MATCH || op == BinOp.NOTMATCH) {
             val leftRef = binaryLeft(ref)
             val rightRef = binaryRight(ref)
-            val receiverClass = resolveReceiverClass(leftRef) ?: throw BytecodeFallbackException(
+            val receiverClass = resolveReceiverClass(leftRef) ?: throw BytecodeCompileException(
                 "Match operator requires compile-time receiver type",
                 refPos(ref)
             )
             val methodId = receiverClass.instanceMethodIdMap(includeAbstract = true)["operatorMatch"]
-                ?: throw BytecodeFallbackException(
+                ?: throw BytecodeCompileException(
                     "Unknown member operatorMatch on ${receiverClass.className}",
                     refPos(ref)
                 )
@@ -782,36 +918,12 @@ class BytecodeCompiler(
         val typesMismatch = a.type != b.type && a.type != SlotType.UNKNOWN && b.type != SlotType.UNKNOWN
         val allowMixedNumeric = op in setOf(BinOp.PLUS, BinOp.MINUS, BinOp.STAR, BinOp.SLASH)
         if (typesMismatch && op in setOf(BinOp.PLUS, BinOp.MINUS, BinOp.STAR, BinOp.SLASH, BinOp.PERCENT)) {
-            val leftObj = ensureObjSlot(a)
-            val rightObj = ensureObjSlot(b)
-            val out = allocSlot()
-            val objOpcode = when (op) {
-                BinOp.PLUS -> Opcode.ADD_OBJ
-                BinOp.MINUS -> Opcode.SUB_OBJ
-                BinOp.STAR -> Opcode.MUL_OBJ
-                BinOp.SLASH -> Opcode.DIV_OBJ
-                BinOp.PERCENT -> Opcode.MOD_OBJ
-                else -> null
-            } ?: return null
-            builder.emit(objOpcode, leftObj.slot, rightObj.slot, out)
-            return CompiledValue(out, SlotType.OBJ)
+            return compileObjBinaryOp(leftRef, a, b, op, refPos(ref))
         }
         if ((a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) &&
             op in setOf(BinOp.PLUS, BinOp.MINUS, BinOp.STAR, BinOp.SLASH, BinOp.PERCENT)
         ) {
-            val leftObj = ensureObjSlot(a)
-            val rightObj = ensureObjSlot(b)
-            val out = allocSlot()
-            val objOpcode = when (op) {
-                BinOp.PLUS -> Opcode.ADD_OBJ
-                BinOp.MINUS -> Opcode.SUB_OBJ
-                BinOp.STAR -> Opcode.MUL_OBJ
-                BinOp.SLASH -> Opcode.DIV_OBJ
-                BinOp.PERCENT -> Opcode.MOD_OBJ
-                else -> null
-            } ?: return null
-            builder.emit(objOpcode, leftObj.slot, rightObj.slot, out)
-            return CompiledValue(out, SlotType.OBJ)
+            return compileObjBinaryOp(leftRef, a, b, op, refPos(ref))
         }
         if (typesMismatch && !allowMixedNumeric &&
             op !in setOf(BinOp.EQ, BinOp.NEQ, BinOp.LT, BinOp.LTE, BinOp.GT, BinOp.GTE)
@@ -844,9 +956,8 @@ class BytecodeCompiler(
                     }
                 }
                 SlotType.OBJ -> {
-                    if (b.type != SlotType.OBJ) return null
-                    builder.emit(Opcode.ADD_OBJ, a.slot, b.slot, out)
-                    CompiledValue(out, SlotType.OBJ)
+                    if (b.type != SlotType.OBJ && b.type != SlotType.UNKNOWN) return null
+                    compileObjBinaryOp(leftRef, a, b, op, refPos(ref))
                 }
                 else -> null
             }
@@ -874,9 +985,8 @@ class BytecodeCompiler(
                     }
                 }
                 SlotType.OBJ -> {
-                    if (b.type != SlotType.OBJ) return null
-                    builder.emit(Opcode.SUB_OBJ, a.slot, b.slot, out)
-                    CompiledValue(out, SlotType.OBJ)
+                    if (b.type != SlotType.OBJ && b.type != SlotType.UNKNOWN) return null
+                    compileObjBinaryOp(leftRef, a, b, op, refPos(ref))
                 }
                 else -> null
             }
@@ -904,9 +1014,8 @@ class BytecodeCompiler(
                     }
                 }
                 SlotType.OBJ -> {
-                    if (b.type != SlotType.OBJ) return null
-                    builder.emit(Opcode.MUL_OBJ, a.slot, b.slot, out)
-                    CompiledValue(out, SlotType.OBJ)
+                    if (b.type != SlotType.OBJ && b.type != SlotType.UNKNOWN) return null
+                    compileObjBinaryOp(leftRef, a, b, op, refPos(ref))
                 }
                 else -> null
             }
@@ -934,9 +1043,8 @@ class BytecodeCompiler(
                     }
                 }
                 SlotType.OBJ -> {
-                    if (b.type != SlotType.OBJ) return null
-                    builder.emit(Opcode.DIV_OBJ, a.slot, b.slot, out)
-                    CompiledValue(out, SlotType.OBJ)
+                    if (b.type != SlotType.OBJ && b.type != SlotType.UNKNOWN) return null
+                    compileObjBinaryOp(leftRef, a, b, op, refPos(ref))
                 }
                 else -> null
             }
@@ -948,9 +1056,8 @@ class BytecodeCompiler(
                         CompiledValue(out, SlotType.INT)
                     }
                     SlotType.OBJ -> {
-                        if (b.type != SlotType.OBJ) return null
-                        builder.emit(Opcode.MOD_OBJ, a.slot, b.slot, out)
-                        CompiledValue(out, SlotType.OBJ)
+                        if (b.type != SlotType.OBJ && b.type != SlotType.UNKNOWN) return null
+                        compileObjBinaryOp(leftRef, a, b, op, refPos(ref))
                     }
                     else -> null
                 }
@@ -994,29 +1101,54 @@ class BytecodeCompiler(
                 CompiledValue(out, SlotType.BOOL)
             }
             BinOp.BAND -> {
-                if (a.type != SlotType.INT) return null
-                builder.emit(Opcode.AND_INT, a.slot, b.slot, out)
-                CompiledValue(out, SlotType.INT)
+                when (a.type) {
+                    SlotType.INT -> {
+                        builder.emit(Opcode.AND_INT, a.slot, b.slot, out)
+                        CompiledValue(out, SlotType.INT)
+                    }
+                    SlotType.OBJ, SlotType.UNKNOWN -> compileObjBinaryOp(leftRef, a, b, op, refPos(ref))
+                    else -> null
+                }
             }
             BinOp.BOR -> {
-                if (a.type != SlotType.INT) return null
-                builder.emit(Opcode.OR_INT, a.slot, b.slot, out)
-                CompiledValue(out, SlotType.INT)
+                when (a.type) {
+                    SlotType.INT -> {
+                        builder.emit(Opcode.OR_INT, a.slot, b.slot, out)
+                        CompiledValue(out, SlotType.INT)
+                    }
+                    SlotType.OBJ, SlotType.UNKNOWN -> compileObjBinaryOp(leftRef, a, b, op, refPos(ref))
+                    else -> null
+                }
             }
             BinOp.BXOR -> {
-                if (a.type != SlotType.INT) return null
-                builder.emit(Opcode.XOR_INT, a.slot, b.slot, out)
-                CompiledValue(out, SlotType.INT)
+                when (a.type) {
+                    SlotType.INT -> {
+                        builder.emit(Opcode.XOR_INT, a.slot, b.slot, out)
+                        CompiledValue(out, SlotType.INT)
+                    }
+                    SlotType.OBJ, SlotType.UNKNOWN -> compileObjBinaryOp(leftRef, a, b, op, refPos(ref))
+                    else -> null
+                }
             }
             BinOp.SHL -> {
-                if (a.type != SlotType.INT) return null
-                builder.emit(Opcode.SHL_INT, a.slot, b.slot, out)
-                CompiledValue(out, SlotType.INT)
+                when (a.type) {
+                    SlotType.INT -> {
+                        builder.emit(Opcode.SHL_INT, a.slot, b.slot, out)
+                        CompiledValue(out, SlotType.INT)
+                    }
+                    SlotType.OBJ, SlotType.UNKNOWN -> compileObjBinaryOp(leftRef, a, b, op, refPos(ref))
+                    else -> null
+                }
             }
             BinOp.SHR -> {
-                if (a.type != SlotType.INT) return null
-                builder.emit(Opcode.SHR_INT, a.slot, b.slot, out)
-                CompiledValue(out, SlotType.INT)
+                when (a.type) {
+                    SlotType.INT -> {
+                        builder.emit(Opcode.SHR_INT, a.slot, b.slot, out)
+                        CompiledValue(out, SlotType.INT)
+                    }
+                    SlotType.OBJ, SlotType.UNKNOWN -> compileObjBinaryOp(leftRef, a, b, op, refPos(ref))
+                    else -> null
+                }
             }
             else -> null
         }
@@ -1472,7 +1604,7 @@ class BytecodeCompiler(
         val target = ref.target
         if (target is FieldRef) {
             val receiverClass = resolveReceiverClass(target.target)
-                ?: throw BytecodeFallbackException(
+                ?: throw BytecodeCompileException(
                     "Member assignment requires compile-time receiver type: ${target.name}",
                     Pos.builtIn
                 )
@@ -1485,7 +1617,7 @@ class BytecodeCompiler(
             }
             if (fieldId < 0 && methodId < 0) {
                 val extSlot = resolveExtensionSetterSlot(receiverClass, target.name)
-                    ?: throw BytecodeFallbackException(
+                    ?: throw BytecodeCompileException(
                         "Unknown member ${target.name} on ${receiverClass.className}",
                         Pos.builtIn
                     )
@@ -1542,9 +1674,9 @@ class BytecodeCompiler(
             val methodId = target.methodId ?: -1
             if (fieldId < 0 && methodId < 0) {
                 val typeName = target.preferredThisTypeName()
-                    ?: throw BytecodeFallbackException("Missing member id for ${target.name}", Pos.builtIn)
+                    ?: throw BytecodeCompileException("Missing member id for ${target.name}", Pos.builtIn)
                 val wrapperName = extensionPropertySetterName(typeName, target.name)
-                val callee = resolveDirectNameSlot(wrapperName) ?: throw BytecodeFallbackException(
+                val callee = resolveDirectNameSlot(wrapperName) ?: throw BytecodeCompileException(
                     "Missing extension wrapper for ${typeName}.${target.name}",
                     Pos.builtIn
                 )
@@ -1570,7 +1702,7 @@ class BytecodeCompiler(
             val fieldId = target.fieldId() ?: -1
             val methodId = target.methodId() ?: -1
             if (fieldId < 0 && methodId < 0) {
-                throw BytecodeFallbackException("Missing member id for ${target.name}", Pos.builtIn)
+                throw BytecodeCompileException("Missing member id for ${target.name}", Pos.builtIn)
             }
             builder.emit(Opcode.SET_MEMBER_SLOT, receiver.slot, fieldId, methodId, value.slot)
             return value
@@ -1580,7 +1712,7 @@ class BytecodeCompiler(
             val fieldId = target.fieldId() ?: -1
             val methodId = target.methodId() ?: -1
             if (fieldId < 0 && methodId < 0) {
-                throw BytecodeFallbackException("Missing member id for ${target.name}", Pos.builtIn)
+                throw BytecodeCompileException("Missing member id for ${target.name}", Pos.builtIn)
             }
             builder.emit(Opcode.SET_MEMBER_SLOT, receiver.slot, fieldId, methodId, value.slot)
             return value
@@ -1673,7 +1805,7 @@ class BytecodeCompiler(
         } ?: return compileEvalRef(ref)
         val fieldTarget = ref.target as? FieldRef
         if (fieldTarget != null) {
-            throw BytecodeFallbackException(
+            throw BytecodeCompileException(
                 "Member assignment requires compile-time receiver type: ${fieldTarget.name}",
                 Pos.builtIn
             )
@@ -1684,7 +1816,7 @@ class BytecodeCompiler(
             val fieldId = implicitTarget.fieldId ?: -1
             val methodId = implicitTarget.methodId ?: -1
             if (fieldId < 0 && methodId < 0) {
-                throw BytecodeFallbackException("Missing member id for ${implicitTarget.name}", Pos.builtIn)
+                throw BytecodeCompileException("Missing member id for ${implicitTarget.name}", Pos.builtIn)
             }
             val current = allocSlot()
             val result = allocSlot()
@@ -1701,7 +1833,7 @@ class BytecodeCompiler(
             val fieldId = thisFieldTarget.fieldId() ?: -1
             val methodId = thisFieldTarget.methodId() ?: -1
             if (fieldId < 0 && methodId < 0) {
-                throw BytecodeFallbackException("Missing member id for ${thisFieldTarget.name}", Pos.builtIn)
+                throw BytecodeCompileException("Missing member id for ${thisFieldTarget.name}", Pos.builtIn)
             }
             val current = allocSlot()
             val result = allocSlot()
@@ -1718,7 +1850,7 @@ class BytecodeCompiler(
             val fieldId = qualifiedTarget.fieldId() ?: -1
             val methodId = qualifiedTarget.methodId() ?: -1
             if (fieldId < 0 && methodId < 0) {
-                throw BytecodeFallbackException("Missing member id for ${qualifiedTarget.name}", Pos.builtIn)
+                throw BytecodeCompileException("Missing member id for ${qualifiedTarget.name}", Pos.builtIn)
             }
             val current = allocSlot()
             val result = allocSlot()
@@ -1808,7 +1940,7 @@ class BytecodeCompiler(
             }
             is FieldRef -> {
                 val receiverClass = resolveReceiverClass(target.target)
-                    ?: throw BytecodeFallbackException(
+                    ?: throw BytecodeCompileException(
                         "Member assignment requires compile-time receiver type: ${target.name}",
                         Pos.builtIn
                     )
@@ -1833,7 +1965,7 @@ class BytecodeCompiler(
                     }
                 } else {
                     val extSlot = resolveExtensionSetterSlot(receiverClass, target.name)
-                        ?: throw BytecodeFallbackException(
+                        ?: throw BytecodeCompileException(
                             "Unknown member ${target.name} on ${receiverClass.className}",
                             Pos.builtIn
                         )
@@ -1895,7 +2027,7 @@ class BytecodeCompiler(
 
     private fun compileFieldRef(ref: FieldRef): CompiledValue? {
         val receiverClass = resolveReceiverClass(ref.target)
-            ?: throw BytecodeFallbackException(
+            ?: throw BytecodeCompileException(
                 "Member access requires compile-time receiver type: ${ref.name}",
                 Pos.builtIn
             )
@@ -1927,7 +2059,7 @@ class BytecodeCompiler(
             return CompiledValue(dst, SlotType.OBJ)
         }
         val extSlot = resolveExtensionGetterSlot(receiverClass, ref.name)
-            ?: throw BytecodeFallbackException(
+            ?: throw BytecodeCompileException(
                 "Unknown member ${ref.name} on ${receiverClass.className}",
                 Pos.builtIn
             )
@@ -1964,7 +2096,7 @@ class BytecodeCompiler(
         val fieldId = ref.fieldId() ?: -1
         val methodId = ref.methodId() ?: -1
         if (fieldId < 0 && methodId < 0) {
-            throw BytecodeFallbackException("Missing member id for ${ref.name}", Pos.builtIn)
+            throw BytecodeCompileException("Missing member id for ${ref.name}", Pos.builtIn)
         }
         val dst = allocSlot()
         if (!ref.optional()) {
@@ -1995,7 +2127,7 @@ class BytecodeCompiler(
         val fieldId = ref.fieldId() ?: -1
         val methodId = ref.methodId() ?: -1
         if (fieldId < 0 && methodId < 0) {
-            throw BytecodeFallbackException("Missing member id for ${ref.name}", Pos.builtIn)
+            throw BytecodeCompileException("Missing member id for ${ref.name}", Pos.builtIn)
         }
         val dst = allocSlot()
         if (!ref.optional()) {
@@ -2296,7 +2428,7 @@ class BytecodeCompiler(
             val fieldId = thisFieldTarget.fieldId() ?: -1
             val methodId = thisFieldTarget.methodId() ?: -1
             if (fieldId < 0 && methodId < 0) {
-                throw BytecodeFallbackException("Missing member id for ${thisFieldTarget.name}", Pos.builtIn)
+                throw BytecodeCompileException("Missing member id for ${thisFieldTarget.name}", Pos.builtIn)
             }
             val current = allocSlot()
             builder.emit(Opcode.GET_MEMBER_SLOT, receiver.slot, fieldId, methodId, current)
@@ -2325,7 +2457,7 @@ class BytecodeCompiler(
             val fieldId = implicitTarget.fieldId ?: -1
             val methodId = implicitTarget.methodId ?: -1
             if (fieldId < 0 && methodId < 0) {
-                throw BytecodeFallbackException("Missing member id for ${implicitTarget.name}", Pos.builtIn)
+                throw BytecodeCompileException("Missing member id for ${implicitTarget.name}", Pos.builtIn)
             }
             val current = allocSlot()
             builder.emit(Opcode.GET_MEMBER_SLOT, receiver.slot, fieldId, methodId, current)
@@ -2354,7 +2486,7 @@ class BytecodeCompiler(
             val fieldId = qualifiedTarget.fieldId() ?: -1
             val methodId = qualifiedTarget.methodId() ?: -1
             if (fieldId < 0 && methodId < 0) {
-                throw BytecodeFallbackException("Missing member id for ${qualifiedTarget.name}", Pos.builtIn)
+                throw BytecodeCompileException("Missing member id for ${qualifiedTarget.name}", Pos.builtIn)
             }
             val current = allocSlot()
             builder.emit(Opcode.GET_MEMBER_SLOT, receiver.slot, fieldId, methodId, current)
@@ -2381,7 +2513,7 @@ class BytecodeCompiler(
         if (fieldTarget != null) {
             if (fieldTarget.isOptional) return null
             val receiverClass = resolveReceiverClass(fieldTarget.target)
-                ?: throw BytecodeFallbackException(
+                ?: throw BytecodeCompileException(
                     "Member access requires compile-time receiver type: ${fieldTarget.name}",
                     Pos.builtIn
                 )
@@ -2591,7 +2723,7 @@ class BytecodeCompiler(
             if (direct == null) {
                 val thisSlot = resolveDirectNameSlot("this")
                 if (thisSlot != null) {
-                    throw BytecodeFallbackException(
+                    throw BytecodeCompileException(
                         "Unresolved member call '${localTarget.name}': missing compile-time member id",
                         Pos.builtIn
                     )
@@ -2600,7 +2732,7 @@ class BytecodeCompiler(
         }
         val fieldTarget = ref.target as? FieldRef
         if (fieldTarget != null) {
-            throw BytecodeFallbackException(
+            throw BytecodeCompileException(
                 "Member call requires compile-time receiver type: ${fieldTarget.name}",
                 Pos.builtIn
             )
@@ -2684,10 +2816,17 @@ class BytecodeCompiler(
 
     private fun compileMethodCall(ref: MethodCallRef): CompiledValue? {
         val receiverClass = resolveReceiverClass(ref.receiver)
+            ?: if (isAllowedObjectMember(ref.name)) {
+                Obj.rootObjectType
+            } else {
+                throw BytecodeCompileException(
+                    "Member call requires compile-time receiver type: ${ref.name}",
+                    Pos.builtIn
+                )
+            }
         val receiver = compileRefWithFallback(ref.receiver, null, Pos.builtIn) ?: return null
         val dst = allocSlot()
-        val methodId = receiverClass?.instanceMethodIdMap(includeAbstract = true)?.get(ref.name)
-            ?: Obj.rootObjectType.instanceMethodIdMap(includeAbstract = true)[ref.name]
+        val methodId = receiverClass.instanceMethodIdMap(includeAbstract = true)[ref.name]
         if (methodId != null) {
             if (!ref.isOptional) {
                 val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
@@ -2714,14 +2853,8 @@ class BytecodeCompiler(
             builder.mark(endLabel)
             return CompiledValue(dst, SlotType.OBJ)
         }
-        if (receiverClass == null) {
-            throw BytecodeFallbackException(
-                "Member call requires compile-time receiver type: ${ref.name}",
-                Pos.builtIn
-            )
-        }
         val extSlot = resolveExtensionCallableSlot(receiverClass, ref.name)
-            ?: throw BytecodeFallbackException(
+            ?: throw BytecodeCompileException(
                 "Unknown member ${ref.name} on ${receiverClass.className}",
                 Pos.builtIn
             )
@@ -2754,7 +2887,7 @@ class BytecodeCompiler(
 
     private fun compileThisMethodSlotCall(ref: ThisMethodSlotCallRef): CompiledValue? {
         val receiver = compileThisRef()
-        val methodId = ref.methodId() ?: throw BytecodeFallbackException(
+        val methodId = ref.methodId() ?: throw BytecodeCompileException(
             "Missing member id for ${ref.methodName()}",
             Pos.builtIn
         )
@@ -2810,7 +2943,7 @@ class BytecodeCompiler(
 
     private fun compileQualifiedThisMethodSlotCall(ref: QualifiedThisMethodSlotCallRef): CompiledValue? {
         val receiver = compileThisVariantRef(ref.receiverTypeName()) ?: return null
-        val methodId = ref.methodId() ?: throw BytecodeFallbackException(
+        val methodId = ref.methodId() ?: throw BytecodeCompileException(
             "Missing member id for ${ref.methodName()}",
             Pos.builtIn
         )
@@ -2925,8 +3058,8 @@ class BytecodeCompiler(
         return when (stmt) {
             is ExpressionStatement -> compileRefWithFallback(stmt.ref, null, stmt.pos)
             else -> {
-                throw BytecodeFallbackException(
-                    "Bytecode fallback: unsupported argument expression",
+                throw BytecodeCompileException(
+                    "Bytecode compile error: unsupported argument expression",
                     stmt.pos
                 )
             }
@@ -3081,15 +3214,15 @@ class BytecodeCompiler(
     }
 
     private fun emitFallbackStatement(stmt: Statement): CompiledValue {
-        throw BytecodeFallbackException(
-            "Bytecode fallback: unsupported statement",
+        throw BytecodeCompileException(
+            "Bytecode compile error: unsupported statement",
             stmt.pos
         )
     }
 
     private fun emitStatementEval(stmt: Statement): CompiledValue {
         val stmtName = stmt::class.simpleName ?: "UnknownStatement"
-        throw BytecodeFallbackException("Unsupported statement in bytecode: $stmtName", stmt.pos)
+        throw BytecodeCompileException("Unsupported statement in bytecode: $stmtName", stmt.pos)
     }
 
     private fun compileStatementValueOrFallback(stmt: Statement, needResult: Boolean = true): CompiledValue? {
@@ -3198,8 +3331,8 @@ class BytecodeCompiler(
                     val original = (statement as? BytecodeStatement)?.original
                     val name = original?.let { "${statement::class.simpleName}(${it::class.simpleName})" }
                         ?: statement::class.simpleName
-                    throw BytecodeFallbackException(
-                        "Bytecode fallback: failed to compile block statement ($name)",
+                    throw BytecodeCompileException(
+                        "Bytecode compile error: failed to compile block statement ($name)",
                         statement.pos
                     )
                 }
@@ -3531,16 +3664,16 @@ class BytecodeCompiler(
             val iterableMethods = ObjIterable.instanceMethodIdMap(includeAbstract = true)
             val iteratorMethodId = iterableMethods["iterator"]
             if (iteratorMethodId == null) {
-                throw BytecodeFallbackException("Missing member id for Iterable.iterator", stmt.pos)
+                throw BytecodeCompileException("Missing member id for Iterable.iterator", stmt.pos)
             }
             val iteratorMethods = ObjIterator.instanceMethodIdMap(includeAbstract = true)
             val hasNextMethodId = iteratorMethods["hasNext"]
             if (hasNextMethodId == null) {
-                throw BytecodeFallbackException("Missing member id for Iterator.hasNext", stmt.pos)
+                throw BytecodeCompileException("Missing member id for Iterator.hasNext", stmt.pos)
             }
             val nextMethodId = iteratorMethods["next"]
             if (nextMethodId == null) {
-                throw BytecodeFallbackException("Missing member id for Iterator.next", stmt.pos)
+                throw BytecodeCompileException("Missing member id for Iterator.next", stmt.pos)
             }
 
             val iterSlot = allocSlot()
@@ -4020,8 +4153,8 @@ class BytecodeCompiler(
         return when (target) {
             is ExpressionStatement -> compileRefWithFallback(target.ref, SlotType.BOOL, target.pos)
             else -> {
-                throw BytecodeFallbackException(
-                    "Bytecode fallback: unsupported condition",
+                throw BytecodeCompileException(
+                    "Bytecode compile error: unsupported condition",
                     pos
                 )
             }
@@ -4135,8 +4268,8 @@ class BytecodeCompiler(
         val stack = loopStack.toList()
         val targetIndex = findLoopContextIndex(stmt.label) ?: run {
             val labels = stack.joinToString(prefix = "[", postfix = "]") { it.label ?: "<unlabeled>" }
-            throw BytecodeFallbackException(
-                "Bytecode fallback: break label '${stmt.label}' not found in $labels",
+            throw BytecodeCompileException(
+                "Bytecode compile error: break label '${stmt.label}' not found in $labels",
                 stmt.pos
             )
         }
@@ -4329,7 +4462,7 @@ class BytecodeCompiler(
             val localKeys = localSlotIndexByName.keys.sorted().joinToString(prefix = "[", postfix = "]")
             val scopeKeys = scopeSlotIndexByName.keys.sorted().joinToString(prefix = "[", postfix = "]")
             val info = " ref=$refKind loopSlots=$loopKeys localSlots=$localKeys scopeSlots=$scopeKeys forceScopeSlots=$forceScopeSlots"
-            throw BytecodeFallbackException("Unresolved name '$name'.$info", pos)
+            throw BytecodeCompileException("Unresolved name '$name'.$info", pos)
         }
         val refInfo = when (ref) {
             is FieldRef -> "FieldRef(${ref.name})"
@@ -4341,8 +4474,8 @@ class BytecodeCompiler(
         } else {
             ""
         }
-        throw BytecodeFallbackException(
-            "Bytecode fallback: unsupported expression ($refInfo)$extra",
+        throw BytecodeCompileException(
+            "Bytecode compile error: unsupported expression ($refInfo)$extra",
             pos
         )
     }
@@ -4354,6 +4487,7 @@ class BytecodeCompiler(
                 val fromSlot = slot?.let { slotObjClass[it] }
                 fromSlot
                     ?: nameObjClass[ref.name]
+                    ?: resolveTypeNameClass(ref.name)
                     ?: slotInitClassByKey[ScopeSlotKey(refScopeId(ref), refSlot(ref))]
                     ?: run {
                         val match = slotInitClassByKey.entries.firstOrNull { (key, _) ->
@@ -4365,6 +4499,7 @@ class BytecodeCompiler(
             }
             is LocalVarRef -> resolveDirectNameSlot(ref.name)?.let { slotObjClass[it.slot] }
                 ?: nameObjClass[ref.name]
+                ?: resolveTypeNameClass(ref.name)
             is ListLiteralRef -> ObjList.type
             is MapLiteralRef -> ObjMap.type
             is RangeRef -> ObjRange.type
@@ -4426,6 +4561,18 @@ class BytecodeCompiler(
         }
     }
 
+    private fun isAllowedObjectMember(memberName: String): Boolean {
+        return when (memberName) {
+            "toString",
+            "toInspectString",
+            "let",
+            "also",
+            "apply",
+            "run" -> true
+            else -> false
+        }
+    }
+
     private fun refSlot(ref: LocalSlotRef): Int = ref.slot
     private fun refScopeId(ref: LocalSlotRef): Int = ref.scopeId
     private fun binaryLeft(ref: BinaryOpRef): ObjRef = ref.left
@@ -4434,8 +4581,8 @@ class BytecodeCompiler(
 
     private fun resolveReceiverClassForScopeCollection(ref: ObjRef): ObjClass? {
         return when (ref) {
-            is LocalSlotRef -> nameObjClass[ref.name]
-            is LocalVarRef -> nameObjClass[ref.name]
+            is LocalSlotRef -> nameObjClass[ref.name] ?: resolveTypeNameClass(ref.name)
+            is LocalVarRef -> nameObjClass[ref.name] ?: resolveTypeNameClass(ref.name)
             is ListLiteralRef -> ObjList.type
             is MapLiteralRef -> ObjMap.type
             is RangeRef -> ObjRange.type
@@ -4605,6 +4752,9 @@ class BytecodeCompiler(
         slotTypes.clear()
         slotObjClass.clear()
         nameObjClass.clear()
+        if (knownNameObjClass.isNotEmpty()) {
+            nameObjClass.putAll(knownNameObjClass)
+        }
         slotInitClassByKey.clear()
         scopeSlotMap.clear()
         scopeSlotNameMap.clear()
@@ -4623,6 +4773,13 @@ class BytecodeCompiler(
         addrSlotByScopeSlot.clear()
         loopStack.clear()
         forceScopeSlots = allowLocalSlots && containsValueFnRef(stmt)
+        if (slotTypeByScopeId.isNotEmpty()) {
+            for ((scopeId, slots) in slotTypeByScopeId) {
+                for ((slotIndex, cls) in slots) {
+                    slotInitClassByKey[ScopeSlotKey(scopeId, slotIndex)] = cls
+                }
+            }
+        }
         if (allowLocalSlots) {
             collectLoopVarNames(stmt)
         }
@@ -5144,7 +5301,6 @@ class BytecodeCompiler(
                 val receiverClass = resolveReceiverClassForScopeCollection(ref.receiver)
                 if (receiverClass != null) {
                     val methodId = receiverClass.instanceMethodIdMap(includeAbstract = true)[ref.name]
-                        ?: Obj.rootObjectType.instanceMethodIdMap(includeAbstract = true)[ref.name]
                     if (methodId == null) {
                         queueExtensionCallableNames(receiverClass, ref.name)
                     }

@@ -17,10 +17,8 @@
 package net.sergeych.lyng.bytecode
 
 import net.sergeych.lyng.Arguments
-import net.sergeych.lyng.ExecutionError
 import net.sergeych.lyng.ModuleScope
 import net.sergeych.lyng.PerfFlags
-import net.sergeych.lyng.PerfStats
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.ReturnException
 import net.sergeych.lyng.Scope
@@ -1160,44 +1158,6 @@ class CmdCallDirect(
     }
 }
 
-class CmdCallVirtual(
-    internal val recvSlot: Int,
-    internal val methodId: Int,
-    internal val argBase: Int,
-    internal val argCount: Int,
-    internal val dst: Int,
-) : Cmd() {
-    override suspend fun perform(frame: CmdFrame) {
-        frame.scope.raiseError("CALL_VIRTUAL is not allowed: compile-time member resolution is required")
-    }
-}
-
-class CmdCallFallback(
-    internal val id: Int,
-    internal val argBase: Int,
-    internal val argCount: Int,
-    internal val dst: Int,
-) : Cmd() {
-    override suspend fun perform(frame: CmdFrame) {
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncFrameToScope()
-        }
-        val stmt = frame.fn.fallbackStatements.getOrNull(id)
-            ?: error("Fallback statement not found: $id")
-        val args = frame.buildArguments(argBase, argCount)
-        val result = if (PerfFlags.SCOPE_POOL) {
-            frame.scope.withChildFrame(args) { child -> stmt.execute(child) }
-        } else {
-            stmt.execute(frame.scope.createChildScope(frame.scope.pos, args = args))
-        }
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncScopeToFrame()
-        }
-        frame.storeObjResult(dst, result)
-        return
-    }
-}
-
 class CmdCallSlot(
     internal val calleeSlot: Int,
     internal val argBase: Int,
@@ -1230,63 +1190,6 @@ class CmdCallSlot(
         }
         if (frame.fn.localSlotNames.isNotEmpty()) {
             frame.syncScopeToFrame()
-        }
-        frame.storeObjResult(dst, result)
-        return
-    }
-}
-
-class CmdGetField(
-    internal val recvSlot: Int,
-    internal val fieldId: Int,
-    internal val dst: Int,
-) : Cmd() {
-    private var rKey: Long = 0L
-    private var rVer: Int = -1
-
-    override suspend fun perform(frame: CmdFrame) {
-        val receiver = frame.slotToObj(recvSlot)
-        val nameConst = frame.fn.constants.getOrNull(fieldId) as? BytecodeConst.StringVal
-            ?: error("GET_FIELD expects StringVal at $fieldId")
-        if (PerfFlags.FIELD_PIC) {
-            val (key, ver) = when (receiver) {
-                is ObjInstance -> receiver.objClass.classId to receiver.objClass.layoutVersion
-                is ObjClass -> receiver.classId to receiver.layoutVersion
-                else -> 0L to -1
-            }
-            if (key != 0L) {
-                if (key == rKey && ver == rVer) {
-                    if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.fieldPicHit++
-                } else {
-                    if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.fieldPicMiss++
-                    rKey = key
-                    rVer = ver
-                }
-            }
-        }
-        val result = receiver.readField(frame.scope, nameConst.value).value
-        frame.storeObjResult(dst, result)
-        return
-    }
-}
-
-class CmdGetName(
-    internal val nameId: Int,
-    internal val dst: Int,
-) : Cmd() {
-    override suspend fun perform(frame: CmdFrame) {
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncFrameToScope()
-        }
-        val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
-            ?: error("GET_NAME expects StringVal at $nameId")
-        val name = nameConst.value
-        val result = frame.scope.get(name)?.value ?: run {
-            try {
-                frame.scope.thisObj.readField(frame.scope, name).value
-            } catch (e: ExecutionError) {
-                if ((e.message ?: "").contains("no such field: $name")) ObjUnset else throw e
-            }
         }
         frame.storeObjResult(dst, result)
         return
@@ -1407,39 +1310,6 @@ class CmdCallMemberSlot(
     }
 }
 
-class CmdSetField(
-    internal val recvSlot: Int,
-    internal val fieldId: Int,
-    internal val valueSlot: Int,
-) : Cmd() {
-    private var wKey: Long = 0L
-    private var wVer: Int = -1
-
-    override suspend fun perform(frame: CmdFrame) {
-        val receiver = frame.slotToObj(recvSlot)
-        val nameConst = frame.fn.constants.getOrNull(fieldId) as? BytecodeConst.StringVal
-            ?: error("SET_FIELD expects StringVal at $fieldId")
-        if (PerfFlags.FIELD_PIC) {
-            val (key, ver) = when (receiver) {
-                is ObjInstance -> receiver.objClass.classId to receiver.objClass.layoutVersion
-                is ObjClass -> receiver.classId to receiver.layoutVersion
-                else -> 0L to -1
-            }
-            if (key != 0L) {
-                if (key == wKey && ver == wVer) {
-                    if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.fieldPicSetHit++
-                } else {
-                    if (PerfFlags.PIC_DEBUG_COUNTERS) PerfStats.fieldPicSetMiss++
-                    wKey = key
-                    wVer = ver
-                }
-            }
-        }
-        receiver.writeField(frame.scope, nameConst.value, frame.slotToObj(valueSlot))
-        return
-    }
-}
-
 class CmdGetIndex(
     internal val targetSlot: Int,
     internal val indexSlot: Int,
@@ -1459,18 +1329,6 @@ class CmdSetIndex(
 ) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         frame.slotToObj(targetSlot).putAt(frame.scope, frame.slotToObj(indexSlot), frame.slotToObj(valueSlot))
-        return
-    }
-}
-
-class CmdEvalFallback(internal val id: Int, internal val dst: Int) : Cmd() {
-    override suspend fun perform(frame: CmdFrame) {
-        val stmt = frame.fn.fallbackStatements.getOrNull(id)
-            ?: error("Fallback statement not found: $id")
-        frame.syncFrameToScope()
-        val result = stmt.execute(frame.scope)
-        frame.syncScopeToFrame()
-        frame.storeObjResult(dst, result)
         return
     }
 }
@@ -1558,7 +1416,6 @@ class CmdFrame(
     var ip: Int = 0
     var scope: Scope = scope0
     private val moduleScope: Scope = resolveModuleScope(scope0)
-    val methodCallSites: MutableMap<Int, MethodCallSite> = CmdCallSiteCache.methodCallSites(fn)
 
     internal val scopeStack = ArrayDeque<Scope>()
     internal val scopeVirtualStack = ArrayDeque<Boolean>()

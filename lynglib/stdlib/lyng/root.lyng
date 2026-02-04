@@ -291,7 +291,7 @@ override fun List<T>.toString() {
     var result = "["
     for (item in this) {
         if (!first) result += ","
-        result += item.toString()
+        result += (item as Object).toString()
         first = false
     }
     result + "]"
@@ -310,8 +310,9 @@ fun List<T>.sort(): Void {
 /* Print this exception and its stack trace to standard output. */
 fun Exception.printStackTrace(): Void {
     println(this)
-    for( entry in stackTrace )
-        println("\tat "+entry.toString())
+    for( entry in stackTrace ) {
+        println("\tat "+(entry as Object).toString())
+    }
 }
 
 /* Compile this string into a regular expression. */
@@ -371,7 +372,7 @@ class lazy<T,ThisRefType=Object>(creatorParam: ThisRefType.()->T) : Delegate<T,T
     private var value = Unset
 
     override fun bind(name: String, access: DelegateAccess, thisRef: ThisRefType): Object {
-        if (access.toString() != "DelegateAccess.Val") throw "lazy delegate can only be used with 'val'"
+        if (access != DelegateAccess.Val) throw "lazy delegate can only be used with 'val'"
         this
     }
 

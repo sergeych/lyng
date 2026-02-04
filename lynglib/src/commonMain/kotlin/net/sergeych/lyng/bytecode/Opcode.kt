@@ -126,12 +126,9 @@ enum class Opcode(val code: Int) {
     DECL_EXT_PROPERTY(0x8A),
 
     CALL_DIRECT(0x90),
-    CALL_VIRTUAL(0x91),
     CALL_MEMBER_SLOT(0x92),
     CALL_SLOT(0x93),
 
-    GET_FIELD(0xA0),
-    SET_FIELD(0xA1),
     GET_INDEX(0xA2),
     SET_INDEX(0xA3),
     LIST_LITERAL(0xA5),

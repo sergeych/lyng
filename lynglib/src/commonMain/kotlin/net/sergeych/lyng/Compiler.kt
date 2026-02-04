@@ -1079,7 +1079,9 @@ class Compiler(
                             block,
                             "<script>",
                             allowLocalSlots = true,
-                            allowedScopeNames = modulePlan.keys
+                            allowedScopeNames = modulePlan.keys,
+                            slotTypeByScopeId = slotTypeByScopeId,
+                            knownNameObjClass = knownClassMapForBytecode()
                         )
                     )
                 } else {
@@ -1284,6 +1286,27 @@ class Compiler(
         }
     }
 
+    private fun knownClassMapForBytecode(): Map<String, ObjClass> {
+        val result = LinkedHashMap<String, ObjClass>()
+        fun addScope(scope: Scope?) {
+            if (scope == null) return
+            for ((name, rec) in scope.objects) {
+                val cls = rec.value as? ObjClass ?: continue
+                result.putIfAbsent(name, cls)
+            }
+        }
+        addScope(seedScope)
+        addScope(importManager.rootScope)
+        for (scope in importedScopes) {
+            addScope(scope)
+        }
+        for (name in compileClassInfos.keys) {
+            val cls = resolveClassByName(name) ?: continue
+            result.putIfAbsent(name, cls)
+        }
+        return result
+    }
+
     private fun wrapBytecode(stmt: Statement): Statement {
         if (!useBytecodeStatements) return stmt
         if (codeContexts.lastOrNull() is CodeContext.Module) {
@@ -1322,7 +1345,9 @@ class Compiler(
             allowLocalSlots = allowLocals,
             returnLabels = returnLabels,
             rangeLocalNames = currentRangeParamNames,
-            allowedScopeNames = allowedScopeNames
+            allowedScopeNames = allowedScopeNames,
+            slotTypeByScopeId = slotTypeByScopeId,
+            knownNameObjClass = knownClassMapForBytecode()
         )
     }
 
@@ -1338,7 +1363,9 @@ class Compiler(
             allowLocalSlots = true,
             returnLabels = returnLabels,
             rangeLocalNames = currentRangeParamNames,
-            allowedScopeNames = allowedScopeNames
+            allowedScopeNames = allowedScopeNames,
+            slotTypeByScopeId = slotTypeByScopeId,
+            knownNameObjClass = knownClassMapForBytecode()
         )
     }
 
@@ -3250,8 +3277,7 @@ class Compiler(
         if (left is LocalSlotRef && left.name == "scope") return
         val receiverClass = resolveReceiverClassForMember(left)
         if (receiverClass == null) {
-            val allowed = memberName == "toString" || memberName == "toInspectString"
-            if (allowed) return
+            if (isAllowedObjectMember(memberName)) return
             throw ScriptError(pos, "member access requires compile-time receiver type: $memberName")
         }
         if (receiverClass == Obj.rootObjectType) {

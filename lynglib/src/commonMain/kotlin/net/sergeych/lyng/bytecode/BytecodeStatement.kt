@@ -27,6 +27,7 @@ import net.sergeych.lyng.WhenInCondition
 import net.sergeych.lyng.WhenIsCondition
 import net.sergeych.lyng.WhenStatement
 import net.sergeych.lyng.obj.Obj
+import net.sergeych.lyng.obj.ObjClass
 import net.sergeych.lyng.obj.RangeRef
 
 class BytecodeStatement private constructor(
@@ -50,13 +51,15 @@ class BytecodeStatement private constructor(
             returnLabels: Set<String> = emptySet(),
             rangeLocalNames: Set<String> = emptySet(),
             allowedScopeNames: Set<String>? = null,
+            slotTypeByScopeId: Map<Int, Map<Int, ObjClass>> = emptyMap(),
+            knownNameObjClass: Map<String, ObjClass> = emptyMap(),
         ): Statement {
             if (statement is BytecodeStatement) return statement
             val hasUnsupported = containsUnsupportedStatement(statement)
             if (hasUnsupported) {
                 val statementName = statement::class.qualifiedName ?: statement::class.simpleName ?: "UnknownStatement"
-                throw BytecodeFallbackException(
-                    "Bytecode fallback: unsupported statement $statementName in '$nameHint'",
+                throw BytecodeCompileException(
+                    "Bytecode compile error: unsupported statement $statementName in '$nameHint'",
                     statement.pos
                 )
             }
@@ -65,11 +68,13 @@ class BytecodeStatement private constructor(
                 allowLocalSlots = safeLocals,
                 returnLabels = returnLabels,
                 rangeLocalNames = rangeLocalNames,
-                allowedScopeNames = allowedScopeNames
+                allowedScopeNames = allowedScopeNames,
+                slotTypeByScopeId = slotTypeByScopeId,
+                knownNameObjClass = knownNameObjClass
             )
             val compiled = compiler.compileStatement(nameHint, statement)
-            val fn = compiled ?: throw BytecodeFallbackException(
-                "Bytecode fallback: failed to compile '$nameHint'",
+            val fn = compiled ?: throw BytecodeCompileException(
+                "Bytecode compile error: failed to compile '$nameHint'",
                 statement.pos
             )
             return BytecodeStatement(statement, fn)

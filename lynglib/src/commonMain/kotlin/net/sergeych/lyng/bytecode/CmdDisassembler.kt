@@ -180,11 +180,8 @@ object CmdDisassembler {
             is CmdDeclLocal -> Opcode.DECL_LOCAL to intArrayOf(cmd.constId, cmd.slot)
             is CmdDeclExtProperty -> Opcode.DECL_EXT_PROPERTY to intArrayOf(cmd.constId, cmd.slot)
             is CmdCallDirect -> Opcode.CALL_DIRECT to intArrayOf(cmd.id, cmd.argBase, cmd.argCount, cmd.dst)
-            is CmdCallVirtual -> Opcode.CALL_VIRTUAL to intArrayOf(cmd.recvSlot, cmd.methodId, cmd.argBase, cmd.argCount, cmd.dst)
             is CmdCallMemberSlot -> Opcode.CALL_MEMBER_SLOT to intArrayOf(cmd.recvSlot, cmd.methodId, cmd.argBase, cmd.argCount, cmd.dst)
             is CmdCallSlot -> Opcode.CALL_SLOT to intArrayOf(cmd.calleeSlot, cmd.argBase, cmd.argCount, cmd.dst)
-            is CmdGetField -> Opcode.GET_FIELD to intArrayOf(cmd.recvSlot, cmd.fieldId, cmd.dst)
-            is CmdSetField -> Opcode.SET_FIELD to intArrayOf(cmd.recvSlot, cmd.fieldId, cmd.valueSlot)
             is CmdGetIndex -> Opcode.GET_INDEX to intArrayOf(cmd.targetSlot, cmd.indexSlot, cmd.dst)
             is CmdSetIndex -> Opcode.SET_INDEX to intArrayOf(cmd.targetSlot, cmd.indexSlot, cmd.valueSlot)
             is CmdListLiteral -> Opcode.LIST_LITERAL to intArrayOf(cmd.planId, cmd.baseSlot, cmd.count, cmd.dst)
@@ -266,14 +263,8 @@ object CmdDisassembler {
                 listOf(OperandKind.ID, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
             Opcode.CALL_SLOT ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
-            Opcode.CALL_VIRTUAL ->
-                listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
             Opcode.CALL_MEMBER_SLOT ->
                 listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
-            Opcode.GET_FIELD ->
-                listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT)
-            Opcode.SET_FIELD ->
-                listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT)
             Opcode.GET_INDEX ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.SET_INDEX ->

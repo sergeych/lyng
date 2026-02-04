@@ -12,10 +12,17 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 package net.sergeych.lyng.bytecode
 
-internal expect object CmdCallSiteCache {
-    fun methodCallSites(fn: CmdFunction): MutableMap<Int, MethodCallSite>
+import net.sergeych.lyng.Pos
+
+class BytecodeCompileException(
+    message: String,
+    val pos: Pos? = null,
+) : RuntimeException(message) {
+    override fun toString(): String =
+        pos?.let { "${super.toString()} at $it" } ?: super.toString()
 }
