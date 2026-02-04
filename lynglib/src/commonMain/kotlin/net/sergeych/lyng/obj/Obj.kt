@@ -482,7 +482,8 @@ open class Obj {
         if (obj.type == ObjRecord.Type.Delegated) {
             val del = obj.delegate ?: scope.raiseError("Internal error: delegated property $name has no delegate")
             val th = if (this === ObjVoid) ObjNull else this
-            if (del.objClass.getInstanceMemberOrNull("getValue") == null) {
+            val getValueRec = del.objClass.getInstanceMemberOrNull("getValue")
+            if (getValueRec == null || getValueRec.declaringClass?.className == "Delegate") {
                 val wrapper = object : Statement() {
                     override val pos: Pos = Pos.builtIn
                     override suspend fun execute(s: Scope): Obj {

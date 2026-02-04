@@ -37,7 +37,6 @@ import kotlin.test.*
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
-import kotlin.test.Ignore
 
 /*
  * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
@@ -2253,9 +2252,9 @@ class ScriptTest {
             """
             class Point(x,y) {
                 println("1")
-                fun length() { sqrt(d2()) }
-                println("2")
                 private fun d2() {x*x + y*y}
+                println("2")
+                fun length() { sqrt(d2()) }
                 println("3")
             }
             println("Helluva")
@@ -2827,9 +2826,10 @@ class ScriptTest {
                         x
                     }
                     
-                    val jobs: List = []
+                    var jobs: List = []
                     for (i in 1..50) {
                         val d: Deferred = launch { dosomething() }
+//                        jobs = jobs + [d]
                         jobs.add(d)
                     }
                     for (j in jobs) {

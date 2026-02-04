@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Sergey S. Chernov
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 package net.sergeych.lyng
@@ -34,7 +35,7 @@ class DelegatedVarDeclStatement(
     override suspend fun execute(context: Scope): Obj {
         val initValue = initializer.execute(context)
         val accessTypeStr = if (isMutable) "Var" else "Val"
-        val accessType = context.resolveQualifiedIdentifier("DelegateAccess.$accessTypeStr")
+        val accessType = ObjString(accessTypeStr)
         val finalDelegate = try {
             initValue.invokeInstanceMethod(context, "bind", Arguments(ObjString(name), accessType, ObjNull))
         } catch (e: Exception) {

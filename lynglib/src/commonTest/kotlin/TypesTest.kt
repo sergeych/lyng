@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,10 +17,8 @@
 
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.eval
-import kotlin.test.Ignore
 import kotlin.test.Test
 
-@Ignore
 class TypesTest {
 
     @Test
@@ -86,10 +84,16 @@ class TypesTest {
             class Point(val a,b) {
                 var c = 0
             }
+            val p1 = Point(0,1)
+            val p2 = Point(0,1)
+            p1.c = 2
+            p2.c = 2
+            val p3 = Point(0,1)
+            p3.c = 1
             assertEquals(Point(0,1), Point(0,1) )
-            assertEquals(Point(0,1).apply { c = 2 }, Point(0,1).apply { c = 2 } )
+            assertEquals(p1, p2)
             assertNotEquals(Point(0,1), Point(1,1) )
-            assertNotEquals(Point(0,1), Point(0,1).apply { c = 1 } )
+            assertNotEquals(Point(0,1), p3)
         """.trimIndent())
     }
 }

@@ -1,13 +1,28 @@
+/*
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.eval
 import net.sergeych.lyng.obj.toInt
-import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
-@Ignore
 class ReturnStatementTest {
 
     @Test
@@ -24,7 +39,7 @@ class ReturnStatementTest {
     @Test
     fun testReturnFromIf() = runTest {
         assertEquals(5, eval("""
-            fun foo(x) {
+            fun foo(x: Int) {
                 if (x > 0) return 5
                 10
             }
@@ -32,7 +47,7 @@ class ReturnStatementTest {
         """).toInt())
         
         assertEquals(10, eval("""
-            fun foo(x) {
+            fun foo(x: Int) {
                 if (x > 0) return 5
                 10
             }
@@ -43,7 +58,7 @@ class ReturnStatementTest {
     @Test
     fun testReturnFromLambda() = runTest {
         assertEquals(2, eval("""
-            val f = { x ->
+            val f = { x: Int ->
                 if (x < 0) return 0
                 x * 2
             }
@@ -51,7 +66,7 @@ class ReturnStatementTest {
         """).toInt())
         
         assertEquals(0, eval("""
-            val f = { x ->
+            val f = { x: Int ->
                 if (x < 0) return 0
                 x * 2
             }
@@ -75,7 +90,7 @@ class ReturnStatementTest {
     @Test
     fun testLabeledLambdaReturn() = runTest {
         assertEquals(42, eval("""
-            val f = @inner { x ->
+            val f = @inner { x: Int ->
                 if (x == 0) return@inner 42
                 x
             }
@@ -83,7 +98,7 @@ class ReturnStatementTest {
         """).toInt())
         
         assertEquals(5, eval("""
-            val f = @inner { x ->
+            val f = @inner { x: Int ->
                 if (x == 0) return@inner 42
                 x
             }
@@ -104,8 +119,10 @@ class ReturnStatementTest {
             fun find() {
                 val data = [[1, 2], [3, 42], [5, 6]]
                 data.forEach { row ->
-                    row.forEach { item ->
-                        if (item == 42) return@find item
+                    val rowList = row as List
+                    rowList.forEach { item ->
+                        val value = item as Int
+                        if (value == 42) return@find value
                     }
                 }
                 0

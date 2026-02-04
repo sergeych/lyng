@@ -19,10 +19,7 @@ package net.sergeych.lyng.obj
 
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import net.sergeych.lyng.Arguments
-import net.sergeych.lyng.Scope
-import net.sergeych.lyng.Visibility
-import net.sergeych.lyng.canAccessMember
+import net.sergeych.lyng.*
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
@@ -173,6 +170,18 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 }
             }
             del = del ?: scope.raiseError("Internal error: delegated property $name has no delegate")
+            val getValueRec = del.objClass.getInstanceMemberOrNull("getValue")
+            if (getValueRec == null || getValueRec.declaringClass?.className == "Delegate") {
+                val wrapper = object : Statement() {
+                    override val pos: Pos = Pos.builtIn
+                    override suspend fun execute(s: Scope): Obj {
+                        val th2 = if (s.thisObj === ObjVoid) ObjNull else s.thisObj
+                        val allArgs = (listOf(th2, ObjString(name)) + s.args.list).toTypedArray()
+                        return del.invokeInstanceMethod(s, "invoke", Arguments(*allArgs))
+                    }
+                }
+                return obj.copy(value = wrapper, type = ObjRecord.Type.Other)
+            }
             val res = del.invokeInstanceMethod(scope, "getValue", Arguments(this, ObjString(name)))
             return obj.copy(value = res, type = ObjRecord.Type.Other)
         }

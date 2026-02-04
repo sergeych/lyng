@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Sergey S. Chernov
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,21 +17,19 @@
 
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.eval
-import kotlin.test.Ignore
 import kotlin.test.Test
 
-@Ignore
 class ValReassignRegressionTest {
 
     @Test
     fun reassign_ctor_param_field_should_work() = runTest {
         eval(
             """
-            class Wallet(balance = 0) {
-                fun add(amount) {
+            class Wallet(var balance: Int = 0) {
+                fun add(amount: Int) {
                     balance += amount
                 }
-                fun transfer(amount) {
+                fun transfer(amount: Int) {
                     val balance = 0
                     add(amount)
                 }
@@ -48,11 +46,11 @@ class ValReassignRegressionTest {
     fun reassign_field_should_not_see_caller_locals() = runTest {
         eval(
             """
-            class Wallet(balance = 0) {
-                fun add(amount) { balance += amount }
+            class Wallet(var balance: Int = 0) {
+                fun add(amount: Int) { balance += amount }
                 fun get() { balance }
             }
-            fun doTransfer(w, amount) {
+            fun doTransfer(w: Wallet, amount: Int) {
                 val balance = 0
                 w.add(amount)
             }
@@ -67,11 +65,11 @@ class ValReassignRegressionTest {
     fun reassign_field_should_not_see_caller_param() = runTest {
         eval(
             """
-            class Wallet(balance = 0) {
-                fun add(amount) { balance += amount }
+            class Wallet(var balance: Int = 0) {
+                fun add(amount: Int) { balance += amount }
                 fun get() { balance }
             }
-            fun doTransfer(balance, w, amount) {
+            fun doTransfer(balance: Int, w: Wallet, amount: Int) {
                 w.add(amount)
             }
             val w = Wallet()
@@ -85,8 +83,8 @@ class ValReassignRegressionTest {
     fun reassign_field_should_not_see_block_local() = runTest {
         eval(
             """
-            class Wallet(balance = 0) {
-                fun add(amount) { balance += amount }
+            class Wallet(var balance: Int = 0) {
+                fun add(amount: Int) { balance += amount }
                 fun get() { balance }
             }
             val w = Wallet()

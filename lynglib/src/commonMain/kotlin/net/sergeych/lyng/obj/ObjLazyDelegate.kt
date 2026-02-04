@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Sergey S. Chernov
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,13 +12,12 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 package net.sergeych.lyng.obj
 
-import net.sergeych.lyng.Arguments
-import net.sergeych.lyng.Scope
-import net.sergeych.lyng.Statement
+import net.sergeych.lyng.*
 
 /**
  * Lazy delegate used by `val x by lazy { ... }`.
@@ -41,7 +40,8 @@ class ObjLazyDelegate(
         return when (name) {
             "getValue" -> {
                 if (!calculated) {
-                    cachedValue = builder.execute(capturedScope)
+                    val callScope = capturedScope.createChildScope(capturedScope.pos, args = Arguments.EMPTY)
+                    cachedValue = builder.callOn(callScope)
                     calculated = true
                 }
                 cachedValue
@@ -52,6 +52,26 @@ class ObjLazyDelegate(
     }
 
     companion object {
-        val type = ObjClass("LazyDelegate")
+        val type = ObjClass("LazyDelegate").apply {
+            implementingNames.add("Delegate")
+            createField(
+                "getValue",
+                ObjNull,
+                isMutable = false,
+                visibility = Visibility.Public,
+                pos = Pos.builtIn,
+                declaringClass = this,
+                type = ObjRecord.Type.Fun
+            )
+            createField(
+                "setValue",
+                ObjNull,
+                isMutable = false,
+                visibility = Visibility.Public,
+                pos = Pos.builtIn,
+                declaringClass = this,
+                type = ObjRecord.Type.Fun
+            )
+        }
     }
 }

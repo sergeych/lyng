@@ -1,10 +1,25 @@
+/*
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
 
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.eval
 import kotlin.test.Test
-import kotlin.test.Ignore
 
-@Ignore
 class IfNullAssignTest {
 
     @Test
@@ -21,7 +36,7 @@ class IfNullAssignTest {
     @Test
     fun testPropertyAssignment() = runTest {
         eval("""
-            class Box(var value)
+            class Box(var value: Object?)
             val b = Box(null)
             b.value ?= 10
             assertEquals(10, b.value)
@@ -44,22 +59,23 @@ class IfNullAssignTest {
     @Test
     fun testOptionalChaining() = runTest {
         eval("""
-            class Inner(var value)
-            class Outer(var inner)
+            class Inner(var value: Object?)
+            class Outer(var inner: Inner?)
             
-            var o = null
+            var o: Outer? = null
             o?.inner?.value ?= 10 // should do nothing
             assertEquals(null, o)
             
             o = Outer(null)
             o?.inner?.value ?= 10 // should do nothing because inner is null
-            assertEquals(null, o.inner)
+            val outer = o as Outer
+            assertEquals(null, outer.inner)
             
-            o.inner = Inner(null)
-            o?.inner?.value ?= 42
-            assertEquals(42, o.inner.value)
-            o?.inner?.value ?= 100
-            assertEquals(42, o.inner.value)
+            outer.inner = Inner(null)
+            outer.inner?.value ?= 42
+            assertEquals(42, (outer.inner as Inner).value)
+            outer.inner?.value ?= 100
+            assertEquals(42, (outer.inner as Inner).value)
         """.trimIndent())
     }
 

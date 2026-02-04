@@ -24,13 +24,11 @@ import net.sergeych.lyng.obj.ObjNull
 import net.sergeych.lyng.obj.toBool
 import net.sergeych.lynon.lynonDecodeAny
 import net.sergeych.lynon.lynonEncodeAny
-import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 
-@Ignore
 class TransientTest {
 
     @Test

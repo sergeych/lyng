@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,9 +25,7 @@ import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Source
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.Ignore
 
-@Ignore
 class SourceOffsetTest {
 
     @Test

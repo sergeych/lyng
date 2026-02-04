@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Sergey S. Chernov
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,29 +12,12 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 package net.sergeych.lyng.bytecode
 
-import net.sergeych.lyng.BlockStatement
-import net.sergeych.lyng.DelegatedVarDeclStatement
-import net.sergeych.lyng.DestructuringVarDeclStatement
-import net.sergeych.lyng.ExpressionStatement
-import net.sergeych.lyng.IfStatement
-import net.sergeych.lyng.ParsedArgument
-import net.sergeych.lyng.Pos
-import net.sergeych.lyng.Statement
-import net.sergeych.lyng.ToBoolStatement
-import net.sergeych.lyng.VarDeclStatement
-import net.sergeych.lyng.Visibility
-import net.sergeych.lyng.WhenCondition
-import net.sergeych.lyng.WhenEqualsCondition
-import net.sergeych.lyng.WhenInCondition
-import net.sergeych.lyng.WhenIsCondition
-import net.sergeych.lyng.WhenStatement
-import net.sergeych.lyng.extensionCallableName
-import net.sergeych.lyng.extensionPropertyGetterName
-import net.sergeych.lyng.extensionPropertySetterName
+import net.sergeych.lyng.*
 import net.sergeych.lyng.obj.*
 
 class BytecodeCompiler(
@@ -4490,6 +4473,7 @@ class BytecodeCompiler(
                 val slot = resolveSlot(ref)
                 val fromSlot = slot?.let { slotObjClass[it] }
                 fromSlot
+                    ?: slotTypeByScopeId[refScopeId(ref)]?.get(refSlot(ref))
                     ?: nameObjClass[ref.name]
                     ?: resolveTypeNameClass(ref.name)
                     ?: slotInitClassByKey[ScopeSlotKey(refScopeId(ref), refSlot(ref))]
@@ -4501,9 +4485,16 @@ class BytecodeCompiler(
                         match?.value
                     }
             }
-            is LocalVarRef -> resolveDirectNameSlot(ref.name)?.let { slotObjClass[it.slot] }
-                ?: nameObjClass[ref.name]
-                ?: resolveTypeNameClass(ref.name)
+            is LocalVarRef -> {
+                val fromSlot = resolveDirectNameSlot(ref.name)?.let { slotObjClass[it.slot] }
+                if (fromSlot != null) return fromSlot
+                val key = localSlotInfoMap.entries.firstOrNull { it.value.name == ref.name }?.key
+                key?.let {
+                    slotTypeByScopeId[it.scopeId]?.get(it.slot)
+                        ?: slotInitClassByKey[it]
+                } ?: nameObjClass[ref.name]
+                    ?: resolveTypeNameClass(ref.name)
+            }
             is ListLiteralRef -> ObjList.type
             is MapLiteralRef -> ObjMap.type
             is RangeRef -> ObjRange.type

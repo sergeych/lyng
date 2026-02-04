@@ -26,11 +26,7 @@ import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.pacman.ImportProvider
-import net.sergeych.lyng.resolution.CompileTimeResolver
-import net.sergeych.lyng.resolution.ResolutionReport
-import net.sergeych.lyng.resolution.ResolutionSink
-import net.sergeych.lyng.resolution.ScopeKind
-import net.sergeych.lyng.resolution.SymbolKind
+import net.sergeych.lyng.resolution.*
 
 /**
  * The LYNG compiler.
@@ -147,6 +143,7 @@ class Compiler(
         while (current != null) {
             for ((name, record) in current.objects) {
                 if (!record.visibility.isPublic) continue
+                if (plan.slots.containsKey(name)) continue
                 declareSlotNameIn(plan, name, record.isMutable, record.type == ObjRecord.Type.Delegated)
             }
             for ((cls, map) in current.extensions) {
@@ -154,34 +151,46 @@ class Compiler(
                     if (!record.visibility.isPublic) continue
                     when (record.type) {
                         ObjRecord.Type.Property -> {
-                            declareSlotNameIn(
-                                plan,
-                                extensionPropertyGetterName(cls.className, name),
-                                isMutable = false,
-                                isDelegated = false
-                            )
-                            val prop = record.value as? ObjProperty
-                            if (prop?.setter != null) {
+                            val getterName = extensionPropertyGetterName(cls.className, name)
+                            if (!plan.slots.containsKey(getterName)) {
                                 declareSlotNameIn(
                                     plan,
-                                    extensionPropertySetterName(cls.className, name),
+                                    getterName,
+                                    isMutable = false,
+                                    isDelegated = false
+                                )
+                            }
+                            val prop = record.value as? ObjProperty
+                            if (prop?.setter != null) {
+                                val setterName = extensionPropertySetterName(cls.className, name)
+                                if (!plan.slots.containsKey(setterName)) {
+                                    declareSlotNameIn(
+                                        plan,
+                                        setterName,
+                                        isMutable = false,
+                                        isDelegated = false
+                                    )
+                                }
+                            }
+                        }
+                        else -> {
+                            val callableName = extensionCallableName(cls.className, name)
+                            if (!plan.slots.containsKey(callableName)) {
+                                declareSlotNameIn(
+                                    plan,
+                                    callableName,
                                     isMutable = false,
                                     isDelegated = false
                                 )
                             }
                         }
-                        else -> declareSlotNameIn(
-                            plan,
-                            extensionCallableName(cls.className, name),
-                            isMutable = false,
-                            isDelegated = false
-                        )
                     }
                 }
             }
             for ((name, slotIndex) in current.slotNameToIndexSnapshot()) {
                 val record = current.getSlotRecord(slotIndex)
                 if (!record.visibility.isPublic) continue
+                if (plan.slots.containsKey(name)) continue
                 declareSlotNameIn(plan, name, record.isMutable, record.type == ObjRecord.Type.Delegated)
             }
             if (!includeParents) return
@@ -336,12 +345,19 @@ class Compiler(
     private fun resolveCompileClassInfo(name: String): CompileClassInfo? {
         compileClassInfos[name]?.let { return it }
         val scopeRec = seedScope?.get(name) ?: importManager.rootScope.get(name)
-        val cls = scopeRec?.value as? ObjClass ?: return null
+        val clsFromScope = scopeRec?.value as? ObjClass
+        val clsFromImports = if (clsFromScope == null) {
+            importedScopes.asReversed().firstNotNullOfOrNull { it.get(name)?.value as? ObjClass }
+        } else {
+            null
+        }
+        val cls = clsFromScope ?: clsFromImports ?: return null
         val fieldIds = cls.instanceFieldIdMap()
         val methodIds = cls.instanceMethodIdMap(includeAbstract = true)
+        val baseNames = cls.directParents.map { it.className }
         val nextFieldId = (fieldIds.values.maxOrNull() ?: -1) + 1
         val nextMethodId = (methodIds.values.maxOrNull() ?: -1) + 1
-        return CompileClassInfo(name, fieldIds, methodIds, nextFieldId, nextMethodId)
+        return CompileClassInfo(name, fieldIds, methodIds, nextFieldId, nextMethodId, baseNames)
     }
 
     private data class BaseMemberIds(
@@ -588,6 +604,20 @@ class Compiler(
                 slotLoc.scopeId,
                 slotLoc.isMutable,
                 slotLoc.isDelegated,
+                pos,
+                strictSlotRefs
+            )
+            resolutionSink?.reference(name, pos)
+            return ref
+        }
+        val moduleLoc = if (slotPlanStack.size == 1) lookupSlotLocation(name, includeModule = true) else null
+        if (moduleLoc != null) {
+            val ref = LocalSlotRef(
+                name,
+                moduleLoc.slot,
+                moduleLoc.scopeId,
+                moduleLoc.isMutable,
+                moduleLoc.isDelegated,
                 pos,
                 strictSlotRefs
             )
@@ -900,7 +930,8 @@ class Compiler(
         val fieldIds: Map<String, Int>,
         val methodIds: Map<String, Int>,
         val nextFieldId: Int,
-        val nextMethodId: Int
+        val nextMethodId: Int,
+        val baseNames: List<String>
     )
 
     private val compileClassInfos = mutableMapOf<String, CompileClassInfo>()
@@ -959,6 +990,7 @@ class Compiler(
                 val stdlib = importManager.prepareImport(start, "lyng.stdlib", null)
                 seedResolutionFromScope(stdlib, start)
                 seedSlotPlanFromScope(stdlib)
+                importedScopes.add(stdlib)
             }
             predeclareTopLevelSymbols()
         }
@@ -1351,12 +1383,24 @@ class Compiler(
         )
     }
 
-    private fun wrapFunctionBytecode(stmt: Statement, name: String): Statement {
+    private fun wrapFunctionBytecode(
+        stmt: Statement,
+        name: String,
+        extraKnownNameObjClass: Map<String, ObjClass> = emptyMap()
+    ): Statement {
         if (!useBytecodeStatements) return stmt
         if (containsDelegatedRefs(stmt)) return stmt
         if (containsUnsupportedForBytecode(stmt)) return stmt
         val returnLabels = returnLabelStack.lastOrNull() ?: emptySet()
         val allowedScopeNames = moduleSlotPlan()?.slots?.keys
+        val knownNames = if (extraKnownNameObjClass.isEmpty()) {
+            knownClassMapForBytecode()
+        } else {
+            val merged = LinkedHashMap<String, ObjClass>()
+            merged.putAll(knownClassMapForBytecode())
+            merged.putAll(extraKnownNameObjClass)
+            merged
+        }
         return BytecodeStatement.wrap(
             stmt,
             "fn@$name",
@@ -1365,7 +1409,7 @@ class Compiler(
             rangeLocalNames = currentRangeParamNames,
             allowedScopeNames = allowedScopeNames,
             slotTypeByScopeId = slotTypeByScopeId,
-            knownNameObjClass = knownClassMapForBytecode()
+            knownNameObjClass = knownNames
         )
     }
 
@@ -2362,8 +2406,12 @@ class Compiler(
         val t = cc.next()
         if (t.type != Token.Type.ID) throw ScriptError(t.pos, "Expecting ID after ::")
         return when (t.value) {
-            "class" -> ValueFnRef { scope ->
-                operand.get(scope).value.objClass.asReadonly
+            "class" -> {
+                val ref = ValueFnRef { scope ->
+                    operand.get(scope).value.objClass.asReadonly
+                }
+                lambdaReturnTypeByRef[ref] = ObjClassType
+                ref
             }
 
             else -> throw ScriptError(t.pos, "Unknown scope operation: ${t.value}")
@@ -2987,11 +3035,13 @@ class Compiler(
 
     private fun inferObjClassFromRef(ref: ObjRef): ObjClass? = when (ref) {
         is ConstRef -> ref.constValue as? ObjClass ?: (ref.constValue as? Obj)?.objClass
-        is LocalVarRef -> nameObjClass[ref.name]
+        is LocalVarRef -> nameObjClass[ref.name] ?: resolveClassByName(ref.name)
         is LocalSlotRef -> {
             val ownerScopeId = ref.captureOwnerScopeId ?: ref.scopeId
             val ownerSlot = ref.captureOwnerSlot ?: ref.slot
-            slotTypeByScopeId[ownerScopeId]?.get(ownerSlot) ?: nameObjClass[ref.name]
+            slotTypeByScopeId[ownerScopeId]?.get(ownerSlot)
+                ?: nameObjClass[ref.name]
+                ?: resolveClassByName(ref.name)
         }
         is ListLiteralRef -> ObjList.type
         is MapLiteralRef -> ObjMap.type
@@ -3027,6 +3077,20 @@ class Compiler(
             is LocalVarRef -> nameObjClass[ref.name]
                 ?: nameTypeDecl[ref.name]?.let { resolveTypeDeclObjClass(it) }
                 ?: resolveClassByName(ref.name)
+            is ImplicitThisMemberRef -> {
+                val typeName = ref.preferredThisTypeName() ?: currentImplicitThisTypeName()
+                val targetClass = typeName?.let { resolveClassByName(it) }
+                inferFieldReturnClass(targetClass, ref.name)
+            }
+            is ThisFieldSlotRef -> {
+                val typeName = currentImplicitThisTypeName()
+                val targetClass = typeName?.let { resolveClassByName(it) }
+                inferFieldReturnClass(targetClass, ref.name)
+            }
+            is QualifiedThisFieldSlotRef -> {
+                val targetClass = resolveClassByName(ref.receiverTypeName())
+                inferFieldReturnClass(targetClass, ref.name)
+            }
             is ConstRef -> ref.constValue as? ObjClass ?: (ref.constValue as? Obj)?.objClass
             is ListLiteralRef -> ObjList.type
             is MapLiteralRef -> ObjMap.type
@@ -3555,15 +3619,19 @@ class Compiler(
         val implicitThisTypeName = currentImplicitThisTypeName()
         return when (left) {
             is ImplicitThisMemberRef ->
-                ImplicitThisMethodCallRef(
-                    left.name,
-                    left.methodId,
-                    args,
-                    detectedBlockArgument,
-                    isOptional,
-                    left.atPos,
-                    implicitThisTypeName
-                )
+                if (left.methodId == null && left.fieldId != null) {
+                    CallRef(left, args, detectedBlockArgument, isOptional)
+                } else {
+                    ImplicitThisMethodCallRef(
+                        left.name,
+                        left.methodId,
+                        args,
+                        detectedBlockArgument,
+                        isOptional,
+                        left.atPos,
+                        implicitThisTypeName
+                    )
+                }
             is LocalVarRef -> {
                 val classContext = codeContexts.any { ctx -> ctx is CodeContext.ClassBody }
                 val implicitThis = codeContexts.any { ctx ->
@@ -4388,7 +4456,8 @@ class Compiler(
             fieldIds = fieldIds,
             methodIds = methodIds,
             nextFieldId = fieldIds.size,
-            nextMethodId = methodIds.size
+            nextMethodId = methodIds.size,
+            baseNames = listOf("Object")
         )
         enumEntriesByName[nameToken.value] = names.toList()
 
@@ -4412,6 +4481,7 @@ class Compiler(
         val className = nameToken?.value ?: generateAnonName(startPos)
         if (nameToken != null) {
             resolutionSink?.declareSymbol(nameToken.value, SymbolKind.CLASS, isMutable = false, pos = nameToken.pos)
+            declareLocalName(nameToken.value, isMutable = false)
         }
 
         val doc = pendingDeclDoc ?: consumePendingDoc()
@@ -4463,10 +4533,31 @@ class Compiler(
                 slotPlanStack.add(classSlotPlan)
                 resolutionSink?.declareClass(className, baseSpecs.map { it.name }, startPos)
                 resolutionSink?.enterScope(ScopeKind.CLASS, startPos, className, baseSpecs.map { it.name })
+                val classCtx = codeContexts.lastOrNull() as? CodeContext.ClassBody
+                classCtx?.let { ctx ->
+                    val baseIds = collectBaseMemberIds(baseSpecs.map { it.name })
+                    ctx.memberFieldIds.putAll(baseIds.fieldIds)
+                    ctx.memberMethodIds.putAll(baseIds.methodIds)
+                    ctx.nextFieldId = maxOf(ctx.nextFieldId, baseIds.nextFieldId)
+                    ctx.nextMethodId = maxOf(ctx.nextMethodId, baseIds.nextMethodId)
+                }
                 val st = try {
-                    withLocalNames(emptySet()) {
+                    val parsed = withLocalNames(emptySet()) {
                         parseScript()
                     }
+                    if (!isExtern) {
+                        classCtx?.let { ctx ->
+                            compileClassInfos[className] = CompileClassInfo(
+                                name = className,
+                                fieldIds = ctx.memberFieldIds.toMap(),
+                                methodIds = ctx.memberMethodIds.toMap(),
+                                nextFieldId = ctx.nextFieldId,
+                                nextMethodId = ctx.nextMethodId,
+                                baseNames = baseSpecs.map { it.name }
+                            )
+                        }
+                    }
+                    parsed
                 } finally {
                     slotPlanStack.removeLast()
                     resolutionSink?.exitScope(cc.currentPos())
@@ -4492,6 +4583,17 @@ class Compiler(
                     miniSink?.onClassDecl(node)
                 }
                 resolutionSink?.declareClass(className, baseSpecs.map { it.name }, startPos)
+                if (!isExtern) {
+                    val baseIds = collectBaseMemberIds(baseSpecs.map { it.name })
+                    compileClassInfos[className] = CompileClassInfo(
+                        name = className,
+                        fieldIds = baseIds.fieldIds,
+                        methodIds = baseIds.methodIds,
+                        nextFieldId = baseIds.nextFieldId,
+                        nextMethodId = baseIds.nextMethodId,
+                        baseNames = baseSpecs.map { it.name }
+                    )
+                }
                 cc.restorePos(saved)
                 null
             }
@@ -4562,6 +4664,15 @@ class Compiler(
                     nameToken.pos,
                     "Bad class declaration: expected ')' at the end of the primary constructor"
                 )
+
+            constructorArgsDeclaration?.params?.forEach { param ->
+                if (param.accessType != null) {
+                    val declClass = resolveTypeDeclObjClass(param.type)
+                    if (declClass != null) {
+                        classFieldTypesByName.getOrPut(nameToken.value) { mutableMapOf() }[param.name] = declClass
+                    }
+                }
+            }
 
             val classSlotPlan = SlotPlan(mutableMapOf(), 0, nextScopeId++)
             classCtx?.slotPlanId = classSlotPlan.id
@@ -4667,6 +4778,14 @@ class Compiler(
                                         throw ScriptError(nameToken.pos, "extern member $member is not found in runtime class ${nameToken.value}")
                                     }
                                 }
+                                constructorArgsDeclaration?.params?.forEach { param ->
+                                    if (param.accessType == null) return@forEach
+                                    if (!ctx.memberFieldIds.containsKey(param.name)) {
+                                        val fieldId = existingExternInfo.fieldIds[param.name]
+                                            ?: throw ScriptError(nameToken.pos, "extern field ${param.name} is not found in runtime class ${nameToken.value}")
+                                        ctx.memberFieldIds[param.name] = fieldId
+                                    }
+                                }
                                 compileClassInfos[nameToken.value] = existingExternInfo
                             } else {
                                 val baseIds = collectBaseMemberIds(baseSpecs.map { it.name })
@@ -4687,11 +4806,11 @@ class Compiler(
                                             throw ScriptError(nameToken.pos, "member $member overrides parent member but 'override' keyword is missing")
                                         }
                                     }
-                                    if (!ctx.memberFieldIds.containsKey(member)) {
-                                        ctx.memberFieldIds[member] = ctx.nextFieldId++
-                                    }
-                                    if (!ctx.memberMethodIds.containsKey(member)) {
-                                        ctx.memberMethodIds[member] = ctx.nextMethodId++
+                                }
+                                constructorArgsDeclaration?.params?.forEach { param ->
+                                    if (param.accessType == null) return@forEach
+                                    if (!ctx.memberFieldIds.containsKey(param.name)) {
+                                        ctx.memberFieldIds[param.name] = ctx.nextFieldId++
                                     }
                                 }
                                 compileClassInfos[nameToken.value] = CompileClassInfo(
@@ -4699,13 +4818,27 @@ class Compiler(
                                     fieldIds = ctx.memberFieldIds.toMap(),
                                     methodIds = ctx.memberMethodIds.toMap(),
                                     nextFieldId = ctx.nextFieldId,
-                                    nextMethodId = ctx.nextMethodId
+                                    nextMethodId = ctx.nextMethodId,
+                                    baseNames = baseSpecs.map { it.name }
                                 )
                             }
                         }
-                        withLocalNames(constructorArgsDeclaration?.params?.map { it.name }?.toSet() ?: emptySet()) {
+                        val parsed = withLocalNames(constructorArgsDeclaration?.params?.map { it.name }?.toSet() ?: emptySet()) {
                             parseScript()
                         }
+                        if (!isExtern) {
+                            classCtx?.let { ctx ->
+                                compileClassInfos[nameToken.value] = CompileClassInfo(
+                                    name = nameToken.value,
+                                    fieldIds = ctx.memberFieldIds.toMap(),
+                                    methodIds = ctx.memberMethodIds.toMap(),
+                                    nextFieldId = ctx.nextFieldId,
+                                    nextMethodId = ctx.nextMethodId,
+                                    baseNames = baseSpecs.map { it.name }
+                                )
+                            }
+                        }
+                        parsed
                     } finally {
                         slotPlanStack.removeLast()
                         resolutionSink?.exitScope(cc.currentPos())
@@ -4738,20 +4871,28 @@ class Compiler(
                             ctx.memberMethodIds.putAll(existingExternInfo.methodIds)
                             ctx.nextFieldId = maxOf(ctx.nextFieldId, existingExternInfo.nextFieldId)
                             ctx.nextMethodId = maxOf(ctx.nextMethodId, existingExternInfo.nextMethodId)
-                            for (member in ctx.declaredMembers) {
-                                val hasField = member in existingExternInfo.fieldIds
-                                val hasMethod = member in existingExternInfo.methodIds
-                                if (!hasField && !hasMethod) {
-                                    throw ScriptError(nameToken.pos, "extern member $member is not found in runtime class ${nameToken.value}")
+                                for (member in ctx.declaredMembers) {
+                                    val hasField = member in existingExternInfo.fieldIds
+                                    val hasMethod = member in existingExternInfo.methodIds
+                                    if (!hasField && !hasMethod) {
+                                        throw ScriptError(nameToken.pos, "extern member $member is not found in runtime class ${nameToken.value}")
+                                    }
                                 }
-                            }
-                            compileClassInfos[nameToken.value] = existingExternInfo
-                        } else {
-                            val baseIds = collectBaseMemberIds(baseSpecs.map { it.name })
-                            ctx.memberFieldIds.putAll(baseIds.fieldIds)
-                            ctx.memberMethodIds.putAll(baseIds.methodIds)
-                            ctx.nextFieldId = maxOf(ctx.nextFieldId, baseIds.nextFieldId)
-                            ctx.nextMethodId = maxOf(ctx.nextMethodId, baseIds.nextMethodId)
+                                constructorArgsDeclaration?.params?.forEach { param ->
+                                    if (param.accessType == null) return@forEach
+                                    if (!ctx.memberFieldIds.containsKey(param.name)) {
+                                        val fieldId = existingExternInfo.fieldIds[param.name]
+                                            ?: throw ScriptError(nameToken.pos, "extern field ${param.name} is not found in runtime class ${nameToken.value}")
+                                        ctx.memberFieldIds[param.name] = fieldId
+                                    }
+                                }
+                                compileClassInfos[nameToken.value] = existingExternInfo
+                            } else {
+                                val baseIds = collectBaseMemberIds(baseSpecs.map { it.name })
+                                ctx.memberFieldIds.putAll(baseIds.fieldIds)
+                                ctx.memberMethodIds.putAll(baseIds.methodIds)
+                                ctx.nextFieldId = maxOf(ctx.nextFieldId, baseIds.nextFieldId)
+                                ctx.nextMethodId = maxOf(ctx.nextMethodId, baseIds.nextMethodId)
                             for (member in ctx.declaredMembers) {
                                 val isOverride = ctx.memberOverrides[member] == true
                                 val hasBaseField = member in baseIds.fieldIds
@@ -4761,24 +4902,25 @@ class Compiler(
                                         throw ScriptError(nameToken.pos, "member $member is marked 'override' but does not override anything")
                                     }
                                 } else {
-                                    if (hasBaseField || hasBaseMethod) {
-                                        throw ScriptError(nameToken.pos, "member $member overrides parent member but 'override' keyword is missing")
+                                        if (hasBaseField || hasBaseMethod) {
+                                            throw ScriptError(nameToken.pos, "member $member overrides parent member but 'override' keyword is missing")
+                                        }
                                     }
                                 }
-                                if (!ctx.memberFieldIds.containsKey(member)) {
-                                    ctx.memberFieldIds[member] = ctx.nextFieldId++
+                                constructorArgsDeclaration?.params?.forEach { param ->
+                                    if (param.accessType == null) return@forEach
+                                    if (!ctx.memberFieldIds.containsKey(param.name)) {
+                                        ctx.memberFieldIds[param.name] = ctx.nextFieldId++
+                                    }
                                 }
-                                if (!ctx.memberMethodIds.containsKey(member)) {
-                                    ctx.memberMethodIds[member] = ctx.nextMethodId++
-                                }
-                            }
-                            compileClassInfos[nameToken.value] = CompileClassInfo(
-                                name = nameToken.value,
-                                fieldIds = ctx.memberFieldIds.toMap(),
-                                methodIds = ctx.memberMethodIds.toMap(),
-                                nextFieldId = ctx.nextFieldId,
-                                nextMethodId = ctx.nextMethodId
-                            )
+                                compileClassInfos[nameToken.value] = CompileClassInfo(
+                                    name = nameToken.value,
+                                    fieldIds = ctx.memberFieldIds.toMap(),
+                                    methodIds = ctx.memberMethodIds.toMap(),
+                                    nextFieldId = ctx.nextFieldId,
+                                    nextMethodId = ctx.nextMethodId,
+                                    baseNames = baseSpecs.map { it.name }
+                                )
                         }
                     }
                     // restore if no body starts here
@@ -5248,13 +5390,19 @@ class Compiler(
         }
         val extensionWrapperName = extTypeName?.let { extensionCallableName(it, name) }
         val classCtx = codeContexts.asReversed().firstOrNull { it is CodeContext.ClassBody } as? CodeContext.ClassBody
-        val memberMethodId = if (extTypeName == null) classCtx?.memberMethodIds?.get(name) else null
+        var memberMethodId = if (extTypeName == null) classCtx?.memberMethodIds?.get(name) else null
         val externCallSignature = if (actualExtern) importManager.rootScope.getLocalRecordDirect(name)?.callSignature else null
 
         val declKind = if (parentContext is CodeContext.ClassBody) SymbolKind.MEMBER else SymbolKind.FUNCTION
         resolutionSink?.declareSymbol(name, declKind, isMutable = false, pos = nameStartPos, isOverride = isOverride)
         if (parentContext is CodeContext.ClassBody && extTypeName == null) {
             parentContext.declaredMembers.add(name)
+            if (!isStatic) {
+                if (!parentContext.memberMethodIds.containsKey(name)) {
+                    parentContext.memberMethodIds[name] = parentContext.nextMethodId++
+                }
+                memberMethodId = parentContext.memberMethodIds[name]
+            }
         }
         if (declKind != SymbolKind.MEMBER) {
             declareLocalName(name, isMutable = false)
@@ -5444,7 +5592,12 @@ class Compiler(
             }
             val fnStatements = rawFnStatements?.let { stmt ->
                 if (useBytecodeStatements && !containsUnsupportedForBytecode(stmt)) {
-                    wrapFunctionBytecode(stmt, name)
+                    val paramKnownClasses = mutableMapOf<String, ObjClass>()
+                    for (param in argsDeclaration.params) {
+                        val cls = resolveTypeDeclObjClass(param.type) ?: continue
+                        paramKnownClasses[param.name] = cls
+                    }
+                    wrapFunctionBytecode(stmt, name, paramKnownClasses)
                 } else {
                     stmt
                 }
@@ -5503,7 +5656,7 @@ class Compiler(
                 override val pos: Pos = start
                 override suspend fun execute(context: Scope): Obj {
                     if (isDelegated) {
-                        val accessType = context.resolveQualifiedIdentifier("DelegateAccess.Callable")
+                        val accessType = ObjString("Callable")
                         val initValue = delegateExpression!!.execute(context)
                         val finalDelegate = try {
                             initValue.invokeInstanceMethod(context, "bind", Arguments(ObjString(name), accessType, context.thisObj))
@@ -5549,7 +5702,7 @@ class Compiler(
                             cls.instanceInitializers += object : Statement() {
                                 override val pos: Pos = start
                                 override suspend fun execute(scp: Scope): Obj {
-                                    val accessType2 = scp.resolveQualifiedIdentifier("DelegateAccess.Callable")
+                                    val accessType2 = ObjString("Callable")
                                     val initValue2 = delegateExpression.execute(scp)
                                     val finalDelegate2 = try {
                                         initValue2.invokeInstanceMethod(scp, "bind", Arguments(ObjString(name), accessType2, scp.thisObj))
@@ -5785,14 +5938,16 @@ class Compiler(
     }
 
     private fun resolveInitializerObjClass(initializer: Statement?): ObjClass? {
-        if (initializer is BytecodeStatement) {
-            val fn = initializer.bytecodeFunction()
+        var unwrapped = initializer
+        while (unwrapped is BytecodeStatement) {
+            val fn = unwrapped.bytecodeFunction()
             if (fn.cmds.any { it is CmdListLiteral }) return ObjList.type
             if (fn.cmds.any { it is CmdMakeRange || it is CmdRangeIntBounds }) return ObjRange.type
+            unwrapped = unwrapped.original
         }
-        if (initializer is DoWhileStatement) {
-            val bodyType = inferReturnClassFromStatement(initializer.body)
-            val elseType = initializer.elseStatement?.let { inferReturnClassFromStatement(it) }
+        if (unwrapped is DoWhileStatement) {
+            val bodyType = inferReturnClassFromStatement(unwrapped.body)
+            val elseType = unwrapped.elseStatement?.let { inferReturnClassFromStatement(it) }
             return when {
                 bodyType == null && elseType == null -> null
                 bodyType != null && elseType != null && bodyType == elseType -> bodyType
@@ -5801,24 +5956,26 @@ class Compiler(
                 else -> Obj.rootObjectType
             }
         }
-        val directRef = unwrapDirectRef(initializer)
+        val directRef = unwrapDirectRef(unwrapped)
         return when (directRef) {
             is ListLiteralRef -> ObjList.type
             is MapLiteralRef -> ObjMap.type
             is RangeRef -> ObjRange.type
+            is ValueFnRef -> lambdaReturnTypeByRef[directRef]
             is CastRef -> resolveTypeRefClass(directRef.castTypeRef())
             is BinaryOpRef -> inferBinaryOpReturnClass(directRef)
             is ImplicitThisMethodCallRef -> {
-                if (directRef.methodName() == "iterator") ObjIterator else null
+                when (directRef.methodName()) {
+                    "iterator" -> ObjIterator
+                    "lazy" -> ObjLazyDelegate.type
+                    else -> inferMethodCallReturnClass(directRef.methodName())
+                }
             }
             is ThisMethodSlotCallRef -> {
                 if (directRef.methodName() == "iterator") ObjIterator else null
             }
             is MethodCallRef -> {
                 inferMethodCallReturnClass(directRef)
-            }
-            is ImplicitThisMethodCallRef -> {
-                inferMethodCallReturnClass(directRef.methodName())
             }
             is FieldRef -> {
                 val targetClass = resolveReceiverClassForMember(directRef.target)
@@ -5828,12 +5985,20 @@ class Compiler(
                 val target = directRef.target
                 when {
                     target is LocalSlotRef -> {
-                        callableReturnTypeByScopeId[target.scopeId]?.get(target.slot)
-                            ?: if (target.name == "iterator") ObjIterator else resolveClassByName(target.name)
+                        when (target.name) {
+                            "lazy" -> ObjLazyDelegate.type
+                            "iterator" -> ObjIterator
+                            else -> callableReturnTypeByScopeId[target.scopeId]?.get(target.slot)
+                                ?: resolveClassByName(target.name)
+                        }
                     }
                     target is LocalVarRef -> {
-                        callableReturnTypeByName[target.name]
-                            ?: if (target.name == "iterator") ObjIterator else resolveClassByName(target.name)
+                        when (target.name) {
+                            "lazy" -> ObjLazyDelegate.type
+                            "iterator" -> ObjIterator
+                            else -> callableReturnTypeByName[target.name]
+                                ?: resolveClassByName(target.name)
+                        }
                     }
                     target is LocalVarRef && target.name == "List" -> ObjList.type
                     target is LocalVarRef && target.name == "Map" -> ObjMap.type
@@ -5863,6 +6028,23 @@ class Compiler(
                 else -> null
             }
             else -> null
+        }
+    }
+
+    private fun ensureDelegateType(initializer: Statement) {
+        val delegateClass = resolveClassByName("Delegate")
+            ?: throw ScriptError(initializer.pos, "Delegate type is not available")
+        val initClass = resolveInitializerObjClass(initializer)
+            ?: unwrapDirectRef(initializer)?.let { inferObjClassFromRef(it) }
+            ?: throw ScriptError(initializer.pos, "Delegate type must be known at compile time")
+        if (initClass !== delegateClass &&
+            !initClass.allParentsSet.contains(delegateClass) &&
+            !initClass.allImplementingNames.contains(delegateClass.className)
+        ) {
+            throw ScriptError(
+                initializer.pos,
+                "Delegate initializer must return Delegate, got ${initClass.className}"
+            )
         }
     }
 
@@ -5920,35 +6102,42 @@ class Compiler(
             (imported?.value as? ObjClass)?.let { return it }
         }
         val info = compileClassInfos[name] ?: return null
-        return compileClassStubs.getOrPut(info.name) {
-            val stub = ObjInstanceClass(info.name)
+        val stub = compileClassStubs.getOrPut(info.name) {
+            val parents = info.baseNames.mapNotNull { resolveClassByName(it) }
+            ObjInstanceClass(info.name, *parents.toTypedArray())
+        }
+        if (stub is ObjInstanceClass) {
             for ((fieldName, fieldId) in info.fieldIds) {
-                stub.createField(
-                    fieldName,
-                    ObjNull,
-                    isMutable = true,
-                    visibility = Visibility.Public,
-                    pos = Pos.builtIn,
-                    declaringClass = stub,
-                    type = ObjRecord.Type.Field,
-                    fieldId = fieldId
-                )
+                if (stub.members[fieldName] == null) {
+                    stub.createField(
+                        fieldName,
+                        ObjNull,
+                        isMutable = true,
+                        visibility = Visibility.Public,
+                        pos = Pos.builtIn,
+                        declaringClass = stub,
+                        type = ObjRecord.Type.Field,
+                        fieldId = fieldId
+                    )
+                }
             }
             for ((methodName, methodId) in info.methodIds) {
-                stub.createField(
-                    methodName,
-                    ObjNull,
-                    isMutable = false,
-                    visibility = Visibility.Public,
-                    pos = Pos.builtIn,
-                    declaringClass = stub,
-                    isAbstract = true,
-                    type = ObjRecord.Type.Fun,
-                    methodId = methodId
-                )
+                if (stub.members[methodName] == null) {
+                    stub.createField(
+                        methodName,
+                        ObjNull,
+                        isMutable = false,
+                        visibility = Visibility.Public,
+                        pos = Pos.builtIn,
+                        declaringClass = stub,
+                        isAbstract = true,
+                        type = ObjRecord.Type.Fun,
+                        methodId = methodId
+                    )
+                }
             }
-            stub
         }
+        return stub
     }
 
     private suspend fun parseBlockWithPredeclared(
@@ -6169,8 +6358,8 @@ class Compiler(
         try {
 
         val classCtx = codeContexts.asReversed().firstOrNull { it is CodeContext.ClassBody } as? CodeContext.ClassBody
-        val memberFieldId = if (extTypeName == null) classCtx?.memberFieldIds?.get(name) else null
-        val memberMethodId = if (extTypeName == null) classCtx?.memberMethodIds?.get(name) else null
+        var memberFieldId = if (extTypeName == null) classCtx?.memberFieldIds?.get(name) else null
+        var memberMethodId = if (extTypeName == null) classCtx?.memberMethodIds?.get(name) else null
 
         // Optional explicit type annotation
         cc.skipWsTokens()
@@ -6300,12 +6489,52 @@ class Compiler(
             false
         }
 
+        if (declaringClassNameCaptured != null && extTypeName == null && !isStatic) {
+            if (isDelegate || isProperty) {
+                if (classCtx != null) {
+                    if (!classCtx.memberMethodIds.containsKey(name)) {
+                        classCtx.memberMethodIds[name] = classCtx.nextMethodId++
+                    }
+                    memberMethodId = classCtx.memberMethodIds[name]
+                }
+            } else {
+                if (classCtx != null) {
+                    if (!classCtx.memberFieldIds.containsKey(name)) {
+                        classCtx.memberFieldIds[name] = classCtx.nextFieldId++
+                    }
+                    memberFieldId = classCtx.memberFieldIds[name]
+                }
+            }
+        }
+
         val initialExpression = if (setNull || isProperty) null
         else parseStatement(true)
             ?: throw ScriptError(effectiveEqToken!!.pos, "Expected initializer expression")
 
+        if (isDelegate && initialExpression != null) {
+            ensureDelegateType(initialExpression)
+            if (isMutable && resolveInitializerObjClass(initialExpression) == ObjLazyDelegate.type) {
+                throw ScriptError(initialExpression.pos, "lazy delegate is read-only")
+            }
+        }
+
         if (!isStatic && isDelegate) {
             markDelegatedSlot(name)
+        }
+
+        if (declaringClassNameCaptured != null && extTypeName == null && !isStatic) {
+            val directRef = unwrapDirectRef(initialExpression)
+            val declClass = resolveTypeDeclObjClass(varTypeDecl)
+            val initFromExpr = resolveInitializerObjClass(initialExpression)
+            val isNullLiteral = (directRef as? ConstRef)?.constValue == ObjNull
+            val initClass = when {
+                isDelegate && declClass != null -> declClass
+                declClass != null && isNullLiteral -> declClass
+                else -> initFromExpr ?: declClass
+            }
+            if (initClass != null) {
+                classFieldTypesByName.getOrPut(declaringClassNameCaptured) { mutableMapOf() }[name] = initClass
+            }
         }
 
         // Emit MiniValDecl for this declaration (before execution wiring), attach doc if any
@@ -6418,7 +6647,7 @@ class Compiler(
                     val initValue = initialExpression?.execute(scope)?.byValueCopy() ?: ObjNull
                     if (isDelegate) {
                         val accessTypeStr = if (isMutable) "Var" else "Val"
-                        val accessType = scope.resolveQualifiedIdentifier("DelegateAccess.$accessTypeStr")
+                        val accessType = ObjString(accessTypeStr)
                         val finalDelegate = try {
                             initValue.invokeInstanceMethod(
                                 scope,
@@ -6736,7 +6965,7 @@ class Compiler(
                                 override suspend fun execute(scp: Scope): Obj {
                                     val initValue = initialExpression!!.execute(scp)
                                     val accessTypeStr = if (isMutable) "Var" else "Val"
-                                    val accessType = scp.resolveQualifiedIdentifier("DelegateAccess.$accessTypeStr")
+                                    val accessType = ObjString(accessTypeStr)
                                     val finalDelegate = try {
                                         initValue.invokeInstanceMethod(
                                             scp,
@@ -6763,7 +6992,7 @@ class Compiler(
                         } else {
                             val initValue = initialExpression!!.execute(context)
                             val accessTypeStr = if (isMutable) "Var" else "Val"
-                            val accessType = context.resolveQualifiedIdentifier("DelegateAccess.$accessTypeStr")
+                            val accessType = ObjString(accessTypeStr)
                             val finalDelegate = try {
                                 initValue.invokeInstanceMethod(
                                     context,
@@ -6787,7 +7016,7 @@ class Compiler(
                     } else {
                         val initValue = initialExpression!!.execute(context)
                         val accessTypeStr = if (isMutable) "Var" else "Val"
-                        val accessType = context.resolveQualifiedIdentifier("DelegateAccess.$accessTypeStr")
+                        val accessType = ObjString(accessTypeStr)
                         val finalDelegate = try {
                             initValue.invokeInstanceMethod(context, "bind", Arguments(ObjString(name), accessType, ObjNull))
                         } catch (e: Exception) {

@@ -118,6 +118,16 @@ class Script(
                 println()
                 ObjVoid
             }
+            addFn("call") {
+                val callee = args.list.firstOrNull()
+                    ?: raiseError("call requires a callable as the first argument")
+                val rest = if (args.list.size > 1) {
+                    Arguments(args.list.drop(1))
+                } else {
+                    Arguments.EMPTY
+                }
+                callee.callOn(createChildScope(pos, args = rest))
+            }
             addFn("floor") {
                 val x = args.firstAndOnly()
                 (if (x is ObjInt) x
@@ -393,7 +403,6 @@ class Script(
                 val builder = requireOnlyArg<Statement>()
                 ObjLazyDelegate(builder, this)
             }
-
             addVoidFn("delay") {
                 val a = args.firstAndOnly()
                 when (a) {
