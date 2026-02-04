@@ -2730,7 +2730,6 @@ class ScriptTest {
         )
     }
 
-@Ignore
     class ObjTestFoo(val value: ObjString) : Obj() {
 
         override val objClass: ObjClass = klass

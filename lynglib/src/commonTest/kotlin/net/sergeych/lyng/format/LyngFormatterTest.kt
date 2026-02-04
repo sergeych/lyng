@@ -18,9 +18,7 @@ package net.sergeych.lyng.format
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.Ignore
 
-@Ignore
 class LyngFormatterTest {
 
     @Test

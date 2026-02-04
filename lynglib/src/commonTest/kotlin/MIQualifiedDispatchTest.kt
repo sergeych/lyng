@@ -17,10 +17,8 @@
 
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.eval
-import kotlin.test.Ignore
 import kotlin.test.Test
 
-@Ignore
 class MIQualifiedDispatchTest {
 
     @Test
@@ -37,7 +35,7 @@ class MIQualifiedDispatchTest {
                 fun runB() { "ResultB:" + b }
             }
 
-            class FooBar(a,b) : Foo(a), Bar(b) { }
+            class FooBar(a0,b0) : Foo(a0), Bar(b0) { }
 
             val fb = FooBar(1,2)
 
@@ -60,25 +58,52 @@ class MIQualifiedDispatchTest {
             """
             class Foo(val a) { var tag = "F" }
             class Bar(val b) { var tag = "B" }
-            class FooBar(a,b) : Foo(a), Bar(b) { }
+            class FooBar(a0,b0) : Foo(a0), Bar(b0) { }
 
             val fb = FooBar(1,2)
-            // unqualified resolves to leftmost base
-            assertEquals("F", fb.tag)
-            // qualified reads via casts
+            // unqualified resolves to rightmost base
+            assertEquals("B", fb.tag)
+            // qualified reads via casts should respect the ancestor view
             assertEquals("F", (fb as Foo).tag)
             assertEquals("B", (fb as Bar).tag)
 
-            // unqualified write updates leftmost base
+            // unqualified write updates rightmost base
             fb.tag = "X"
             assertEquals("X", fb.tag)
-            assertEquals("X", (fb as Foo).tag)
-            assertEquals("B", (fb as Bar).tag)
+            assertEquals("F", (fb as Foo).tag)
+            assertEquals("X", (fb as Bar).tag)
 
             // qualified write via cast targets Bar
             (fb as Bar).tag = "Y"
-            assertEquals("X", (fb as Foo).tag)
+            assertEquals("F", (fb as Foo).tag)
             assertEquals("Y", (fb as Bar).tag)
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testCastsUseDistinctAncestorStorage() = runTest {
+        eval(
+            """
+            class A { var x = 1 }
+            class B : A { override var x = 2 }
+            class C : A { override var x = 3 }
+            class D : B, C { }
+
+            val d = D()
+            assertEquals(2, (d as B).x)
+            assertEquals(3, (d as C).x)
+            assertEquals(1, (d as A).x)
+
+            (d as B).x = 100
+            assertEquals(100, (d as B).x)
+            assertEquals(3, (d as C).x)
+            assertEquals(1, (d as A).x)
+
+            (d as C).x = 200
+            assertEquals(100, (d as B).x)
+            assertEquals(200, (d as C).x)
+            assertEquals(1, (d as A).x)
             """.trimIndent()
         )
     }

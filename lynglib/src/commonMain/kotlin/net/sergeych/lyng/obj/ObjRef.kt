@@ -522,6 +522,10 @@ class QualifiedThisFieldSlotRef(
         fieldId?.let { id ->
             val rec = inst.fieldRecordForId(id)
             if (rec != null && (rec.type == ObjRecord.Type.Field || rec.type == ObjRecord.Type.ConstructorField) && !rec.isAbstract) {
+                val decl = rec.declaringClass ?: inst.objClass
+                if (!canAccessMember(rec.visibility, decl, scope.currentClassCtx, rec.memberName ?: name)) {
+                    scope.raiseError(ObjIllegalAccessException(scope, "can't access field ${rec.memberName ?: name} (declared in ${decl.className})"))
+                }
                 return rec
             }
         }
@@ -529,6 +533,9 @@ class QualifiedThisFieldSlotRef(
             val rec = inst.methodRecordForId(id)
             if (rec != null && !rec.isAbstract) {
                 val decl = rec.declaringClass ?: inst.objClass
+                if (!canAccessMember(rec.visibility, decl, scope.currentClassCtx, rec.memberName ?: name)) {
+                    scope.raiseError(ObjIllegalAccessException(scope, "can't access member ${rec.memberName ?: name} (declared in ${decl.className})"))
+                }
                 return inst.resolveRecord(scope, rec, rec.memberName ?: name, decl)
             }
         }
@@ -542,6 +549,10 @@ class QualifiedThisFieldSlotRef(
         fieldId?.let { id ->
             val rec = inst.fieldRecordForId(id)
             if (rec != null) {
+                val decl = rec.declaringClass ?: inst.objClass
+                if (!canAccessMember(rec.effectiveWriteVisibility, decl, scope.currentClassCtx, rec.memberName ?: name)) {
+                    scope.raiseError(ObjIllegalAccessException(scope, "can't assign to field ${rec.memberName ?: name} (declared in ${decl.className})"))
+                }
                 assignToRecord(scope, rec, newValue)
                 return
             }
@@ -549,6 +560,10 @@ class QualifiedThisFieldSlotRef(
         methodId?.let { id ->
             val rec = inst.methodRecordForId(id)
             if (rec != null) {
+                val decl = rec.declaringClass ?: inst.objClass
+                if (!canAccessMember(rec.effectiveWriteVisibility, decl, scope.currentClassCtx, rec.memberName ?: name)) {
+                    scope.raiseError(ObjIllegalAccessException(scope, "can't assign to member ${rec.memberName ?: name} (declared in ${decl.className})"))
+                }
                 scope.assign(rec, rec.memberName ?: name, newValue)
                 return
             }
@@ -597,6 +612,9 @@ class QualifiedThisMethodSlotCallRef(
         val id = methodId ?: scope.raiseSymbolNotFound(name)
         val rec = inst.methodRecordForId(id) ?: scope.raiseSymbolNotFound(name)
         val decl = rec.declaringClass ?: inst.objClass
+        if (!canAccessMember(rec.visibility, decl, scope.currentClassCtx, rec.memberName ?: name)) {
+            scope.raiseError(ObjIllegalAccessException(scope, "can't invoke method ${rec.memberName ?: name} (declared in ${decl.className})"))
+        }
         return when (rec.type) {
             ObjRecord.Type.Property -> {
                 if (callArgs.isEmpty()) (rec.value as ObjProperty).callGetter(scope, inst, decl)

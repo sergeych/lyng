@@ -232,6 +232,31 @@ class CmdAssertIs(internal val objSlot: Int, internal val typeSlot: Int) : Cmd()
     }
 }
 
+class CmdMakeQualifiedView(
+    internal val objSlot: Int,
+    internal val typeSlot: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val obj0 = frame.slotToObj(objSlot)
+        val typeObj = frame.slotToObj(typeSlot)
+        val clazz = typeObj as? ObjClass ?: frame.scope.raiseClassCastError(
+            "${typeObj.inspect(frame.scope)} is not the class instance"
+        )
+        val base = when (obj0) {
+            is ObjQualifiedView -> obj0.instance
+            else -> obj0
+        }
+        val result = if (base is ObjInstance && base.isInstanceOf(clazz)) {
+            ObjQualifiedView(base, clazz)
+        } else {
+            base
+        }
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
 class CmdRangeIntBounds(
     internal val src: Int,
     internal val startSlot: Int,
@@ -1243,6 +1268,11 @@ class CmdGetMemberSlot(
             } else null
         } ?: frame.scope.raiseSymbolNotFound("member")
         val name = rec.memberName ?: "<member>"
+        if (receiver is ObjQualifiedView) {
+            val resolved = receiver.readField(frame.scope, name)
+            frame.storeObjResult(dst, resolved.value)
+            return
+        }
         val resolved = receiver.resolveRecord(frame.scope, rec, name, rec.declaringClass)
         frame.storeObjResult(dst, resolved.value)
         return
@@ -1267,6 +1297,10 @@ class CmdSetMemberSlot(
             } else null
         } ?: frame.scope.raiseSymbolNotFound("member")
         val name = rec.memberName ?: "<member>"
+        if (receiver is ObjQualifiedView) {
+            receiver.writeField(frame.scope, name, frame.slotToObj(valueSlot))
+            return
+        }
         frame.scope.assign(rec, name, frame.slotToObj(valueSlot))
         return
     }
@@ -1290,6 +1324,14 @@ class CmdCallMemberSlot(
             ?: frame.scope.raiseError("member id $methodId not found on ${receiver.objClass.className}")
         val callArgs = frame.buildArguments(argBase, argCount)
         val name = rec.memberName ?: "<member>"
+        if (receiver is ObjQualifiedView) {
+            val result = receiver.invokeInstanceMethod(frame.scope, name, callArgs)
+            if (frame.fn.localSlotNames.isNotEmpty()) {
+                frame.syncScopeToFrame()
+            }
+            frame.storeObjResult(dst, result)
+            return
+        }
         val decl = rec.declaringClass ?: receiver.objClass
         val result = when (rec.type) {
             ObjRecord.Type.Property -> {

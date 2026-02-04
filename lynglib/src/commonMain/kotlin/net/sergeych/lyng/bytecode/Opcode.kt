@@ -41,6 +41,7 @@ enum class Opcode(val code: Int) {
     OBJ_TO_BOOL(0x14),
     CHECK_IS(0x15),
     ASSERT_IS(0x16),
+    MAKE_QUALIFIED_VIEW(0x17),
 
     ADD_INT(0x20),
     SUB_INT(0x21),

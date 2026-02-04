@@ -21,12 +21,10 @@
 
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.eval
-import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertFails
 import kotlin.test.assertTrue
 
-@Ignore
 class MIDiagnosticsTest {
 
     @Test
@@ -36,7 +34,7 @@ class MIDiagnosticsTest {
                 """
                 class Foo(val a) { fun runA() { "ResultA:" + a } }
                 class Bar(val b) { fun runB() { "ResultB:" + b } }
-                class FooBar(a,b) : Foo(a), Bar(b) { }
+                class FooBar(a0,b0) : Foo(a0), Bar(b0) { }
                 val fb = FooBar(1,2)
                 fb.qux()
                 """.trimIndent()
@@ -57,7 +55,7 @@ class MIDiagnosticsTest {
                 """
                 class Foo(val a) { var tag = "F" }
                 class Bar(val b) { var tag = "B" }
-                class FooBar(a,b) : Foo(a), Bar(b) { }
+                class FooBar(a0,b0) : Foo(a0), Bar(b0) { }
                 val fb = FooBar(1,2)
                 fb.unknownField
                 """.trimIndent()
@@ -87,7 +85,6 @@ class MIDiagnosticsTest {
     }
 
     @Test
-    @Ignore
     fun castFailureMentionsActualAndTargetTypes() = runTest {
         val ex = assertFails {
             eval(

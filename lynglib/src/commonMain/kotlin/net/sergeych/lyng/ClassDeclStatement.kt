@@ -21,6 +21,7 @@ import net.sergeych.lyng.obj.Obj
 class ClassDeclStatement(
     private val delegate: Statement,
     private val startPos: Pos,
+    val declaredName: String?,
 ) : Statement() {
     override val pos: Pos = startPos
 

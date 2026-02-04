@@ -122,6 +122,10 @@ open class ObjDynamic(var readCallback: Statement? = null, var writeCallback: St
         }
 
         val type = object : ObjClass("Delegate") {}.apply {
+            addFn("getValue") { raiseError("Delegate.getValue is not implemented") }
+            addFn("setValue") { raiseError("Delegate.setValue is not implemented") }
+            addFn("invoke") { raiseError("Delegate.invoke is not implemented") }
+            addFn("bind") { raiseError("Delegate.bind is not implemented") }
 //            addClassConst("IndexGetName", operatorGetName)
         }
     }

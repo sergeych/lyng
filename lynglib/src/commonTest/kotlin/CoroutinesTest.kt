@@ -17,10 +17,8 @@
 
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.eval
-import kotlin.test.Ignore
 import kotlin.test.Test
 
-@Ignore
 class TestCoroutines {
 
     @Test
@@ -75,7 +73,7 @@ class TestCoroutines {
                         counter = c + 1
 //                    }
                 }
-             }.forEach { it.await() }
+             }.forEach { (it as Deferred).await() }
              println(counter)
              assert( counter < 10 )
              

@@ -27,9 +27,7 @@ import net.sergeych.lyng.obj.ObjInt
 import kotlin.time.TimeSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.Ignore
 
-@Ignore
 class NestedRangeBenchmarkTest {
     @Test
     fun benchmarkHappyNumbersNestedRanges() = runTest {

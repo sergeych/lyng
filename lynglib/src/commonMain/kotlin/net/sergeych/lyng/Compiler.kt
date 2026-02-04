@@ -145,6 +145,10 @@ class Compiler(
                 if (!record.visibility.isPublic) continue
                 if (plan.slots.containsKey(name)) continue
                 declareSlotNameIn(plan, name, record.isMutable, record.type == ObjRecord.Type.Delegated)
+                val instance = record.value as? ObjInstance
+                if (instance != null && nameObjClass[name] == null) {
+                    nameObjClass[name] = instance.objClass
+                }
             }
             for ((cls, map) in current.extensions) {
                 for ((name, record) in map) {
@@ -457,6 +461,13 @@ class Compiler(
             return MemberIds(fieldId, methodId)
         }
         if (qualifier != null) {
+            val classCtx = codeContexts.asReversed()
+                .firstOrNull { it is CodeContext.ClassBody && it.name == qualifier } as? CodeContext.ClassBody
+            if (classCtx != null) {
+                val fieldId = classCtx.memberFieldIds[name]
+                val methodId = classCtx.memberMethodIds[name]
+                if (fieldId != null || methodId != null) return MemberIds(fieldId, methodId)
+            }
             val info = resolveCompileClassInfo(qualifier)
                 ?: if (allowUnresolvedRefs) return MemberIds(null, null) else throw ScriptError(pos, "unknown type $qualifier")
             val fieldId = info.fieldIds[name]
@@ -629,6 +640,14 @@ class Compiler(
             resolutionSink?.referenceMember(name, pos)
             val ids = resolveMemberIds(name, pos, null)
             return ImplicitThisMemberRef(name, pos, ids.fieldId, ids.methodId, currentImplicitThisTypeName())
+        }
+        if (classCtx != null) {
+            val implicitType = classCtx.name
+            if (hasImplicitThisMember(name, implicitType)) {
+                resolutionSink?.referenceMember(name, pos, implicitType)
+                val ids = resolveImplicitThisMemberIds(name, pos, implicitType)
+                return ImplicitThisMemberRef(name, pos, ids.fieldId, ids.methodId, implicitType)
+            }
         }
         val implicitThisMembers = codeContexts.any { ctx ->
             (ctx as? CodeContext.Function)?.implicitThisMembers == true
@@ -1190,6 +1209,14 @@ class Compiler(
 
     private fun resolveImplicitThisMemberIds(name: String, pos: Pos, implicitTypeName: String?): MemberIds {
         if (implicitTypeName == null) return resolveMemberIds(name, pos, null)
+        val classCtx = codeContexts.asReversed().firstOrNull { it is CodeContext.ClassBody } as? CodeContext.ClassBody
+        if (classCtx != null && classCtx.name == implicitTypeName) {
+            val fieldId = classCtx.memberFieldIds[name]
+            val methodId = classCtx.memberMethodIds[name]
+            if (fieldId != null || methodId != null) {
+                return MemberIds(fieldId, methodId)
+            }
+        }
         val info = resolveCompileClassInfo(implicitTypeName)
         val fieldId = info?.fieldIds?.get(name)
         val methodId = info?.methodIds?.get(name)
@@ -1211,6 +1238,12 @@ class Compiler(
 
     private fun hasImplicitThisMember(name: String, implicitTypeName: String?): Boolean {
         if (implicitTypeName == null) return false
+        val classCtx = codeContexts.asReversed().firstOrNull { it is CodeContext.ClassBody } as? CodeContext.ClassBody
+        if (classCtx != null && classCtx.name == implicitTypeName) {
+            if (classCtx.memberFieldIds.containsKey(name) || classCtx.memberMethodIds.containsKey(name)) {
+                return true
+            }
+        }
         val info = resolveCompileClassInfo(implicitTypeName)
         if (info != null && (info.fieldIds.containsKey(name) || info.methodIds.containsKey(name))) return true
         val cls = resolveClassByName(implicitTypeName)
@@ -1480,7 +1513,11 @@ class Compiler(
             is ConditionalRef ->
                 containsUnsupportedRef(ref.condition) || containsUnsupportedRef(ref.ifTrue) || containsUnsupportedRef(ref.ifFalse)
             is ElvisRef -> containsUnsupportedRef(ref.left) || containsUnsupportedRef(ref.right)
-            is FieldRef -> containsUnsupportedRef(ref.target)
+            is FieldRef -> {
+                val receiverClass = resolveReceiverClassForMember(ref.target)
+                if (receiverClass == ObjDynamic.type) return true
+                containsUnsupportedRef(ref.target)
+            }
             is IndexRef -> containsUnsupportedRef(ref.targetRef) || containsUnsupportedRef(ref.indexRef)
             is ListLiteralRef -> ref.entries().any {
                 when (it) {
@@ -1495,7 +1532,13 @@ class Compiler(
                 }
             }
             is CallRef -> containsUnsupportedRef(ref.target) || ref.args.any { containsUnsupportedForBytecode(it.value) }
-            is MethodCallRef -> containsUnsupportedRef(ref.receiver) || ref.args.any { containsUnsupportedForBytecode(it.value) }
+            is MethodCallRef -> {
+                val receiverClass = resolveReceiverClassForMember(ref.receiver)
+                if (receiverClass == ObjDynamic.type) return true
+                containsUnsupportedRef(ref.receiver) || ref.args.any { containsUnsupportedForBytecode(it.value) }
+            }
+            is QualifiedThisMethodSlotCallRef -> true
+            is QualifiedThisFieldSlotRef -> true
             else -> false
         }
     }
@@ -3255,6 +3298,7 @@ class Compiler(
 
     private fun inferFieldReturnClass(targetClass: ObjClass?, name: String): ObjClass? {
         if (targetClass == null) return null
+        if (targetClass == ObjDynamic.type) return ObjDynamic.type
         classFieldTypesByName[targetClass.className]?.get(name)?.let { return it }
         enumEntriesByName[targetClass.className]?.let { entries ->
             return when {
@@ -4632,7 +4676,7 @@ class Compiler(
                 return instance
             }
         }
-        return ClassDeclStatement(declStatement, startPos)
+        return ClassDeclStatement(declStatement, startPos, className)
     }
 
     private suspend fun parseClassDeclaration(isAbstract: Boolean = false, isExtern: Boolean = false): Statement {
@@ -4691,6 +4735,7 @@ class Compiler(
 
             val baseSpecs = mutableListOf<BaseSpec>()
             pendingTypeParamStack.add(classTypeParams)
+            slotPlanStack.add(classSlotPlan)
             try {
                 if (cc.skipTokenOfType(Token.Type.COLON, isOptional = true)) {
                     do {
@@ -4710,6 +4755,7 @@ class Compiler(
                     } while (cc.skipTokenOfType(Token.Type.COMMA, isOptional = true))
                 }
             } finally {
+                slotPlanStack.removeLast()
                 pendingTypeParamStack.removeLast()
             }
 
@@ -5016,7 +5062,7 @@ class Compiler(
                     return newClass
                 }
             }
-            ClassDeclStatement(classDeclStatement, startPos)
+            ClassDeclStatement(classDeclStatement, startPos, nameToken.value)
         }
 
     }
@@ -5397,12 +5443,10 @@ class Compiler(
         resolutionSink?.declareSymbol(name, declKind, isMutable = false, pos = nameStartPos, isOverride = isOverride)
         if (parentContext is CodeContext.ClassBody && extTypeName == null) {
             parentContext.declaredMembers.add(name)
-            if (!isStatic) {
-                if (!parentContext.memberMethodIds.containsKey(name)) {
-                    parentContext.memberMethodIds[name] = parentContext.nextMethodId++
-                }
-                memberMethodId = parentContext.memberMethodIds[name]
+            if (!parentContext.memberMethodIds.containsKey(name)) {
+                parentContext.memberMethodIds[name] = parentContext.nextMethodId++
             }
+            memberMethodId = parentContext.memberMethodIds[name]
         }
         if (declKind != SymbolKind.MEMBER) {
             declareLocalName(name, isMutable = false)
@@ -5494,11 +5538,16 @@ class Compiler(
 
         miniSink?.onEnterFunction(node)
         val implicitThisMembers = extTypeName != null || (parentContext is CodeContext.ClassBody && !isStatic)
+        val implicitThisTypeName = when {
+            extTypeName != null -> extTypeName
+            parentContext is CodeContext.ClassBody && !isStatic -> parentContext.name
+            else -> null
+        }
         return inCodeContext(
             CodeContext.Function(
                 name,
                 implicitThisMembers = implicitThisMembers,
-                implicitThisTypeName = extTypeName,
+                implicitThisTypeName = implicitThisTypeName,
                 typeParams = typeParams,
                 typeParamDecls = typeParamDecls
             )
@@ -5932,7 +5981,7 @@ class Compiler(
         }
         val initRef = (initStmt as? ExpressionStatement)?.ref
         return when (initRef) {
-            is StatementRef -> (initRef.statement as? ExpressionStatement)?.ref
+            is StatementRef -> (initRef.statement as? ExpressionStatement)?.ref ?: initRef
             else -> initRef
         }
     }
@@ -5956,11 +6005,18 @@ class Compiler(
                 else -> Obj.rootObjectType
             }
         }
+        if (unwrapped is ClassDeclStatement) {
+            unwrapped.declaredName?.let { return resolveClassByName(it) }
+        }
         val directRef = unwrapDirectRef(unwrapped)
         return when (directRef) {
             is ListLiteralRef -> ObjList.type
             is MapLiteralRef -> ObjMap.type
             is RangeRef -> ObjRange.type
+            is StatementRef -> {
+                val decl = directRef.statement as? ClassDeclStatement
+                decl?.declaredName?.let { resolveClassByName(it) }
+            }
             is ValueFnRef -> lambdaReturnTypeByRef[directRef]
             is CastRef -> resolveTypeRefClass(directRef.castTypeRef())
             is BinaryOpRef -> inferBinaryOpReturnClass(directRef)
@@ -5988,6 +6044,9 @@ class Compiler(
                         when (target.name) {
                             "lazy" -> ObjLazyDelegate.type
                             "iterator" -> ObjIterator
+                            "flow" -> ObjFlow.type
+                            "launch" -> ObjDeferred.type
+                            "dynamic" -> ObjDynamic.type
                             else -> callableReturnTypeByScopeId[target.scopeId]?.get(target.slot)
                                 ?: resolveClassByName(target.name)
                         }
@@ -5996,6 +6055,9 @@ class Compiler(
                         when (target.name) {
                             "lazy" -> ObjLazyDelegate.type
                             "iterator" -> ObjIterator
+                            "flow" -> ObjFlow.type
+                            "launch" -> ObjDeferred.type
+                            "dynamic" -> ObjDynamic.type
                             else -> callableReturnTypeByName[target.name]
                                 ?: resolveClassByName(target.name)
                         }
@@ -6489,7 +6551,7 @@ class Compiler(
             false
         }
 
-        if (declaringClassNameCaptured != null && extTypeName == null && !isStatic) {
+        if (declaringClassNameCaptured != null && extTypeName == null) {
             if (isDelegate || isProperty) {
                 if (classCtx != null) {
                     if (!classCtx.memberMethodIds.containsKey(name)) {

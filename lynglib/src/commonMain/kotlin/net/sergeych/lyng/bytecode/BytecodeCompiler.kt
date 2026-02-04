@@ -512,7 +512,10 @@ class BytecodeCompiler(
         val typeObj = ensureObjSlot(typeValue)
         if (!ref.castIsNullable()) {
             builder.emit(Opcode.ASSERT_IS, objValue.slot, typeObj.slot)
-            return objValue
+            val resultSlot = allocSlot()
+            builder.emit(Opcode.MAKE_QUALIFIED_VIEW, objValue.slot, typeObj.slot, resultSlot)
+            updateSlotType(resultSlot, SlotType.OBJ)
+            return CompiledValue(resultSlot, SlotType.OBJ)
         }
         val checkSlot = allocSlot()
         builder.emit(Opcode.CHECK_IS, objValue.slot, typeObj.slot, checkSlot)
@@ -529,7 +532,7 @@ class BytecodeCompiler(
         builder.emit(Opcode.MOVE_OBJ, nullSlot, resultSlot)
         builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
         builder.mark(okLabel)
-        builder.emit(Opcode.MOVE_OBJ, objValue.slot, resultSlot)
+        builder.emit(Opcode.MAKE_QUALIFIED_VIEW, objValue.slot, typeObj.slot, resultSlot)
         builder.mark(endLabel)
         updateSlotType(resultSlot, SlotType.OBJ)
         return CompiledValue(resultSlot, SlotType.OBJ)

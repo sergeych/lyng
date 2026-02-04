@@ -24,9 +24,7 @@ import kotlin.math.min
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
-import kotlin.test.Ignore
 
-@Ignore
 class BlockReindentTest {
     @Test
     fun findMatchingOpen_basic() {

@@ -343,7 +343,7 @@ class Script(
                 result
             }
 
-            addFn("dynamic") {
+            addFn("dynamic", callSignature = CallSignature(tailBlockReceiverType = "DelegateContext")) {
                 ObjDynamic.create(this, requireOnlyArg())
             }
 
@@ -438,6 +438,8 @@ class Script(
             addConst("Mutex", ObjMutex.type)
             addConst("Flow", ObjFlow.type)
             addConst("FlowBuilder", ObjFlowBuilder.type)
+            addConst("Delegate", ObjDynamic.type)
+            addConst("DelegateContext", ObjDynamicContext.type)
 
             addConst("Regex", ObjRegex.type)
             addConst("RegexMatch", ObjRegexMatch.type)

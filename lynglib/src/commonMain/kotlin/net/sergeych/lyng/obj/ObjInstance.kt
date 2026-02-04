@@ -191,12 +191,12 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         val d = decl ?: obj.declaringClass
         if (d != null) {
             val mangled = d.mangledName(name)
-            fieldRecordForKey(mangled)?.let {
-                targetRec = it
-            }
-            if (targetRec === obj) {
-                instanceScope.objects[mangled]?.let { 
-                    targetRec = it 
+            val scoped = instanceScope.objects[mangled]
+            if (scoped != null) {
+                targetRec = scoped
+            } else {
+                fieldRecordForKey(mangled)?.let {
+                    targetRec = it
                 }
             }
         }
@@ -598,7 +598,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
     override suspend fun readField(scope: Scope, name: String): ObjRecord {
         // Qualified field access: prefer mangled storage for the qualified ancestor
         val mangled = "${startClass.className}::$name"
-        instance.fieldRecordForKey(mangled)?.let { rec ->
+        instance.instanceScope.objects[mangled]?.let { rec ->
             // Visibility: declaring class is the qualified ancestor for mangled storage
             val decl = rec.declaringClass ?: startClass
             val caller = scope.currentClassCtx
@@ -606,7 +606,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
                 scope.raiseError(ObjIllegalAccessException(scope, "can't access field $name (declared in ${decl.className})"))
             return instance.resolveRecord(scope, rec, name, decl)
         }
-        instance.instanceScope.objects[mangled]?.let { rec ->
+        instance.fieldRecordForKey(mangled)?.let { rec ->
             // Visibility: declaring class is the qualified ancestor for mangled storage
             val decl = rec.declaringClass ?: startClass
             val caller = scope.currentClassCtx
@@ -642,7 +642,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
     override suspend fun writeField(scope: Scope, name: String, newValue: Obj) {
         // Qualified write: target mangled storage for the ancestor
         val mangled = "${startClass.className}::$name"
-        instance.fieldRecordForKey(mangled)?.let { f ->
+        instance.instanceScope.objects[mangled]?.let { f ->
             val decl = f.declaringClass ?: startClass
             val caller = scope.currentClassCtx
             if (!canAccessMember(f.effectiveWriteVisibility, decl, caller, name))
@@ -654,7 +654,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
             if (f.value.assign(scope, newValue) == null) f.value = newValue
             return
         }
-        instance.instanceScope.objects[mangled]?.let { f ->
+        instance.fieldRecordForKey(mangled)?.let { f ->
             val decl = f.declaringClass ?: startClass
             val caller = scope.currentClassCtx
             if (!canAccessMember(f.effectiveWriteVisibility, decl, caller, name))
@@ -705,7 +705,15 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
             val saved = instance.instanceScope.currentClassCtx
             instance.instanceScope.currentClassCtx = decl
             try {
-                return rec.value.invoke(instance.instanceScope, instance, args)
+                return when (rec.type) {
+                    ObjRecord.Type.Property -> {
+                        if (args.isEmpty()) (rec.value as ObjProperty).callGetter(scope, instance, decl)
+                        else scope.raiseError("property $name cannot be called with arguments")
+                    }
+                    ObjRecord.Type.Fun, ObjRecord.Type.Delegated ->
+                        rec.value.invoke(instance.instanceScope, instance, args)
+                    else -> scope.raiseError("member $name is not callable")
+                }
             } finally {
                 instance.instanceScope.currentClassCtx = saved
             }

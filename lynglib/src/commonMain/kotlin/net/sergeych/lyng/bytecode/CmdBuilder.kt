@@ -116,7 +116,7 @@ class CmdBuilder {
             Opcode.NEG_INT, Opcode.NEG_REAL, Opcode.NOT_BOOL, Opcode.INV_INT,
             Opcode.ASSERT_IS ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT)
-            Opcode.CHECK_IS ->
+            Opcode.CHECK_IS, Opcode.MAKE_QUALIFIED_VIEW ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.RANGE_INT_BOUNDS ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
@@ -225,6 +225,7 @@ class CmdBuilder {
             Opcode.MAKE_RANGE -> CmdMakeRange(operands[0], operands[1], operands[2], operands[3])
             Opcode.CHECK_IS -> CmdCheckIs(operands[0], operands[1], operands[2])
             Opcode.ASSERT_IS -> CmdAssertIs(operands[0], operands[1])
+            Opcode.MAKE_QUALIFIED_VIEW -> CmdMakeQualifiedView(operands[0], operands[1], operands[2])
             Opcode.RET_LABEL -> CmdRetLabel(operands[0], operands[1])
             Opcode.THROW -> CmdThrow(operands[0], operands[1])
             Opcode.RESOLVE_SCOPE_SLOT -> CmdResolveScopeSlot(operands[0], operands[1])
