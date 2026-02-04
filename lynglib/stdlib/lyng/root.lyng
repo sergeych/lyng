@@ -7,7 +7,6 @@ extern class Exception
 extern class IllegalArgumentException
 extern class NotImplementedException
 extern class Delegate
-
 extern class Iterable<T> {
     fun iterator(): Iterator<T>
     fun forEach(action: (T)->Void): Void
@@ -29,6 +28,7 @@ extern class Array<T> : Collection<T> {
 }
 
 extern class List<T> : Array<T> {
+    fun add(value: T, more...): Void
 }
 
 extern class Set<T> : Collection<T> {
