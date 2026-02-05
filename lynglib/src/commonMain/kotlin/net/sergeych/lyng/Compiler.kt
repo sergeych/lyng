@@ -565,6 +565,37 @@ class Compiler(
         return typeParams
     }
 
+    private fun looksLikeTypeAliasDeclaration(): Boolean {
+        val saved = cc.savePos()
+        try {
+            val nameTok = cc.nextNonWhitespace()
+            if (nameTok.type != Token.Type.ID) return false
+            val afterName = cc.savePos()
+            if (cc.skipTokenOfType(Token.Type.LT, isOptional = true)) {
+                var depth = 1
+                while (depth > 0) {
+                    val t = cc.nextNonWhitespace()
+                    when (t.type) {
+                        Token.Type.LT -> depth += 1
+                        Token.Type.GT -> depth -= 1
+                        Token.Type.SHR -> {
+                            cc.pushPendingGT()
+                            depth -= 1
+                        }
+                        Token.Type.EOF -> return false
+                        else -> {}
+                    }
+                }
+            } else {
+                cc.restorePos(afterName)
+            }
+            cc.skipWsTokens()
+            return cc.peekNextNonWhitespace().type == Token.Type.ASSIGN
+        } finally {
+            cc.restorePos(saved)
+        }
+    }
+
     private suspend fun parseTypeAliasDeclaration(): Statement {
         if (codeContexts.lastOrNull() is CodeContext.ClassBody) {
             throw ScriptError(cc.currentPos(), "type alias is not allowed in class body")
@@ -4667,6 +4698,7 @@ class Compiler(
         "type" -> {
             pendingDeclStart = id.pos
             pendingDeclDoc = consumePendingDoc()
+            if (!looksLikeTypeAliasDeclaration()) return null
             parseTypeAliasDeclaration()
         }
 
