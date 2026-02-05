@@ -18,6 +18,7 @@
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.eval
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 
 class TypesTest {
 
@@ -165,5 +166,70 @@ class TypesTest {
             assertEquals("ok!", f("ok"))
         """.trimIndent()
         )
+    }
+
+    @Test
+    fun testIsUnionIntersection() = runTest {
+        eval("""
+            class A
+            class B
+            class C: A, B
+            val c = C()
+            assert( c is A | B )
+            assert( c is A & B )
+            assert( !(c is A & String) )
+            
+            val v = 1
+            assert( v is Int | String | Real )
+            assert( !(v is String | Bool) )
+        """.trimIndent())
+    }
+
+    @Test
+    fun testListLiteralInferenceForBounds() = runTest {
+        eval("""
+            fun acceptInts<T: Int>(xs: List<T>) { }
+            acceptInts([1, 2, 3])
+            val base = [1, 2]
+            acceptInts([...base, 3])
+        """.trimIndent())
+        assertFailsWith<net.sergeych.lyng.ScriptError> {
+            eval("""
+                fun acceptInts<T: Int>(xs: List<T>) { }
+                acceptInts([1, "a"])
+            """.trimIndent())
+        }
+    }
+
+    @Test
+    fun testUnioTypeLists() = runTest {
+        eval("""
+            
+            fun f<T>(list: List<T>) {
+                println(list)
+                println(T)
+            }
+            f([1, "two", true])
+            f([1,2,3])
+        """)
+    }
+
+    @Test
+    fun multipleReceivers() = runTest {
+        eval("""
+            class R1(shared,r1="r1")
+            class R2(shared,r2="r2")
+            
+            R1("s").apply {
+                assertEquals("r1", r1)
+                assertEquals("s", shared)
+                R2("t").apply {
+                    assertEquals("r2", r2)
+                    assertEquals("t", shared)
+                    assertEquals("r1", this@R1.r1)
+                    // actually we have now this of union type R1 & R2!
+                }
+            }
+        """)
     }
 }

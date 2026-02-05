@@ -207,8 +207,12 @@ class CmdCheckIs(internal val objSlot: Int, internal val typeSlot: Int, internal
     override suspend fun perform(frame: CmdFrame) {
         val obj = frame.slotToObj(objSlot)
         val typeObj = frame.slotToObj(typeSlot)
-        val clazz = typeObj as? ObjClass
-        frame.setBool(dst, clazz != null && obj.isInstanceOf(clazz))
+        val result = when (typeObj) {
+            is ObjTypeExpr -> matchesTypeDecl(frame.ensureScope(), obj, typeObj.typeDecl)
+            is ObjClass -> obj.isInstanceOf(typeObj)
+            else -> false
+        }
+        frame.setBool(dst, result)
         return
     }
 }

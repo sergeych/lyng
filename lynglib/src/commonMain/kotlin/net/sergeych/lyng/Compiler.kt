@@ -1505,6 +1505,7 @@ class Compiler(
             is BinaryOpRef -> containsUnsupportedRef(ref.left) || containsUnsupportedRef(ref.right)
             is UnaryOpRef -> containsUnsupportedRef(ref.a)
             is CastRef -> containsUnsupportedRef(ref.castValueRef()) || containsUnsupportedRef(ref.castTypeRef())
+            is net.sergeych.lyng.obj.TypeDeclRef -> false
             is AssignRef -> {
                 val target = ref.target as? LocalSlotRef
                 (target?.isDelegated == true) || containsUnsupportedRef(ref.value)
@@ -1601,6 +1602,7 @@ class Compiler(
             is BinaryOpRef -> containsDelegatedRefs(ref.left) || containsDelegatedRefs(ref.right)
             is UnaryOpRef -> containsDelegatedRefs(ref.a)
             is CastRef -> containsDelegatedRefs(ref.castValueRef()) || containsDelegatedRefs(ref.castTypeRef())
+            is net.sergeych.lyng.obj.TypeDeclRef -> false
             is AssignRef -> {
                 val target = ref.target as? LocalSlotRef
                 (target?.isDelegated == true) || containsDelegatedRefs(ref.value)
@@ -1829,6 +1831,14 @@ class Compiler(
                     CastRef(lvalue!!, typeRef, false, opToken.pos)
                 } else {
                     CastRef(lvalue!!, typeRef, true, opToken.pos)
+                }
+            } else if (opToken.type == Token.Type.IS || opToken.type == Token.Type.NOTIS) {
+                val (typeDecl, _) = parseTypeExpressionWithMini()
+                val typeRef = net.sergeych.lyng.obj.TypeDeclRef(typeDecl, opToken.pos)
+                if (opToken.type == Token.Type.IS) {
+                    BinaryOpRef(BinOp.IS, lvalue!!, typeRef)
+                } else {
+                    BinaryOpRef(BinOp.NOTIS, lvalue!!, typeRef)
                 }
             } else {
                 val rvalue = parseExpressionLevel(level + 1)
@@ -3127,6 +3137,114 @@ class Compiler(
         TypeDecl.TypeNullableAny -> "Object?"
     }
 
+    private fun inferTypeDeclFromInitializer(stmt: Statement): TypeDecl? {
+        val directRef = unwrapDirectRef(stmt) ?: return null
+        return inferTypeDeclFromRef(directRef)
+    }
+
+    private fun inferTypeDeclFromRef(ref: ObjRef): TypeDecl? {
+        resolveReceiverTypeDecl(ref)?.let { return it }
+        return when (ref) {
+            is ListLiteralRef -> inferListLiteralTypeDecl(ref)
+            is ConstRef -> inferTypeDeclFromConst(ref.constValue)
+            else -> null
+        }
+    }
+
+    private fun inferTypeDeclFromConst(value: Obj): TypeDecl? = when (value) {
+        is ObjInt -> TypeDecl.Simple("Int", false)
+        is ObjReal -> TypeDecl.Simple("Real", false)
+        is ObjString -> TypeDecl.Simple("String", false)
+        is ObjBool -> TypeDecl.Simple("Bool", false)
+        is ObjChar -> TypeDecl.Simple("Char", false)
+        is ObjNull -> TypeDecl.TypeNullableAny
+        is ObjList -> TypeDecl.Generic("List", listOf(TypeDecl.TypeAny), false)
+        is ObjMap -> TypeDecl.Generic("Map", listOf(TypeDecl.TypeAny, TypeDecl.TypeAny), false)
+        else -> null
+    }
+
+    private fun inferListLiteralTypeDecl(ref: ListLiteralRef): TypeDecl {
+        val elementType = inferListLiteralElementType(ref.entries())
+        return TypeDecl.Generic("List", listOf(elementType), false)
+    }
+
+    private fun inferListLiteralElementType(entries: List<ListEntry>): TypeDecl {
+        var nullable = false
+        val collected = mutableListOf<TypeDecl>()
+        val seen = mutableSetOf<String>()
+
+        fun addType(type: TypeDecl) {
+            val (base, isNullable) = stripNullable(type)
+            nullable = nullable || isNullable
+            if (base == TypeDecl.TypeAny) {
+                collected.clear()
+                collected += base
+                seen.clear()
+                seen += typeDeclKey(base)
+                return
+            }
+            val key = typeDeclKey(base)
+            if (seen.add(key)) {
+                collected += base
+            }
+        }
+
+        for (entry in entries) {
+            val type = when (entry) {
+                is ListEntry.Element -> inferTypeDeclFromRef(entry.ref)
+                is ListEntry.Spread -> inferElementTypeFromSpread(entry.ref)
+            } ?: return if (nullable) TypeDecl.TypeNullableAny else TypeDecl.TypeAny
+            addType(type)
+            if (collected.size == 1 && collected[0] == TypeDecl.TypeAny) break
+        }
+
+        if (collected.isEmpty()) return TypeDecl.TypeAny
+        val base = if (collected.size == 1) {
+            collected[0]
+        } else {
+            TypeDecl.Union(collected.toList(), nullable = false)
+        }
+        return if (nullable) makeTypeDeclNullable(base) else base
+    }
+
+    private fun inferElementTypeFromSpread(ref: ObjRef): TypeDecl? {
+        val listType = inferTypeDeclFromRef(ref) ?: return null
+        if (listType == TypeDecl.TypeAny || listType == TypeDecl.TypeNullableAny) return listType
+        if (listType is TypeDecl.Generic) {
+            val base = listType.name.substringAfterLast('.')
+            if (base == "List" || base == "Array" || base == "Iterable") {
+                return listType.args.firstOrNull() ?: TypeDecl.TypeAny
+            }
+        }
+        return TypeDecl.TypeAny
+    }
+
+    private fun stripNullable(type: TypeDecl): Pair<TypeDecl, Boolean> {
+        if (type is TypeDecl.TypeNullableAny) return TypeDecl.TypeAny to true
+        val nullable = type.isNullable
+        val base = if (!nullable) type else when (type) {
+            is TypeDecl.Function -> type.copy(nullable = false)
+            is TypeDecl.TypeVar -> type.copy(nullable = false)
+            is TypeDecl.Union -> type.copy(nullable = false)
+            is TypeDecl.Intersection -> type.copy(nullable = false)
+            is TypeDecl.Simple -> TypeDecl.Simple(type.name, false)
+            is TypeDecl.Generic -> TypeDecl.Generic(type.name, type.args, false)
+            else -> type
+        }
+        return base to nullable
+    }
+
+    private fun typeDeclKey(type: TypeDecl): String = when (type) {
+        TypeDecl.TypeAny -> "Any"
+        TypeDecl.TypeNullableAny -> "Any?"
+        is TypeDecl.Simple -> "S:${type.name}"
+        is TypeDecl.Generic -> "G:${type.name}<${type.args.joinToString(",") { typeDeclKey(it) }}>"
+        is TypeDecl.Function -> "F:(${type.params.joinToString(",") { typeDeclKey(it) }})->${typeDeclKey(type.returnType)}"
+        is TypeDecl.TypeVar -> "V:${type.name}"
+        is TypeDecl.Union -> "U:${type.options.joinToString("|") { typeDeclKey(it) }}"
+        is TypeDecl.Intersection -> "I:${type.options.joinToString("&") { typeDeclKey(it) }}"
+    }
+
     private fun inferObjClassFromRef(ref: ObjRef): ObjClass? = when (ref) {
         is ConstRef -> ref.constValue as? ObjClass ?: (ref.constValue as? Obj)?.objClass
         is LocalVarRef -> nameObjClass[ref.name] ?: resolveClassByName(ref.name)
@@ -3482,21 +3600,102 @@ class Compiler(
         pos: Pos
     ) {
         val decl = lookupGenericFunctionDecl(name) ?: return
-        val inferred = mutableMapOf<String, ObjClass>()
+        val inferred = mutableMapOf<String, TypeDecl>()
         val limit = minOf(args.size, decl.params.size)
         for (i in 0 until limit) {
             val paramType = decl.params[i].type
             val argRef = (args[i].value as? ExpressionStatement)?.ref ?: continue
-            val argClass = inferObjClassFromRef(argRef) ?: continue
-            if (paramType is TypeDecl.TypeVar) {
-                inferred[paramType.name] = argClass
-            }
+            val argTypeDecl = inferTypeDeclFromRef(argRef)
+                ?: inferObjClassFromRef(argRef)?.let { TypeDecl.Simple(it.className, false) }
+                ?: continue
+            collectTypeVarBindings(paramType, argTypeDecl, inferred)
         }
         for (tp in decl.typeParams) {
-            val argClass = inferred[tp.name] ?: continue
+            val argType = inferred[tp.name] ?: continue
             val bound = tp.bound ?: continue
-            if (!typeParamBoundSatisfied(argClass, bound)) {
-                throw ScriptError(pos, "type argument ${argClass.className} does not satisfy bound ${typeDeclName(bound)}")
+            if (!typeDeclSatisfiesBound(argType, bound)) {
+                throw ScriptError(pos, "type argument ${typeDeclName(argType)} does not satisfy bound ${typeDeclName(bound)}")
+            }
+        }
+    }
+
+    private fun collectTypeVarBindings(
+        paramType: TypeDecl,
+        argType: TypeDecl,
+        out: MutableMap<String, TypeDecl>
+    ) {
+        when (paramType) {
+            is TypeDecl.TypeVar -> {
+                val current = out[paramType.name]
+                out[paramType.name] = mergeTypeDecls(current, argType)
+            }
+            is TypeDecl.Generic -> {
+                if (argType is TypeDecl.Generic && argType.name == paramType.name &&
+                    argType.args.size == paramType.args.size
+                ) {
+                    for (i in paramType.args.indices) {
+                        collectTypeVarBindings(paramType.args[i], argType.args[i], out)
+                    }
+                }
+            }
+            is TypeDecl.Union -> {
+                if (argType is TypeDecl.Union) {
+                    val limit = minOf(paramType.options.size, argType.options.size)
+                    for (i in 0 until limit) {
+                        collectTypeVarBindings(paramType.options[i], argType.options[i], out)
+                    }
+                }
+            }
+            is TypeDecl.Intersection -> {
+                if (argType is TypeDecl.Intersection) {
+                    val limit = minOf(paramType.options.size, argType.options.size)
+                    for (i in 0 until limit) {
+                        collectTypeVarBindings(paramType.options[i], argType.options[i], out)
+                    }
+                }
+            }
+            else -> {}
+        }
+    }
+
+    private fun mergeTypeDecls(a: TypeDecl?, b: TypeDecl): TypeDecl {
+        if (a == null) return b
+        if (a == TypeDecl.TypeAny || b == TypeDecl.TypeAny) {
+            return if (a.isNullable || b.isNullable) TypeDecl.TypeNullableAny else TypeDecl.TypeAny
+        }
+        if (a == TypeDecl.TypeNullableAny || b == TypeDecl.TypeNullableAny) return TypeDecl.TypeNullableAny
+        val (aBase, aNullable) = stripNullable(a)
+        val (bBase, bNullable) = stripNullable(b)
+        if (typeDeclKey(aBase) == typeDeclKey(bBase)) {
+            return if (aNullable || bNullable) makeTypeDeclNullable(aBase) else aBase
+        }
+        val options = mutableListOf<TypeDecl>()
+        val seen = mutableSetOf<String>()
+        fun addOpt(t: TypeDecl) {
+            val key = typeDeclKey(t)
+            if (seen.add(key)) options += t
+        }
+        val nullable = aNullable || bNullable
+        if (aBase is TypeDecl.Union) aBase.options.forEach { addOpt(it) } else addOpt(aBase)
+        if (bBase is TypeDecl.Union) bBase.options.forEach { addOpt(it) } else addOpt(bBase)
+        val merged = TypeDecl.Union(options, nullable = false)
+        return if (nullable) makeTypeDeclNullable(merged) else merged
+    }
+
+    private fun typeDeclSatisfiesBound(argType: TypeDecl, bound: TypeDecl): Boolean {
+        return when (argType) {
+            TypeDecl.TypeAny, TypeDecl.TypeNullableAny -> true
+            is TypeDecl.Union -> argType.options.all { typeDeclSatisfiesBound(it, bound) }
+            is TypeDecl.Intersection -> argType.options.all { typeDeclSatisfiesBound(it, bound) }
+            else -> when (bound) {
+                is TypeDecl.Union -> bound.options.any { typeDeclSatisfiesBound(argType, it) }
+                is TypeDecl.Intersection -> bound.options.all { typeDeclSatisfiesBound(argType, it) }
+                is TypeDecl.Simple, is TypeDecl.Generic, is TypeDecl.Function -> {
+                    val argClass = resolveTypeDeclObjClass(argType) ?: return false
+                    val boundClass = resolveTypeDeclObjClass(bound) ?: return false
+                    argClass == boundClass || argClass.allParentsSet.contains(boundClass)
+                }
+                else -> true
             }
         }
     }
@@ -3509,11 +3708,10 @@ class Compiler(
         if (typeParams.isEmpty()) return
         val inferred = mutableMapOf<String, ObjClass>()
         for (param in argsDeclaration.params) {
-            val paramType = param.type
-            if (paramType is TypeDecl.TypeVar) {
-                val rec = context.getLocalRecordDirect(param.name) ?: continue
-                val value = rec.value
-                if (value is Obj) inferred[paramType.name] = value.objClass
+            val rec = context.getLocalRecordDirect(param.name) ?: continue
+            val value = rec.value
+            if (value is Obj) {
+                collectRuntimeTypeVarBindings(param.type, value, inferred)
             }
         }
         for (tp in typeParams) {
@@ -3526,6 +3724,47 @@ class Compiler(
                 context.raiseError("type argument ${cls.className} does not satisfy bound ${typeDeclName(bound)}")
             }
         }
+    }
+
+    private fun collectRuntimeTypeVarBindings(
+        paramType: TypeDecl,
+        value: Obj,
+        inferred: MutableMap<String, ObjClass>
+    ) {
+        when (paramType) {
+            is TypeDecl.TypeVar -> {
+                if (value !== ObjNull) {
+                    inferred[paramType.name] = value.objClass
+                }
+            }
+            is TypeDecl.Generic -> {
+                val base = paramType.name.substringAfterLast('.')
+                val arg = paramType.args.firstOrNull()
+                if (base == "List" && arg is TypeDecl.TypeVar && value is ObjList) {
+                    val elementClass = inferListElementClass(value)
+                    inferred[arg.name] = elementClass
+                }
+            }
+            else -> {}
+        }
+    }
+
+    private fun inferListElementClass(list: ObjList): ObjClass {
+        var elemClass: ObjClass? = null
+        for (elem in list.list) {
+            if (elem === ObjNull) {
+                elemClass = Obj.rootObjectType
+                break
+            }
+            val cls = elem.objClass
+            if (elemClass == null) {
+                elemClass = cls
+            } else if (elemClass != cls) {
+                elemClass = Obj.rootObjectType
+                break
+            }
+        }
+        return elemClass ?: Obj.rootObjectType
     }
 
     private fun resolveLocalTypeRef(name: String, pos: Pos): ObjRef? {
@@ -4248,7 +4487,9 @@ class Compiler(
                         Token.Type.IS,
                         Token.Type.NOTIS -> {
                             val negated = t.type == Token.Type.NOTIS
-                            val caseType = parseExpression() ?: throw ScriptError(cc.currentPos(), "type expected")
+                            val (typeDecl, _) = parseTypeExpressionWithMini()
+                            val typeRef = net.sergeych.lyng.obj.TypeDeclRef(typeDecl, t.pos)
+                            val caseType = ExpressionStatement(typeRef, t.pos)
                             currentConditions += WhenIsCondition(caseType, negated, t.pos)
                         }
 
@@ -6476,7 +6717,7 @@ class Compiler(
 
         // Optional explicit type annotation
         cc.skipWsTokens()
-        val (varTypeDecl, varTypeMini) = if (cc.peekNextNonWhitespace().type == Token.Type.COLON) {
+        var (varTypeDecl, varTypeMini) = if (cc.peekNextNonWhitespace().type == Token.Type.COLON) {
             parseTypeDeclarationWithMini()
         } else {
             TypeDecl.TypeAny to null
@@ -6623,6 +6864,13 @@ class Compiler(
         val initialExpression = if (setNull || isProperty) null
         else parseStatement(true)
             ?: throw ScriptError(effectiveEqToken!!.pos, "Expected initializer expression")
+
+        if (varTypeDecl == TypeDecl.TypeAny && initialExpression != null) {
+            val inferred = inferTypeDeclFromInitializer(initialExpression)
+            if (inferred != null) {
+                varTypeDecl = inferred
+            }
+        }
 
         if (isDelegate && initialExpression != null) {
             ensureDelegateType(initialExpression)

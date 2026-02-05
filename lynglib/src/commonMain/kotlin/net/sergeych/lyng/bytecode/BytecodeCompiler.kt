@@ -198,6 +198,7 @@ class BytecodeCompiler(
     private fun compileRef(ref: ObjRef): CompiledValue? {
         return when (ref) {
             is ConstRef -> compileConst(ref.constValue)
+            is TypeDeclRef -> compileConst(ObjTypeExpr(ref.decl()))
             is IncDecRef -> compileIncDec(ref, true)
             is CastRef -> compileCast(ref)
             is LocalSlotRef -> {

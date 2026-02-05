@@ -151,6 +151,12 @@ class BinaryOpRef(internal val op: BinOp, internal val left: ObjRef, internal va
     override suspend fun evalValue(scope: Scope): Obj {
         val a = left.evalValue(scope)
         val b = right.evalValue(scope)
+        if (op == BinOp.IS || op == BinOp.NOTIS) {
+            if (b is ObjTypeExpr) {
+                val result = matchesTypeDecl(scope, a, b.typeDecl)
+                return if (op == BinOp.NOTIS) ObjBool(!result) else ObjBool(result)
+            }
+        }
 
         // Primitive fast paths for common cases (guarded by PerfFlags.PRIMITIVE_FASTOPS)
         if (PerfFlags.PRIMITIVE_FASTOPS) {
@@ -458,6 +464,24 @@ class CastRef(
                 "Cannot cast ${(v as? Obj)?.objClass?.className ?: v::class.simpleName} to ${target.className}"
             )
         }
+    }
+}
+
+/** Type expression reference used for `is` checks (including unions/intersections). */
+class TypeDeclRef(private val typeDecl: TypeDecl, private val atPos: Pos) : ObjRef {
+    internal fun decl(): TypeDecl = typeDecl
+    internal fun pos(): Pos = atPos
+
+    override fun forEachVariable(block: (String) -> Unit) {}
+
+    override fun forEachVariableWithPos(block: (String, Pos) -> Unit) {}
+
+    override suspend fun get(scope: Scope): ObjRecord {
+        return evalValue(scope).asReadonly
+    }
+
+    override suspend fun evalValue(scope: Scope): Obj {
+        return ObjTypeExpr(typeDecl)
     }
 }
 

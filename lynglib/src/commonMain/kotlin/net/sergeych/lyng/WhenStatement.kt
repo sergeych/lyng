@@ -49,7 +49,11 @@ class WhenIsCondition(
     override val pos: Pos,
 ) : WhenCondition(expr, pos) {
     override suspend fun matches(scope: Scope, value: Obj): Boolean {
-        val result = value.isInstanceOf(expr.execute(scope))
+        val typeExpr = expr.execute(scope)
+        val result = when (typeExpr) {
+            is net.sergeych.lyng.obj.ObjTypeExpr -> net.sergeych.lyng.obj.matchesTypeDecl(scope, value, typeExpr.typeDecl)
+            else -> value.isInstanceOf(typeExpr)
+        }
         return if (negated) !result else result
     }
 }
