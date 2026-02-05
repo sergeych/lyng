@@ -3706,7 +3706,7 @@ class Compiler(
         typeParams: List<TypeDecl.TypeParam>
     ) {
         if (typeParams.isEmpty()) return
-        val inferred = mutableMapOf<String, ObjClass>()
+        val inferred = mutableMapOf<String, TypeDecl>()
         for (param in argsDeclaration.params) {
             val rec = context.getLocalRecordDirect(param.name) ?: continue
             val value = rec.value
@@ -3715,13 +3715,17 @@ class Compiler(
             }
         }
         for (tp in typeParams) {
-            val cls = inferred[tp.name]
-                ?: tp.defaultType?.let { resolveTypeDeclObjClass(it) }
-                ?: Obj.rootObjectType
-            context.addConst(tp.name, cls)
+            val inferredType = inferred[tp.name] ?: tp.defaultType ?: TypeDecl.TypeAny
+            val normalized = normalizeRuntimeTypeDecl(inferredType)
+            val cls = resolveTypeDeclObjClass(normalized)
+            if (cls != null && !normalized.isNullable && normalized !is TypeDecl.Union && normalized !is TypeDecl.Intersection) {
+                context.addConst(tp.name, cls)
+            } else {
+                context.addConst(tp.name, net.sergeych.lyng.obj.ObjTypeExpr(normalized))
+            }
             val bound = tp.bound ?: continue
-            if (!typeParamBoundSatisfied(cls, bound)) {
-                context.raiseError("type argument ${cls.className} does not satisfy bound ${typeDeclName(bound)}")
+            if (!typeDeclSatisfiesBound(normalized, bound)) {
+                context.raiseError("type argument ${typeDeclName(normalized)} does not satisfy bound ${typeDeclName(bound)}")
             }
         }
     }
@@ -3729,42 +3733,69 @@ class Compiler(
     private fun collectRuntimeTypeVarBindings(
         paramType: TypeDecl,
         value: Obj,
-        inferred: MutableMap<String, ObjClass>
+        inferred: MutableMap<String, TypeDecl>
     ) {
         when (paramType) {
             is TypeDecl.TypeVar -> {
                 if (value !== ObjNull) {
-                    inferred[paramType.name] = value.objClass
+                    inferred[paramType.name] = inferRuntimeTypeDecl(value)
                 }
             }
             is TypeDecl.Generic -> {
                 val base = paramType.name.substringAfterLast('.')
                 val arg = paramType.args.firstOrNull()
                 if (base == "List" && arg is TypeDecl.TypeVar && value is ObjList) {
-                    val elementClass = inferListElementClass(value)
-                    inferred[arg.name] = elementClass
+                    val elementType = inferListElementTypeDecl(value)
+                    inferred[arg.name] = elementType
                 }
             }
             else -> {}
         }
     }
 
-    private fun inferListElementClass(list: ObjList): ObjClass {
-        var elemClass: ObjClass? = null
+    private fun inferRuntimeTypeDecl(value: Obj): TypeDecl {
+        return when (value) {
+            is ObjInt -> TypeDecl.Simple("Int", false)
+            is ObjReal -> TypeDecl.Simple("Real", false)
+            is ObjString -> TypeDecl.Simple("String", false)
+            is ObjBool -> TypeDecl.Simple("Bool", false)
+            is ObjChar -> TypeDecl.Simple("Char", false)
+            is ObjNull -> TypeDecl.TypeNullableAny
+            is ObjList -> TypeDecl.Generic("List", listOf(inferListElementTypeDecl(value)), false)
+            is ObjMap -> TypeDecl.Generic("Map", listOf(TypeDecl.TypeAny, TypeDecl.TypeAny), false)
+            is ObjClass -> TypeDecl.Simple(value.className, false)
+            else -> TypeDecl.Simple(value.objClass.className, false)
+        }
+    }
+
+    private fun inferListElementTypeDecl(list: ObjList): TypeDecl {
+        var nullable = false
+        val options = mutableListOf<TypeDecl>()
+        val seen = mutableSetOf<String>()
         for (elem in list.list) {
             if (elem === ObjNull) {
-                elemClass = Obj.rootObjectType
-                break
+                nullable = true
+                continue
             }
-            val cls = elem.objClass
-            if (elemClass == null) {
-                elemClass = cls
-            } else if (elemClass != cls) {
-                elemClass = Obj.rootObjectType
-                break
-            }
+            val elemType = inferRuntimeTypeDecl(elem)
+            val base = stripNullable(elemType).first
+            val key = typeDeclKey(base)
+            if (seen.add(key)) options += base
         }
-        return elemClass ?: Obj.rootObjectType
+        val base = when {
+            options.isEmpty() -> TypeDecl.TypeAny
+            options.size == 1 -> options[0]
+            else -> TypeDecl.Union(options, nullable = false)
+        }
+        return if (nullable) makeTypeDeclNullable(base) else base
+    }
+
+    private fun normalizeRuntimeTypeDecl(type: TypeDecl): TypeDecl {
+        return when (type) {
+            is TypeDecl.Union -> TypeDecl.Union(type.options.distinctBy { typeDeclKey(it) }, type.isNullable)
+            is TypeDecl.Intersection -> TypeDecl.Intersection(type.options.distinctBy { typeDeclKey(it) }, type.isNullable)
+            else -> type
+        }
     }
 
     private fun resolveLocalTypeRef(name: String, pos: Pos): ObjRef? {

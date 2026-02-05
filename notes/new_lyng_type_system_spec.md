@@ -234,6 +234,18 @@ Object methods:
 - keep `toString()` as Object method
 - if we need extra metadata later, use explicit helpers like `Object.getHashCode(obj)`
 
+- Type expression checks (unions/intersections):
+  - Value check: `x is T` is runtime instance check (as usual).
+  - Type check: `T1 is T2` means type-subset (all values of `T1` fit in `T2`).
+  - Exact equality uses `==` and is structural (normalized unions/intersections).
+  - Includes uses `in`: `A in T` means `A` is a subset of `T`.
+  - Examples (T = A | B):
+    - `T == A` is false
+    - `T is A` is false
+    - `A in T` is true
+    - `B in T` is true
+    - `T is A | B` is true
+
 - Builtin classes inheritance: Are Int/String final? If so, is "class T: String, Int" forbidden (and thus Int & String is unsatisfiable but still allowed)?
 
 What keyword we did used for final vals/vars/funs? "closed"? Anyway I am uncertain whether to make Int or String closed, it is a discussion subject. But if we have some closed independent classes A, B, <T: A & B> is a compile time error.

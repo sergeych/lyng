@@ -152,9 +152,23 @@ class BinaryOpRef(internal val op: BinOp, internal val left: ObjRef, internal va
         val a = left.evalValue(scope)
         val b = right.evalValue(scope)
         if (op == BinOp.IS || op == BinOp.NOTIS) {
-            if (b is ObjTypeExpr) {
-                val result = matchesTypeDecl(scope, a, b.typeDecl)
-                return if (op == BinOp.NOTIS) ObjBool(!result) else ObjBool(result)
+            val result = when {
+                (a is ObjTypeExpr || a is ObjClass) && (b is ObjTypeExpr || b is ObjClass) -> {
+                    val leftDecl = typeDeclFromObj(scope, a) ?: return ObjBool(false)
+                    val rightDecl = typeDeclFromObj(scope, b) ?: return ObjBool(false)
+                    typeDeclIsSubtype(scope, leftDecl, rightDecl)
+                }
+                b is ObjTypeExpr -> matchesTypeDecl(scope, a, b.typeDecl)
+                else -> a.isInstanceOf(b)
+            }
+            return if (op == BinOp.NOTIS) ObjBool(!result) else ObjBool(result)
+        }
+        if (op == BinOp.IN || op == BinOp.NOTIN) {
+            if ((b is ObjTypeExpr || b is ObjClass) && (a is ObjTypeExpr || a is ObjClass)) {
+                val leftDecl = typeDeclFromObj(scope, a) ?: return ObjBool(op == BinOp.NOTIN)
+                val rightDecl = typeDeclFromObj(scope, b) ?: return ObjBool(op == BinOp.NOTIN)
+                val result = typeDeclIsSubtype(scope, leftDecl, rightDecl)
+                return if (op == BinOp.NOTIN) ObjBool(!result) else ObjBool(result)
             }
         }
 

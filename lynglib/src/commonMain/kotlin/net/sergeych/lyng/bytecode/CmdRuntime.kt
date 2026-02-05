@@ -207,9 +207,14 @@ class CmdCheckIs(internal val objSlot: Int, internal val typeSlot: Int, internal
     override suspend fun perform(frame: CmdFrame) {
         val obj = frame.slotToObj(objSlot)
         val typeObj = frame.slotToObj(typeSlot)
-        val result = when (typeObj) {
-            is ObjTypeExpr -> matchesTypeDecl(frame.ensureScope(), obj, typeObj.typeDecl)
-            is ObjClass -> obj.isInstanceOf(typeObj)
+        val result = when {
+            (obj is ObjTypeExpr || obj is ObjClass) && (typeObj is ObjTypeExpr || typeObj is ObjClass) -> {
+                val leftDecl = typeDeclFromObj(frame.ensureScope(), obj) ?: return frame.setBool(dst, false)
+                val rightDecl = typeDeclFromObj(frame.ensureScope(), typeObj) ?: return frame.setBool(dst, false)
+                typeDeclIsSubtype(frame.ensureScope(), leftDecl, rightDecl)
+            }
+            typeObj is ObjTypeExpr -> matchesTypeDecl(frame.ensureScope(), obj, typeObj.typeDecl)
+            typeObj is ObjClass -> obj.isInstanceOf(typeObj)
             else -> false
         }
         frame.setBool(dst, result)
@@ -1020,7 +1025,22 @@ class CmdModObj(internal val a: Int, internal val b: Int, internal val dst: Int)
 
 class CmdContainsObj(internal val target: Int, internal val value: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setBool(dst, frame.slotToObj(target).contains(frame.ensureScope(), frame.slotToObj(value)))
+        val targetObj = frame.slotToObj(target)
+        val valueObj = frame.slotToObj(value)
+        val result = if ((targetObj is ObjTypeExpr || targetObj is ObjClass) &&
+            (valueObj is ObjTypeExpr || valueObj is ObjClass)
+        ) {
+            val leftDecl = typeDeclFromObj(frame.ensureScope(), valueObj)
+            val rightDecl = typeDeclFromObj(frame.ensureScope(), targetObj)
+            if (leftDecl != null && rightDecl != null) {
+                typeDeclIsSubtype(frame.ensureScope(), leftDecl, rightDecl)
+            } else {
+                false
+            }
+        } else {
+            targetObj.contains(frame.ensureScope(), valueObj)
+        }
+        frame.setBool(dst, result)
         return
     }
 }

@@ -202,15 +202,24 @@ class TypesTest {
     }
 
     @Test
-    fun testUnioTypeLists() = runTest {
+    fun testUnionTypeLists() = runTest {
         eval("""
-            
-            fun f<T>(list: List<T>) {
+
+            fun fMixed<T>(list: List<T>) {
                 println(list)
                 println(T)
+                assert( T is Int | String | Bool )
+                assert( !(T is Int) )
+                assert( Int in T )
+                assert( String in T )
             }
-            f([1, "two", true])
-            f([1,2,3])
+            fun fInts<T>(list: List<T>) {
+                assert( T is Int )
+                assert( Int in T )
+                assert( !(String in T) )
+            }
+            fMixed([1, "two", true])
+            fInts([1,2,3])
         """)
     }
 
@@ -226,8 +235,11 @@ class TypesTest {
                 R2("t").apply {
                     assertEquals("r2", r2)
                     assertEquals("t", shared)
-                    assertEquals("r1", this@R1.r1)
+                    assertEquals("s", this@R1.shared)
                     // actually we have now this of union type R1 & R2!
+//                    println(this::class)
+                    assert( this@R2 is R2 )
+                    assert( this@R1 is R1 )
                 }
             }
         """)
