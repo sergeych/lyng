@@ -108,6 +108,24 @@ object Config {
 Config.show()
 ```
 
+### Nested Declarations and Lifted Enums
+You can now declare classes, objects, enums, and type aliases inside another class. These nested declarations live in the class namespace (no outer instance capture) and are accessed with a qualifier.
+
+```lyng
+class A {
+    class B(x?)
+    object Inner { val foo = "bar" }
+    enum E* { One, Two }
+}
+
+val ab = A.B()
+assertEquals(ab.x, null)
+assertEquals(A.Inner.foo, "bar")
+assertEquals(A.One, A.E.One)
+```
+
+The `*` on `enum E*` lifts entries into the enclosing class namespace (compile-time error on ambiguity).
+
 ### Object Expressions
 You can now create anonymous objects that inherit from classes or interfaces using the `object : Base { ... }` syntax. These expressions capture their lexical scope and support multiple inheritance.
 

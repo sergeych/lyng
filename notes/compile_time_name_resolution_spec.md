@@ -75,6 +75,18 @@ class B { fun foo() = 2 }
 class C : A, B { }  // error: requires override
 ```
 
+## Class Namespace (Nested Declarations)
+Nested classes, objects, enums, and type aliases belong to the **class namespace** of their enclosing class. They are not instance members and do not capture an outer instance.
+
+Resolution rules:
+- Qualified access (`Outer.Inner`) resolves to a class-namespace member at compile time.
+- Unqualified access inside `Outer` can resolve to nested declarations if not shadowed by locals/params.
+- Class-namespace members are never resolved via runtime name lookup; failures are compile-time errors.
+
+Enum lifting:
+- `enum E* { ... }` lifts entries into the enclosing class namespace (e.g., `Outer.Entry`).
+- Any ambiguity with existing class members is a compile-time error.
+
 ## Shadowing Rules
 Shadowing policy is configurable:
 - Locals may shadow parameters (allowed by default).

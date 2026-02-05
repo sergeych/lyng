@@ -3546,6 +3546,45 @@ class ScriptTest {
     }
 
     @Test
+    fun nestedTypesAndObjects() = runTest {
+        eval(
+            """
+                class A {
+                    class B(x?)
+                    object Inner { val foo = "bar" }
+                }
+
+                val ab = A.B()
+                assertEquals(ab.x, null)
+                assertEquals(A.Inner.foo, "bar")
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun liftedEnumEntries() = runTest {
+        eval(
+            """
+                class A {
+                    enum E* { One, Two }
+                }
+                assertEquals(A.One, A.E.One)
+                assertEquals(A.Two, A.E.Two)
+            """.trimIndent()
+        )
+        assertFailsWith<ScriptError> {
+            eval(
+                """
+                    class A {
+                        val One = 1
+                        enum E* { One, Two }
+                    }
+                """.trimIndent()
+            )
+        }
+    }
+
+    @Test
     fun enumSerializationTest() = runTest {
         eval(
             """

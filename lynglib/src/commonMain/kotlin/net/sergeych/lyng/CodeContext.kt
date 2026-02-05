@@ -31,6 +31,7 @@ sealed class CodeContext {
         var typeParamDecls: List<TypeDecl.TypeParam> = emptyList()
         val pendingInitializations = mutableMapOf<String, Pos>()
         val declaredMembers = mutableSetOf<String>()
+        val classScopeMembers = mutableSetOf<String>()
         val memberOverrides = mutableMapOf<String, Boolean>()
         val memberFieldIds = mutableMapOf<String, Int>()
         val memberMethodIds = mutableMapOf<String, Int>()

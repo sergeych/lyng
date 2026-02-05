@@ -20,6 +20,7 @@ package net.sergeych.lyng
 import net.sergeych.lyng.miniast.MiniTypeRef
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjList
+import net.sergeych.lyng.obj.ObjNull
 import net.sergeych.lyng.obj.ObjRecord
 
 /**
@@ -61,12 +62,20 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
                 }
             }
             if (!hasComplex) {
-                if (arguments.list.size != params.size)
+                if (arguments.list.size > params.size)
                     scope.raiseIllegalArgument("expected ${params.size} arguments, got ${arguments.list.size}")
+                if (arguments.list.size < params.size) {
+                    for (i in arguments.list.size until params.size) {
+                        val a = params[i]
+                        if (!a.type.isNullable) {
+                            scope.raiseIllegalArgument("expected ${params.size} arguments, got ${arguments.list.size}")
+                        }
+                    }
+                }
                 
                 for (i in params.indices) {
                     val a = params[i]
-                    val value = arguments.list[i]
+                    val value = if (i < arguments.list.size) arguments.list[i] else ObjNull
                     val recordType = if (declaringClass != null && a.accessType != null) {
                         ObjRecord.Type.ConstructorField
                     } else {
@@ -101,6 +110,11 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
                 declaringClass = declaringClass,
                 isTransient = a.isTransient
             )
+        }
+
+        suspend fun missingValue(a: Item, error: String): Obj {
+            return a.defaultValue?.execute(scope)
+                ?: if (a.type.isNullable) ObjNull else scope.raiseIllegalArgument(error)
         }
 
         // Prepare positional args and parameter count, handle tail-block binding
@@ -181,8 +195,7 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
                     assign(a, namedValues[i]!!)
                 } else {
                     val value = if (hp < callArgs.size) callArgs[hp++]
-                    else a.defaultValue?.execute(scope)
-                        ?: scope.raiseIllegalArgument("too few arguments for the call (missing ${a.name})")
+                    else missingValue(a, "too few arguments for the call (missing ${a.name})")
                     assign(a, value)
                 }
                 i++
@@ -202,8 +215,7 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
                     assign(a, namedValues[i]!!)
                 } else {
                     val value = if (tp >= headPosBound) callArgs[tp--]
-                    else a.defaultValue?.execute(scope)
-                        ?: scope.raiseIllegalArgument("too few arguments for the call")
+                    else missingValue(a, "too few arguments for the call")
                     assign(a, value)
                 }
                 i--

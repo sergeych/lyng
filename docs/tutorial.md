@@ -107,6 +107,23 @@ Singleton objects are declared using the `object` keyword. They define a class a
     
     Logger.log("Hello singleton!")
 
+## Nested Declarations (short)
+
+Classes, objects, and enums can be declared inside another class. They live in the class namespace (no outer instance capture), so you access them with a qualifier:
+
+    class A {
+        class B(x?)
+        object Inner { val foo = "bar" }
+        enum E* { One, Two }
+    }
+
+    val ab = A.B()
+    assertEquals(ab.x, null)
+    assertEquals(A.Inner.foo, "bar")
+    assertEquals(A.One, A.E.One)
+
+See [OOP notes](OOP.md#nested-declarations) for rules, visibility, and enum lifting details.
+
 ## Delegation (briefly)
 
 You can delegate properties and functions to other objects using the `by` keyword. This is perfect for patterns like `lazy` initialization.

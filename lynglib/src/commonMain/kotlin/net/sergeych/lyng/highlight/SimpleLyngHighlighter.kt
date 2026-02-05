@@ -242,6 +242,7 @@ private fun applyEnumConstantHeuristics(
             var j = i + 1
             // skip optional whitespace/newlines tokens are separate types, so we just check IDs and braces
             if (j < tokens.size && tokens[j].type == Type.ID) j++ else { i++; continue }
+            if (j < tokens.size && tokens[j].type == Type.STAR) j++
             if (j < tokens.size && tokens[j].type == Type.LBRACE) {
                 j++
                 while (j < tokens.size) {

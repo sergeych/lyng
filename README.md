@@ -25,6 +25,16 @@ Point(x:, y:).dist() //< 5
 fun swapEnds(first, args..., last, f) {
     f( last, ...args, first)
 } 
+
+class A {
+    class B(x?)
+    object Inner { val foo = "bar" }
+    enum E* { One, Two }
+}
+val ab = A.B()
+assertEquals(ab.x, null)
+assertEquals(A.Inner.foo, "bar")
+assertEquals(A.One, A.E.One)
 ```
 
 - extremely simple Kotlin integration on any platform (JVM, JS, WasmJS, Lunux, MacOS, iOS, Windows)

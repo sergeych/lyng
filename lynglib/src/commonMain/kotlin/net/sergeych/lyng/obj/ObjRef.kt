@@ -2134,6 +2134,50 @@ class ImplicitThisMemberRef(
 }
 
 /**
+ * Reference to a class-scope member in the nearest enclosing class context.
+ */
+class ClassScopeMemberRef(
+    val name: String,
+    private val atPos: Pos,
+    private val ownerClassName: String
+) : ObjRef {
+    internal fun ownerClassName(): String = ownerClassName
+    override fun forEachVariable(block: (String) -> Unit) {
+        block(name)
+    }
+
+    override fun forEachVariableWithPos(block: (String, Pos) -> Unit) {
+        block(name, atPos)
+    }
+
+    private fun resolveClass(scope: Scope): ObjClass {
+        scope.thisVariants.firstOrNull { it is ObjClass && it.className == ownerClassName }?.let {
+            return it as ObjClass
+        }
+        val cls = scope[ownerClassName]?.value as? ObjClass
+        if (cls != null) return cls
+        scope.raiseSymbolNotFound(ownerClassName)
+    }
+
+    override suspend fun get(scope: Scope): ObjRecord {
+        scope.pos = atPos
+        val cls = resolveClass(scope)
+        return cls.readField(scope, name)
+    }
+
+    override suspend fun evalValue(scope: Scope): Obj {
+        val rec = get(scope)
+        return scope.resolve(rec, name)
+    }
+
+    override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
+        scope.pos = atPos
+        val cls = resolveClass(scope)
+        cls.writeField(scope, name, newValue)
+    }
+}
+
+/**
  * Fast path for implicit member calls in class bodies: `foo(...)` resolves locals first,
  * then falls back to member lookup on `this`.
  */
