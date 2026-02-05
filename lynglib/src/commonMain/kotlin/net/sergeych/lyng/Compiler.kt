@@ -2641,8 +2641,31 @@ class Compiler(
                         access
                     }
 
+                    // Nullable shorthand: "x?" means Object? (or makes explicit type nullable)
+                    var nullableHint = false
+                    val nullableHintPos = cc.savePos()
+                    cc.skipWsTokens()
+                    if (cc.peekNextNonWhitespace().type == Token.Type.QUESTION) {
+                        cc.nextNonWhitespace()
+                        nullableHint = true
+                    } else {
+                        cc.restorePos(nullableHintPos)
+                    }
+
                     // type information (semantic + mini syntax)
-                    val (typeInfo, miniType) = parseTypeDeclarationWithMini()
+                    if (nullableHint) {
+                        val afterHint = cc.savePos()
+                        cc.skipWsTokens()
+                        if (cc.peekNextNonWhitespace().type == Token.Type.COLON) {
+                            throw ScriptError(t.pos, "nullable shorthand '?' cannot be combined with explicit type")
+                        }
+                        cc.restorePos(afterHint)
+                    }
+                    var (typeInfo, miniType) = parseTypeDeclarationWithMini()
+                    if (nullableHint) {
+                        typeInfo = makeTypeDeclNullable(typeInfo)
+                        miniType = miniType?.let { makeMiniTypeNullable(it) }
+                    }
 
                     var defaultValue: Statement? = null
                     cc.ifNextIs(Token.Type.ASSIGN) {
@@ -2711,6 +2734,31 @@ class Compiler(
 
     private fun parseTypeExpressionWithMini(): Pair<TypeDecl, MiniTypeRef> {
         return parseTypeUnionWithMini()
+    }
+
+    private fun makeTypeDeclNullable(type: TypeDecl): TypeDecl {
+        if (type.isNullable) return type
+        return when (type) {
+            TypeDecl.TypeAny -> TypeDecl.TypeNullableAny
+            TypeDecl.TypeNullableAny -> type
+            is TypeDecl.Function -> type.copy(nullable = true)
+            is TypeDecl.TypeVar -> type.copy(nullable = true)
+            is TypeDecl.Union -> type.copy(nullable = true)
+            is TypeDecl.Intersection -> type.copy(nullable = true)
+            is TypeDecl.Simple -> TypeDecl.Simple(type.name, true)
+            is TypeDecl.Generic -> TypeDecl.Generic(type.name, type.args, true)
+        }
+    }
+
+    private fun makeMiniTypeNullable(type: MiniTypeRef): MiniTypeRef {
+        return when (type) {
+            is MiniTypeName -> type.copy(nullable = true)
+            is MiniGenericType -> type.copy(nullable = true)
+            is MiniFunctionType -> type.copy(nullable = true)
+            is MiniTypeVar -> type.copy(nullable = true)
+            is MiniTypeUnion -> type.copy(nullable = true)
+            is MiniTypeIntersection -> type.copy(nullable = true)
+        }
     }
 
     private fun parseTypeUnionWithMini(): Pair<TypeDecl, MiniTypeRef> {

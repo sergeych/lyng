@@ -146,4 +146,24 @@ class TypesTest {
             println("Result: "+limit)
         """.trimIndent())
     }
+
+    @Test
+    fun testNullableHints() = runTest {
+        eval("""
+            // nullable, without type os Object?
+            class N(x=null)
+            assertEquals(null, N().x)
+            assertEquals("foo", N("foo").x)
+            // nullable shortcut (x?)is same as (var x: Object?)
+            class A(x?)
+            assertEquals(null, A(null).x)
+            assertEquals("ok", A("ok").x)
+            
+            // same in function: x? is a shortcut for (x: Object?)
+            fun f(x?) = x?.let { x + "!" }
+            assertEquals(null, f(null))
+            assertEquals("ok!", f("ok"))
+        """.trimIndent()
+        )
+    }
 }
