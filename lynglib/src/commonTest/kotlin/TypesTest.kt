@@ -240,6 +240,32 @@ class TypesTest {
     }
 
     @Test
+    fun testTypeAliases() = runTest {
+        eval("""
+            type Num = Int | Real
+            type AB = A & B
+            class A
+            class B
+            class C: A, B
+            val c = C()
+            assert( c is AB )
+            assert( 1 is Num )
+            assert( !(true is Num) )
+            val v: Num = 1.5
+            assert( v is Num )
+
+            type Maybe<T> = T?
+            fun f<T>(x: Maybe<T>) = x
+            assertEquals(null, f(null))
+            assertEquals(1, f(1))
+
+            type IntList<T: Int> = List<T>
+            fun accept<T: Int>(xs: IntList<T>) { }
+            accept([1,2,3])
+        """.trimIndent())
+    }
+
+    @Test
     fun multipleReceivers() = runTest {
         eval("""
             class R1(shared,r1="r1")

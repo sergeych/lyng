@@ -12,6 +12,7 @@
 - `void` is a singleton of class `Void` (syntax sugar for return type).
 - Object members are always allowed even on unknown types; non-Object members require explicit casts. Remove `inspect` from Object and use `toInspectString()` instead.
 - Type expression checks: `x is T` is value instance check; `T1 is T2` is type-subset; `A in T` means `A` is subset of `T`; `==` is structural type equality.
+- Type aliases: `type Name = TypeExpr` (generic allowed) expand to their underlying type expressions; no nominal distinctness.
 - Do not reintroduce bytecode fallback opcodes (e.g., `GET_NAME`, `EVAL_*`, `CALL_FALLBACK`) or runtime name-resolution fallbacks; all symbol resolution must stay compile-time only.
 
 ## Bytecode frame-first migration plan

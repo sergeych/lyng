@@ -129,6 +129,13 @@ class Compiler(
     private val nameObjClass: MutableMap<String, ObjClass> = mutableMapOf()
     private val slotTypeDeclByScopeId: MutableMap<Int, MutableMap<Int, TypeDecl>> = mutableMapOf()
     private val nameTypeDecl: MutableMap<String, TypeDecl> = mutableMapOf()
+    private data class TypeAliasDecl(
+        val name: String,
+        val typeParams: List<TypeDecl.TypeParam>,
+        val body: TypeDecl,
+        val pos: Pos
+    )
+    private val typeAliases: MutableMap<String, TypeAliasDecl> = mutableMapOf()
     private val methodReturnTypeDeclByRef: MutableMap<ObjRef, TypeDecl> = mutableMapOf()
     private val callableReturnTypeByScopeId: MutableMap<Int, MutableMap<Int, ObjClass>> = mutableMapOf()
     private val callableReturnTypeByName: MutableMap<String, ObjClass> = mutableMapOf()
@@ -556,6 +563,59 @@ class Compiler(
             }
         }
         return typeParams
+    }
+
+    private suspend fun parseTypeAliasDeclaration(): Statement {
+        if (codeContexts.lastOrNull() is CodeContext.ClassBody) {
+            throw ScriptError(cc.currentPos(), "type alias is not allowed in class body")
+        }
+        val nameToken = cc.requireToken(Token.Type.ID, "type alias name expected")
+        val name = nameToken.value
+        if (typeAliases.containsKey(name)) {
+            throw ScriptError(nameToken.pos, "type alias $name already declared")
+        }
+        if (resolveTypeDeclObjClass(TypeDecl.Simple(name, false)) != null) {
+            throw ScriptError(nameToken.pos, "type alias $name conflicts with existing class")
+        }
+        val typeParams = parseTypeParamList()
+        val uniqueParams = typeParams.map { it.name }.toSet()
+        if (uniqueParams.size != typeParams.size) {
+            throw ScriptError(nameToken.pos, "type alias $name has duplicate type parameters")
+        }
+        val typeParamNames = uniqueParams
+        if (typeParamNames.isNotEmpty()) pendingTypeParamStack.add(typeParamNames)
+        val body = try {
+            cc.skipWsTokens()
+            val eq = cc.nextNonWhitespace()
+            if (eq.type != Token.Type.ASSIGN) {
+                throw ScriptError(eq.pos, "type alias $name expects '='")
+            }
+            parseTypeExpressionWithMini().first
+        } finally {
+            if (typeParamNames.isNotEmpty()) pendingTypeParamStack.removeLast()
+        }
+        val alias = TypeAliasDecl(name, typeParams, body, nameToken.pos)
+        typeAliases[name] = alias
+        declareLocalName(name, isMutable = false)
+        resolutionSink?.declareSymbol(name, SymbolKind.LOCAL, isMutable = false, pos = nameToken.pos)
+        pendingDeclDoc = null
+
+        val aliasExpr = net.sergeych.lyng.obj.TypeDeclRef(body, nameToken.pos)
+        val initStmt = ExpressionStatement(aliasExpr, nameToken.pos)
+        val slotPlan = slotPlanStack.lastOrNull()
+        val slotIndex = slotPlan?.slots?.get(name)?.index
+        val scopeId = slotPlan?.id
+        return VarDeclStatement(
+            name = name,
+            isMutable = false,
+            visibility = Visibility.Public,
+            initializer = initStmt,
+            isTransient = false,
+            slotIndex = slotIndex,
+            scopeId = scopeId,
+            startPos = nameToken.pos,
+            initializerObjClass = null
+        )
     }
 
     private fun lookupSlotLocation(name: String, includeModule: Boolean = true): SlotLocation? {
@@ -2743,7 +2803,112 @@ class Compiler(
     }
 
     private fun parseTypeExpressionWithMini(): Pair<TypeDecl, MiniTypeRef> {
-        return parseTypeUnionWithMini()
+        val start = cc.currentPos()
+        val (decl, mini) = parseTypeUnionWithMini()
+        return expandTypeAliases(decl, start) to mini
+    }
+
+    private fun expandTypeAliases(type: TypeDecl, pos: Pos, seen: MutableSet<String> = mutableSetOf()): TypeDecl {
+        return when (type) {
+            is TypeDecl.Simple -> expandTypeAliasReference(type.name, emptyList(), type.isNullable, pos, seen) ?: type
+            is TypeDecl.Generic -> {
+                val expandedArgs = type.args.map { expandTypeAliases(it, pos, seen) }
+                expandTypeAliasReference(type.name, expandedArgs, type.isNullable, pos, seen)
+                    ?: TypeDecl.Generic(type.name, expandedArgs, type.isNullable)
+            }
+            is TypeDecl.Function -> {
+                val receiver = type.receiver?.let { expandTypeAliases(it, pos, seen) }
+                val params = type.params.map { expandTypeAliases(it, pos, seen) }
+                val ret = expandTypeAliases(type.returnType, pos, seen)
+                TypeDecl.Function(receiver, params, ret, type.nullable)
+            }
+            is TypeDecl.Union -> {
+                val options = type.options.map { expandTypeAliases(it, pos, seen) }
+                TypeDecl.Union(options, type.isNullable)
+            }
+            is TypeDecl.Intersection -> {
+                val options = type.options.map { expandTypeAliases(it, pos, seen) }
+                TypeDecl.Intersection(options, type.isNullable)
+            }
+            else -> type
+        }
+    }
+
+    private fun expandTypeAliasReference(
+        name: String,
+        args: List<TypeDecl>,
+        isNullable: Boolean,
+        pos: Pos,
+        seen: MutableSet<String>
+    ): TypeDecl? {
+        val alias = typeAliases[name] ?: typeAliases[name.substringAfterLast('.')] ?: return null
+        if (!seen.add(alias.name)) throw ScriptError(pos, "circular type alias: ${alias.name}")
+        val bindings = buildTypeAliasBindings(alias, args, pos)
+        val substituted = substituteTypeAliasTypeVars(alias.body, bindings)
+        val expanded = expandTypeAliases(substituted, pos, seen)
+        seen.remove(alias.name)
+        return if (isNullable) makeTypeDeclNullable(expanded) else expanded
+    }
+
+    private fun buildTypeAliasBindings(
+        alias: TypeAliasDecl,
+        args: List<TypeDecl>,
+        pos: Pos
+    ): Map<String, TypeDecl> {
+        val params = alias.typeParams
+        val resolvedArgs = if (args.size >= params.size) {
+            if (args.size > params.size) {
+                throw ScriptError(pos, "type alias ${alias.name} expects ${params.size} type arguments")
+            }
+            args.toMutableList()
+        } else {
+            val filled = args.toMutableList()
+            for (param in params.drop(args.size)) {
+                val fallback = param.defaultType
+                    ?: throw ScriptError(pos, "type alias ${alias.name} expects ${params.size} type arguments")
+                filled.add(fallback)
+            }
+            filled
+        }
+        val bindings = mutableMapOf<String, TypeDecl>()
+        for ((index, param) in params.withIndex()) {
+            val arg = resolvedArgs[index]
+            val bound = param.bound
+            if (bound != null && arg !is TypeDecl.TypeVar && !typeDeclSatisfiesBound(arg, bound)) {
+                throw ScriptError(pos, "type alias ${alias.name} type argument ${param.name} does not satisfy bound")
+            }
+            bindings[param.name] = arg
+        }
+        return bindings
+    }
+
+    private fun substituteTypeAliasTypeVars(type: TypeDecl, bindings: Map<String, TypeDecl>): TypeDecl {
+        return when (type) {
+            is TypeDecl.TypeVar -> {
+                val bound = bindings[type.name] ?: return type
+                if (type.isNullable) makeTypeDeclNullable(bound) else bound
+            }
+            is TypeDecl.Simple -> type
+            is TypeDecl.Generic -> {
+                val args = type.args.map { substituteTypeAliasTypeVars(it, bindings) }
+                TypeDecl.Generic(type.name, args, type.isNullable)
+            }
+            is TypeDecl.Function -> {
+                val receiver = type.receiver?.let { substituteTypeAliasTypeVars(it, bindings) }
+                val params = type.params.map { substituteTypeAliasTypeVars(it, bindings) }
+                val ret = substituteTypeAliasTypeVars(type.returnType, bindings)
+                TypeDecl.Function(receiver, params, ret, type.nullable)
+            }
+            is TypeDecl.Union -> {
+                val options = type.options.map { substituteTypeAliasTypeVars(it, bindings) }
+                TypeDecl.Union(options, type.isNullable)
+            }
+            is TypeDecl.Intersection -> {
+                val options = type.options.map { substituteTypeAliasTypeVars(it, bindings) }
+                TypeDecl.Intersection(options, type.isNullable)
+            }
+            else -> type
+        }
     }
 
     private fun makeTypeDeclNullable(type: TypeDecl): TypeDecl {
@@ -4497,6 +4662,12 @@ class Compiler(
             pendingDeclStart = id.pos
             pendingDeclDoc = consumePendingDoc()
             parseEnumDeclaration()
+        }
+
+        "type" -> {
+            pendingDeclStart = id.pos
+            pendingDeclDoc = consumePendingDoc()
+            parseTypeAliasDeclaration()
         }
 
         "try" -> parseTryStatement()

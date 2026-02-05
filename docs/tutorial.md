@@ -467,6 +467,13 @@ It cannot be combined with an explicit type annotation.
     class A(x?) { ... }     // x: Object?
     fun f(x?) { x == null } // x: Object?
 
+Type aliases name type expressions and can be generic:
+
+    type Num = Int | Real
+    type Maybe<T> = T?
+
+Aliases expand to their underlying type expressions. See `docs/generics.md` for details.
+
 `void` is a singleton value of the class `Void`. `Void` can be used as an explicit return type:
 
     fun log(msg): Void { println(msg); void }
@@ -502,6 +509,8 @@ Empty list/map literals default to `List<Object>` and `Map<Object,Object>` until
 
     val xs = []             // List<Object>
     val ys: List<Int> = []  // List<Int>
+
+Map literals infer key/value types from entries; named keys are `String`. See `docs/generics.md` for details.
 
 ## Flow analysis
 

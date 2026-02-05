@@ -106,6 +106,11 @@ fun x10(x: Int & String) {
 ```
 but in fact some strange programmer can create `class T: String, Int` so we won't check it for sanity, except that we certainly disallow <T: Void &...> 
 
+Type aliases:
+- `type Name = TypeExpr`
+- can be generic: `type Maybe<T> = T?`
+- aliases expand to their underlying type expressions (no nominal distinctness).
+
 Instead of template expansions, we might provide explicit `inline` later.
 
 Notes and open questions to answer in this spec:

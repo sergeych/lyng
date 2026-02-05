@@ -32,6 +32,20 @@ Generic types are invariant by default. You can specify declaration-site varianc
 
 `out` makes the type covariant (produced), `in` makes it contravariant (consumed).
 
+# Type aliases
+
+Type aliases name type expressions (including unions/intersections):
+
+    type Num = Int | Real
+    type AB = A & B
+
+Aliases can be generic and can use bounds and defaults:
+
+    type Maybe<T> = T?
+    type IntList<T: Int> = List<T>
+
+Aliases expand to their underlying type expressions. They can be used anywhere a type expression is expected.
+
 # Inference rules
 
 - Literals set obvious types (`1` is `Int`, `1.0` is `Real`, etc.).
