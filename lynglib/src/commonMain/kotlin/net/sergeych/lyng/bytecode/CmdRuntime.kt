@@ -871,14 +871,21 @@ class CmdAddObj(internal val a: Int, internal val b: Int, internal val dst: Int)
                 frame.setInt(dst, frame.frame.getInt(la) + frame.frame.getInt(lb))
                 return
             }
-            if (ta == SlotType.REAL.code || tb == SlotType.REAL.code) {
+            val aNumeric = ta == SlotType.INT.code || ta == SlotType.REAL.code
+            val bNumeric = tb == SlotType.INT.code || tb == SlotType.REAL.code
+            if (aNumeric && bNumeric && (ta == SlotType.REAL.code || tb == SlotType.REAL.code)) {
                 val av = if (ta == SlotType.REAL.code) frame.frame.getReal(la) else frame.frame.getInt(la).toDouble()
                 val bv = if (tb == SlotType.REAL.code) frame.frame.getReal(lb) else frame.frame.getInt(lb).toDouble()
                 frame.setReal(dst, av + bv)
                 return
             }
         }
-        frame.setObj(dst, frame.slotToObj(a).plus(frame.ensureScope(), frame.slotToObj(b)))
+        val result = frame.slotToObj(a).plus(frame.ensureScope(), frame.slotToObj(b))
+        when (result) {
+            is ObjInt -> frame.setInt(dst, result.value)
+            is ObjReal -> frame.setReal(dst, result.value)
+            else -> frame.setObj(dst, result)
+        }
         return
     }
 }
@@ -895,14 +902,21 @@ class CmdSubObj(internal val a: Int, internal val b: Int, internal val dst: Int)
                 frame.setInt(dst, frame.frame.getInt(la) - frame.frame.getInt(lb))
                 return
             }
-            if (ta == SlotType.REAL.code || tb == SlotType.REAL.code) {
+            val aNumeric = ta == SlotType.INT.code || ta == SlotType.REAL.code
+            val bNumeric = tb == SlotType.INT.code || tb == SlotType.REAL.code
+            if (aNumeric && bNumeric && (ta == SlotType.REAL.code || tb == SlotType.REAL.code)) {
                 val av = if (ta == SlotType.REAL.code) frame.frame.getReal(la) else frame.frame.getInt(la).toDouble()
                 val bv = if (tb == SlotType.REAL.code) frame.frame.getReal(lb) else frame.frame.getInt(lb).toDouble()
                 frame.setReal(dst, av - bv)
                 return
             }
         }
-        frame.setObj(dst, frame.slotToObj(a).minus(frame.ensureScope(), frame.slotToObj(b)))
+        val result = frame.slotToObj(a).minus(frame.ensureScope(), frame.slotToObj(b))
+        when (result) {
+            is ObjInt -> frame.setInt(dst, result.value)
+            is ObjReal -> frame.setReal(dst, result.value)
+            else -> frame.setObj(dst, result)
+        }
         return
     }
 }
@@ -919,14 +933,21 @@ class CmdMulObj(internal val a: Int, internal val b: Int, internal val dst: Int)
                 frame.setInt(dst, frame.frame.getInt(la) * frame.frame.getInt(lb))
                 return
             }
-            if (ta == SlotType.REAL.code || tb == SlotType.REAL.code) {
+            val aNumeric = ta == SlotType.INT.code || ta == SlotType.REAL.code
+            val bNumeric = tb == SlotType.INT.code || tb == SlotType.REAL.code
+            if (aNumeric && bNumeric && (ta == SlotType.REAL.code || tb == SlotType.REAL.code)) {
                 val av = if (ta == SlotType.REAL.code) frame.frame.getReal(la) else frame.frame.getInt(la).toDouble()
                 val bv = if (tb == SlotType.REAL.code) frame.frame.getReal(lb) else frame.frame.getInt(lb).toDouble()
                 frame.setReal(dst, av * bv)
                 return
             }
         }
-        frame.setObj(dst, frame.slotToObj(a).mul(frame.ensureScope(), frame.slotToObj(b)))
+        val result = frame.slotToObj(a).mul(frame.ensureScope(), frame.slotToObj(b))
+        when (result) {
+            is ObjInt -> frame.setInt(dst, result.value)
+            is ObjReal -> frame.setReal(dst, result.value)
+            else -> frame.setObj(dst, result)
+        }
         return
     }
 }
@@ -943,14 +964,21 @@ class CmdDivObj(internal val a: Int, internal val b: Int, internal val dst: Int)
                 frame.setInt(dst, frame.frame.getInt(la) / frame.frame.getInt(lb))
                 return
             }
-            if (ta == SlotType.REAL.code || tb == SlotType.REAL.code) {
+            val aNumeric = ta == SlotType.INT.code || ta == SlotType.REAL.code
+            val bNumeric = tb == SlotType.INT.code || tb == SlotType.REAL.code
+            if (aNumeric && bNumeric && (ta == SlotType.REAL.code || tb == SlotType.REAL.code)) {
                 val av = if (ta == SlotType.REAL.code) frame.frame.getReal(la) else frame.frame.getInt(la).toDouble()
                 val bv = if (tb == SlotType.REAL.code) frame.frame.getReal(lb) else frame.frame.getInt(lb).toDouble()
                 frame.setReal(dst, av / bv)
                 return
             }
         }
-        frame.setObj(dst, frame.slotToObj(a).div(frame.ensureScope(), frame.slotToObj(b)))
+        val result = frame.slotToObj(a).div(frame.ensureScope(), frame.slotToObj(b))
+        when (result) {
+            is ObjInt -> frame.setInt(dst, result.value)
+            is ObjReal -> frame.setReal(dst, result.value)
+            else -> frame.setObj(dst, result)
+        }
         return
     }
 }
@@ -967,14 +995,21 @@ class CmdModObj(internal val a: Int, internal val b: Int, internal val dst: Int)
                 frame.setInt(dst, frame.frame.getInt(la) % frame.frame.getInt(lb))
                 return
             }
-            if (ta == SlotType.REAL.code || tb == SlotType.REAL.code) {
+            val aNumeric = ta == SlotType.INT.code || ta == SlotType.REAL.code
+            val bNumeric = tb == SlotType.INT.code || tb == SlotType.REAL.code
+            if (aNumeric && bNumeric && (ta == SlotType.REAL.code || tb == SlotType.REAL.code)) {
                 val av = if (ta == SlotType.REAL.code) frame.frame.getReal(la) else frame.frame.getInt(la).toDouble()
                 val bv = if (tb == SlotType.REAL.code) frame.frame.getReal(lb) else frame.frame.getInt(lb).toDouble()
                 frame.setReal(dst, av % bv)
                 return
             }
         }
-        frame.setObj(dst, frame.slotToObj(a).mod(frame.ensureScope(), frame.slotToObj(b)))
+        val result = frame.slotToObj(a).mod(frame.ensureScope(), frame.slotToObj(b))
+        when (result) {
+            is ObjInt -> frame.setInt(dst, result.value)
+            is ObjReal -> frame.setReal(dst, result.value)
+            else -> frame.setObj(dst, result)
+        }
         return
     }
 }

@@ -96,4 +96,54 @@ class TypesTest {
             assertNotEquals(Point(0,1), p3)
         """.trimIndent())
     }
+
+    @Test
+    fun testNumericInference() = runTest {
+        eval("""
+            val x = 1
+            var y = 2.0
+            assert( x is Int )
+            assert( y is Real )
+            assert( x + y is Real )
+            assert( abs(x+y) is Real )
+            assert( abs(x/y) is Real )
+        """.trimIndent())
+    }
+    @Test
+    fun testNumericInferenceBug1() = runTest {
+        eval("""
+            fun findSumLimit(f) {
+                var sum = 0.0
+                for( n in 1..100 ) {
+                    val s0 = sum
+                    sum += f(n)
+                    assert( sum is Real )
+                    assert( s0 is Real )
+                    val delta = abs(sum - s0) / abs(sum)
+                    assert( delta is Real )
+                    println("abs(%g - %g) = %g"(sum, s0, abs(sum-s0)))
+                    if( s0 != 0 )
+                        assert( abs(sum-s0) < abs(sum) )
+                    println("abs(%g) = %g"(sum, abs(sum)))
+                    println( "delta calc: %g"(delta) )
+//                    if( n > 3 ) assert( delta < 1.0 )
+                    if( delta < 1.0e-4 ) {
+                        println("limit reached after "+n+" rounds")
+                        break sum
+                    }
+                    else
+                        println("%g, delta=%g"(sum, delta))
+                    n++
+                }
+                else {
+                    println("limit not reached")
+                    null
+                }
+            }
+            
+            val limit = findSumLimit { n -> 1.0/n/n }
+            assert( limit != null )
+            println("Result: "+limit)
+        """.trimIndent())
+    }
 }
