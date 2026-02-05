@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Sergey S. Chernov
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,17 +12,19 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 package net.sergeych.lyng.bytecode
 
+import net.sergeych.lyng.FrameAccess
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjNull
 
 class BytecodeFrame(
     val localCount: Int,
     val argCount: Int,
-) {
+) : FrameAccess {
     val slotCount: Int = localCount + argCount
     val argBase: Int = localCount
 
@@ -33,31 +35,31 @@ class BytecodeFrame(
     private val boolSlots: BooleanArray = BooleanArray(slotCount)
 
     fun getSlotType(slot: Int): SlotType = SlotType.values().first { it.code == slotTypes[slot] }
-    fun getSlotTypeCode(slot: Int): Byte = slotTypes[slot]
+    override fun getSlotTypeCode(slot: Int): Byte = slotTypes[slot]
     fun setSlotType(slot: Int, type: SlotType) {
         slotTypes[slot] = type.code
     }
 
-    fun getObj(slot: Int): Obj = objSlots[slot] ?: ObjNull
-    fun setObj(slot: Int, value: Obj) {
+    override fun getObj(slot: Int): Obj = objSlots[slot] ?: ObjNull
+    override fun setObj(slot: Int, value: Obj) {
         objSlots[slot] = value
         slotTypes[slot] = SlotType.OBJ.code
     }
 
-    fun getInt(slot: Int): Long = intSlots[slot]
-    fun setInt(slot: Int, value: Long) {
+    override fun getInt(slot: Int): Long = intSlots[slot]
+    override fun setInt(slot: Int, value: Long) {
         intSlots[slot] = value
         slotTypes[slot] = SlotType.INT.code
     }
 
-    fun getReal(slot: Int): Double = realSlots[slot]
-    fun setReal(slot: Int, value: Double) {
+    override fun getReal(slot: Int): Double = realSlots[slot]
+    override fun setReal(slot: Int, value: Double) {
         realSlots[slot] = value
         slotTypes[slot] = SlotType.REAL.code
     }
 
-    fun getBool(slot: Int): Boolean = boolSlots[slot]
-    fun setBool(slot: Int, value: Boolean) {
+    override fun getBool(slot: Int): Boolean = boolSlots[slot]
+    override fun setBool(slot: Int, value: Boolean) {
         boolSlots[slot] = value
         slotTypes[slot] = SlotType.BOOL.code
     }

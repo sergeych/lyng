@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Sergey S. Chernov
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 package net.sergeych.lyng.bytecode
@@ -27,9 +28,11 @@ class CmdBuilder {
     data class Instr(val op: Opcode, val operands: List<Operand>)
 
     private val instructions = mutableListOf<Instr>()
+    private val posByInstr = mutableListOf<net.sergeych.lyng.Pos?>()
     private val constPool = mutableListOf<BytecodeConst>()
     private val labelPositions = mutableMapOf<Label, Int>()
     private var nextLabelId = 0
+    private var currentPos: net.sergeych.lyng.Pos? = null
 
     fun addConst(c: BytecodeConst): Int {
         constPool += c
@@ -38,10 +41,16 @@ class CmdBuilder {
 
     fun emit(op: Opcode, vararg operands: Int) {
         instructions += Instr(op, operands.map { Operand.IntVal(it) })
+        posByInstr += currentPos
     }
 
     fun emit(op: Opcode, operands: List<Operand>) {
         instructions += Instr(op, operands)
+        posByInstr += currentPos
+    }
+
+    fun setPos(pos: net.sergeych.lyng.Pos?) {
+        currentPos = pos
     }
 
     fun label(): Label = Label(nextLabelId++)
@@ -103,7 +112,8 @@ class CmdBuilder {
             localSlotNames = localSlotNames,
             localSlotMutables = localSlotMutables,
             constants = constPool.toList(),
-            cmds = cmds.toTypedArray()
+            cmds = cmds.toTypedArray(),
+            posByIp = posByInstr.toTypedArray()
         )
     }
 

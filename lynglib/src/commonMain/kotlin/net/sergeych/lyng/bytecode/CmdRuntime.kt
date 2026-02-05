@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Sergey S. Chernov
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,17 +12,12 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 package net.sergeych.lyng.bytecode
 
-import net.sergeych.lyng.Arguments
-import net.sergeych.lyng.ModuleScope
-import net.sergeych.lyng.PerfFlags
-import net.sergeych.lyng.Pos
-import net.sergeych.lyng.ReturnException
-import net.sergeych.lyng.Scope
-import net.sergeych.lyng.Statement
+import net.sergeych.lyng.*
 import net.sergeych.lyng.obj.*
 
 class CmdVm {
@@ -152,7 +147,7 @@ class CmdConstBool(internal val constId: Int, internal val dst: Int) : Cmd() {
 
 class CmdLoadThis(internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setObj(dst, frame.scope.thisObj)
+        frame.setObj(dst, frame.ensureScope().thisObj)
         return
     }
 }
@@ -165,8 +160,8 @@ class CmdLoadThisVariant(
         val typeConst = frame.fn.constants.getOrNull(typeId) as? BytecodeConst.StringVal
             ?: error("LOAD_THIS_VARIANT expects StringVal at $typeId")
         val typeName = typeConst.value
-        val receiver = frame.scope.thisVariants.firstOrNull { it.isInstanceOf(typeName) }
-            ?: frame.scope.raiseClassCastError("Cannot cast ${frame.scope.thisObj.objClass.className} to $typeName")
+        val receiver = frame.ensureScope().thisVariants.firstOrNull { it.isInstanceOf(typeName) }
+            ?: frame.ensureScope().raiseClassCastError("Cannot cast ${frame.ensureScope().thisObj.objClass.className} to $typeName")
         frame.setObj(dst, receiver)
         return
     }
@@ -222,11 +217,11 @@ class CmdAssertIs(internal val objSlot: Int, internal val typeSlot: Int) : Cmd()
     override suspend fun perform(frame: CmdFrame) {
         val obj = frame.slotToObj(objSlot)
         val typeObj = frame.slotToObj(typeSlot)
-        val clazz = typeObj as? ObjClass ?: frame.scope.raiseClassCastError(
-            "${typeObj.inspect(frame.scope)} is not the class instance"
+        val clazz = typeObj as? ObjClass ?: frame.ensureScope().raiseClassCastError(
+            "${typeObj.inspect(frame.ensureScope())} is not the class instance"
         )
         if (!obj.isInstanceOf(clazz)) {
-            frame.scope.raiseClassCastError("expected ${clazz.className}, got ${obj.objClass.className}")
+            frame.ensureScope().raiseClassCastError("expected ${clazz.className}, got ${obj.objClass.className}")
         }
         return
     }
@@ -240,8 +235,8 @@ class CmdMakeQualifiedView(
     override suspend fun perform(frame: CmdFrame) {
         val obj0 = frame.slotToObj(objSlot)
         val typeObj = frame.slotToObj(typeSlot)
-        val clazz = typeObj as? ObjClass ?: frame.scope.raiseClassCastError(
-            "${typeObj.inspect(frame.scope)} is not the class instance"
+        val clazz = typeObj as? ObjClass ?: frame.ensureScope().raiseClassCastError(
+            "${typeObj.inspect(frame.ensureScope())} is not the class instance"
         )
         val base = when (obj0) {
             is ObjQualifiedView -> obj0.instance
@@ -787,7 +782,7 @@ class CmdCmpEqObj(internal val a: Int, internal val b: Int, internal val dst: In
     override suspend fun perform(frame: CmdFrame) {
         val left = frame.slotToObj(a)
         val right = frame.slotToObj(b)
-        frame.setBool(dst, left.equals(frame.scope, right))
+        frame.setBool(dst, left.equals(frame.ensureScope(), right))
         return
     }
 }
@@ -796,7 +791,7 @@ class CmdCmpNeqObj(internal val a: Int, internal val b: Int, internal val dst: I
     override suspend fun perform(frame: CmdFrame) {
         val left = frame.slotToObj(a)
         val right = frame.slotToObj(b)
-        frame.setBool(dst, !left.equals(frame.scope, right))
+        frame.setBool(dst, !left.equals(frame.ensureScope(), right))
         return
     }
 }
@@ -838,28 +833,28 @@ class CmdOrBool(internal val a: Int, internal val b: Int, internal val dst: Int)
 
 class CmdCmpLtObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setBool(dst, frame.slotToObj(a).compareTo(frame.scope, frame.slotToObj(b)) < 0)
+        frame.setBool(dst, frame.slotToObj(a).compareTo(frame.ensureScope(), frame.slotToObj(b)) < 0)
         return
     }
 }
 
 class CmdCmpLteObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setBool(dst, frame.slotToObj(a).compareTo(frame.scope, frame.slotToObj(b)) <= 0)
+        frame.setBool(dst, frame.slotToObj(a).compareTo(frame.ensureScope(), frame.slotToObj(b)) <= 0)
         return
     }
 }
 
 class CmdCmpGtObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setBool(dst, frame.slotToObj(a).compareTo(frame.scope, frame.slotToObj(b)) > 0)
+        frame.setBool(dst, frame.slotToObj(a).compareTo(frame.ensureScope(), frame.slotToObj(b)) > 0)
         return
     }
 }
 
 class CmdCmpGteObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setBool(dst, frame.slotToObj(a).compareTo(frame.scope, frame.slotToObj(b)) >= 0)
+        frame.setBool(dst, frame.slotToObj(a).compareTo(frame.ensureScope(), frame.slotToObj(b)) >= 0)
         return
     }
 }
@@ -883,7 +878,7 @@ class CmdAddObj(internal val a: Int, internal val b: Int, internal val dst: Int)
                 return
             }
         }
-        frame.setObj(dst, frame.slotToObj(a).plus(frame.scope, frame.slotToObj(b)))
+        frame.setObj(dst, frame.slotToObj(a).plus(frame.ensureScope(), frame.slotToObj(b)))
         return
     }
 }
@@ -907,7 +902,7 @@ class CmdSubObj(internal val a: Int, internal val b: Int, internal val dst: Int)
                 return
             }
         }
-        frame.setObj(dst, frame.slotToObj(a).minus(frame.scope, frame.slotToObj(b)))
+        frame.setObj(dst, frame.slotToObj(a).minus(frame.ensureScope(), frame.slotToObj(b)))
         return
     }
 }
@@ -931,7 +926,7 @@ class CmdMulObj(internal val a: Int, internal val b: Int, internal val dst: Int)
                 return
             }
         }
-        frame.setObj(dst, frame.slotToObj(a).mul(frame.scope, frame.slotToObj(b)))
+        frame.setObj(dst, frame.slotToObj(a).mul(frame.ensureScope(), frame.slotToObj(b)))
         return
     }
 }
@@ -955,7 +950,7 @@ class CmdDivObj(internal val a: Int, internal val b: Int, internal val dst: Int)
                 return
             }
         }
-        frame.setObj(dst, frame.slotToObj(a).div(frame.scope, frame.slotToObj(b)))
+        frame.setObj(dst, frame.slotToObj(a).div(frame.ensureScope(), frame.slotToObj(b)))
         return
     }
 }
@@ -979,14 +974,14 @@ class CmdModObj(internal val a: Int, internal val b: Int, internal val dst: Int)
                 return
             }
         }
-        frame.setObj(dst, frame.slotToObj(a).mod(frame.scope, frame.slotToObj(b)))
+        frame.setObj(dst, frame.slotToObj(a).mod(frame.ensureScope(), frame.slotToObj(b)))
         return
     }
 }
 
 class CmdContainsObj(internal val target: Int, internal val value: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setBool(dst, frame.slotToObj(target).contains(frame.scope, frame.slotToObj(value)))
+        frame.setBool(dst, frame.slotToObj(target).contains(frame.ensureScope(), frame.slotToObj(value)))
         return
     }
 }
@@ -1002,17 +997,17 @@ class CmdAssignOpObj(
         val target = frame.slotToObj(targetSlot)
         val value = frame.slotToObj(valueSlot)
         val result = when (BinOp.values().getOrNull(opId)) {
-            BinOp.PLUS -> target.plusAssign(frame.scope, value)
-            BinOp.MINUS -> target.minusAssign(frame.scope, value)
-            BinOp.STAR -> target.mulAssign(frame.scope, value)
-            BinOp.SLASH -> target.divAssign(frame.scope, value)
-            BinOp.PERCENT -> target.modAssign(frame.scope, value)
+            BinOp.PLUS -> target.plusAssign(frame.ensureScope(), value)
+            BinOp.MINUS -> target.minusAssign(frame.ensureScope(), value)
+            BinOp.STAR -> target.mulAssign(frame.ensureScope(), value)
+            BinOp.SLASH -> target.divAssign(frame.ensureScope(), value)
+            BinOp.PERCENT -> target.modAssign(frame.ensureScope(), value)
             else -> null
         }
         if (result == null) {
             val name = (frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal)?.value
-            if (name != null) frame.scope.raiseIllegalAssignment("symbol is readonly: $name")
-            frame.scope.raiseIllegalAssignment("symbol is readonly")
+            if (name != null) frame.ensureScope().raiseIllegalAssignment("symbol is readonly: $name")
+            frame.ensureScope().raiseIllegalAssignment("symbol is readonly")
         }
         frame.storeObjResult(dst, result)
         return
@@ -1118,7 +1113,7 @@ class CmdDeclLocal(internal val constId: Int, internal val slot: Int) : Cmd() {
         val decl = frame.fn.constants[constId] as? BytecodeConst.LocalDecl
             ?: error("DECL_LOCAL expects LocalDecl at $constId")
         val value = frame.slotToObj(slot).byValueCopy()
-        frame.scope.addItem(
+        frame.ensureScope().addItem(
             decl.name,
             decl.isMutable,
             value,
@@ -1134,12 +1129,12 @@ class CmdDeclExtProperty(internal val constId: Int, internal val slot: Int) : Cm
     override suspend fun perform(frame: CmdFrame) {
         val decl = frame.fn.constants[constId] as? BytecodeConst.ExtensionPropertyDecl
             ?: error("DECL_EXT_PROPERTY expects ExtensionPropertyDecl at $constId")
-        val type = frame.scope[decl.extTypeName]?.value
-            ?: frame.scope.raiseSymbolNotFound("class ${decl.extTypeName} not found")
+        val type = frame.ensureScope()[decl.extTypeName]?.value
+            ?: frame.ensureScope().raiseSymbolNotFound("class ${decl.extTypeName} not found")
         if (type !is ObjClass) {
-            frame.scope.raiseClassCastError("${decl.extTypeName} is not the class instance")
+            frame.ensureScope().raiseClassCastError("${decl.extTypeName} is not the class instance")
         }
-        frame.scope.addExtension(
+        frame.ensureScope().addExtension(
             type,
             decl.property.name,
             ObjRecord(
@@ -1164,16 +1159,16 @@ class CmdCallDirect(
 ) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncFrameToScope()
+            frame.syncFrameToScope(useRefs = true)
         }
         val ref = frame.fn.constants.getOrNull(id) as? BytecodeConst.ObjRef
             ?: error("CALL_DIRECT expects ObjRef at $id")
         val callee = ref.value
         val args = frame.buildArguments(argBase, argCount)
         val result = if (PerfFlags.SCOPE_POOL) {
-            frame.scope.withChildFrame(args) { child -> callee.callOn(child) }
+            frame.ensureScope().withChildFrame(args) { child -> callee.callOn(child) }
         } else {
-            callee.callOn(frame.scope.createChildScope(frame.scope.pos, args = args))
+            callee.callOn(frame.ensureScope().createChildScope(frame.ensureScope().pos, args = args))
         }
         if (frame.fn.localSlotNames.isNotEmpty()) {
             frame.syncScopeToFrame()
@@ -1191,7 +1186,7 @@ class CmdCallSlot(
 ) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncFrameToScope()
+            frame.syncFrameToScope(useRefs = true)
         }
         val callee = frame.slotToObj(calleeSlot)
         if (callee === ObjUnset) {
@@ -1203,15 +1198,15 @@ class CmdCallSlot(
             }
             val message = name?.let { "property '$it' is unset (not initialized)" }
                 ?: "property is unset (not initialized) in ${frame.fn.name} at slot $calleeSlot"
-            frame.scope.raiseUnset(message)
+            frame.ensureScope().raiseUnset(message)
         }
         val args = frame.buildArguments(argBase, argCount)
         val canPool = PerfFlags.SCOPE_POOL && callee !is Statement
         val result = if (canPool) {
-            frame.scope.withChildFrame(args) { child -> callee.callOn(child) }
+            frame.ensureScope().withChildFrame(args) { child -> callee.callOn(child) }
         } else {
             // Pooling for Statement-based callables (lambdas) can still alter closure semantics; keep safe path for now.
-            callee.callOn(frame.scope.createChildScope(frame.scope.pos, args = args))
+            callee.callOn(frame.ensureScope().createChildScope(frame.ensureScope().pos, args = args))
         }
         if (frame.fn.localSlotNames.isNotEmpty()) {
             frame.syncScopeToFrame()
@@ -1239,7 +1234,7 @@ class CmdListLiteral(
                         list.ensureCapacity(list.size + value.list.size)
                         list.addAll(value.list)
                     }
-                    else -> frame.scope.raiseError("Spread element must be list")
+                    else -> frame.ensureScope().raiseError("Spread element must be list")
                 }
             } else {
                 list.add(value)
@@ -1266,14 +1261,14 @@ class CmdGetMemberSlot(
             if (methodId >= 0) {
                 inst?.methodRecordForId(methodId) ?: receiver.objClass.methodRecordForId(methodId)
             } else null
-        } ?: frame.scope.raiseSymbolNotFound("member")
+        } ?: frame.ensureScope().raiseSymbolNotFound("member")
         val name = rec.memberName ?: "<member>"
         if (receiver is ObjQualifiedView) {
-            val resolved = receiver.readField(frame.scope, name)
+            val resolved = receiver.readField(frame.ensureScope(), name)
             frame.storeObjResult(dst, resolved.value)
             return
         }
-        val resolved = receiver.resolveRecord(frame.scope, rec, name, rec.declaringClass)
+        val resolved = receiver.resolveRecord(frame.ensureScope(), rec, name, rec.declaringClass)
         frame.storeObjResult(dst, resolved.value)
         return
     }
@@ -1295,13 +1290,13 @@ class CmdSetMemberSlot(
             if (methodId >= 0) {
                 inst?.methodRecordForId(methodId) ?: receiver.objClass.methodRecordForId(methodId)
             } else null
-        } ?: frame.scope.raiseSymbolNotFound("member")
+        } ?: frame.ensureScope().raiseSymbolNotFound("member")
         val name = rec.memberName ?: "<member>"
         if (receiver is ObjQualifiedView) {
-            receiver.writeField(frame.scope, name, frame.slotToObj(valueSlot))
+            receiver.writeField(frame.ensureScope(), name, frame.slotToObj(valueSlot))
             return
         }
-        frame.scope.assign(rec, name, frame.slotToObj(valueSlot))
+        frame.ensureScope().assign(rec, name, frame.slotToObj(valueSlot))
         return
     }
 }
@@ -1315,17 +1310,17 @@ class CmdCallMemberSlot(
 ) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncFrameToScope()
+            frame.syncFrameToScope(useRefs = true)
         }
         val receiver = frame.slotToObj(recvSlot)
         val inst = receiver as? ObjInstance
         val rec = inst?.methodRecordForId(methodId)
             ?: receiver.objClass.methodRecordForId(methodId)
-            ?: frame.scope.raiseError("member id $methodId not found on ${receiver.objClass.className}")
+            ?: frame.ensureScope().raiseError("member id $methodId not found on ${receiver.objClass.className}")
         val callArgs = frame.buildArguments(argBase, argCount)
         val name = rec.memberName ?: "<member>"
         if (receiver is ObjQualifiedView) {
-            val result = receiver.invokeInstanceMethod(frame.scope, name, callArgs)
+            val result = receiver.invokeInstanceMethod(frame.ensureScope(), name, callArgs)
             if (frame.fn.localSlotNames.isNotEmpty()) {
                 frame.syncScopeToFrame()
             }
@@ -1335,14 +1330,14 @@ class CmdCallMemberSlot(
         val decl = rec.declaringClass ?: receiver.objClass
         val result = when (rec.type) {
             ObjRecord.Type.Property -> {
-                if (callArgs.isEmpty()) (rec.value as ObjProperty).callGetter(frame.scope, receiver, decl)
-                else frame.scope.raiseError("property $name cannot be called with arguments")
+                if (callArgs.isEmpty()) (rec.value as ObjProperty).callGetter(frame.ensureScope(), receiver, decl)
+                else frame.ensureScope().raiseError("property $name cannot be called with arguments")
             }
             ObjRecord.Type.Fun, ObjRecord.Type.Delegated -> {
-                val callScope = inst?.instanceScope ?: frame.scope
+                val callScope = inst?.instanceScope ?: frame.ensureScope()
                 rec.value.invoke(callScope, receiver, callArgs, decl)
             }
-            else -> frame.scope.raiseError("member $name is not callable")
+            else -> frame.ensureScope().raiseError("member $name is not callable")
         }
         if (frame.fn.localSlotNames.isNotEmpty()) {
             frame.syncScopeToFrame()
@@ -1358,7 +1353,7 @@ class CmdGetIndex(
     internal val dst: Int,
 ) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        val result = frame.slotToObj(targetSlot).getAt(frame.scope, frame.slotToObj(indexSlot))
+        val result = frame.slotToObj(targetSlot).getAt(frame.ensureScope(), frame.slotToObj(indexSlot))
         frame.storeObjResult(dst, result)
         return
     }
@@ -1370,7 +1365,7 @@ class CmdSetIndex(
     internal val valueSlot: Int,
 ) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.slotToObj(targetSlot).putAt(frame.scope, frame.slotToObj(indexSlot), frame.slotToObj(valueSlot))
+        frame.slotToObj(targetSlot).putAt(frame.ensureScope(), frame.slotToObj(indexSlot), frame.slotToObj(valueSlot))
         return
     }
 }
@@ -1378,11 +1373,11 @@ class CmdSetIndex(
 class CmdEvalRef(internal val id: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncFrameToScope()
+            frame.syncFrameToScope(useRefs = true)
         }
         val ref = frame.fn.constants[id] as? BytecodeConst.Ref
             ?: error("EVAL_REF expects Ref at $id")
-        val result = ref.value.evalValue(frame.scope)
+        val result = ref.value.evalValue(frame.ensureScope())
         if (frame.fn.localSlotNames.isNotEmpty()) {
             frame.syncScopeToFrame()
         }
@@ -1394,11 +1389,11 @@ class CmdEvalRef(internal val id: Int, internal val dst: Int) : Cmd() {
 class CmdEvalStmt(internal val id: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncFrameToScope()
+            frame.syncFrameToScope(useRefs = true)
         }
         val stmt = frame.fn.constants.getOrNull(id) as? BytecodeConst.StatementVal
             ?: error("EVAL_STMT expects StatementVal at $id")
-        val result = stmt.statement.execute(frame.scope)
+        val result = stmt.statement.execute(frame.ensureScope())
         if (frame.fn.localSlotNames.isNotEmpty()) {
             frame.syncScopeToFrame()
         }
@@ -1410,11 +1405,11 @@ class CmdEvalStmt(internal val id: Int, internal val dst: Int) : Cmd() {
 class CmdMakeValueFn(internal val id: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncFrameToScope()
+            frame.syncFrameToScope(useRefs = true)
         }
         val valueFn = frame.fn.constants.getOrNull(id) as? BytecodeConst.ValueFn
             ?: error("MAKE_VALUE_FN expects ValueFn at $id")
-        val result = valueFn.fn(frame.scope).value
+        val result = valueFn.fn(frame.ensureScope()).value
         if (frame.fn.localSlotNames.isNotEmpty()) {
             frame.syncScopeToFrame()
         }
@@ -1458,6 +1453,8 @@ class CmdFrame(
     var ip: Int = 0
     var scope: Scope = scope0
     private val moduleScope: Scope = resolveModuleScope(scope0)
+    private val scopeSlotNames: Set<String> = fn.scopeSlotNames.filterNotNull().toSet()
+    private var lastScopePosIp = -1
 
     internal val scopeStack = ArrayDeque<Scope>()
     internal val scopeVirtualStack = ArrayDeque<Boolean>()
@@ -1504,10 +1501,24 @@ class CmdFrame(
         return last
     }
 
+    fun ensureScope(): Scope {
+        val pos = posForIp(ip - 1)
+        if (pos != null && lastScopePosIp != ip) {
+            scope.pos = pos
+            lastScopePosIp = ip
+        }
+        return scope
+    }
+
+    private fun posForIp(ip: Int): Pos? {
+        if (ip < 0) return null
+        return fn.posByIp.getOrNull(ip)
+    }
+
     fun pushScope(plan: Map<String, Int>, captures: List<String>) {
         val parentScope = scope
         if (captures.isNotEmpty()) {
-            syncFrameToScope()
+            syncFrameToScope(useRefs = true)
         }
         val captureRecords = if (captures.isNotEmpty()) {
             captures.map { name ->
@@ -1555,7 +1566,7 @@ class CmdFrame(
         val captures = captureStack.removeLastOrNull() ?: emptyList()
         scopeDepth -= 1
         if (captures.isNotEmpty()) {
-            syncFrameToScope()
+            syncFrameToScope(useRefs = true)
         }
     }
 
@@ -1569,13 +1580,13 @@ class CmdFrame(
 
     suspend fun cancelTopIterator() {
         val iter = iterStack.removeLastOrNull() ?: return
-        iter.invokeInstanceMethod(scope, "cancelIteration") { ObjVoid }
+        iter.invokeInstanceMethod(ensureScope(), "cancelIteration") { ObjVoid }
     }
 
     suspend fun cancelIterators() {
         while (iterStack.isNotEmpty()) {
             val iter = iterStack.removeLast()
-            iter.invokeInstanceMethod(scope, "cancelIteration") { ObjVoid }
+            iter.invokeInstanceMethod(ensureScope(), "cancelIteration") { ObjVoid }
         }
     }
 
@@ -1781,7 +1792,7 @@ class CmdFrame(
 
     suspend fun throwObj(pos: Pos, value: Obj) {
         var errorObject = value
-        val throwScope = scope.createChildScope(pos = pos)
+        val throwScope = ensureScope().createChildScope(pos = pos)
         if (errorObject is ObjString) {
             errorObject = ObjException(throwScope, errorObject.value).apply { getStackTrace() }
         }
@@ -1803,18 +1814,21 @@ class CmdFrame(
         }
     }
 
-    fun syncFrameToScope() {
+    fun syncFrameToScope(useRefs: Boolean = false) {
         val names = fn.localSlotNames
         if (names.isEmpty()) return
         for (i in names.indices) {
             val name = names[i] ?: continue
+            if (scopeSlotNames.contains(name)) continue
             val target = resolveLocalScope(i) ?: continue
-            val value = localSlotToObj(i)
+            val value = if (useRefs) FrameSlotRef(frame, i) else localSlotToObj(i)
             val rec = target.getLocalRecordDirect(name)
             if (rec == null) {
                 val isMutable = fn.localSlotMutables.getOrElse(i) { true }
                 target.addItem(name, isMutable, value)
             } else {
+                val existing = rec.value
+                if (existing is FrameSlotRef && !useRefs) continue
                 rec.value = value
             }
         }
@@ -1828,6 +1842,16 @@ class CmdFrame(
             val target = resolveLocalScope(i) ?: continue
             val rec = target.getLocalRecordDirect(name) ?: continue
             val value = rec.value
+            if (value is FrameSlotRef) {
+                val resolved = value.read()
+                when (resolved) {
+                    is ObjInt -> frame.setInt(i, resolved.value)
+                    is ObjReal -> frame.setReal(i, resolved.value)
+                    is ObjBool -> frame.setBool(i, resolved.value)
+                    else -> frame.setObj(i, resolved)
+                }
+                continue
+            }
             when (value) {
                 is ObjInt -> frame.setInt(i, value.value)
                 is ObjReal -> frame.setReal(i, value.value)
@@ -1856,6 +1880,7 @@ class CmdFrame(
         argBase: Int,
         plan: BytecodeConst.CallArgsPlan,
     ): Arguments {
+        val scope = ensureScope()
         val positional = ArrayList<Obj>(plan.specs.size)
         var named: LinkedHashMap<String, Obj>? = null
         var namedSeen = false
@@ -1931,7 +1956,9 @@ class CmdFrame(
         val target = scopeTarget(slot)
         val index = ensureScopeSlot(target, slot)
         val record = target.getSlotRecord(index)
-        if (record.value !== ObjUnset) return record.value
+        val direct = record.value
+        if (direct is FrameSlotRef) return direct.read()
+        if (direct !== ObjUnset) return direct
         val name = fn.scopeSlotNames[slot] ?: return record.value
         val resolved = target.get(name) ?: return record.value
         if (resolved.value !== ObjUnset) {
@@ -1944,7 +1971,9 @@ class CmdFrame(
         val target = addrScopes[addrSlot] ?: error("Address slot $addrSlot is not resolved")
         val index = addrIndices[addrSlot]
         val record = target.getSlotRecord(index)
-        if (record.value !== ObjUnset) return record.value
+        val direct = record.value
+        if (direct is FrameSlotRef) return direct.read()
+        if (direct !== ObjUnset) return direct
         val slotId = addrScopeSlots[addrSlot]
         val name = fn.scopeSlotNames[slotId] ?: return record.value
         val resolved = target.get(name) ?: return record.value

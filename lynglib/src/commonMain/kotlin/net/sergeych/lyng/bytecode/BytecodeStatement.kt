@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Sergey S. Chernov
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,23 +12,14 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 package net.sergeych.lyng.bytecode
 
-import net.sergeych.lyng.Pos
-import net.sergeych.lyng.Scope
-import net.sergeych.lyng.Statement
-import net.sergeych.lyng.DestructuringVarDeclStatement
-import net.sergeych.lyng.WhenCase
-import net.sergeych.lyng.WhenCondition
-import net.sergeych.lyng.WhenEqualsCondition
-import net.sergeych.lyng.WhenInCondition
-import net.sergeych.lyng.WhenIsCondition
-import net.sergeych.lyng.WhenStatement
+import net.sergeych.lyng.*
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjClass
-import net.sergeych.lyng.obj.RangeRef
 
 class BytecodeStatement private constructor(
     val original: Statement,
@@ -51,13 +42,14 @@ class BytecodeStatement private constructor(
             returnLabels: Set<String> = emptySet(),
             rangeLocalNames: Set<String> = emptySet(),
             allowedScopeNames: Set<String>? = null,
+            moduleScopeId: Int? = null,
             slotTypeByScopeId: Map<Int, Map<Int, ObjClass>> = emptyMap(),
             knownNameObjClass: Map<String, ObjClass> = emptyMap(),
         ): Statement {
             if (statement is BytecodeStatement) return statement
             val hasUnsupported = containsUnsupportedStatement(statement)
             if (hasUnsupported) {
-                val statementName = statement::class.qualifiedName ?: statement::class.simpleName ?: "UnknownStatement"
+                val statementName = statement.toString()
                 throw BytecodeCompileException(
                     "Bytecode compile error: unsupported statement $statementName in '$nameHint'",
                     statement.pos
@@ -69,6 +61,7 @@ class BytecodeStatement private constructor(
                 returnLabels = returnLabels,
                 rangeLocalNames = rangeLocalNames,
                 allowedScopeNames = allowedScopeNames,
+                moduleScopeId = moduleScopeId,
                 slotTypeByScopeId = slotTypeByScopeId,
                 knownNameObjClass = knownNameObjClass
             )

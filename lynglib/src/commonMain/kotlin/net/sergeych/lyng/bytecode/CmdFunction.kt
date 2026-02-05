@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Sergey S. Chernov
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 package net.sergeych.lyng.bytecode
@@ -29,6 +30,7 @@ data class CmdFunction(
     val localSlotMutables: BooleanArray,
     val constants: List<BytecodeConst>,
     val cmds: Array<Cmd>,
+    val posByIp: Array<net.sergeych.lyng.Pos?>,
 ) {
     init {
         require(scopeSlotIndices.size == scopeSlotCount) { "scopeSlotIndices size mismatch" }
@@ -37,5 +39,8 @@ data class CmdFunction(
         require(localSlotNames.size == localSlotMutables.size) { "localSlot metadata size mismatch" }
         require(localSlotNames.size <= localCount) { "localSlotNames exceed localCount" }
         require(addrCount >= 0) { "addrCount must be non-negative" }
+        if (posByIp.isNotEmpty()) {
+            require(posByIp.size == cmds.size) { "posByIp size mismatch" }
+        }
     }
 }

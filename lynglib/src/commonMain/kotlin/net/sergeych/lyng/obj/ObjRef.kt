@@ -463,6 +463,7 @@ class CastRef(
 
 /** Qualified `this@Type`: resolves to a view of current `this` starting dispatch from the ancestor Type. */
 class QualifiedThisRef(val typeName: String, private val atPos: Pos) : ObjRef {
+    internal fun pos(): Pos = atPos
     override suspend fun get(scope: Scope): ObjRecord {
         val t = scope[typeName]?.value as? ObjClass
             ?: scope.raiseError("unknown type $typeName")
@@ -2107,6 +2108,7 @@ class ImplicitThisMethodCallRef(
     private val atPos: Pos,
     private val preferredThisTypeName: String? = null
 ) : ObjRef {
+    internal fun pos(): Pos = atPos
     internal fun methodName(): String = name
     internal fun arguments(): List<ParsedArgument> = args
     internal fun hasTailBlock(): Boolean = tailBlock
@@ -2184,13 +2186,38 @@ class LocalSlotRef(
         return null
     }
 
+    private fun resolveOwnerAndSlot(scope: Scope): Pair<Scope, Int>? {
+        var s: Scope? = scope
+        var guard = 0
+        while (s != null && guard++ < 1024) {
+            val idx = s.getSlotIndexOf(name)
+            if (idx != null) {
+                if (idx == slot) return s to slot
+                if (!strict || captureOwnerSlot != null) return s to idx
+            }
+            s = s.parent
+        }
+        return null
+    }
+
     override suspend fun get(scope: Scope): ObjRecord {
         scope.pos = atPos
-        val owner = resolveOwner(scope) ?: scope.raiseError("slot owner not found for $name")
-        if (slot < 0 || slot >= owner.slotCount()) {
+        val resolved = resolveOwnerAndSlot(scope)
+        if (resolved == null) {
+            val rec = scope.get(name) ?: scope.raiseError("slot owner not found for $name")
+            if (rec.declaringClass != null &&
+                !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)
+            ) {
+                scope.raiseError(ObjIllegalAccessException(scope, "private field access"))
+            }
+            return rec
+        }
+        val owner = resolved.first
+        val slotIndex = resolved.second
+        if (slotIndex < 0 || slotIndex >= owner.slotCount()) {
             scope.raiseError("slot index out of range for $name")
         }
-        val rec = owner.getSlotRecord(slot)
+        val rec = owner.getSlotRecord(slotIndex)
         if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)) {
             scope.raiseError(ObjIllegalAccessException(scope, "private field access"))
         }
@@ -2199,11 +2226,22 @@ class LocalSlotRef(
 
     override suspend fun evalValue(scope: Scope): Obj {
         scope.pos = atPos
-        val owner = resolveOwner(scope) ?: scope.raiseError("slot owner not found for $name")
-        if (slot < 0 || slot >= owner.slotCount()) {
+        val resolved = resolveOwnerAndSlot(scope)
+        if (resolved == null) {
+            val rec = scope.get(name) ?: scope.raiseError("slot owner not found for $name")
+            if (rec.declaringClass != null &&
+                !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)
+            ) {
+                scope.raiseError(ObjIllegalAccessException(scope, "private field access"))
+            }
+            return scope.resolve(rec, name)
+        }
+        val owner = resolved.first
+        val slotIndex = resolved.second
+        if (slotIndex < 0 || slotIndex >= owner.slotCount()) {
             scope.raiseError("slot index out of range for $name")
         }
-        val rec = owner.getSlotRecord(slot)
+        val rec = owner.getSlotRecord(slotIndex)
         if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)) {
             scope.raiseError(ObjIllegalAccessException(scope, "private field access"))
         }
@@ -2212,11 +2250,23 @@ class LocalSlotRef(
 
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
         scope.pos = atPos
-        val owner = resolveOwner(scope) ?: scope.raiseError("slot owner not found for $name")
-        if (slot < 0 || slot >= owner.slotCount()) {
+        val resolved = resolveOwnerAndSlot(scope)
+        if (resolved == null) {
+            val rec = scope.get(name) ?: scope.raiseError("slot owner not found for $name")
+            if (rec.declaringClass != null &&
+                !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)
+            ) {
+                scope.raiseError(ObjIllegalAccessException(scope, "private field access"))
+            }
+            scope.assign(rec, name, newValue)
+            return
+        }
+        val owner = resolved.first
+        val slotIndex = resolved.second
+        if (slotIndex < 0 || slotIndex >= owner.slotCount()) {
             scope.raiseError("slot index out of range for $name")
         }
-        val rec = owner.getSlotRecord(slot)
+        val rec = owner.getSlotRecord(slotIndex)
         if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)) {
             scope.raiseError(ObjIllegalAccessException(scope, "private field access"))
         }

@@ -17,9 +17,9 @@
 
 package net.sergeych.lyng
 
-import net.sergeych.lyng.obj.*
-import net.sergeych.lyng.bytecode.CmdDisassembler
 import net.sergeych.lyng.bytecode.BytecodeStatement
+import net.sergeych.lyng.bytecode.CmdDisassembler
+import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.pacman.ImportProvider
 
@@ -414,7 +414,13 @@ open class Scope(
     // Slot fast-path API
     fun getSlotRecord(index: Int): ObjRecord = slots[index]
     fun setSlotValue(index: Int, newValue: Obj) {
-        slots[index].value = newValue
+        val record = slots[index]
+        val value = record.value
+        if (value is FrameSlotRef) {
+            value.write(newValue)
+            return
+        }
+        record.value = newValue
     }
     val slotCount: Int
         get() = slots.size
@@ -839,11 +845,21 @@ open class Scope(
     }
 
     suspend fun resolve(rec: ObjRecord, name: String): Obj {
+        val value = rec.value
+        if (value is FrameSlotRef) {
+            return value.read()
+        }
         val receiver = rec.receiver ?: thisObj
         return receiver.resolveRecord(this, rec, name, rec.declaringClass).value
     }
 
     suspend fun assign(rec: ObjRecord, name: String, newValue: Obj) {
+        val value = rec.value
+        if (value is FrameSlotRef) {
+            if (!rec.isMutable && value.read() !== ObjUnset) raiseIllegalAssignment("can't reassign val $name")
+            value.write(newValue)
+            return
+        }
         if (rec.type == ObjRecord.Type.Delegated) {
             val receiver = rec.receiver ?: thisObj
             val del = rec.delegate ?: run {

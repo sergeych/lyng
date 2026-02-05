@@ -1131,6 +1131,7 @@ class Compiler(
                             "<script>",
                             allowLocalSlots = true,
                             allowedScopeNames = modulePlan.keys,
+                            moduleScopeId = moduleSlotPlan()?.id,
                             slotTypeByScopeId = slotTypeByScopeId,
                             knownNameObjClass = knownClassMapForBytecode()
                         )
@@ -1357,7 +1358,7 @@ class Compiler(
             if (scope == null) return
             for ((name, rec) in scope.objects) {
                 val cls = rec.value as? ObjClass ?: continue
-                result.putIfAbsent(name, cls)
+                if (!result.containsKey(name)) result[name] = cls
             }
         }
         addScope(seedScope)
@@ -1367,7 +1368,7 @@ class Compiler(
         }
         for (name in compileClassInfos.keys) {
             val cls = resolveClassByName(name) ?: continue
-            result.putIfAbsent(name, cls)
+            if (!result.containsKey(name)) result[name] = cls
         }
         return result
     }
@@ -1411,6 +1412,7 @@ class Compiler(
             returnLabels = returnLabels,
             rangeLocalNames = currentRangeParamNames,
             allowedScopeNames = allowedScopeNames,
+            moduleScopeId = moduleSlotPlan()?.id,
             slotTypeByScopeId = slotTypeByScopeId,
             knownNameObjClass = knownClassMapForBytecode()
         )
@@ -1441,6 +1443,7 @@ class Compiler(
             returnLabels = returnLabels,
             rangeLocalNames = currentRangeParamNames,
             allowedScopeNames = allowedScopeNames,
+            moduleScopeId = moduleSlotPlan()?.id,
             slotTypeByScopeId = slotTypeByScopeId,
             knownNameObjClass = knownNames
         )
