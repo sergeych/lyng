@@ -202,6 +202,22 @@ class TypesTest {
     }
 
     @Test
+    fun testMapLiteralInferenceForBounds() = runTest {
+        eval("""
+            fun acceptMap<T: Int>(m: Map<String, T>) { }
+            acceptMap({ "a": 1, "b": 2 })
+            val base = { "a": 1 }
+            acceptMap({ ...base, "b": 3 })
+        """.trimIndent())
+        assertFailsWith<net.sergeych.lyng.ScriptError> {
+            eval("""
+                fun acceptMap<T: Int>(m: Map<String, T>) { }
+                acceptMap({ "a": 1, "b": "x" })
+            """.trimIndent())
+        }
+    }
+
+    @Test
     fun testUnionTypeLists() = runTest {
         eval("""
 

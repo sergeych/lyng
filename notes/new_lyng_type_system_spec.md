@@ -268,6 +268,7 @@ Normalize unions by removing duplicates and collapsing nullability (e.g. `Int|In
 
 Map inference:
 - `{ "a": 1, "b": 2 }` is `Map<String,Int>`.
+- `{ "a": 1, "b": "x" }` is `Map<String,Int|String>`.
 - Empty map literal uses `{:}` (since `{}` is empty callable).
 - `extern class Map<K=String,V=Object>` so `Map()` is `Map<String,Object>()` unless contextual type overrides.
 

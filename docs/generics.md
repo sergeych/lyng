@@ -37,12 +37,19 @@ Generic types are invariant by default. You can specify declaration-site varianc
 - Literals set obvious types (`1` is `Int`, `1.0` is `Real`, etc.).
 - Empty list literals default to `List<Object>` unless constrained by context.
 - Non-empty list literals infer element type as a union of element types.
+- Map literals infer key and value types; named keys are `String`.
 
 Examples:
 
     val a = [1, 2, 3]             // List<Int>
     val b = [1, "two", true]      // List<Int | String | Bool>
     val c: List<Int> = []         // List<Int>
+
+    val m1 = { "a": 1, "b": 2 }   // Map<String, Int>
+    val m2 = { "a": 1, "b": "x" } // Map<String, Int | String>
+    val m3 = { ...m1, "c": true } // Map<String, Int | Bool>
+
+Map spreads carry key/value types when possible.
 
 Spreads propagate element type when possible:
 

@@ -3146,6 +3146,7 @@ class Compiler(
         resolveReceiverTypeDecl(ref)?.let { return it }
         return when (ref) {
             is ListLiteralRef -> inferListLiteralTypeDecl(ref)
+            is MapLiteralRef -> inferMapLiteralTypeDecl(ref)
             is ConstRef -> inferTypeDeclFromConst(ref.constValue)
             else -> null
         }
@@ -3166,6 +3167,11 @@ class Compiler(
     private fun inferListLiteralTypeDecl(ref: ListLiteralRef): TypeDecl {
         val elementType = inferListLiteralElementType(ref.entries())
         return TypeDecl.Generic("List", listOf(elementType), false)
+    }
+
+    private fun inferMapLiteralTypeDecl(ref: MapLiteralRef): TypeDecl {
+        val (keyType, valueType) = inferMapLiteralEntryTypes(ref.entries())
+        return TypeDecl.Generic("Map", listOf(keyType, valueType), false)
     }
 
     private fun inferListLiteralElementType(entries: List<ListEntry>): TypeDecl {
@@ -3205,6 +3211,83 @@ class Compiler(
             TypeDecl.Union(collected.toList(), nullable = false)
         }
         return if (nullable) makeTypeDeclNullable(base) else base
+    }
+
+    private fun inferMapLiteralEntryTypes(entries: List<MapLiteralEntry>): Pair<TypeDecl, TypeDecl> {
+        var keyNullable = false
+        var valueNullable = false
+        val keyTypes = mutableListOf<TypeDecl>()
+        val valueTypes = mutableListOf<TypeDecl>()
+        val seenKeys = mutableSetOf<String>()
+        val seenValues = mutableSetOf<String>()
+
+        fun addKey(type: TypeDecl) {
+            val (base, isNullable) = stripNullable(type)
+            keyNullable = keyNullable || isNullable
+            if (base == TypeDecl.TypeAny) {
+                keyTypes.clear()
+                keyTypes += base
+                seenKeys.clear()
+                seenKeys += typeDeclKey(base)
+                return
+            }
+            val key = typeDeclKey(base)
+            if (seenKeys.add(key)) keyTypes += base
+        }
+
+        fun addValue(type: TypeDecl) {
+            val (base, isNullable) = stripNullable(type)
+            valueNullable = valueNullable || isNullable
+            if (base == TypeDecl.TypeAny) {
+                valueTypes.clear()
+                valueTypes += base
+                seenValues.clear()
+                seenValues += typeDeclKey(base)
+                return
+            }
+            val key = typeDeclKey(base)
+            if (seenValues.add(key)) valueTypes += base
+        }
+
+        for (entry in entries) {
+            when (entry) {
+                is MapLiteralEntry.Named -> {
+                    addKey(TypeDecl.Simple("String", false))
+                    val vType = inferTypeDeclFromRef(entry.value) ?: return TypeDecl.TypeAny to TypeDecl.TypeAny
+                    addValue(vType)
+                }
+                is MapLiteralEntry.Spread -> {
+                    val mapType = inferTypeDeclFromRef(entry.ref) ?: return TypeDecl.TypeAny to TypeDecl.TypeAny
+                    if (mapType is TypeDecl.Generic) {
+                        val base = mapType.name.substringAfterLast('.')
+                        if (base == "Map") {
+                            val k = mapType.args.getOrNull(0) ?: TypeDecl.TypeAny
+                            val v = mapType.args.getOrNull(1) ?: TypeDecl.TypeAny
+                            addKey(k)
+                            addValue(v)
+                        } else {
+                            return TypeDecl.TypeAny to TypeDecl.TypeAny
+                        }
+                    } else {
+                        return TypeDecl.TypeAny to TypeDecl.TypeAny
+                    }
+                }
+            }
+        }
+
+        val keyBase = when {
+            keyTypes.isEmpty() -> TypeDecl.TypeAny
+            keyTypes.size == 1 -> keyTypes[0]
+            else -> TypeDecl.Union(keyTypes.toList(), nullable = false)
+        }
+        val valueBase = when {
+            valueTypes.isEmpty() -> TypeDecl.TypeAny
+            valueTypes.size == 1 -> valueTypes[0]
+            else -> TypeDecl.Union(valueTypes.toList(), nullable = false)
+        }
+        val finalKey = if (keyNullable) makeTypeDeclNullable(keyBase) else keyBase
+        val finalValue = if (valueNullable) makeTypeDeclNullable(valueBase) else valueBase
+        return finalKey to finalValue
     }
 
     private fun inferElementTypeFromSpread(ref: ObjRef): TypeDecl? {
@@ -3762,7 +3845,7 @@ class Compiler(
             is ObjChar -> TypeDecl.Simple("Char", false)
             is ObjNull -> TypeDecl.TypeNullableAny
             is ObjList -> TypeDecl.Generic("List", listOf(inferListElementTypeDecl(value)), false)
-            is ObjMap -> TypeDecl.Generic("Map", listOf(TypeDecl.TypeAny, TypeDecl.TypeAny), false)
+            is ObjMap -> TypeDecl.Generic("Map", listOf(inferMapKeyTypeDecl(value), inferMapValueTypeDecl(value)), false)
             is ObjClass -> TypeDecl.Simple(value.className, false)
             else -> TypeDecl.Simple(value.objClass.className, false)
         }
@@ -3781,6 +3864,50 @@ class Compiler(
             val base = stripNullable(elemType).first
             val key = typeDeclKey(base)
             if (seen.add(key)) options += base
+        }
+        val base = when {
+            options.isEmpty() -> TypeDecl.TypeAny
+            options.size == 1 -> options[0]
+            else -> TypeDecl.Union(options, nullable = false)
+        }
+        return if (nullable) makeTypeDeclNullable(base) else base
+    }
+
+    private fun inferMapKeyTypeDecl(map: ObjMap): TypeDecl {
+        var nullable = false
+        val options = mutableListOf<TypeDecl>()
+        val seen = mutableSetOf<String>()
+        for (key in map.map.keys) {
+            if (key === ObjNull) {
+                nullable = true
+                continue
+            }
+            val keyType = inferRuntimeTypeDecl(key)
+            val base = stripNullable(keyType).first
+            val k = typeDeclKey(base)
+            if (seen.add(k)) options += base
+        }
+        val base = when {
+            options.isEmpty() -> TypeDecl.TypeAny
+            options.size == 1 -> options[0]
+            else -> TypeDecl.Union(options, nullable = false)
+        }
+        return if (nullable) makeTypeDeclNullable(base) else base
+    }
+
+    private fun inferMapValueTypeDecl(map: ObjMap): TypeDecl {
+        var nullable = false
+        val options = mutableListOf<TypeDecl>()
+        val seen = mutableSetOf<String>()
+        for (value in map.map.values) {
+            if (value === ObjNull) {
+                nullable = true
+                continue
+            }
+            val valueType = inferRuntimeTypeDecl(value)
+            val base = stripNullable(valueType).first
+            val k = typeDeclKey(base)
+            if (seen.add(k)) options += base
         }
         val base = when {
             options.isEmpty() -> TypeDecl.TypeAny
