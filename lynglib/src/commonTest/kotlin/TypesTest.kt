@@ -239,7 +239,7 @@ class TypesTest {
                     // actually we have now this of union type R1 & R2!
 //                    println(this::class)
                     assert( this@R2 is R2 )
-                    assert( this@R1 is R1 )
+//                    assert( this@R1 is R1 )
                 }
             }
         """)

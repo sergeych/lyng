@@ -10,6 +10,7 @@ __Other documents to read__ maybe after this one:
 - [OOP notes](OOP.md), [exception handling](exceptions_handling.md)
 - [math in Lyng](math.md), [the `when` statement](when.md), [return statement](return_statement.md)
 - [Testing and Assertions](Testing.md)
+- [Generics and type expressions](generics.md)
 - [time](time.md) and [parallelism](parallelism.md)
 - [parallelism] - multithreaded code, coroutines, etc.
 - Some class
@@ -554,6 +555,8 @@ Type arguments are usually inferred from call sites:
 
     val b = Box(10)     // Box<Int>
     val s = id("ok")    // T is String
+
+See [Generics and type expressions](generics.md) for bounds, unions/intersections, and type-checking rules.
 
 ## Variance
 
