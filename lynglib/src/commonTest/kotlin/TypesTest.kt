@@ -266,7 +266,7 @@ class TypesTest {
     }
 
     @Test
-    fun multipleReceivers() = runTest {
+    fun testMultipleReceivers() = runTest {
         eval("""
             class R1(shared,r1="r1")
             class R2(shared,r2="r2")
@@ -278,10 +278,20 @@ class TypesTest {
                     assertEquals("r2", r2)
                     assertEquals("t", shared)
                     assertEquals("s", this@R1.shared)
-                    // actually we have now this of union type R1 & R2!
-//                    println(this::class)
-                    assert( this@R2 is R2 )
-//                    assert( this@R1 is R1 )
+                    assertEquals("r1", this@R1.r1)
+                    assertEquals("r2", this@R2.r2)
+                    assertEquals("r1", r1)
+                }
+            }
+            with(R1("s")) {
+                assertEquals("r1", r1)
+                assertEquals("s", shared)
+                with(R2("t")) {
+                    assertEquals("r2", r2)
+                    assertEquals("t", shared)
+                    assertEquals("s", this@R1.shared)
+                    assertEquals("r1", this@R1.r1)
+                    assertEquals("r1", r1)
                 }
             }
         """)

@@ -599,6 +599,16 @@ class Compiler(
         return null
     }
 
+    private fun implicitReceiverTypeForMember(name: String): String? {
+        for (ctx in codeContexts.asReversed()) {
+            val fn = ctx as? CodeContext.Function ?: continue
+            if (!fn.implicitThisMembers) continue
+            val typeName = fn.implicitThisTypeName ?: continue
+            if (hasImplicitThisMember(name, typeName)) return typeName
+        }
+        return null
+    }
+
     private fun currentEnclosingClassName(): String? {
         val ctx = codeContexts.asReversed().firstOrNull { it is CodeContext.ClassBody } as? CodeContext.ClassBody
         return ctx?.name
@@ -836,14 +846,12 @@ class Compiler(
             if (hasImplicitThisMember(name, implicitType)) {
                 resolutionSink?.referenceMember(name, pos, implicitType)
                 val ids = resolveImplicitThisMemberIds(name, pos, implicitType)
-                return ImplicitThisMemberRef(name, pos, ids.fieldId, ids.methodId, implicitType)
+                val preferredType = if (currentImplicitThisTypeName() == null) null else implicitType
+                return ImplicitThisMemberRef(name, pos, ids.fieldId, ids.methodId, preferredType)
             }
         }
-        val implicitThisMembers = codeContexts.any { ctx ->
-            (ctx as? CodeContext.Function)?.implicitThisMembers == true
-        }
-        val implicitType = if (implicitThisMembers) currentImplicitThisTypeName() else null
-        if (implicitType != null && hasImplicitThisMember(name, implicitType)) {
+        val implicitType = implicitReceiverTypeForMember(name)
+        if (implicitType != null) {
             resolutionSink?.referenceMember(name, pos, implicitType)
             val ids = resolveImplicitThisMemberIds(name, pos, implicitType)
             return ImplicitThisMemberRef(name, pos, ids.fieldId, ids.methodId, implicitType)
@@ -4456,7 +4464,7 @@ class Compiler(
                         detectedBlockArgument,
                         isOptional,
                         left.atPos,
-                        implicitThisTypeName
+                        left.preferredThisTypeName() ?: implicitThisTypeName
                     )
                 }
             is LocalVarRef -> {
@@ -4465,7 +4473,8 @@ class Compiler(
                     (ctx as? CodeContext.Function)?.implicitThisMembers == true
                 }
                 if ((classContext || implicitThis) && extensionNames.contains(left.name)) {
-                    val ids = resolveImplicitThisMemberIds(left.name, left.pos(), implicitThisTypeName)
+                    val receiverTypeName = implicitReceiverTypeForMember(left.name) ?: implicitThisTypeName
+                    val ids = resolveImplicitThisMemberIds(left.name, left.pos(), receiverTypeName)
                     ImplicitThisMethodCallRef(
                         left.name,
                         ids.methodId,
@@ -4473,7 +4482,7 @@ class Compiler(
                         detectedBlockArgument,
                         isOptional,
                         left.pos(),
-                        implicitThisTypeName
+                        receiverTypeName
                     )
                 } else {
                     checkGenericBoundsAtCall(left.name, args, left.pos())
@@ -4486,7 +4495,8 @@ class Compiler(
                     (ctx as? CodeContext.Function)?.implicitThisMembers == true
                 }
                 if ((classContext || implicitThis) && extensionNames.contains(left.name)) {
-                    val ids = resolveImplicitThisMemberIds(left.name, left.pos(), implicitThisTypeName)
+                    val receiverTypeName = implicitReceiverTypeForMember(left.name) ?: implicitThisTypeName
+                    val ids = resolveImplicitThisMemberIds(left.name, left.pos(), receiverTypeName)
                     ImplicitThisMethodCallRef(
                         left.name,
                         ids.methodId,
@@ -4494,7 +4504,7 @@ class Compiler(
                         detectedBlockArgument,
                         isOptional,
                         left.pos(),
-                        implicitThisTypeName
+                        receiverTypeName
                     )
                 } else {
                     checkGenericBoundsAtCall(left.name, args, left.pos())
