@@ -241,6 +241,17 @@ data class MiniEnumDecl(
     val entryPositions: List<Pos> = emptyList()
 ) : MiniDecl
 
+data class MiniTypeAliasDecl(
+    override val range: MiniRange,
+    override val name: String,
+    val typeParams: List<String>,
+    val target: MiniTypeRef?,
+    override val doc: MiniDoc?,
+    override val nameStart: Pos,
+    override val isExtern: Boolean = false,
+    override val isStatic: Boolean = false,
+) : MiniDecl
+
 data class MiniCtorField(
     val name: String,
     val mutable: Boolean,
@@ -290,6 +301,17 @@ data class MiniMemberValDecl(
     override val isExtern: Boolean = false,
 ) : MiniMemberDecl
 
+data class MiniMemberTypeAliasDecl(
+    override val range: MiniRange,
+    override val name: String,
+    val typeParams: List<String>,
+    val target: MiniTypeRef?,
+    override val doc: MiniDoc?,
+    override val nameStart: Pos,
+    override val isStatic: Boolean = false,
+    override val isExtern: Boolean = false,
+) : MiniMemberDecl
+
 data class MiniInitDecl(
     override val range: MiniRange,
     override val nameStart: Pos,
@@ -319,6 +341,7 @@ interface MiniAstSink {
     fun onInitDecl(node: MiniInitDecl) {}
     fun onClassDecl(node: MiniClassDecl) {}
     fun onEnumDecl(node: MiniEnumDecl) {}
+    fun onTypeAliasDecl(node: MiniTypeAliasDecl) {}
 
     fun onBlock(node: MiniBlock) {}
     fun onIdentifier(node: MiniIdentifier) {}
@@ -486,6 +509,41 @@ class MiniAstBuilder : MiniAstSink {
     override fun onEnumDecl(node: MiniEnumDecl) {
         val attach = node.copy(doc = node.doc ?: lastDoc)
         currentScript?.declarations?.add(attach)
+        lastDoc = null
+    }
+
+    override fun onTypeAliasDecl(node: MiniTypeAliasDecl) {
+        val attach = node.copy(doc = node.doc ?: lastDoc)
+        val currentClass = classStack.lastOrNull()
+        if (currentClass != null && functionDepth == 0) {
+            val member = MiniMemberTypeAliasDecl(
+                range = attach.range,
+                name = attach.name,
+                typeParams = attach.typeParams,
+                target = attach.target,
+                doc = attach.doc,
+                nameStart = attach.nameStart,
+                isStatic = attach.isStatic,
+                isExtern = attach.isExtern
+            )
+            val existing = currentClass.members.filterIsInstance<MiniMemberTypeAliasDecl>()
+                .find { it.name == attach.name && it.nameStart == attach.nameStart }
+            val updatedMembers = if (existing != null) {
+                currentClass.members.map { if (it === existing) member else it }
+            } else {
+                currentClass.members + member
+            }
+            classStack.removeLast()
+            classStack.addLast(currentClass.copy(members = updatedMembers))
+        } else {
+            val existing = currentScript?.declarations?.find { it.name == attach.name && it.nameStart == attach.nameStart }
+            if (existing != null) {
+                val idx = currentScript?.declarations?.indexOf(existing) ?: -1
+                if (idx >= 0) currentScript?.declarations?.set(idx, attach)
+            } else {
+                currentScript?.declarations?.add(attach)
+            }
+        }
         lastDoc = null
     }
 

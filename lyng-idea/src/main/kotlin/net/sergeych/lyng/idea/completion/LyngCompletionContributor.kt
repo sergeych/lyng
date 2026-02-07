@@ -96,9 +96,10 @@ class LyngCompletionContributor : CompletionContributor() {
                 log.info("[LYNG_DEBUG] Completion: caret=$caret prefix='${prefix}' memberDotPos=${memberDotPos} file='${file.name}'")
             }
 
-            // Build MiniAst (cached) for both global and member contexts to enable local class/val inference
-            val mini = LyngAstManager.getMiniAst(file)
-            val binding = LyngAstManager.getBinding(file)
+            // Build analysis (cached) for both global and member contexts to enable local class/val inference
+            val analysis = LyngAstManager.getAnalysis(file)
+            val mini = analysis?.mini
+            val binding = analysis?.binding
 
             // Delegate computation to the shared engine to keep behavior in sync with tests
             val engineItems = try {
@@ -160,6 +161,8 @@ class LyngCompletionContributor : CompletionContributor() {
                         .withIcon(AllIcons.Nodes.Class)
                     Kind.Enum -> LookupElementBuilder.create(ci.name)
                         .withIcon(AllIcons.Nodes.Enum)
+                    Kind.TypeAlias -> LookupElementBuilder.create(ci.name)
+                        .withIcon(AllIcons.Nodes.Class)
                     Kind.Value -> LookupElementBuilder.create(ci.name)
                         .withIcon(AllIcons.Nodes.Variable)
                         .let { b -> if (!ci.typeText.isNullOrBlank()) b.withTypeText(ci.typeText, true) else b }

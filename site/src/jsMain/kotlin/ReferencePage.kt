@@ -120,6 +120,12 @@ fun ReferencePage() {
                                 Div { Text("$kind ${d.name}$t") }
                                 d.doc?.summary?.let { Small({ classes("text-muted") }) { Text(it) } }
                             }
+                            is MiniTypeAliasDecl -> {
+                                val params = if (d.typeParams.isEmpty()) "" else d.typeParams.joinToString(", ", "<", ">")
+                                val target = DocLookupUtils.typeOf(d.target).ifEmpty { "Any" }
+                                Div { Text("type ${d.name}$params = $target") }
+                                d.doc?.summary?.let { Small({ classes("text-muted") }) { Text(it) } }
+                            }
                             is MiniClassDecl -> {
                                 Div { Text("class ${d.name}") }
                                 d.doc?.summary?.let { Small({ classes("text-muted") }) { Text(it) } }
@@ -144,6 +150,12 @@ fun ReferencePage() {
                                                     val kindM = if (m.mutable) "var" else "val"
                                                     val staticStr = if (m.isStatic) "static " else ""
                                                     Li { Text("${staticStr}${kindM} ${d.name}.${m.name}${ts}") }
+                                                }
+                                                is MiniMemberTypeAliasDecl -> {
+                                                    val params = if (m.typeParams.isEmpty()) "" else m.typeParams.joinToString(", ", "<", ">")
+                                                    val target = DocLookupUtils.typeOf(m.target).ifEmpty { "Any" }
+                                                    val staticStr = if (m.isStatic) "static " else ""
+                                                    Li { Text("${staticStr}type ${d.name}.${m.name}$params = $target") }
                                                 }
                                             }
                                         }

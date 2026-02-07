@@ -34,6 +34,7 @@ object DocLookupUtils {
                     is MiniFunDecl -> "Function"
                     is MiniClassDecl -> "Class"
                     is MiniEnumDecl -> "Enum"
+                    is MiniTypeAliasDecl -> "TypeAlias"
                     is MiniValDecl -> if (d.mutable) "Variable" else "Value"
                 }
                 return d.name to kind
@@ -87,6 +88,7 @@ object DocLookupUtils {
                     val kind = when (m) {
                         is MiniMemberFunDecl -> "Function"
                         is MiniMemberValDecl -> if (m.isStatic) "Value" else (if (m.mutable) "Variable" else "Value")
+                        is MiniMemberTypeAliasDecl -> "TypeAlias"
                         is MiniInitDecl -> "Initializer"
                     }
                     return m.name to kind
@@ -119,6 +121,7 @@ object DocLookupUtils {
                 return when (d) {
                     is MiniValDecl -> d.type ?: if (text != null && imported != null) inferTypeRefForVal(d, text, imported, mini) else null
                     is MiniFunDecl -> d.returnType
+                    is MiniTypeAliasDecl -> d.target
                     else -> null
                 }
             }
@@ -142,6 +145,7 @@ object DocLookupUtils {
                             is MiniMemberValDecl -> m.type ?: if (text != null && imported != null) {
                                 inferTypeRefFromInitRange(m.initRange, m.nameStart, text, imported, mini)
                             } else null
+                            is MiniMemberTypeAliasDecl -> m.target
 
                             else -> null
                         }
@@ -436,7 +440,10 @@ object DocLookupUtils {
                     val type = findTypeByRange(mini, sym.name, sym.declStart, text, imported)
                     simpleClassNameOf(type)?.let { return it }
                     // if it's a class/enum, return its name directly
-                    if (sym.kind == net.sergeych.lyng.binding.SymbolKind.Class || sym.kind == net.sergeych.lyng.binding.SymbolKind.Enum) return sym.name
+                    if (sym.kind == net.sergeych.lyng.binding.SymbolKind.Class ||
+                        sym.kind == net.sergeych.lyng.binding.SymbolKind.Enum ||
+                        sym.kind == net.sergeych.lyng.binding.SymbolKind.TypeAlias
+                    ) return sym.name
                 }
             }
         }
@@ -451,6 +458,7 @@ object DocLookupUtils {
             return when (d) {
                 is MiniClassDecl -> d.name
                 is MiniEnumDecl -> d.name
+                is MiniTypeAliasDecl -> d.name
                 is MiniValDecl -> simpleClassNameOf(d.type ?: inferTypeRefForVal(d, text, imported, mini))
                 is MiniFunDecl -> simpleClassNameOf(d.returnType)
             }
@@ -565,6 +573,7 @@ object DocLookupUtils {
                 val rt = when (mm) {
                     is MiniMemberFunDecl -> mm.returnType
                     is MiniMemberValDecl -> mm.type
+                    is MiniMemberTypeAliasDecl -> mm.target
                     else -> null
                 }
                 return simpleClassNameOf(rt)
@@ -580,8 +589,10 @@ object DocLookupUtils {
             val rt = when (m) {
                 is MiniMemberFunDecl -> m.returnType
                 is MiniMemberValDecl -> m.type
+                is MiniMemberTypeAliasDecl -> m.target
                 is MiniFunDecl -> m.returnType
                 is MiniValDecl -> m.type
+                is MiniTypeAliasDecl -> m.target
                 else -> null
             }
             simpleClassNameOf(rt)
@@ -921,6 +932,7 @@ object DocLookupUtils {
                         return when (val m = resolved.second) {
                             is MiniMemberFunDecl -> m.returnType
                             is MiniMemberValDecl -> m.type ?: inferTypeRefFromInitRange(m.initRange, m.nameStart, fullText, imported, mini)
+                            is MiniMemberTypeAliasDecl -> m.target
                             else -> null
                         }
                     }
@@ -943,6 +955,7 @@ object DocLookupUtils {
                         is MiniEnumDecl -> syntheticTypeRef(d.name)
                         is MiniValDecl -> d.type ?: inferTypeRefForVal(d, fullText, imported, mini)
                         is MiniFunDecl -> d.returnType
+                        is MiniTypeAliasDecl -> d.target
                     }
                 }
 

@@ -36,7 +36,7 @@ data class CompletionItem(
     val priority: Double = 0.0,
 )
 
-enum class Kind { Function, Class_, Enum, Value, Method, Field }
+enum class Kind { Function, Class_, Enum, TypeAlias, Value, Method, Field }
 
 /**
  * Platform-free, lenient import provider that never fails on unknown packages.
@@ -118,9 +118,11 @@ object CompletionEngineLight {
         val classes = decls.filterIsInstance<MiniClassDecl>().sortedBy { it.name.lowercase() }
         val enums = decls.filterIsInstance<MiniEnumDecl>().sortedBy { it.name.lowercase() }
         val vals = decls.filterIsInstance<MiniValDecl>().sortedBy { it.name.lowercase() }
+        val aliases = decls.filterIsInstance<MiniTypeAliasDecl>().sortedBy { it.name.lowercase() }
         funs.forEach { offerDeclAdd(out, prefix, it) }
         classes.forEach { offerDeclAdd(out, prefix, it) }
         enums.forEach { offerDeclAdd(out, prefix, it) }
+        aliases.forEach { offerDeclAdd(out, prefix, it) }
         vals.forEach { offerDeclAdd(out, prefix, it) }
 
         // Imported and builtin
@@ -135,9 +137,11 @@ object CompletionEngineLight {
             val classes = decls.filterIsInstance<MiniClassDecl>().sortedBy { it.name.lowercase() }
             val enums = decls.filterIsInstance<MiniEnumDecl>().sortedBy { it.name.lowercase() }
             val vals = decls.filterIsInstance<MiniValDecl>().sortedBy { it.name.lowercase() }
+            val aliases = decls.filterIsInstance<MiniTypeAliasDecl>().sortedBy { it.name.lowercase() }
             funs.forEach { if (externalAdded < budget) { offerDeclAdd(out, prefix, it); externalAdded++ } }
             classes.forEach { if (externalAdded < budget) { offerDeclAdd(out, prefix, it); externalAdded++ } }
             enums.forEach { if (externalAdded < budget) { offerDeclAdd(out, prefix, it); externalAdded++ } }
+            aliases.forEach { if (externalAdded < budget) { offerDeclAdd(out, prefix, it); externalAdded++ } }
             vals.forEach { if (externalAdded < budget) { offerDeclAdd(out, prefix, it); externalAdded++ } }
             if (out.size >= cap || externalAdded >= budget) break
         }
@@ -196,6 +200,9 @@ object CompletionEngineLight {
                                 is MiniMemberValDecl -> {
                                     add(CompletionItem(m.name, if (m.mutable) Kind.Value else Kind.Field, typeText = typeOf(m.type), priority = 100.0))
                                 }
+                                is MiniMemberTypeAliasDecl -> {
+                                    add(CompletionItem(m.name, Kind.TypeAlias, typeText = typeOf(m.target), priority = 100.0))
+                                }
                                 is MiniInitDecl -> {}
                             }
                         }
@@ -225,6 +232,7 @@ object CompletionEngineLight {
             }
             is MiniClassDecl -> add(CompletionItem(d.name, Kind.Class_))
             is MiniEnumDecl -> add(CompletionItem(d.name, Kind.Enum))
+            is MiniTypeAliasDecl -> add(CompletionItem(d.name, Kind.TypeAlias, typeText = typeOf(d.target)))
             is MiniValDecl -> add(CompletionItem(d.name, Kind.Value, typeText = typeOf(d.type)))
 //            else -> add(CompletionItem(d.name, Kind.Value))
         }
@@ -289,6 +297,10 @@ object CompletionEngineLight {
                         val ci = CompletionItem(name, Kind.Field, typeText = typeOf(chosen.type), priority = groupPriority)
                         if (ci.name.startsWith(prefix, true)) out += ci
                     }
+                    is MiniMemberTypeAliasDecl -> {
+                        val ci = CompletionItem(name, Kind.TypeAlias, typeText = typeOf(rep.target), priority = groupPriority)
+                        if (ci.name.startsWith(prefix, true)) out += ci
+                    }
                     is MiniInitDecl -> {}
                 }
             }
@@ -317,6 +329,8 @@ object CompletionEngineLight {
                         }
                         is MiniMemberValDecl -> CompletionItem(name, Kind.Field, typeText = typeOf(m.type), priority = 50.0)
                         is MiniValDecl -> CompletionItem(name, Kind.Field, typeText = typeOf(m.type), priority = 50.0)
+                        is MiniMemberTypeAliasDecl -> CompletionItem(name, Kind.TypeAlias, typeText = typeOf(m.target), priority = 50.0)
+                        is MiniTypeAliasDecl -> CompletionItem(name, Kind.TypeAlias, typeText = typeOf(m.target), priority = 50.0)
                         else -> CompletionItem(name, Kind.Method, tailText = "()", typeText = null, priority = 50.0)
                     }
                     if (ci.name.startsWith(prefix, true)) {

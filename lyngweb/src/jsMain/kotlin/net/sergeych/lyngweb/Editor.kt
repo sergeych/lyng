@@ -19,9 +19,17 @@ package net.sergeych.lyngweb
 
 import androidx.compose.runtime.*
 import kotlinx.browser.window
+import kotlinx.coroutines.launch
+import net.sergeych.lyng.highlight.TextRange
+import net.sergeych.lyng.miniast.CompletionItem
+import net.sergeych.lyng.tools.LyngAnalysisResult
+import net.sergeych.lyng.tools.LyngSymbolInfo
+import net.sergeych.lyng.tools.LyngSymbolTarget
 import org.jetbrains.compose.web.attributes.placeholder
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.events.SyntheticKeyboardEvent
+import org.w3c.dom.CanvasRenderingContext2D
+import org.w3c.dom.HTMLCanvasElement
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.HTMLTextAreaElement
 
@@ -47,12 +55,20 @@ fun EditorWithOverlay(
     setCode: (String) -> Unit,
     tabSize: Int = 4,
     onKeyDown: ((SyntheticKeyboardEvent) -> Unit)? = null,
+    onAnalysisReady: ((LyngAnalysisResult) -> Unit)? = null,
+    onCompletionRequested: ((Int, List<CompletionItem>) -> Unit)? = null,
+    onDefinitionResolved: ((Int, LyngSymbolTarget?) -> Unit)? = null,
+    onUsagesResolved: ((Int, List<TextRange>) -> Unit)? = null,
+    onDocRequested: ((Int, LyngSymbolInfo?) -> Unit)? = null,
     // New sizing controls
     minRows: Int = 6,
     maxRows: Int? = null,
     autoGrow: Boolean = false,
 ) {
+    val scope = rememberCoroutineScope()
+    var containerEl by remember { mutableStateOf<HTMLElement?>(null) }
     var overlayEl by remember { mutableStateOf<HTMLElement?>(null) }
+    var diagOverlayEl by remember { mutableStateOf<HTMLElement?>(null) }
     var taEl by remember { mutableStateOf<HTMLTextAreaElement?>(null) }
     var lastGoodHtml by remember { mutableStateOf<String?>(null) }
     var lastGoodText by remember { mutableStateOf<String?>(null) }
@@ -62,9 +78,16 @@ fun EditorWithOverlay(
     var pendingScrollLeft by remember { mutableStateOf<Double?>(null) }
     var cachedLineHeight by remember { mutableStateOf<Double?>(null) }
     var cachedVInsets by remember { mutableStateOf<Double?>(null) }
+    var cachedCharWidth by remember { mutableStateOf<Double?>(null) }
+    var lastAnalysis by remember { mutableStateOf<LyngAnalysisResult?>(null) }
+    var lastAnalysisText by remember { mutableStateOf<String?>(null) }
+    var lineStarts by remember { mutableStateOf(IntArray(0)) }
+    var tooltipText by remember { mutableStateOf<String?>(null) }
+    var tooltipX by remember { mutableStateOf<Double?>(null) }
+    var tooltipY by remember { mutableStateOf<Double?>(null) }
 
     fun ensureMetrics(ta: HTMLTextAreaElement) {
-        if (cachedLineHeight == null || cachedVInsets == null) {
+        if (cachedLineHeight == null || cachedVInsets == null || cachedCharWidth == null) {
             val cs = window.getComputedStyle(ta)
             val lhStr = cs.getPropertyValue("line-height").trim()
             val lh = lhStr.removeSuffix("px").toDoubleOrNull() ?: 20.0
@@ -78,6 +101,21 @@ fun EditorWithOverlay(
             val bb = parsePx("border-bottom-width")
             cachedLineHeight = lh
             cachedVInsets = pt + pb + bt + bb
+
+            val canvas = window.document.createElement("canvas") as HTMLCanvasElement
+            val ctx = canvas.getContext("2d") as? CanvasRenderingContext2D
+            if (ctx != null) {
+                val fontSize = cs.fontSize
+                val fontFamily = cs.fontFamily
+                val fontWeight = cs.fontWeight
+                val fontStyle = cs.fontStyle
+                ctx.font = "$fontStyle $fontWeight $fontSize $fontFamily"
+                val m = ctx.measureText("M")
+                val w = if (m.width > 0.0) m.width else 8.0
+                cachedCharWidth = w
+            } else {
+                cachedCharWidth = 8.0
+            }
         }
     }
 
@@ -102,6 +140,63 @@ fun EditorWithOverlay(
         ta.style.height = "${target}px"
     }
 
+    suspend fun ensureAnalysis(text: String): LyngAnalysisResult {
+        val cached = lastAnalysis
+        val cachedText = lastAnalysisText
+        if (cached != null && cachedText == text) return cached
+        val analysis = LyngWebTools.analyze(text)
+        lastAnalysis = analysis
+        lastAnalysisText = text
+        onAnalysisReady?.invoke(analysis)
+        return analysis
+    }
+
+    fun htmlEscapeLocal(s: String): String = buildString(s.length) {
+        for (ch in s) when (ch) {
+            '<' -> append("&lt;")
+            '>' -> append("&gt;")
+            '&' -> append("&amp;")
+            '"' -> append("&quot;")
+            '\'' -> append("&#39;")
+            else -> append(ch)
+        }
+    }
+
+    fun buildLineStarts(text: String): IntArray {
+        val starts = ArrayList<Int>(maxOf(1, text.length / 16))
+        starts.add(0)
+        for (i in text.indices) {
+            if (text[i] == '\n') starts.add(i + 1)
+        }
+        return starts.toIntArray()
+    }
+
+    fun offsetFromMouse(ta: HTMLTextAreaElement, clientX: Double, clientY: Double): Int? {
+        ensureMetrics(ta)
+        val rect = ta.getBoundingClientRect()
+        val lineHeight = cachedLineHeight ?: return null
+        val charWidth = cachedCharWidth ?: return null
+        val cs = window.getComputedStyle(ta)
+        fun parsePx(name: String): Double {
+            val v = cs.getPropertyValue(name).trim().removeSuffix("px").toDoubleOrNull()
+            return v ?: 0.0
+        }
+        val padLeft = parsePx("padding-left") + parsePx("border-left-width")
+        val padTop = parsePx("padding-top") + parsePx("border-top-width")
+        val x = clientX - rect.left + ta.scrollLeft - padLeft
+        val y = clientY - rect.top + ta.scrollTop - padTop
+        if (y < 0) return 0
+        val lineIdx = (y / lineHeight).toInt().coerceAtLeast(0)
+        if (lineStarts.isEmpty()) return 0
+        val actualLineIdx = lineIdx.coerceAtMost(lineStarts.size - 1)
+        val lineStart = lineStarts[actualLineIdx]
+        val lineEnd = if (actualLineIdx + 1 < lineStarts.size) lineStarts[actualLineIdx + 1] - 1 else code.length
+        val lineLen = (lineEnd - lineStart).coerceAtLeast(0)
+        val col = (x / charWidth).toInt().coerceAtLeast(0)
+        val clampedCol = col.coerceAtMost(lineLen)
+        return (lineStart + clampedCol).coerceIn(0, code.length)
+    }
+
     // Update overlay HTML whenever code changes
     LaunchedEffect(code) {
         fun clamp(i: Int, lo: Int, hi: Int): Int = if (i < lo) lo else if (i > hi) hi else i
@@ -109,16 +204,6 @@ fun EditorWithOverlay(
             val s = clamp(start, 0, text.length)
             val e = clamp(end, 0, text.length)
             return if (e <= s) "" else text.substring(s, e)
-        }
-        fun htmlEscapeLocal(s: String): String = buildString(s.length) {
-            for (ch in s) when (ch) {
-                '<' -> append("&lt;")
-                '>' -> append("&gt;")
-                '&' -> append("&amp;")
-                '"' -> append("&quot;")
-                '\'' -> append("&#39;")
-                else -> append(ch)
-            }
         }
 
         fun trimHtmlToTextPrefix(html: String, prefixChars: Int): String {
@@ -188,10 +273,103 @@ fun EditorWithOverlay(
         val sl = pendingScrollLeft ?: (taEl?.scrollLeft ?: 0.0)
         overlayEl?.scrollTop = st
         overlayEl?.scrollLeft = sl
+        diagOverlayEl?.scrollTop = st
+        diagOverlayEl?.scrollLeft = sl
         pendingScrollTop = null
         pendingScrollLeft = null
         // If text changed and autoGrow enabled, adjust height
         adjustTextareaHeight()
+        lineStarts = buildLineStarts(code)
+    }
+
+    fun buildDiagnosticsHtml(
+        text: String,
+        diagnostics: List<net.sergeych.lyng.tools.LyngDiagnostic>
+    ): String {
+        if (diagnostics.isEmpty()) return ""
+        val ranges = diagnostics.mapNotNull { d ->
+            val r = d.range ?: return@mapNotNull null
+            if (r.start < 0 || r.endExclusive <= r.start || r.endExclusive > text.length) return@mapNotNull null
+            Triple(r, d.severity, d.message)
+        }.sortedBy { it.first.start }
+        if (ranges.isEmpty()) return ""
+        val out = StringBuilder(text.length + 64)
+        var cursor = 0
+        for ((range, severity, message) in ranges) {
+            if (range.start < cursor) continue
+            if (cursor < range.start) {
+                out.append(htmlEscapeLocal(text.substring(cursor, range.start)))
+            }
+            val color = when (severity) {
+                net.sergeych.lyng.tools.LyngDiagnosticSeverity.Error -> "#dc3545"
+                net.sergeych.lyng.tools.LyngDiagnosticSeverity.Warning -> "#ffc107"
+            }
+            val seg = htmlEscapeLocal(text.substring(range.start, range.endExclusive))
+            val tip = htmlEscapeLocal(message).replace("\"", "&quot;")
+            out.append("<span title=\"").append(tip).append("\" style=\"text-decoration-line:underline;text-decoration-style:wavy;")
+            out.append("text-decoration-color:").append(color).append(";\">")
+            out.append(seg)
+            out.append("</span>")
+            cursor = range.endExclusive
+        }
+        if (cursor < text.length) out.append(htmlEscapeLocal(text.substring(cursor)))
+        return out.toString()
+    }
+
+    fun diagnosticMessageAt(offset: Int, analysis: LyngAnalysisResult?): String? {
+        val list = analysis?.diagnostics ?: return null
+        for (d in list) {
+            val r = d.range ?: continue
+            if (offset in r.start until r.endExclusive) return d.message
+        }
+        return null
+    }
+
+    fun updateCaretTooltip() {
+        val ta = taEl ?: return
+        val offset = ta.selectionStart ?: return
+        val msg = diagnosticMessageAt(offset, lastAnalysis)
+        if (msg.isNullOrBlank()) {
+            ta.removeAttribute("title")
+        } else {
+            ta.setAttribute("title", msg)
+        }
+    }
+
+    fun updateHoverTooltip(clientX: Double, clientY: Double) {
+        val ta = taEl ?: return
+        val offset = offsetFromMouse(ta, clientX, clientY) ?: return
+        val msg = diagnosticMessageAt(offset, lastAnalysis)
+        if (msg.isNullOrBlank()) {
+            tooltipText = null
+            return
+        }
+        val container = containerEl ?: return
+        val rect = container.getBoundingClientRect()
+        tooltipText = msg
+        tooltipX = (clientX - rect.left + 12.0).coerceAtLeast(0.0)
+        tooltipY = (clientY - rect.top + 12.0).coerceAtLeast(0.0)
+    }
+
+    LaunchedEffect(code, lastAnalysis) {
+        val analysis = lastAnalysis ?: return@LaunchedEffect
+        if (lastAnalysisText != code) {
+            diagOverlayEl?.innerHTML = htmlEscapeLocal(code)
+            updateCaretTooltip()
+            return@LaunchedEffect
+        }
+        val html = buildDiagnosticsHtml(code, analysis.diagnostics)
+        val content = if (html.isEmpty()) htmlEscapeLocal(code) else html
+        diagOverlayEl?.innerHTML = content
+        updateCaretTooltip()
+    }
+
+    LaunchedEffect(code, onAnalysisReady) {
+        if (onAnalysisReady == null) return@LaunchedEffect
+        try {
+            ensureAnalysis(code)
+        } catch (_: Throwable) {
+        }
     }
 
     fun setSelection(start: Int, end: Int = start) {
@@ -206,6 +384,10 @@ fun EditorWithOverlay(
         // avoid external CSS dependency: ensure base positioning inline
         classes("position-relative")
         attr("style", "position:relative;")
+        ref { it ->
+            containerEl = it
+            onDispose { if (containerEl === it) containerEl = null }
+        }
     }) {
         // Overlay: highlighted code
         org.jetbrains.compose.web.dom.Div({
@@ -223,6 +405,23 @@ fun EditorWithOverlay(
             ref { it ->
                 overlayEl = it
                 onDispose { if (overlayEl === it) overlayEl = null }
+            }
+        }) {}
+
+        // Diagnostics overlay: transparent text with wavy underlines
+        org.jetbrains.compose.web.dom.Div({
+            attr(
+                "style",
+                buildString {
+                    append("position:absolute; left:0; top:0; right:0; bottom:0;")
+                    append("overflow:auto; box-sizing:border-box; white-space:pre-wrap; word-break:break-word; tab-size:")
+                    append(tabSize)
+                    append("; margin:0; pointer-events:none; color:transparent;")
+                }
+            )
+            ref { it ->
+                diagOverlayEl = it
+                onDispose { if (diagOverlayEl === it) diagOverlayEl = null }
             }
         }) {}
 
@@ -269,19 +468,64 @@ fun EditorWithOverlay(
                 val v = (ev.target as HTMLTextAreaElement).value
                 setCode(v)
                 adjustTextareaHeight()
+                updateCaretTooltip()
             }
 
             onKeyDown { ev ->
                 // bubble to caller first so they may intercept shortcuts
                 onKeyDown?.invoke(ev)
+                if (ev.defaultPrevented) return@onKeyDown
                 val ta = taEl ?: return@onKeyDown
                 val key = ev.key
+                val keyLower = key.lowercase()
                 // If user pressed Ctrl/Cmd + Enter, treat it as a shortcut (e.g., Run)
                 // and DO NOT insert a newline here. Let the host handler act.
                 // Also prevent default so the textarea won't add a line.
                 if ((ev.ctrlKey || ev.metaKey) && key == "Enter") {
                     ev.preventDefault()
                     return@onKeyDown
+                }
+                if (ev.ctrlKey || ev.metaKey) {
+                    val offset = ta.selectionStart ?: 0
+                    val text = ta.value
+                    when {
+                        (key == " " || keyLower == "space" || keyLower == "spacebar") && onCompletionRequested != null -> {
+                            ev.preventDefault()
+                            scope.launch {
+                                val analysis = ensureAnalysis(text)
+                                val items = LyngWebTools.completions(text, offset, analysis)
+                                onCompletionRequested(offset, items)
+                            }
+                            return@onKeyDown
+                        }
+                        keyLower == "b" && onDefinitionResolved != null -> {
+                            ev.preventDefault()
+                            scope.launch {
+                                val analysis = ensureAnalysis(text)
+                                val target = LyngWebTools.definitionAt(analysis, offset)
+                                onDefinitionResolved(offset, target)
+                            }
+                            return@onKeyDown
+                        }
+                        ev.shiftKey && keyLower == "u" && onUsagesResolved != null -> {
+                            ev.preventDefault()
+                            scope.launch {
+                                val analysis = ensureAnalysis(text)
+                                val ranges = LyngWebTools.usagesAt(analysis, offset, includeDeclaration = false)
+                                onUsagesResolved(offset, ranges)
+                            }
+                            return@onKeyDown
+                        }
+                        keyLower == "q" && onDocRequested != null -> {
+                            ev.preventDefault()
+                            scope.launch {
+                                val analysis = ensureAnalysis(text)
+                                val info = LyngWebTools.docAt(analysis, offset)
+                                onDocRequested(offset, info)
+                            }
+                            return@onKeyDown
+                        }
+                    }
                 }
                 if (key == "Tab" && ev.shiftKey) {
                     // Shift+Tab: outdent current line(s)
@@ -336,21 +580,57 @@ fun EditorWithOverlay(
                 }
             }
 
+            onKeyUp { _ ->
+                updateCaretTooltip()
+            }
+
+            onMouseUp { _ ->
+                updateCaretTooltip()
+            }
+
+            onMouseMove { ev ->
+                updateHoverTooltip(ev.clientX.toDouble(), ev.clientY.toDouble())
+            }
+
+            onMouseLeave { _ ->
+                tooltipText = null
+            }
+
             onScroll { ev ->
                 val src = ev.target as? HTMLTextAreaElement ?: return@onScroll
                 overlayEl?.scrollTop = src.scrollTop
                 overlayEl?.scrollLeft = src.scrollLeft
+                diagOverlayEl?.scrollTop = src.scrollTop
+                diagOverlayEl?.scrollLeft = src.scrollLeft
             }
         })
+
+        if (tooltipText != null && tooltipX != null && tooltipY != null) {
+            org.jetbrains.compose.web.dom.Div({
+                attr(
+                    "style",
+                    buildString {
+                        append("position:absolute; z-index:3; pointer-events:none;")
+                        append("left:").append(tooltipX).append("px; top:").append(tooltipY).append("px;")
+                        append("background:#212529; color:#f8f9fa; padding:4px 6px; border-radius:4px;")
+                        append("font-size:12px; line-height:1.3; max-width:360px; white-space:pre-wrap;")
+                        append("box-shadow:0 4px 10px rgba(0,0,0,.15);")
+                    }
+                )
+            }) {
+                org.jetbrains.compose.web.dom.Text(tooltipText!!)
+            }
+        }
 
         // No built-in action buttons: EditorWithOverlay is a pure editor now
     }
 
     // Ensure overlay typography and paddings mirror the textarea so characters line up 1:1
-    LaunchedEffect(taEl, overlayEl) {
+    LaunchedEffect(taEl, overlayEl, diagOverlayEl) {
         try {
             val ta = taEl ?: return@LaunchedEffect
             val ov = overlayEl ?: return@LaunchedEffect
+            val diag = diagOverlayEl
             val cs = window.getComputedStyle(ta)
 
             // Best-effort concrete line-height
@@ -376,6 +656,7 @@ fun EditorWithOverlay(
                 append("color: var(--bs-body-color);")
             }
             ov.setAttribute("style", style)
+            diag?.setAttribute("style", style + "color:transparent;")
             // also enforce concrete line-height on textarea to stabilize caret metrics
             val existing = ta.getAttribute("style") ?: ""
             if (!existing.contains("line-height") && !lineHeight.isNullOrBlank()) {

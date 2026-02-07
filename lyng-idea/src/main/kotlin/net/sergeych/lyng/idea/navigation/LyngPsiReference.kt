@@ -36,9 +36,10 @@ class LyngPsiReference(element: PsiElement) : PsiPolyVariantReferenceBase<PsiEle
         val name = element.text ?: ""
         val results = mutableListOf<ResolveResult>()
 
-        val mini = LyngAstManager.getMiniAst(file) ?: return emptyArray()
-        val binding = LyngAstManager.getBinding(file)
-        val imported = DocLookupUtils.canonicalImportedModules(mini, text).toSet()
+        val analysis = LyngAstManager.getAnalysis(file) ?: return emptyArray()
+        val mini = analysis.mini ?: return emptyArray()
+        val binding = analysis.binding
+        val imported = analysis.importedModules.toSet()
         val currentPackage = getPackageName(file)
         val allowedPackages = if (currentPackage != null) imported + currentPackage else imported
 
@@ -64,11 +65,13 @@ class LyngPsiReference(element: PsiElement) : PsiPolyVariantReferenceBase<PsiEle
                             val kind = when(member) {
                                 is MiniMemberFunDecl -> "Function"
                                 is MiniMemberValDecl -> if (member.mutable) "Variable" else "Value"
+                                is MiniMemberTypeAliasDecl -> "TypeAlias"
                                 is MiniInitDecl -> "Initializer"
                                 is MiniFunDecl -> "Function"
                                 is MiniValDecl -> if (member.mutable) "Variable" else "Value"
                                 is MiniClassDecl -> "Class"
                                 is MiniEnumDecl -> "Enum"
+                                is MiniTypeAliasDecl -> "TypeAlias"
                             }
                             results.add(PsiElementResolveResult(LyngDeclarationElement(it, member.name, kind)))
                         }
@@ -199,6 +202,7 @@ class LyngPsiReference(element: PsiElement) : PsiPolyVariantReferenceBase<PsiEle
                         is net.sergeych.lyng.miniast.MiniClassDecl -> "Class"
                         is net.sergeych.lyng.miniast.MiniEnumDecl -> "Enum"
                         is net.sergeych.lyng.miniast.MiniValDecl -> if (d.mutable) "Variable" else "Value"
+                        is net.sergeych.lyng.miniast.MiniTypeAliasDecl -> "TypeAlias"
                     }
                     addIfMatch(d.name, d.nameStart, dKind)
                 }
@@ -214,6 +218,7 @@ class LyngPsiReference(element: PsiElement) : PsiPolyVariantReferenceBase<PsiEle
                     val mKind = when(m) {
                         is net.sergeych.lyng.miniast.MiniMemberFunDecl -> "Function"
                         is net.sergeych.lyng.miniast.MiniMemberValDecl -> if (m.mutable) "Variable" else "Value"
+                        is net.sergeych.lyng.miniast.MiniMemberTypeAliasDecl -> "TypeAlias"
                         is net.sergeych.lyng.miniast.MiniInitDecl -> "Initializer"
                     }
                     addIfMatch(m.name, m.nameStart, mKind)

@@ -29,6 +29,8 @@ import net.sergeych.lyng.idea.LyngLanguage
 import net.sergeych.lyng.idea.util.LyngAstManager
 import net.sergeych.lyng.idea.util.TextCtx
 import net.sergeych.lyng.miniast.*
+import net.sergeych.lyng.tools.LyngLanguageTools
+import net.sergeych.lyng.tools.LyngSymbolInfo
 
 /**
  * Quick Docs backed by MiniAst: when caret is on an identifier that corresponds
@@ -66,9 +68,15 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         if (DEBUG_LOG) log.info("[LYNG_DEBUG] QuickDoc: ident='$ident' at ${idRange.startOffset}..${idRange.endOffset} in ${file.name}")
 
         // 1. Get merged mini-AST from Manager (handles local + .lyng.d merged declarations)
-        val mini = LyngAstManager.getMiniAst(file) ?: return null
+        val analysis = LyngAstManager.getAnalysis(file) ?: return null
+        val mini = analysis.mini ?: return null
         val miniSource = mini.range.start.source
-        val imported = DocLookupUtils.canonicalImportedModules(mini, text)
+        val imported = analysis.importedModules.ifEmpty { DocLookupUtils.canonicalImportedModules(mini, text) }
+
+        // Single-source quick doc lookup
+        LyngLanguageTools.docAt(analysis, offset)?.let { info ->
+            renderDocFromInfo(info)?.let { return it }
+        }
 
         // Try resolve to: function param at position, function/class/val declaration at position
         // 1) Use unified declaration detection
@@ -91,6 +99,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                                 return when (m) {
                                     is MiniMemberFunDecl -> renderMemberFunDoc(d.name, m)
                                     is MiniMemberValDecl -> renderMemberValDoc(d.name, m)
+                                    is MiniMemberTypeAliasDecl -> renderMemberTypeAliasDoc(d.name, m)
                                     else -> null
                                 }
                             }
@@ -197,6 +206,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                                     return when (m) {
                                         is MiniMemberFunDecl -> renderMemberFunDoc(cls.name, m)
                                         is MiniMemberValDecl -> renderMemberValDoc(cls.name, m)
+                                        is MiniMemberTypeAliasDecl -> renderMemberTypeAliasDoc(cls.name, m)
                                         else -> null
                                     }
                                 }
@@ -312,11 +322,13 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                         return when (member) {
                             is MiniMemberFunDecl -> renderMemberFunDoc(owner, member)
                             is MiniMemberValDecl -> renderMemberValDoc(owner, member)
+                            is MiniMemberTypeAliasDecl -> renderMemberTypeAliasDoc(owner, member)
                             is MiniInitDecl -> null
                             is MiniFunDecl -> renderDeclDoc(member, text, mini, importedModules)
                             is MiniValDecl -> renderDeclDoc(member, text, mini, importedModules)
                             is MiniClassDecl -> renderDeclDoc(member, text, mini, importedModules)
                             is MiniEnumDecl -> renderDeclDoc(member, text, mini, importedModules)
+                            is MiniTypeAliasDecl -> renderDeclDoc(member, text, mini, importedModules)
                         }
                     }
                     log.info("[LYNG_DEBUG] QuickDoc: resolve failed for ${className}.${ident}")
@@ -354,6 +366,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
             // And classes/enums
             docs.filterIsInstance<MiniClassDecl>().firstOrNull { it.name == ident }?.let { return renderDeclDoc(it, text, mini, imported) }
             docs.filterIsInstance<MiniEnumDecl>().firstOrNull { it.name == ident }?.let { return renderDeclDoc(it, text, mini, imported) }
+            docs.filterIsInstance<MiniTypeAliasDecl>().firstOrNull { it.name == ident }?.let { return renderDeclDoc(it, text, mini, imported) }
         }
         // Defensive fallback: if nothing found and it's a well-known stdlib function, render minimal inline docs
         if (ident == "println" || ident == "print") {
@@ -372,11 +385,13 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                 return when (member) {
                     is MiniMemberFunDecl -> renderMemberFunDoc(owner, member)
                     is MiniMemberValDecl -> renderMemberValDoc(owner, member)
+                    is MiniMemberTypeAliasDecl -> renderMemberTypeAliasDoc(owner, member)
                     is MiniInitDecl -> null
                     is MiniFunDecl -> renderDeclDoc(member, text, mini, importedModules)
                     is MiniValDecl -> renderDeclDoc(member, text, mini, importedModules)
                     is MiniClassDecl -> renderDeclDoc(member, text, mini, importedModules)
                     is MiniEnumDecl -> renderDeclDoc(member, text, mini, importedModules)
+                    is MiniTypeAliasDecl -> renderDeclDoc(member, text, mini, importedModules)
                 }
             }
         } else {
@@ -395,11 +410,13 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                         return when (member) {
                             is MiniMemberFunDecl -> renderMemberFunDoc(owner, member)
                             is MiniMemberValDecl -> renderMemberValDoc(owner, member)
+                            is MiniMemberTypeAliasDecl -> renderMemberTypeAliasDoc(owner, member)
                             is MiniInitDecl -> null
                             is MiniFunDecl -> renderDeclDoc(member, text, mini, importedModules)
                             is MiniValDecl -> renderDeclDoc(member, text, mini, importedModules)
                             is MiniClassDecl -> renderDeclDoc(member, text, mini, importedModules)
                             is MiniEnumDecl -> renderDeclDoc(member, text, mini, importedModules)
+                            is MiniTypeAliasDecl -> renderDeclDoc(member, text, mini, importedModules)
                         }
                     }
                 } else {
@@ -412,11 +429,13 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                                 return when (member) {
                                     is MiniMemberFunDecl -> renderMemberFunDoc(owner, member)
                                     is MiniMemberValDecl -> renderMemberValDoc(owner, member)
+                                    is MiniMemberTypeAliasDecl -> renderMemberTypeAliasDoc(owner, member)
                                     is MiniInitDecl -> null
                                     is MiniFunDecl -> renderDeclDoc(member, text, mini, importedModules)
                                     is MiniValDecl -> renderDeclDoc(member, text, mini, importedModules)
                                     is MiniClassDecl -> renderDeclDoc(member, text, mini, importedModules)
                                     is MiniEnumDecl -> renderDeclDoc(member, text, mini, importedModules)
+                                    is MiniTypeAliasDecl -> renderDeclDoc(member, text, mini, importedModules)
                                 }
                             }
                         }
@@ -431,6 +450,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                             return when (m) {
                                 is MiniMemberFunDecl -> renderMemberFunDoc("String", m)
                                 is MiniMemberValDecl -> renderMemberValDoc("String", m)
+                                is MiniMemberTypeAliasDecl -> renderMemberTypeAliasDoc("String", m)
                                 is MiniInitDecl -> null
                             }
                         }
@@ -512,6 +532,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
             is MiniFunDecl -> "function ${d.name}${signatureOf(d)}"
             is MiniClassDecl -> "class ${d.name}"
             is MiniEnumDecl -> "enum ${d.name} { ${d.entries.joinToString(", ")} }"
+            is MiniTypeAliasDecl -> "type ${d.name}${typeAliasSuffix(d)}"
             is MiniValDecl -> {
                 val t = d.type ?: DocLookupUtils.inferTypeRefForVal(d, text, imported, mini)
                 val typeStr = if (t == null) ": Object?" else typeOf(t)
@@ -521,6 +542,24 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         val sb = StringBuilder()
         sb.append(renderTitle(title))
         sb.append(renderDocBody(d.doc))
+        return sb.toString()
+    }
+
+    private fun renderDocFromInfo(info: LyngSymbolInfo): String? {
+        val kind = when (info.target.kind) {
+            net.sergeych.lyng.binding.SymbolKind.Function -> "function"
+            net.sergeych.lyng.binding.SymbolKind.Class -> "class"
+            net.sergeych.lyng.binding.SymbolKind.Enum -> "enum"
+            net.sergeych.lyng.binding.SymbolKind.TypeAlias -> "type"
+            net.sergeych.lyng.binding.SymbolKind.Value -> "val"
+            net.sergeych.lyng.binding.SymbolKind.Variable -> "var"
+            net.sergeych.lyng.binding.SymbolKind.Parameter -> "parameter"
+        }
+        val title = info.signature ?: "$kind ${info.target.name}"
+        if (title.isBlank() && info.doc == null) return null
+        val sb = StringBuilder()
+        sb.append(renderTitle(title))
+        sb.append(renderDocBody(info.doc))
         return sb.toString()
     }
 
@@ -563,6 +602,25 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         sb.append(renderTitle(title))
         sb.append(renderDocBody(m.doc))
         return sb.toString()
+    }
+
+    private fun renderMemberTypeAliasDoc(className: String, m: MiniMemberTypeAliasDecl): String {
+        val tp = if (m.typeParams.isEmpty()) "" else "<" + m.typeParams.joinToString(", ") + ">"
+        val body = typeOf(m.target)
+        val rhs = if (body.isBlank()) "" else " = ${body.removePrefix(": ")}"
+        val staticStr = if (m.isStatic) "static " else ""
+        val title = "${staticStr}type $className.${m.name}$tp$rhs"
+        val sb = StringBuilder()
+        sb.append(renderTitle(title))
+        sb.append(renderDocBody(m.doc))
+        return sb.toString()
+    }
+
+    private fun typeAliasSuffix(d: MiniTypeAliasDecl): String {
+        val tp = if (d.typeParams.isEmpty()) "" else "<" + d.typeParams.joinToString(", ") + ">"
+        val body = typeOf(d.target)
+        val rhs = if (body.isBlank()) "" else " = ${body.removePrefix(": ")}"
+        return "$tp$rhs"
     }
 
     private fun typeOf(t: MiniTypeRef?): String {
