@@ -21,14 +21,11 @@
 package net.sergeych.lyngweb
 
 import kotlinx.browser.window
-import net.sergeych.lyng.Compiler
-import net.sergeych.lyng.Source
-import net.sergeych.lyng.binding.Binder
-import net.sergeych.lyng.binding.SymbolKind
 import net.sergeych.lyng.highlight.HighlightKind
 import net.sergeych.lyng.highlight.SimpleLyngHighlighter
 import net.sergeych.lyng.highlight.offsetOf
-import net.sergeych.lyng.miniast.*
+import net.sergeych.lyng.tools.LyngLanguageTools
+import net.sergeych.lyng.tools.LyngSemanticKind
 import org.w3c.dom.HTMLStyleElement
 
 fun ensureBootstrapCodeBlocks(html: String): String {
@@ -339,162 +336,32 @@ fun applyLyngHighlightToText(text: String): String {
  */
 suspend fun applyLyngHighlightToTextAst(text: String): String {
     return try {
-        // Ensure CSS present
         ensureLyngHighlightStyles()
-        val source = Source("<web>", text)
-        // Token baseline
-        val tokenSpans = SimpleLyngHighlighter().highlight(text)
+        val analysis = LyngLanguageTools.analyze(text, "<web>")
+        val source = analysis.source
+        val tokenSpans = analysis.lexicalHighlights
         if (tokenSpans.isEmpty()) return htmlEscape(text)
 
-        // Build Mini-AST
-        val sink = MiniAstBuilder()
-        Compiler.compileWithMini(text, sink)
-        val mini = sink.build()
-
-        // Collect overrides from AST and Binding with precise offsets
         val overrides = HashMap<Pair<Int, Int>, String>()
-        fun putName(startPos: net.sergeych.lyng.Pos, name: String, cls: String) {
-            val s = source.offsetOf(startPos)
-            val e = s + name.length
-            if (s >= 0 && e <= text.length && s < e) overrides[s to e] = cls
+        fun classForSemantic(kind: LyngSemanticKind): String? = when (kind) {
+            LyngSemanticKind.Function -> "hl-fn"
+            LyngSemanticKind.Class, LyngSemanticKind.Enum, LyngSemanticKind.TypeAlias -> "hl-class"
+            LyngSemanticKind.Value -> "hl-val"
+            LyngSemanticKind.Variable -> "hl-var"
+            LyngSemanticKind.Parameter -> "hl-param"
+            LyngSemanticKind.TypeRef -> "hl-ty"
+            LyngSemanticKind.EnumConstant -> "hl-enumc"
         }
-        // Declarations
-        mini?.declarations?.forEach { d ->
-            when (d) {
-                is MiniFunDecl -> putName(d.nameStart, d.name, "hl-fn")
-                is MiniClassDecl -> putName(d.nameStart, d.name, "hl-class")
-                is net.sergeych.lyng.miniast.MiniValDecl -> putName(d.nameStart, d.name, if (d.mutable) "hl-var" else "hl-val")
-                is MiniEnumDecl -> putName(d.nameStart, d.name, "hl-class")
-            }
+
+        LyngLanguageTools.semanticHighlights(analysis).forEach { s ->
+            classForSemantic(s.kind)?.let { overrides[s.range.start to s.range.endExclusive] = it }
         }
-        // Imports: color each segment as directive/path
-        mini?.imports?.forEach { imp ->
+
+        analysis.mini?.imports?.forEach { imp ->
             imp.segments.forEach { seg ->
                 val s = source.offsetOf(seg.range.start)
                 val e = source.offsetOf(seg.range.end)
                 if (s >= 0 && e <= text.length && s < e) overrides[s to e] = "hl-dir"
-            }
-        }
-        // Parameters
-        mini?.declarations?.filterIsInstance<MiniFunDecl>()?.forEach { fn ->
-            fn.params.forEach { p -> putName(p.nameStart, p.name, "hl-param") }
-        }
-        // Type name segments
-        fun addTypeSegments(t: net.sergeych.lyng.miniast.MiniTypeRef?) {
-            when (t) {
-                is MiniTypeName -> t.segments.forEach { seg ->
-                    val s = source.offsetOf(seg.range.start)
-                    val e = s + seg.name.length
-                    if (s >= 0 && e <= text.length && s < e) overrides[s to e] = "hl-ty"
-                }
-                is net.sergeych.lyng.miniast.MiniGenericType -> {
-                    addTypeSegments(t.base)
-                    t.args.forEach { addTypeSegments(it) }
-                }
-                else -> {}
-            }
-        }
-        mini?.declarations?.forEach { d ->
-            when (d) {
-                is MiniFunDecl -> {
-                    addTypeSegments(d.returnType)
-                    d.params.forEach { addTypeSegments(it.type) }
-                }
-                is net.sergeych.lyng.miniast.MiniValDecl -> addTypeSegments(d.type)
-                is MiniClassDecl -> {}
-                is MiniEnumDecl -> {}
-            }
-        }
-
-        // Apply binder results to mark usages by semantic kind (params, locals, top-level, functions, classes)
-        try {
-            if (mini != null) {
-                val binding = Binder.bind(text, mini)
-                val symbolsById = binding.symbols.associateBy { it.id }
-                // Map decl ranges to avoid overriding declarations
-                val declKeys = HashSet<Pair<Int, Int>>()
-                for (sym in binding.symbols) {
-                    declKeys += (sym.declStart to sym.declEnd)
-                }
-                fun classForKind(k: SymbolKind): String? = when (k) {
-                    SymbolKind.Function -> "hl-fn"
-                    SymbolKind.Class, SymbolKind.Enum -> "hl-class"
-                    SymbolKind.Parameter -> "hl-param"
-                    SymbolKind.Value -> "hl-val"
-                    SymbolKind.Variable -> "hl-var"
-                }
-                for (ref in binding.references) {
-                    val key = ref.start to ref.end
-                    if (declKeys.contains(key)) continue
-                    if (!overrides.containsKey(key)) {
-                        val sym = symbolsById[ref.symbolId]
-                        val cls = sym?.let { classForKind(it.kind) }
-                        if (cls != null) overrides[key] = cls
-                    }
-                }
-            }
-        } catch (_: Throwable) {
-            // Binder is best-effort; ignore on any failure
-        }
-
-        fun isFollowedByParen(rangeEnd: Int): Boolean {
-            var i = rangeEnd
-            while (i < text.length) {
-                val ch = text[i]
-                if (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') { i++; continue }
-                return ch == '('
-            }
-            return false
-        }
-
-        fun isFollowedByBlock(rangeEnd: Int): Boolean {
-            var i = rangeEnd
-            while (i < text.length) {
-                val ch = text[i]
-                if (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') { i++; continue }
-                return ch == '{'
-            }
-            return false
-        }
-
-        // First: mark function call-sites (identifier immediately followed by '('), best-effort.
-        // Do this before vars/params so it takes precedence where both could match.
-        run {
-            for (s in tokenSpans) {
-                if (s.kind == HighlightKind.Identifier) {
-                    val key = s.range.start to s.range.endExclusive
-                    if (!overrides.containsKey(key)) {
-                        if (isFollowedByParen(s.range.endExclusive) || isFollowedByBlock(s.range.endExclusive)) {
-                            overrides[key] = "hl-fn"
-                        }
-                    }
-                }
-            }
-        }
-
-        // Highlight usages of top-level vals/vars and parameters (best-effort, no binder yet)
-        val nameRoleMap = HashMap<String, String>(8)
-        mini?.declarations?.forEach { d ->
-            when (d) {
-                is net.sergeych.lyng.miniast.MiniValDecl -> nameRoleMap[d.name] = if (d.mutable) "hl-var" else "hl-val"
-                is MiniFunDecl -> d.params.forEach { p -> nameRoleMap[p.name] = "hl-param" }
-                else -> {}
-            }
-        }
-        // For every identifier token not already overridden, apply role based on known names
-        for (s in tokenSpans) {
-            if (s.kind == HighlightKind.Identifier) {
-                val key = s.range.start to s.range.endExclusive
-                if (!overrides.containsKey(key)) {
-                    val ident = text.substring(s.range.start, s.range.endExclusive)
-                    val cls = nameRoleMap[ident]
-                    if (cls != null) {
-                        // Avoid marking function call sites as vars/params
-                        if (!isFollowedByParen(s.range.endExclusive)) {
-                            overrides[key] = cls
-                        }
-                    }
-                }
             }
         }
 
@@ -534,7 +401,7 @@ private fun detectDeclarationAndParamOverrides(text: String): Map<Pair<Int, Int>
         "if", "else", "while", "do", "for", "when", "try", "catch", "finally",
         "throw", "return", "break", "continue", "in", "is", "as", "as?", "not",
         "true", "false", "null", "private", "protected", "abstract", "closed", "override", "open", "extern", "static",
-        "init", "get", "set", "Unset", "by"
+        "init", "get", "set", "Unset", "by", "step"
     )
     fun skipWs(idx0: Int): Int {
         var idx = idx0

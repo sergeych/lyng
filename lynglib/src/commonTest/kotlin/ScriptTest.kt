@@ -3458,6 +3458,26 @@ class ScriptTest {
     }
 
     @Test
+    fun testRangeStepIteration() = runTest {
+        val ints = eval("""(1..5 step 2).toList()""") as ObjList
+        assertEquals(listOf(1, 3, 5), ints.list.map { it.toInt() })
+        val chars = eval("""('a'..'e' step 2).toList()""") as ObjList
+        assertEquals(listOf('a', 'c', 'e'), chars.list.map { it.toString().single() })
+        val reals = eval("""(0.0..1.0 step 0.25).toList()""") as ObjList
+        assertEquals(listOf(0.0, 0.25, 0.5, 0.75, 1.0), reals.list.map { it.toDouble() })
+        val empty = eval("""(5..1 step 1).toList()""") as ObjList
+        assertEquals(0, empty.list.size)
+        val openEnd = eval("""(0.. step 1).take(3).toList()""") as ObjList
+        assertEquals(listOf(0, 1, 2), openEnd.list.map { it.toInt() })
+        assertFailsWith<ExecutionError> {
+            eval("""(0.0..1.0).toList()""")
+        }
+        assertFailsWith<ExecutionError> {
+            eval("""(0..).toList()""")
+        }
+    }
+
+    @Test
     fun testMultilineStrings() = runTest {
         assertEquals(
             """

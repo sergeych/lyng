@@ -23,10 +23,16 @@ import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lyng.miniast.addPropertyDoc
 import net.sergeych.lyng.miniast.type
 
-class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Obj() {
+class ObjRange(
+    val start: Obj?,
+    val end: Obj?,
+    val isEndInclusive: Boolean,
+    val step: Obj? = null
+) : Obj() {
 
     val isOpenStart by lazy { start == null || start.isNull }
     val isOpenEnd by lazy { end == null || end.isNull }
+    val hasExplicitStep: Boolean get() = step != null && !step.isNull
 
     override val objClass: ObjClass get() = type
 
@@ -35,6 +41,9 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
         result.append("${start?.inspect(scope) ?: '∞'} ..")
         if (!isEndInclusive) result.append('<')
         result.append(" ${end?.inspect(scope) ?: '∞'}")
+        if (hasExplicitStep) {
+            result.append(" step ${step?.inspect(scope)}")
+        }
         return ObjString(result.toString())
     }
 
@@ -64,26 +73,26 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
         }
 
     suspend fun containsRange(scope: Scope, other: ObjRange): Boolean {
-        if (start != null) {
+        if (!isOpenStart) {
             // our start is not -∞ so other start should be GTE or is not contained:
-            if (other.start != null && start.compareTo(scope, other.start) > 0) return false
+            if (!other.isOpenStart && start!!.compareTo(scope, other.start!!) > 0) return false
         }
-        if (end != null) {
+        if (!isOpenEnd) {
             // same with the end: if it is open, it can't be contained in ours:
-            if (other.end == null) return false
+            if (other.isOpenEnd) return false
             // both exists, now there could be 4 cases:
             return when {
                 other.isEndInclusive && isEndInclusive ->
-                    end.compareTo(scope, other.end) >= 0
+                    end!!.compareTo(scope, other.end!!) >= 0
 
                 !other.isEndInclusive && !isEndInclusive ->
-                    end.compareTo(scope, other.end) >= 0
+                    end!!.compareTo(scope, other.end!!) >= 0
 
                 other.isEndInclusive && !isEndInclusive ->
-                    end.compareTo(scope, other.end) > 0
+                    end!!.compareTo(scope, other.end!!) > 0
 
                 !other.isEndInclusive && isEndInclusive ->
-                    end.compareTo(scope, other.end) >= 0
+                    end!!.compareTo(scope, other.end!!) >= 0
 
                 else -> throw IllegalStateException("unknown comparison")
             }
@@ -120,12 +129,12 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
             }
         }
 
-        if (start == null && end == null) return true
-        if (start != null) {
-            if (start.compareTo(scope, other) > 0) return false
+        if (isOpenStart && isOpenEnd) return true
+        if (!isOpenStart) {
+            if (start!!.compareTo(scope, other) > 0) return false
         }
-        if (end != null) {
-            val cmp = end.compareTo(scope, other)
+        if (!isOpenEnd) {
+            val cmp = end!!.compareTo(scope, other)
             if (isEndInclusive && cmp < 0 || !isEndInclusive && cmp <= 0) return false
         }
         return true
@@ -140,7 +149,7 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
     }
 
     override suspend fun enumerate(scope: Scope, callback: suspend (Obj) -> Boolean) {
-        if (start is ObjInt && end is ObjInt) {
+        if (!hasExplicitStep && start is ObjInt && end is ObjInt) {
             val s = start.value
             val e = end.value
             if (isEndInclusive) {
@@ -152,7 +161,7 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
                     if (!callback(ObjInt.of(i))) break
                 }
             }
-        } else if (start is ObjChar && end is ObjChar) {
+        } else if (!hasExplicitStep && start is ObjChar && end is ObjChar) {
             val s = start.value
             val e = end.value
             if (isEndInclusive) {
@@ -171,7 +180,11 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
         return (other as? ObjRange)?.let {
-            if( start == other.start && end == other.end ) 0 else -1
+            if (start == other.start &&
+                end == other.end &&
+                isEndInclusive == other.isEndInclusive &&
+                step == other.step
+            ) 0 else -1
         }
             ?: -1
     }
@@ -180,6 +193,7 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
         var result = start?.hashCode() ?: 0
         result = 31 * result + (end?.hashCode() ?: 0)
         result = 31 * result + isEndInclusive.hashCode()
+        result = 31 * result + (step?.hashCode() ?: 0)
         return result
     }
 
@@ -192,6 +206,7 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
         if (start != other.start) return false
         if (end != other.end) return false
         if (isEndInclusive != other.isEndInclusive) return false
+        if (step != other.step) return false
 
         return true
     }
@@ -214,11 +229,18 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
                 getter = { thisAs<ObjRange>().end ?: ObjNull }
             )
             addPropertyDoc(
+                name = "step",
+                doc = "Explicit step for iteration, or null if implicit.",
+                type = type("lyng.Any", nullable = true),
+                moduleName = "lyng.stdlib",
+                getter = { thisAs<ObjRange>().step ?: ObjNull }
+            )
+            addPropertyDoc(
                 name = "isOpen",
                 doc = "Whether the range is open on either side (no start or no end).",
                 type = type("lyng.Bool"),
                 moduleName = "lyng.stdlib",
-                getter = { thisAs<ObjRange>().let { it.start == null || it.end == null }.toObj() }
+                getter = { thisAs<ObjRange>().let { it.isOpenStart || it.isOpenEnd }.toObj() }
             )
             addPropertyDoc(
                 name = "isIntRange",
@@ -248,20 +270,78 @@ class ObjRange(val start: Obj?, val end: Obj?, val isEndInclusive: Boolean) : Ob
                 moduleName = "lyng.stdlib"
             ) {
                 val self = thisAs<ObjRange>()
-                if (net.sergeych.lyng.PerfFlags.RANGE_FAST_ITER) {
-                    val s = self.start
-                    val e = self.end
-                    if (s is ObjInt && e is ObjInt) {
-                        val start = s.value.toInt()
-                        val endExclusive = (if (self.isEndInclusive) e.value.toInt() + 1 else e.value.toInt())
-                        // Only for ascending simple ranges; fall back otherwise
-                        if (start <= endExclusive) {
-                            return@addFnDoc ObjFastIntRangeIterator(start, endExclusive)
-                        }
-                    }
-                }
-                ObjRangeIterator(self).apply { init() }
+                self.buildIterator(this)
             }
         }
+    }
+
+    private fun explicitStepOrNull(): Obj? = step?.takeUnless { it.isNull }
+
+    private suspend fun resolveStep(scope: Scope, explicitStep: Obj?): Obj {
+        val startObj = start ?: ObjNull
+        if (explicitStep != null) {
+            if (explicitStep is Numeric && explicitStep.doubleValue == 0.0) {
+                scope.raiseIllegalState("Range step cannot be zero")
+            }
+            if (startObj is ObjChar && explicitStep !is ObjInt) {
+                scope.raiseIllegalState("Char range step must be Int")
+            }
+            if (startObj is Numeric && explicitStep !is Numeric) {
+                scope.raiseIllegalState("Numeric range step must be numeric")
+            }
+            return explicitStep
+        }
+        if (startObj is ObjInt) {
+            val cmp = if (end == null || end.isNull) 0 else startObj.compareTo(scope, end)
+            val dir = if (cmp >= 0) -1 else 1
+            return ObjInt.of(dir.toLong())
+        }
+        if (startObj is ObjChar) {
+            val endChar = end as? ObjChar
+                ?: scope.raiseIllegalState("Char range requires Char end to infer step")
+            val dir = if (startObj.value >= endChar.value) -1 else 1
+            return ObjInt.of(dir.toLong())
+        }
+        if (startObj is ObjReal) {
+            scope.raiseIllegalState("Real range requires explicit step")
+        }
+        scope.raiseIllegalState("Range of ${startObj.objClass.className} requires explicit step")
+    }
+
+    private suspend fun directionMismatch(scope: Scope, step: Obj): Boolean {
+        if (end == null || end.isNull) return false
+        val startObj = start ?: ObjNull
+        if (startObj is ObjChar && end !is ObjChar) return false
+        val cmp = startObj.compareTo(scope, end)
+        if (cmp == -2) return false
+        if (cmp == 0) return false
+        val stepSign = when {
+            startObj is ObjChar && step is ObjInt -> step.value.compareTo(0)
+            step is Numeric -> step.doubleValue.compareTo(0.0)
+            else -> return false
+        }
+        return (cmp < 0 && stepSign < 0) || (cmp > 0 && stepSign > 0)
+    }
+
+    suspend fun buildIterator(scope: Scope): Obj {
+        if (isOpenStart) scope.raiseIllegalState("Range with open start is not iterable")
+        val explicitStep = explicitStepOrNull()
+        if (isOpenEnd && explicitStep == null) {
+            scope.raiseIllegalState("Open-ended range requires explicit step to iterate")
+        }
+        val stepValue = resolveStep(scope, explicitStep)
+        val mismatch = directionMismatch(scope, stepValue)
+        if (net.sergeych.lyng.PerfFlags.RANGE_FAST_ITER) {
+            val s = start
+            val e = end
+            if (!mismatch && stepValue is ObjInt && stepValue.value == 1L && s is ObjInt && e is ObjInt) {
+                val startVal = s.value.toInt()
+                val endExclusive = (if (isEndInclusive) e.value.toInt() + 1 else e.value.toInt())
+                if (startVal <= endExclusive) {
+                    return ObjFastIntRangeIterator(startVal, endExclusive)
+                }
+            }
+        }
+        return ObjRangeIterator(this, stepValue, mismatch)
     }
 }

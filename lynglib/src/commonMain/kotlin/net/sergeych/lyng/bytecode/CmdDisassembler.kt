@@ -76,7 +76,13 @@ object CmdDisassembler {
             is CmdAssertIs -> Opcode.ASSERT_IS to intArrayOf(cmd.objSlot, cmd.typeSlot)
             is CmdMakeQualifiedView -> Opcode.MAKE_QUALIFIED_VIEW to intArrayOf(cmd.objSlot, cmd.typeSlot, cmd.dst)
             is CmdRangeIntBounds -> Opcode.RANGE_INT_BOUNDS to intArrayOf(cmd.src, cmd.startSlot, cmd.endSlot, cmd.okSlot)
-            is CmdMakeRange -> Opcode.MAKE_RANGE to intArrayOf(cmd.startSlot, cmd.endSlot, cmd.inclusiveSlot, cmd.dst)
+            is CmdMakeRange -> Opcode.MAKE_RANGE to intArrayOf(
+                cmd.startSlot,
+                cmd.endSlot,
+                cmd.inclusiveSlot,
+                cmd.stepSlot,
+                cmd.dst
+            )
             is CmdResolveScopeSlot -> Opcode.RESOLVE_SCOPE_SLOT to intArrayOf(cmd.scopeSlot, cmd.addrSlot)
             is CmdLoadObjAddr -> Opcode.LOAD_OBJ_ADDR to intArrayOf(cmd.addrSlot, cmd.dst)
             is CmdStoreObjAddr -> Opcode.STORE_OBJ_ADDR to intArrayOf(cmd.src, cmd.addrSlot)
@@ -216,8 +222,10 @@ object CmdDisassembler {
                 listOf(OperandKind.SLOT, OperandKind.SLOT)
             Opcode.CHECK_IS, Opcode.MAKE_QUALIFIED_VIEW ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
-            Opcode.RANGE_INT_BOUNDS, Opcode.MAKE_RANGE ->
+            Opcode.RANGE_INT_BOUNDS ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
+            Opcode.MAKE_RANGE ->
+                listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.RET_LABEL, Opcode.THROW ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.RESOLVE_SCOPE_SLOT ->

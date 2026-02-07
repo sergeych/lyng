@@ -703,6 +703,10 @@ class Compiler(
 
     private suspend fun parseTypeAliasDeclaration(): Statement {
         val nameToken = cc.requireToken(Token.Type.ID, "type alias name expected")
+        val startPos = pendingDeclStart ?: nameToken.pos
+        val doc = pendingDeclDoc ?: consumePendingDoc()
+        pendingDeclDoc = null
+        pendingDeclStart = null
         val declaredName = nameToken.value
         val outerClassName = currentEnclosingClassName()
         val qualifiedName = if (outerClassName != null) "$outerClassName.$declaredName" else declaredName
@@ -719,13 +723,13 @@ class Compiler(
         }
         val typeParamNames = uniqueParams
         if (typeParamNames.isNotEmpty()) pendingTypeParamStack.add(typeParamNames)
-        val body = try {
+        val (body, bodyMini) = try {
             cc.skipWsTokens()
             val eq = cc.nextNonWhitespace()
             if (eq.type != Token.Type.ASSIGN) {
                 throw ScriptError(eq.pos, "type alias $qualifiedName expects '='")
             }
-            parseTypeExpressionWithMini().first
+            parseTypeExpressionWithMini()
         } finally {
             if (typeParamNames.isNotEmpty()) pendingTypeParamStack.removeLast()
         }
@@ -738,7 +742,16 @@ class Compiler(
             outerCtx?.classScopeMembers?.add(declaredName)
             registerClassScopeMember(outerClassName, declaredName)
         }
-        pendingDeclDoc = null
+        miniSink?.onTypeAliasDecl(
+            MiniTypeAliasDecl(
+                range = MiniRange(startPos, cc.currentPos()),
+                name = declaredName,
+                typeParams = typeParams.map { it.name },
+                target = bodyMini,
+                doc = doc,
+                nameStart = nameToken.pos
+            )
+        )
 
         val aliasExpr = net.sergeych.lyng.obj.TypeDeclRef(body, nameToken.pos)
         val initStmt = ExpressionStatement(aliasExpr, nameToken.pos)
@@ -2422,7 +2435,10 @@ class Compiler(
                     // to skip in parseExpression:
                     val current = cc.current()
                     val right =
-                        if (current.type == Token.Type.NEWLINE || current.type == Token.Type.SINGLE_LINE_COMMENT)
+                        if (current.type == Token.Type.NEWLINE ||
+                            current.type == Token.Type.SINGLE_LINE_COMMENT ||
+                            current.type == Token.Type.STEP
+                        )
                             null
                         else
                             parseExpression()
@@ -2438,6 +2454,30 @@ class Compiler(
                     } else {
                         operand = RangeRef(left, rightRef, isEndInclusive)
                     }
+                }
+
+                Token.Type.STEP -> {
+                    val left = operand ?: throw ScriptError(t.pos, "step requires a range")
+                    val rangeRef = when (left) {
+                        is RangeRef -> left
+                        is ConstRef -> {
+                            val range = left.constValue as? ObjRange ?: run {
+                                cc.previous()
+                                return operand
+                            }
+                            val leftRef = range.start?.takeUnless { it.isNull }?.let { ConstRef(it.asReadonly) }
+                            val rightRef = range.end?.takeUnless { it.isNull }?.let { ConstRef(it.asReadonly) }
+                            RangeRef(leftRef, rightRef, range.isEndInclusive)
+                        }
+                        else -> {
+                            cc.previous()
+                            return operand
+                        }
+                    }
+                    if (rangeRef.step != null) throw ScriptError(t.pos, "step is already specified for this range")
+                    val stepExpr = parseExpression() ?: throw ScriptError(t.pos, "Expected step expression")
+                    val stepRef = StatementRef(stepExpr)
+                    operand = RangeRef(rangeRef.left, rangeRef.right, rangeRef.isEndInclusive, stepRef)
                 }
 
                 Token.Type.LBRACE, Token.Type.NULL_COALESCE_BLOCKINVOKE -> {
@@ -6042,12 +6082,14 @@ class Compiler(
             is ConstRef -> {
                 val range = ref.constValue as? ObjRange ?: return null
                 if (!range.isIntRange) return null
+                if (range.step != null && !range.step.isNull) return null
                 val start = range.start?.toLong() ?: return null
                 val end = range.end?.toLong() ?: return null
                 val endExclusive = if (range.isEndInclusive) end + 1 else end
                 return ConstIntRange(start, endExclusive)
             }
             is RangeRef -> {
+                if (ref.step != null) return null
                 val start = constIntValueOrNull(ref.left) ?: return null
                 val end = constIntValueOrNull(ref.right) ?: return null
                 val endExclusive = if (ref.isEndInclusive) end + 1 else end

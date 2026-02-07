@@ -125,7 +125,7 @@ class ForInStatement(
         }
 
         val sourceObj = source.execute(forContext)
-        return if (sourceObj is ObjRange && sourceObj.isIntRange && PerfFlags.PRIMITIVE_FASTOPS) {
+        return if (sourceObj is ObjRange && sourceObj.isIntRange && !sourceObj.hasExplicitStep && PerfFlags.PRIMITIVE_FASTOPS) {
             loopIntRange(
                 forContext,
                 sourceObj.start!!.toLong(),

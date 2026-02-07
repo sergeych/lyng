@@ -2202,8 +2202,17 @@ class BytecodeCompiler(
         val inclusiveSlot = allocSlot()
         val inclusiveId = builder.addConst(BytecodeConst.Bool(ref.isEndInclusive))
         builder.emit(Opcode.CONST_BOOL, inclusiveId, inclusiveSlot)
+        val stepSlot = if (ref.step != null) {
+            val step = compileRefWithFallback(ref.step, null, Pos.builtIn) ?: return null
+            ensureObjSlot(step).slot
+        } else {
+            val slot = allocSlot()
+            builder.emit(Opcode.CONST_NULL, slot)
+            updateSlotType(slot, SlotType.OBJ)
+            slot
+        }
         val dst = allocSlot()
-        builder.emit(Opcode.MAKE_RANGE, startSlot, endSlot, inclusiveSlot, dst)
+        builder.emit(Opcode.MAKE_RANGE, startSlot, endSlot, inclusiveSlot, stepSlot, dst)
         updateSlotType(dst, SlotType.OBJ)
         slotObjClass[dst] = ObjRange.type
         return CompiledValue(dst, SlotType.OBJ)
@@ -5508,7 +5517,8 @@ class BytecodeCompiler(
     private fun extractRangeRef(source: Statement): RangeRef? {
         val target = if (source is BytecodeStatement) source.original else source
         val expr = target as? ExpressionStatement ?: return null
-        return expr.ref as? RangeRef
+        val ref = expr.ref as? RangeRef ?: return null
+        return if (ref.step != null) null else ref
     }
 
     private fun extractDeclaredRange(stmt: Statement?): RangeRef? {
@@ -5519,6 +5529,7 @@ class BytecodeCompiler(
         if (ref is RangeRef) return ref
         if (ref is ConstRef) {
             val range = ref.constValue as? ObjRange ?: return null
+            if (range.step != null && !range.step.isNull) return null
             val start = range.start as? ObjInt ?: return null
             val end = range.end as? ObjInt ?: return null
             val left = ConstRef(start.asReadonly)

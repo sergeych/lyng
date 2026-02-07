@@ -17,57 +17,55 @@
 
 package net.sergeych.lyng.obj
 
-import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.Scope
 
-class ObjRangeIterator(val self: ObjRange) : Obj() {
+class ObjRangeIterator(
+    private val self: ObjRange,
+    private val step: Obj,
+    private val directionMismatch: Boolean
+) : Obj() {
 
-    private var nextIndex = 0
-    private var lastIndex = 0
-    private var isCharRange: Boolean = false
+    private var current: Obj? = null
+    private var initialized = false
 
     override val objClass: ObjClass get() = type
 
-    fun Scope.init() {
-        val s = self.start
-        val e = self.end
-        if (s is ObjInt && e is ObjInt) {
-            lastIndex = if (self.isEndInclusive)
-                (e.value - s.value + 1).toInt()
-            else
-                (e.value - s.value).toInt()
-        } else if (s is ObjChar && e is ObjChar) {
-            isCharRange = true
-            lastIndex = if (self.isEndInclusive)
-                (e.value.code - s.value.code + 1)
-            else
-                (e.value.code - s.value.code)
-        } else {
-            raiseError("not implemented iterator for range of $this")
+    private fun ensureInit() {
+        if (!initialized) {
+            current = self.start ?: ObjNull
+            initialized = true
         }
     }
 
-    fun hasNext(): Boolean = nextIndex < lastIndex
+    suspend fun hasNext(scope: Scope): Boolean {
+        if (directionMismatch) return false
+        ensureInit()
+        val cur = current ?: return false
+        return self.contains(scope, cur)
+    }
 
-    fun next(scope: Scope): Obj =
-        if (nextIndex < lastIndex) {
-            val start = self.start
-            val x = if (start is ObjInt)
-                start.value + nextIndex++
-            else if (start is ObjChar)
-                start.value.code.toLong() + nextIndex++
-            else
-                scope.raiseError("iterator error: unsupported range start")
-            if (isCharRange) ObjChar(x.toInt().toChar()) else ObjInt.of(x)
-        }
-        else {
+    suspend fun next(scope: Scope): Obj {
+        if (!hasNext(scope)) {
             scope.raiseError(ObjIterationFinishedException(scope))
+        }
+        val result = current ?: scope.raiseError("iterator error: missing current value")
+        current = advance(scope, result)
+        return result
+    }
+
+    private suspend fun advance(scope: Scope, value: Obj): Obj =
+        if (value is ObjChar) {
+            val delta = (step as? ObjInt)
+                ?: scope.raiseIllegalState("Char range step must be Int")
+            ObjChar((value.value.code + delta.value.toInt()).toChar())
+        } else {
+            value.plus(scope, step)
         }
 
     companion object {
         val type = ObjClass("RangeIterator", ObjIterator).apply {
             addFn("hasNext") {
-                thisAs<ObjRangeIterator>().hasNext().toObj()
+                thisAs<ObjRangeIterator>().hasNext(this).toObj()
             }
             addFn("next") {
                 thisAs<ObjRangeIterator>().next(this)

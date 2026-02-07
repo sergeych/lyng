@@ -36,7 +36,7 @@ class LyngLexer : LexerBase() {
         "abstract", "closed", "override", "static", "extern", "open", "private", "protected",
         "if", "else", "for", "while", "return", "true", "false", "null",
         "when", "in", "is", "break", "continue", "try", "catch", "finally",
-        "get", "set", "object", "enum", "init", "by", "property", "constructor"
+        "get", "set", "object", "enum", "init", "by", "step", "property", "constructor"
     )
 
     override fun start(buffer: CharSequence, startOffset: Int, endOffset: Int, initialState: Int) {

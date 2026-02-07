@@ -171,13 +171,16 @@ class CmdMakeRange(
     internal val startSlot: Int,
     internal val endSlot: Int,
     internal val inclusiveSlot: Int,
+    internal val stepSlot: Int,
     internal val dst: Int,
 ) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         val start = frame.slotToObj(startSlot)
         val end = frame.slotToObj(endSlot)
         val inclusive = frame.slotToObj(inclusiveSlot).toBool()
-        frame.storeObjResult(dst, ObjRange(start, end, isEndInclusive = inclusive))
+        val stepObj = frame.slotToObj(stepSlot)
+        val step = if (stepObj.isNull) null else stepObj
+        frame.storeObjResult(dst, ObjRange(start, end, isEndInclusive = inclusive, step = step))
         return
     }
 }

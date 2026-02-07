@@ -2495,7 +2495,8 @@ class MapLiteralRef(private val entries: List<MapLiteralEntry>) : ObjRef {
 class RangeRef(
     internal val left: ObjRef?,
     internal val right: ObjRef?,
-    internal val isEndInclusive: Boolean
+    internal val isEndInclusive: Boolean,
+    internal val step: ObjRef? = null
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord {
         return evalValue(scope).asReadonly
@@ -2504,7 +2505,8 @@ class RangeRef(
     override suspend fun evalValue(scope: Scope): Obj {
         val l = left?.evalValue(scope) ?: ObjNull
         val r = right?.evalValue(scope) ?: ObjNull
-        return ObjRange(l, r, isEndInclusive = isEndInclusive)
+        val st = step?.evalValue(scope)
+        return ObjRange(l, r, isEndInclusive = isEndInclusive, step = st)
     }
 }
 
