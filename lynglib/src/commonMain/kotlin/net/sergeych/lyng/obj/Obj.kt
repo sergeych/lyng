@@ -65,7 +65,8 @@ open class Obj {
     fun isInstanceOf(someClass: Obj) = someClass === objClass ||
             objClass.allParentsSet.contains(someClass) ||
             someClass == rootObjectType ||
-            (someClass is ObjClass && objClass.allImplementingNames.contains(someClass.className))
+            (someClass is ObjClass && (objClass.allImplementingNames.contains(someClass.className) ||
+                objClass.className == someClass.className))
 
     fun isInstanceOf(className: String) = 
         objClass.mro.any { it.className == className } ||
@@ -139,6 +140,15 @@ open class Obj {
                         return rec.value.invoke(scope, this, args, decl)
                     }
                 }
+            }
+        }
+        scope.findExtension(objClass, name)?.let { ext ->
+            if (ext.type == ObjRecord.Type.Property) {
+                if (args.isEmpty()) {
+                    return (ext.value as ObjProperty).callGetter(scope, this, ext.declaringClass)
+                }
+            } else if (ext.type != ObjRecord.Type.Delegated) {
+                return ext.value.invoke(scope, this, args, ext.declaringClass)
             }
         }
 
@@ -472,6 +482,14 @@ open class Obj {
                 }
             }
         }
+        scope.findExtension(objClass, name)?.let { ext ->
+            return if (ext.type == ObjRecord.Type.Property) {
+                val prop = ext.value as ObjProperty
+                ObjRecord(prop.callGetter(scope, this, ext.declaringClass), isMutable = false)
+            } else {
+                ext.copy(value = ext.value.invoke(scope, this, Arguments.EMPTY, ext.declaringClass))
+            }
+        }
 
         scope.raiseError(
             "no such field: $name on ${objClass.className}. Considered order: ${objClass.renderLinearization(true)}"
@@ -486,6 +504,7 @@ open class Obj {
             if (getValueRec == null || getValueRec.declaringClass?.className == "Delegate") {
                 val wrapper = object : Statement() {
                     override val pos: Pos = Pos.builtIn
+
                     override suspend fun execute(s: Scope): Obj {
                         val th2 = if (s.thisObj === ObjVoid) ObjNull else s.thisObj
                         val allArgs = (listOf(th2, ObjString(name)) + s.args.list).toTypedArray()
@@ -587,16 +606,19 @@ open class Obj {
         scope.raiseNotImplemented()
     }
 
-    suspend fun invoke(scope: Scope, thisObj: Obj, args: Arguments, declaringClass: ObjClass? = null): Obj =
-        if (PerfFlags.SCOPE_POOL)
+    suspend fun invoke(scope: Scope, thisObj: Obj, args: Arguments, declaringClass: ObjClass? = null): Obj {
+        val usePool = PerfFlags.SCOPE_POOL && this !is Statement
+        return if (usePool) {
             scope.withChildFrame(args, newThisObj = thisObj) { child ->
                 if (declaringClass != null) child.currentClassCtx = declaringClass
                 callOn(child)
             }
-        else
+        } else {
             callOn(scope.createChildScope(scope.pos, args = args, newThisObj = thisObj).also {
                 if (declaringClass != null) it.currentClassCtx = declaringClass
             })
+        }
+    }
 
     suspend fun invoke(scope: Scope, thisObj: Obj, vararg args: Obj): Obj =
         callOn(

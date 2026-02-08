@@ -92,34 +92,48 @@ open class ObjException(
 
 
     companion object {
+        private var stackTraceCaptureDepth = 0
 
         suspend fun captureStackTrace(scope: Scope): ObjList {
             val result = ObjList()
-            val maybeCls = scope.get("StackTraceEntry")?.value as? ObjClass
+            val nestedCapture = stackTraceCaptureDepth > 0
+            stackTraceCaptureDepth += 1
+            val maybeCls = if (nestedCapture) null else scope.get("StackTraceEntry")?.value as? ObjClass
             var s: Scope? = scope
             var lastPos: Pos? = null
-            while (s != null) {
-                val pos = s.pos
-                if (pos != lastPos && !pos.currentLine.isEmpty()) {
-                    if( (lastPos == null || (lastPos.source != pos.source || lastPos.line != pos.line)) ) {
-                        if (maybeCls != null) {
-                            result.list += maybeCls.callWithArgs(
-                                scope,
-                                pos.source.objSourceName,
-                                ObjInt(pos.line.toLong()),
-                                ObjInt(pos.column.toLong()),
-                                ObjString(pos.currentLine)
-                            )
-                        } else {
-                            // Fallback textual entry if StackTraceEntry class is not available in this scope
-                            result.list += ObjString("#${pos.source.objSourceName}:${pos.line+1}:${pos.column+1}: ${pos.currentLine}")
+            try {
+                while (s != null) {
+                    val pos = s.pos
+                    if (pos != lastPos && !pos.currentLine.isEmpty()) {
+                        if (lastPos == null || (lastPos.source != pos.source || lastPos.line != pos.line)) {
+                            val fallback =
+                                ObjString("#${pos.source.objSourceName}:${pos.line+1}:${pos.column+1}: ${pos.currentLine}")
+                            if (maybeCls != null) {
+                                try {
+                                    result.list += maybeCls.callWithArgs(
+                                        scope,
+                                        pos.source.objSourceName,
+                                        ObjInt(pos.line.toLong()),
+                                        ObjInt(pos.column.toLong()),
+                                        ObjString(pos.currentLine)
+                                    )
+                                } catch (e: Throwable) {
+                                    // Fallback textual entry if StackTraceEntry fails to instantiate
+                                    result.list += fallback
+                                }
+                            } else {
+                                // Fallback textual entry if StackTraceEntry class is not available in this scope
+                                result.list += fallback
+                            }
+                            lastPos = pos
                         }
-                        lastPos = pos
                     }
+                    s = s.parent
                 }
-                s = s.parent
+                return result
+            } finally {
+                stackTraceCaptureDepth -= 1
             }
-            return result
         }
 
         class ExceptionClass(val name: String, vararg parents: ObjClass) : ObjClass(name, *parents) {

@@ -445,38 +445,64 @@ class CastRef(
     override suspend fun get(scope: Scope): ObjRecord {
         val v0 = valueRef.evalValue(scope)
         val t = typeRef.evalValue(scope)
-        val target = (t as? ObjClass) ?: scope.raiseClassCastError("${t} is not the class instance")
         // unwrap qualified views
         val v = when (v0) {
             is ObjQualifiedView -> v0.instance
             else -> v0
         }
-        return if (v.isInstanceOf(target)) {
-            // For instances, return a qualified view to enforce ancestor-start dispatch
-            if (v is ObjInstance) ObjQualifiedView(v, target).asReadonly else v.asReadonly
-        } else {
-            if (isNullable) ObjNull.asReadonly else scope.raiseClassCastError(
-                "Cannot cast ${(v as? Obj)?.objClass?.className ?: v::class.simpleName} to ${target.className}"
-            )
+        return when (t) {
+            is ObjClass -> {
+                if (v.isInstanceOf(t)) {
+                    // For instances, return a qualified view to enforce ancestor-start dispatch
+                    if (v is ObjInstance) ObjQualifiedView(v, t).asReadonly else v.asReadonly
+                } else {
+                    if (isNullable) ObjNull.asReadonly else scope.raiseClassCastError(
+                        "Cannot cast ${(v as? Obj)?.objClass?.className ?: v::class.simpleName} to ${t.className}"
+                    )
+                }
+            }
+            is ObjTypeExpr -> {
+                if (matchesTypeDecl(scope, v, t.typeDecl)) {
+                    v.asReadonly
+                } else {
+                    if (isNullable) ObjNull.asReadonly else scope.raiseClassCastError(
+                        "Cannot cast ${(v as? Obj)?.objClass?.className ?: v::class.simpleName} to ${t.typeDecl}"
+                    )
+                }
+            }
+            else -> scope.raiseClassCastError("${t} is not the class instance")
         }
     }
 
     override suspend fun evalValue(scope: Scope): Obj {
         val v0 = valueRef.evalValue(scope)
         val t = typeRef.evalValue(scope)
-        val target = (t as? ObjClass) ?: scope.raiseClassCastError("${t} is not the class instance")
         // unwrap qualified views
         val v = when (v0) {
             is ObjQualifiedView -> v0.instance
             else -> v0
         }
-        return if (v.isInstanceOf(target)) {
-            // For instances, return a qualified view to enforce ancestor-start dispatch
-            if (v is ObjInstance) ObjQualifiedView(v, target) else v
-        } else {
-            if (isNullable) ObjNull else scope.raiseClassCastError(
-                "Cannot cast ${(v as? Obj)?.objClass?.className ?: v::class.simpleName} to ${target.className}"
-            )
+        return when (t) {
+            is ObjClass -> {
+                if (v.isInstanceOf(t)) {
+                    // For instances, return a qualified view to enforce ancestor-start dispatch
+                    if (v is ObjInstance) ObjQualifiedView(v, t) else v
+                } else {
+                    if (isNullable) ObjNull else scope.raiseClassCastError(
+                        "Cannot cast ${(v as? Obj)?.objClass?.className ?: v::class.simpleName} to ${t.className}"
+                    )
+                }
+            }
+            is ObjTypeExpr -> {
+                if (matchesTypeDecl(scope, v, t.typeDecl)) {
+                    v
+                } else {
+                    if (isNullable) ObjNull else scope.raiseClassCastError(
+                        "Cannot cast ${(v as? Obj)?.objClass?.className ?: v::class.simpleName} to ${t.typeDecl}"
+                    )
+                }
+            }
+            else -> scope.raiseClassCastError("${t} is not the class instance")
         }
     }
 }
@@ -1174,6 +1200,10 @@ class FieldRef(
         }
         if (rec.receiver != null && rec.declaringClass != null) {
             return rec.receiver!!.resolveRecord(scope, rec, name, rec.declaringClass).value
+        }
+        if (rec.type == ObjRecord.Type.Fun && !rec.isAbstract) {
+            val receiver = rec.receiver ?: base
+            return rec.value.invoke(scope, receiver, Arguments.EMPTY, rec.declaringClass)
         }
         return rec.value
     }
@@ -2300,6 +2330,11 @@ class LocalSlotRef(
             scope.raiseError("slot index out of range for $name")
         }
         val rec = owner.getSlotRecord(slotIndex)
+        val direct = owner.getLocalRecordDirect(name)
+        if (direct != null && direct !== rec) {
+            owner.updateSlotFor(name, direct)
+            return direct
+        }
         if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)) {
             scope.raiseError(ObjIllegalAccessException(scope, "private field access"))
         }
@@ -2324,6 +2359,11 @@ class LocalSlotRef(
             scope.raiseError("slot index out of range for $name")
         }
         val rec = owner.getSlotRecord(slotIndex)
+        val direct = owner.getLocalRecordDirect(name)
+        if (direct != null && direct !== rec) {
+            owner.updateSlotFor(name, direct)
+            return scope.resolve(direct, name)
+        }
         if (rec.declaringClass != null && !canAccessMember(rec.visibility, rec.declaringClass, scope.currentClassCtx, name)) {
             scope.raiseError(ObjIllegalAccessException(scope, "private field access"))
         }

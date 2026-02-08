@@ -463,6 +463,24 @@ open class Scope(
         }
     }
 
+    internal fun applySlotPlanReset(plan: Map<String, Int>, records: Map<String, ObjRecord>) {
+        if (plan.isEmpty()) return
+        slots.clear()
+        nameToSlot.clear()
+        val maxIndex = plan.values.maxOrNull() ?: return
+        val targetSize = maxIndex + 1
+        repeat(targetSize) {
+            slots.add(ObjRecord(ObjUnset, isMutable = true))
+        }
+        for ((name, idx) in plan) {
+            nameToSlot[name] = idx
+            val record = records[name]
+            if (record != null && record.value !== ObjUnset) {
+                slots[idx] = record
+            }
+        }
+    }
+
     fun applySlotPlanWithSnapshot(plan: Map<String, Int>): Map<String, Int?> {
         if (plan.isEmpty()) return emptyMap()
         val maxIndex = plan.values.maxOrNull() ?: return emptyMap()

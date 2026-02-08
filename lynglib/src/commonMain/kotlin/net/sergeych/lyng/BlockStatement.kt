@@ -37,8 +37,14 @@ class BlockStatement(
                         ?: applyScope.callScope.resolveCaptureRecord(capture.name)
                 } else {
                     scope.resolveCaptureRecord(capture.name)
-                } ?: (applyScope?.callScope ?: scope)
-                    .raiseSymbolNotFound("symbol ${capture.name} not found")
+                }
+                if (rec == null) {
+                    if (scope.getSlotIndexOf(capture.name) == null && scope.getLocalRecordDirect(capture.name) == null) {
+                        continue
+                    }
+                    (applyScope?.callScope ?: scope)
+                        .raiseSymbolNotFound("symbol ${capture.name} not found")
+                }
                 target.updateSlotFor(capture.name, rec)
             }
         }

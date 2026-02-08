@@ -68,11 +68,17 @@ abstract class ImportProvider(
 
     suspend fun newStdScope(pos: Pos = Pos.builtIn): Scope =
         cachedStdScope.get {
-            newModuleAt(pos).also {
-                it.eval("import lyng.stdlib\n")
+            val module = newModuleAt(pos)
+            val stdlib = prepareImport(pos, "lyng.stdlib", null)
+            val plan = LinkedHashMap<String, Int>()
+            for ((name, record) in stdlib.objects) {
+                if (!record.visibility.isPublic) continue
+                plan[name] = plan.size
             }
+            if (plan.isNotEmpty()) module.applySlotPlan(plan)
+            stdlib.importInto(module, null)
+            module
         }.createChildScope()
 }
-
 
 

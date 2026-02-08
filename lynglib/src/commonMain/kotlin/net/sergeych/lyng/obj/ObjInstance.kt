@@ -174,6 +174,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
             if (getValueRec == null || getValueRec.declaringClass?.className == "Delegate") {
                 val wrapper = object : Statement() {
                     override val pos: Pos = Pos.builtIn
+
                     override suspend fun execute(s: Scope): Obj {
                         val th2 = if (s.thisObj === ObjVoid) ObjNull else s.thisObj
                         val allArgs = (listOf(th2, ObjString(name)) + s.args.list).toTypedArray()
@@ -364,6 +365,16 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         
         // Fast path for public members when outside any class context
         if (caller == null) {
+            objClass.members[name]?.let { rec ->
+                if (rec.visibility == Visibility.Public && !rec.isAbstract) {
+                    val decl = rec.declaringClass
+                    if (rec.type == ObjRecord.Type.Property) {
+                        if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, decl)
+                    } else if (rec.type == ObjRecord.Type.Fun) {
+                        return rec.value.invoke(instanceScope, this, args, decl)
+                    }
+                }
+            }
             objClass.publicMemberResolution[name]?.let { key ->
                 methodRecordForKey(key)?.let { rec ->
                     if (rec.visibility == Visibility.Public && !rec.isAbstract) {

@@ -286,5 +286,3 @@ class ObjInstant(val instant: Instant,val truncateMode: LynonSettings.InstantTru
 
     }
 }
-
-

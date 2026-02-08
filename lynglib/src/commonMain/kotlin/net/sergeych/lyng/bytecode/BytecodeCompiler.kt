@@ -211,6 +211,12 @@ class BytecodeCompiler(
 
     private fun allocSlot(): Int = nextSlot++
 
+    private fun encodeMemberId(receiverClass: ObjClass, id: Int?): Int? {
+        if (id == null) return null
+        if (receiverClass == ObjClassType) return -(id + 2)
+        return id
+    }
+
     private fun compileRef(ref: ObjRef): CompiledValue? {
         return when (ref) {
             is ConstRef -> compileConst(ref.constValue)
@@ -1620,13 +1626,13 @@ class BytecodeCompiler(
                     Pos.builtIn
                 )
             val receiver = compileRefWithFallback(target.target, null, Pos.builtIn) ?: return null
-            val fieldId = receiverClass.instanceFieldIdMap()[target.name] ?: -1
-            val methodId = if (fieldId < 0) {
-                receiverClass.instanceMethodIdMap(includeAbstract = true)[target.name] ?: -1
+            val fieldId = receiverClass.instanceFieldIdMap()[target.name]
+            val methodId = if (fieldId == null) {
+                receiverClass.instanceMethodIdMap(includeAbstract = true)[target.name]
             } else {
-                -1
+                null
             }
-            if (fieldId < 0 && methodId < 0) {
+            if (fieldId == null && methodId == null) {
                 val extSlot = resolveExtensionSetterSlot(receiverClass, target.name)
                     ?: throw BytecodeCompileException(
                         "Unknown member ${target.name} on ${receiverClass.className}",
@@ -1660,8 +1666,10 @@ class BytecodeCompiler(
                 }
                 return value
             }
+            val encodedFieldId = encodeMemberId(receiverClass, fieldId) ?: -1
+            val encodedMethodId = encodeMemberId(receiverClass, methodId) ?: -1
             if (!target.isOptional) {
-                builder.emit(Opcode.SET_MEMBER_SLOT, receiver.slot, fieldId, methodId, value.slot)
+                builder.emit(Opcode.SET_MEMBER_SLOT, receiver.slot, encodedFieldId, encodedMethodId, value.slot)
             } else {
                 val nullSlot = allocSlot()
                 builder.emit(Opcode.CONST_NULL, nullSlot)
@@ -1672,7 +1680,7 @@ class BytecodeCompiler(
                     Opcode.JMP_IF_TRUE,
                     listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(endLabel))
                 )
-                builder.emit(Opcode.SET_MEMBER_SLOT, receiver.slot, fieldId, methodId, value.slot)
+                builder.emit(Opcode.SET_MEMBER_SLOT, receiver.slot, encodedFieldId, encodedMethodId, value.slot)
                 builder.mark(endLabel)
             }
             return value
@@ -2048,11 +2056,13 @@ class BytecodeCompiler(
             }
         val fieldId = receiverClass.instanceFieldIdMap()[ref.name]
         val methodId = receiverClass.instanceMethodIdMap(includeAbstract = true)[ref.name]
+        val encodedFieldId = encodeMemberId(receiverClass, fieldId)
+        val encodedMethodId = encodeMemberId(receiverClass, methodId)
         val receiver = compileRefWithFallback(ref.target, null, Pos.builtIn) ?: return null
         val dst = allocSlot()
         if (fieldId != null || methodId != null) {
             if (!ref.isOptional) {
-                builder.emit(Opcode.GET_MEMBER_SLOT, receiver.slot, fieldId ?: -1, methodId ?: -1, dst)
+                builder.emit(Opcode.GET_MEMBER_SLOT, receiver.slot, encodedFieldId ?: -1, encodedMethodId ?: -1, dst)
             } else {
                 val nullSlot = allocSlot()
                 builder.emit(Opcode.CONST_NULL, nullSlot)
@@ -2064,7 +2074,7 @@ class BytecodeCompiler(
                     Opcode.JMP_IF_TRUE,
                     listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
                 )
-                builder.emit(Opcode.GET_MEMBER_SLOT, receiver.slot, fieldId ?: -1, methodId ?: -1, dst)
+                builder.emit(Opcode.GET_MEMBER_SLOT, receiver.slot, encodedFieldId ?: -1, encodedMethodId ?: -1, dst)
                 builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
                 builder.mark(nullLabel)
                 builder.emit(Opcode.CONST_NULL, dst)
@@ -2856,11 +2866,12 @@ class BytecodeCompiler(
         val dst = allocSlot()
         val methodId = receiverClass.instanceMethodIdMap(includeAbstract = true)[ref.name]
         if (methodId != null) {
+            val encodedMethodId = encodeMemberId(receiverClass, methodId) ?: methodId
             if (!ref.isOptional) {
                 val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
                 val encodedCount = encodeCallArgCount(args) ?: return null
                 setPos(callPos)
-                builder.emit(Opcode.CALL_MEMBER_SLOT, receiver.slot, methodId, args.base, encodedCount, dst)
+                builder.emit(Opcode.CALL_MEMBER_SLOT, receiver.slot, encodedMethodId, args.base, encodedCount, dst)
                 return CompiledValue(dst, SlotType.OBJ)
             }
             val nullSlot = allocSlot()
@@ -2876,7 +2887,7 @@ class BytecodeCompiler(
             val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
             val encodedCount = encodeCallArgCount(args) ?: return null
             setPos(callPos)
-            builder.emit(Opcode.CALL_MEMBER_SLOT, receiver.slot, methodId, args.base, encodedCount, dst)
+            builder.emit(Opcode.CALL_MEMBER_SLOT, receiver.slot, encodedMethodId, args.base, encodedCount, dst)
             builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
             builder.mark(nullLabel)
             builder.emit(Opcode.CONST_NULL, dst)
@@ -4659,43 +4670,17 @@ class BytecodeCompiler(
                 ?: resolveReceiverClass(ref.castValueRef())
             is FieldRef -> {
                 val targetClass = resolveReceiverClass(ref.target) ?: return null
-                if (targetClass == ObjString.type && ref.name == "re") {
-                    ObjRegex.type
-                } else {
-                    null
-                }
+                inferFieldReturnClass(targetClass, ref.name)
             }
             is MethodCallRef -> {
                 val targetClass = resolveReceiverClass(ref.receiver) ?: return null
                 if (targetClass == ObjString.type && ref.name == "re" && ref.args.isEmpty() && !ref.isOptional) {
                     ObjRegex.type
                 } else {
-                    when (ref.name) {
-                        "map",
-                        "mapNotNull",
-                        "filter",
-                        "filterNotNull",
-                        "drop",
-                        "take",
-                        "flatMap",
-                        "flatten",
-                        "sorted",
-                        "sortedBy",
-                        "sortedWith",
-                        "reversed",
-                        "toList",
-                        "shuffle",
-                        "shuffled" -> ObjList.type
-                        "dropLast" -> ObjFlow.type
-                        "takeLast" -> ObjRingBuffer.type
-                        "count" -> ObjInt.type
-                        "toSet" -> ObjSet.type
-                        "toMap" -> ObjMap.type
-                        "joinToString" -> ObjString.type
-                        else -> null
-                    }
+                    inferMethodCallReturnClass(ref.name)
                 }
             }
+            is CallRef -> inferCallReturnClass(ref)
             else -> null
         }
     }
@@ -4742,39 +4727,17 @@ class BytecodeCompiler(
                 ?: resolveReceiverClassForScopeCollection(ref.castValueRef())
             is FieldRef -> {
                 val targetClass = resolveReceiverClassForScopeCollection(ref.target) ?: return null
-                if (targetClass == ObjString.type && ref.name == "re") ObjRegex.type else null
+                inferFieldReturnClass(targetClass, ref.name)
             }
             is MethodCallRef -> {
                 val targetClass = resolveReceiverClassForScopeCollection(ref.receiver) ?: return null
                 if (targetClass == ObjString.type && ref.name == "re" && ref.args.isEmpty() && !ref.isOptional) {
                     ObjRegex.type
                 } else {
-                    when (ref.name) {
-                        "map",
-                        "mapNotNull",
-                        "filter",
-                        "filterNotNull",
-                        "drop",
-                        "take",
-                        "flatMap",
-                        "flatten",
-                        "sorted",
-                        "sortedBy",
-                        "sortedWith",
-                        "reversed",
-                        "toList",
-                        "shuffle",
-                        "shuffled" -> ObjList.type
-                        "dropLast" -> ObjFlow.type
-                        "takeLast" -> ObjRingBuffer.type
-                        "count" -> ObjInt.type
-                        "toSet" -> ObjSet.type
-                        "toMap" -> ObjMap.type
-                        "joinToString" -> ObjString.type
-                        else -> null
-                    }
+                    inferMethodCallReturnClass(ref.name)
                 }
             }
+            is CallRef -> inferCallReturnClass(ref)
             else -> null
         }
     }
@@ -4813,10 +4776,152 @@ class BytecodeCompiler(
             "Regex" -> ObjRegex.type
             "RegexMatch" -> ObjRegexMatch.type
             "MapEntry" -> ObjMapEntry.type
+            "Instant" -> ObjInstant.type
+            "DateTime" -> ObjDateTime.type
+            "Duration" -> ObjDuration.type
             "Exception" -> ObjException.Root
+            "Class" -> ObjClassType
             "Callable" -> Statement.type
             else -> null
         }
+    }
+
+    private fun inferCallReturnClass(ref: CallRef): ObjClass? {
+        return when (val target = ref.target) {
+            is LocalSlotRef -> nameObjClass[target.name] ?: resolveTypeNameClass(target.name)
+            is LocalVarRef -> nameObjClass[target.name] ?: resolveTypeNameClass(target.name)
+            is ConstRef -> target.constValue as? ObjClass
+            else -> null
+        }
+    }
+
+    private fun inferMethodCallReturnClass(name: String): ObjClass? = when (name) {
+        "map",
+        "mapNotNull",
+        "filter",
+        "filterNotNull",
+        "drop",
+        "take",
+        "flatMap",
+        "flatten",
+        "sorted",
+        "sortedBy",
+        "sortedWith",
+        "reversed",
+        "toList",
+        "shuffle",
+        "shuffled" -> ObjList.type
+        "dropLast" -> ObjFlow.type
+        "takeLast" -> ObjRingBuffer.type
+        "iterator" -> ObjIterator
+        "count" -> ObjInt.type
+        "toSet" -> ObjSet.type
+        "toMap" -> ObjMap.type
+        "joinToString" -> ObjString.type
+        "now",
+        "truncateToSecond",
+        "truncateToMinute",
+        "truncateToMillisecond" -> ObjInstant.type
+        "toDateTime",
+        "toTimeZone",
+        "toUTC",
+        "parseRFC3339",
+        "addYears",
+        "addMonths",
+        "addDays",
+        "addHours",
+        "addMinutes",
+        "addSeconds" -> ObjDateTime.type
+        "toInstant" -> ObjInstant.type
+        "toRFC3339",
+        "toSortableString",
+        "toJsonString",
+        "decodeUtf8",
+        "toDump",
+        "toString" -> ObjString.type
+        "startsWith",
+        "matches" -> ObjBool.type
+        "toInt",
+        "toEpochSeconds" -> ObjInt.type
+        "toMutable" -> ObjMutableBuffer.type
+        "seq" -> ObjFlow.type
+        "encode" -> ObjBitBuffer.type
+        "assertThrows" -> ObjException.Root
+        else -> null
+    }
+
+    private fun inferFieldReturnClass(targetClass: ObjClass?, name: String): ObjClass? {
+        if (targetClass == null) return null
+        if (targetClass == ObjDynamic.type) return ObjDynamic.type
+        if (targetClass == ObjInstant.type && (name == "distantFuture" || name == "distantPast")) {
+            return ObjInstant.type
+        }
+        if (targetClass == ObjString.type && name == "re") {
+            return ObjRegex.type
+        }
+        if (targetClass == ObjInt.type || targetClass == ObjReal.type) {
+            return when (name) {
+                "day",
+                "days",
+                "hour",
+                "hours",
+                "minute",
+                "minutes",
+                "second",
+                "seconds",
+                "millisecond",
+                "milliseconds",
+                "microsecond",
+                "microseconds" -> ObjDuration.type
+                else -> null
+            }
+        }
+        if (targetClass == ObjDuration.type) {
+            return when (name) {
+                "days",
+                "hours",
+                "minutes",
+                "seconds",
+                "milliseconds",
+                "microseconds" -> ObjReal.type
+                else -> null
+            }
+        }
+        if (targetClass == ObjInstant.type) {
+            return when (name) {
+                "epochSeconds",
+                "epochWholeSeconds" -> ObjInt.type
+                "truncateToSecond",
+                "truncateToMinute",
+                "truncateToMillisecond" -> ObjInstant.type
+                else -> null
+            }
+        }
+        if (targetClass == ObjDateTime.type) {
+            return when (name) {
+                "year",
+                "month",
+                "day",
+                "hour",
+                "minute",
+                "second",
+                "dayOfWeek",
+                "nanosecond" -> ObjInt.type
+                "timeZone" -> ObjString.type
+                else -> null
+            }
+        }
+        if (targetClass == ObjException.Root || targetClass.allParentsSet.contains(ObjException.Root)) {
+            return when (name) {
+                "message" -> ObjString.type
+                "stackTrace" -> ObjList.type
+                else -> null
+            }
+        }
+        if (targetClass == ObjRegex.type && name == "pattern") {
+            return ObjString.type
+        }
+        return null
     }
 
     private fun queueExtensionCallableNames(receiverClass: ObjClass, memberName: String) {

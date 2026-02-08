@@ -1321,7 +1321,8 @@ class CmdCallSlot(
             frame.ensureScope().withChildFrame(args) { child -> callee.callOn(child) }
         } else {
             // Pooling for Statement-based callables (lambdas) can still alter closure semantics; keep safe path for now.
-            callee.callOn(frame.ensureScope().createChildScope(frame.ensureScope().pos, args = args))
+            val scope = frame.ensureScope()
+            callee.callOn(scope.createChildScope(scope.pos, args = args))
         }
         if (frame.fn.localSlotNames.isNotEmpty()) {
             frame.syncScopeToFrame()
@@ -1360,6 +1361,14 @@ class CmdListLiteral(
     }
 }
 
+private fun decodeMemberId(id: Int): Pair<Int, Boolean> {
+    return if (id <= -2) {
+        Pair(-id - 2, true)
+    } else {
+        Pair(id, false)
+    }
+}
+
 class CmdGetMemberSlot(
     internal val recvSlot: Int,
     internal val fieldId: Int,
@@ -1369,22 +1378,42 @@ class CmdGetMemberSlot(
     override suspend fun perform(frame: CmdFrame) {
         val receiver = frame.slotToObj(recvSlot)
         val inst = receiver as? ObjInstance
-        val fieldRec = if (fieldId >= 0) {
-            inst?.fieldRecordForId(fieldId) ?: receiver.objClass.fieldRecordForId(fieldId)
+        val cls = receiver as? ObjClass
+        val (fieldIdResolved, fieldOnObjClass) = decodeMemberId(fieldId)
+        val (methodIdResolved, methodOnObjClass) = decodeMemberId(methodId)
+        val fieldRec = if (fieldIdResolved >= 0) {
+            when {
+                inst != null -> inst.fieldRecordForId(fieldIdResolved) ?: inst.objClass.fieldRecordForId(fieldIdResolved)
+                cls != null && fieldOnObjClass -> cls.objClass.fieldRecordForId(fieldIdResolved)
+                cls != null -> cls.fieldRecordForId(fieldIdResolved)
+                else -> receiver.objClass.fieldRecordForId(fieldIdResolved)
+            }
         } else null
         val rec = fieldRec ?: run {
-            if (methodId >= 0) {
-                inst?.methodRecordForId(methodId) ?: receiver.objClass.methodRecordForId(methodId)
+            if (methodIdResolved >= 0) {
+                when {
+                    inst != null -> inst.methodRecordForId(methodIdResolved) ?: inst.objClass.methodRecordForId(methodIdResolved)
+                    cls != null && methodOnObjClass -> cls.objClass.methodRecordForId(methodIdResolved)
+                    cls != null -> cls.methodRecordForId(methodIdResolved)
+                    else -> receiver.objClass.methodRecordForId(methodIdResolved)
+                }
             } else null
         } ?: frame.ensureScope().raiseSymbolNotFound("member")
         val name = rec.memberName ?: "<member>"
+        suspend fun autoCallIfMethod(resolved: ObjRecord, recv: Obj): Obj {
+            return if (resolved.type == ObjRecord.Type.Fun && !resolved.isAbstract) {
+                resolved.value.invoke(frame.ensureScope(), resolved.receiver ?: recv, Arguments.EMPTY, resolved.declaringClass)
+            } else {
+                resolved.value
+            }
+        }
         if (receiver is ObjQualifiedView) {
             val resolved = receiver.readField(frame.ensureScope(), name)
-            frame.storeObjResult(dst, resolved.value)
+            frame.storeObjResult(dst, autoCallIfMethod(resolved, receiver))
             return
         }
         val resolved = receiver.resolveRecord(frame.ensureScope(), rec, name, rec.declaringClass)
-        frame.storeObjResult(dst, resolved.value)
+        frame.storeObjResult(dst, autoCallIfMethod(resolved, receiver))
         return
     }
 }
@@ -1398,12 +1427,25 @@ class CmdSetMemberSlot(
     override suspend fun perform(frame: CmdFrame) {
         val receiver = frame.slotToObj(recvSlot)
         val inst = receiver as? ObjInstance
-        val fieldRec = if (fieldId >= 0) {
-            inst?.fieldRecordForId(fieldId) ?: receiver.objClass.fieldRecordForId(fieldId)
+        val cls = receiver as? ObjClass
+        val (fieldIdResolved, fieldOnObjClass) = decodeMemberId(fieldId)
+        val (methodIdResolved, methodOnObjClass) = decodeMemberId(methodId)
+        val fieldRec = if (fieldIdResolved >= 0) {
+            when {
+                inst != null -> inst.fieldRecordForId(fieldIdResolved) ?: inst.objClass.fieldRecordForId(fieldIdResolved)
+                cls != null && fieldOnObjClass -> cls.objClass.fieldRecordForId(fieldIdResolved)
+                cls != null -> cls.fieldRecordForId(fieldIdResolved)
+                else -> receiver.objClass.fieldRecordForId(fieldIdResolved)
+            }
         } else null
         val rec = fieldRec ?: run {
-            if (methodId >= 0) {
-                inst?.methodRecordForId(methodId) ?: receiver.objClass.methodRecordForId(methodId)
+            if (methodIdResolved >= 0) {
+                when {
+                    inst != null -> inst.methodRecordForId(methodIdResolved) ?: inst.objClass.methodRecordForId(methodIdResolved)
+                    cls != null && methodOnObjClass -> cls.objClass.methodRecordForId(methodIdResolved)
+                    cls != null -> cls.methodRecordForId(methodIdResolved)
+                    else -> receiver.objClass.methodRecordForId(methodIdResolved)
+                }
             } else null
         } ?: frame.ensureScope().raiseSymbolNotFound("member")
         val name = rec.memberName ?: "<member>"
@@ -1429,8 +1471,14 @@ class CmdCallMemberSlot(
         }
         val receiver = frame.slotToObj(recvSlot)
         val inst = receiver as? ObjInstance
-        val rec = inst?.methodRecordForId(methodId)
-            ?: receiver.objClass.methodRecordForId(methodId)
+        val cls = receiver as? ObjClass
+        val (methodIdResolved, methodOnObjClass) = decodeMemberId(methodId)
+        val rec = inst?.methodRecordForId(methodIdResolved)
+            ?: when {
+                cls != null && methodOnObjClass -> cls.objClass.methodRecordForId(methodIdResolved)
+                cls != null -> cls.methodRecordForId(methodIdResolved)
+                else -> receiver.objClass.methodRecordForId(methodIdResolved)
+            }
             ?: frame.ensureScope().raiseError("member id $methodId not found on ${receiver.objClass.className}")
         val callArgs = frame.buildArguments(argBase, argCount)
         val name = rec.memberName ?: "<member>"
@@ -1605,15 +1653,51 @@ class CmdFrame(
     }
 
     private fun resolveModuleScope(scope: Scope): Scope {
-        var current: Scope? = scope
-        var last: Scope = scope
-        while (current != null) {
+        val moduleSlotName = fn.scopeSlotNames.indices
+            .firstOrNull { fn.scopeSlotIsModule.getOrNull(it) == true }
+            ?.let { fn.scopeSlotNames[it] }
+        if (moduleSlotName != null) {
+            findScopeWithSlot(scope, moduleSlotName)?.let { return it }
+        }
+        findModuleScope(scope)?.let { return it }
+        return scope
+    }
+
+    private fun findScopeWithSlot(scope: Scope, slotName: String): Scope? {
+        val visited = HashSet<Scope>(16)
+        val queue = ArrayDeque<Scope>()
+        queue.add(scope)
+        while (queue.isNotEmpty()) {
+            val current = queue.removeFirst()
+            if (!visited.add(current)) continue
+            if (current.getSlotIndexOf(slotName) != null) return current
+            current.parent?.let { queue.add(it) }
+            if (current is ClosureScope) {
+                queue.add(current.closureScope)
+            } else if (current is ApplyScope) {
+                queue.add(current.applied)
+            }
+        }
+        return null
+    }
+
+    private fun findModuleScope(scope: Scope): Scope? {
+        val visited = HashSet<Scope>(16)
+        val queue = ArrayDeque<Scope>()
+        queue.add(scope)
+        while (queue.isNotEmpty()) {
+            val current = queue.removeFirst()
+            if (!visited.add(current)) continue
             if (current is ModuleScope) return current
             if (current.parent is ModuleScope) return current
-            last = current
-            current = current.parent
+            current.parent?.let { queue.add(it) }
+            if (current is ClosureScope) {
+                queue.add(current.closureScope)
+            } else if (current is ApplyScope) {
+                queue.add(current.applied)
+            }
         }
-        return last
+        return null
     }
 
     fun ensureScope(): Scope {
@@ -1737,7 +1821,7 @@ class CmdFrame(
         scopeDepth -= 1
     }
 
-    fun getObj(slot: Int): Obj {
+    suspend fun getObj(slot: Int): Obj {
         return if (slot < fn.scopeSlotCount) {
             getScopeSlotValue(slot)
         } else {
@@ -1755,7 +1839,7 @@ class CmdFrame(
         }
     }
 
-    fun getInt(slot: Int): Long {
+    suspend fun getInt(slot: Int): Long {
         return if (slot < fn.scopeSlotCount) {
             getScopeSlotValue(slot).toLong()
         } else {
@@ -1786,7 +1870,7 @@ class CmdFrame(
         frame.setInt(local, value)
     }
 
-    fun getReal(slot: Int): Double {
+    suspend fun getReal(slot: Int): Double {
         return if (slot < fn.scopeSlotCount) {
             getScopeSlotValue(slot).toDouble()
         } else {
@@ -1811,7 +1895,7 @@ class CmdFrame(
         }
     }
 
-    fun getBool(slot: Int): Boolean {
+    suspend fun getBool(slot: Int): Boolean {
         return if (slot < fn.scopeSlotCount) {
             getScopeSlotValue(slot).toBool()
         } else {
@@ -1850,7 +1934,7 @@ class CmdFrame(
         addrScopeSlots[addrSlot] = scopeSlot
     }
 
-    fun getAddrObj(addrSlot: Int): Obj {
+    suspend fun getAddrObj(addrSlot: Int): Obj {
         return getScopeSlotValueAtAddr(addrSlot)
     }
 
@@ -1858,7 +1942,7 @@ class CmdFrame(
         setScopeSlotValueAtAddr(addrSlot, value)
     }
 
-    fun getAddrInt(addrSlot: Int): Long {
+    suspend fun getAddrInt(addrSlot: Int): Long {
         return getScopeSlotValueAtAddr(addrSlot).toLong()
     }
 
@@ -1866,7 +1950,7 @@ class CmdFrame(
         setScopeSlotValueAtAddr(addrSlot, ObjInt.of(value))
     }
 
-    fun getAddrReal(addrSlot: Int): Double {
+    suspend fun getAddrReal(addrSlot: Int): Double {
         return getScopeSlotValueAtAddr(addrSlot).toDouble()
     }
 
@@ -1874,7 +1958,7 @@ class CmdFrame(
         setScopeSlotValueAtAddr(addrSlot, ObjReal.of(value))
     }
 
-    fun getAddrBool(addrSlot: Int): Boolean {
+    suspend fun getAddrBool(addrSlot: Int): Boolean {
         return getScopeSlotValueAtAddr(addrSlot).toBool()
     }
 
@@ -1882,11 +1966,18 @@ class CmdFrame(
         setScopeSlotValueAtAddr(addrSlot, if (value) ObjTrue else ObjFalse)
     }
 
-    fun slotToObj(slot: Int): Obj {
+    suspend fun slotToObj(slot: Int): Obj {
         if (slot < fn.scopeSlotCount) {
             return getScopeSlotValue(slot)
         }
         val local = slot - fn.scopeSlotCount
+        val localName = fn.localSlotNames.getOrNull(local)
+        if (localName != null) {
+            val rec = scope.getLocalRecordDirect(localName) ?: scope.localBindings[localName]
+            if (rec != null && (rec.type == ObjRecord.Type.Delegated || rec.type == ObjRecord.Type.Property || rec.value is ObjProperty)) {
+                return scope.resolve(rec, localName)
+            }
+        }
         return when (frame.getSlotTypeCode(local)) {
             SlotType.INT.code -> ObjInt.of(frame.getInt(local))
             SlotType.REAL.code -> ObjReal.of(frame.getReal(local))
@@ -2067,14 +2158,20 @@ class CmdFrame(
         }
     }
 
-    private fun getScopeSlotValue(slot: Int): Obj {
+    private suspend fun getScopeSlotValue(slot: Int): Obj {
         val target = scopeTarget(slot)
         val index = ensureScopeSlot(target, slot)
         val record = target.getSlotRecord(index)
         val direct = record.value
         if (direct is FrameSlotRef) return direct.read()
-        if (direct !== ObjUnset) return direct
-        val name = fn.scopeSlotNames[slot] ?: return record.value
+        val name = fn.scopeSlotNames[slot]
+        if (direct !== ObjUnset) {
+            if (name != null && (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || direct is ObjProperty)) {
+                return target.resolve(record, name)
+            }
+            return direct
+        }
+        if (name == null) return record.value
         val resolved = target.get(name) ?: return record.value
         if (resolved.value !== ObjUnset) {
             target.updateSlotFor(name, resolved)
@@ -2082,15 +2179,21 @@ class CmdFrame(
         return resolved.value
     }
 
-    private fun getScopeSlotValueAtAddr(addrSlot: Int): Obj {
+    private suspend fun getScopeSlotValueAtAddr(addrSlot: Int): Obj {
         val target = addrScopes[addrSlot] ?: error("Address slot $addrSlot is not resolved")
         val index = addrIndices[addrSlot]
         val record = target.getSlotRecord(index)
         val direct = record.value
         if (direct is FrameSlotRef) return direct.read()
-        if (direct !== ObjUnset) return direct
         val slotId = addrScopeSlots[addrSlot]
-        val name = fn.scopeSlotNames[slotId] ?: return record.value
+        val name = fn.scopeSlotNames.getOrNull(slotId)
+        if (direct !== ObjUnset) {
+            if (name != null && (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || direct is ObjProperty)) {
+                return target.resolve(record, name)
+            }
+            return direct
+        }
+        if (name == null) return record.value
         val resolved = target.get(name) ?: return record.value
         if (resolved.value !== ObjUnset) {
             target.updateSlotFor(name, resolved)

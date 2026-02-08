@@ -107,6 +107,12 @@ class Compiler(
         if (added && localDeclCountStack.isNotEmpty()) {
             localDeclCountStack[localDeclCountStack.lastIndex] = currentLocalDeclCount + 1
         }
+        capturePlanStack.lastOrNull()?.let { plan ->
+            if (plan.captureMap.remove(name) != null) {
+                plan.captureOwners.remove(name)
+                plan.captures.removeAll { it.name == name }
+            }
+        }
         declareSlotName(name, isMutable, isDelegated)
     }
 
@@ -122,6 +128,20 @@ class Compiler(
         if (plan.slots.containsKey(name)) return
         plan.slots[name] = SlotEntry(plan.nextIndex, isMutable, isDelegated)
         plan.nextIndex += 1
+    }
+
+    private fun declareSlotNameAt(
+        plan: SlotPlan,
+        name: String,
+        slotIndex: Int,
+        isMutable: Boolean,
+        isDelegated: Boolean
+    ) {
+        if (plan.slots.containsKey(name)) return
+        plan.slots[name] = SlotEntry(slotIndex, isMutable, isDelegated)
+        if (slotIndex >= plan.nextIndex) {
+            plan.nextIndex = slotIndex + 1
+        }
     }
 
     private fun moduleSlotPlan(): SlotPlan? = slotPlanStack.firstOrNull()
@@ -208,6 +228,20 @@ class Compiler(
             }
             if (!includeParents) return
             current = current.parent
+        }
+    }
+
+    private fun seedSlotPlanFromSeedScope(scope: Scope) {
+        val plan = moduleSlotPlan() ?: return
+        for ((name, slotIndex) in scope.slotNameToIndexSnapshot()) {
+            val record = scope.getSlotRecord(slotIndex)
+            declareSlotNameAt(
+                plan,
+                name,
+                slotIndex,
+                record.isMutable,
+                record.type == ObjRecord.Type.Delegated
+            )
         }
     }
 
@@ -448,11 +482,11 @@ class Compiler(
         val scopeRec = seedScope?.get(name) ?: importManager.rootScope.get(name)
         val clsFromScope = scopeRec?.value as? ObjClass
         val clsFromImports = if (clsFromScope == null) {
-            importedScopes.asReversed().firstNotNullOfOrNull { it.get(name)?.value as? ObjClass }
+            importedModules.asReversed().firstNotNullOfOrNull { it.scope.get(name)?.value as? ObjClass }
         } else {
             null
         }
-        val cls = clsFromScope ?: clsFromImports ?: return null
+        val cls = clsFromScope ?: clsFromImports ?: resolveClassByName(name) ?: return null
         val fieldIds = cls.instanceFieldIdMap()
         val methodIds = cls.instanceMethodIdMap(includeAbstract = true)
         val baseNames = cls.directParents.map { it.className }
@@ -836,6 +870,12 @@ class Compiler(
         }
         val moduleLoc = if (slotPlanStack.size == 1) lookupSlotLocation(name, includeModule = true) else null
         if (moduleLoc != null) {
+            val moduleDeclaredNames = localNamesStack.firstOrNull()
+            if (moduleDeclaredNames == null || !moduleDeclaredNames.contains(name)) {
+                resolveImportBinding(name, pos)?.let { resolved ->
+                    registerImportBinding(name, resolved.binding, pos)
+                }
+            }
             val ref = LocalSlotRef(
                 name,
                 moduleLoc.slot,
@@ -854,6 +894,83 @@ class Compiler(
             val ids = resolveMemberIds(name, pos, null)
             return ImplicitThisMemberRef(name, pos, ids.fieldId, ids.methodId, currentImplicitThisTypeName())
         }
+        val implicitTypeFromFunc = implicitReceiverTypeForMember(name)
+        val hasImplicitClassMember = classCtx != null && hasImplicitThisMember(name, classCtx.name)
+        if (implicitTypeFromFunc == null && !hasImplicitClassMember) {
+            val modulePlan = moduleSlotPlan()
+            val moduleEntry = modulePlan?.slots?.get(name)
+            if (moduleEntry != null) {
+                val moduleDeclaredNames = localNamesStack.firstOrNull()
+                if (moduleDeclaredNames == null || !moduleDeclaredNames.contains(name)) {
+                    resolveImportBinding(name, pos)?.let { resolved ->
+                        registerImportBinding(name, resolved.binding, pos)
+                    }
+                }
+                val moduleLoc = SlotLocation(
+                    moduleEntry.index,
+                    slotPlanStack.size - 1,
+                    modulePlan.id,
+                    moduleEntry.isMutable,
+                    moduleEntry.isDelegated
+                )
+                captureLocalRef(name, moduleLoc, pos)?.let { ref ->
+                    resolutionSink?.reference(name, pos)
+                    return ref
+                }
+                val ref = LocalSlotRef(
+                    name,
+                    moduleLoc.slot,
+                    moduleLoc.scopeId,
+                    moduleLoc.isMutable,
+                    moduleLoc.isDelegated,
+                    pos,
+                    strictSlotRefs
+                )
+                resolutionSink?.reference(name, pos)
+                return ref
+            }
+            resolveImportBinding(name, pos)?.let { resolved ->
+                val sourceRecord = resolved.record
+                if (modulePlan != null && !modulePlan.slots.containsKey(name)) {
+                    val seedSlotIndex = if (resolved.binding.source is ImportBindingSource.Seed) {
+                        seedScope?.getSlotIndexOf(name)
+                    } else {
+                        null
+                    }
+                    if (seedSlotIndex != null) {
+                        declareSlotNameAt(
+                            modulePlan,
+                            name,
+                            seedSlotIndex,
+                            sourceRecord.isMutable,
+                            sourceRecord.type == ObjRecord.Type.Delegated
+                        )
+                    } else {
+                        declareSlotNameIn(
+                            modulePlan,
+                            name,
+                            sourceRecord.isMutable,
+                            sourceRecord.type == ObjRecord.Type.Delegated
+                        )
+                    }
+                }
+                registerImportBinding(name, resolved.binding, pos)
+                val slot = lookupSlotLocation(name)
+                if (slot != null) {
+                    val ref = LocalSlotRef(
+                        name,
+                        slot.slot,
+                        slot.scopeId,
+                        slot.isMutable,
+                        slot.isDelegated,
+                        pos,
+                        strictSlotRefs
+                    )
+                    resolutionSink?.reference(name, pos)
+                    return ref
+                }
+            }
+        }
         if (classCtx != null) {
             val implicitType = classCtx.name
             if (hasImplicitThisMember(name, implicitType)) {
@@ -863,7 +980,7 @@ class Compiler(
                 return ImplicitThisMemberRef(name, pos, ids.fieldId, ids.methodId, preferredType)
             }
         }
-        val implicitType = implicitReceiverTypeForMember(name)
+        val implicitType = implicitTypeFromFunc
         if (implicitType != null) {
             resolutionSink?.referenceMember(name, pos, implicitType)
             val ids = resolveImplicitThisMemberIds(name, pos, implicitType)
@@ -872,52 +989,6 @@ class Compiler(
         if (classCtx != null && classCtx.classScopeMembers.contains(name)) {
             resolutionSink?.referenceMember(name, pos, classCtx.name)
             return ClassScopeMemberRef(name, pos, classCtx.name)
-        }
-        val modulePlan = moduleSlotPlan()
-        val moduleEntry = modulePlan?.slots?.get(name)
-        if (moduleEntry != null) {
-            val moduleLoc = SlotLocation(
-                moduleEntry.index,
-                slotPlanStack.size - 1,
-                modulePlan.id,
-                moduleEntry.isMutable,
-                moduleEntry.isDelegated
-            )
-            captureLocalRef(name, moduleLoc, pos)?.let { ref ->
-                resolutionSink?.reference(name, pos)
-                return ref
-            }
-            val ref = LocalSlotRef(
-                name,
-                moduleLoc.slot,
-                moduleLoc.scopeId,
-                moduleLoc.isMutable,
-                moduleLoc.isDelegated,
-                pos,
-                strictSlotRefs
-            )
-            resolutionSink?.reference(name, pos)
-            return ref
-        }
-        val rootRecord = importManager.rootScope.objects[name]
-        if (rootRecord != null && rootRecord.visibility.isPublic) {
-            modulePlan?.let { plan ->
-                declareSlotNameIn(plan, name, rootRecord.isMutable, rootRecord.type == ObjRecord.Type.Delegated)
-            }
-            val rootSlot = lookupSlotLocation(name)
-            if (rootSlot != null) {
-                val ref = LocalSlotRef(
-                    name,
-                    rootSlot.slot,
-                    rootSlot.scopeId,
-                    rootSlot.isMutable,
-                    rootSlot.isDelegated,
-                    pos,
-                    strictSlotRefs
-                )
-                resolutionSink?.reference(name, pos)
-                return ref
-            }
         }
         val classContext = codeContexts.any { ctx -> ctx is CodeContext.ClassBody }
         if (classContext && extensionNames.contains(name)) {
@@ -960,7 +1031,10 @@ class Compiler(
     private val seedScope: Scope? = settings.seedScope
     private var resolutionScriptDepth = 0
     private val resolutionPredeclared = mutableSetOf<String>()
-    private val importedScopes = mutableListOf<Scope>()
+    private data class ImportedModule(val scope: ModuleScope, val pos: Pos)
+    private data class ImportBindingResolution(val binding: ImportBinding, val record: ObjRecord)
+    private val importedModules = mutableListOf<ImportedModule>()
+    private val importBindings = mutableMapOf<String, ImportBinding>()
     private val enumEntriesByName = mutableMapOf<String, List<String>>()
 
     // --- Doc-comment collection state (for immediate preceding declarations) ---
@@ -995,6 +1069,118 @@ class Compiler(
             }
             current = current.parent
         }
+    }
+
+    private fun seedNameObjClassFromScope(scope: Scope) {
+        var current: Scope? = scope
+        while (current != null) {
+            for ((name, record) in current.objects) {
+                if (!record.visibility.isPublic) continue
+                if (nameObjClass.containsKey(name)) continue
+                when (val value = record.value) {
+                    is ObjClass -> nameObjClass[name] = value
+                    is ObjInstance -> nameObjClass[name] = value.objClass
+                }
+            }
+            current = current.parent
+        }
+    }
+
+    private fun resolveImportBinding(name: String, pos: Pos): ImportBindingResolution? {
+        val seedRecord = findSeedScopeRecord(name)?.takeIf { it.visibility.isPublic }
+        val rootRecord = importManager.rootScope.objects[name]?.takeIf { it.visibility.isPublic }
+        val moduleMatches = LinkedHashMap<String, Pair<ImportedModule, ObjRecord>>()
+        for (module in importedModules.asReversed()) {
+            val found = LinkedHashMap<String, Pair<ModuleScope, ObjRecord>>()
+            collectModuleRecordMatches(module.scope, name, mutableSetOf(), found)
+            for ((pkg, pair) in found) {
+                moduleMatches.putIfAbsent(pkg, ImportedModule(pair.first, module.pos) to pair.second)
+            }
+        }
+        if (seedRecord != null) {
+            val value = seedRecord.value
+            if (!nameObjClass.containsKey(name)) {
+                when (value) {
+                    is ObjClass -> nameObjClass[name] = value
+                    is ObjInstance -> nameObjClass[name] = value.objClass
+                }
+            }
+            return ImportBindingResolution(ImportBinding(name, ImportBindingSource.Seed), seedRecord)
+        }
+        if (rootRecord != null) {
+            val value = rootRecord.value
+            if (!nameObjClass.containsKey(name)) {
+                when (value) {
+                    is ObjClass -> nameObjClass[name] = value
+                    is ObjInstance -> nameObjClass[name] = value.objClass
+                }
+            }
+            return ImportBindingResolution(ImportBinding(name, ImportBindingSource.Root), rootRecord)
+        }
+        if (moduleMatches.isEmpty()) return null
+        if (moduleMatches.size > 1) {
+            val moduleNames = moduleMatches.keys.toList()
+            throw ScriptError(pos, "symbol $name is ambiguous between imports: ${moduleNames.joinToString(", ")}")
+        }
+        val (module, record) = moduleMatches.values.first()
+        val binding = ImportBinding(name, ImportBindingSource.Module(module.scope.packageName, module.pos))
+        val value = record.value
+        if (!nameObjClass.containsKey(name)) {
+            when (value) {
+                is ObjClass -> nameObjClass[name] = value
+                is ObjInstance -> nameObjClass[name] = value.objClass
+            }
+        }
+        return ImportBindingResolution(binding, record)
+    }
+
+    private fun collectModuleRecordMatches(
+        scope: ModuleScope,
+        name: String,
+        visited: MutableSet<String>,
+        out: MutableMap<String, Pair<ModuleScope, ObjRecord>>
+    ) {
+        if (!visited.add(scope.packageName)) return
+        val record = scope.objects[name]
+        if (record != null && record.visibility.isPublic) {
+            out.putIfAbsent(scope.packageName, scope to record)
+        }
+        for (child in scope.importedModules) {
+            collectModuleRecordMatches(child, name, visited, out)
+        }
+    }
+
+    private fun registerImportBinding(name: String, binding: ImportBinding, pos: Pos) {
+        val existing = importBindings[name] ?: run {
+            importBindings[name] = binding
+            return
+        }
+        if (!sameImportBinding(existing, binding)) {
+            throw ScriptError(pos, "symbol $name resolves to multiple imports")
+        }
+    }
+
+    private fun sameImportBinding(left: ImportBinding, right: ImportBinding): Boolean {
+        if (left.symbol != right.symbol) return false
+        val leftSrc = left.source
+        val rightSrc = right.source
+        return when (leftSrc) {
+            is ImportBindingSource.Module -> {
+                rightSrc is ImportBindingSource.Module && leftSrc.name == rightSrc.name
+            }
+            ImportBindingSource.Root -> rightSrc is ImportBindingSource.Root
+            ImportBindingSource.Seed -> rightSrc is ImportBindingSource.Seed
+        }
+    }
+
+    private fun findSeedScopeRecord(name: String): ObjRecord? {
+        var current = seedScope
+        var hops = 0
+        while (current != null && hops++ < 1024) {
+            current.objects[name]?.let { return it }
+            current = current.parent
+        }
+        return null
     }
 
     private fun shouldSeedDefaultStdlib(): Boolean {
@@ -1216,15 +1402,25 @@ class Compiler(
         val needsSlotPlan = slotPlanStack.isEmpty()
         if (needsSlotPlan) {
             slotPlanStack.add(SlotPlan(mutableMapOf(), 0, nextScopeId++))
-            declareSlotNameIn(slotPlanStack.last(), "__PACKAGE__", isMutable = false, isDelegated = false)
-            declareSlotNameIn(slotPlanStack.last(), "$~", isMutable = true, isDelegated = false)
-            seedScope?.let { seedSlotPlanFromScope(it, includeParents = true) }
-            seedSlotPlanFromScope(importManager.rootScope)
+            seedScope?.let { scope ->
+                if (scope !is ModuleScope) {
+                    seedSlotPlanFromSeedScope(scope)
+                }
+            }
+            val plan = slotPlanStack.last()
+            if (!plan.slots.containsKey("__PACKAGE__")) {
+                declareSlotNameIn(plan, "__PACKAGE__", isMutable = false, isDelegated = false)
+            }
+            if (!plan.slots.containsKey("$~")) {
+                declareSlotNameIn(plan, "$~", isMutable = true, isDelegated = false)
+            }
+            seedScope?.let { seedNameObjClassFromScope(it) }
+            seedNameObjClassFromScope(importManager.rootScope)
             if (shouldSeedDefaultStdlib()) {
                 val stdlib = importManager.prepareImport(start, "lyng.stdlib", null)
                 seedResolutionFromScope(stdlib, start)
-                seedSlotPlanFromScope(stdlib)
-                importedScopes.add(stdlib)
+                seedNameObjClassFromScope(stdlib)
+                importedModules.add(ImportedModule(stdlib, start))
             }
             predeclareTopLevelSymbols()
         }
@@ -1293,16 +1489,8 @@ class Compiler(
                                 }
                             }
                             val module = importManager.prepareImport(pos, name, null)
-                            importedScopes.add(module)
+                            importedModules.add(ImportedModule(module, pos))
                             seedResolutionFromScope(module, pos)
-                            seedSlotPlanFromScope(module)
-                            statements += object : Statement() {
-                                override val pos: Pos = pos
-                                override suspend fun execute(scope: Scope): Obj {
-                                    module.importInto(scope, null)
-                                    return ObjVoid
-                                }
-                            }
                             continue
                         }
                     }
@@ -1336,7 +1524,8 @@ class Compiler(
                     statements.isNotEmpty() &&
                     codeContexts.lastOrNull() is CodeContext.Module &&
                     resolutionScriptDepth == 1 &&
-                    statements.none { containsUnsupportedForBytecode(it) }
+                    statements.none { containsUnsupportedForBytecode(it) } &&
+                    statements.none { containsDelegatedRefs(it) }
                 val finalStatements = if (wrapScriptBytecode) {
                     val unwrapped = statements.map { unwrapBytecodeDeep(it) }
                     val block = InlineBlockStatement(unwrapped, start)
@@ -1354,7 +1543,8 @@ class Compiler(
                 } else {
                     statements
                 }
-                Script(start, finalStatements, modulePlan)
+                val moduleRefs = importedModules.map { ImportBindingSource.Module(it.scope.packageName, it.pos) }
+                Script(start, finalStatements, modulePlan, importBindings.toMap(), moduleRefs)
             }.also {
                 // Best-effort script end notification (use current position)
                 miniSink?.onScriptEnd(
@@ -1415,8 +1605,23 @@ class Compiler(
         val candidates = mutableListOf(typeName)
         cls?.mro?.forEach { candidates.add(it.className) }
         for (baseName in candidates) {
-            val wrapperName = extensionCallableName(baseName, memberName)
-            if (seedScope?.get(wrapperName) != null || importManager.rootScope.get(wrapperName) != null) {
+            val wrapperNames = listOf(
+                extensionCallableName(baseName, memberName),
+                extensionPropertyGetterName(baseName, memberName),
+                extensionPropertySetterName(baseName, memberName)
+            )
+            for (wrapperName in wrapperNames) {
+                val resolved = resolveImportBinding(wrapperName, Pos.builtIn) ?: continue
+                val plan = moduleSlotPlan()
+                if (plan != null && !plan.slots.containsKey(wrapperName)) {
+                    declareSlotNameIn(
+                        plan,
+                        wrapperName,
+                        resolved.record.isMutable,
+                        resolved.record.type == ObjRecord.Type.Delegated
+                    )
+                }
+                registerImportBinding(wrapperName, resolved.binding, Pos.builtIn)
                 return true
             }
         }
@@ -1578,8 +1783,8 @@ class Compiler(
         }
         addScope(seedScope)
         addScope(importManager.rootScope)
-        for (scope in importedScopes) {
-            addScope(scope)
+        for (module in importedModules) {
+            addScope(module.scope)
         }
         for (name in compileClassInfos.keys) {
             val cls = resolveClassByName(name) ?: continue
@@ -1730,8 +1935,11 @@ class Compiler(
                 containsUnsupportedRef(ref.condition) || containsUnsupportedRef(ref.ifTrue) || containsUnsupportedRef(ref.ifFalse)
             is ElvisRef -> containsUnsupportedRef(ref.left) || containsUnsupportedRef(ref.right)
             is FieldRef -> {
-                val receiverClass = resolveReceiverClassForMember(ref.target)
+                val receiverClass = resolveReceiverClassForMember(ref.target) ?: return true
                 if (receiverClass == ObjDynamic.type) return true
+                val hasMember = receiverClass.instanceFieldIdMap()[ref.name] != null ||
+                    receiverClass.instanceMethodIdMap(includeAbstract = true)[ref.name] != null
+                if (!hasMember && !hasExtensionFor(receiverClass.className, ref.name)) return true
                 containsUnsupportedRef(ref.target)
             }
             is IndexRef -> containsUnsupportedRef(ref.targetRef) || containsUnsupportedRef(ref.indexRef)
@@ -1747,12 +1955,24 @@ class Compiler(
                     is net.sergeych.lyng.obj.MapLiteralEntry.Spread -> containsUnsupportedRef(it.ref)
                 }
             }
-            is CallRef -> containsUnsupportedRef(ref.target) || ref.args.any { containsUnsupportedForBytecode(it.value) }
+            is CallRef -> {
+                val targetName = when (val target = ref.target) {
+                    is LocalVarRef -> target.name
+                    is LocalSlotRef -> target.name
+                    else -> null
+                }
+                if (targetName == "delay") return true
+                containsUnsupportedRef(ref.target) || ref.args.any { containsUnsupportedForBytecode(it.value) }
+            }
             is MethodCallRef -> {
-                val receiverClass = resolveReceiverClassForMember(ref.receiver)
+                if (ref.name == "delay") return true
+                val receiverClass = resolveReceiverClassForMember(ref.receiver) ?: return true
                 if (receiverClass == ObjDynamic.type) return true
+                val hasMember = receiverClass.instanceMethodIdMap(includeAbstract = true)[ref.name] != null
+                if (!hasMember && !hasExtensionFor(receiverClass.className, ref.name)) return true
                 containsUnsupportedRef(ref.receiver) || ref.args.any { containsUnsupportedForBytecode(it.value) }
             }
+            is ImplicitThisMethodCallRef -> true
             is QualifiedThisMethodSlotCallRef -> true
             is QualifiedThisFieldSlotRef -> true
             is ClassScopeMemberRef -> true
@@ -1766,7 +1986,7 @@ class Compiler(
             is ExpressionStatement -> containsDelegatedRefs(target.ref)
             is BlockStatement -> target.statements().any { containsDelegatedRefs(it) }
             is VarDeclStatement -> target.initializer?.let { containsDelegatedRefs(it) } ?: false
-            is DelegatedVarDeclStatement -> containsDelegatedRefs(target.initializer)
+            is DelegatedVarDeclStatement -> true
             is DestructuringVarDeclStatement -> containsDelegatedRefs(target.initializer)
             is IfStatement -> {
                 containsDelegatedRefs(target.condition) ||
@@ -1812,6 +2032,18 @@ class Compiler(
     private fun containsDelegatedRefs(ref: ObjRef): Boolean {
         return when (ref) {
             is LocalSlotRef -> ref.isDelegated
+            is ImplicitThisMemberRef -> {
+                val typeName = ref.preferredThisTypeName() ?: currentImplicitThisTypeName()
+                val targetClass = typeName?.let { resolveClassByName(it) }
+                val member = targetClass?.findFirstConcreteMember(ref.name)
+                member?.type == ObjRecord.Type.Delegated
+            }
+            is ImplicitThisMethodCallRef -> {
+                val typeName = ref.preferredThisTypeName() ?: currentImplicitThisTypeName()
+                val targetClass = typeName?.let { resolveClassByName(it) }
+                val member = targetClass?.findFirstConcreteMember(ref.methodName())
+                member?.type == ObjRecord.Type.Delegated
+            }
             is BinaryOpRef -> containsDelegatedRefs(ref.left) || containsDelegatedRefs(ref.right)
             is UnaryOpRef -> containsDelegatedRefs(ref.a)
             is CastRef -> containsDelegatedRefs(ref.castValueRef()) || containsDelegatedRefs(ref.castTypeRef())
@@ -1826,7 +2058,14 @@ class Compiler(
             is ConditionalRef ->
                 containsDelegatedRefs(ref.condition) || containsDelegatedRefs(ref.ifTrue) || containsDelegatedRefs(ref.ifFalse)
             is ElvisRef -> containsDelegatedRefs(ref.left) || containsDelegatedRefs(ref.right)
-            is FieldRef -> containsDelegatedRefs(ref.target)
+            is FieldRef -> {
+                val receiverClass = resolveReceiverClassForMember(ref.target)
+                if (receiverClass != null) {
+                    val member = receiverClass.findFirstConcreteMember(ref.name)
+                    if (member?.type == ObjRecord.Type.Delegated) return true
+                }
+                containsDelegatedRefs(ref.target)
+            }
             is IndexRef -> containsDelegatedRefs(ref.targetRef) || containsDelegatedRefs(ref.indexRef)
             is ListLiteralRef -> ref.entries().any {
                 when (it) {
@@ -1841,7 +2080,14 @@ class Compiler(
                 }
             }
             is CallRef -> containsDelegatedRefs(ref.target) || ref.args.any { containsDelegatedRefs(it.value) }
-            is MethodCallRef -> containsDelegatedRefs(ref.receiver) || ref.args.any { containsDelegatedRefs(it.value) }
+            is MethodCallRef -> {
+                val receiverClass = resolveReceiverClassForMember(ref.receiver)
+                if (receiverClass != null) {
+                    val member = receiverClass.findFirstConcreteMember(ref.name)
+                    if (member?.type == ObjRecord.Type.Delegated) return true
+                }
+                containsDelegatedRefs(ref.receiver) || ref.args.any { containsDelegatedRefs(it.value) }
+            }
             is StatementRef -> containsDelegatedRefs(ref.statement)
             else -> false
         }
@@ -3939,6 +4185,15 @@ class Compiler(
         if (targetClass == ObjInstant.type && (name == "distantFuture" || name == "distantPast")) {
             return ObjInstant.type
         }
+        if (targetClass == ObjInstant.type && name in listOf(
+                "truncateToMinute",
+                "truncateToSecond",
+                "truncateToMillisecond",
+                "truncateToMicrosecond"
+            )
+        ) {
+            return ObjInstant.type
+        }
         if (targetClass == ObjString.type && name == "re") {
             return ObjRegex.type
         }
@@ -4020,10 +4275,34 @@ class Compiler(
             if (isAllowedObjectMember(memberName)) return
             throw ScriptError(pos, "member access requires compile-time receiver type: $memberName")
         }
+        registerExtensionWrapperBindings(receiverClass, memberName, pos)
         if (receiverClass == Obj.rootObjectType) {
             val allowed = isAllowedObjectMember(memberName)
             if (!allowed && !hasExtensionFor(receiverClass.className, memberName)) {
                 throw ScriptError(pos, "member $memberName is not available on Object without explicit cast")
+            }
+        }
+    }
+
+    private fun registerExtensionWrapperBindings(receiverClass: ObjClass, memberName: String, pos: Pos) {
+        for (cls in receiverClass.mro) {
+            val wrapperNames = listOf(
+                extensionCallableName(cls.className, memberName),
+                extensionPropertyGetterName(cls.className, memberName),
+                extensionPropertySetterName(cls.className, memberName)
+            )
+            for (wrapperName in wrapperNames) {
+                val resolved = resolveImportBinding(wrapperName, pos) ?: continue
+                val plan = moduleSlotPlan()
+                if (plan != null && !plan.slots.containsKey(wrapperName)) {
+                    declareSlotNameIn(
+                        plan,
+                        wrapperName,
+                        resolved.record.isMutable,
+                        resolved.record.type == ObjRecord.Type.Delegated
+                    )
+                }
+                registerImportBinding(wrapperName, resolved.binding, pos)
             }
         }
     }
@@ -4489,7 +4768,7 @@ class Compiler(
             }
         }
         val implicitThisTypeName = currentImplicitThisTypeName()
-        return when (left) {
+        val result = when (left) {
             is ImplicitThisMemberRef ->
                 if (left.methodId == null && left.fieldId != null) {
                     CallRef(left, args, detectedBlockArgument, isOptional)
@@ -4550,6 +4829,7 @@ class Compiler(
             }
             else -> CallRef(left, args, detectedBlockArgument, isOptional)
         }
+        return result
     }
 
     private fun inferReceiverTypeFromArgs(args: List<ParsedArgument>): String? {
@@ -5930,6 +6210,14 @@ class Compiler(
                 override suspend fun execute(scope: Scope): Obj {
                     // the main statement should create custom ObjClass instance with field
                     // accessors, constructor registration, etc.
+                    if (isExtern) {
+                        val rec = scope[className]
+                        val existing = rec?.value as? ObjClass
+                        val resolved = existing ?: resolveClassByName(className)
+                        val stub = resolved ?: ObjInstanceClass(className).apply { this.isAbstract = true }
+                        scope.addItem(declaredName, false, stub)
+                        return stub
+                    }
                     // Resolve parent classes by name at execution time
                     val parentClasses = baseSpecs.map { baseSpec ->
                         val rec = scope[baseSpec.name]
@@ -6566,7 +6854,11 @@ class Compiler(
                 }
             }
             val fnStatements = rawFnStatements?.let { stmt ->
-                if (useBytecodeStatements && !containsUnsupportedForBytecode(stmt)) {
+                if (useBytecodeStatements &&
+                    parentContext !is CodeContext.ClassBody &&
+                    !containsUnsupportedForBytecode(stmt) &&
+                    !containsDelegatedRefs(stmt)
+                ) {
                     val paramKnownClasses = mutableMapOf<String, ObjClass>()
                     for (param in argsDeclaration.params) {
                         val cls = resolveTypeDeclObjClass(param.type) ?: continue
@@ -6630,6 +6922,19 @@ class Compiler(
             val fnCreateStatement = object : Statement() {
                 override val pos: Pos = start
                 override suspend fun execute(context: Scope): Obj {
+                    if (actualExtern && extTypeName == null && parentContext !is CodeContext.ClassBody) {
+                        val existing = context.get(name)
+                        if (existing != null) {
+                            context.addItem(
+                                name,
+                                false,
+                                existing.value,
+                                visibility,
+                                callSignature = existing.callSignature
+                            )
+                            return existing.value
+                        }
+                    }
                     if (isDelegated) {
                         val accessType = ObjString("Callable")
                         val initValue = delegateExpression!!.execute(context)
@@ -6758,7 +7063,9 @@ class Compiler(
                                             )
                                             execScope.currentClassCtx = cls
                                             compiledFnBody.execute(execScope)
-                                        } ?: compiledFnBody.execute(thisObj.autoInstanceScope(this))
+                                        } ?: run {
+                                            compiledFnBody.execute(thisObj.autoInstanceScope(this))
+                                        }
                                     } finally {
                                         this.currentClassCtx = savedCtx
                                     }
@@ -7096,8 +7403,8 @@ class Compiler(
     private fun resolveClassByName(name: String): ObjClass? {
         val rec = seedScope?.get(name) ?: importManager.rootScope.get(name)
         (rec?.value as? ObjClass)?.let { return it }
-        for (scope in importedScopes.asReversed()) {
-            val imported = scope.get(name)
+        for (module in importedModules.asReversed()) {
+            val imported = module.scope.get(name)
             (imported?.value as? ObjClass)?.let { return it }
         }
         val info = compileClassInfos[name] ?: return null

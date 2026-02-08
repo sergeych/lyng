@@ -1,41 +1,32 @@
-# Bytecode migration plan (compiler -> frames/bytecode)
+# Bytecode Migration Plan
 
-This is a step-by-step checklist to track remaining non-bytecode paths in the compiler.
-Mark items as you implement them. Priorities are ordered by expected simplicity.
+Goal: migrate :lynglib compiler/runtime so values live in frame slots and bytecode is the default execution path.
 
-## Priority 1: Quick wins (local changes)
-- [ ] Implement bytecode emission for `DelegatedVarDeclStatement`.
-  - References: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/bytecode/BytecodeCompiler.kt:3284`, `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Compiler.kt:1667`
-- [ ] Implement bytecode emission for `DestructuringVarDeclStatement`.
-  - References: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/bytecode/BytecodeCompiler.kt:3285`, `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Compiler.kt:1667`
-- [ ] Ensure `ExtensionPropertyDeclStatement` is handled in both value and no-value bytecode paths.
-  - References: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/bytecode/BytecodeCompiler.kt:3332`
+## Step 1: Imports as module slots (done)
+- [x] Seed module slot plans from import bindings (lazy, unused imports do not allocate).
+- [x] Avoid mutating scopes during compile-time imports; bind slots at runtime instead.
+- [x] Make runtime member access honor extensions (methods + properties).
+- [x] Ensure class members (ObjClass instances) resolve by slot id in bytecode runtime.
+- [x] Expose `Iterator` in root scope so stdlib externs bind at runtime.
 
-## Priority 2: Conservative wrapper guards to relax
-- [ ] Allow wrapping `BreakStatement` / `ContinueStatement` / `ReturnStatement` where bytecode already supports them.
-  - References: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Compiler.kt:1608`
-- [ ] Revisit `containsLoopControl` as a hard blocker for wrapping (once label handling is verified).
-  - References: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Compiler.kt:1542`
+## Step 2: Class-scope member refs + qualified-this refs (pending)
+- [ ] Bytecode-compile `ClassScopeMemberRef` (currently forced to AST in `Compiler.containsUnsupportedRef`).
+- [ ] Bytecode-compile `QualifiedThisFieldSlotRef` / `QualifiedThisMethodSlotCallRef`.
+- [ ] Ensure slot resolution uses class member ids, not scope lookup; no fallback opcodes.
+- [ ] Add coverage for class static access + qualified-this access to keep JVM tests green.
 
-## Priority 3: Medium complexity statements
-- [ ] Implement bytecode support for `TryStatement`.
-  - References: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Compiler.kt:1698`, `lynglib/src/commonMain/kotlin/net/sergeych/lyng/bytecode/BytecodeCompiler.kt:3290`
-- [ ] Expand `WhenStatement` condition coverage (remove "unsupported condition" paths).
-  - References: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Compiler.kt:1699`
+## Step 3: Expand bytecode coverage for control flow + literals (pending)
+- [ ] Add bytecode support for `TryStatement` (catch/finally) in `Compiler.containsUnsupportedForBytecode` and `BytecodeCompiler`.
+- [ ] Support `WhenStatement` conditions beyond the current limited set.
+- [ ] Add map literal spread support (currently throws in `BytecodeCompiler`).
+- [ ] Remove remaining `BytecodeCompileException` cases for common member access (missing id paths).
 
-## Priority 4: Ref-level blockers
-- [ ] Support dynamic member access in bytecode (`FieldRef` / `MethodCallRef` on `ObjDynamic`).
-  - References: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Compiler.kt:1735`
-- [ ] Implement bytecode for qualified/captured member refs:
-  - `QualifiedThisMethodSlotCallRef`
-  - `QualifiedThisFieldSlotRef`
-  - `ClassScopeMemberRef`
-  - References: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Compiler.kt:1759`
+## Known bytecode gaps (from current guards)
+- [ ] `TryStatement` is always excluded by `Compiler.containsUnsupportedForBytecode`.
+- [ ] `ClassScopeMemberRef` and qualified-this refs are excluded by `Compiler.containsUnsupportedRef`.
+- [ ] `BytecodeCompiler` rejects map literal spreads and some argument expressions.
+- [ ] Member access still fails when compile-time receiver class cannot be resolved.
 
-## Priority 5: Wrapping policy improvements
-- [ ] Allow partial script wrapping (wrap supported statements even when others are unsupported).
-  - References: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Compiler.kt:1333`
-- [ ] Re-evaluate tooling paths that disable bytecode:
-  - `CompileTimeResolution.dryRun` (resolution-only)
-  - `LyngLanguageTools.analyze` (diagnostics/mini-ast)
-  - References: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/resolution/CompileTimeResolution.kt:67`, `lynglib/src/commonMain/kotlin/net/sergeych/lyng/tools/LyngLanguageTools.kt:97`
+## Validation
+- [ ] `./gradlew :lynglib:jvmTest` (full suite) after each step; if failures pre-exist, run targeted tests tied to the change and record the gap in this file.
+- [ ] Baseline full suite: currently 46 failures on `:lynglib:jvmTest` (run 2026-02-08); keep targeted tests green until the baseline is addressed.

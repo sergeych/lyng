@@ -34,13 +34,50 @@ class Script(
     private val statements: List<Statement> = emptyList(),
     private val moduleSlotPlan: Map<String, Int> = emptyMap(),
     private val importBindings: Map<String, ImportBinding> = emptyMap(),
+    private val importedModules: List<ImportBindingSource.Module> = emptyList(),
 //    private val catchReturn: Boolean = false,
 ) : Statement() {
 
     override suspend fun execute(scope: Scope): Obj {
-        if (moduleSlotPlan.isNotEmpty()) {
-            scope.applySlotPlan(moduleSlotPlan)
-            seedModuleSlots(scope)
+        val isModuleScope = scope is ModuleScope
+        val shouldSeedModule = isModuleScope || scope.thisObj === ObjVoid
+        val moduleTarget = scope
+        if (moduleSlotPlan.isNotEmpty() && shouldSeedModule) {
+            val hasPlanMapping = moduleSlotPlan.keys.any { moduleTarget.getSlotIndexOf(it) != null }
+            val needsReset = moduleTarget is ModuleScope ||
+                moduleTarget.slotCount() == 0 ||
+                moduleTarget.hasSlotPlanConflict(moduleSlotPlan) ||
+                (!hasPlanMapping && moduleTarget.slotCount() > 0)
+            if (needsReset) {
+                val preserved = LinkedHashMap<String, ObjRecord>()
+                for (name in moduleSlotPlan.keys) {
+                    moduleTarget.getLocalRecordDirect(name)?.let { preserved[name] = it }
+                }
+                moduleTarget.applySlotPlanReset(moduleSlotPlan, preserved)
+                for (name in moduleSlotPlan.keys) {
+                    if (preserved.containsKey(name)) continue
+                    val inherited = findSeedRecord(moduleTarget.parent, name)
+                    if (inherited != null && inherited.value !== ObjUnset) {
+                        moduleTarget.updateSlotFor(name, inherited)
+                    }
+                }
+            } else {
+                moduleTarget.applySlotPlan(moduleSlotPlan)
+                for (name in moduleSlotPlan.keys) {
+                    val local = moduleTarget.getLocalRecordDirect(name)
+                    if (local != null && local.value !== ObjUnset) {
+                        moduleTarget.updateSlotFor(name, local)
+                        continue
+                    }
+                    val inherited = findSeedRecord(moduleTarget.parent, name)
+                    if (inherited != null && inherited.value !== ObjUnset) {
+                        moduleTarget.updateSlotFor(name, inherited)
+                    }
+                }
+            }
+        }
+        if (shouldSeedModule) {
+            seedModuleSlots(moduleTarget)
         }
         var lastResult: Obj = ObjVoid
         for (s in statements) {
@@ -50,37 +87,24 @@ class Script(
     }
 
     private suspend fun seedModuleSlots(scope: Scope) {
-        if (importBindings.isNotEmpty()) {
-            seedImportBindings(scope)
-            return
-        }
-        val parent = scope.parent ?: return
-        for (name in moduleSlotPlan.keys) {
-            if (scope.objects.containsKey(name)) {
-                scope.updateSlotFor(name, scope.objects[name]!!)
-                continue
-            }
-            val seed = findSeedRecord(parent, name)
-            if (seed != null) {
-                if (name == "Exception" && seed.value !is ObjClass) {
-                    scope.updateSlotFor(name, ObjRecord(ObjException.Root, isMutable = false))
-                } else {
-                    scope.updateSlotFor(name, seed)
-                }
-                continue
-            }
-            if (name == "Exception") {
-                scope.updateSlotFor(name, ObjRecord(ObjException.Root, isMutable = false))
-            }
-        }
+        if (importBindings.isEmpty() && importedModules.isEmpty()) return
+        seedImportBindings(scope)
     }
 
     private suspend fun seedImportBindings(scope: Scope) {
         val provider = scope.currentImportProvider
+        val importedModules = LinkedHashSet<ModuleScope>()
+        for (moduleRef in this.importedModules) {
+            importedModules.add(provider.prepareImport(moduleRef.pos, moduleRef.name, null))
+        }
+        if (scope is ModuleScope) {
+            scope.importedModules = importedModules.toList()
+        }
         for ((name, binding) in importBindings) {
             val record = when (val source = binding.source) {
                 is ImportBindingSource.Module -> {
                     val module = provider.prepareImport(source.pos, source.name, null)
+                    importedModules.add(module)
                     module.objects[binding.symbol]?.takeIf { it.visibility.isPublic }
                         ?: scope.raiseSymbolNotFound("symbol ${source.name}.${binding.symbol} not found")
                 }
@@ -99,6 +123,15 @@ class Script(
                 scope.updateSlotFor(name, record)
             }
         }
+        for (module in importedModules) {
+            for ((cls, map) in module.extensions) {
+                for ((symbol, record) in map) {
+                    if (record.visibility.isPublic) {
+                        scope.addExtension(cls, symbol, record)
+                    }
+                }
+            }
+        }
     }
 
     private fun findSeedRecord(scope: Scope?, name: String): ObjRecord? {
@@ -112,6 +145,15 @@ class Script(
                 if (rec.value !== ObjUnset) return rec
             }
             s = s.parent
+        }
+        return null
+    }
+
+    private fun resolveModuleScope(scope: Scope): ModuleScope? {
+        var current: Scope? = scope
+        while (current != null) {
+            if (current is ModuleScope) return current
+            current = current.parent
         }
         return null
     }
@@ -460,6 +502,7 @@ class Script(
             // interfaces
             addConst("Iterable", ObjIterable)
             addConst("Collection", ObjCollection)
+            addConst("Iterator", ObjIterator)
             addConst("Array", ObjArray)
             addConst("RingBuffer", ObjRingBuffer.type)
             addConst("Class", ObjClassType)

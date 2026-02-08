@@ -33,6 +33,8 @@ class ModuleScope(
 
     constructor(importProvider: ImportProvider, source: Source) : this(importProvider, source.startPos, source.fileName)
 
+    internal var importedModules: List<ModuleScope> = emptyList()
+
     /**
      * Import symbols into the scope. It _is called_ after the module is imported by [ImportProvider.prepareImport]
      * which checks symbol availability and accessibility prior to execution.
@@ -92,4 +94,3 @@ class ModuleScope(
             super.get(name)
     }
 }
-
