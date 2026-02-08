@@ -9,10 +9,10 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [x] Enable bytecode for `ImplicitThisMethodCallRef`, `QualifiedThisMethodSlotCallRef`, `QualifiedThisFieldSlotRef`.
   - [x] Keep unsupported cases blocked: `ClassScopeMemberRef`, dynamic receivers, delegated members.
   - [x] JVM tests must be green before commit.
-- [ ] Step 3: Bytecode support for `try/catch/finally`.
-  - [ ] Implement bytecode emission for try/catch and finally blocks.
-  - [ ] Preserve existing error/stack semantics.
-  - [ ] JVM tests must be green before commit.
+- [x] Step 3: Bytecode support for `try/catch/finally`.
+  - [x] Implement bytecode emission for try/catch and finally blocks.
+  - [x] Preserve existing error/stack semantics.
+  - [x] JVM tests must be green before commit.
 
 ## Notes
 

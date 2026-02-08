@@ -119,7 +119,8 @@ class CmdBuilder {
 
     private fun operandKinds(op: Opcode): List<OperandKind> {
         return when (op) {
-            Opcode.NOP, Opcode.RET_VOID, Opcode.POP_SCOPE, Opcode.POP_SLOT_PLAN -> emptyList()
+            Opcode.NOP, Opcode.RET_VOID, Opcode.POP_SCOPE, Opcode.POP_SLOT_PLAN, Opcode.POP_TRY,
+            Opcode.CLEAR_PENDING_THROWABLE, Opcode.RETHROW_PENDING -> emptyList()
             Opcode.MOVE_OBJ, Opcode.MOVE_INT, Opcode.MOVE_REAL, Opcode.MOVE_BOOL, Opcode.BOX_OBJ,
             Opcode.INT_TO_REAL, Opcode.REAL_TO_INT, Opcode.BOOL_TO_INT, Opcode.INT_TO_BOOL,
             Opcode.OBJ_TO_BOOL,
@@ -144,6 +145,8 @@ class CmdBuilder {
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.PUSH_SCOPE, Opcode.PUSH_SLOT_PLAN ->
                 listOf(OperandKind.CONST)
+            Opcode.PUSH_TRY ->
+                listOf(OperandKind.SLOT, OperandKind.IP, OperandKind.IP)
             Opcode.DECL_LOCAL, Opcode.DECL_EXT_PROPERTY, Opcode.DECL_DELEGATED, Opcode.DECL_DESTRUCTURE ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.ADD_INT, Opcode.SUB_INT, Opcode.MUL_INT, Opcode.DIV_INT, Opcode.MOD_INT,
@@ -238,6 +241,7 @@ class CmdBuilder {
             Opcode.MAKE_QUALIFIED_VIEW -> CmdMakeQualifiedView(operands[0], operands[1], operands[2])
             Opcode.RET_LABEL -> CmdRetLabel(operands[0], operands[1])
             Opcode.THROW -> CmdThrow(operands[0], operands[1])
+            Opcode.RETHROW_PENDING -> CmdRethrowPending()
             Opcode.RESOLVE_SCOPE_SLOT -> CmdResolveScopeSlot(operands[0], operands[1])
             Opcode.LOAD_OBJ_ADDR -> CmdLoadObjAddr(operands[0], operands[1])
             Opcode.STORE_OBJ_ADDR -> CmdStoreObjAddr(operands[0], operands[1])
@@ -376,6 +380,9 @@ class CmdBuilder {
             Opcode.POP_SCOPE -> CmdPopScope()
             Opcode.PUSH_SLOT_PLAN -> CmdPushSlotPlan(operands[0])
             Opcode.POP_SLOT_PLAN -> CmdPopSlotPlan()
+            Opcode.PUSH_TRY -> CmdPushTry(operands[0], operands[1], operands[2])
+            Opcode.POP_TRY -> CmdPopTry()
+            Opcode.CLEAR_PENDING_THROWABLE -> CmdClearPendingThrowable()
             Opcode.DECL_LOCAL -> CmdDeclLocal(operands[0], operands[1])
             Opcode.DECL_DELEGATED -> CmdDeclDelegated(operands[0], operands[1])
             Opcode.DECL_DESTRUCTURE -> CmdDeclDestructure(operands[0], operands[1])

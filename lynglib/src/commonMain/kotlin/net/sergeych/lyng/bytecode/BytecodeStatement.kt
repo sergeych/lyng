@@ -126,7 +126,11 @@ class BytecodeStatement private constructor(
                 is net.sergeych.lyng.ClassDeclStatement -> false
                 is net.sergeych.lyng.FunctionDeclStatement -> false
                 is net.sergeych.lyng.EnumDeclStatement -> false
-                is net.sergeych.lyng.TryStatement -> true
+                is net.sergeych.lyng.TryStatement -> {
+                    containsUnsupportedStatement(target.body) ||
+                        target.catches.any { containsUnsupportedStatement(it.block) } ||
+                        (target.finallyClause?.let { containsUnsupportedStatement(it) } ?: false)
+                }
                 is net.sergeych.lyng.WhenStatement -> {
                     containsUnsupportedStatement(target.value) ||
                         target.cases.any { case ->
@@ -147,6 +151,7 @@ class BytecodeStatement private constructor(
                     net.sergeych.lyng.BlockStatement(
                         net.sergeych.lyng.Script(stmt.pos, unwrapped),
                         stmt.slotPlan,
+                        stmt.scopeId,
                         stmt.captureSlots,
                         stmt.pos
                     )

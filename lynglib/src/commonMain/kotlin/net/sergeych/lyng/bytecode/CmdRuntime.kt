@@ -34,7 +34,14 @@ class CmdVm {
             while (result == null) {
                 val cmd = cmds[frame.ip]
                 frame.ip += 1
-                cmd.perform(frame)
+                try {
+                    cmd.perform(frame)
+                } catch (e: Throwable) {
+                    if (!frame.handleException(e)) {
+                        frame.cancelIterators()
+                        throw e
+                    }
+                }
             }
         } catch (e: Throwable) {
             frame.cancelIterators()
@@ -1138,6 +1145,13 @@ class CmdThrow(internal val posId: Int, internal val slot: Int) : Cmd() {
     }
 }
 
+class CmdRethrowPending : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.rethrowPending()
+        return
+    }
+}
+
 class CmdPushScope(internal val planId: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         val planConst = frame.fn.constants[planId] as? BytecodeConst.SlotPlan
@@ -1166,6 +1180,27 @@ class CmdPushSlotPlan(internal val planId: Int) : Cmd() {
 class CmdPopSlotPlan : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         frame.popSlotPlan()
+        return
+    }
+}
+
+class CmdPushTry(internal val exceptionSlot: Int, internal val catchIp: Int, internal val finallyIp: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.pushTry(exceptionSlot, catchIp, finallyIp)
+        return
+    }
+}
+
+class CmdPopTry : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.popTry()
+        return
+    }
+}
+
+class CmdClearPendingThrowable : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.clearPendingThrowable()
         return
     }
 }
@@ -1627,6 +1662,14 @@ class CmdFrame(
     private var scopeDepth = 0
     private var virtualDepth = 0
     private val iterStack = ArrayDeque<Obj>()
+    internal data class TryHandler(
+        val exceptionSlot: Int,
+        val catchIp: Int,
+        val finallyIp: Int,
+        var inCatch: Boolean = false
+    )
+    internal val tryStack = ArrayDeque<TryHandler>()
+    private var pendingThrowable: Throwable? = null
 
     internal val frame = BytecodeFrame(fn.localCount, args.size)
     private val addrScopes: Array<Scope?> = arrayOfNulls(fn.addrCount)
@@ -1707,6 +1750,63 @@ class CmdFrame(
             lastScopePosIp = ip
         }
         return scope
+    }
+
+    fun handleException(t: Throwable): Boolean {
+        val handler = tryStack.lastOrNull() ?: return false
+        val finallyIp = handler.finallyIp
+        if (t is ReturnException || t is LoopBreakContinueException) {
+            if (finallyIp >= 0) {
+                pendingThrowable = t
+                ip = finallyIp
+                return true
+            }
+            return false
+        }
+        if (handler.inCatch) {
+            if (finallyIp >= 0) {
+                pendingThrowable = t
+                ip = finallyIp
+                return true
+            }
+            return false
+        }
+        handler.inCatch = true
+        pendingThrowable = t
+        if (handler.catchIp >= 0) {
+            val caughtObj = when (t) {
+                is ExecutionError -> t.errorObject
+                else -> ObjUnknownException(ensureScope(), t.message ?: t.toString())
+            }
+            storeObjResult(handler.exceptionSlot, caughtObj)
+            ip = handler.catchIp
+            return true
+        }
+        if (finallyIp >= 0) {
+            ip = finallyIp
+            return true
+        }
+        return false
+    }
+
+    fun pushTry(exceptionSlot: Int, catchIp: Int, finallyIp: Int) {
+        tryStack.addLast(TryHandler(exceptionSlot, catchIp, finallyIp))
+    }
+
+    fun popTry() {
+        if (tryStack.isNotEmpty()) {
+            tryStack.removeLast()
+        }
+    }
+
+    fun clearPendingThrowable() {
+        pendingThrowable = null
+    }
+
+    fun rethrowPending() {
+        val t = pendingThrowable ?: return
+        pendingThrowable = null
+        throw t
     }
 
     private fun posForIp(ip: Int): Pos? {

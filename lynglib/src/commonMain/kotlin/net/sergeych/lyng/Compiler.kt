@@ -1897,7 +1897,11 @@ class Compiler(
             is ContinueStatement -> false
             is ReturnStatement -> target.resultExpr?.let { containsUnsupportedForBytecode(it) } ?: false
             is ThrowStatement -> containsUnsupportedForBytecode(target.throwExpr)
-            is TryStatement -> true
+            is TryStatement -> {
+                containsUnsupportedForBytecode(target.body) ||
+                    target.catches.any { containsUnsupportedForBytecode(it.block) } ||
+                    (target.finallyClause?.let { containsUnsupportedForBytecode(it) } ?: false)
+            }
             is WhenStatement -> {
                 containsUnsupportedForBytecode(target.value) ||
                     target.cases.any { case ->
@@ -2099,7 +2103,7 @@ class Compiler(
             is BlockStatement -> {
                 val unwrapped = stmt.statements().map { unwrapBytecodeDeep(it) }
                 val script = Script(stmt.block.pos, unwrapped)
-                BlockStatement(script, stmt.slotPlan, stmt.captureSlots, stmt.pos)
+                BlockStatement(script, stmt.slotPlan, stmt.scopeId, stmt.captureSlots, stmt.pos)
             }
             is InlineBlockStatement -> {
                 val unwrapped = stmt.statements().map { unwrapBytecodeDeep(it) }
@@ -5388,19 +5392,12 @@ class Compiler(
             for ((name, idx) in basePlan) {
                 newPlan[name] = idx + 1
             }
-            return BlockStatement(stmt.block, newPlan, stmt.captureSlots, stmt.pos)
+            return BlockStatement(stmt.block, newPlan, stmt.scopeId, stmt.captureSlots, stmt.pos)
         }
         fun stripCatchCaptures(block: Statement): Statement {
             val stmt = block as? BlockStatement ?: return block
             if (stmt.captureSlots.isEmpty()) return stmt
-            return BlockStatement(stmt.block, stmt.slotPlan, emptyList(), stmt.pos)
-        }
-        fun resolveExceptionClass(scope: Scope, name: String): ObjClass {
-            val rec = scope[name]
-            val cls = rec?.value as? ObjClass
-            if (cls != null) return cls
-            if (name == "Exception") return ObjException.Root
-            scope.raiseSymbolNotFound("error class does not exist or is not a class: $name")
+            return BlockStatement(stmt.block, stmt.slotPlan, stmt.scopeId, emptyList(), stmt.pos)
         }
         fun resolveCatchVarClass(names: List<String>): ObjClass? {
             if (names.size == 1) {
@@ -5507,55 +5504,15 @@ class Compiler(
             throw ScriptError(cc.currentPos(), "try block must have either catch or finally clause or both")
 
         val stmtPos = body.pos
-        val tryStatement = object : Statement() {
-            override val pos: Pos = stmtPos
-            override suspend fun execute(scope: Scope): Obj {
-                var result: Obj = ObjVoid
-                try {
-                    // body is a parsed block, it already has separate context
-                    result = body.execute(scope)
-                } catch (e: ReturnException) {
-                    throw e
-                } catch (e: LoopBreakContinueException) {
-                    throw e
-                } catch (e: Exception) {
-                    // convert to appropriate exception
-                    val caughtObj = when (e) {
-                        is ExecutionError -> e.errorObject
-                        else -> ObjUnknownException(scope, e.message ?: e.toString())
-                    }
-                    // let's see if we should catch it:
-                    var isCaught = false
-                    for (cdata in catches) {
-                        var match: Obj? = null
-                        for (exceptionClassName in cdata.classNames) {
-                            val exObj = resolveExceptionClass(scope, exceptionClassName)
-                            if (caughtObj.isInstanceOf(exObj)) {
-                                match = caughtObj
-                                break
-                            }
-                        }
-                        if (match != null) {
-                            val catchContext = scope.createChildScope(pos = cdata.catchVar.pos).apply {
-                                skipScopeCreation = true
-                            }
-                            catchContext.addItem(cdata.catchVar.value, false, caughtObj)
-                            result = cdata.block.execute(catchContext)
-                            isCaught = true
-                            break
-                        }
-                    }
-                    // rethrow if not caught this exception
-                    if (!isCaught)
-                        throw e
-                } finally {
-                    // finally clause does not alter result!
-                    finallyClause?.execute(scope)
-                }
-                return result
-            }
+        val tryCatches = catches.map { cdata ->
+            TryStatement.CatchBlock(
+                catchVarName = cdata.catchVar.value,
+                catchVarPos = cdata.catchVar.pos,
+                classNames = cdata.classNames,
+                block = cdata.block
+            )
         }
-        return TryStatement(tryStatement, stmtPos)
+        return TryStatement(body, tryCatches, finallyClause, stmtPos)
     }
 
     private fun parseEnumDeclaration(isExtern: Boolean = false): Statement {
@@ -7164,7 +7121,7 @@ class Compiler(
         }
         val planSnapshot = slotPlanIndices(blockSlotPlan)
         val block = Script(startPos, listOf(expr))
-        val stmt = BlockStatement(block, planSnapshot, capturePlan.captures.toList(), startPos)
+        val stmt = BlockStatement(block, planSnapshot, blockSlotPlan.id, capturePlan.captures.toList(), startPos)
         resolutionSink?.exitScope(cc.currentPos())
         return stmt
     }
@@ -7480,7 +7437,7 @@ class Compiler(
             slotPlanStack.removeLast()
         }
         val planSnapshot = slotPlanIndices(blockSlotPlan)
-        val stmt = BlockStatement(block, planSnapshot, capturePlan.captures.toList(), startPos)
+        val stmt = BlockStatement(block, planSnapshot, blockSlotPlan.id, capturePlan.captures.toList(), startPos)
         val wrapped = wrapBytecode(stmt)
         return wrapped.also {
             val t1 = cc.next()
@@ -7511,7 +7468,7 @@ class Compiler(
             slotPlanStack.removeLast()
         }
         val planSnapshot = slotPlanIndices(blockSlotPlan)
-        val stmt = BlockStatement(block, planSnapshot, capturePlan.captures.toList(), startPos)
+        val stmt = BlockStatement(block, planSnapshot, blockSlotPlan.id, capturePlan.captures.toList(), startPos)
         val wrapped = wrapBytecode(stmt)
         return wrapped.also {
             val t1 = cc.next()
@@ -7541,7 +7498,7 @@ class Compiler(
             slotPlanStack.removeLast()
         }
         val planSnapshot = slotPlanIndices(blockSlotPlan)
-        val stmt = BlockStatement(block, planSnapshot, capturePlan.captures.toList(), startPos)
+        val stmt = BlockStatement(block, planSnapshot, blockSlotPlan.id, capturePlan.captures.toList(), startPos)
         val wrapped = wrapBytecode(stmt)
         val t1 = cc.next()
         if (t1.type != Token.Type.RBRACE)

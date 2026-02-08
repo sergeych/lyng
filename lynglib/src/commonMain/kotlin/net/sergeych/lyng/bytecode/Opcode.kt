@@ -127,6 +127,9 @@ enum class Opcode(val code: Int) {
     DECL_EXT_PROPERTY(0x8A),
     DECL_DELEGATED(0x8B),
     DECL_DESTRUCTURE(0x8C),
+    PUSH_TRY(0x8D),
+    POP_TRY(0x8E),
+    CLEAR_PENDING_THROWABLE(0x8F),
 
     CALL_DIRECT(0x90),
     CALL_MEMBER_SLOT(0x92),
@@ -148,6 +151,7 @@ enum class Opcode(val code: Int) {
     LOAD_BOOL_ADDR(0xB8),
     STORE_BOOL_ADDR(0xB9),
     THROW(0xBB),
+    RETHROW_PENDING(0xBC),
     ITER_PUSH(0xBF),
     ITER_POP(0xC0),
     ITER_CANCEL(0xC1),

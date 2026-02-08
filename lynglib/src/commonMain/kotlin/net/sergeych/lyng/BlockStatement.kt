@@ -21,6 +21,7 @@ import net.sergeych.lyng.obj.Obj
 class BlockStatement(
     val block: Script,
     val slotPlan: Map<String, Int>,
+    val scopeId: Int,
     val captureSlots: List<CaptureSlot> = emptyList(),
     private val startPos: Pos,
 ) : Statement() {

@@ -133,7 +133,7 @@ class BytecodeCompiler(
             is net.sergeych.lyng.ThrowStatement -> compileThrowStatement(name, stmt)
             is net.sergeych.lyng.ExtensionPropertyDeclStatement -> compileExtensionPropertyDecl(name, stmt)
             is net.sergeych.lyng.TryStatement -> {
-                val value = emitStatementEval(stmt)
+                val value = emitTry(stmt, true) ?: return null
                 builder.emit(Opcode.RET, value.slot)
                 val localCount = maxOf(nextSlot, value.slot + 1) - scopeSlotCount
                 builder.build(
@@ -3314,12 +3314,13 @@ class BytecodeCompiler(
                 is net.sergeych.lyng.ClassDeclStatement -> emitStatementEval(target)
                 is net.sergeych.lyng.FunctionDeclStatement -> emitStatementEval(target)
                 is net.sergeych.lyng.EnumDeclStatement -> emitStatementEval(target)
-                is net.sergeych.lyng.TryStatement -> emitStatementEval(target)
+                is net.sergeych.lyng.TryStatement -> emitTry(target, true)
                 is net.sergeych.lyng.WhenStatement -> compileWhen(target, true)
                 is net.sergeych.lyng.BreakStatement -> compileBreak(target)
                 is net.sergeych.lyng.ContinueStatement -> compileContinue(target)
                 is net.sergeych.lyng.ReturnStatement -> compileReturn(target)
                 is net.sergeych.lyng.ThrowStatement -> compileThrow(target)
+                is net.sergeych.lyng.TryStatement -> emitTry(target, false)
                 else -> {
                     emitFallbackStatement(target)
                 }
@@ -3362,6 +3363,7 @@ class BytecodeCompiler(
                 is net.sergeych.lyng.ContinueStatement -> compileContinue(target)
                 is net.sergeych.lyng.ReturnStatement -> compileReturn(target)
                 is net.sergeych.lyng.ThrowStatement -> compileThrow(target)
+                is net.sergeych.lyng.TryStatement -> emitTry(target, false)
                 is net.sergeych.lyng.WhenStatement -> compileWhen(target, false)
                 else -> {
                     emitFallbackStatement(target)
@@ -3421,6 +3423,167 @@ class BytecodeCompiler(
         builder.emit(Opcode.POP_SCOPE)
         resetAddrCache()
         return result
+    }
+
+    private fun emitTry(stmt: net.sergeych.lyng.TryStatement, needResult: Boolean): CompiledValue? {
+        val resultSlot = allocSlot()
+        updateSlotType(resultSlot, SlotType.OBJ)
+        val exceptionSlot = allocSlot()
+        updateSlotType(exceptionSlot, SlotType.OBJ)
+        val catchLabel = if (stmt.catches.isNotEmpty()) builder.label() else null
+        val finallyLabel = if (stmt.finallyClause != null) builder.label() else null
+        val endLabel = builder.label()
+        val catchOperand = catchLabel?.let { CmdBuilder.Operand.LabelRef(it) }
+            ?: CmdBuilder.Operand.IntVal(-1)
+        val finallyOperand = finallyLabel?.let { CmdBuilder.Operand.LabelRef(it) }
+            ?: CmdBuilder.Operand.IntVal(-1)
+        builder.emit(
+            Opcode.PUSH_TRY,
+            listOf(
+                CmdBuilder.Operand.IntVal(exceptionSlot),
+                catchOperand,
+                finallyOperand
+            )
+        )
+        val bodyValue = compileStatementValueOrFallback(stmt.body, needResult) ?: return null
+        if (needResult) {
+            emitMove(bodyValue, resultSlot)
+        }
+        if (finallyLabel != null) {
+            builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(finallyLabel)))
+        } else {
+            builder.emit(Opcode.POP_TRY)
+            builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
+        }
+        if (catchLabel != null) {
+            builder.mark(catchLabel)
+            val catchBlockLabels = stmt.catches.map { builder.label() }
+            val noMatchLabel = builder.label()
+            for ((index, cdata) in stmt.catches.withIndex()) {
+                val handlerLabel = catchBlockLabels[index]
+                for (className in cdata.classNames) {
+                    val classValue = compileCatchClassSlot(className) ?: return null
+                    val checkSlot = allocSlot()
+                    builder.emit(Opcode.CHECK_IS, exceptionSlot, classValue.slot, checkSlot)
+                    builder.emit(
+                        Opcode.JMP_IF_TRUE,
+                        listOf(CmdBuilder.Operand.IntVal(checkSlot), CmdBuilder.Operand.LabelRef(handlerLabel))
+                    )
+                }
+            }
+            builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(noMatchLabel)))
+            for ((index, cdata) in stmt.catches.withIndex()) {
+                val handlerLabel = catchBlockLabels[index]
+                builder.mark(handlerLabel)
+                builder.emit(Opcode.CLEAR_PENDING_THROWABLE)
+                val catchValue = emitCatchBlock(cdata.block, cdata.catchVarName, exceptionSlot, needResult)
+                    ?: return null
+                if (needResult) {
+                    emitMove(catchValue, resultSlot)
+                }
+                if (finallyLabel != null) {
+                    builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(finallyLabel)))
+                } else {
+                    builder.emit(Opcode.POP_TRY)
+                    builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
+                }
+            }
+            builder.mark(noMatchLabel)
+            if (finallyLabel != null) {
+                builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(finallyLabel)))
+            } else {
+                builder.emit(Opcode.POP_TRY)
+                builder.emit(Opcode.RETHROW_PENDING)
+            }
+        }
+        if (finallyLabel != null) {
+            builder.mark(finallyLabel)
+            builder.emit(Opcode.POP_TRY)
+            stmt.finallyClause?.let { finallyClause ->
+                compileStatementValueOrFallback(finallyClause, false) ?: return null
+            }
+            builder.emit(Opcode.RETHROW_PENDING)
+        }
+        builder.mark(endLabel)
+        if (needResult) return CompiledValue(resultSlot, SlotType.OBJ)
+        val voidId = builder.addConst(BytecodeConst.ObjRef(ObjVoid))
+        val voidSlot = allocSlot()
+        builder.emit(Opcode.CONST_OBJ, voidId, voidSlot)
+        return CompiledValue(voidSlot, SlotType.OBJ)
+    }
+
+    private fun emitCatchBlock(
+        block: Statement,
+        catchVarName: String,
+        exceptionSlot: Int,
+        needResult: Boolean
+    ): CompiledValue? {
+        val stmt = block as? BlockStatement
+        if (stmt == null) {
+            val declId = builder.addConst(BytecodeConst.LocalDecl(catchVarName, false, Visibility.Public, false))
+            builder.emit(Opcode.DECL_LOCAL, declId, exceptionSlot)
+            return compileStatementValueOrFallback(block, needResult)
+        }
+        val captureNames = if (stmt.captureSlots.isEmpty()) emptyList() else stmt.captureSlots.map { it.name }
+        val planId = builder.addConst(BytecodeConst.SlotPlan(stmt.slotPlan, captureNames))
+        builder.emit(Opcode.PUSH_SCOPE, planId)
+        resetAddrCache()
+        val declId = builder.addConst(BytecodeConst.LocalDecl(catchVarName, false, Visibility.Public, false))
+        builder.emit(Opcode.DECL_LOCAL, declId, exceptionSlot)
+        val catchSlotIndex = stmt.slotPlan[catchVarName]
+        if (catchSlotIndex != null) {
+            val key = ScopeSlotKey(stmt.scopeId, catchSlotIndex)
+            val localIndex = localSlotIndexByKey[key]
+            if (localIndex != null) {
+                val localSlot = scopeSlotCount + localIndex
+                if (localSlot != exceptionSlot) {
+                    emitMove(CompiledValue(exceptionSlot, SlotType.OBJ), localSlot)
+                }
+                updateSlotType(localSlot, SlotType.OBJ)
+            }
+        }
+        val statements = stmt.statements()
+        var lastValue: CompiledValue? = null
+        for ((index, statement) in statements.withIndex()) {
+            val isLast = index == statements.lastIndex
+            val wantResult = needResult && isLast
+            val value = compileStatementValueOrFallback(statement, wantResult) ?: return null
+            if (wantResult) {
+                lastValue = value
+            }
+        }
+        val result = if (needResult) {
+            lastValue ?: run {
+                val slot = allocSlot()
+                val voidId = builder.addConst(BytecodeConst.ObjRef(ObjVoid))
+                builder.emit(Opcode.CONST_OBJ, voidId, slot)
+                CompiledValue(slot, SlotType.OBJ)
+            }
+        } else {
+            lastValue ?: run {
+                val slot = allocSlot()
+                val voidId = builder.addConst(BytecodeConst.ObjRef(ObjVoid))
+                builder.emit(Opcode.CONST_OBJ, voidId, slot)
+                CompiledValue(slot, SlotType.OBJ)
+            }
+        }
+        builder.emit(Opcode.POP_SCOPE)
+        resetAddrCache()
+        return result
+    }
+
+    private fun compileCatchClassSlot(name: String): CompiledValue? {
+        val ref = LocalVarRef(name, Pos.builtIn)
+        val compiled = compileRef(ref)
+        if (compiled != null) {
+            return ensureObjSlot(compiled)
+        }
+        val cls = nameObjClass[name] ?: resolveTypeNameClass(name) ?: return null
+        val id = builder.addConst(BytecodeConst.ObjRef(cls))
+        val slot = allocSlot()
+        builder.emit(Opcode.CONST_OBJ, id, slot)
+        updateSlotType(slot, SlotType.OBJ)
+        return CompiledValue(slot, SlotType.OBJ)
     }
 
     private fun emitInlineStatements(statements: List<Statement>, needResult: Boolean): CompiledValue? {
@@ -5181,6 +5344,13 @@ class BytecodeCompiler(
                 }
                 stmt.elseCase?.let { collectScopeSlots(it) }
             }
+            is net.sergeych.lyng.TryStatement -> {
+                collectScopeSlots(stmt.body)
+                for (catchBlock in stmt.catches) {
+                    collectScopeSlots(catchBlock.block)
+                }
+                stmt.finallyClause?.let { collectScopeSlots(it) }
+            }
             is net.sergeych.lyng.BreakStatement -> {
                 stmt.resultExpr?.let { collectScopeSlots(it) }
             }
@@ -5361,6 +5531,13 @@ class BytecodeCompiler(
             }
             is net.sergeych.lyng.ThrowStatement -> {
                 collectLoopVarNames(stmt.throwExpr)
+            }
+            is net.sergeych.lyng.TryStatement -> {
+                collectLoopVarNames(stmt.body)
+                for (catchBlock in stmt.catches) {
+                    collectLoopVarNames(catchBlock.block)
+                }
+                stmt.finallyClause?.let { collectLoopVarNames(it) }
             }
             else -> {}
         }
