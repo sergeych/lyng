@@ -1893,10 +1893,12 @@ class Compiler(
             is BlockStatement -> target.statements().any { containsUnsupportedForBytecode(it) }
             is InlineBlockStatement -> target.statements().any { containsUnsupportedForBytecode(it) }
             is VarDeclStatement -> target.initializer?.let { containsUnsupportedForBytecode(it) } ?: false
+            is DestructuringVarDeclStatement -> containsUnsupportedForBytecode(target.initializer)
             is BreakStatement -> target.resultExpr?.let { containsUnsupportedForBytecode(it) } ?: false
             is ContinueStatement -> false
             is ReturnStatement -> target.resultExpr?.let { containsUnsupportedForBytecode(it) } ?: false
             is ThrowStatement -> containsUnsupportedForBytecode(target.throwExpr)
+            is ExtensionPropertyDeclStatement -> false
             is TryStatement -> {
                 containsUnsupportedForBytecode(target.body) ||
                     target.catches.any { containsUnsupportedForBytecode(it.block) } ||
@@ -1928,6 +1930,7 @@ class Compiler(
             is CastRef -> containsUnsupportedRef(ref.castValueRef()) || containsUnsupportedRef(ref.castTypeRef())
             is net.sergeych.lyng.obj.TypeDeclRef -> false
             is AssignRef -> {
+                if (ref.target is ListLiteralRef) return true
                 val target = ref.target as? LocalSlotRef
                 (target?.isDelegated == true) || containsUnsupportedRef(ref.value)
             }
