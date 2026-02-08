@@ -99,7 +99,7 @@ class BytecodeCompiler(
             is net.sergeych.lyng.InlineBlockStatement -> compileInlineBlock(name, stmt)
             is VarDeclStatement -> compileVarDecl(name, stmt)
             is DelegatedVarDeclStatement -> {
-                val value = emitStatementEval(stmt)
+                val value = emitDelegatedVarDecl(stmt) ?: return null
                 builder.emit(Opcode.RET, value.slot)
                 val localCount = maxOf(nextSlot, value.slot + 1) - scopeSlotCount
                 builder.build(
@@ -3281,7 +3281,7 @@ class BytecodeCompiler(
                 }
                 is BlockStatement -> emitBlock(target, true)
                 is VarDeclStatement -> emitVarDecl(target)
-                is DelegatedVarDeclStatement -> emitStatementEval(target)
+                is DelegatedVarDeclStatement -> emitDelegatedVarDecl(target)
                 is DestructuringVarDeclStatement -> emitStatementEval(target)
                 is net.sergeych.lyng.ExtensionPropertyDeclStatement -> emitExtensionPropertyDecl(target)
                 is net.sergeych.lyng.ClassDeclStatement -> emitStatementEval(target)
@@ -3308,7 +3308,7 @@ class BytecodeCompiler(
                     }
                 }
                 is VarDeclStatement -> emitVarDecl(target)
-                is DelegatedVarDeclStatement -> emitStatementEval(target)
+                is DelegatedVarDeclStatement -> emitDelegatedVarDecl(target)
                 is IfStatement -> compileIfStatement(target)
                 is net.sergeych.lyng.ForInStatement -> {
                     val resultSlot = emitForIn(target, false) ?: return null
@@ -3574,6 +3574,21 @@ class BytecodeCompiler(
         updateNameObjClassFromSlot(stmt.name, value.slot)
         updateSlotObjClass(value.slot, stmt.initializer, stmt.initializerObjClass)
         return value
+    }
+
+    private fun emitDelegatedVarDecl(stmt: DelegatedVarDeclStatement): CompiledValue? {
+        val value = compileStatementValueOrFallback(stmt.initializer) ?: return null
+        val declId = builder.addConst(
+            BytecodeConst.DelegatedDecl(
+                stmt.name,
+                stmt.isMutable,
+                stmt.visibility,
+                stmt.isTransient
+            )
+        )
+        builder.emit(Opcode.DECL_DELEGATED, declId, value.slot)
+        updateSlotType(value.slot, SlotType.OBJ)
+        return CompiledValue(value.slot, SlotType.OBJ)
     }
 
     private fun updateNameObjClass(name: String, initializer: Statement?, initializerObjClass: ObjClass? = null) {

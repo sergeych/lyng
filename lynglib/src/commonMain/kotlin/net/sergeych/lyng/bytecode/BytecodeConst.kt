@@ -46,6 +46,12 @@ sealed class BytecodeConst {
         val visibility: Visibility,
         val isTransient: Boolean,
     ) : BytecodeConst()
+    data class DelegatedDecl(
+        val name: String,
+        val isMutable: Boolean,
+        val visibility: Visibility,
+        val isTransient: Boolean,
+    ) : BytecodeConst()
     data class CallArgsPlan(val tailBlock: Boolean, val specs: List<CallArgSpec>) : BytecodeConst()
     data class CallArgSpec(val name: String?, val isSplat: Boolean)
 }

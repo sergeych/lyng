@@ -1187,6 +1187,35 @@ class CmdDeclLocal(internal val constId: Int, internal val slot: Int) : Cmd() {
     }
 }
 
+class CmdDeclDelegated(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.DelegatedDecl
+            ?: error("DECL_DELEGATED expects DelegatedDecl at $constId")
+        val initValue = frame.slotToObj(slot)
+        val accessType = ObjString(if (decl.isMutable) "Var" else "Val")
+        val finalDelegate = try {
+            initValue.invokeInstanceMethod(
+                frame.ensureScope(),
+                "bind",
+                Arguments(ObjString(decl.name), accessType, ObjNull)
+            )
+        } catch (_: Exception) {
+            initValue
+        }
+        val rec = frame.ensureScope().addItem(
+            decl.name,
+            decl.isMutable,
+            ObjNull,
+            decl.visibility,
+            recordType = ObjRecord.Type.Delegated,
+            isTransient = decl.isTransient
+        )
+        rec.delegate = finalDelegate
+        frame.storeObjResult(slot, finalDelegate)
+        return
+    }
+}
+
 class CmdDeclExtProperty(internal val constId: Int, internal val slot: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         val decl = frame.fn.constants[constId] as? BytecodeConst.ExtensionPropertyDecl

@@ -125,6 +125,7 @@ enum class Opcode(val code: Int) {
     POP_SLOT_PLAN(0x88),
     DECL_LOCAL(0x89),
     DECL_EXT_PROPERTY(0x8A),
+    DECL_DELEGATED(0x8B),
 
     CALL_DIRECT(0x90),
     CALL_MEMBER_SLOT(0x92),
