@@ -1887,6 +1887,24 @@ class BytecodeCompiler(
         } ?: return compileEvalRef(ref)
         val fieldTarget = ref.target as? FieldRef
         if (fieldTarget != null) {
+            if (fieldTarget.isOptional) return compileEvalRef(ref)
+            val receiverClass = resolveReceiverClass(fieldTarget.target)
+                ?: throw BytecodeCompileException(
+                    "Member assignment requires compile-time receiver type: ${fieldTarget.name}",
+                    Pos.builtIn
+                )
+            if (receiverClass == ObjDynamic.type) {
+                val receiver = compileRefWithFallback(fieldTarget.target, null, Pos.builtIn) ?: return null
+                val current = allocSlot()
+                val result = allocSlot()
+                val rhs = compileRef(ref.value) ?: return compileEvalRef(ref)
+                val nameId = builder.addConst(BytecodeConst.StringVal(fieldTarget.name))
+                builder.emit(Opcode.GET_DYNAMIC_MEMBER, receiver.slot, nameId, current)
+                builder.emit(objOp, current, rhs.slot, result)
+                builder.emit(Opcode.SET_DYNAMIC_MEMBER, receiver.slot, nameId, result)
+                updateSlotType(result, SlotType.OBJ)
+                return CompiledValue(result, SlotType.OBJ)
+            }
             throw BytecodeCompileException(
                 "Member assignment requires compile-time receiver type: ${fieldTarget.name}",
                 Pos.builtIn
@@ -2027,6 +2045,29 @@ class BytecodeCompiler(
                         Pos.builtIn
                     )
                 val receiver = compileRefWithFallback(target.target, null, Pos.builtIn) ?: return null
+                if (receiverClass == ObjDynamic.type) {
+                    val nameId = builder.addConst(BytecodeConst.StringVal(target.name))
+                    if (!target.isOptional) {
+                        builder.emit(Opcode.SET_DYNAMIC_MEMBER, receiver.slot, nameId, newValue.slot)
+                    } else {
+                        val recvNull = allocSlot()
+                        builder.emit(Opcode.CONST_NULL, recvNull)
+                        val recvCmp = allocSlot()
+                        builder.emit(Opcode.CMP_REF_EQ_OBJ, receiver.slot, recvNull, recvCmp)
+                        val skipLabel = builder.label()
+                        builder.emit(
+                            Opcode.JMP_IF_TRUE,
+                            listOf(CmdBuilder.Operand.IntVal(recvCmp), CmdBuilder.Operand.LabelRef(skipLabel))
+                        )
+                        builder.emit(Opcode.SET_DYNAMIC_MEMBER, receiver.slot, nameId, newValue.slot)
+                        builder.mark(skipLabel)
+                    }
+                    val newObj = ensureObjSlot(newValue)
+                    builder.emit(Opcode.MOVE_OBJ, newObj.slot, resultSlot)
+                    builder.mark(endLabel)
+                    updateSlotType(resultSlot, SlotType.OBJ)
+                    return CompiledValue(resultSlot, SlotType.OBJ)
+                }
                 val fieldId = receiverClass.instanceFieldIdMap()[target.name]
                 val methodId = receiverClass.instanceMethodIdMap(includeAbstract = true)[target.name]
                 if (fieldId != null || methodId != null) {
@@ -2658,6 +2699,29 @@ class BytecodeCompiler(
                     "Member access requires compile-time receiver type: ${fieldTarget.name}",
                     Pos.builtIn
                 )
+            if (receiverClass == ObjDynamic.type) {
+                val receiver = compileRefWithFallback(fieldTarget.target, null, Pos.builtIn) ?: return null
+                val nameId = builder.addConst(BytecodeConst.StringVal(fieldTarget.name))
+                val current = allocSlot()
+                builder.emit(Opcode.GET_DYNAMIC_MEMBER, receiver.slot, nameId, current)
+                updateSlotType(current, SlotType.OBJ)
+                val oneSlot = allocSlot()
+                val oneId = builder.addConst(BytecodeConst.ObjRef(ObjInt.One))
+                builder.emit(Opcode.CONST_OBJ, oneId, oneSlot)
+                updateSlotType(oneSlot, SlotType.OBJ)
+                val result = allocSlot()
+                val op = if (ref.isIncrement) Opcode.ADD_OBJ else Opcode.SUB_OBJ
+                if (wantResult && ref.isPost) {
+                    val old = allocSlot()
+                    builder.emit(Opcode.MOVE_OBJ, current, old)
+                    builder.emit(op, current, oneSlot, result)
+                    builder.emit(Opcode.SET_DYNAMIC_MEMBER, receiver.slot, nameId, result)
+                    return CompiledValue(old, SlotType.OBJ)
+                }
+                builder.emit(op, current, oneSlot, result)
+                builder.emit(Opcode.SET_DYNAMIC_MEMBER, receiver.slot, nameId, result)
+                return CompiledValue(result, SlotType.OBJ)
+            }
             val fieldId = receiverClass.instanceFieldIdMap()[fieldTarget.name]
             val methodId = receiverClass.instanceMethodIdMap(includeAbstract = true)[fieldTarget.name]
             if (fieldId == null && methodId == null) return null
