@@ -122,18 +122,13 @@ class TypesTest {
                     assert( s0 is Real )
                     val delta = abs(sum - s0) / abs(sum)
                     assert( delta is Real )
-                    println("abs(%g - %g) = %g"(sum, s0, abs(sum-s0)))
                     if( s0 != 0 )
                         assert( abs(sum-s0) < abs(sum) )
-                    println("abs(%g) = %g"(sum, abs(sum)))
-                    println( "delta calc: %g"(delta) )
 //                    if( n > 3 ) assert( delta < 1.0 )
                     if( delta < 1.0e-4 ) {
                         println("limit reached after "+n+" rounds")
                         break sum
                     }
-                    else
-                        println("%g, delta=%g"(sum, delta))
                     n++
                 }
                 else {
