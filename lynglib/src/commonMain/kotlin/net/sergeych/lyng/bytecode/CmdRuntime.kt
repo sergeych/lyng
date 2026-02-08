@@ -1216,6 +1216,30 @@ class CmdDeclDelegated(internal val constId: Int, internal val slot: Int) : Cmd(
     }
 }
 
+class CmdDeclDestructure(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.DestructureDecl
+            ?: error("DECL_DESTRUCTURE expects DestructureDecl at $constId")
+        val value = frame.slotToObj(slot)
+        val scope = frame.ensureScope()
+        for (name in decl.names) {
+            scope.addItem(name, true, ObjVoid, decl.visibility, isTransient = decl.isTransient)
+        }
+        decl.pattern.setAt(decl.pos, scope, value)
+        if (!decl.isMutable) {
+            for (name in decl.names) {
+                val rec = scope.objects[name] ?: continue
+                val immutableRec = rec.copy(isMutable = false)
+                scope.objects[name] = immutableRec
+                scope.localBindings[name] = immutableRec
+                scope.updateSlotFor(name, immutableRec)
+            }
+        }
+        frame.storeObjResult(slot, ObjVoid)
+        return
+    }
+}
+
 class CmdDeclExtProperty(internal val constId: Int, internal val slot: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         val decl = frame.fn.constants[constId] as? BytecodeConst.ExtensionPropertyDecl

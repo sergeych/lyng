@@ -18,6 +18,7 @@ package net.sergeych.lyng.bytecode
 
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Visibility
+import net.sergeych.lyng.obj.ListLiteralRef
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjProperty
 
@@ -51,6 +52,14 @@ sealed class BytecodeConst {
         val isMutable: Boolean,
         val visibility: Visibility,
         val isTransient: Boolean,
+    ) : BytecodeConst()
+    data class DestructureDecl(
+        val pattern: ListLiteralRef,
+        val names: List<String>,
+        val isMutable: Boolean,
+        val visibility: Visibility,
+        val isTransient: Boolean,
+        val pos: Pos,
     ) : BytecodeConst()
     data class CallArgsPlan(val tailBlock: Boolean, val specs: List<CallArgSpec>) : BytecodeConst()
     data class CallArgSpec(val name: String?, val isSplat: Boolean)

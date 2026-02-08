@@ -114,6 +114,22 @@ class BytecodeCompiler(
                     localSlotMutables
                 )
             }
+            is DestructuringVarDeclStatement -> {
+                val value = emitDestructuringVarDecl(stmt) ?: return null
+                builder.emit(Opcode.RET, value.slot)
+                val localCount = maxOf(nextSlot, value.slot + 1) - scopeSlotCount
+                builder.build(
+                    name,
+                    localCount,
+                    addrCount = nextAddrSlot,
+                    returnLabels = returnLabels,
+                    scopeSlotIndices,
+                    scopeSlotNames,
+                    scopeSlotIsModule,
+                    localSlotNames,
+                    localSlotMutables
+                )
+            }
             is net.sergeych.lyng.ThrowStatement -> compileThrowStatement(name, stmt)
             is net.sergeych.lyng.ExtensionPropertyDeclStatement -> compileExtensionPropertyDecl(name, stmt)
             is net.sergeych.lyng.TryStatement -> {
@@ -3282,7 +3298,7 @@ class BytecodeCompiler(
                 is BlockStatement -> emitBlock(target, true)
                 is VarDeclStatement -> emitVarDecl(target)
                 is DelegatedVarDeclStatement -> emitDelegatedVarDecl(target)
-                is DestructuringVarDeclStatement -> emitStatementEval(target)
+                is DestructuringVarDeclStatement -> emitDestructuringVarDecl(target)
                 is net.sergeych.lyng.ExtensionPropertyDeclStatement -> emitExtensionPropertyDecl(target)
                 is net.sergeych.lyng.ClassDeclStatement -> emitStatementEval(target)
                 is net.sergeych.lyng.FunctionDeclStatement -> emitStatementEval(target)
@@ -3329,7 +3345,7 @@ class BytecodeCompiler(
                     }
                 }
                 is BlockStatement -> emitBlock(target, false)
-                is DestructuringVarDeclStatement -> emitStatementEval(target)
+                is DestructuringVarDeclStatement -> emitDestructuringVarDecl(target)
                 is net.sergeych.lyng.ExtensionPropertyDeclStatement -> emitExtensionPropertyDecl(target)
                 is net.sergeych.lyng.BreakStatement -> compileBreak(target)
                 is net.sergeych.lyng.ContinueStatement -> compileContinue(target)
@@ -3587,6 +3603,23 @@ class BytecodeCompiler(
             )
         )
         builder.emit(Opcode.DECL_DELEGATED, declId, value.slot)
+        updateSlotType(value.slot, SlotType.OBJ)
+        return CompiledValue(value.slot, SlotType.OBJ)
+    }
+
+    private fun emitDestructuringVarDecl(stmt: DestructuringVarDeclStatement): CompiledValue? {
+        val value = compileStatementValueOrFallback(stmt.initializer) ?: return null
+        val declId = builder.addConst(
+            BytecodeConst.DestructureDecl(
+                stmt.pattern,
+                stmt.names,
+                stmt.isMutable,
+                stmt.visibility,
+                stmt.isTransient,
+                stmt.pos
+            )
+        )
+        builder.emit(Opcode.DECL_DESTRUCTURE, declId, value.slot)
         updateSlotType(value.slot, SlotType.OBJ)
         return CompiledValue(value.slot, SlotType.OBJ)
     }

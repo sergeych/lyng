@@ -144,7 +144,7 @@ class CmdBuilder {
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.PUSH_SCOPE, Opcode.PUSH_SLOT_PLAN ->
                 listOf(OperandKind.CONST)
-            Opcode.DECL_LOCAL, Opcode.DECL_EXT_PROPERTY, Opcode.DECL_DELEGATED ->
+            Opcode.DECL_LOCAL, Opcode.DECL_EXT_PROPERTY, Opcode.DECL_DELEGATED, Opcode.DECL_DESTRUCTURE ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.ADD_INT, Opcode.SUB_INT, Opcode.MUL_INT, Opcode.DIV_INT, Opcode.MOD_INT,
             Opcode.ADD_REAL, Opcode.SUB_REAL, Opcode.MUL_REAL, Opcode.DIV_REAL,
@@ -378,6 +378,7 @@ class CmdBuilder {
             Opcode.POP_SLOT_PLAN -> CmdPopSlotPlan()
             Opcode.DECL_LOCAL -> CmdDeclLocal(operands[0], operands[1])
             Opcode.DECL_DELEGATED -> CmdDeclDelegated(operands[0], operands[1])
+            Opcode.DECL_DESTRUCTURE -> CmdDeclDestructure(operands[0], operands[1])
             Opcode.DECL_EXT_PROPERTY -> CmdDeclExtProperty(operands[0], operands[1])
             Opcode.CALL_DIRECT -> CmdCallDirect(operands[0], operands[1], operands[2], operands[3])
             Opcode.CALL_MEMBER_SLOT -> CmdCallMemberSlot(operands[0], operands[1], operands[2], operands[3], operands[4])
