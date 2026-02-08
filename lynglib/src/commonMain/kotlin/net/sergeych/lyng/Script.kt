@@ -33,6 +33,7 @@ class Script(
     override val pos: Pos,
     private val statements: List<Statement> = emptyList(),
     private val moduleSlotPlan: Map<String, Int> = emptyMap(),
+    private val importBindings: Map<String, ImportBinding> = emptyMap(),
 //    private val catchReturn: Boolean = false,
 ) : Statement() {
 
@@ -48,7 +49,11 @@ class Script(
         return lastResult
     }
 
-    private fun seedModuleSlots(scope: Scope) {
+    private suspend fun seedModuleSlots(scope: Scope) {
+        if (importBindings.isNotEmpty()) {
+            seedImportBindings(scope)
+            return
+        }
         val parent = scope.parent ?: return
         for (name in moduleSlotPlan.keys) {
             if (scope.objects.containsKey(name)) {
@@ -66,6 +71,32 @@ class Script(
             }
             if (name == "Exception") {
                 scope.updateSlotFor(name, ObjRecord(ObjException.Root, isMutable = false))
+            }
+        }
+    }
+
+    private suspend fun seedImportBindings(scope: Scope) {
+        val provider = scope.currentImportProvider
+        for ((name, binding) in importBindings) {
+            val record = when (val source = binding.source) {
+                is ImportBindingSource.Module -> {
+                    val module = provider.prepareImport(source.pos, source.name, null)
+                    module.objects[binding.symbol]?.takeIf { it.visibility.isPublic }
+                        ?: scope.raiseSymbolNotFound("symbol ${source.name}.${binding.symbol} not found")
+                }
+                ImportBindingSource.Root -> {
+                    provider.rootScope.objects[binding.symbol]?.takeIf { it.visibility.isPublic }
+                        ?: scope.raiseSymbolNotFound("symbol ${binding.symbol} not found")
+                }
+                ImportBindingSource.Seed -> {
+                    findSeedRecord(scope, binding.symbol)
+                        ?: scope.raiseSymbolNotFound("symbol ${binding.symbol} not found")
+                }
+            }
+            if (name == "Exception" && record.value !is ObjClass) {
+                scope.updateSlotFor(name, ObjRecord(ObjException.Root, isMutable = false))
+            } else {
+                scope.updateSlotFor(name, record)
             }
         }
     }
