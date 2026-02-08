@@ -1526,25 +1526,24 @@ class Compiler(
                     resolutionScriptDepth == 1 &&
                     statements.none { containsUnsupportedForBytecode(it) } &&
                     statements.none { containsDelegatedRefs(it) }
-                val finalStatements = if (wrapScriptBytecode) {
+                val (finalStatements, moduleBytecode) = if (wrapScriptBytecode) {
                     val unwrapped = statements.map { unwrapBytecodeDeep(it) }
                     val block = InlineBlockStatement(unwrapped, start)
-                    listOf(
-                        BytecodeStatement.wrap(
-                            block,
-                            "<script>",
-                            allowLocalSlots = true,
-                            allowedScopeNames = modulePlan.keys,
-                            moduleScopeId = moduleSlotPlan()?.id,
-                            slotTypeByScopeId = slotTypeByScopeId,
-                            knownNameObjClass = knownClassMapForBytecode()
-                        )
-                    )
+                    val bytecodeStmt = BytecodeStatement.wrap(
+                        block,
+                        "<script>",
+                        allowLocalSlots = true,
+                        allowedScopeNames = modulePlan.keys,
+                        moduleScopeId = moduleSlotPlan()?.id,
+                        slotTypeByScopeId = slotTypeByScopeId,
+                        knownNameObjClass = knownClassMapForBytecode()
+                    ) as BytecodeStatement
+                    unwrapped to bytecodeStmt.bytecodeFunction()
                 } else {
-                    statements
+                    statements to null
                 }
                 val moduleRefs = importedModules.map { ImportBindingSource.Module(it.scope.packageName, it.pos) }
-                Script(start, finalStatements, modulePlan, importBindings.toMap(), moduleRefs)
+                Script(start, finalStatements, modulePlan, importBindings.toMap(), moduleRefs, moduleBytecode)
             }.also {
                 // Best-effort script end notification (use current position)
                 miniSink?.onScriptEnd(

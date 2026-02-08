@@ -20,6 +20,8 @@ package net.sergeych.lyng
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
 import net.sergeych.lyng.Script.Companion.defaultImportManager
+import net.sergeych.lyng.bytecode.CmdFunction
+import net.sergeych.lyng.bytecode.CmdVm
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
@@ -35,10 +37,12 @@ class Script(
     private val moduleSlotPlan: Map<String, Int> = emptyMap(),
     private val importBindings: Map<String, ImportBinding> = emptyMap(),
     private val importedModules: List<ImportBindingSource.Module> = emptyList(),
+    private val moduleBytecode: CmdFunction? = null,
 //    private val catchReturn: Boolean = false,
 ) : Statement() {
 
     override suspend fun execute(scope: Scope): Obj {
+        scope.pos = pos
         val isModuleScope = scope is ModuleScope
         val shouldSeedModule = isModuleScope || scope.thisObj === ObjVoid
         val moduleTarget = scope
@@ -78,6 +82,9 @@ class Script(
         }
         if (shouldSeedModule) {
             seedModuleSlots(moduleTarget)
+        }
+        moduleBytecode?.let { fn ->
+            return CmdVm().execute(fn, scope, scope.args.list)
         }
         var lastResult: Obj = ObjVoid
         for (s in statements) {
