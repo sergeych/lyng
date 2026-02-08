@@ -1607,10 +1607,7 @@ class Compiler(
         }
         if (stmt is FunctionDeclStatement ||
             stmt is ClassDeclStatement ||
-            stmt is EnumDeclStatement ||
-            stmt is BreakStatement ||
-            stmt is ContinueStatement ||
-            stmt is ReturnStatement
+            stmt is EnumDeclStatement
         ) {
             return stmt
         }
