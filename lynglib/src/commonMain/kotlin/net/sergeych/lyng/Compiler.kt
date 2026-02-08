@@ -1967,11 +1967,9 @@ class Compiler(
                     is LocalSlotRef -> target.name
                     else -> null
                 }
-                if (targetName == "delay") return true
                 containsUnsupportedRef(ref.target) || ref.args.any { containsUnsupportedForBytecode(it.value) }
             }
             is MethodCallRef -> {
-                if (ref.name == "delay") return true
                 val receiverClass = resolveReceiverClassForMember(ref.receiver) ?: return true
                 val hasMember = receiverClass.instanceMethodIdMap(includeAbstract = true)[ref.name] != null
                 if (!hasMember && !hasExtensionFor(receiverClass.className, ref.name)) return true
