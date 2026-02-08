@@ -1670,6 +1670,25 @@ class BytecodeCompiler(
                     Pos.builtIn
                 )
             val receiver = compileRefWithFallback(target.target, null, Pos.builtIn) ?: return null
+            if (receiverClass == ObjDynamic.type) {
+                val nameId = builder.addConst(BytecodeConst.StringVal(target.name))
+                if (!target.isOptional) {
+                    builder.emit(Opcode.SET_DYNAMIC_MEMBER, receiver.slot, nameId, value.slot)
+                } else {
+                    val nullSlot = allocSlot()
+                    builder.emit(Opcode.CONST_NULL, nullSlot)
+                    val cmpSlot = allocSlot()
+                    builder.emit(Opcode.CMP_REF_EQ_OBJ, receiver.slot, nullSlot, cmpSlot)
+                    val endLabel = builder.label()
+                    builder.emit(
+                        Opcode.JMP_IF_TRUE,
+                        listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(endLabel))
+                    )
+                    builder.emit(Opcode.SET_DYNAMIC_MEMBER, receiver.slot, nameId, value.slot)
+                    builder.mark(endLabel)
+                }
+                return value
+            }
             val fieldId = receiverClass.instanceFieldIdMap()[target.name]
             val methodId = if (fieldId == null) {
                 receiverClass.instanceMethodIdMap(includeAbstract = true)[target.name]
@@ -2098,6 +2117,32 @@ class BytecodeCompiler(
                     Pos.builtIn
                 )
             }
+        if (receiverClass == ObjDynamic.type) {
+            val receiver = compileRefWithFallback(ref.target, null, Pos.builtIn) ?: return null
+            val dst = allocSlot()
+            val nameId = builder.addConst(BytecodeConst.StringVal(ref.name))
+            if (!ref.isOptional) {
+                builder.emit(Opcode.GET_DYNAMIC_MEMBER, receiver.slot, nameId, dst)
+            } else {
+                val nullSlot = allocSlot()
+                builder.emit(Opcode.CONST_NULL, nullSlot)
+                val cmpSlot = allocSlot()
+                builder.emit(Opcode.CMP_REF_EQ_OBJ, receiver.slot, nullSlot, cmpSlot)
+                val nullLabel = builder.label()
+                val endLabel = builder.label()
+                builder.emit(
+                    Opcode.JMP_IF_TRUE,
+                    listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
+                )
+                builder.emit(Opcode.GET_DYNAMIC_MEMBER, receiver.slot, nameId, dst)
+                builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
+                builder.mark(nullLabel)
+                builder.emit(Opcode.CONST_NULL, dst)
+                builder.mark(endLabel)
+            }
+            updateSlotType(dst, SlotType.OBJ)
+            return CompiledValue(dst, SlotType.OBJ)
+        }
         val fieldId = receiverClass.instanceFieldIdMap()[ref.name]
         val methodId = receiverClass.instanceMethodIdMap(includeAbstract = true)[ref.name]
         val encodedFieldId = encodeMemberId(receiverClass, fieldId)
@@ -2926,6 +2971,33 @@ class BytecodeCompiler(
             }
         val receiver = compileRefWithFallback(ref.receiver, null, refPosOrCurrent(ref.receiver)) ?: return null
         val dst = allocSlot()
+        if (receiverClass == ObjDynamic.type) {
+            val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
+            val encodedCount = encodeCallArgCount(args) ?: return null
+            val nameId = builder.addConst(BytecodeConst.StringVal(ref.name))
+            if (!ref.isOptional) {
+                setPos(callPos)
+                builder.emit(Opcode.CALL_DYNAMIC_MEMBER, receiver.slot, nameId, args.base, encodedCount, dst)
+                return CompiledValue(dst, SlotType.OBJ)
+            }
+            val nullSlot = allocSlot()
+            builder.emit(Opcode.CONST_NULL, nullSlot)
+            val cmpSlot = allocSlot()
+            builder.emit(Opcode.CMP_REF_EQ_OBJ, receiver.slot, nullSlot, cmpSlot)
+            val nullLabel = builder.label()
+            val endLabel = builder.label()
+            builder.emit(
+                Opcode.JMP_IF_TRUE,
+                listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
+            )
+            setPos(callPos)
+            builder.emit(Opcode.CALL_DYNAMIC_MEMBER, receiver.slot, nameId, args.base, encodedCount, dst)
+            builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
+            builder.mark(nullLabel)
+            builder.emit(Opcode.CONST_NULL, dst)
+            builder.mark(endLabel)
+            return CompiledValue(dst, SlotType.OBJ)
+        }
         val methodId = receiverClass.instanceMethodIdMap(includeAbstract = true)[ref.name]
         if (methodId != null) {
             val encodedMethodId = encodeMemberId(receiverClass, methodId) ?: methodId

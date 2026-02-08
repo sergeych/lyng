@@ -1404,6 +1404,21 @@ private fun decodeMemberId(id: Int): Pair<Int, Boolean> {
     }
 }
 
+private suspend fun resolveDynamicFieldValue(scope: Scope, receiver: Obj, name: String, rec: ObjRecord): Obj {
+    if (rec.type == ObjRecord.Type.Delegated || rec.value is ObjProperty || rec.type == ObjRecord.Type.Property) {
+        val recv = rec.receiver ?: receiver
+        return recv.resolveRecord(scope, rec, name, rec.declaringClass).value
+    }
+    if (rec.receiver != null && rec.declaringClass != null) {
+        return rec.receiver!!.resolveRecord(scope, rec, name, rec.declaringClass).value
+    }
+    if (rec.type == ObjRecord.Type.Fun && !rec.isAbstract) {
+        val recv = rec.receiver ?: receiver
+        return rec.value.invoke(scope, recv, Arguments.EMPTY, rec.declaringClass)
+    }
+    return rec.value
+}
+
 class CmdGetMemberSlot(
     internal val recvSlot: Int,
     internal val fieldId: Int,
@@ -1523,6 +1538,75 @@ class CmdSetClassScope(
         val cls = frame.slotToObj(classSlot) as? ObjClass
             ?: scope.raiseSymbolNotFound(nameConst.value)
         cls.writeField(scope, nameConst.value, frame.slotToObj(valueSlot))
+        return
+    }
+}
+
+class CmdGetDynamicMember(
+    internal val recvSlot: Int,
+    internal val nameId: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.fn.localSlotNames.isNotEmpty()) {
+            frame.syncFrameToScope(useRefs = true)
+        }
+        val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
+            ?: error("GET_DYNAMIC_MEMBER expects StringVal at $nameId")
+        val scope = frame.ensureScope()
+        val receiver = frame.slotToObj(recvSlot)
+        val rec = receiver.readField(scope, nameConst.value)
+        val value = resolveDynamicFieldValue(scope, receiver, nameConst.value, rec)
+        if (frame.fn.localSlotNames.isNotEmpty()) {
+            frame.syncScopeToFrame()
+        }
+        frame.storeObjResult(dst, value)
+        return
+    }
+}
+
+class CmdSetDynamicMember(
+    internal val recvSlot: Int,
+    internal val nameId: Int,
+    internal val valueSlot: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.fn.localSlotNames.isNotEmpty()) {
+            frame.syncFrameToScope(useRefs = true)
+        }
+        val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
+            ?: error("SET_DYNAMIC_MEMBER expects StringVal at $nameId")
+        val scope = frame.ensureScope()
+        val receiver = frame.slotToObj(recvSlot)
+        receiver.writeField(scope, nameConst.value, frame.slotToObj(valueSlot))
+        if (frame.fn.localSlotNames.isNotEmpty()) {
+            frame.syncScopeToFrame()
+        }
+        return
+    }
+}
+
+class CmdCallDynamicMember(
+    internal val recvSlot: Int,
+    internal val nameId: Int,
+    internal val argBase: Int,
+    internal val argCount: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.fn.localSlotNames.isNotEmpty()) {
+            frame.syncFrameToScope(useRefs = true)
+        }
+        val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
+            ?: error("CALL_DYNAMIC_MEMBER expects StringVal at $nameId")
+        val scope = frame.ensureScope()
+        val receiver = frame.slotToObj(recvSlot)
+        val callArgs = frame.buildArguments(argBase, argCount)
+        val result = receiver.invokeInstanceMethod(scope, nameConst.value, callArgs)
+        if (frame.fn.localSlotNames.isNotEmpty()) {
+            frame.syncScopeToFrame()
+        }
+        frame.storeObjResult(dst, result)
         return
     }
 }

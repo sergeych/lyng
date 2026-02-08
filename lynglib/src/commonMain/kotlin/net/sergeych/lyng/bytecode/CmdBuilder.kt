@@ -181,6 +181,8 @@ class CmdBuilder {
                 listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
             Opcode.CALL_SLOT ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
+            Opcode.CALL_DYNAMIC_MEMBER ->
+                listOf(OperandKind.SLOT, OperandKind.CONST, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
             Opcode.GET_INDEX ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.SET_INDEX ->
@@ -196,6 +198,10 @@ class CmdBuilder {
             Opcode.GET_CLASS_SCOPE ->
                 listOf(OperandKind.SLOT, OperandKind.CONST, OperandKind.SLOT)
             Opcode.SET_CLASS_SCOPE ->
+                listOf(OperandKind.SLOT, OperandKind.CONST, OperandKind.SLOT)
+            Opcode.GET_DYNAMIC_MEMBER ->
+                listOf(OperandKind.SLOT, OperandKind.CONST, OperandKind.SLOT)
+            Opcode.SET_DYNAMIC_MEMBER ->
                 listOf(OperandKind.SLOT, OperandKind.CONST, OperandKind.SLOT)
             Opcode.ITER_PUSH ->
                 listOf(OperandKind.SLOT)
@@ -394,6 +400,7 @@ class CmdBuilder {
             Opcode.CALL_DIRECT -> CmdCallDirect(operands[0], operands[1], operands[2], operands[3])
             Opcode.CALL_MEMBER_SLOT -> CmdCallMemberSlot(operands[0], operands[1], operands[2], operands[3], operands[4])
             Opcode.CALL_SLOT -> CmdCallSlot(operands[0], operands[1], operands[2], operands[3])
+            Opcode.CALL_DYNAMIC_MEMBER -> CmdCallDynamicMember(operands[0], operands[1], operands[2], operands[3], operands[4])
             Opcode.GET_INDEX -> CmdGetIndex(operands[0], operands[1], operands[2])
             Opcode.SET_INDEX -> CmdSetIndex(operands[0], operands[1], operands[2])
             Opcode.LIST_LITERAL -> CmdListLiteral(operands[0], operands[1], operands[2], operands[3])
@@ -401,6 +408,8 @@ class CmdBuilder {
             Opcode.SET_MEMBER_SLOT -> CmdSetMemberSlot(operands[0], operands[1], operands[2], operands[3])
             Opcode.GET_CLASS_SCOPE -> CmdGetClassScope(operands[0], operands[1], operands[2])
             Opcode.SET_CLASS_SCOPE -> CmdSetClassScope(operands[0], operands[1], operands[2])
+            Opcode.GET_DYNAMIC_MEMBER -> CmdGetDynamicMember(operands[0], operands[1], operands[2])
+            Opcode.SET_DYNAMIC_MEMBER -> CmdSetDynamicMember(operands[0], operands[1], operands[2])
             Opcode.ITER_PUSH -> CmdIterPush(operands[0])
             Opcode.ITER_POP -> CmdIterPop()
             Opcode.ITER_CANCEL -> CmdIterCancel()

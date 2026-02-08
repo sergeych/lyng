@@ -27,8 +27,8 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [x] Replace `MapLiteralEntry.Spread` bytecode exception with runtime `putAll`/merge logic.
 - [x] Step 7: Class-scope member refs in bytecode.
   - [x] Support `ClassScopeMemberRef` without scope-map fallback.
-- [ ] Step 8: ObjDynamic member access in bytecode.
-  - [ ] Allow dynamic receiver field/method lookup without falling back to interpreter.
+- [x] Step 8: ObjDynamic member access in bytecode.
+  - [x] Allow dynamic receiver field/method lookup without falling back to interpreter.
 - [ ] Step 9: Module-level bytecode execution.
   - [ ] Compile `Script` bodies to bytecode instead of interpreting at module scope.
   - [ ] Keep import/module slot seeding in frame-only flow.

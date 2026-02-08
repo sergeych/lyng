@@ -1944,7 +1944,6 @@ class Compiler(
             is ElvisRef -> containsUnsupportedRef(ref.left) || containsUnsupportedRef(ref.right)
             is FieldRef -> {
                 val receiverClass = resolveReceiverClassForMember(ref.target) ?: return true
-                if (receiverClass == ObjDynamic.type) return true
                 val hasMember = receiverClass.instanceFieldIdMap()[ref.name] != null ||
                     receiverClass.instanceMethodIdMap(includeAbstract = true)[ref.name] != null
                 if (!hasMember && !hasExtensionFor(receiverClass.className, ref.name)) return true
@@ -1975,7 +1974,6 @@ class Compiler(
             is MethodCallRef -> {
                 if (ref.name == "delay") return true
                 val receiverClass = resolveReceiverClassForMember(ref.receiver) ?: return true
-                if (receiverClass == ObjDynamic.type) return true
                 val hasMember = receiverClass.instanceMethodIdMap(includeAbstract = true)[ref.name] != null
                 if (!hasMember && !hasExtensionFor(receiverClass.className, ref.name)) return true
                 containsUnsupportedRef(ref.receiver) || ref.args.any { containsUnsupportedForBytecode(it.value) }
