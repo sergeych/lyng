@@ -19,9 +19,10 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
 - [x] Step 4: Allow bytecode wrapping for supported declaration statements.
   - [x] Enable `DestructuringVarDeclStatement` and `ExtensionPropertyDeclStatement` in `containsUnsupportedForBytecode`.
   - [x] Keep JVM tests green before commit.
-- [ ] Step 5: Enable bytecode for delegated var declarations.
-  - [ ] Revisit `containsDelegatedRefs` guard for `DelegatedVarDeclStatement`.
-  - [ ] Ensure delegate binding uses explicit `Statement` objects (no inline suspend lambdas).
+- [x] Step 5: Enable bytecode for delegated var declarations.
+  - [x] Revisit `containsDelegatedRefs` guard for `DelegatedVarDeclStatement`.
+  - [x] Ensure delegate binding uses explicit `Statement` objects (no inline suspend lambdas).
+  - [x] Keep JVM tests green before commit.
 - [ ] Step 6: Map literal spread in bytecode.
   - [ ] Replace `MapLiteralEntry.Spread` bytecode exception with runtime `putAll`/merge logic.
 - [ ] Step 7: Class-scope member refs in bytecode.

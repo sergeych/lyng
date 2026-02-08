@@ -1894,6 +1894,7 @@ class Compiler(
             is InlineBlockStatement -> target.statements().any { containsUnsupportedForBytecode(it) }
             is VarDeclStatement -> target.initializer?.let { containsUnsupportedForBytecode(it) } ?: false
             is DestructuringVarDeclStatement -> containsUnsupportedForBytecode(target.initializer)
+            is DelegatedVarDeclStatement -> containsUnsupportedForBytecode(target.initializer)
             is BreakStatement -> target.resultExpr?.let { containsUnsupportedForBytecode(it) } ?: false
             is ContinueStatement -> false
             is ReturnStatement -> target.resultExpr?.let { containsUnsupportedForBytecode(it) } ?: false
@@ -1993,7 +1994,7 @@ class Compiler(
             is ExpressionStatement -> containsDelegatedRefs(target.ref)
             is BlockStatement -> target.statements().any { containsDelegatedRefs(it) }
             is VarDeclStatement -> target.initializer?.let { containsDelegatedRefs(it) } ?: false
-            is DelegatedVarDeclStatement -> true
+            is DelegatedVarDeclStatement -> containsDelegatedRefs(target.initializer)
             is DestructuringVarDeclStatement -> containsDelegatedRefs(target.initializer)
             is IfStatement -> {
                 containsDelegatedRefs(target.condition) ||
