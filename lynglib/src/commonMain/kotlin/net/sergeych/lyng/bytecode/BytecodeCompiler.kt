@@ -310,6 +310,7 @@ class BytecodeCompiler(
             is CallRef -> compileCall(ref)
             is MethodCallRef -> compileMethodCall(ref)
             is FieldRef -> compileFieldRef(ref)
+            is ClassScopeMemberRef -> compileClassScopeMemberRef(ref)
             is ThisFieldSlotRef -> compileThisFieldSlotRef(ref)
             is QualifiedThisFieldSlotRef -> compileQualifiedThisFieldSlotRef(ref)
             is ImplicitThisMemberRef -> {
@@ -1647,6 +1648,21 @@ class BytecodeCompiler(
         }
         val value = compileRef(assignValue(ref)) ?: return null
         val target = ref.target
+        if (target is ClassScopeMemberRef) {
+            val className = target.ownerClassName()
+            val classSlot = compileRef(LocalVarRef(className, Pos.builtIn)) ?: run {
+                val cls = resolveTypeNameClass(className) ?: return null
+                val id = builder.addConst(BytecodeConst.ObjRef(cls))
+                val slot = allocSlot()
+                builder.emit(Opcode.CONST_OBJ, id, slot)
+                updateSlotType(slot, SlotType.OBJ)
+                CompiledValue(slot, SlotType.OBJ)
+            }
+            val classObj = ensureObjSlot(classSlot)
+            val nameId = builder.addConst(BytecodeConst.StringVal(target.name))
+            builder.emit(Opcode.SET_CLASS_SCOPE, classObj.slot, nameId, value.slot)
+            return value
+        }
         if (target is FieldRef) {
             val receiverClass = resolveReceiverClass(target.target)
                 ?: throw BytecodeCompileException(
@@ -2140,6 +2156,24 @@ class BytecodeCompiler(
             builder.emit(Opcode.CONST_NULL, dst)
             builder.mark(endLabel)
         }
+        updateSlotType(dst, SlotType.OBJ)
+        return CompiledValue(dst, SlotType.OBJ)
+    }
+
+    private fun compileClassScopeMemberRef(ref: ClassScopeMemberRef): CompiledValue? {
+        val className = ref.ownerClassName()
+        val classSlot = compileRef(LocalVarRef(className, Pos.builtIn)) ?: run {
+            val cls = resolveTypeNameClass(className) ?: return null
+            val id = builder.addConst(BytecodeConst.ObjRef(cls))
+            val slot = allocSlot()
+            builder.emit(Opcode.CONST_OBJ, id, slot)
+            updateSlotType(slot, SlotType.OBJ)
+            CompiledValue(slot, SlotType.OBJ)
+        }
+        val classObj = ensureObjSlot(classSlot)
+        val nameId = builder.addConst(BytecodeConst.StringVal(ref.name))
+        val dst = allocSlot()
+        builder.emit(Opcode.GET_CLASS_SCOPE, classObj.slot, nameId, dst)
         updateSlotType(dst, SlotType.OBJ)
         return CompiledValue(dst, SlotType.OBJ)
     }

@@ -1983,7 +1983,7 @@ class Compiler(
             is ImplicitThisMethodCallRef -> false
             is QualifiedThisMethodSlotCallRef -> false
             is QualifiedThisFieldSlotRef -> false
-            is ClassScopeMemberRef -> true
+            is ClassScopeMemberRef -> false
             else -> false
         }
     }

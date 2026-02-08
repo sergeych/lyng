@@ -140,6 +140,8 @@ enum class Opcode(val code: Int) {
     LIST_LITERAL(0xA5),
     GET_MEMBER_SLOT(0xA8),
     SET_MEMBER_SLOT(0xA9),
+    GET_CLASS_SCOPE(0xAA),
+    SET_CLASS_SCOPE(0xAB),
 
     RESOLVE_SCOPE_SLOT(0xB1),
     LOAD_OBJ_ADDR(0xB2),

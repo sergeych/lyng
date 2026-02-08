@@ -193,6 +193,10 @@ class CmdBuilder {
                 listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.ID, OperandKind.SLOT)
             Opcode.SET_MEMBER_SLOT ->
                 listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.ID, OperandKind.SLOT)
+            Opcode.GET_CLASS_SCOPE ->
+                listOf(OperandKind.SLOT, OperandKind.CONST, OperandKind.SLOT)
+            Opcode.SET_CLASS_SCOPE ->
+                listOf(OperandKind.SLOT, OperandKind.CONST, OperandKind.SLOT)
             Opcode.ITER_PUSH ->
                 listOf(OperandKind.SLOT)
             Opcode.ITER_POP, Opcode.ITER_CANCEL ->
@@ -395,6 +399,8 @@ class CmdBuilder {
             Opcode.LIST_LITERAL -> CmdListLiteral(operands[0], operands[1], operands[2], operands[3])
             Opcode.GET_MEMBER_SLOT -> CmdGetMemberSlot(operands[0], operands[1], operands[2], operands[3])
             Opcode.SET_MEMBER_SLOT -> CmdSetMemberSlot(operands[0], operands[1], operands[2], operands[3])
+            Opcode.GET_CLASS_SCOPE -> CmdGetClassScope(operands[0], operands[1], operands[2])
+            Opcode.SET_CLASS_SCOPE -> CmdSetClassScope(operands[0], operands[1], operands[2])
             Opcode.ITER_PUSH -> CmdIterPush(operands[0])
             Opcode.ITER_POP -> CmdIterPop()
             Opcode.ITER_CANCEL -> CmdIterCancel()

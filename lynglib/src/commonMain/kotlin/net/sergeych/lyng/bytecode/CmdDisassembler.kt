@@ -200,6 +200,8 @@ object CmdDisassembler {
             is CmdListLiteral -> Opcode.LIST_LITERAL to intArrayOf(cmd.planId, cmd.baseSlot, cmd.count, cmd.dst)
             is CmdGetMemberSlot -> Opcode.GET_MEMBER_SLOT to intArrayOf(cmd.recvSlot, cmd.fieldId, cmd.methodId, cmd.dst)
             is CmdSetMemberSlot -> Opcode.SET_MEMBER_SLOT to intArrayOf(cmd.recvSlot, cmd.fieldId, cmd.methodId, cmd.valueSlot)
+            is CmdGetClassScope -> Opcode.GET_CLASS_SCOPE to intArrayOf(cmd.classSlot, cmd.nameId, cmd.dst)
+            is CmdSetClassScope -> Opcode.SET_CLASS_SCOPE to intArrayOf(cmd.classSlot, cmd.nameId, cmd.valueSlot)
             is CmdIterPush -> Opcode.ITER_PUSH to intArrayOf(cmd.iterSlot)
             is CmdIterPop -> Opcode.ITER_POP to intArrayOf()
             is CmdIterCancel -> Opcode.ITER_CANCEL to intArrayOf()
@@ -293,6 +295,10 @@ object CmdDisassembler {
                 listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.ID, OperandKind.SLOT)
             Opcode.SET_MEMBER_SLOT ->
                 listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.ID, OperandKind.SLOT)
+            Opcode.GET_CLASS_SCOPE ->
+                listOf(OperandKind.SLOT, OperandKind.CONST, OperandKind.SLOT)
+            Opcode.SET_CLASS_SCOPE ->
+                listOf(OperandKind.SLOT, OperandKind.CONST, OperandKind.SLOT)
         }
     }
 }

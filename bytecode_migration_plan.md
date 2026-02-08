@@ -25,8 +25,8 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [x] Keep JVM tests green before commit.
 - [x] Step 6: Map literal spread in bytecode.
   - [x] Replace `MapLiteralEntry.Spread` bytecode exception with runtime `putAll`/merge logic.
-- [ ] Step 7: Class-scope member refs in bytecode.
-  - [ ] Support `ClassScopeMemberRef` without scope-map fallback.
+- [x] Step 7: Class-scope member refs in bytecode.
+  - [x] Support `ClassScopeMemberRef` without scope-map fallback.
 - [ ] Step 8: ObjDynamic member access in bytecode.
   - [ ] Allow dynamic receiver field/method lookup without falling back to interpreter.
 - [ ] Step 9: Module-level bytecode execution.

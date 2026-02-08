@@ -1493,6 +1493,40 @@ class CmdSetMemberSlot(
     }
 }
 
+class CmdGetClassScope(
+    internal val classSlot: Int,
+    internal val nameId: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
+            ?: error("GET_CLASS_SCOPE expects StringVal at $nameId")
+        val scope = frame.ensureScope()
+        val cls = frame.slotToObj(classSlot) as? ObjClass
+            ?: scope.raiseSymbolNotFound(nameConst.value)
+        val rec = cls.readField(scope, nameConst.value)
+        val value = scope.resolve(rec, nameConst.value)
+        frame.storeObjResult(dst, value)
+        return
+    }
+}
+
+class CmdSetClassScope(
+    internal val classSlot: Int,
+    internal val nameId: Int,
+    internal val valueSlot: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
+            ?: error("SET_CLASS_SCOPE expects StringVal at $nameId")
+        val scope = frame.ensureScope()
+        val cls = frame.slotToObj(classSlot) as? ObjClass
+            ?: scope.raiseSymbolNotFound(nameConst.value)
+        cls.writeField(scope, nameConst.value, frame.slotToObj(valueSlot))
+        return
+    }
+}
+
 class CmdCallMemberSlot(
     internal val recvSlot: Int,
     internal val methodId: Int,
