@@ -1972,9 +1972,9 @@ class Compiler(
                 if (!hasMember && !hasExtensionFor(receiverClass.className, ref.name)) return true
                 containsUnsupportedRef(ref.receiver) || ref.args.any { containsUnsupportedForBytecode(it.value) }
             }
-            is ImplicitThisMethodCallRef -> true
-            is QualifiedThisMethodSlotCallRef -> true
-            is QualifiedThisFieldSlotRef -> true
+            is ImplicitThisMethodCallRef -> false
+            is QualifiedThisMethodSlotCallRef -> false
+            is QualifiedThisFieldSlotRef -> false
             is ClassScopeMemberRef -> true
             else -> false
         }
