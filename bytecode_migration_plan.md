@@ -23,8 +23,8 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [x] Revisit `containsDelegatedRefs` guard for `DelegatedVarDeclStatement`.
   - [x] Ensure delegate binding uses explicit `Statement` objects (no inline suspend lambdas).
   - [x] Keep JVM tests green before commit.
-- [ ] Step 6: Map literal spread in bytecode.
-  - [ ] Replace `MapLiteralEntry.Spread` bytecode exception with runtime `putAll`/merge logic.
+- [x] Step 6: Map literal spread in bytecode.
+  - [x] Replace `MapLiteralEntry.Spread` bytecode exception with runtime `putAll`/merge logic.
 - [ ] Step 7: Class-scope member refs in bytecode.
   - [ ] Support `ClassScopeMemberRef` without scope-map fallback.
 - [ ] Step 8: ObjDynamic member access in bytecode.

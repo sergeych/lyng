@@ -529,7 +529,35 @@ class BytecodeCompiler(
                     builder.emit(Opcode.SET_INDEX, dst, keySlot, value.slot)
                 }
                 is net.sergeych.lyng.obj.MapLiteralEntry.Spread -> {
-                    throw BytecodeCompileException("Map spread is not supported in bytecode", Pos.builtIn)
+                    if (entry.ref is ListLiteralRef) {
+                        throw BytecodeCompileException(
+                            "spread element in map literal must be a Map",
+                            Pos.builtIn
+                        )
+                    }
+                    val value = compileRefWithFallback(entry.ref, null, Pos.builtIn) ?: return null
+                    val mapClassId = builder.addConst(BytecodeConst.ObjRef(ObjMap.type))
+                    val mapClassSlot = allocSlot()
+                    builder.emit(Opcode.CONST_OBJ, mapClassId, mapClassSlot)
+                    val checkSlot = allocSlot()
+                    builder.emit(Opcode.CHECK_IS, value.slot, mapClassSlot, checkSlot)
+                    val okLabel = builder.label()
+                    val endLabel = builder.label()
+                    builder.emit(
+                        Opcode.JMP_IF_TRUE,
+                        listOf(CmdBuilder.Operand.IntVal(checkSlot), CmdBuilder.Operand.LabelRef(okLabel))
+                    )
+                    val msgId = builder.addConst(BytecodeConst.StringVal("spread element in map literal must be a Map"))
+                    val msgSlot = allocSlot()
+                    builder.emit(Opcode.CONST_OBJ, msgId, msgSlot)
+                    val posId = builder.addConst(BytecodeConst.PosVal(Pos.builtIn))
+                    builder.emit(Opcode.THROW, posId, msgSlot)
+                    builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
+                    builder.mark(okLabel)
+                    val mergedSlot = allocSlot()
+                    builder.emit(Opcode.ADD_OBJ, dst, value.slot, mergedSlot)
+                    builder.emit(Opcode.MOVE_OBJ, mergedSlot, dst)
+                    builder.mark(endLabel)
                 }
             }
         }
