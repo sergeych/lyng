@@ -1,6 +1,7 @@
 # What's New in Lyng
 
 This document highlights the latest additions and improvements to the Lyng language and its ecosystem.
+For a programmer-focused migration summary, see `docs/whats_new_1_3.md`.
 
 ## Language Features
 

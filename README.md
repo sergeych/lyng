@@ -48,6 +48,7 @@ assertEquals(A.One, A.E.One)
 
 - [Language home](https://lynglang.com)
 - [introduction and tutorial](docs/tutorial.md) - start here please
+- [What's New in 1.3](docs/whats_new_1_3.md)
 - [Testing and Assertions](docs/Testing.md)
 - [Filesystem and Processes (lyngio)](docs/lyngio.md)
 - [Return Statement](docs/return_statement.md)
