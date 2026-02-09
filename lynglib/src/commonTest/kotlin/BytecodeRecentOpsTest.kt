@@ -16,8 +16,13 @@
  */
 
 import kotlinx.coroutines.test.runTest
+import net.sergeych.lyng.Compiler
+import net.sergeych.lyng.Script
+import net.sergeych.lyng.Source
 import net.sergeych.lyng.eval
+import net.sergeych.lyng.obj.toInt
 import kotlin.test.Test
+import kotlin.test.assertEquals
 
 class BytecodeRecentOpsTest {
 
@@ -153,5 +158,24 @@ class BytecodeRecentOpsTest {
             assertEquals(7, T(7).get())
             """.trimIndent()
         )
+    }
+
+    @Test
+    fun fastLocalVarRefRead() = runTest {
+        val code = """
+            fun addOne(x) {
+                val y = x + 1
+                y
+            }
+            addOne(1)
+        """.trimIndent()
+        val script = Compiler.compileWithResolution(
+            Source("<fast-local>", code),
+            Script.defaultImportManager,
+            useBytecodeStatements = true,
+            useFastLocalRefs = true
+        )
+        val result = script.execute(Script.defaultImportManager.newStdScope())
+        assertEquals(2, result.toInt())
     }
 }

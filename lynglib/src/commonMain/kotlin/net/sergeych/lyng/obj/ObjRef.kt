@@ -1971,6 +1971,7 @@ class BoundLocalVarRef(
     private val slot: Int,
     private val atPos: Pos,
 ) : ObjRef {
+    internal fun slotIndex(): Int = slot
     override suspend fun get(scope: Scope): ObjRecord {
         scope.pos = atPos
         val rec = scope.getSlotRecord(slot)

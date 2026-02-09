@@ -340,6 +340,49 @@ class BytecodeCompiler(
                 }
                 null
             }
+            is FastLocalVarRef -> {
+                if (ref.name == "this") {
+                    return compileThisRef()
+                }
+                loopSlotOverrides[ref.name]?.let { slot ->
+                    val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
+                    return CompiledValue(slot, resolved)
+                }
+                if (allowLocalSlots) {
+                    if (!forceScopeSlots) {
+                    scopeSlotIndexByName[ref.name]?.let { slot ->
+                        val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
+                        return CompiledValue(slot, resolved)
+                    }
+                    val localIndex = localSlotIndexByName[ref.name]
+                    if (localIndex != null) {
+                        val slot = scopeSlotCount + localIndex
+                        val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
+                        return CompiledValue(slot, resolved)
+                    }
+                    }
+                    if (forceScopeSlots) {
+                        scopeSlotIndexByName[ref.name]?.let { slot ->
+                            val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
+                            return CompiledValue(slot, resolved)
+                        }
+                    }
+                }
+                null
+            }
+            is BoundLocalVarRef -> {
+                if (!allowLocalSlots) return null
+                val slot = ref.slotIndex()
+                val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
+                if (slot < scopeSlotCount && resolved != SlotType.UNKNOWN) {
+                    val addrSlot = ensureScopeAddr(slot)
+                    val local = allocSlot()
+                    emitLoadFromAddr(addrSlot, local, resolved)
+                    updateSlotType(local, resolved)
+                    return CompiledValue(local, resolved)
+                }
+                CompiledValue(slot, resolved)
+            }
             is ValueFnRef -> compileValueFnRef(ref)
             is ListLiteralRef -> compileListLiteral(ref)
             is MapLiteralRef -> compileMapLiteral(ref)
@@ -5360,9 +5403,10 @@ class BytecodeCompiler(
                 compiled = null
             }
         }
-        if (ref is LocalVarRef || ref is LocalSlotRef) {
+        if (ref is LocalVarRef || ref is LocalSlotRef || ref is FastLocalVarRef) {
             val name = when (ref) {
                 is LocalVarRef -> ref.name
+                is FastLocalVarRef -> ref.name
                 is LocalSlotRef -> ref.name
                 else -> "unknown"
             }
@@ -5423,6 +5467,20 @@ class BytecodeCompiler(
                 } ?: nameObjClass[ref.name]
                     ?: resolveTypeNameClass(ref.name)
             }
+            is FastLocalVarRef -> {
+                if (knownObjectNames.contains(ref.name)) {
+                    return nameObjClass[ref.name] ?: ObjDynamic.type
+                }
+                val fromSlot = resolveDirectNameSlot(ref.name)?.let { slotObjClass[it.slot] }
+                if (fromSlot != null) return fromSlot
+                val key = localSlotInfoMap.entries.firstOrNull { it.value.name == ref.name }?.key
+                key?.let {
+                    slotTypeByScopeId[it.scopeId]?.get(it.slot)
+                        ?: slotInitClassByKey[it]
+                } ?: nameObjClass[ref.name]
+                    ?: resolveTypeNameClass(ref.name)
+            }
+            is BoundLocalVarRef -> slotObjClass[ref.slotIndex()]
             is QualifiedThisRef -> resolveTypeNameClass(ref.typeName)
             is ListLiteralRef -> ObjList.type
             is MapLiteralRef -> ObjMap.type
@@ -5463,6 +5521,7 @@ class BytecodeCompiler(
         return when (ref) {
             is LocalVarRef -> knownClassNames.contains(ref.name) && !knownObjectNames.contains(ref.name)
             is LocalSlotRef -> knownClassNames.contains(ref.name) && !knownObjectNames.contains(ref.name)
+            is FastLocalVarRef -> knownClassNames.contains(ref.name) && !knownObjectNames.contains(ref.name)
             else -> false
         }
     }
@@ -5489,6 +5548,8 @@ class BytecodeCompiler(
         return when (ref) {
             is LocalSlotRef -> nameObjClass[ref.name] ?: resolveTypeNameClass(ref.name)
             is LocalVarRef -> nameObjClass[ref.name] ?: resolveTypeNameClass(ref.name)
+            is FastLocalVarRef -> nameObjClass[ref.name] ?: resolveTypeNameClass(ref.name)
+            is BoundLocalVarRef -> slotObjClass[ref.slotIndex()]
             is QualifiedThisRef -> resolveTypeNameClass(ref.typeName)
             is ListLiteralRef -> ObjList.type
             is MapLiteralRef -> ObjMap.type
@@ -5530,6 +5591,8 @@ class BytecodeCompiler(
             is ConstRef -> ref.constValue as? ObjClass
             is LocalSlotRef -> resolveTypeNameClass(ref.name) ?: nameObjClass[ref.name]
             is LocalVarRef -> resolveTypeNameClass(ref.name) ?: nameObjClass[ref.name]
+            is FastLocalVarRef -> resolveTypeNameClass(ref.name) ?: nameObjClass[ref.name]
+            is QualifiedThisRef -> resolveTypeNameClass(ref.typeName)
             else -> null
         }
     }

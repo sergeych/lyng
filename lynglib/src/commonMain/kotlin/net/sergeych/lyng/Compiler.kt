@@ -46,8 +46,11 @@ class Compiler(
 
     // Track identifiers known to be locals/parameters in the current function for fast local emission
     private val localNamesStack = mutableListOf<MutableSet<String>>()
+    private val localShadowedNamesStack = mutableListOf<MutableSet<String>>()
     private val currentLocalNames: MutableSet<String>?
         get() = localNamesStack.lastOrNull()
+    private val currentShadowedLocalNames: MutableSet<String>?
+        get() = localShadowedNamesStack.lastOrNull()
 
     private data class SlotEntry(val index: Int, val isMutable: Boolean, val isDelegated: Boolean)
     private data class SlotPlan(val slots: MutableMap<String, SlotEntry>, var nextIndex: Int, val id: Int)
@@ -94,9 +97,11 @@ class Compiler(
 
     private inline fun <T> withLocalNames(names: Set<String>, block: () -> T): T {
         localNamesStack.add(names.toMutableSet())
+        localShadowedNamesStack.add(mutableSetOf())
         return try {
             block()
         } finally {
+            localShadowedNamesStack.removeLast()
             localNamesStack.removeLast()
         }
     }
@@ -104,6 +109,9 @@ class Compiler(
     private fun declareLocalName(name: String, isMutable: Boolean, isDelegated: Boolean = false) {
         // Add to current function's local set; only count if it was newly added (avoid duplicates)
         val added = currentLocalNames?.add(name) == true
+        if (!added) {
+            currentShadowedLocalNames?.add(name)
+        }
         if (added && localDeclCountStack.isNotEmpty()) {
             localDeclCountStack[localDeclCountStack.lastIndex] = currentLocalDeclCount + 1
         }
@@ -842,6 +850,16 @@ class Compiler(
                 return ref
             }
             val captureOwner = capturePlanStack.lastOrNull()?.captureOwners?.get(name)
+            if (useFastLocalRefs &&
+                slotLoc.depth == 0 &&
+                captureOwner == null &&
+                currentLocalNames?.contains(name) == true &&
+                currentShadowedLocalNames?.contains(name) != true &&
+                !slotLoc.isDelegated
+            ) {
+                resolutionSink?.reference(name, pos)
+                return FastLocalVarRef(name, pos)
+            }
             if (slotLoc.depth == 0 && captureOwner != null) {
                 val ref = LocalSlotRef(
                     name,
@@ -1024,12 +1042,14 @@ class Compiler(
         val strictSlotRefs: Boolean = true,
         val allowUnresolvedRefs: Boolean = false,
         val seedScope: Scope? = null,
+        val useFastLocalRefs: Boolean = false,
     )
 
     // Optional sink for mini-AST streaming (null by default, zero overhead when not used)
     private val miniSink: MiniAstSink? = settings.miniAstSink
     private val resolutionSink: ResolutionSink? = settings.resolutionSink
     private val seedScope: Scope? = settings.seedScope
+    private val useFastLocalRefs: Boolean = settings.useFastLocalRefs
     private var resolutionScriptDepth = 0
     private val resolutionPredeclared = mutableSetOf<String>()
     private data class ImportedModule(val scope: ModuleScope, val pos: Pos)
@@ -3964,6 +3984,7 @@ class Compiler(
     private fun inferObjClassFromRef(ref: ObjRef): ObjClass? = when (ref) {
         is ConstRef -> ref.constValue as? ObjClass ?: (ref.constValue as? Obj)?.objClass
         is LocalVarRef -> nameObjClass[ref.name] ?: resolveClassByName(ref.name)
+        is FastLocalVarRef -> nameObjClass[ref.name] ?: resolveClassByName(ref.name)
         is LocalSlotRef -> {
             val ownerScopeId = ref.captureOwnerScopeId ?: ref.scopeId
             val ownerSlot = ref.captureOwnerSlot ?: ref.slot
@@ -3990,6 +4011,7 @@ class Compiler(
                 slotTypeDeclByScopeId[ownerScopeId]?.get(ownerSlot)
             }
             is LocalVarRef -> nameTypeDecl[ref.name]
+            is FastLocalVarRef -> nameTypeDecl[ref.name]
             is MethodCallRef -> methodReturnTypeDeclByRef[ref]
             is StatementRef -> (ref.statement as? ExpressionStatement)?.let { resolveReceiverTypeDecl(it.ref) }
             else -> null
@@ -4007,6 +4029,9 @@ class Compiler(
                     ?: resolveClassByName(ref.name)
             }
             is LocalVarRef -> nameObjClass[ref.name]
+                ?: nameTypeDecl[ref.name]?.let { resolveTypeDeclObjClass(it) }
+                ?: resolveClassByName(ref.name)
+            is FastLocalVarRef -> nameObjClass[ref.name]
                 ?: nameTypeDecl[ref.name]?.let { resolveTypeDeclObjClass(it) }
                 ?: resolveClassByName(ref.name)
             is ClassScopeMemberRef -> {
@@ -4071,6 +4096,8 @@ class Compiler(
             is LocalSlotRef -> callableReturnTypeByScopeId[target.scopeId]?.get(target.slot)
                 ?: resolveClassByName(target.name)
             is LocalVarRef -> callableReturnTypeByName[target.name]
+                ?: resolveClassByName(target.name)
+            is FastLocalVarRef -> callableReturnTypeByName[target.name]
                 ?: resolveClassByName(target.name)
             is ConstRef -> when (val value = target.constValue) {
                 is ObjClass -> value
@@ -4348,6 +4375,7 @@ class Compiler(
         is ConstRef -> ref.constValue as? ObjClass
         is LocalSlotRef -> resolveTypeDeclObjClass(TypeDecl.Simple(ref.name, false)) ?: nameObjClass[ref.name]
         is LocalVarRef -> resolveTypeDeclObjClass(TypeDecl.Simple(ref.name, false)) ?: nameObjClass[ref.name]
+        is FastLocalVarRef -> resolveTypeDeclObjClass(TypeDecl.Simple(ref.name, false)) ?: nameObjClass[ref.name]
         else -> null
     }
 
@@ -4877,6 +4905,8 @@ class Compiler(
                     ?: slotTypeDeclByScopeId[ownerScopeId]?.get(ownerSlot)?.let { typeDeclName(it) }
             }
             is LocalVarRef -> nameObjClass[ref.name]?.className
+                ?: nameTypeDecl[ref.name]?.let { typeDeclName(it) }
+            is FastLocalVarRef -> nameObjClass[ref.name]?.className
                 ?: nameTypeDecl[ref.name]?.let { typeDeclName(it) }
             is QualifiedThisRef -> ref.typeName
             else -> resolveReceiverClassForMember(ref)?.className
@@ -8529,7 +8559,8 @@ class Compiler(
             useBytecodeStatements: Boolean = true,
             strictSlotRefs: Boolean = true,
             allowUnresolvedRefs: Boolean = false,
-            seedScope: Scope? = null
+            seedScope: Scope? = null,
+            useFastLocalRefs: Boolean = false
         ): Script {
             return Compiler(
                 CompilerContext(parseLyng(source)),
@@ -8540,7 +8571,8 @@ class Compiler(
                     useBytecodeStatements = useBytecodeStatements,
                     strictSlotRefs = strictSlotRefs,
                     allowUnresolvedRefs = allowUnresolvedRefs,
-                    seedScope = seedScope
+                    seedScope = seedScope,
+                    useFastLocalRefs = useFastLocalRefs
                 )
             ).parseScript()
         }
