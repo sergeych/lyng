@@ -2220,6 +2220,20 @@ class BytecodeCompiler(
 
         val newValue = compileRefWithFallback(ref.value, null, Pos.builtIn) ?: return null
         when (target) {
+            is ClassScopeMemberRef -> {
+                val className = target.ownerClassName()
+                val classSlot = compileRef(LocalVarRef(className, Pos.builtIn)) ?: run {
+                    val cls = resolveTypeNameClass(className) ?: return null
+                    val id = builder.addConst(BytecodeConst.ObjRef(cls))
+                    val slot = allocSlot()
+                    builder.emit(Opcode.CONST_OBJ, id, slot)
+                    updateSlotType(slot, SlotType.OBJ)
+                    CompiledValue(slot, SlotType.OBJ)
+                }
+                val classObj = ensureObjSlot(classSlot)
+                val nameId = builder.addConst(BytecodeConst.StringVal(target.name))
+                builder.emit(Opcode.SET_CLASS_SCOPE, classObj.slot, nameId, newValue.slot)
+            }
             is LocalSlotRef -> {
                 if (!allowLocalSlots || !target.isMutable || target.isDelegated) return null
                 val slot = resolveSlot(target) ?: return null
@@ -2244,7 +2258,24 @@ class BytecodeCompiler(
                         Pos.builtIn
                     )
                 val receiver = compileRefWithFallback(target.target, null, Pos.builtIn) ?: return null
-                if (receiverClass == ObjDynamic.type) {
+                if (isKnownClassReceiver(target.target)) {
+                    val nameId = builder.addConst(BytecodeConst.StringVal(target.name))
+                    if (!target.isOptional) {
+                        builder.emit(Opcode.SET_CLASS_SCOPE, receiver.slot, nameId, newValue.slot)
+                    } else {
+                        val recvNull = allocSlot()
+                        builder.emit(Opcode.CONST_NULL, recvNull)
+                        val recvCmp = allocSlot()
+                        builder.emit(Opcode.CMP_REF_EQ_OBJ, receiver.slot, recvNull, recvCmp)
+                        val skipLabel = builder.label()
+                        builder.emit(
+                            Opcode.JMP_IF_TRUE,
+                            listOf(CmdBuilder.Operand.IntVal(recvCmp), CmdBuilder.Operand.LabelRef(skipLabel))
+                        )
+                        builder.emit(Opcode.SET_CLASS_SCOPE, receiver.slot, nameId, newValue.slot)
+                        builder.mark(skipLabel)
+                    }
+                } else if (receiverClass == ObjDynamic.type) {
                     val nameId = builder.addConst(BytecodeConst.StringVal(target.name))
                     if (!target.isOptional) {
                         builder.emit(Opcode.SET_DYNAMIC_MEMBER, receiver.slot, nameId, newValue.slot)
@@ -2266,55 +2297,56 @@ class BytecodeCompiler(
                     builder.mark(endLabel)
                     updateSlotType(resultSlot, SlotType.OBJ)
                     return CompiledValue(resultSlot, SlotType.OBJ)
-                }
-                val fieldId = receiverClass.instanceFieldIdMap()[target.name]
-                val methodId = receiverClass.instanceMethodIdMap(includeAbstract = true)[target.name]
-                if (fieldId != null || methodId != null) {
-                    if (!target.isOptional) {
-                        builder.emit(Opcode.SET_MEMBER_SLOT, receiver.slot, fieldId ?: -1, methodId ?: -1, newValue.slot)
-                    } else {
-                        val recvNull = allocSlot()
-                        builder.emit(Opcode.CONST_NULL, recvNull)
-                        val recvCmp = allocSlot()
-                        builder.emit(Opcode.CMP_REF_EQ_OBJ, receiver.slot, recvNull, recvCmp)
-                        val skipLabel = builder.label()
-                        builder.emit(
-                            Opcode.JMP_IF_TRUE,
-                            listOf(CmdBuilder.Operand.IntVal(recvCmp), CmdBuilder.Operand.LabelRef(skipLabel))
-                        )
-                        builder.emit(Opcode.SET_MEMBER_SLOT, receiver.slot, fieldId ?: -1, methodId ?: -1, newValue.slot)
-                        builder.mark(skipLabel)
-                    }
                 } else {
-                    val extSlot = resolveExtensionSetterSlot(receiverClass, target.name)
-                        ?: throw BytecodeCompileException(
-                            "Unknown member ${target.name} on ${receiverClass.className}",
-                            Pos.builtIn
-                        )
-                    val callee = ensureObjSlot(extSlot)
-                    val receiverObj = ensureObjSlot(receiver)
-                    val valueObj = ensureObjSlot(newValue)
-                    val argSlots = intArrayOf(allocSlot(), allocSlot())
-                    builder.emit(Opcode.MOVE_OBJ, receiverObj.slot, argSlots[0])
-                    builder.emit(Opcode.MOVE_OBJ, valueObj.slot, argSlots[1])
-                    updateSlotType(argSlots[0], SlotType.OBJ)
-                    updateSlotType(argSlots[1], SlotType.OBJ)
-                    val callArgs = CallArgs(base = argSlots[0], count = argSlots.size, planId = null)
-                    val encodedCount = encodeCallArgCount(callArgs) ?: return null
-                    if (!target.isOptional) {
-                        builder.emit(Opcode.CALL_SLOT, callee.slot, callArgs.base, encodedCount, resultSlot)
+                    val fieldId = receiverClass.instanceFieldIdMap()[target.name]
+                    val methodId = receiverClass.instanceMethodIdMap(includeAbstract = true)[target.name]
+                    if (fieldId != null || methodId != null) {
+                        if (!target.isOptional) {
+                            builder.emit(Opcode.SET_MEMBER_SLOT, receiver.slot, fieldId ?: -1, methodId ?: -1, newValue.slot)
+                        } else {
+                            val recvNull = allocSlot()
+                            builder.emit(Opcode.CONST_NULL, recvNull)
+                            val recvCmp = allocSlot()
+                            builder.emit(Opcode.CMP_REF_EQ_OBJ, receiver.slot, recvNull, recvCmp)
+                            val skipLabel = builder.label()
+                            builder.emit(
+                                Opcode.JMP_IF_TRUE,
+                                listOf(CmdBuilder.Operand.IntVal(recvCmp), CmdBuilder.Operand.LabelRef(skipLabel))
+                            )
+                            builder.emit(Opcode.SET_MEMBER_SLOT, receiver.slot, fieldId ?: -1, methodId ?: -1, newValue.slot)
+                            builder.mark(skipLabel)
+                        }
                     } else {
-                        val recvNull = allocSlot()
-                        builder.emit(Opcode.CONST_NULL, recvNull)
-                        val recvCmp = allocSlot()
-                        builder.emit(Opcode.CMP_REF_EQ_OBJ, receiver.slot, recvNull, recvCmp)
-                        val skipLabel = builder.label()
-                        builder.emit(
-                            Opcode.JMP_IF_TRUE,
-                            listOf(CmdBuilder.Operand.IntVal(recvCmp), CmdBuilder.Operand.LabelRef(skipLabel))
-                        )
-                        builder.emit(Opcode.CALL_SLOT, callee.slot, callArgs.base, encodedCount, resultSlot)
-                        builder.mark(skipLabel)
+                        val extSlot = resolveExtensionSetterSlot(receiverClass, target.name)
+                            ?: throw BytecodeCompileException(
+                                "Unknown member ${target.name} on ${receiverClass.className}",
+                                Pos.builtIn
+                            )
+                        val callee = ensureObjSlot(extSlot)
+                        val receiverObj = ensureObjSlot(receiver)
+                        val valueObj = ensureObjSlot(newValue)
+                        val argSlots = intArrayOf(allocSlot(), allocSlot())
+                        builder.emit(Opcode.MOVE_OBJ, receiverObj.slot, argSlots[0])
+                        builder.emit(Opcode.MOVE_OBJ, valueObj.slot, argSlots[1])
+                        updateSlotType(argSlots[0], SlotType.OBJ)
+                        updateSlotType(argSlots[1], SlotType.OBJ)
+                        val callArgs = CallArgs(base = argSlots[0], count = argSlots.size, planId = null)
+                        val encodedCount = encodeCallArgCount(callArgs) ?: return null
+                        if (!target.isOptional) {
+                            builder.emit(Opcode.CALL_SLOT, callee.slot, callArgs.base, encodedCount, resultSlot)
+                        } else {
+                            val recvNull = allocSlot()
+                            builder.emit(Opcode.CONST_NULL, recvNull)
+                            val recvCmp = allocSlot()
+                            builder.emit(Opcode.CMP_REF_EQ_OBJ, receiver.slot, recvNull, recvCmp)
+                            val skipLabel = builder.label()
+                            builder.emit(
+                                Opcode.JMP_IF_TRUE,
+                                listOf(CmdBuilder.Operand.IntVal(recvCmp), CmdBuilder.Operand.LabelRef(skipLabel))
+                            )
+                            builder.emit(Opcode.CALL_SLOT, callee.slot, callArgs.base, encodedCount, resultSlot)
+                            builder.mark(skipLabel)
+                        }
                     }
                 }
             }

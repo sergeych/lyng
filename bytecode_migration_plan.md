@@ -50,9 +50,9 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [x] Support `FastLocalVarRef` reads with the same slot resolution as `LocalVarRef`.
   - [x] If `BoundLocalVarRef` is still emitted, map it to a direct slot read instead of failing.
   - [x] Add a JVM test that exercises fast-local reads in a bytecode-compiled function.
-- [ ] Step 15: Class-scope `?=` in bytecode.
-  - [ ] Handle `C.x ?= v` and `C?.x ?= v` for class-scope members without falling back.
-  - [ ] Add a JVM test for class-scope `?=` on static vars.
+- [x] Step 15: Class-scope `?=` in bytecode.
+  - [x] Handle `C.x ?= v` and `C?.x ?= v` for class-scope members without falling back.
+  - [x] Add a JVM test for class-scope `?=` on static vars.
 
 ## Notes
 

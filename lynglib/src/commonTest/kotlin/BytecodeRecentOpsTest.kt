@@ -147,6 +147,19 @@ class BytecodeRecentOpsTest {
     }
 
     @Test
+    fun classScopeIfNullAssign() = runTest {
+        eval(
+            """
+            class C { static var x: Object? = null }
+            C.x ?= 7
+            assertEquals(7, C.x)
+            C.x ?= 9
+            assertEquals(7, C.x)
+            """.trimIndent()
+        )
+    }
+
+    @Test
     fun qualifiedThisValueRef() = runTest {
         eval(
             """
