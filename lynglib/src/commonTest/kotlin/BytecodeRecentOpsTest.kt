@@ -116,6 +116,20 @@ class BytecodeRecentOpsTest {
     }
 
     @Test
+    fun optionalIndexPreIncSkipsOnNullReceiver() = runTest {
+        eval(
+            """
+            var count = 0
+            fun idx() { count = count + 1; return 1 }
+            var a: List<Int>? = null
+            val r = ++a?[idx()]
+            assertEquals(null, r)
+            assertEquals(0, count)
+            """.trimIndent()
+        )
+    }
+
+    @Test
     fun optionalClassScopeIncDec() = runTest {
         eval(
             """
