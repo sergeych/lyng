@@ -5784,7 +5784,7 @@ class Compiler(
                 return enumClass
             }
         }
-        return EnumDeclStatement(enumDeclStatement, stmtPos)
+        return EnumDeclStatement(StatementDeclExecutable(enumDeclStatement), stmtPos)
     }
 
     private suspend fun parseObjectDeclaration(isExtern: Boolean = false): Statement {
@@ -5965,7 +5965,7 @@ class Compiler(
                 return instance
             }
         }
-        return ClassDeclStatement(declStatement, startPos, className)
+        return ClassDeclStatement(StatementDeclExecutable(declStatement), startPos, className)
     }
 
     private suspend fun parseClassDeclaration(isAbstract: Boolean = false, isExtern: Boolean = false): Statement {
@@ -6372,7 +6372,7 @@ class Compiler(
                     return newClass
                 }
             }
-            ClassDeclStatement(classDeclStatement, startPos, qualifiedName)
+            ClassDeclStatement(StatementDeclExecutable(classDeclStatement), startPos, qualifiedName)
         }
 
     }
@@ -7186,7 +7186,7 @@ class Compiler(
                     return annotatedFnBody
                 }
             }
-            val declaredFn = FunctionDeclStatement(fnCreateStatement, start)
+            val declaredFn = FunctionDeclStatement(StatementDeclExecutable(fnCreateStatement), start)
             if (isStatic) {
                 currentInitScope += declaredFn
                 NopStatement

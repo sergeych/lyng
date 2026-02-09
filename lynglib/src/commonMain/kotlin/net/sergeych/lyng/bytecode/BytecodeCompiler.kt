@@ -4077,6 +4077,23 @@ class BytecodeCompiler(
         return CompiledValue(dst, SlotType.OBJ)
     }
 
+    private fun emitDeclExec(stmt: Statement): CompiledValue {
+        val executable = when (stmt) {
+            is net.sergeych.lyng.ClassDeclStatement -> stmt.executable
+            is net.sergeych.lyng.FunctionDeclStatement -> stmt.executable
+            is net.sergeych.lyng.EnumDeclStatement -> stmt.executable
+            else -> throw BytecodeCompileException(
+                "Bytecode compile error: unsupported declaration ${stmt::class.simpleName}",
+                stmt.pos
+            )
+        }
+        val constId = builder.addConst(BytecodeConst.DeclExec(executable))
+        val dst = allocSlot()
+        builder.emit(Opcode.DECL_EXEC, constId, dst)
+        updateSlotType(dst, SlotType.OBJ)
+        return CompiledValue(dst, SlotType.OBJ)
+    }
+
     private fun compileStatementValueOrFallback(stmt: Statement, needResult: Boolean = true): CompiledValue? {
         val target = if (stmt is BytecodeStatement) stmt.original else stmt
         setPos(target.pos)
@@ -4110,9 +4127,9 @@ class BytecodeCompiler(
                 is DelegatedVarDeclStatement -> emitDelegatedVarDecl(target)
                 is DestructuringVarDeclStatement -> emitDestructuringVarDecl(target)
                 is net.sergeych.lyng.ExtensionPropertyDeclStatement -> emitExtensionPropertyDecl(target)
-                is net.sergeych.lyng.ClassDeclStatement -> emitStatementCall(target)
-                is net.sergeych.lyng.FunctionDeclStatement -> emitStatementCall(target)
-                is net.sergeych.lyng.EnumDeclStatement -> emitStatementCall(target)
+                is net.sergeych.lyng.ClassDeclStatement -> emitDeclExec(target)
+                is net.sergeych.lyng.FunctionDeclStatement -> emitDeclExec(target)
+                is net.sergeych.lyng.EnumDeclStatement -> emitDeclExec(target)
                 is net.sergeych.lyng.TryStatement -> emitTry(target, true)
                 is net.sergeych.lyng.WhenStatement -> compileWhen(target, true)
                 is net.sergeych.lyng.BreakStatement -> compileBreak(target)
@@ -4143,9 +4160,9 @@ class BytecodeCompiler(
                 is VarDeclStatement -> emitVarDecl(target)
                 is DelegatedVarDeclStatement -> emitDelegatedVarDecl(target)
                 is IfStatement -> compileIfStatement(target)
-                is net.sergeych.lyng.ClassDeclStatement -> emitStatementCall(target)
-                is net.sergeych.lyng.FunctionDeclStatement -> emitStatementCall(target)
-                is net.sergeych.lyng.EnumDeclStatement -> emitStatementCall(target)
+                is net.sergeych.lyng.ClassDeclStatement -> emitDeclExec(target)
+                is net.sergeych.lyng.FunctionDeclStatement -> emitDeclExec(target)
+                is net.sergeych.lyng.EnumDeclStatement -> emitDeclExec(target)
                 is net.sergeych.lyng.ForInStatement -> {
                     val resultSlot = emitForIn(target, false) ?: return null
                     CompiledValue(resultSlot, SlotType.OBJ)

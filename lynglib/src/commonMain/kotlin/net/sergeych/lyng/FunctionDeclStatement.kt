@@ -19,17 +19,17 @@ package net.sergeych.lyng
 import net.sergeych.lyng.obj.Obj
 
 class FunctionDeclStatement(
-    private val delegate: Statement,
+    val executable: DeclExecutable,
     private val startPos: Pos,
 ) : Statement() {
     override val pos: Pos = startPos
 
     override suspend fun execute(scope: Scope): Obj {
-        return delegate.execute(scope)
+        return executable.execute(scope)
     }
 
     override suspend fun callOn(scope: Scope): Obj {
         val target = scope.parent ?: scope
-        return delegate.execute(target)
+        return executable.execute(target)
     }
 }

@@ -158,6 +158,7 @@ enum class Opcode(val code: Int) {
     STORE_BOOL_ADDR(0xB9),
     THROW(0xBB),
     RETHROW_PENDING(0xBC),
+    DECL_EXEC(0xBD),
     ITER_PUSH(0xBF),
     ITER_POP(0xC0),
     ITER_CANCEL(0xC1),

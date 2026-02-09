@@ -24,10 +24,13 @@ import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.Source
 import net.sergeych.lyng.eval
 import net.sergeych.lyng.toSource
+import net.sergeych.lyng.bytecode.CmdDisassembler
+import net.sergeych.lyng.bytecode.CmdFunction
 import net.sergeych.lyng.obj.toInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class BytecodeRecentOpsTest {
@@ -241,6 +244,23 @@ class BytecodeRecentOpsTest {
         assertTrue(disasm.contains("DELEGATED_GET_LOCAL"), disasm)
         assertTrue(disasm.contains("DELEGATED_SET_LOCAL"), disasm)
         assertTrue(disasm.contains("DECL_DELEGATED"), disasm)
+    }
+
+    @Test
+    fun moduleDeclsAvoidCallableCallSlots() = runTest {
+        val script = """
+            class A {}
+            fun f() { 1 }
+            enum E { one }
+        """.trimIndent()
+        val compiled = Compiler.compile(script.toSource(), Script.defaultImportManager)
+        val field = Script::class.java.getDeclaredField("moduleBytecode")
+        field.isAccessible = true
+        val moduleFn = field.get(compiled) as? CmdFunction
+        assertNotNull(moduleFn, "module bytecode missing")
+        val disasm = CmdDisassembler.disassemble(moduleFn)
+        assertTrue(!disasm.contains("CALL_SLOT"), disasm)
+        assertTrue(disasm.contains("DECL_EXEC"), disasm)
     }
 
     @Test

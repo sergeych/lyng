@@ -1314,6 +1314,22 @@ class CmdDeclDelegated(internal val constId: Int, internal val slot: Int) : Cmd(
     }
 }
 
+class CmdDeclExec(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.fn.localSlotNames.isNotEmpty()) {
+            frame.syncFrameToScope(useRefs = true)
+        }
+        val decl = frame.fn.constants[constId] as? BytecodeConst.DeclExec
+            ?: error("DECL_EXEC expects DeclExec at $constId")
+        val result = decl.executable.execute(frame.ensureScope())
+        if (frame.fn.localSlotNames.isNotEmpty()) {
+            frame.syncScopeToFrame()
+        }
+        frame.storeObjResult(slot, result)
+        return
+    }
+}
+
 class CmdDeclDestructure(internal val constId: Int, internal val slot: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         val decl = frame.fn.constants[constId] as? BytecodeConst.DestructureDecl
