@@ -45,6 +45,11 @@ class BytecodeStatement private constructor(
             moduleScopeId: Int? = null,
             slotTypeByScopeId: Map<Int, Map<Int, ObjClass>> = emptyMap(),
             knownNameObjClass: Map<String, ObjClass> = emptyMap(),
+            knownObjectNames: Set<String> = emptySet(),
+            classFieldTypesByName: Map<String, Map<String, ObjClass>> = emptyMap(),
+            enumEntriesByName: Map<String, List<String>> = emptyMap(),
+            callableReturnTypeByScopeId: Map<Int, Map<Int, ObjClass>> = emptyMap(),
+            callableReturnTypeByName: Map<String, ObjClass> = emptyMap(),
         ): Statement {
             if (statement is BytecodeStatement) return statement
             val hasUnsupported = containsUnsupportedStatement(statement)
@@ -63,7 +68,12 @@ class BytecodeStatement private constructor(
                 allowedScopeNames = allowedScopeNames,
                 moduleScopeId = moduleScopeId,
                 slotTypeByScopeId = slotTypeByScopeId,
-                knownNameObjClass = knownNameObjClass
+                knownNameObjClass = knownNameObjClass,
+                knownObjectNames = knownObjectNames,
+                classFieldTypesByName = classFieldTypesByName,
+                enumEntriesByName = enumEntriesByName,
+                callableReturnTypeByScopeId = callableReturnTypeByScopeId,
+                callableReturnTypeByName = callableReturnTypeByName
             )
             val compiled = compiler.compileStatement(nameHint, statement)
             val fn = compiled ?: throw BytecodeCompileException(

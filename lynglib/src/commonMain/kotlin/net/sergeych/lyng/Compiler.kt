@@ -165,6 +165,7 @@ class Compiler(
     private val classScopeCallableMembersByClassName: MutableMap<String, MutableSet<String>> = mutableMapOf()
     private val encodedPayloadTypeByScopeId: MutableMap<Int, MutableMap<Int, ObjClass>> = mutableMapOf()
     private val encodedPayloadTypeByName: MutableMap<String, ObjClass> = mutableMapOf()
+    private val objectDeclNames: MutableSet<String> = mutableSetOf()
 
     private fun seedSlotPlanFromScope(scope: Scope, includeParents: Boolean = false) {
         val plan = moduleSlotPlan() ?: return
@@ -1536,7 +1537,12 @@ class Compiler(
                         allowedScopeNames = modulePlan.keys,
                         moduleScopeId = moduleSlotPlan()?.id,
                         slotTypeByScopeId = slotTypeByScopeId,
-                        knownNameObjClass = knownClassMapForBytecode()
+                        knownNameObjClass = knownClassMapForBytecode(),
+                        knownObjectNames = objectDeclNames,
+                        classFieldTypesByName = classFieldTypesByName,
+                        enumEntriesByName = enumEntriesByName,
+                        callableReturnTypeByScopeId = callableReturnTypeByScopeId,
+                        callableReturnTypeByName = callableReturnTypeByName
                     ) as BytecodeStatement
                     unwrapped to bytecodeStmt.bytecodeFunction()
                 } else {
@@ -1830,7 +1836,12 @@ class Compiler(
             allowedScopeNames = allowedScopeNames,
             moduleScopeId = moduleSlotPlan()?.id,
             slotTypeByScopeId = slotTypeByScopeId,
-            knownNameObjClass = knownClassMapForBytecode()
+            knownNameObjClass = knownClassMapForBytecode(),
+            knownObjectNames = objectDeclNames,
+            classFieldTypesByName = classFieldTypesByName,
+            enumEntriesByName = enumEntriesByName,
+            callableReturnTypeByScopeId = callableReturnTypeByScopeId,
+            callableReturnTypeByName = callableReturnTypeByName
         )
     }
 
@@ -1861,7 +1872,12 @@ class Compiler(
             allowedScopeNames = allowedScopeNames,
             moduleScopeId = moduleSlotPlan()?.id,
             slotTypeByScopeId = slotTypeByScopeId,
-            knownNameObjClass = knownNames
+            knownNameObjClass = knownNames,
+            knownObjectNames = objectDeclNames,
+            classFieldTypesByName = classFieldTypesByName,
+            enumEntriesByName = enumEntriesByName,
+            callableReturnTypeByScopeId = callableReturnTypeByScopeId,
+            callableReturnTypeByName = callableReturnTypeByName
         )
     }
 
@@ -1899,6 +1915,9 @@ class Compiler(
             is ReturnStatement -> target.resultExpr?.let { containsUnsupportedForBytecode(it) } ?: false
             is ThrowStatement -> containsUnsupportedForBytecode(target.throwExpr)
             is ExtensionPropertyDeclStatement -> false
+            is ClassDeclStatement -> false
+            is FunctionDeclStatement -> false
+            is EnumDeclStatement -> false
             is TryStatement -> {
                 containsUnsupportedForBytecode(target.body) ||
                     target.catches.any { containsUnsupportedForBytecode(it.block) } ||
@@ -5660,6 +5679,9 @@ class Compiler(
         if (declaredName != null) {
             resolutionSink?.declareSymbol(declaredName, SymbolKind.CLASS, isMutable = false, pos = nameToken!!.pos)
             declareLocalName(declaredName, isMutable = false)
+            if (codeContexts.lastOrNull() is CodeContext.Module) {
+                objectDeclNames.add(declaredName)
+            }
             if (outerClassName != null) {
                 val outerCtx = codeContexts.asReversed().firstOrNull { it is CodeContext.ClassBody } as? CodeContext.ClassBody
                 outerCtx?.classScopeMembers?.add(declaredName)
@@ -6612,11 +6634,17 @@ class Compiler(
         val declKind = if (parentContext is CodeContext.ClassBody) SymbolKind.MEMBER else SymbolKind.FUNCTION
         resolutionSink?.declareSymbol(name, declKind, isMutable = false, pos = nameStartPos, isOverride = isOverride)
         if (parentContext is CodeContext.ClassBody && extTypeName == null) {
-            parentContext.declaredMembers.add(name)
-            if (!parentContext.memberMethodIds.containsKey(name)) {
-                parentContext.memberMethodIds[name] = parentContext.nextMethodId++
+            if (isStatic) {
+                parentContext.classScopeMembers.add(name)
+                registerClassScopeMember(parentContext.name, name)
+                registerClassScopeCallableMember(parentContext.name, name)
+            } else {
+                parentContext.declaredMembers.add(name)
+                if (!parentContext.memberMethodIds.containsKey(name)) {
+                    parentContext.memberMethodIds[name] = parentContext.nextMethodId++
+                }
+                memberMethodId = parentContext.memberMethodIds[name]
             }
-            memberMethodId = parentContext.memberMethodIds[name]
         }
         if (declKind != SymbolKind.MEMBER) {
             declareLocalName(name, isMutable = false)
@@ -7752,7 +7780,10 @@ class Compiler(
         }
 
         if (declaringClassNameCaptured != null && extTypeName == null) {
-            if (isDelegate || isProperty) {
+            if (isStatic) {
+                classCtx?.classScopeMembers?.add(name)
+                registerClassScopeMember(declaringClassNameCaptured, name)
+            } else if (isDelegate || isProperty) {
                 if (classCtx != null) {
                     if (!classCtx.memberMethodIds.containsKey(name)) {
                         classCtx.memberMethodIds[name] = classCtx.nextMethodId++

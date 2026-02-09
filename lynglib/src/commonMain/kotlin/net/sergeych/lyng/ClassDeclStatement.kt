@@ -28,4 +28,9 @@ class ClassDeclStatement(
     override suspend fun execute(scope: Scope): Obj {
         return delegate.execute(scope)
     }
+
+    override suspend fun callOn(scope: Scope): Obj {
+        val target = scope.parent ?: scope
+        return delegate.execute(target)
+    }
 }

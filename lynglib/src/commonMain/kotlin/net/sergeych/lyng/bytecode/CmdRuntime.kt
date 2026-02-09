@@ -240,7 +240,9 @@ class CmdAssertIs(internal val objSlot: Int, internal val typeSlot: Int) : Cmd()
             "${typeObj.inspect(frame.ensureScope())} is not the class instance"
         )
         if (!obj.isInstanceOf(clazz)) {
-            frame.ensureScope().raiseClassCastError("expected ${clazz.className}, got ${obj.objClass.className}")
+            frame.ensureScope().raiseClassCastError(
+                "Cannot cast ${obj.objClass.className} to ${clazz.className}"
+            )
         }
         return
     }
@@ -1296,6 +1298,14 @@ class CmdDeclExtProperty(internal val constId: Int, internal val slot: Int) : Cm
                 type = ObjRecord.Type.Property
             )
         )
+        val getterName = extensionPropertyGetterName(decl.extTypeName, decl.property.name)
+        val getterWrapper = ObjExtensionPropertyGetterCallable(decl.property.name, decl.property)
+        frame.ensureScope().addItem(getterName, false, getterWrapper, decl.visibility, recordType = ObjRecord.Type.Fun)
+        if (decl.property.setter != null) {
+            val setterName = extensionPropertySetterName(decl.extTypeName, decl.property.name)
+            val setterWrapper = ObjExtensionPropertySetterCallable(decl.property.name, decl.property)
+            frame.ensureScope().addItem(setterName, false, setterWrapper, decl.visibility, recordType = ObjRecord.Type.Fun)
+        }
         frame.setObj(slot, decl.property)
         return
     }
@@ -1449,7 +1459,12 @@ class CmdGetMemberSlot(
                 }
             } else null
         } ?: frame.ensureScope().raiseSymbolNotFound("member")
-        val name = rec.memberName ?: "<member>"
+        val rawName = rec.memberName ?: "<member>"
+        val name = if (receiver is ObjInstance && rawName.contains("::")) {
+            rawName.substringAfterLast("::")
+        } else {
+            rawName
+        }
         suspend fun autoCallIfMethod(resolved: ObjRecord, recv: Obj): Obj {
             return if (resolved.type == ObjRecord.Type.Fun && !resolved.isAbstract) {
                 resolved.value.invoke(frame.ensureScope(), resolved.receiver ?: recv, Arguments.EMPTY, resolved.declaringClass)
@@ -1498,12 +1513,17 @@ class CmdSetMemberSlot(
                 }
             } else null
         } ?: frame.ensureScope().raiseSymbolNotFound("member")
-        val name = rec.memberName ?: "<member>"
+        val rawName = rec.memberName ?: "<member>"
+        val name = if (receiver is ObjInstance && rawName.contains("::")) {
+            rawName.substringAfterLast("::")
+        } else {
+            rawName
+        }
         if (receiver is ObjQualifiedView) {
             receiver.writeField(frame.ensureScope(), name, frame.slotToObj(valueSlot))
             return
         }
-        frame.ensureScope().assign(rec, name, frame.slotToObj(valueSlot))
+        receiver.writeField(frame.ensureScope(), name, frame.slotToObj(valueSlot))
         return
     }
 }
@@ -2383,10 +2403,10 @@ class CmdFrame(
         val direct = record.value
         if (direct is FrameSlotRef) return direct.read()
         val name = fn.scopeSlotNames[slot]
+        if (name != null && (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || direct is ObjProperty)) {
+            return target.resolve(record, name)
+        }
         if (direct !== ObjUnset) {
-            if (name != null && (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || direct is ObjProperty)) {
-                return target.resolve(record, name)
-            }
             return direct
         }
         if (name == null) return record.value
@@ -2405,10 +2425,10 @@ class CmdFrame(
         if (direct is FrameSlotRef) return direct.read()
         val slotId = addrScopeSlots[addrSlot]
         val name = fn.scopeSlotNames.getOrNull(slotId)
+        if (name != null && (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || direct is ObjProperty)) {
+            return target.resolve(record, name)
+        }
         if (direct !== ObjUnset) {
-            if (name != null && (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || direct is ObjProperty)) {
-                return target.resolve(record, name)
-            }
             return direct
         }
         if (name == null) return record.value
