@@ -140,4 +140,18 @@ class BytecodeRecentOpsTest {
             """.trimIndent()
         )
     }
+
+    @Test
+    fun qualifiedThisValueRef() = runTest {
+        eval(
+            """
+            class T(val v) {
+                fun get() {
+                    this@T.v
+                }
+            }
+            assertEquals(7, T(7).get())
+            """.trimIndent()
+        )
+    }
 }

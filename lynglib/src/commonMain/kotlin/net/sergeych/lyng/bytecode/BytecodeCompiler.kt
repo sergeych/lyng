@@ -397,6 +397,7 @@ class BytecodeCompiler(
             is ImplicitThisMethodCallRef -> compileImplicitThisMethodCall(ref)
             is QualifiedThisMethodSlotCallRef -> compileQualifiedThisMethodSlotCall(ref)
             is IndexRef -> compileIndexRef(ref)
+            is QualifiedThisRef -> compileThisVariantRef(ref.typeName)
             else -> null
         }
     }
@@ -5422,6 +5423,7 @@ class BytecodeCompiler(
                 } ?: nameObjClass[ref.name]
                     ?: resolveTypeNameClass(ref.name)
             }
+            is QualifiedThisRef -> resolveTypeNameClass(ref.typeName)
             is ListLiteralRef -> ObjList.type
             is MapLiteralRef -> ObjMap.type
             is RangeRef -> ObjRange.type
@@ -5487,6 +5489,7 @@ class BytecodeCompiler(
         return when (ref) {
             is LocalSlotRef -> nameObjClass[ref.name] ?: resolveTypeNameClass(ref.name)
             is LocalVarRef -> nameObjClass[ref.name] ?: resolveTypeNameClass(ref.name)
+            is QualifiedThisRef -> resolveTypeNameClass(ref.typeName)
             is ListLiteralRef -> ObjList.type
             is MapLiteralRef -> ObjMap.type
             is RangeRef -> ObjRange.type

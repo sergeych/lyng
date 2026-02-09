@@ -43,6 +43,16 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [x] Fix post-inc return value for object slots stored in scope frames.
   - [x] Handle optional receivers for member assign-ops and inc/dec without evaluating operands on null.
   - [x] Support class-scope and index optional inc/dec paths in bytecode.
+- [x] Step 13: Qualified `this` value refs in bytecode.
+  - [x] Compile `QualifiedThisRef` (`this@Type`) via `LOAD_THIS_VARIANT`.
+  - [x] Add a JVM test that evaluates `this@Type` as a value inside nested classes.
+- [ ] Step 14: Fast local ref reads in bytecode.
+  - [ ] Support `FastLocalVarRef` reads with the same slot resolution as `LocalVarRef`.
+  - [ ] If `BoundLocalVarRef` is still emitted, map it to a direct slot read instead of failing.
+  - [ ] Add a JVM test that exercises fast-local reads in a bytecode-compiled function.
+- [ ] Step 15: Class-scope `?=` in bytecode.
+  - [ ] Handle `C.x ?= v` and `C?.x ?= v` for class-scope members without falling back.
+  - [ ] Add a JVM test for class-scope `?=` on static vars.
 
 ## Notes
 
