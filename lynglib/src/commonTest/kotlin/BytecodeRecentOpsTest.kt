@@ -160,6 +160,18 @@ class BytecodeRecentOpsTest {
     }
 
     @Test
+    fun callablePropertyCall() = runTest {
+        eval(
+            """
+            class C { var f = { x -> x + 1 } }
+            val c = C()
+            val r = (c.f)(2)
+            assertEquals(3, r)
+            """.trimIndent()
+        )
+    }
+
+    @Test
     fun qualifiedThisValueRef() = runTest {
         eval(
             """

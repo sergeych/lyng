@@ -3375,13 +3375,6 @@ class BytecodeCompiler(
                 }
             }
         }
-        val fieldTarget = ref.target as? FieldRef
-        if (fieldTarget != null) {
-            throw BytecodeCompileException(
-                "Member call requires compile-time receiver type: ${fieldTarget.name}",
-                Pos.builtIn
-            )
-        }
         val initClass = when (localTarget?.name) {
             "List" -> ObjList.type
             "Map" -> ObjMap.type

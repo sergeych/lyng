@@ -53,6 +53,18 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
 - [x] Step 15: Class-scope `?=` in bytecode.
   - [x] Handle `C.x ?= v` and `C?.x ?= v` for class-scope members without falling back.
   - [x] Add a JVM test for class-scope `?=` on static vars.
+- [ ] Step 16: Remove dead `ToBoolStatement`.
+  - [ ] Confirm no parser/compiler paths construct `ToBoolStatement` and delete it plus interpreter hooks.
+  - [ ] Keep JVM tests green after removal.
+- [x] Step 17: Callable property calls in bytecode.
+  - [x] Support `CallRef` where the target is a `FieldRef` (e.g., `(obj.fn)()`), keeping compile-time resolution.
+  - [x] Add a JVM test for a callable property call compiled to bytecode.
+- [ ] Step 18: Delegated member access in bytecode.
+  - [ ] Remove `containsDelegatedRefs` guard once bytecode emits delegated get/set/call correctly.
+  - [ ] Add JVM coverage for delegated member get/set/call in bytecode.
+- [ ] Step 19: Unknown receiver member access in bytecode.
+  - [ ] Decide on allowed fallback behavior for unknown receiver types without runtime name resolution.
+  - [ ] Add JVM tests for member access on unresolved receiver types and keep compile-time-only resolution.
 
 ## Notes
 
