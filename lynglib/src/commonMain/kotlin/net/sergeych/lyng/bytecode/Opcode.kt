@@ -161,6 +161,7 @@ enum class Opcode(val code: Int) {
     ITER_PUSH(0xBF),
     ITER_POP(0xC0),
     ITER_CANCEL(0xC1),
+    ASSIGN_SCOPE_SLOT(0xC2),
     ;
 
     companion object {

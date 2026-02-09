@@ -200,6 +200,25 @@ class BytecodeRecentOpsTest {
     }
 
     @Test
+    fun delegatedLocalAssignAndIncDec() = runTest {
+        eval(
+            """
+            class BoxDelegate(var v) : Delegate {
+                override fun getValue(thisRef: Object, name: String): Object = v
+                override fun setValue(thisRef: Object, name: String, value: Object) { v = value }
+            }
+            fun calc() {
+                var x by BoxDelegate(1)
+                x += 2
+                x++
+                return x
+            }
+            assertEquals(4, calc())
+            """.trimIndent()
+        )
+    }
+
+    @Test
     fun unionMemberDispatchSubtype() = runTest {
         eval(
             """

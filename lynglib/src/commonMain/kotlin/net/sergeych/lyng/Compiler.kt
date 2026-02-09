@@ -1545,8 +1545,7 @@ class Compiler(
                     statements.isNotEmpty() &&
                     codeContexts.lastOrNull() is CodeContext.Module &&
                     resolutionScriptDepth == 1 &&
-                    statements.none { containsUnsupportedForBytecode(it) } &&
-                    statements.none { containsDelegatedRefs(it) }
+                    statements.none { containsUnsupportedForBytecode(it) }
                 val (finalStatements, moduleBytecode) = if (wrapScriptBytecode) {
                     val unwrapped = statements.map { unwrapBytecodeDeep(it) }
                     val block = InlineBlockStatement(unwrapped, start)
@@ -1829,9 +1828,6 @@ class Compiler(
         if (codeContexts.any { it is CodeContext.Function }) {
             return stmt
         }
-        if (containsDelegatedRefs(stmt)) {
-            return stmt
-        }
         if (containsUnsupportedForBytecode(stmt)) {
             return stmt
         }
@@ -1871,7 +1867,6 @@ class Compiler(
         extraKnownNameObjClass: Map<String, ObjClass> = emptyMap()
     ): Statement {
         if (!useBytecodeStatements) return stmt
-        if (containsDelegatedRefs(stmt)) return stmt
         if (containsUnsupportedForBytecode(stmt)) return stmt
         val returnLabels = returnLabelStack.lastOrNull() ?: emptySet()
         val allowedScopeNames = moduleSlotPlan()?.slots?.keys
@@ -6965,8 +6960,7 @@ class Compiler(
             val fnStatements = rawFnStatements?.let { stmt ->
                 if (useBytecodeStatements &&
                     parentContext !is CodeContext.ClassBody &&
-                    !containsUnsupportedForBytecode(stmt) &&
-                    !containsDelegatedRefs(stmt)
+                    !containsUnsupportedForBytecode(stmt)
                 ) {
                     val paramKnownClasses = mutableMapOf<String, ObjClass>()
                     for (param in argsDeclaration.params) {

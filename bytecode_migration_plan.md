@@ -73,10 +73,10 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
 - [x] Step 21: Union mismatch path in bytecode.
   - [x] Replace `UnionTypeMismatchStatement` branch with a bytecode-compilable throw path (no custom `StatementRef` that blocks bytecode).
   - [x] Add a JVM test that forces the union mismatch at runtime and asserts the error message.
-- [ ] Step 22: Delegated local slots in bytecode.
-  - [ ] Support reads/writes/assign-ops/inc/dec for delegated locals (`LocalSlotRef.isDelegated`) in `BytecodeCompiler`.
-  - [ ] Remove `containsDelegatedRefs` guard once delegated locals are bytecode-safe.
-  - [ ] Add JVM tests that use delegated locals inside bytecode-compiled functions.
+- [x] Step 22: Delegated local slots in bytecode.
+  - [x] Support reads/writes/assign-ops/inc/dec for delegated locals (`LocalSlotRef.isDelegated`) in `BytecodeCompiler`.
+  - [x] Remove `containsDelegatedRefs` guard once delegated locals are bytecode-safe.
+  - [x] Add JVM tests that use delegated locals inside bytecode-compiled functions.
 
 ## Notes
 
