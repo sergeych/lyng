@@ -2002,8 +2002,7 @@ class BytecodeCompiler(
                 builder.emit(Opcode.SET_DYNAMIC_MEMBER, receiver.slot, nameId, result)
                 builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
                 builder.mark(nullLabel)
-                builder.emit(Opcode.CONST_NULL, current)
-                builder.emit(objOp, current, rhs.slot, result)
+                builder.emit(Opcode.CONST_NULL, result)
                 builder.mark(endLabel)
                 updateSlotType(result, SlotType.OBJ)
                 return CompiledValue(result, SlotType.OBJ)
@@ -2032,8 +2031,7 @@ class BytecodeCompiler(
                     builder.emit(Opcode.SET_CLASS_SCOPE, receiver.slot, nameId, result)
                     builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
                     builder.mark(nullLabel)
-                    builder.emit(Opcode.CONST_NULL, current)
-                    builder.emit(objOp, current, rhs.slot, result)
+                    builder.emit(Opcode.CONST_NULL, result)
                     builder.mark(endLabel)
                 }
                 updateSlotType(result, SlotType.OBJ)
@@ -2060,8 +2058,7 @@ class BytecodeCompiler(
                     builder.emit(Opcode.SET_MEMBER_SLOT, receiver.slot, fieldId ?: -1, methodId ?: -1, result)
                     builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
                     builder.mark(nullLabel)
-                    builder.emit(Opcode.CONST_NULL, current)
-                    builder.emit(objOp, current, rhs.slot, result)
+                    builder.emit(Opcode.CONST_NULL, result)
                     builder.mark(endLabel)
                 }
                 updateSlotType(result, SlotType.OBJ)
@@ -2150,8 +2147,7 @@ class BytecodeCompiler(
             builder.emit(Opcode.SET_INDEX, receiver.slot, index.slot, result)
             builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
             builder.mark(nullLabel)
-            builder.emit(Opcode.CONST_NULL, current)
-            builder.emit(objOp, current, rhs.slot, result)
+            builder.emit(Opcode.CONST_NULL, result)
             builder.mark(endLabel)
             updateSlotType(result, SlotType.OBJ)
             return CompiledValue(result, SlotType.OBJ)
@@ -2878,7 +2874,6 @@ class BytecodeCompiler(
 
         val fieldTarget = ref.target as? FieldRef
         if (fieldTarget != null) {
-            if (fieldTarget.isOptional) return null
             val receiverClass = resolveReceiverClass(fieldTarget.target)
                 ?: throw BytecodeCompileException(
                     "Member access requires compile-time receiver type: ${fieldTarget.name}",
@@ -2887,6 +2882,45 @@ class BytecodeCompiler(
             if (receiverClass == ObjDynamic.type) {
                 val receiver = compileRefWithFallback(fieldTarget.target, null, Pos.builtIn) ?: return null
                 val nameId = builder.addConst(BytecodeConst.StringVal(fieldTarget.name))
+                val resultSlot = allocSlot()
+                if (fieldTarget.isOptional) {
+                    val nullSlot = allocSlot()
+                    builder.emit(Opcode.CONST_NULL, nullSlot)
+                    val cmpSlot = allocSlot()
+                    builder.emit(Opcode.CMP_REF_EQ_OBJ, receiver.slot, nullSlot, cmpSlot)
+                    val nullLabel = builder.label()
+                    val endLabel = builder.label()
+                    builder.emit(
+                        Opcode.JMP_IF_TRUE,
+                        listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
+                    )
+                    val current = allocSlot()
+                    builder.emit(Opcode.GET_DYNAMIC_MEMBER, receiver.slot, nameId, current)
+                    updateSlotType(current, SlotType.OBJ)
+                    val oneSlot = allocSlot()
+                    val oneId = builder.addConst(BytecodeConst.ObjRef(ObjInt.One))
+                    builder.emit(Opcode.CONST_OBJ, oneId, oneSlot)
+                    updateSlotType(oneSlot, SlotType.OBJ)
+                    val result = allocSlot()
+                    val op = if (ref.isIncrement) Opcode.ADD_OBJ else Opcode.SUB_OBJ
+                    if (wantResult && ref.isPost) {
+                        val old = allocSlot()
+                        builder.emit(Opcode.MOVE_OBJ, current, old)
+                        builder.emit(op, current, oneSlot, result)
+                        builder.emit(Opcode.SET_DYNAMIC_MEMBER, receiver.slot, nameId, result)
+                        builder.emit(Opcode.MOVE_OBJ, old, resultSlot)
+                    } else {
+                        builder.emit(op, current, oneSlot, result)
+                        builder.emit(Opcode.SET_DYNAMIC_MEMBER, receiver.slot, nameId, result)
+                        builder.emit(Opcode.MOVE_OBJ, result, resultSlot)
+                    }
+                    builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
+                    builder.mark(nullLabel)
+                    builder.emit(Opcode.CONST_NULL, resultSlot)
+                    builder.mark(endLabel)
+                    updateSlotType(resultSlot, SlotType.OBJ)
+                    return CompiledValue(resultSlot, SlotType.OBJ)
+                }
                 val current = allocSlot()
                 builder.emit(Opcode.GET_DYNAMIC_MEMBER, receiver.slot, nameId, current)
                 updateSlotType(current, SlotType.OBJ)
@@ -2901,16 +2935,121 @@ class BytecodeCompiler(
                     builder.emit(Opcode.MOVE_OBJ, current, old)
                     builder.emit(op, current, oneSlot, result)
                     builder.emit(Opcode.SET_DYNAMIC_MEMBER, receiver.slot, nameId, result)
-                    return CompiledValue(old, SlotType.OBJ)
+                    builder.emit(Opcode.MOVE_OBJ, old, resultSlot)
+                    return CompiledValue(resultSlot, SlotType.OBJ)
                 }
                 builder.emit(op, current, oneSlot, result)
                 builder.emit(Opcode.SET_DYNAMIC_MEMBER, receiver.slot, nameId, result)
-                return CompiledValue(result, SlotType.OBJ)
+                builder.emit(Opcode.MOVE_OBJ, result, resultSlot)
+                return CompiledValue(resultSlot, SlotType.OBJ)
             }
             val fieldId = receiverClass.instanceFieldIdMap()[fieldTarget.name]
             val methodId = receiverClass.instanceMethodIdMap(includeAbstract = true)[fieldTarget.name]
+            if (fieldId == null && methodId == null && isKnownClassReceiver(fieldTarget.target)) {
+                val receiver = compileRefWithFallback(fieldTarget.target, null, Pos.builtIn) ?: return null
+                val nameId = builder.addConst(BytecodeConst.StringVal(fieldTarget.name))
+                val resultSlot = allocSlot()
+                if (fieldTarget.isOptional) {
+                    val nullSlot = allocSlot()
+                    builder.emit(Opcode.CONST_NULL, nullSlot)
+                    val cmpSlot = allocSlot()
+                    builder.emit(Opcode.CMP_REF_EQ_OBJ, receiver.slot, nullSlot, cmpSlot)
+                    val nullLabel = builder.label()
+                    val endLabel = builder.label()
+                    builder.emit(
+                        Opcode.JMP_IF_TRUE,
+                        listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
+                    )
+                    val current = allocSlot()
+                    builder.emit(Opcode.GET_CLASS_SCOPE, receiver.slot, nameId, current)
+                    updateSlotType(current, SlotType.OBJ)
+                    val oneSlot = allocSlot()
+                    val oneId = builder.addConst(BytecodeConst.ObjRef(ObjInt.One))
+                    builder.emit(Opcode.CONST_OBJ, oneId, oneSlot)
+                    updateSlotType(oneSlot, SlotType.OBJ)
+                    val result = allocSlot()
+                    val op = if (ref.isIncrement) Opcode.ADD_OBJ else Opcode.SUB_OBJ
+                    if (wantResult && ref.isPost) {
+                        val old = allocSlot()
+                        builder.emit(Opcode.MOVE_OBJ, current, old)
+                        builder.emit(op, current, oneSlot, result)
+                        builder.emit(Opcode.SET_CLASS_SCOPE, receiver.slot, nameId, result)
+                        builder.emit(Opcode.MOVE_OBJ, old, resultSlot)
+                    } else {
+                        builder.emit(op, current, oneSlot, result)
+                        builder.emit(Opcode.SET_CLASS_SCOPE, receiver.slot, nameId, result)
+                        builder.emit(Opcode.MOVE_OBJ, result, resultSlot)
+                    }
+                    builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
+                    builder.mark(nullLabel)
+                    builder.emit(Opcode.CONST_NULL, resultSlot)
+                    builder.mark(endLabel)
+                    updateSlotType(resultSlot, SlotType.OBJ)
+                    return CompiledValue(resultSlot, SlotType.OBJ)
+                }
+                val current = allocSlot()
+                builder.emit(Opcode.GET_CLASS_SCOPE, receiver.slot, nameId, current)
+                updateSlotType(current, SlotType.OBJ)
+                val oneSlot = allocSlot()
+                val oneId = builder.addConst(BytecodeConst.ObjRef(ObjInt.One))
+                builder.emit(Opcode.CONST_OBJ, oneId, oneSlot)
+                updateSlotType(oneSlot, SlotType.OBJ)
+                val result = allocSlot()
+                val op = if (ref.isIncrement) Opcode.ADD_OBJ else Opcode.SUB_OBJ
+                if (wantResult && ref.isPost) {
+                    val old = allocSlot()
+                    builder.emit(Opcode.MOVE_OBJ, current, old)
+                    builder.emit(op, current, oneSlot, result)
+                    builder.emit(Opcode.SET_CLASS_SCOPE, receiver.slot, nameId, result)
+                    builder.emit(Opcode.MOVE_OBJ, old, resultSlot)
+                    return CompiledValue(resultSlot, SlotType.OBJ)
+                }
+                builder.emit(op, current, oneSlot, result)
+                builder.emit(Opcode.SET_CLASS_SCOPE, receiver.slot, nameId, result)
+                builder.emit(Opcode.MOVE_OBJ, result, resultSlot)
+                return CompiledValue(resultSlot, SlotType.OBJ)
+            }
             if (fieldId == null && methodId == null) return null
             val receiver = compileRefWithFallback(fieldTarget.target, null, Pos.builtIn) ?: return null
+            val resultSlot = allocSlot()
+            if (fieldTarget.isOptional) {
+                val nullSlot = allocSlot()
+                builder.emit(Opcode.CONST_NULL, nullSlot)
+                val cmpSlot = allocSlot()
+                builder.emit(Opcode.CMP_REF_EQ_OBJ, receiver.slot, nullSlot, cmpSlot)
+                val nullLabel = builder.label()
+                val endLabel = builder.label()
+                builder.emit(
+                    Opcode.JMP_IF_TRUE,
+                    listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
+                )
+                val current = allocSlot()
+                builder.emit(Opcode.GET_MEMBER_SLOT, receiver.slot, fieldId ?: -1, methodId ?: -1, current)
+                updateSlotType(current, SlotType.OBJ)
+                val oneSlot = allocSlot()
+                val oneId = builder.addConst(BytecodeConst.ObjRef(ObjInt.One))
+                builder.emit(Opcode.CONST_OBJ, oneId, oneSlot)
+                updateSlotType(oneSlot, SlotType.OBJ)
+                val result = allocSlot()
+                val op = if (ref.isIncrement) Opcode.ADD_OBJ else Opcode.SUB_OBJ
+                if (wantResult && ref.isPost) {
+                    val old = allocSlot()
+                    builder.emit(Opcode.MOVE_OBJ, current, old)
+                    builder.emit(op, current, oneSlot, result)
+                    builder.emit(Opcode.SET_MEMBER_SLOT, receiver.slot, fieldId ?: -1, methodId ?: -1, result)
+                    builder.emit(Opcode.MOVE_OBJ, old, resultSlot)
+                } else {
+                    builder.emit(op, current, oneSlot, result)
+                    builder.emit(Opcode.SET_MEMBER_SLOT, receiver.slot, fieldId ?: -1, methodId ?: -1, result)
+                    builder.emit(Opcode.MOVE_OBJ, result, resultSlot)
+                }
+                builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
+                builder.mark(nullLabel)
+                builder.emit(Opcode.CONST_NULL, resultSlot)
+                builder.mark(endLabel)
+                updateSlotType(resultSlot, SlotType.OBJ)
+                return CompiledValue(resultSlot, SlotType.OBJ)
+            }
             val current = allocSlot()
             builder.emit(Opcode.GET_MEMBER_SLOT, receiver.slot, fieldId ?: -1, methodId ?: -1, current)
             updateSlotType(current, SlotType.OBJ)
@@ -2925,16 +3064,55 @@ class BytecodeCompiler(
                 builder.emit(Opcode.MOVE_OBJ, current, old)
                 builder.emit(op, current, oneSlot, result)
                 builder.emit(Opcode.SET_MEMBER_SLOT, receiver.slot, fieldId ?: -1, methodId ?: -1, result)
-                return CompiledValue(old, SlotType.OBJ)
+                builder.emit(Opcode.MOVE_OBJ, old, resultSlot)
+                return CompiledValue(resultSlot, SlotType.OBJ)
             }
             builder.emit(op, current, oneSlot, result)
             builder.emit(Opcode.SET_MEMBER_SLOT, receiver.slot, fieldId ?: -1, methodId ?: -1, result)
-            return CompiledValue(result, SlotType.OBJ)
+            builder.emit(Opcode.MOVE_OBJ, result, resultSlot)
+            return CompiledValue(resultSlot, SlotType.OBJ)
         }
 
         val indexTarget = ref.target as? IndexRef ?: return null
-        if (indexTarget.optionalRef) return null
         val receiver = compileRefWithFallback(indexTarget.targetRef, null, Pos.builtIn) ?: return null
+        if (indexTarget.optionalRef) {
+            val resultSlot = allocSlot()
+            val nullSlot = allocSlot()
+            builder.emit(Opcode.CONST_NULL, nullSlot)
+            val cmpSlot = allocSlot()
+            builder.emit(Opcode.CMP_REF_EQ_OBJ, receiver.slot, nullSlot, cmpSlot)
+            val nullLabel = builder.label()
+            val endLabel = builder.label()
+            builder.emit(
+                Opcode.JMP_IF_TRUE,
+                listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
+            )
+            val index = compileRefWithFallback(indexTarget.indexRef, null, Pos.builtIn) ?: return null
+            val current = allocSlot()
+            builder.emit(Opcode.GET_INDEX, receiver.slot, index.slot, current)
+            updateSlotType(current, SlotType.OBJ)
+            val oneSlot = allocSlot()
+            val oneId = builder.addConst(BytecodeConst.ObjRef(ObjInt.One))
+            builder.emit(Opcode.CONST_OBJ, oneId, oneSlot)
+            val result = allocSlot()
+            val op = if (ref.isIncrement) Opcode.ADD_OBJ else Opcode.SUB_OBJ
+            if (wantResult && ref.isPost) {
+                val old = allocSlot()
+                builder.emit(Opcode.MOVE_OBJ, current, old)
+                builder.emit(op, current, oneSlot, result)
+                builder.emit(Opcode.SET_INDEX, receiver.slot, index.slot, result)
+                builder.emit(Opcode.MOVE_OBJ, old, resultSlot)
+            } else {
+                builder.emit(op, current, oneSlot, result)
+                builder.emit(Opcode.SET_INDEX, receiver.slot, index.slot, result)
+                builder.emit(Opcode.MOVE_OBJ, result, resultSlot)
+            }
+            builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
+            builder.mark(nullLabel)
+            builder.emit(Opcode.CONST_NULL, resultSlot)
+            builder.mark(endLabel)
+            return CompiledValue(resultSlot, SlotType.OBJ)
+        }
         val index = compileRefWithFallback(indexTarget.indexRef, null, Pos.builtIn) ?: return null
         val current = allocSlot()
         builder.emit(Opcode.GET_INDEX, receiver.slot, index.slot, current)

@@ -38,9 +38,11 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [x] Ensure module object member refs compile as instance access (not class-scope).
 - [x] Step 11: Destructuring assignment bytecode.
   - [x] Handle `[a, b] = expr` (AssignRef target `ListLiteralRef`) without interpreter fallback.
-- [ ] Step 12: Optional member assign-ops and inc/dec in bytecode.
-  - [ ] Support `a?.b += 1` and `a?.b++` for `FieldRef` targets.
+- [x] Step 12: Optional member assign-ops and inc/dec in bytecode.
+  - [x] Support `a?.b += 1` and `a?.b++` for `FieldRef` targets.
   - [x] Fix post-inc return value for object slots stored in scope frames.
+  - [x] Handle optional receivers for member assign-ops and inc/dec without evaluating operands on null.
+  - [x] Support class-scope and index optional inc/dec paths in bytecode.
 
 ## Notes
 
