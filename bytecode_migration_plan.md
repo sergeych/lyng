@@ -32,9 +32,9 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
 - [x] Step 9: Module-level bytecode execution.
   - [x] Compile `Script` bodies to bytecode instead of interpreting at module scope.
   - [x] Keep import/module slot seeding in frame-only flow.
-- [ ] Step 10: Bytecode for declaration statements in module scripts.
-  - [ ] Support `ClassDeclStatement`, `FunctionDeclStatement`, `EnumDeclStatement` in bytecode compilation.
-  - [ ] Decide whether to compile declarations into module bytecode or keep a mixed execution path.
+- [x] Step 10: Bytecode for declaration statements in module scripts.
+  - [x] Support `ClassDeclStatement`, `FunctionDeclStatement`, `EnumDeclStatement` in bytecode compilation.
+  - [x] Keep a mixed execution path for declarations (module bytecode calls statement bodies via `CALL_SLOT`).
   - [x] Ensure module object member refs compile as instance access (not class-scope).
 - [ ] Step 11: Destructuring assignment bytecode.
   - [ ] Handle `[a, b] = expr` (AssignRef target `ListLiteralRef`) without interpreter fallback.
