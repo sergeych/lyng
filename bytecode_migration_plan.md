@@ -85,6 +85,24 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [x] Force delegated locals into local slots (even module) and avoid scope-slot resolution.
   - [x] Drop opcode/runtime support for `ASSIGN_SCOPE_SLOT`.
 
+## Interpreter Removal (next)
+
+- [ ] Step 25: Replace Statement-based declaration calls in bytecode.
+  - [ ] Add bytecode const/op for class/enum/function declarations (no `Statement` objects in constants).
+  - [ ] Replace `emitStatementCall` usage for `ClassDeclStatement`, `FunctionDeclStatement`, `EnumDeclStatement`.
+  - [ ] Add JVM disasm coverage to ensure module init has no `CALL_SLOT` to `Callable@...` for declarations.
+- [ ] Step 26: Bytecode-backed lambdas (remove `ValueFnRef` runtime execution).
+  - [ ] Compile lambda bodies to bytecode and emit an opcode to create a callable from bytecode + capture plan.
+  - [ ] Remove `containsValueFnRef`/`forceScopeSlots` workaround once lambdas are bytecode.
+  - [ ] Add JVM tests for captured locals and delegated locals inside lambdas on the bytecode path.
+- [ ] Step 27: Remove interpreter opcodes and constants from bytecode runtime.
+  - [ ] Delete `BytecodeConst.ValueFn`, `CmdMakeValueFn`, and `MAKE_VALUE_FN`.
+  - [ ] Delete `BytecodeConst.StatementVal`, `CmdEvalStmt`, and `EVAL_STMT`.
+  - [ ] Remove `emitStatementCall`/`emitStatementEval` once unused.
+- [ ] Step 28: Scope as facade only.
+  - [ ] Audit bytecode execution paths for `Statement.execute` usage and remove remaining calls.
+  - [ ] Keep scope sync only for reflection/Kotlin interop, not for execution.
+
 ## Notes
 
 - Keep imports bound to module frame slots; no scope map writes for imports.
