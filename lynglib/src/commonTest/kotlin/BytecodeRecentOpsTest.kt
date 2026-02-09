@@ -210,6 +210,18 @@ class BytecodeRecentOpsTest {
     }
 
     @Test
+    fun staticMemberDeclNopStatement() = runTest {
+        eval(
+            """
+            class C {
+                static fun ping() { 7 }
+            }
+            assertEquals(7, C.ping())
+            """.trimIndent()
+        )
+    }
+
+    @Test
     fun objectReceiverMemberError() = runTest {
         val failed = try {
             eval("fun bad(x) { x.missing() }")

@@ -1934,6 +1934,7 @@ class Compiler(
             is ContinueStatement -> false
             is ReturnStatement -> target.resultExpr?.let { containsUnsupportedForBytecode(it) } ?: false
             is ThrowStatement -> containsUnsupportedForBytecode(target.throwExpr)
+            is NopStatement -> false
             is ExtensionPropertyDeclStatement -> false
             is ClassDeclStatement -> false
             is FunctionDeclStatement -> false

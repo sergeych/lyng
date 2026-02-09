@@ -202,6 +202,23 @@ class BytecodeCompiler(
                     localSlotMutables
                 )
             }
+            is net.sergeych.lyng.NopStatement -> {
+                val voidId = builder.addConst(BytecodeConst.ObjRef(ObjVoid))
+                val slot = allocSlot()
+                builder.emit(Opcode.CONST_OBJ, voidId, slot)
+                builder.emit(Opcode.RET, slot)
+                builder.build(
+                    name,
+                    localCount = maxOf(nextSlot, slot + 1) - scopeSlotCount,
+                    addrCount = nextAddrSlot,
+                    returnLabels = returnLabels,
+                    scopeSlotIndices,
+                    scopeSlotNames,
+                    scopeSlotIsModule,
+                    localSlotNames,
+                    localSlotMutables
+                )
+            }
             else -> null
         }
     }
@@ -3920,6 +3937,12 @@ class BytecodeCompiler(
     private fun compileStatementValue(stmt: Statement): CompiledValue? {
         return when (stmt) {
             is ExpressionStatement -> compileRefWithFallback(stmt.ref, null, stmt.pos)
+            is net.sergeych.lyng.NopStatement -> {
+                val slot = allocSlot()
+                val voidId = builder.addConst(BytecodeConst.ObjRef(ObjVoid))
+                builder.emit(Opcode.CONST_OBJ, voidId, slot)
+                CompiledValue(slot, SlotType.OBJ)
+            }
             else -> null
         }
     }
@@ -3990,6 +4013,12 @@ class BytecodeCompiler(
                 is net.sergeych.lyng.ReturnStatement -> compileReturn(target)
                 is net.sergeych.lyng.ThrowStatement -> compileThrow(target)
                 is net.sergeych.lyng.TryStatement -> emitTry(target, false)
+                is net.sergeych.lyng.NopStatement -> {
+                    val slot = allocSlot()
+                    val voidId = builder.addConst(BytecodeConst.ObjRef(ObjVoid))
+                    builder.emit(Opcode.CONST_OBJ, voidId, slot)
+                    CompiledValue(slot, SlotType.OBJ)
+                }
                 else -> {
                     emitFallbackStatement(target)
                 }
@@ -4037,6 +4066,12 @@ class BytecodeCompiler(
                 is net.sergeych.lyng.ThrowStatement -> compileThrow(target)
                 is net.sergeych.lyng.TryStatement -> emitTry(target, false)
                 is net.sergeych.lyng.WhenStatement -> compileWhen(target, false)
+                is net.sergeych.lyng.NopStatement -> {
+                    val slot = allocSlot()
+                    val voidId = builder.addConst(BytecodeConst.ObjRef(ObjVoid))
+                    builder.emit(Opcode.CONST_OBJ, voidId, slot)
+                    CompiledValue(slot, SlotType.OBJ)
+                }
                 else -> {
                     emitFallbackStatement(target)
                 }
