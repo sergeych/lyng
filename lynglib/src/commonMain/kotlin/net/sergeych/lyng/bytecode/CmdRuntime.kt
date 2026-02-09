@@ -1272,7 +1272,26 @@ class CmdDeclDestructure(internal val constId: Int, internal val slot: Int) : Cm
                 scope.updateSlotFor(name, immutableRec)
             }
         }
-        frame.storeObjResult(slot, ObjVoid)
+        if (slot >= frame.fn.scopeSlotCount) {
+            frame.storeObjResult(slot, ObjVoid)
+        }
+        return
+    }
+}
+
+class CmdAssignDestructure(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.fn.localSlotNames.isNotEmpty()) {
+            frame.syncFrameToScope(useRefs = true)
+        }
+        val decl = frame.fn.constants[constId] as? BytecodeConst.DestructureAssign
+            ?: error("ASSIGN_DESTRUCTURE expects DestructureAssign at $constId")
+        val value = frame.slotToObj(slot)
+        decl.pattern.setAt(decl.pos, frame.ensureScope(), value)
+        if (frame.fn.localSlotNames.isNotEmpty()) {
+            frame.syncScopeToFrame()
+        }
+        frame.storeObjResult(slot, value)
         return
     }
 }

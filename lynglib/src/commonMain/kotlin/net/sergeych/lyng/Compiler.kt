@@ -1949,9 +1949,12 @@ class Compiler(
             is CastRef -> containsUnsupportedRef(ref.castValueRef()) || containsUnsupportedRef(ref.castTypeRef())
             is net.sergeych.lyng.obj.TypeDeclRef -> false
             is AssignRef -> {
-                if (ref.target is ListLiteralRef) return true
                 val target = ref.target as? LocalSlotRef
-                (target?.isDelegated == true) || containsUnsupportedRef(ref.value)
+                if (target != null) {
+                    (target.isDelegated) || containsUnsupportedRef(ref.value)
+                } else {
+                    containsUnsupportedRef(ref.target) || containsUnsupportedRef(ref.value)
+                }
             }
             is AssignOpRef -> containsUnsupportedRef(ref.target) || containsUnsupportedRef(ref.value)
             is AssignIfNullRef -> containsUnsupportedRef(ref.target) || containsUnsupportedRef(ref.value)

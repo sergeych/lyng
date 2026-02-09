@@ -61,6 +61,10 @@ sealed class BytecodeConst {
         val isTransient: Boolean,
         val pos: Pos,
     ) : BytecodeConst()
+    data class DestructureAssign(
+        val pattern: ListLiteralRef,
+        val pos: Pos,
+    ) : BytecodeConst()
     data class CallArgsPlan(val tailBlock: Boolean, val specs: List<CallArgSpec>) : BytecodeConst()
     data class CallArgSpec(val name: String?, val isSplat: Boolean)
 }

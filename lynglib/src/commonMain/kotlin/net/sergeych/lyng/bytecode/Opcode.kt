@@ -132,6 +132,7 @@ enum class Opcode(val code: Int) {
     CLEAR_PENDING_THROWABLE(0x8F),
 
     CALL_DIRECT(0x90),
+    ASSIGN_DESTRUCTURE(0x91),
     CALL_MEMBER_SLOT(0x92),
     CALL_SLOT(0x93),
 

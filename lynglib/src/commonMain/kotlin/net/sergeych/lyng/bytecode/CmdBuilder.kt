@@ -147,7 +147,8 @@ class CmdBuilder {
                 listOf(OperandKind.CONST)
             Opcode.PUSH_TRY ->
                 listOf(OperandKind.SLOT, OperandKind.IP, OperandKind.IP)
-            Opcode.DECL_LOCAL, Opcode.DECL_EXT_PROPERTY, Opcode.DECL_DELEGATED, Opcode.DECL_DESTRUCTURE ->
+            Opcode.DECL_LOCAL, Opcode.DECL_EXT_PROPERTY, Opcode.DECL_DELEGATED, Opcode.DECL_DESTRUCTURE,
+            Opcode.ASSIGN_DESTRUCTURE ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.ADD_INT, Opcode.SUB_INT, Opcode.MUL_INT, Opcode.DIV_INT, Opcode.MOD_INT,
             Opcode.ADD_REAL, Opcode.SUB_REAL, Opcode.MUL_REAL, Opcode.DIV_REAL,
@@ -398,6 +399,7 @@ class CmdBuilder {
             Opcode.DECL_DESTRUCTURE -> CmdDeclDestructure(operands[0], operands[1])
             Opcode.DECL_EXT_PROPERTY -> CmdDeclExtProperty(operands[0], operands[1])
             Opcode.CALL_DIRECT -> CmdCallDirect(operands[0], operands[1], operands[2], operands[3])
+            Opcode.ASSIGN_DESTRUCTURE -> CmdAssignDestructure(operands[0], operands[1])
             Opcode.CALL_MEMBER_SLOT -> CmdCallMemberSlot(operands[0], operands[1], operands[2], operands[3], operands[4])
             Opcode.CALL_SLOT -> CmdCallSlot(operands[0], operands[1], operands[2], operands[3])
             Opcode.CALL_DYNAMIC_MEMBER -> CmdCallDynamicMember(operands[0], operands[1], operands[2], operands[3], operands[4])

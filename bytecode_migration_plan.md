@@ -36,8 +36,8 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [x] Support `ClassDeclStatement`, `FunctionDeclStatement`, `EnumDeclStatement` in bytecode compilation.
   - [x] Keep a mixed execution path for declarations (module bytecode calls statement bodies via `CALL_SLOT`).
   - [x] Ensure module object member refs compile as instance access (not class-scope).
-- [ ] Step 11: Destructuring assignment bytecode.
-  - [ ] Handle `[a, b] = expr` (AssignRef target `ListLiteralRef`) without interpreter fallback.
+- [x] Step 11: Destructuring assignment bytecode.
+  - [x] Handle `[a, b] = expr` (AssignRef target `ListLiteralRef`) without interpreter fallback.
 - [ ] Step 12: Optional member assign-ops and inc/dec in bytecode.
   - [ ] Support `a?.b += 1` and `a?.b++` for `FieldRef` targets.
   - [x] Fix post-inc return value for object slots stored in scope frames.

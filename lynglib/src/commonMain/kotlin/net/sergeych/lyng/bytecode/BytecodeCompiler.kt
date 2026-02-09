@@ -1700,6 +1700,15 @@ class BytecodeCompiler(
             updateNameObjClassFromSlot(nameTarget, slot)
             return value
         }
+        val listTarget = ref.target as? ListLiteralRef
+        if (listTarget != null) {
+            val value = compileRef(assignValue(ref)) ?: return null
+            val valueObj = ensureObjSlot(value)
+            val declId = builder.addConst(BytecodeConst.DestructureAssign(listTarget, callSitePos()))
+            builder.emit(Opcode.ASSIGN_DESTRUCTURE, declId, valueObj.slot)
+            updateSlotType(valueObj.slot, SlotType.OBJ)
+            return CompiledValue(valueObj.slot, SlotType.OBJ)
+        }
         val value = compileRef(assignValue(ref)) ?: return null
         val target = ref.target
         if (target is ClassScopeMemberRef) {
@@ -6252,7 +6261,11 @@ class BytecodeCompiler(
             is CastRef -> containsValueFnRef(ref.castValueRef()) || containsValueFnRef(ref.castTypeRef())
             is AssignRef -> {
                 val target = assignTarget(ref)
-                (target != null && containsValueFnRef(target)) || containsValueFnRef(assignValue(ref))
+                if (target != null) {
+                    containsValueFnRef(target) || containsValueFnRef(assignValue(ref))
+                } else {
+                    containsValueFnRef(ref.target) || containsValueFnRef(assignValue(ref))
+                }
             }
             is AssignOpRef -> containsValueFnRef(ref.target) || containsValueFnRef(ref.value)
             is AssignIfNullRef -> containsValueFnRef(ref.target) || containsValueFnRef(ref.value)
