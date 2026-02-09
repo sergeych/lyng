@@ -77,6 +77,10 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [x] Support reads/writes/assign-ops/inc/dec for delegated locals (`LocalSlotRef.isDelegated`) in `BytecodeCompiler`.
   - [x] Remove `containsDelegatedRefs` guard once delegated locals are bytecode-safe.
   - [x] Add JVM tests that use delegated locals inside bytecode-compiled functions.
+- [x] Step 23: Refactor delegated locals to keep delegate objects in frame slots.
+  - [x] Add bytecode ops to bind/get/set delegated locals without scope storage.
+  - [x] Store delegated locals in frame slots and compile get/set/assign ops with new ops.
+  - [x] Preserve reflection facade by syncing delegated locals into scope only when needed.
 
 ## Notes
 

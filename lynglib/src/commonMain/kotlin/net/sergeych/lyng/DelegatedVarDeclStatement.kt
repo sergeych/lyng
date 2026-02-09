@@ -28,6 +28,8 @@ class DelegatedVarDeclStatement(
     val visibility: Visibility,
     val initializer: Statement,
     val isTransient: Boolean,
+    val slotIndex: Int?,
+    val scopeId: Int?,
     private val startPos: Pos,
 ) : Statement() {
     override val pos: Pos = startPos

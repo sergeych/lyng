@@ -28,6 +28,7 @@ data class CmdFunction(
     val scopeSlotIsModule: BooleanArray,
     val localSlotNames: Array<String?>,
     val localSlotMutables: BooleanArray,
+    val localSlotDelegated: BooleanArray,
     val constants: List<BytecodeConst>,
     val cmds: Array<Cmd>,
     val posByIp: Array<net.sergeych.lyng.Pos?>,
@@ -37,6 +38,7 @@ data class CmdFunction(
         require(scopeSlotNames.size == scopeSlotCount) { "scopeSlotNames size mismatch" }
         require(scopeSlotIsModule.size == scopeSlotCount) { "scopeSlotIsModule size mismatch" }
         require(localSlotNames.size == localSlotMutables.size) { "localSlot metadata size mismatch" }
+        require(localSlotNames.size == localSlotDelegated.size) { "localSlot delegation size mismatch" }
         require(localSlotNames.size <= localCount) { "localSlotNames exceed localCount" }
         require(addrCount >= 0) { "addrCount must be non-negative" }
         if (posByIp.isNotEmpty()) {

@@ -365,6 +365,67 @@ class CmdAssignScopeSlot(internal val scopeSlot: Int, internal val valueSlot: In
     }
 }
 
+class CmdDelegatedGetLocal(
+    internal val delegateSlot: Int,
+    internal val nameId: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
+            ?: error("DELEGATED_GET_LOCAL expects StringVal at $nameId")
+        val delegate = frame.slotToObj(delegateSlot)
+        val scope = frame.ensureScope()
+        val rec = ObjRecord(ObjNull, isMutable = false, type = ObjRecord.Type.Delegated)
+        rec.delegate = delegate
+        val resolved = ObjVoid.resolveRecord(scope, rec, nameConst.value, null)
+        frame.storeObjResult(dst, resolved.value)
+        return
+    }
+}
+
+class CmdDelegatedSetLocal(
+    internal val delegateSlot: Int,
+    internal val nameId: Int,
+    internal val valueSlot: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
+            ?: error("DELEGATED_SET_LOCAL expects StringVal at $nameId")
+        val delegate = frame.slotToObj(delegateSlot)
+        val scope = frame.ensureScope()
+        val value = frame.slotToObj(valueSlot)
+        delegate.invokeInstanceMethod(scope, "setValue", Arguments(ObjNull, ObjString(nameConst.value), value))
+        return
+    }
+}
+
+class CmdBindDelegateLocal(
+    internal val delegateSlot: Int,
+    internal val nameId: Int,
+    internal val accessId: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
+            ?: error("BIND_DELEGATE_LOCAL expects StringVal at $nameId")
+        val accessConst = frame.fn.constants.getOrNull(accessId) as? BytecodeConst.StringVal
+            ?: error("BIND_DELEGATE_LOCAL expects StringVal at $accessId")
+        val delegate = frame.slotToObj(delegateSlot)
+        val scope = frame.ensureScope()
+        val bound = try {
+            delegate.invokeInstanceMethod(
+                scope,
+                "bind",
+                Arguments(ObjString(nameConst.value), ObjString(accessConst.value), ObjNull)
+            )
+        } catch (_: Exception) {
+            delegate
+        }
+        frame.storeObjResult(dst, bound)
+        return
+    }
+}
+
 class CmdIntToReal(internal val src: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         frame.setReal(dst, frame.getReal(src))
@@ -2274,7 +2335,7 @@ class CmdFrame(
         }
         val local = slot - fn.scopeSlotCount
         val localName = fn.localSlotNames.getOrNull(local)
-        if (localName != null) {
+        if (localName != null && fn.localSlotDelegated.getOrNull(local) != true) {
             val rec = scope.getLocalRecordDirect(localName) ?: scope.localBindings[localName]
             if (rec != null && (rec.type == ObjRecord.Type.Delegated || rec.type == ObjRecord.Type.Property || rec.value is ObjProperty)) {
                 return scope.resolve(rec, localName)
@@ -2329,12 +2390,27 @@ class CmdFrame(
             val name = names[i] ?: continue
             if (scopeSlotNames.contains(name)) continue
             val target = resolveLocalScope(i) ?: continue
+            val isDelegated = fn.localSlotDelegated.getOrNull(i) == true
             val value = if (useRefs) FrameSlotRef(frame, i) else localSlotToObj(i)
             val rec = target.getLocalRecordDirect(name)
             if (rec == null) {
                 val isMutable = fn.localSlotMutables.getOrElse(i) { true }
-                target.addItem(name, isMutable, value)
+                if (isDelegated) {
+                    val delegatedRec = target.addItem(
+                        name,
+                        isMutable,
+                        ObjNull,
+                        recordType = ObjRecord.Type.Delegated
+                    )
+                    delegatedRec.delegate = localSlotToObj(i)
+                } else {
+                    target.addItem(name, isMutable, value)
+                }
             } else {
+                if (isDelegated && rec.type == ObjRecord.Type.Delegated) {
+                    rec.delegate = localSlotToObj(i)
+                    continue
+                }
                 val existing = rec.value
                 if (existing is FrameSlotRef && !useRefs) continue
                 rec.value = value
@@ -2349,6 +2425,11 @@ class CmdFrame(
             val name = names[i] ?: continue
             val target = resolveLocalScope(i) ?: continue
             val rec = target.getLocalRecordDirect(name) ?: continue
+            if (fn.localSlotDelegated.getOrNull(i) == true && rec.type == ObjRecord.Type.Delegated) {
+                val delegate = rec.delegate ?: ObjNull
+                frame.setObj(i, delegate)
+                continue
+            }
             val value = rec.value
             if (value is FrameSlotRef) {
                 val resolved = value.read()
