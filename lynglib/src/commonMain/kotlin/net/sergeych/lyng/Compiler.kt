@@ -4341,15 +4341,6 @@ class Compiler(
         }
     }
 
-    private class UnionTypeMismatchStatement(
-        private val message: String,
-        override val pos: Pos
-    ) : Statement() {
-        override suspend fun execute(scope: Scope): Obj {
-            throw ScriptError(pos, message)
-        }
-    }
-
     private fun resolveMemberHostForUnion(typeDecl: TypeDecl, memberName: String, pos: Pos): ObjClass {
         val receiverClass = when (typeDecl) {
             TypeDecl.TypeAny, TypeDecl.TypeNullableAny -> Obj.rootObjectType
@@ -4392,8 +4383,10 @@ class Compiler(
             resolveMemberHostForUnion(option, memberName, pos)
         }
         val unionName = typeDeclName(union)
-        val failStmt = UnionTypeMismatchStatement("value is not $unionName", pos)
-        var current: ObjRef = net.sergeych.lyng.obj.StatementRef(failStmt)
+        val errorMessage = ObjString("value is not $unionName").asReadonly
+        val throwExpr = ExpressionStatement(ConstRef(errorMessage), pos)
+        val throwStmt = ThrowStatement(throwExpr, pos)
+        var current: ObjRef = net.sergeych.lyng.obj.StatementRef(throwStmt)
         for (option in options.asReversed()) {
             val typeRef = net.sergeych.lyng.obj.TypeDeclRef(option, pos)
             val cond = BinaryOpRef(BinOp.IS, left, typeRef)

@@ -17,6 +17,7 @@
 
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.Compiler
+import net.sergeych.lyng.ExecutionError
 import net.sergeych.lyng.Script
 import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.Source
@@ -24,6 +25,7 @@ import net.sergeych.lyng.eval
 import net.sergeych.lyng.obj.toInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class BytecodeRecentOpsTest {
@@ -219,6 +221,21 @@ class BytecodeRecentOpsTest {
             assertEquals(7, C.ping())
             """.trimIndent()
         )
+    }
+
+    @Test
+    fun unionMemberDispatchMismatch() = runTest {
+        val err = assertFailsWith<ExecutionError> {
+            eval(
+                """
+                class A { fun who() = "A" }
+                class B { fun who() = "B" }
+                val x: A | B = 1
+                x.who()
+                """.trimIndent()
+            )
+        }
+        assertTrue(err.message?.contains("value is not A | B") == true)
     }
 
     @Test
