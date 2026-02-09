@@ -62,9 +62,10 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
 - [x] Step 18: Delegated member access in bytecode.
   - [x] Remove `containsDelegatedRefs` guard once bytecode emits delegated get/set/call correctly.
   - [x] Add JVM coverage for delegated member get/set/call in bytecode.
-- [ ] Step 19: Unknown receiver member access in bytecode.
-  - [ ] Decide on allowed fallback behavior for unknown receiver types without runtime name resolution.
-  - [ ] Add JVM tests for member access on unresolved receiver types and keep compile-time-only resolution.
+- [x] Step 19: Unknown receiver member access in bytecode.
+  - [x] Reject Object/unknown receiver member calls without explicit cast or Dynamic.
+  - [x] Add union-member dispatch with ordered type checks and runtime mismatch error.
+  - [x] Add JVM tests for unknown receiver and union member access.
 
 ## Notes
 

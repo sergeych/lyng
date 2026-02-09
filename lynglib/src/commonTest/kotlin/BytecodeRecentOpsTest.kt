@@ -18,11 +18,13 @@
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.Compiler
 import net.sergeych.lyng.Script
+import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.Source
 import net.sergeych.lyng.eval
 import net.sergeych.lyng.obj.toInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class BytecodeRecentOpsTest {
 
@@ -193,6 +195,46 @@ class BytecodeRecentOpsTest {
             assertEquals("Called greet with 2 args: [hi,world]", c.greet("hi", "world"))
             """.trimIndent()
         )
+    }
+
+    @Test
+    fun unionMemberDispatchSubtype() = runTest {
+        eval(
+            """
+            class A { fun who() = "A" }
+            class B : A { override fun who() = "B" }
+            fun pick(x: A | B) { x.who() }
+            assertEquals("B", pick(B()))
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun objectReceiverMemberError() = runTest {
+        val failed = try {
+            eval("fun bad(x) { x.missing() }")
+            false
+        } catch (_: ScriptError) {
+            true
+        }
+        assertTrue(failed)
+    }
+
+    @Test
+    fun unionMissingMemberError() = runTest {
+        val failed = try {
+            eval(
+                """
+                class A { fun who() = "A" }
+                class B { fun other() = "B" }
+                fun pick(x: A | B) { x.who() }
+                """.trimIndent()
+            )
+            false
+        } catch (_: ScriptError) {
+            true
+        }
+        assertTrue(failed)
     }
 
     @Test

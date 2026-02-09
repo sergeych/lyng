@@ -2443,8 +2443,13 @@ class Compiler(
                                                 }
                                                 MethodCallRef(left, next.value, args, tailBlock, isOptional)
                                             } else {
-                                                enforceReceiverTypeForMember(left, next.value, next.pos)
-                                                MethodCallRef(left, next.value, args, tailBlock, isOptional)
+                                                val unionCall = buildUnionMethodCall(left, next.value, next.pos, isOptional, args, tailBlock)
+                                                if (unionCall != null) {
+                                                    unionCall
+                                                } else {
+                                                    enforceReceiverTypeForMember(left, next.value, next.pos)
+                                                    MethodCallRef(left, next.value, args, tailBlock, isOptional)
+                                                }
                                             }
                                             is QualifiedThisRef ->
                                                 QualifiedThisMethodSlotCallRef(
@@ -2458,8 +2463,13 @@ class Compiler(
                                                     resolutionSink?.referenceMember(next.value, next.pos, left.typeName)
                                                 }
                                             else -> {
-                                                enforceReceiverTypeForMember(left, next.value, next.pos)
-                                                MethodCallRef(left, next.value, args, tailBlock, isOptional)
+                                                val unionCall = buildUnionMethodCall(left, next.value, next.pos, isOptional, args, tailBlock)
+                                                if (unionCall != null) {
+                                                    unionCall
+                                                } else {
+                                                    enforceReceiverTypeForMember(left, next.value, next.pos)
+                                                    MethodCallRef(left, next.value, args, tailBlock, isOptional)
+                                                }
                                             }
                                         }
                                     }
@@ -2496,8 +2506,13 @@ class Compiler(
                                             }
                                             MethodCallRef(left, next.value, args, true, isOptional)
                                         } else {
-                                            enforceReceiverTypeForMember(left, next.value, next.pos)
-                                            MethodCallRef(left, next.value, args, true, isOptional)
+                                            val unionCall = buildUnionMethodCall(left, next.value, next.pos, isOptional, args, true)
+                                            if (unionCall != null) {
+                                                unionCall
+                                            } else {
+                                                enforceReceiverTypeForMember(left, next.value, next.pos)
+                                                MethodCallRef(left, next.value, args, true, isOptional)
+                                            }
                                         }
                                         is QualifiedThisRef ->
                                             QualifiedThisMethodSlotCallRef(
@@ -2511,8 +2526,13 @@ class Compiler(
                                                 resolutionSink?.referenceMember(next.value, next.pos, left.typeName)
                                             }
                                         else -> {
-                                            enforceReceiverTypeForMember(left, next.value, next.pos)
-                                            MethodCallRef(left, next.value, args, true, isOptional)
+                                            val unionCall = buildUnionMethodCall(left, next.value, next.pos, isOptional, args, true)
+                                            if (unionCall != null) {
+                                                unionCall
+                                            } else {
+                                                enforceReceiverTypeForMember(left, next.value, next.pos)
+                                                MethodCallRef(left, next.value, args, true, isOptional)
+                                            }
                                         }
                                     }
                                 }
@@ -2528,8 +2548,13 @@ class Compiler(
                                     val ids = resolveMemberIds(next.value, next.pos, implicitType)
                                     ThisFieldSlotRef(next.value, ids.fieldId, ids.methodId, isOptional)
                                 } else {
-                                    enforceReceiverTypeForMember(left, next.value, next.pos)
-                                    FieldRef(left, next.value, isOptional)
+                                    val unionField = buildUnionFieldAccess(left, next.value, next.pos, isOptional)
+                                    if (unionField != null) {
+                                        unionField
+                                    } else {
+                                        enforceReceiverTypeForMember(left, next.value, next.pos)
+                                        FieldRef(left, next.value, isOptional)
+                                    }
                                 }
                                 is QualifiedThisRef -> run {
                                     val ids = resolveMemberIds(next.value, next.pos, left.typeName)
@@ -2544,8 +2569,13 @@ class Compiler(
                                     resolutionSink?.referenceMember(next.value, next.pos, left.typeName)
                                 }
                                 else -> {
-                                    enforceReceiverTypeForMember(left, next.value, next.pos)
-                                    FieldRef(left, next.value, isOptional)
+                                    val unionField = buildUnionFieldAccess(left, next.value, next.pos, isOptional)
+                                    if (unionField != null) {
+                                        unionField
+                                    } else {
+                                        enforceReceiverTypeForMember(left, next.value, next.pos)
+                                        FieldRef(left, next.value, isOptional)
+                                    }
                                 }
                             }
                         }
@@ -4307,6 +4337,100 @@ class Compiler(
             if (!allowed && !hasExtensionFor(receiverClass.className, memberName)) {
                 throw ScriptError(pos, "member $memberName is not available on Object without explicit cast")
             }
+        }
+    }
+
+    private class UnionTypeMismatchStatement(
+        private val message: String,
+        override val pos: Pos
+    ) : Statement() {
+        override suspend fun execute(scope: Scope): Obj {
+            throw ScriptError(pos, message)
+        }
+    }
+
+    private fun resolveMemberHostForUnion(typeDecl: TypeDecl, memberName: String, pos: Pos): ObjClass {
+        val receiverClass = when (typeDecl) {
+            TypeDecl.TypeAny, TypeDecl.TypeNullableAny -> Obj.rootObjectType
+            else -> resolveTypeDeclObjClass(typeDecl)
+        } ?: throw ScriptError(pos, "member access requires compile-time receiver type: $memberName")
+        if (receiverClass == ObjDynamic.type) {
+            return receiverClass
+        }
+        registerExtensionWrapperBindings(receiverClass, memberName, pos)
+        val hasMember = receiverClass.instanceFieldIdMap()[memberName] != null ||
+            receiverClass.instanceMethodIdMap(includeAbstract = true)[memberName] != null
+        if (!hasMember && !hasExtensionFor(receiverClass.className, memberName)) {
+            if (receiverClass == Obj.rootObjectType && isAllowedObjectMember(memberName)) {
+                return receiverClass
+            }
+            val ownerName = receiverClass.className
+            val message = if (receiverClass == Obj.rootObjectType) {
+                "member $memberName is not available on Object without explicit cast"
+            } else {
+                "unknown member $memberName on $ownerName"
+            }
+            throw ScriptError(pos, message)
+        }
+        return receiverClass
+    }
+
+    private fun buildUnionMemberAccess(
+        left: ObjRef,
+        union: TypeDecl.Union,
+        memberName: String,
+        pos: Pos,
+        isOptional: Boolean,
+        makeRef: (ObjRef) -> ObjRef
+    ): ObjRef {
+        val options = union.options
+        if (options.isEmpty()) {
+            throw ScriptError(pos, "member access requires compile-time receiver type: $memberName")
+        }
+        for (option in options) {
+            resolveMemberHostForUnion(option, memberName, pos)
+        }
+        val unionName = typeDeclName(union)
+        val failStmt = UnionTypeMismatchStatement("value is not $unionName", pos)
+        var current: ObjRef = net.sergeych.lyng.obj.StatementRef(failStmt)
+        for (option in options.asReversed()) {
+            val typeRef = net.sergeych.lyng.obj.TypeDeclRef(option, pos)
+            val cond = BinaryOpRef(BinOp.IS, left, typeRef)
+            val casted = CastRef(left, typeRef, false, pos)
+            val branch = makeRef(casted)
+            current = ConditionalRef(cond, branch, current)
+        }
+        if (isOptional) {
+            val nullRef = ConstRef(ObjNull.asReadonly)
+            val nullCond = BinaryOpRef(BinOp.REF_EQ, left, nullRef)
+            current = ConditionalRef(nullCond, nullRef, current)
+        }
+        return current
+    }
+
+    private fun buildUnionFieldAccess(
+        left: ObjRef,
+        memberName: String,
+        pos: Pos,
+        isOptional: Boolean
+    ): ObjRef? {
+        val receiverDecl = resolveReceiverTypeDecl(left) as? TypeDecl.Union ?: return null
+        return buildUnionMemberAccess(left, receiverDecl, memberName, pos, isOptional) { receiver ->
+            FieldRef(receiver, memberName, false)
+        }
+    }
+
+    private fun buildUnionMethodCall(
+        left: ObjRef,
+        memberName: String,
+        pos: Pos,
+        isOptional: Boolean,
+        args: List<ParsedArgument>,
+        tailBlock: Boolean
+    ): ObjRef? {
+        val receiverDecl = resolveReceiverTypeDecl(left) as? TypeDecl.Union ?: return null
+        return buildUnionMemberAccess(left, receiverDecl, memberName, pos, isOptional) { receiver ->
+            MethodCallRef(receiver, memberName, args, tailBlock, false)
         }
     }
 
