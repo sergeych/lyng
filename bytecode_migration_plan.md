@@ -81,6 +81,9 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [x] Add bytecode ops to bind/get/set delegated locals without scope storage.
   - [x] Store delegated locals in frame slots and compile get/set/assign ops with new ops.
   - [x] Preserve reflection facade by syncing delegated locals into scope only when needed.
+- [x] Step 24: Remove `ASSIGN_SCOPE_SLOT` now that delegated locals are always frame-backed.
+  - [x] Force delegated locals into local slots (even module) and avoid scope-slot resolution.
+  - [x] Drop opcode/runtime support for `ASSIGN_SCOPE_SLOT`.
 
 ## Notes
 

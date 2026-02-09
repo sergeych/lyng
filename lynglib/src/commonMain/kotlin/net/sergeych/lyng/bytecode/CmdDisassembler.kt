@@ -84,7 +84,6 @@ object CmdDisassembler {
                 cmd.dst
             )
             is CmdResolveScopeSlot -> Opcode.RESOLVE_SCOPE_SLOT to intArrayOf(cmd.scopeSlot, cmd.addrSlot)
-            is CmdAssignScopeSlot -> Opcode.ASSIGN_SCOPE_SLOT to intArrayOf(cmd.scopeSlot, cmd.valueSlot)
             is CmdDelegatedGetLocal -> Opcode.DELEGATED_GET_LOCAL to intArrayOf(cmd.delegateSlot, cmd.nameId, cmd.dst)
             is CmdDelegatedSetLocal -> Opcode.DELEGATED_SET_LOCAL to intArrayOf(cmd.delegateSlot, cmd.nameId, cmd.valueSlot)
             is CmdBindDelegateLocal -> Opcode.BIND_DELEGATE_LOCAL to intArrayOf(cmd.delegateSlot, cmd.nameId, cmd.accessId, cmd.dst)
@@ -247,8 +246,6 @@ object CmdDisassembler {
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.RESOLVE_SCOPE_SLOT ->
                 listOf(OperandKind.SLOT, OperandKind.ADDR)
-            Opcode.ASSIGN_SCOPE_SLOT ->
-                listOf(OperandKind.SLOT, OperandKind.SLOT)
             Opcode.DELEGATED_GET_LOCAL ->
                 listOf(OperandKind.SLOT, OperandKind.CONST, OperandKind.SLOT)
             Opcode.DELEGATED_SET_LOCAL ->

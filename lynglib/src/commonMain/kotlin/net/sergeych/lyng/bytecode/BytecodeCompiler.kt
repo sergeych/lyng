@@ -317,13 +317,7 @@ class BytecodeCompiler(
                 if (!allowLocalSlots) return null
                 if (ref.isDelegated) {
                     val mapped = resolveSlot(ref) ?: return null
-                    if (mapped < scopeSlotCount) {
-                        val addrSlot = ensureScopeAddr(mapped)
-                        val local = allocSlot()
-                        builder.emit(Opcode.LOAD_OBJ_ADDR, addrSlot, local)
-                        updateSlotType(local, SlotType.OBJ)
-                        return CompiledValue(local, SlotType.OBJ)
-                    }
+                    if (mapped < scopeSlotCount) return null
                     val nameId = builder.addConst(BytecodeConst.StringVal(ref.name))
                     val local = allocSlot()
                     builder.emit(Opcode.DELEGATED_GET_LOCAL, mapped, nameId, local)
@@ -1692,13 +1686,9 @@ class BytecodeCompiler(
             if (localTarget.isDelegated) {
                 val slot = resolveSlot(localTarget) ?: return null
                 val value = compileRef(assignValue(ref)) ?: return null
-                if (slot >= scopeSlotCount) {
-                    val nameId = builder.addConst(BytecodeConst.StringVal(localTarget.name))
-                    builder.emit(Opcode.DELEGATED_SET_LOCAL, slot, nameId, value.slot)
-                    updateSlotType(slot, SlotType.OBJ)
-                    return value
-                }
-                builder.emit(Opcode.ASSIGN_SCOPE_SLOT, slot, value.slot)
+                if (slot < scopeSlotCount) return null
+                val nameId = builder.addConst(BytecodeConst.StringVal(localTarget.name))
+                builder.emit(Opcode.DELEGATED_SET_LOCAL, slot, nameId, value.slot)
                 updateSlotType(slot, SlotType.OBJ)
                 return value
             }
@@ -2011,14 +2001,10 @@ class BytecodeCompiler(
             if (!allowLocalSlots) return compileEvalRef(ref)
             if (localTarget.isDelegated) {
                 val slot = resolveSlot(localTarget) ?: return null
+                if (slot < scopeSlotCount) return null
                 val nameId = builder.addConst(BytecodeConst.StringVal(localTarget.name))
                 val current = allocSlot()
-                if (slot >= scopeSlotCount) {
-                    builder.emit(Opcode.DELEGATED_GET_LOCAL, slot, nameId, current)
-                } else {
-                    val addrSlot = ensureScopeAddr(slot)
-                    builder.emit(Opcode.LOAD_OBJ_ADDR, addrSlot, current)
-                }
+                builder.emit(Opcode.DELEGATED_GET_LOCAL, slot, nameId, current)
                 updateSlotType(current, SlotType.OBJ)
                 val rhs = compileRef(ref.value) ?: return compileEvalRef(ref)
                 val rhsObj = ensureObjSlot(rhs)
@@ -2033,11 +2019,7 @@ class BytecodeCompiler(
                 val result = allocSlot()
                 builder.emit(objOp, current, rhsObj.slot, result)
                 updateSlotType(result, SlotType.OBJ)
-                if (slot >= scopeSlotCount) {
-                    builder.emit(Opcode.DELEGATED_SET_LOCAL, slot, nameId, result)
-                } else {
-                    builder.emit(Opcode.ASSIGN_SCOPE_SLOT, slot, result)
-                }
+                builder.emit(Opcode.DELEGATED_SET_LOCAL, slot, nameId, result)
                 updateSlotType(slot, SlotType.OBJ)
                 return CompiledValue(result, SlotType.OBJ)
             }
@@ -2326,14 +2308,10 @@ class BytecodeCompiler(
                 if (!allowLocalSlots || !target.isMutable) return null
                 if (target.isDelegated) {
                     val slot = resolveSlot(target) ?: return null
+                    if (slot < scopeSlotCount) return null
                     val nameId = builder.addConst(BytecodeConst.StringVal(target.name))
                     val current = allocSlot()
-                    if (slot >= scopeSlotCount) {
-                        builder.emit(Opcode.DELEGATED_GET_LOCAL, slot, nameId, current)
-                    } else {
-                        val addrSlot = ensureScopeAddr(slot)
-                        builder.emit(Opcode.LOAD_OBJ_ADDR, addrSlot, current)
-                    }
+                    builder.emit(Opcode.DELEGATED_GET_LOCAL, slot, nameId, current)
                     val nullSlot = allocSlot()
                     builder.emit(Opcode.CONST_NULL, nullSlot)
                     val cmpSlot = allocSlot()
@@ -2347,11 +2325,7 @@ class BytecodeCompiler(
                     builder.emit(Opcode.MOVE_OBJ, current, resultSlot)
                     builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
                     builder.mark(assignLabel)
-                    if (slot >= scopeSlotCount) {
-                        builder.emit(Opcode.DELEGATED_SET_LOCAL, slot, nameId, newValue.slot)
-                    } else {
-                        builder.emit(Opcode.ASSIGN_SCOPE_SLOT, slot, newValue.slot)
-                    }
+                    builder.emit(Opcode.DELEGATED_SET_LOCAL, slot, nameId, newValue.slot)
                     builder.emit(Opcode.MOVE_OBJ, newValue.slot, resultSlot)
                     builder.mark(endLabel)
                     updateSlotType(resultSlot, SlotType.OBJ)
@@ -2840,14 +2814,10 @@ class BytecodeCompiler(
             if (!target.isMutable) return null
             if (target.isDelegated) {
                 val slot = resolveSlot(target) ?: return null
+                if (slot < scopeSlotCount) return null
                 val nameId = builder.addConst(BytecodeConst.StringVal(target.name))
                 val current = allocSlot()
-                if (slot >= scopeSlotCount) {
-                    builder.emit(Opcode.DELEGATED_GET_LOCAL, slot, nameId, current)
-                } else {
-                    val addrSlot = ensureScopeAddr(slot)
-                    builder.emit(Opcode.LOAD_OBJ_ADDR, addrSlot, current)
-                }
+                builder.emit(Opcode.DELEGATED_GET_LOCAL, slot, nameId, current)
                 updateSlotType(current, SlotType.OBJ)
                 val oneSlot = allocSlot()
                 val oneId = builder.addConst(BytecodeConst.ObjRef(ObjInt.One))
@@ -2857,11 +2827,7 @@ class BytecodeCompiler(
                 val op = if (ref.isIncrement) Opcode.ADD_OBJ else Opcode.SUB_OBJ
                 builder.emit(op, current, oneSlot, result)
                 updateSlotType(result, SlotType.OBJ)
-                if (slot >= scopeSlotCount) {
-                    builder.emit(Opcode.DELEGATED_SET_LOCAL, slot, nameId, result)
-                } else {
-                    builder.emit(Opcode.ASSIGN_SCOPE_SLOT, slot, result)
-                }
+                builder.emit(Opcode.DELEGATED_SET_LOCAL, slot, nameId, result)
                 updateSlotType(slot, SlotType.OBJ)
                 return if (wantResult && ref.isPost) {
                     CompiledValue(current, SlotType.OBJ)
@@ -4619,17 +4585,25 @@ class BytecodeCompiler(
         val value = compileStatementValueOrFallback(stmt.initializer) ?: return null
         val slotIndex = stmt.slotIndex
         val scopeId = stmt.scopeId ?: 0
-        val isModuleSlot = isModuleSlot(scopeId, stmt.name)
         val localSlot = if (slotIndex != null) {
             val key = ScopeSlotKey(scopeId, slotIndex)
             localSlotIndexByKey[key]?.let { scopeSlotCount + it }
         } else {
             null
         }
-        if (allowLocalSlots && !isModuleSlot && localSlot != null) {
-            val nameId = builder.addConst(BytecodeConst.StringVal(stmt.name))
-            val accessId = builder.addConst(BytecodeConst.StringVal(if (stmt.isMutable) "Var" else "Val"))
-            builder.emit(Opcode.BIND_DELEGATE_LOCAL, value.slot, nameId, accessId, localSlot)
+        if (allowLocalSlots && localSlot != null) {
+            if (value.slot != localSlot) {
+                emitMove(value, localSlot)
+            }
+            val declId = builder.addConst(
+                BytecodeConst.DelegatedDecl(
+                    stmt.name,
+                    stmt.isMutable,
+                    stmt.visibility,
+                    stmt.isTransient
+                )
+            )
+            builder.emit(Opcode.DECL_DELEGATED, declId, localSlot)
             updateSlotType(localSlot, SlotType.OBJ)
             return CompiledValue(localSlot, SlotType.OBJ)
         }
@@ -6032,7 +6006,7 @@ class BytecodeCompiler(
     private fun resolveSlot(ref: LocalSlotRef): Int? {
         loopSlotOverrides[ref.name]?.let { return it }
         val scopeId = refScopeId(ref)
-        if (isModuleSlot(scopeId, ref.name)) {
+        if (!ref.isDelegated && isModuleSlot(scopeId, ref.name)) {
             val key = ScopeSlotKey(scopeId, refSlot(ref))
             scopeSlotMap[key]?.let { return it }
             scopeSlotIndexByName[ref.name]?.let { return it }
@@ -6049,6 +6023,13 @@ class BytecodeCompiler(
             }
             val scopeKey = ScopeSlotKey(refScopeId(ref), refSlot(ref))
             return scopeSlotMap[scopeKey]
+        }
+        if (ref.isDelegated) {
+            val localKey = ScopeSlotKey(refScopeId(ref), refSlot(ref))
+            val localIndex = localSlotIndexByKey[localKey]
+            if (localIndex != null) return scopeSlotCount + localIndex
+            val nameIndex = localSlotIndexByName[ref.name]
+            if (nameIndex != null) return scopeSlotCount + nameIndex
         }
         if (forceScopeSlots) {
             val scopeKey = ScopeSlotKey(refScopeId(ref), refSlot(ref))
@@ -6236,8 +6217,7 @@ class BytecodeCompiler(
             is DelegatedVarDeclStatement -> {
                 val slotIndex = stmt.slotIndex
                 val scopeId = stmt.scopeId ?: 0
-                val isModuleSlot = isModuleSlot(scopeId, stmt.name)
-                if (allowLocalSlots && !forceScopeSlots && slotIndex != null && !isModuleSlot) {
+                if (allowLocalSlots && slotIndex != null) {
                     val key = ScopeSlotKey(scopeId, slotIndex)
                     declaredLocalKeys.add(key)
                     if (!localSlotInfoMap.containsKey(key)) {
@@ -6528,8 +6508,8 @@ class BytecodeCompiler(
                     }
                     return
                 }
-                val shouldLocalize = !forceScopeSlots || intLoopVarNames.contains(ref.name)
-                val isModuleSlot = isModuleSlot(scopeId, ref.name)
+                val shouldLocalize = ref.isDelegated || !forceScopeSlots || intLoopVarNames.contains(ref.name)
+                val isModuleSlot = if (ref.isDelegated) false else isModuleSlot(scopeId, ref.name)
                 if (allowLocalSlots && shouldLocalize && !isModuleSlot) {
                     if (!localSlotInfoMap.containsKey(key)) {
                         localSlotInfoMap[key] = LocalSlotInfo(ref.name, ref.isMutable, ref.isDelegated)
@@ -6577,8 +6557,8 @@ class BytecodeCompiler(
                             scopeSlotNameMap[key] = target.name
                         }
                     } else {
-                        val shouldLocalize = !forceScopeSlots || intLoopVarNames.contains(target.name)
-                        val isModuleSlot = isModuleSlot(scopeId, target.name)
+                        val shouldLocalize = target.isDelegated || !forceScopeSlots || intLoopVarNames.contains(target.name)
+                        val isModuleSlot = if (target.isDelegated) false else isModuleSlot(scopeId, target.name)
                         if (allowLocalSlots && shouldLocalize && !isModuleSlot) {
                             if (!localSlotInfoMap.containsKey(key)) {
                                 localSlotInfoMap[key] = LocalSlotInfo(target.name, target.isMutable, target.isDelegated)

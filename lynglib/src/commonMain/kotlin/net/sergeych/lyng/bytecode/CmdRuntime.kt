@@ -358,13 +358,6 @@ class CmdStoreBoolAddr(internal val src: Int, internal val addrSlot: Int) : Cmd(
     }
 }
 
-class CmdAssignScopeSlot(internal val scopeSlot: Int, internal val valueSlot: Int) : Cmd() {
-    override suspend fun perform(frame: CmdFrame) {
-        frame.assignScopeSlot(scopeSlot, frame.slotToObj(valueSlot))
-        return
-    }
-}
-
 class CmdDelegatedGetLocal(
     internal val delegateSlot: Int,
     internal val nameId: Int,
@@ -2190,16 +2183,6 @@ class CmdFrame(
         } else {
             frame.setObj(slot - fn.scopeSlotCount, value)
         }
-    }
-
-    suspend fun assignScopeSlot(scopeSlot: Int, value: Obj) {
-        ensureScope()
-        val target = scopeTarget(scopeSlot)
-        val index = ensureScopeSlot(target, scopeSlot)
-        val name = fn.scopeSlotNames.getOrNull(scopeSlot)
-            ?: target.raiseSymbolNotFound("slot $scopeSlot")
-        val record = target.getSlotRecord(index)
-        target.assign(record, name, value)
     }
 
     suspend fun getInt(slot: Int): Long {

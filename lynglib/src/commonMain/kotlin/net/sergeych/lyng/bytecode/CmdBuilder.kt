@@ -138,8 +138,6 @@ class CmdBuilder {
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.RESOLVE_SCOPE_SLOT ->
                 listOf(OperandKind.SLOT, OperandKind.ADDR)
-            Opcode.ASSIGN_SCOPE_SLOT ->
-                listOf(OperandKind.SLOT, OperandKind.SLOT)
             Opcode.DELEGATED_GET_LOCAL ->
                 listOf(OperandKind.SLOT, OperandKind.CONST, OperandKind.SLOT)
             Opcode.DELEGATED_SET_LOCAL ->
@@ -265,7 +263,6 @@ class CmdBuilder {
             Opcode.THROW -> CmdThrow(operands[0], operands[1])
             Opcode.RETHROW_PENDING -> CmdRethrowPending()
             Opcode.RESOLVE_SCOPE_SLOT -> CmdResolveScopeSlot(operands[0], operands[1])
-            Opcode.ASSIGN_SCOPE_SLOT -> CmdAssignScopeSlot(operands[0], operands[1])
             Opcode.DELEGATED_GET_LOCAL -> CmdDelegatedGetLocal(operands[0], operands[1], operands[2])
             Opcode.DELEGATED_SET_LOCAL -> CmdDelegatedSetLocal(operands[0], operands[1], operands[2])
             Opcode.BIND_DELEGATE_LOCAL -> CmdBindDelegateLocal(operands[0], operands[1], operands[2], operands[3])

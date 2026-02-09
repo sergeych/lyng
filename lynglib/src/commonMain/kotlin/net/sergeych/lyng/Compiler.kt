@@ -1967,7 +1967,7 @@ class Compiler(
             is AssignRef -> {
                 val target = ref.target as? LocalSlotRef
                 if (target != null) {
-                    (target.isDelegated) || containsUnsupportedRef(ref.value)
+                    containsUnsupportedRef(ref.value)
                 } else {
                     containsUnsupportedRef(ref.target) || containsUnsupportedRef(ref.value)
                 }

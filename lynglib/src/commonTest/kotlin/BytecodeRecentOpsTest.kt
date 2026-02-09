@@ -18,10 +18,12 @@
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.Compiler
 import net.sergeych.lyng.ExecutionError
+import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Script
 import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.Source
 import net.sergeych.lyng.eval
+import net.sergeych.lyng.toSource
 import net.sergeych.lyng.obj.toInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -216,6 +218,29 @@ class BytecodeRecentOpsTest {
             assertEquals(4, calc())
             """.trimIndent()
         )
+    }
+
+    @Test
+    fun delegatedLocalDisasmUsesDelegateOps() = runTest {
+        val script = """
+            class BoxDelegate(var v) : Delegate {
+                override fun getValue(thisRef: Object, name: String): Object = v
+                override fun setValue(thisRef: Object, name: String, value: Object) { v = value }
+            }
+            fun calc() {
+                var x by BoxDelegate(1)
+                x += 2
+                x++
+                return x
+            }
+        """.trimIndent()
+        val compiled = Compiler.compile(script.toSource(), Script.defaultImportManager)
+        val scope = Script.defaultImportManager.newModuleAt(Pos.builtIn)
+        compiled.execute(scope)
+        val disasm = scope.disassembleSymbol("calc")
+        assertTrue(disasm.contains("DELEGATED_GET_LOCAL"), disasm)
+        assertTrue(disasm.contains("DELEGATED_SET_LOCAL"), disasm)
+        assertTrue(disasm.contains("DECL_DELEGATED"), disasm)
     }
 
     @Test
