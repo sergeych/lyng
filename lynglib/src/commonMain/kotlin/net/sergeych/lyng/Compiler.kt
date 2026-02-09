@@ -2077,18 +2077,6 @@ class Compiler(
     private fun containsDelegatedRefs(ref: ObjRef): Boolean {
         return when (ref) {
             is LocalSlotRef -> ref.isDelegated
-            is ImplicitThisMemberRef -> {
-                val typeName = ref.preferredThisTypeName() ?: currentImplicitThisTypeName()
-                val targetClass = typeName?.let { resolveClassByName(it) }
-                val member = targetClass?.findFirstConcreteMember(ref.name)
-                member?.type == ObjRecord.Type.Delegated
-            }
-            is ImplicitThisMethodCallRef -> {
-                val typeName = ref.preferredThisTypeName() ?: currentImplicitThisTypeName()
-                val targetClass = typeName?.let { resolveClassByName(it) }
-                val member = targetClass?.findFirstConcreteMember(ref.methodName())
-                member?.type == ObjRecord.Type.Delegated
-            }
             is BinaryOpRef -> containsDelegatedRefs(ref.left) || containsDelegatedRefs(ref.right)
             is UnaryOpRef -> containsDelegatedRefs(ref.a)
             is CastRef -> containsDelegatedRefs(ref.castValueRef()) || containsDelegatedRefs(ref.castTypeRef())
@@ -2103,14 +2091,7 @@ class Compiler(
             is ConditionalRef ->
                 containsDelegatedRefs(ref.condition) || containsDelegatedRefs(ref.ifTrue) || containsDelegatedRefs(ref.ifFalse)
             is ElvisRef -> containsDelegatedRefs(ref.left) || containsDelegatedRefs(ref.right)
-            is FieldRef -> {
-                val receiverClass = resolveReceiverClassForMember(ref.target)
-                if (receiverClass != null) {
-                    val member = receiverClass.findFirstConcreteMember(ref.name)
-                    if (member?.type == ObjRecord.Type.Delegated) return true
-                }
-                containsDelegatedRefs(ref.target)
-            }
+            is FieldRef -> containsDelegatedRefs(ref.target)
             is IndexRef -> containsDelegatedRefs(ref.targetRef) || containsDelegatedRefs(ref.indexRef)
             is ListLiteralRef -> ref.entries().any {
                 when (it) {
@@ -2125,14 +2106,7 @@ class Compiler(
                 }
             }
             is CallRef -> containsDelegatedRefs(ref.target) || ref.args.any { containsDelegatedRefs(it.value) }
-            is MethodCallRef -> {
-                val receiverClass = resolveReceiverClassForMember(ref.receiver)
-                if (receiverClass != null) {
-                    val member = receiverClass.findFirstConcreteMember(ref.name)
-                    if (member?.type == ObjRecord.Type.Delegated) return true
-                }
-                containsDelegatedRefs(ref.receiver) || ref.args.any { containsDelegatedRefs(it.value) }
-            }
+            is MethodCallRef -> containsDelegatedRefs(ref.receiver) || ref.args.any { containsDelegatedRefs(it.value) }
             is StatementRef -> containsDelegatedRefs(ref.statement)
             else -> false
         }

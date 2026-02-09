@@ -172,6 +172,30 @@ class BytecodeRecentOpsTest {
     }
 
     @Test
+    fun delegatedMemberAccessAndCall() = runTest {
+        eval(
+            """
+            class ConstDelegate(val v) : Delegate {
+                override fun getValue(thisRef: Object, name: String): Object = v
+            }
+            class ActionDelegate : Delegate {
+                override fun invoke(thisRef: Object, name: String, args...) {
+                    val list: List = args as List
+                    "Called %s with %d args: %s"(name, list.size, list.toString())
+                }
+            }
+            class C {
+                val a by ConstDelegate(7)
+                fun greet by ActionDelegate()
+            }
+            val c = C()
+            assertEquals(7, c.a)
+            assertEquals("Called greet with 2 args: [hi,world]", c.greet("hi", "world"))
+            """.trimIndent()
+        )
+    }
+
+    @Test
     fun qualifiedThisValueRef() = runTest {
         eval(
             """

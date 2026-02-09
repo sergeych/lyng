@@ -59,9 +59,9 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
 - [x] Step 17: Callable property calls in bytecode.
   - [x] Support `CallRef` where the target is a `FieldRef` (e.g., `(obj.fn)()`), keeping compile-time resolution.
   - [x] Add a JVM test for a callable property call compiled to bytecode.
-- [ ] Step 18: Delegated member access in bytecode.
-  - [ ] Remove `containsDelegatedRefs` guard once bytecode emits delegated get/set/call correctly.
-  - [ ] Add JVM coverage for delegated member get/set/call in bytecode.
+- [x] Step 18: Delegated member access in bytecode.
+  - [x] Remove `containsDelegatedRefs` guard once bytecode emits delegated get/set/call correctly.
+  - [x] Add JVM coverage for delegated member get/set/call in bytecode.
 - [ ] Step 19: Unknown receiver member access in bytecode.
   - [ ] Decide on allowed fallback behavior for unknown receiver types without runtime name resolution.
   - [ ] Add JVM tests for member access on unresolved receiver types and keep compile-time-only resolution.

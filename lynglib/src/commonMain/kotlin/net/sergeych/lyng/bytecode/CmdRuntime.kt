@@ -1673,7 +1673,12 @@ class CmdCallMemberSlot(
             }
             ?: frame.ensureScope().raiseError("member id $methodId not found on ${receiver.objClass.className}")
         val callArgs = frame.buildArguments(argBase, argCount)
-        val name = rec.memberName ?: "<member>"
+        val rawName = rec.memberName ?: "<member>"
+        val name = if (receiver is ObjInstance && rawName.contains("::")) {
+            rawName.substringAfterLast("::")
+        } else {
+            rawName
+        }
         if (receiver is ObjQualifiedView) {
             val result = receiver.invokeInstanceMethod(frame.ensureScope(), name, callArgs)
             if (frame.fn.localSlotNames.isNotEmpty()) {
@@ -1688,9 +1693,32 @@ class CmdCallMemberSlot(
                 if (callArgs.isEmpty()) (rec.value as ObjProperty).callGetter(frame.ensureScope(), receiver, decl)
                 else frame.ensureScope().raiseError("property $name cannot be called with arguments")
             }
-            ObjRecord.Type.Fun, ObjRecord.Type.Delegated -> {
+            ObjRecord.Type.Fun -> {
                 val callScope = inst?.instanceScope ?: frame.ensureScope()
                 rec.value.invoke(callScope, receiver, callArgs, decl)
+            }
+            ObjRecord.Type.Delegated -> {
+                val scope = frame.ensureScope()
+                val delegate = when (receiver) {
+                    is ObjInstance -> {
+                        val storageName = decl.mangledName(name)
+                        var del = receiver.instanceScope[storageName]?.delegate ?: rec.delegate
+                        if (del == null) {
+                            for (c in receiver.objClass.mro) {
+                                del = receiver.instanceScope[c.mangledName(name)]?.delegate
+                                if (del != null) break
+                            }
+                        }
+                        del ?: scope.raiseError("Internal error: delegated member $name has no delegate (tried $storageName)")
+                    }
+                    is ObjClass -> rec.delegate ?: scope.raiseError("Internal error: delegated member $name has no delegate")
+                    else -> rec.delegate ?: scope.raiseError("Internal error: delegated member $name has no delegate")
+                }
+                val allArgs = (listOf(receiver, ObjString(name)) + callArgs.list).toTypedArray()
+                delegate.invokeInstanceMethod(scope, "invoke", Arguments(*allArgs), onNotFoundResult = {
+                    val propVal = delegate.invokeInstanceMethod(scope, "getValue", Arguments(receiver, ObjString(name)))
+                    propVal.invoke(scope, receiver, callArgs, decl)
+                })
             }
             else -> frame.ensureScope().raiseError("member $name is not callable")
         }
