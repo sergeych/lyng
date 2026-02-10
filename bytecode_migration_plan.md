@@ -114,10 +114,10 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
 
 - [ ] Step 25: Replace Statement-based declaration calls in bytecode.
   - [x] Add bytecode const/op for enum declarations (no `Statement` objects in constants).
-  - [ ] Add bytecode const/op for class declarations (no `Statement` objects in constants).
+  - [x] Add bytecode const/op for class declarations (no `Statement` objects in constants).
   - [x] Add bytecode const/op for function declarations (no `Statement` objects in constants).
   - [x] Replace `emitStatementCall` usage for `EnumDeclStatement`.
-  - [ ] Replace `emitStatementCall` usage for `ClassDeclStatement`.
+  - [x] Replace `emitStatementCall` usage for `ClassDeclStatement`.
   - [x] Replace `emitStatementCall` usage for `FunctionDeclStatement`.
   - [ ] Add JVM disasm coverage to ensure module init has no `CALL_SLOT` to `Callable@...` for declarations.
 - [ ] Step 26: Bytecode-backed lambdas (remove `ValueFnRef` runtime execution).

@@ -260,7 +260,9 @@ class BytecodeRecentOpsTest {
         assertNotNull(moduleFn, "module bytecode missing")
         val disasm = CmdDisassembler.disassemble(moduleFn)
         assertTrue(!disasm.contains("CALL_SLOT"), disasm)
-        assertTrue(disasm.contains("DECL_EXEC"), disasm)
+        assertTrue(disasm.contains("DECL_CLASS"), disasm)
+        assertTrue(disasm.contains("DECL_FUNCTION"), disasm)
+        assertTrue(disasm.contains("DECL_ENUM"), disasm)
     }
 
     @Test

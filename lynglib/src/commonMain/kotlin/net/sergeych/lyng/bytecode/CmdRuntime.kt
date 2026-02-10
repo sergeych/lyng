@@ -1354,6 +1354,16 @@ class CmdDeclFunction(internal val constId: Int, internal val slot: Int) : Cmd()
     }
 }
 
+class CmdDeclClass(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.ClassDecl
+            ?: error("DECL_CLASS expects ClassDecl at $constId")
+        val result = executeClassDecl(frame.ensureScope(), decl.spec)
+        frame.storeObjResult(slot, result)
+        return
+    }
+}
+
 class CmdDeclDestructure(internal val constId: Int, internal val slot: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         val decl = frame.fn.constants[constId] as? BytecodeConst.DestructureDecl

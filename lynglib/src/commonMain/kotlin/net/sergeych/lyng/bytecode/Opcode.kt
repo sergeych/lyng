@@ -167,6 +167,7 @@ enum class Opcode(val code: Int) {
     DELEGATED_SET_LOCAL(0xC3),
     BIND_DELEGATE_LOCAL(0xC4),
     DECL_FUNCTION(0xC5),
+    DECL_CLASS(0xC6),
     ;
 
     companion object {

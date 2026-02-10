@@ -5959,38 +5959,22 @@ class Compiler(
 
         val initScope = popInitScope()
 
-        val declStatement = object : Statement() {
-            override val pos: Pos = startPos
-            override suspend fun execute(scope: Scope): Obj {
-                val parentClasses = baseSpecs.map { baseSpec ->
-                    val rec = scope[baseSpec.name] ?: throw ScriptError(startPos, "unknown base class: ${baseSpec.name}")
-                    (rec.value as? ObjClass) ?: throw ScriptError(startPos, "${baseSpec.name} is not a class")
-                }
-
-                val newClass = ObjInstanceClass(className, *parentClasses.toTypedArray())
-                newClass.isAnonymous = nameToken == null
-                newClass.constructorMeta = ArgsDeclaration(emptyList(), Token.Type.RPAREN)
-                for (i in parentClasses.indices) {
-                    val argsList = baseSpecs[i].args
-                    // In object, we evaluate parent args once at creation time
-                    if (argsList != null) newClass.directParentArgs[parentClasses[i]] = argsList
-                }
-
-                val classScope = scope.createChildScope(newThisObj = newClass)
-                classScope.currentClassCtx = newClass
-                newClass.classScope = classScope
-                classScope.addConst("object", newClass)
-
-                bodyInit?.execute(classScope)
-
-                // Create instance (singleton)
-                val instance = newClass.callOn(scope.createChildScope(Arguments.EMPTY))
-                if (declaredName != null)
-                    scope.addItem(declaredName, false, instance)
-                return instance
-            }
-        }
-        return ClassDeclStatement(StatementDeclExecutable(declStatement), startPos, className)
+        val spec = ClassDeclSpec(
+            declaredName = declaredName,
+            className = className,
+            typeName = className,
+            startPos = startPos,
+            isExtern = false,
+            isAbstract = false,
+            isObject = true,
+            isAnonymous = nameToken == null,
+            baseSpecs = baseSpecs.map { ClassDeclBaseSpec(it.name, it.args) },
+            constructorArgs = null,
+            constructorFieldIds = null,
+            bodyInit = bodyInit,
+            initScope = emptyList()
+        )
+        return ClassDeclStatement(spec)
     }
 
     private suspend fun parseClassDeclaration(isAbstract: Boolean = false, isExtern: Boolean = false): Statement {
@@ -6313,91 +6297,23 @@ class Compiler(
             // create instance constructor
             // create custom objClass with all fields and instance constructor
 
-            val constructorCode = object : Statement() {
-                override val pos: Pos = startPos
-                override suspend fun execute(scope: Scope): Obj {
-                    // constructor code is registered with class instance and is called over
-                    // new `thisObj` already set by class to ObjInstance.instanceContext
-                    val instance = scope.thisObj as ObjInstance
-                    // Constructor parameters have been assigned to instance scope by ObjClass.callOn before
-                    // invoking parent/child constructors.
-                    // IMPORTANT: do not execute class body here; class body was executed once in the class scope
-                    // to register methods and prepare initializers. Instance constructor should be empty unless
-                    // we later add explicit constructor body syntax.
-                    return instance
-                }
-            }
             val classInfo = compileClassInfos[className]
-            val classDeclStatement = object : Statement() {
-                override val pos: Pos = startPos
-                override suspend fun execute(scope: Scope): Obj {
-                    // the main statement should create custom ObjClass instance with field
-                    // accessors, constructor registration, etc.
-                    if (isExtern) {
-                        val rec = scope[className]
-                        val existing = rec?.value as? ObjClass
-                        val resolved = existing ?: resolveClassByName(className)
-                        val stub = resolved ?: ObjInstanceClass(className).apply { this.isAbstract = true }
-                        scope.addItem(declaredName, false, stub)
-                        return stub
-                    }
-                    // Resolve parent classes by name at execution time
-                    val parentClasses = baseSpecs.map { baseSpec ->
-                        val rec = scope[baseSpec.name]
-                        val cls = rec?.value as? ObjClass
-                        if (cls != null) return@map cls
-                        if (baseSpec.name == "Exception") return@map ObjException.Root
-                        if (rec == null) throw ScriptError(nameToken.pos, "unknown base class: ${baseSpec.name}")
-                        throw ScriptError(nameToken.pos, "${baseSpec.name} is not a class")
-                    }
-
-                    val newClass = ObjInstanceClass(className, *parentClasses.toTypedArray()).also {
-                        it.isAbstract = isAbstract
-                        it.instanceConstructor = constructorCode
-                        it.constructorMeta = constructorArgsDeclaration
-                        // Attach per-parent constructor args (thunks) if provided
-                        for (i in parentClasses.indices) {
-                            val argsList = baseSpecs[i].args
-                            if (argsList != null) it.directParentArgs[parentClasses[i]] = argsList
-                        }
-                        // Register constructor fields in the class members
-                        constructorArgsDeclaration?.params?.forEach { p ->
-                            if (p.accessType != null) {
-                                it.createField(
-                                    p.name, ObjNull,
-                                    isMutable = p.accessType == AccessType.Var,
-                                    visibility = p.visibility ?: Visibility.Public,
-                                    declaringClass = it,
-                                    // Constructor fields are not currently supporting override/closed in parser
-                                    // but we should pass Pos.builtIn to skip validation for now if needed,
-                                    // or p.pos to allow it.
-                                    pos = Pos.builtIn,
-                                    isTransient = p.isTransient,
-                                    type = ObjRecord.Type.ConstructorField,
-                                    fieldId = classInfo?.fieldIds?.get(p.name)
-                                )
-                            }
-                        }
-                    }
-
-                    scope.addItem(declaredName, false, newClass)
-                    // Prepare class scope for class-scope members (static) and future registrations
-                    val classScope = scope.createChildScope(newThisObj = newClass)
-                    // Set lexical class context for visibility tagging inside class body
-                    classScope.currentClassCtx = newClass
-                    newClass.classScope = classScope
-                    // Execute class body once in class scope to register instance methods and prepare instance field initializers
-                    bodyInit?.execute(classScope)
-                    if (initScope.isNotEmpty()) {
-                        for (s in initScope)
-                            s.execute(classScope)
-                    }
-                    newClass.checkAbstractSatisfaction(nameToken.pos)
-                    // Debug summary: list registered instance methods and class-scope functions for this class
-                    return newClass
-                }
-            }
-            ClassDeclStatement(StatementDeclExecutable(classDeclStatement), startPos, qualifiedName)
+            val spec = ClassDeclSpec(
+                declaredName = declaredName,
+                className = className,
+                typeName = className,
+                startPos = startPos,
+                isExtern = isExtern,
+                isAbstract = isAbstract,
+                isObject = false,
+                isAnonymous = false,
+                baseSpecs = baseSpecs.map { ClassDeclBaseSpec(it.name, it.args) },
+                constructorArgs = constructorArgsDeclaration,
+                constructorFieldIds = classInfo?.fieldIds,
+                bodyInit = bodyInit,
+                initScope = initScope
+            )
+            ClassDeclStatement(spec)
         }
 
     }
@@ -7224,7 +7140,7 @@ class Compiler(
             }
         }
         if (unwrapped is ClassDeclStatement) {
-            unwrapped.declaredName?.let { return resolveClassByName(it) }
+            return resolveClassByName(unwrapped.typeName)
         }
         val directRef = unwrapDirectRef(unwrapped)
         return when (directRef) {
@@ -7233,7 +7149,7 @@ class Compiler(
             is RangeRef -> ObjRange.type
             is StatementRef -> {
                 val decl = directRef.statement as? ClassDeclStatement
-                decl?.declaredName?.let { resolveClassByName(it) }
+                decl?.let { resolveClassByName(it.typeName) }
             }
             is ValueFnRef -> lambdaReturnTypeByRef[directRef]
             is CastRef -> resolveTypeRefClass(directRef.castTypeRef())
