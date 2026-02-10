@@ -1344,6 +1344,16 @@ class CmdDeclEnum(internal val constId: Int, internal val slot: Int) : Cmd() {
     }
 }
 
+class CmdDeclFunction(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.FunctionDecl
+            ?: error("DECL_FUNCTION expects FunctionDecl at $constId")
+        val result = executeFunctionDecl(frame.ensureScope(), decl.spec)
+        frame.storeObjResult(slot, result)
+        return
+    }
+}
+
 class CmdDeclDestructure(internal val constId: Int, internal val slot: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         val decl = frame.fn.constants[constId] as? BytecodeConst.DestructureDecl

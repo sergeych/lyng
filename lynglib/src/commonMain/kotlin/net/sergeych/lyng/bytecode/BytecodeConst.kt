@@ -44,6 +44,9 @@ sealed class BytecodeConst {
         val entries: List<String>,
         val lifted: Boolean,
     ) : BytecodeConst()
+    data class FunctionDecl(
+        val spec: net.sergeych.lyng.FunctionDeclSpec,
+    ) : BytecodeConst()
     data class SlotPlan(val plan: Map<String, Int>, val captures: List<String> = emptyList()) : BytecodeConst()
     data class CaptureTable(val entries: List<BytecodeCaptureEntry>) : BytecodeConst()
     data class ExtensionPropertyDecl(

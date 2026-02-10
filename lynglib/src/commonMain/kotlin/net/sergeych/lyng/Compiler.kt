@@ -7000,8 +7000,7 @@ class Compiler(
             // Capture and pop the local declarations count for this function
             val fnLocalDecls = localDeclCountStack.removeLastOrNull() ?: 0
 
-            var closure: Scope? = null
-            var captureContext: Scope? = null
+            val closureBox = FunctionClosureBox()
 
             val paramSlotPlanSnapshot = slotPlanIndices(paramSlotPlan)
             val captureSlots = capturePlan.captures.toList()
@@ -7014,14 +7013,14 @@ class Compiler(
                     // restore closure where the function was defined, and making a copy of it
                     // for local space. If there is no closure, we are in, say, class context where
                     // the closure is in the class initialization and we needn't more:
-                    val context = closure?.let { ClosureScope(callerContext, it) }
+                    val context = closureBox.closure?.let { ClosureScope(callerContext, it) }
                         ?: callerContext
 
                     // Capacity hint: parameters + declared locals + small overhead
                     val capacityHint = paramNames.size + fnLocalDecls + 4
                     context.hintLocalCapacity(capacityHint)
                     if (paramSlotPlanSnapshot.isNotEmpty()) context.applySlotPlan(paramSlotPlanSnapshot)
-                    val captureBase = captureContext ?: closure
+                    val captureBase = closureBox.captureContext ?: closureBox.closure
                     if (captureBase != null && captureSlots.isNotEmpty()) {
                         for (capture in captureSlots) {
                             // Interpreter-only capture resolution; bytecode functions do not use resolveCaptureRecord.
@@ -7047,172 +7046,29 @@ class Compiler(
             }
             cc.labels.remove(name)
             outerLabel?.let { cc.labels.remove(it) }
-//            parentContext
-            val fnCreateStatement = object : Statement() {
-                override val pos: Pos = start
-                override suspend fun execute(context: Scope): Obj {
-                    if (actualExtern && extTypeName == null && parentContext !is CodeContext.ClassBody) {
-                        val existing = context.get(name)
-                        if (existing != null) {
-                            context.addItem(
-                                name,
-                                false,
-                                existing.value,
-                                visibility,
-                                callSignature = existing.callSignature
-                            )
-                            return existing.value
-                        }
-                    }
-                    if (isDelegated) {
-                        val accessType = ObjString("Callable")
-                        val initValue = delegateExpression!!.execute(context)
-                        val finalDelegate = try {
-                            initValue.invokeInstanceMethod(context, "bind", Arguments(ObjString(name), accessType, context.thisObj))
-                        } catch (e: Exception) {
-                            initValue
-                        }
-
-                        if (extTypeName != null) {
-                            val type = context[extTypeName]?.value ?: context.raiseSymbolNotFound("class $extTypeName not found")
-                            if (type !is ObjClass) context.raiseClassCastError("$extTypeName is not the class instance")
-                            context.addExtension(type, name, ObjRecord(ObjUnset, isMutable = false, visibility = visibility, declaringClass = null, type = ObjRecord.Type.Delegated).apply {
-                                delegate = finalDelegate
-                            })
-                            return ObjVoid
-                        }
-
-                        val th = context.thisObj
-                        if (isStatic) {
-                            (th as ObjClass).createClassField(name, ObjUnset, false, visibility, null, start, isTransient = isTransient, type = ObjRecord.Type.Delegated).apply {
-                                delegate = finalDelegate
-                            }
-                            context.addItem(name, false, ObjUnset, visibility, recordType = ObjRecord.Type.Delegated, isTransient = isTransient).apply {
-                                delegate = finalDelegate
-                            }
-                        } else if (th is ObjClass) {
-                            val cls: ObjClass = th
-                            val storageName = "${cls.className}::$name"
-                            cls.createField(
-                                name,
-                                ObjUnset,
-                                false,
-                                visibility,
-                                null,
-                                start,
-                                declaringClass = cls,
-                                isAbstract = isAbstract,
-                                isClosed = isClosed,
-                                isOverride = isOverride,
-                                isTransient = isTransient,
-                                type = ObjRecord.Type.Delegated,
-                                methodId = memberMethodId
-                            )
-                            cls.instanceInitializers += object : Statement() {
-                                override val pos: Pos = start
-                                override suspend fun execute(scp: Scope): Obj {
-                                    val accessType2 = ObjString("Callable")
-                                    val initValue2 = delegateExpression.execute(scp)
-                                    val finalDelegate2 = try {
-                                        initValue2.invokeInstanceMethod(scp, "bind", Arguments(ObjString(name), accessType2, scp.thisObj))
-                                    } catch (e: Exception) {
-                                        initValue2
-                                    }
-                                    scp.addItem(storageName, false, ObjUnset, visibility, null, recordType = ObjRecord.Type.Delegated, isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride, isTransient = isTransient).apply {
-                                        delegate = finalDelegate2
-                                    }
-                                    return ObjVoid
-                                }
-                            }
-                        } else {
-                            context.addItem(name, false, ObjUnset, visibility, recordType = ObjRecord.Type.Delegated, isTransient = isTransient).apply {
-                                delegate = finalDelegate
-                            }
-                        }
-                        return ObjVoid
-                    }
-
-                    // we added fn in the context. now we must save closure
-                    // for the function, unless we're in the class scope:
-                    if (isStatic || parentContext !is CodeContext.ClassBody)
-                        closure = context
-                    if (parentContext is CodeContext.ClassBody && captureSlots.isNotEmpty())
-                        captureContext = context
-
-                    val annotatedFnBody = annotation?.invoke(context, ObjString(name), fnBody)
-                        ?: fnBody
-                    val compiledFnBody = annotatedFnBody
-
-                    extTypeName?.let { typeName ->
-                        // class extension method
-                        val type = context[typeName]?.value ?: context.raiseSymbolNotFound("class $typeName not found")
-                        if (type !is ObjClass) context.raiseClassCastError("$typeName is not the class instance")
-                        val stmt = object : Statement() {
-                            override val pos: Pos = start
-                            override suspend fun execute(scope: Scope): Obj {
-                                // ObjInstance has a fixed instance scope, so we need to build a closure
-                                val result = (scope.thisObj as? ObjInstance)?.let { i ->
-                                    compiledFnBody.execute(ClosureScope(scope, i.instanceScope))
-                                }
-                                // other classes can create one-time scope for this rare case:
-                                    ?: compiledFnBody.execute(scope.thisObj.autoInstanceScope(scope))
-                                return result
-                            }
-                        }
-                        context.addExtension(type, name, ObjRecord(stmt, isMutable = false, visibility = visibility, declaringClass = null))
-                        val wrapperName = extensionWrapperName ?: extensionCallableName(typeName, name)
-                        val wrapper = ObjExtensionMethodCallable(name, stmt)
-                        context.addItem(wrapperName, false, wrapper, visibility, recordType = ObjRecord.Type.Fun)
-                    }
-                    // regular function/method
-                        ?: run {
-                            val th = context.thisObj
-                            if (!isStatic && th is ObjClass) {
-                                // Instance method declared inside a class body: register on the class
-                                val cls: ObjClass = th
-                                cls.addFn(
-                                    name,
-                                    isMutable = true,
-                                    visibility = visibility,
-                                    isAbstract = isAbstract,
-                                    isClosed = isClosed,
-                                    isOverride = isOverride,
-                                    pos = start,
-                                    methodId = memberMethodId
-                                ) {
-                                    // Execute with the instance as receiver; set caller lexical class for visibility
-                                    val savedCtx = this.currentClassCtx
-                                    this.currentClassCtx = cls
-                                    try {
-                                        (thisObj as? ObjInstance)?.let { i ->
-                                            val execScope = i.instanceScope.createChildScope(
-                                                pos = this.pos,
-                                                args = this.args,
-                                                newThisObj = i
-                                            )
-                                            execScope.currentClassCtx = cls
-                                            compiledFnBody.execute(execScope)
-                                        } ?: run {
-                                            compiledFnBody.execute(thisObj.autoInstanceScope(this))
-                                        }
-                                    } finally {
-                                        this.currentClassCtx = savedCtx
-                                    }
-                                }
-                                // also expose the symbol in the class scope for possible references
-                                context.addItem(name, false, compiledFnBody, visibility, callSignature = externCallSignature)
-                                compiledFnBody
-                            } else {
-                                // top-level or nested function
-                                context.addItem(name, false, compiledFnBody, visibility, callSignature = externCallSignature)
-                            }
-                        }
-                    // as the function can be called from anywhere, we have
-                    // saved the proper context in the closure
-                    return annotatedFnBody
-                }
-            }
-            val declaredFn = FunctionDeclStatement(StatementDeclExecutable(fnCreateStatement), start)
+            val spec = FunctionDeclSpec(
+                name = name,
+                visibility = visibility,
+                isAbstract = isAbstract,
+                isClosed = isClosed,
+                isOverride = isOverride,
+                isStatic = isStatic,
+                isTransient = isTransient,
+                isDelegated = isDelegated,
+                delegateExpression = delegateExpression,
+                extTypeName = extTypeName,
+                extensionWrapperName = extensionWrapperName,
+                memberMethodId = memberMethodId,
+                actualExtern = actualExtern,
+                parentIsClassBody = parentContext is CodeContext.ClassBody,
+                externCallSignature = externCallSignature,
+                annotation = annotation,
+                fnBody = fnBody,
+                closureBox = closureBox,
+                captureSlots = captureSlots,
+                startPos = start
+            )
+            val declaredFn = FunctionDeclStatement(spec)
             if (isStatic) {
                 currentInitScope += declaredFn
                 NopStatement
