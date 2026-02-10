@@ -608,14 +608,39 @@ class BytecodeCompiler(
     }
 
     private fun compileValueFnRef(ref: ValueFnRef): CompiledValue? {
-        lambdaCaptureEntriesByRef[ref]?.let { captures ->
-            builder.addConst(BytecodeConst.CaptureTable(captures))
+        val captureTableId = lambdaCaptureEntriesByRef[ref]?.let { captures ->
+            if (captures.isEmpty()) return@let null
+            val resolved = captures.map { entry ->
+                val slotIndex = resolveCaptureSlot(entry)
+                BytecodeCaptureEntry(
+                    ownerKind = entry.ownerKind,
+                    ownerScopeId = entry.ownerScopeId,
+                    ownerSlotId = entry.ownerSlotId,
+                    slotIndex = slotIndex
+                )
+            }
+            builder.addConst(BytecodeConst.CaptureTable(resolved))
         }
-        val id = builder.addConst(BytecodeConst.ValueFn(ref.valueFn()))
+        val id = builder.addConst(BytecodeConst.ValueFn(ref.valueFn(), captureTableId))
         val slot = allocSlot()
         builder.emit(Opcode.MAKE_VALUE_FN, id, slot)
         updateSlotType(slot, SlotType.OBJ)
         return CompiledValue(slot, SlotType.OBJ)
+    }
+
+    private fun resolveCaptureSlot(entry: LambdaCaptureEntry): Int {
+        val key = ScopeSlotKey(entry.ownerScopeId, entry.ownerSlotId)
+        return when (entry.ownerKind) {
+            CaptureOwnerFrameKind.MODULE -> {
+                scopeSlotMap[key]
+                    ?: throw BytecodeCompileException("Missing module capture slot for ${entry.ownerScopeId}:${entry.ownerSlotId}", Pos.builtIn)
+            }
+            CaptureOwnerFrameKind.LOCAL -> {
+                val localIndex = localSlotIndexByKey[key]
+                    ?: throw BytecodeCompileException("Missing local capture slot for ${entry.ownerScopeId}:${entry.ownerSlotId}", Pos.builtIn)
+                scopeSlotCount + localIndex
+            }
+        }
     }
 
     private fun compileEvalRef(ref: ObjRef): CompiledValue? {

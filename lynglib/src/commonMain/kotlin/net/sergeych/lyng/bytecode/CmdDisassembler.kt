@@ -61,7 +61,7 @@ object CmdDisassembler {
                     "[]"
                 } else {
                     table.entries.joinToString(prefix = "[", postfix = "]") { entry ->
-                        "${entry.ownerKind}#${entry.ownerScopeId}:${entry.ownerSlotId}"
+                        "${entry.ownerKind}#${entry.ownerScopeId}:${entry.ownerSlotId}@s${entry.slotIndex}"
                     }
                 }
                 out.append("k").append(idx).append(" CAPTURE_TABLE ").append(entries).append('\n')

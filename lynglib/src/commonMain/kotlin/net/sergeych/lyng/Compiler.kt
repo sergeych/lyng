@@ -2880,22 +2880,31 @@ class Compiler(
                     val context = scope.applyClosure(closureScope, preferredThisType = expectedReceiverType)
                     if (paramSlotPlanSnapshot.isNotEmpty()) context.applySlotPlan(paramSlotPlanSnapshot)
                     if (captureSlots.isNotEmpty()) {
-                        val moduleScope = if (context is ApplyScope) {
-                            var s: Scope? = closureScope
-                            while (s != null && s !is ModuleScope) {
-                                s = s.parent
+                        val captureRecords = closureScope.captureRecords
+                        if (captureRecords != null) {
+                            for (i in captureSlots.indices) {
+                                val rec = captureRecords.getOrNull(i)
+                                    ?: closureScope.raiseSymbolNotFound("capture ${captureSlots[i].name} not found")
+                                context.updateSlotFor(captureSlots[i].name, rec)
                             }
-                            s as? ModuleScope
                         } else {
-                            null
-                        }
-                        for (capture in captureSlots) {
-                            if (moduleScope != null && moduleScope.getLocalRecordDirect(capture.name) != null) {
-                                continue
+                            val moduleScope = if (context is ApplyScope) {
+                                var s: Scope? = closureScope
+                                while (s != null && s !is ModuleScope) {
+                                    s = s.parent
+                                }
+                                s as? ModuleScope
+                            } else {
+                                null
                             }
-                            val rec = closureScope.resolveCaptureRecord(capture.name)
-                                ?: closureScope.raiseSymbolNotFound("symbol ${capture.name} not found")
-                            context.updateSlotFor(capture.name, rec)
+                            for (capture in captureSlots) {
+                                if (moduleScope != null && moduleScope.getLocalRecordDirect(capture.name) != null) {
+                                    continue
+                                }
+                                val rec = closureScope.resolveCaptureRecord(capture.name)
+                                    ?: closureScope.raiseSymbolNotFound("symbol ${capture.name} not found")
+                                context.updateSlotFor(capture.name, rec)
+                            }
                         }
                     }
                     // Execute lambda body in a closure-aware context. Blocks inside the lambda

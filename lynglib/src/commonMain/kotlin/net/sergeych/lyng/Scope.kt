@@ -59,6 +59,7 @@ open class Scope(
     // Enabled by default for child scopes; module/class scopes can ignore it.
     private val slots: MutableList<ObjRecord> = mutableListOf()
     private val nameToSlot: MutableMap<String, Int> = mutableMapOf()
+    internal var captureRecords: List<ObjRecord>? = null
     /**
      * Auxiliary per-frame map of local bindings (locals declared in this frame).
      * This helps resolving locals across suspension when slot ownership isn't

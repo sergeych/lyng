@@ -92,11 +92,11 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [x] Create captures only when detected; do not allocate scope slots.
   - [x] Add disassembler output for capture tables.
   - [x] JVM tests must be green before commit.
-- [ ] Step 24B: Frame-slot captures in bytecode runtime.
-  - [ ] Build lambdas from bytecode + capture table (no capture names).
-  - [ ] Read captured values via `FrameSlotRef` only.
-  - [ ] Forbid `resolveCaptureRecord` in bytecode paths; keep only in interpreter.
-  - [ ] JVM tests must be green before commit.
+- [x] Step 24B: Frame-slot captures in bytecode runtime.
+  - [x] Build lambdas from bytecode + capture table (no capture names).
+  - [x] Read captured values via `FrameSlotRef` only.
+  - [x] Forbid `resolveCaptureRecord` in bytecode paths; keep only in interpreter.
+  - [x] JVM tests must be green before commit.
 - [ ] Step 24C: Remove scope local mirroring in bytecode execution.
   - [ ] Remove/disable any bytecode runtime code that writes locals into Scope for execution.
   - [ ] Keep Scope creation only for reflection/Kotlin interop paths.

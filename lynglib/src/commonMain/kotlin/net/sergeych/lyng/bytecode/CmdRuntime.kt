@@ -1869,7 +1869,12 @@ class CmdMakeValueFn(internal val id: Int, internal val dst: Int) : Cmd() {
         }
         val valueFn = frame.fn.constants.getOrNull(id) as? BytecodeConst.ValueFn
             ?: error("MAKE_VALUE_FN expects ValueFn at $id")
-        val result = valueFn.fn(frame.ensureScope()).value
+        val scope = frame.ensureScope()
+        val previousCaptures = scope.captureRecords
+        val captureRecords = valueFn.captureTableId?.let { frame.buildCaptureRecords(it) }
+        scope.captureRecords = captureRecords
+        val result = valueFn.fn(scope).value
+        scope.captureRecords = previousCaptures
         if (frame.fn.localSlotNames.isNotEmpty()) {
             frame.syncScopeToFrame()
         }
@@ -1941,6 +1946,37 @@ class CmdFrame(
     init {
         for (i in args.indices) {
             frame.setObj(frame.argBase + i, args[i])
+        }
+    }
+
+    internal fun buildCaptureRecords(captureTableId: Int): List<ObjRecord> {
+        val table = fn.constants.getOrNull(captureTableId) as? BytecodeConst.CaptureTable
+            ?: error("Capture table $captureTableId missing")
+        return table.entries.map { entry ->
+            when (entry.ownerKind) {
+                CaptureOwnerFrameKind.LOCAL -> {
+                    val localIndex = entry.slotIndex - fn.scopeSlotCount
+                    if (localIndex < 0) {
+                        error("Invalid local capture slot ${entry.slotIndex}")
+                    }
+                    val isMutable = fn.localSlotMutables.getOrNull(localIndex) ?: false
+                    val isDelegated = fn.localSlotDelegated.getOrNull(localIndex) ?: false
+                    if (isDelegated) {
+                        val delegate = frame.getObj(localIndex)
+                        ObjRecord(ObjNull, isMutable, type = ObjRecord.Type.Delegated).also {
+                            it.delegate = delegate
+                        }
+                    } else {
+                        ObjRecord(FrameSlotRef(frame, localIndex), isMutable)
+                    }
+                }
+                CaptureOwnerFrameKind.MODULE -> {
+                    val slot = entry.slotIndex
+                    val target = scopeTarget(slot)
+                    val index = fn.scopeSlotIndices[slot]
+                    target.getSlotRecord(index)
+                }
+            }
         }
     }
 
