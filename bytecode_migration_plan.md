@@ -85,12 +85,37 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [x] Force delegated locals into local slots (even module) and avoid scope-slot resolution.
   - [x] Drop opcode/runtime support for `ASSIGN_SCOPE_SLOT`.
 
+## Frame-Only Execution (new, before interpreter removal)
+
+- [x] Step 24A: Bytecode capture tables for lambdas (compiler only).
+  - [x] Emit per-lambda capture tables containing (ownerFrameKind, ownerSlotId).
+  - [x] Create captures only when detected; do not allocate scope slots.
+  - [x] Add disassembler output for capture tables.
+  - [x] JVM tests must be green before commit.
+- [ ] Step 24B: Frame-slot captures in bytecode runtime.
+  - [ ] Build lambdas from bytecode + capture table (no capture names).
+  - [ ] Read captured values via `FrameSlotRef` only.
+  - [ ] Forbid `resolveCaptureRecord` in bytecode paths; keep only in interpreter.
+  - [ ] JVM tests must be green before commit.
+- [ ] Step 24C: Remove scope local mirroring in bytecode execution.
+  - [ ] Remove/disable any bytecode runtime code that writes locals into Scope for execution.
+  - [ ] Keep Scope creation only for reflection/Kotlin interop paths.
+  - [ ] JVM tests must be green before commit.
+- [ ] Step 24D: Eliminate `ClosureScope` usage on bytecode execution paths.
+  - [ ] Avoid `ClosureScope` in bytecode-related call paths (Block/Lambda/ObjDynamic/ObjProperty).
+  - [ ] Keep interpreter path using `ClosureScope` until interpreter removal.
+  - [ ] JVM tests must be green before commit.
+- [ ] Step 24E: Isolate interpreter-only capture logic.
+  - [ ] Mark `resolveCaptureRecord` paths as interpreter-only.
+  - [ ] Guard or delete any bytecode path that tries to sync captures into scopes.
+  - [ ] JVM tests must be green before commit.
+
 ## Interpreter Removal (next)
 
-- [x] Step 25: Replace Statement-based declaration calls in bytecode.
-  - [x] Add bytecode const/op for class/enum/function declarations (no `Statement` objects in constants).
-  - [x] Replace `emitStatementCall` usage for `ClassDeclStatement`, `FunctionDeclStatement`, `EnumDeclStatement`.
-  - [x] Add JVM disasm coverage to ensure module init has no `CALL_SLOT` to `Callable@...` for declarations.
+- [ ] Step 25: Replace Statement-based declaration calls in bytecode.
+  - [ ] Add bytecode const/op for class/enum/function declarations (no `Statement` objects in constants).
+  - [ ] Replace `emitStatementCall` usage for `ClassDeclStatement`, `FunctionDeclStatement`, `EnumDeclStatement`.
+  - [ ] Add JVM disasm coverage to ensure module init has no `CALL_SLOT` to `Callable@...` for declarations.
 - [ ] Step 26: Bytecode-backed lambdas (remove `ValueFnRef` runtime execution).
   - [ ] Compile lambda bodies to bytecode and emit an opcode to create a callable from bytecode + capture plan.
   - [ ] Remove `containsValueFnRef`/`forceScopeSlots` workaround once lambdas are bytecode.

@@ -33,6 +33,7 @@ class BytecodeCompiler(
     private val enumEntriesByName: Map<String, List<String>> = emptyMap(),
     private val callableReturnTypeByScopeId: Map<Int, Map<Int, ObjClass>> = emptyMap(),
     private val callableReturnTypeByName: Map<String, ObjClass> = emptyMap(),
+    private val lambdaCaptureEntriesByRef: Map<ValueFnRef, List<LambdaCaptureEntry>> = emptyMap(),
 ) {
     private var builder = CmdBuilder()
     private var nextSlot = 0
@@ -607,6 +608,9 @@ class BytecodeCompiler(
     }
 
     private fun compileValueFnRef(ref: ValueFnRef): CompiledValue? {
+        lambdaCaptureEntriesByRef[ref]?.let { captures ->
+            builder.addConst(BytecodeConst.CaptureTable(captures))
+        }
         val id = builder.addConst(BytecodeConst.ValueFn(ref.valueFn()))
         val slot = allocSlot()
         builder.emit(Opcode.MAKE_VALUE_FN, id, slot)

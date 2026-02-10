@@ -50,6 +50,23 @@ object CmdDisassembler {
             }
             out.append('\n')
         }
+        val captureConsts = fn.constants.withIndex().mapNotNull { (idx, constVal) ->
+            val table = constVal as? BytecodeConst.CaptureTable ?: return@mapNotNull null
+            idx to table
+        }
+        if (captureConsts.isNotEmpty()) {
+            out.append("consts:\n")
+            for ((idx, table) in captureConsts) {
+                val entries = if (table.entries.isEmpty()) {
+                    "[]"
+                } else {
+                    table.entries.joinToString(prefix = "[", postfix = "]") { entry ->
+                        "${entry.ownerKind}#${entry.ownerScopeId}:${entry.ownerSlotId}"
+                    }
+                }
+                out.append("k").append(idx).append(" CAPTURE_TABLE ").append(entries).append('\n')
+            }
+        }
         return out.toString()
     }
 

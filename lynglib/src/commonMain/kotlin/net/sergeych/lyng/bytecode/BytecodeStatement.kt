@@ -20,6 +20,7 @@ package net.sergeych.lyng.bytecode
 import net.sergeych.lyng.*
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjClass
+import net.sergeych.lyng.obj.ValueFnRef
 
 class BytecodeStatement private constructor(
     val original: Statement,
@@ -50,6 +51,7 @@ class BytecodeStatement private constructor(
             enumEntriesByName: Map<String, List<String>> = emptyMap(),
             callableReturnTypeByScopeId: Map<Int, Map<Int, ObjClass>> = emptyMap(),
             callableReturnTypeByName: Map<String, ObjClass> = emptyMap(),
+            lambdaCaptureEntriesByRef: Map<ValueFnRef, List<LambdaCaptureEntry>> = emptyMap(),
         ): Statement {
             if (statement is BytecodeStatement) return statement
             val hasUnsupported = containsUnsupportedStatement(statement)
@@ -73,7 +75,8 @@ class BytecodeStatement private constructor(
                 classFieldTypesByName = classFieldTypesByName,
                 enumEntriesByName = enumEntriesByName,
                 callableReturnTypeByScopeId = callableReturnTypeByScopeId,
-                callableReturnTypeByName = callableReturnTypeByName
+                callableReturnTypeByName = callableReturnTypeByName,
+                lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef
             )
             val compiled = compiler.compileStatement(nameHint, statement)
             val fn = compiled ?: throw BytecodeCompileException(

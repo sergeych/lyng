@@ -36,6 +36,7 @@ sealed class BytecodeConst {
     data class ValueFn(val fn: suspend (net.sergeych.lyng.Scope) -> net.sergeych.lyng.obj.ObjRecord) : BytecodeConst()
     data class DeclExec(val executable: net.sergeych.lyng.DeclExecutable) : BytecodeConst()
     data class SlotPlan(val plan: Map<String, Int>, val captures: List<String> = emptyList()) : BytecodeConst()
+    data class CaptureTable(val entries: List<LambdaCaptureEntry>) : BytecodeConst()
     data class ExtensionPropertyDecl(
         val extTypeName: String,
         val property: ObjProperty,

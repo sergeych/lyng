@@ -168,6 +168,8 @@ class Compiler(
     private val callableReturnTypeByScopeId: MutableMap<Int, MutableMap<Int, ObjClass>> = mutableMapOf()
     private val callableReturnTypeByName: MutableMap<String, ObjClass> = mutableMapOf()
     private val lambdaReturnTypeByRef: MutableMap<ObjRef, ObjClass> = mutableMapOf()
+    private val lambdaCaptureEntriesByRef: MutableMap<ValueFnRef, List<net.sergeych.lyng.bytecode.LambdaCaptureEntry>> =
+        mutableMapOf()
     private val classFieldTypesByName: MutableMap<String, MutableMap<String, ObjClass>> = mutableMapOf()
     private val classScopeMembersByClassName: MutableMap<String, MutableSet<String>> = mutableMapOf()
     private val classScopeCallableMembersByClassName: MutableMap<String, MutableSet<String>> = mutableMapOf()
@@ -1561,7 +1563,8 @@ class Compiler(
                         classFieldTypesByName = classFieldTypesByName,
                         enumEntriesByName = enumEntriesByName,
                         callableReturnTypeByScopeId = callableReturnTypeByScopeId,
-                        callableReturnTypeByName = callableReturnTypeByName
+                        callableReturnTypeByName = callableReturnTypeByName,
+                        lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef
                     ) as BytecodeStatement
                     unwrapped to bytecodeStmt.bytecodeFunction()
                 } else {
@@ -1857,7 +1860,8 @@ class Compiler(
             classFieldTypesByName = classFieldTypesByName,
             enumEntriesByName = enumEntriesByName,
             callableReturnTypeByScopeId = callableReturnTypeByScopeId,
-            callableReturnTypeByName = callableReturnTypeByName
+            callableReturnTypeByName = callableReturnTypeByName,
+            lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef
         )
     }
 
@@ -1892,7 +1896,8 @@ class Compiler(
             classFieldTypesByName = classFieldTypesByName,
             enumEntriesByName = enumEntriesByName,
             callableReturnTypeByScopeId = callableReturnTypeByScopeId,
-            callableReturnTypeByName = callableReturnTypeByName
+            callableReturnTypeByName = callableReturnTypeByName,
+            lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef
         )
     }
 
@@ -2929,6 +2934,22 @@ class Compiler(
         if (returnClass != null) {
             lambdaReturnTypeByRef[ref] = returnClass
         }
+        val moduleScopeId = moduleSlotPlan()?.id
+        val captureEntries = captureSlots.map { capture ->
+            val owner = capturePlan.captureOwners[capture.name]
+                ?: error("Missing capture owner for ${capture.name}")
+            val kind = if (moduleScopeId != null && owner.scopeId == moduleScopeId) {
+                net.sergeych.lyng.bytecode.CaptureOwnerFrameKind.MODULE
+            } else {
+                net.sergeych.lyng.bytecode.CaptureOwnerFrameKind.LOCAL
+            }
+            net.sergeych.lyng.bytecode.LambdaCaptureEntry(
+                ownerKind = kind,
+                ownerScopeId = owner.scopeId,
+                ownerSlotId = owner.slot
+            )
+        }
+        lambdaCaptureEntriesByRef[ref] = captureEntries
         return ref
     }
 
