@@ -119,7 +119,7 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [x] Replace `emitStatementCall` usage for `EnumDeclStatement`.
   - [x] Replace `emitStatementCall` usage for `ClassDeclStatement`.
   - [x] Replace `emitStatementCall` usage for `FunctionDeclStatement`.
-  - [ ] Add JVM disasm coverage to ensure module init has no `CALL_SLOT` to `Callable@...` for declarations.
+  - [x] Add JVM disasm coverage to ensure module init has no `CALL_SLOT` to `Callable@...` for declarations.
 - [ ] Step 26: Bytecode-backed lambdas (remove `ValueFnRef` runtime execution).
   - [ ] Compile lambda bodies to bytecode and emit an opcode to create a callable from bytecode + capture plan.
   - [ ] Remove `containsValueFnRef`/`forceScopeSlots` workaround once lambdas are bytecode.
