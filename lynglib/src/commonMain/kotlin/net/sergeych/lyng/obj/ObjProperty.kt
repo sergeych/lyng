@@ -18,7 +18,6 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Arguments
-import net.sergeych.lyng.ClosureScope
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Statement
 
@@ -35,9 +34,9 @@ class ObjProperty(
     suspend fun callGetter(scope: Scope, instance: Obj, declaringClass: ObjClass? = null): Obj {
         val g = getter ?: scope.raiseError("property $name has no getter")
         // Execute getter in a child scope of the instance with 'this' properly set
-        // Use ClosureScope to match extension function behavior (access to instance scope + call scope)
+        // Match extension function behavior (access to instance scope + call scope).
         val instanceScope = (instance as? ObjInstance)?.instanceScope ?: instance.autoInstanceScope(scope)
-        val execScope = ClosureScope(scope, instanceScope).createChildScope(newThisObj = instance)
+        val execScope = scope.applyClosure(instanceScope).createChildScope(newThisObj = instance)
         execScope.currentClassCtx = declaringClass
         return g.execute(execScope)
     }
@@ -45,9 +44,9 @@ class ObjProperty(
     suspend fun callSetter(scope: Scope, instance: Obj, value: Obj, declaringClass: ObjClass? = null) {
         val s = setter ?: scope.raiseError("property $name has no setter")
         // Execute setter in a child scope of the instance with 'this' properly set and the value as an argument
-        // Use ClosureScope to match extension function behavior
+        // Match extension function behavior (access to instance scope + call scope).
         val instanceScope = (instance as? ObjInstance)?.instanceScope ?: instance.autoInstanceScope(scope)
-        val execScope = ClosureScope(scope, instanceScope).createChildScope(args = Arguments(value), newThisObj = instance)
+        val execScope = scope.applyClosure(instanceScope).createChildScope(args = Arguments(value), newThisObj = instance)
         execScope.currentClassCtx = declaringClass
         s.execute(execScope)
     }

@@ -18,7 +18,6 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Arguments
-import net.sergeych.lyng.ClosureScope
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Statement
 
@@ -63,7 +62,7 @@ open class ObjDynamic(var readCallback: Statement? = null, var writeCallback: St
      * with method invocation which is implemented separately in [invokeInstanceMethod] below.
      */
     override suspend fun readField(scope: Scope, name: String): ObjRecord {
-        val execBase = builderScope?.let { ClosureScope(scope, it) } ?: scope
+        val execBase = builderScope?.let { scope.applyClosure(it) } ?: scope
         return readCallback?.execute(execBase.createChildScope(Arguments(ObjString(name))))?.let {
             if (writeCallback != null)
                 it.asMutable
@@ -83,26 +82,26 @@ open class ObjDynamic(var readCallback: Statement? = null, var writeCallback: St
         args: Arguments,
         onNotFoundResult: (suspend () -> Obj?)?
     ): Obj {
-        val execBase = builderScope?.let { ClosureScope(scope, it) } ?: scope
+        val execBase = builderScope?.let { scope.applyClosure(it) } ?: scope
         val over = readCallback?.execute(execBase.createChildScope(Arguments(ObjString(name))))
         return over?.invoke(scope, scope.thisObj, args)
             ?: super.invokeInstanceMethod(scope, name, args, onNotFoundResult)
     }
 
     override suspend fun writeField(scope: Scope, name: String, newValue: Obj) {
-        val execBase = builderScope?.let { ClosureScope(scope, it) } ?: scope
+        val execBase = builderScope?.let { scope.applyClosure(it) } ?: scope
         writeCallback?.execute(execBase.createChildScope(Arguments(ObjString(name), newValue)))
             ?: super.writeField(scope, name, newValue)
     }
 
     override suspend fun getAt(scope: Scope, index: Obj): Obj {
-        val execBase = builderScope?.let { ClosureScope(scope, it) } ?: scope
+        val execBase = builderScope?.let { scope.applyClosure(it) } ?: scope
         return readCallback?.execute(execBase.createChildScope(Arguments(index)))
             ?: super.getAt(scope, index)
     }
 
     override suspend fun putAt(scope: Scope, index: Obj, newValue: Obj) {
-        val execBase = builderScope?.let { ClosureScope(scope, it) } ?: scope
+        val execBase = builderScope?.let { scope.applyClosure(it) } ?: scope
         writeCallback?.execute(execBase.createChildScope(Arguments(index, newValue)))
             ?: super.putAt(scope, index, newValue)
     }

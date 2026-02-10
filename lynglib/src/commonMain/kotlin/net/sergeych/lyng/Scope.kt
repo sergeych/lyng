@@ -832,6 +832,20 @@ open class Scope(
     open fun applyClosure(closure: Scope, preferredThisType: String? = null): Scope =
         ClosureScope(this, closure, preferredThisType)
 
+    internal fun applyClosureForBytecode(closure: Scope, preferredThisType: String? = null): Scope {
+        val context = createChildScope(newThisObj = closure.thisObj)
+        val desired = preferredThisType?.let { typeName ->
+            thisVariants.firstOrNull { it.objClass.className == typeName }
+        }
+        val merged = ArrayList<Obj>(thisVariants.size + closure.thisVariants.size + 1)
+        desired?.let { merged.add(it) }
+        merged.addAll(thisVariants)
+        merged.addAll(closure.thisVariants)
+        context.setThisVariants(closure.thisObj, merged)
+        context.currentClassCtx = closure.currentClassCtx ?: currentClassCtx
+        return context
+    }
+
     /**
      * Resolve and evaluate a qualified identifier exactly as compiled code would.
      * For input like `A.B.C`, it builds the same ObjRef chain the compiler emits:

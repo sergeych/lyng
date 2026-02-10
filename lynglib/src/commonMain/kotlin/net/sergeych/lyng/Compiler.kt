@@ -2877,7 +2877,12 @@ class Compiler(
                 override val pos: Pos = body.pos
                 override suspend fun execute(scope: Scope): Obj {
                     // and the source closure of the lambda which might have other thisObj.
-                    val context = scope.applyClosure(closureScope, preferredThisType = expectedReceiverType)
+                    val useBytecodeClosure = closureScope.captureRecords != null
+                    val context = if (useBytecodeClosure) {
+                        scope.applyClosureForBytecode(closureScope, preferredThisType = expectedReceiverType)
+                    } else {
+                        scope.applyClosure(closureScope, preferredThisType = expectedReceiverType)
+                    }
                     if (paramSlotPlanSnapshot.isNotEmpty()) context.applySlotPlan(paramSlotPlanSnapshot)
                     if (captureSlots.isNotEmpty()) {
                         val captureRecords = closureScope.captureRecords
