@@ -97,10 +97,10 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [x] Read captured values via `FrameSlotRef` only.
   - [x] Forbid `resolveCaptureRecord` in bytecode paths; keep only in interpreter.
   - [x] JVM tests must be green before commit.
-- [ ] Step 24C: Remove scope local mirroring in bytecode execution.
-  - [ ] Remove/disable any bytecode runtime code that writes locals into Scope for execution.
-  - [ ] Keep Scope creation only for reflection/Kotlin interop paths.
-  - [ ] JVM tests must be green before commit.
+- [x] Step 24C: Remove scope local mirroring in bytecode execution.
+  - [x] Remove/disable any bytecode runtime code that writes locals into Scope for execution.
+  - [x] Keep Scope creation only for reflection/Kotlin interop paths.
+  - [x] JVM tests must be green before commit.
 - [ ] Step 24D: Eliminate `ClosureScope` usage on bytecode execution paths.
   - [ ] Avoid `ClosureScope` in bytecode-related call paths (Block/Lambda/ObjDynamic/ObjProperty).
   - [ ] Keep interpreter path using `ClosureScope` until interpreter removal.

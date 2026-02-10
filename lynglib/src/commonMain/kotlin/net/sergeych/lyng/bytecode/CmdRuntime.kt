@@ -1316,15 +1316,9 @@ class CmdDeclDelegated(internal val constId: Int, internal val slot: Int) : Cmd(
 
 class CmdDeclExec(internal val constId: Int, internal val slot: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncFrameToScope(useRefs = true)
-        }
         val decl = frame.fn.constants[constId] as? BytecodeConst.DeclExec
             ?: error("DECL_EXEC expects DeclExec at $constId")
         val result = decl.executable.execute(frame.ensureScope())
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncScopeToFrame()
-        }
         frame.storeObjResult(slot, result)
         return
     }
@@ -1414,9 +1408,6 @@ class CmdCallDirect(
     internal val dst: Int,
 ) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncFrameToScope(useRefs = true)
-        }
         val ref = frame.fn.constants.getOrNull(id) as? BytecodeConst.ObjRef
             ?: error("CALL_DIRECT expects ObjRef at $id")
         val callee = ref.value
@@ -1425,9 +1416,6 @@ class CmdCallDirect(
             frame.ensureScope().withChildFrame(args) { child -> callee.callOn(child) }
         } else {
             callee.callOn(frame.ensureScope().createChildScope(frame.ensureScope().pos, args = args))
-        }
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncScopeToFrame()
         }
         frame.storeObjResult(dst, result)
         return
@@ -1441,9 +1429,6 @@ class CmdCallSlot(
     internal val dst: Int,
 ) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncFrameToScope(useRefs = true)
-        }
         val callee = frame.slotToObj(calleeSlot)
         if (callee === ObjUnset) {
             val name = if (calleeSlot < frame.fn.scopeSlotCount) {
@@ -1464,9 +1449,6 @@ class CmdCallSlot(
             // Pooling for Statement-based callables (lambdas) can still alter closure semantics; keep safe path for now.
             val scope = frame.ensureScope()
             callee.callOn(scope.createChildScope(scope.pos, args = args))
-        }
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncScopeToFrame()
         }
         frame.storeObjResult(dst, result)
         return
@@ -1664,18 +1646,12 @@ class CmdGetDynamicMember(
     internal val dst: Int,
 ) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncFrameToScope(useRefs = true)
-        }
         val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
             ?: error("GET_DYNAMIC_MEMBER expects StringVal at $nameId")
         val scope = frame.ensureScope()
         val receiver = frame.slotToObj(recvSlot)
         val rec = receiver.readField(scope, nameConst.value)
         val value = resolveDynamicFieldValue(scope, receiver, nameConst.value, rec)
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncScopeToFrame()
-        }
         frame.storeObjResult(dst, value)
         return
     }
@@ -1687,17 +1663,11 @@ class CmdSetDynamicMember(
     internal val valueSlot: Int,
 ) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncFrameToScope(useRefs = true)
-        }
         val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
             ?: error("SET_DYNAMIC_MEMBER expects StringVal at $nameId")
         val scope = frame.ensureScope()
         val receiver = frame.slotToObj(recvSlot)
         receiver.writeField(scope, nameConst.value, frame.slotToObj(valueSlot))
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncScopeToFrame()
-        }
         return
     }
 }
@@ -1710,18 +1680,12 @@ class CmdCallDynamicMember(
     internal val dst: Int,
 ) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncFrameToScope(useRefs = true)
-        }
         val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
             ?: error("CALL_DYNAMIC_MEMBER expects StringVal at $nameId")
         val scope = frame.ensureScope()
         val receiver = frame.slotToObj(recvSlot)
         val callArgs = frame.buildArguments(argBase, argCount)
         val result = receiver.invokeInstanceMethod(scope, nameConst.value, callArgs)
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncScopeToFrame()
-        }
         frame.storeObjResult(dst, result)
         return
     }
@@ -1735,9 +1699,6 @@ class CmdCallMemberSlot(
     internal val dst: Int,
 ) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncFrameToScope(useRefs = true)
-        }
         val receiver = frame.slotToObj(recvSlot)
         val inst = receiver as? ObjInstance
         val cls = receiver as? ObjClass
@@ -1758,9 +1719,6 @@ class CmdCallMemberSlot(
         }
         if (receiver is ObjQualifiedView) {
             val result = receiver.invokeInstanceMethod(frame.ensureScope(), name, callArgs)
-            if (frame.fn.localSlotNames.isNotEmpty()) {
-                frame.syncScopeToFrame()
-            }
             frame.storeObjResult(dst, result)
             return
         }
@@ -1798,9 +1756,6 @@ class CmdCallMemberSlot(
                 })
             }
             else -> frame.ensureScope().raiseError("member $name is not callable")
-        }
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncScopeToFrame()
         }
         frame.storeObjResult(dst, result)
         return
@@ -1864,9 +1819,6 @@ class CmdEvalStmt(internal val id: Int, internal val dst: Int) : Cmd() {
 
 class CmdMakeValueFn(internal val id: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncFrameToScope(useRefs = true)
-        }
         val valueFn = frame.fn.constants.getOrNull(id) as? BytecodeConst.ValueFn
             ?: error("MAKE_VALUE_FN expects ValueFn at $id")
         val scope = frame.ensureScope()
@@ -1875,9 +1827,6 @@ class CmdMakeValueFn(internal val id: Int, internal val dst: Int) : Cmd() {
         scope.captureRecords = captureRecords
         val result = valueFn.fn(scope).value
         scope.captureRecords = previousCaptures
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncScopeToFrame()
-        }
         frame.storeObjResult(dst, result)
         return
     }
@@ -2113,19 +2062,6 @@ class CmdFrame(
     }
 
     fun pushScope(plan: Map<String, Int>, captures: List<String>) {
-        val parentScope = scope
-        if (captures.isNotEmpty()) {
-            syncFrameToScope(useRefs = true)
-        }
-        val captureRecords = if (captures.isNotEmpty()) {
-            captures.map { name ->
-                val rec = parentScope.resolveCaptureRecord(name)
-                    ?: parentScope.raiseSymbolNotFound("symbol $name not found")
-                name to rec
-            }
-        } else {
-            emptyList()
-        }
         if (scope.skipScopeCreation) {
             val snapshot = scope.applySlotPlanWithSnapshot(plan)
             slotPlanStack.addLast(snapshot)
@@ -2138,11 +2074,6 @@ class CmdFrame(
             scope = scope.createChildScope()
             if (plan.isNotEmpty()) {
                 scope.applySlotPlan(plan)
-            }
-        }
-        if (captureRecords.isNotEmpty()) {
-            for ((name, rec) in captureRecords) {
-                scope.updateSlotFor(name, rec)
             }
         }
         captureStack.addLast(captures)
@@ -2162,9 +2093,6 @@ class CmdFrame(
             ?: error("Scope stack underflow in POP_SCOPE")
         val captures = captureStack.removeLastOrNull() ?: emptyList()
         scopeDepth -= 1
-        if (captures.isNotEmpty()) {
-            syncFrameToScope(useRefs = true)
-        }
     }
 
     fun pushIterator(iter: Obj) {

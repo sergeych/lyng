@@ -4236,8 +4236,7 @@ class BytecodeCompiler(
         if (shouldInlineBlock(stmt)) {
             return emitInlineStatements(stmt.statements(), needResult)
         }
-        val captureNames = if (stmt.captureSlots.isEmpty()) emptyList() else stmt.captureSlots.map { it.name }
-        val planId = builder.addConst(BytecodeConst.SlotPlan(stmt.slotPlan, captureNames))
+        val planId = builder.addConst(BytecodeConst.SlotPlan(stmt.slotPlan, emptyList()))
         builder.emit(Opcode.PUSH_SCOPE, planId)
         resetAddrCache()
         val statements = stmt.statements()
@@ -4384,8 +4383,7 @@ class BytecodeCompiler(
             builder.emit(Opcode.DECL_LOCAL, declId, exceptionSlot)
             return compileStatementValueOrFallback(block, needResult)
         }
-        val captureNames = if (stmt.captureSlots.isEmpty()) emptyList() else stmt.captureSlots.map { it.name }
-        val planId = builder.addConst(BytecodeConst.SlotPlan(stmt.slotPlan, captureNames))
+        val planId = builder.addConst(BytecodeConst.SlotPlan(stmt.slotPlan, emptyList()))
         builder.emit(Opcode.PUSH_SCOPE, planId)
         resetAddrCache()
         val declId = builder.addConst(BytecodeConst.LocalDecl(catchVarName, false, Visibility.Public, false))
