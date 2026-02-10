@@ -33,6 +33,7 @@ class BlockStatement(
         if (captureSlots.isNotEmpty()) {
             val applyScope = scope as? ApplyScope
             for (capture in captureSlots) {
+                // Interpreter-only capture resolution; bytecode paths must use captureRecords instead.
                 val rec = if (applyScope != null) {
                     applyScope.resolveCaptureRecord(capture.name)
                         ?: applyScope.callScope.resolveCaptureRecord(capture.name)

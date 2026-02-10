@@ -170,6 +170,9 @@ open class Scope(
     }
 
     internal fun resolveCaptureRecord(name: String): ObjRecord? {
+        if (captureRecords != null) {
+            raiseIllegalState("resolveCaptureRecord is interpreter-only; bytecode captures use captureRecords")
+        }
         return chainLookupIgnoreClosure(name, followClosure = true, caller = currentClassCtx)
     }
 

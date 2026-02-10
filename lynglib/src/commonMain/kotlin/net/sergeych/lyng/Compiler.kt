@@ -7034,6 +7034,7 @@ class Compiler(
                     val captureBase = captureContext ?: closure
                     if (captureBase != null && captureSlots.isNotEmpty()) {
                         for (capture in captureSlots) {
+                            // Interpreter-only capture resolution; bytecode functions do not use resolveCaptureRecord.
                             val rec = captureBase.resolveCaptureRecord(capture.name)
                                 ?: captureBase.raiseSymbolNotFound("symbol ${capture.name} not found")
                             context.updateSlotFor(capture.name, rec)
