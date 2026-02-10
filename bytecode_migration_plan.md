@@ -101,7 +101,7 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [x] Remove/disable any bytecode runtime code that writes locals into Scope for execution.
   - [x] Keep Scope creation only for reflection/Kotlin interop paths.
   - [x] JVM tests must be green before commit.
-- [ ] Step 24D: Eliminate `ClosureScope` usage on bytecode execution paths.
+- [x] Step 24D: Eliminate `ClosureScope` usage on bytecode execution paths.
   - [ ] Avoid `ClosureScope` in bytecode-related call paths (Block/Lambda/ObjDynamic/ObjProperty).
   - [ ] Keep interpreter path using `ClosureScope` until interpreter removal.
   - [ ] JVM tests must be green before commit.
