@@ -113,8 +113,10 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
 ## Interpreter Removal (next)
 
 - [ ] Step 25: Replace Statement-based declaration calls in bytecode.
-  - [ ] Add bytecode const/op for class/enum/function declarations (no `Statement` objects in constants).
-  - [ ] Replace `emitStatementCall` usage for `ClassDeclStatement`, `FunctionDeclStatement`, `EnumDeclStatement`.
+  - [x] Add bytecode const/op for enum declarations (no `Statement` objects in constants).
+  - [ ] Add bytecode const/op for class/function declarations (no `Statement` objects in constants).
+  - [x] Replace `emitStatementCall` usage for `EnumDeclStatement`.
+  - [ ] Replace `emitStatementCall` usage for `ClassDeclStatement` and `FunctionDeclStatement`.
   - [ ] Add JVM disasm coverage to ensure module init has no `CALL_SLOT` to `Callable@...` for declarations.
 - [ ] Step 26: Bytecode-backed lambdas (remove `ValueFnRef` runtime execution).
   - [ ] Compile lambda bodies to bytecode and emit an opcode to create a callable from bytecode + capture plan.

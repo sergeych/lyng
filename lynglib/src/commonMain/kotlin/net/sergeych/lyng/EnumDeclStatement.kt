@@ -17,19 +17,34 @@
 package net.sergeych.lyng
 
 import net.sergeych.lyng.obj.Obj
+import net.sergeych.lyng.obj.ObjEnumClass
+import net.sergeych.lyng.obj.ObjRecord
 
 class EnumDeclStatement(
-    val executable: DeclExecutable,
+    val declaredName: String,
+    val qualifiedName: String,
+    val entries: List<String>,
+    val lifted: Boolean,
     private val startPos: Pos,
 ) : Statement() {
     override val pos: Pos = startPos
 
     override suspend fun execute(scope: Scope): Obj {
-        return executable.execute(scope)
+        val enumClass = ObjEnumClass.createSimpleEnum(qualifiedName, entries)
+        scope.addItem(declaredName, false, enumClass, recordType = ObjRecord.Type.Enum)
+        if (lifted) {
+            for (entry in entries) {
+                val rec = enumClass.getInstanceMemberOrNull(entry, includeAbstract = false, includeStatic = true)
+                if (rec != null) {
+                    scope.addItem(entry, false, rec.value)
+                }
+            }
+        }
+        return enumClass
     }
 
     override suspend fun callOn(scope: Scope): Obj {
         val target = scope.parent ?: scope
-        return executable.execute(target)
+        return execute(target)
     }
 }

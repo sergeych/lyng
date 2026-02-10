@@ -38,6 +38,12 @@ sealed class BytecodeConst {
         val captureTableId: Int? = null,
     ) : BytecodeConst()
     data class DeclExec(val executable: net.sergeych.lyng.DeclExecutable) : BytecodeConst()
+    data class EnumDecl(
+        val declaredName: String,
+        val qualifiedName: String,
+        val entries: List<String>,
+        val lifted: Boolean,
+    ) : BytecodeConst()
     data class SlotPlan(val plan: Map<String, Int>, val captures: List<String> = emptyList()) : BytecodeConst()
     data class CaptureTable(val entries: List<BytecodeCaptureEntry>) : BytecodeConst()
     data class ExtensionPropertyDecl(

@@ -159,6 +159,7 @@ enum class Opcode(val code: Int) {
     THROW(0xBB),
     RETHROW_PENDING(0xBC),
     DECL_EXEC(0xBD),
+    DECL_ENUM(0xBE),
     ITER_PUSH(0xBF),
     ITER_POP(0xC0),
     ITER_CANCEL(0xC1),

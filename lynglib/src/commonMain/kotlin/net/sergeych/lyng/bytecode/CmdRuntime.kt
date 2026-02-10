@@ -1324,6 +1324,26 @@ class CmdDeclExec(internal val constId: Int, internal val slot: Int) : Cmd() {
     }
 }
 
+class CmdDeclEnum(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.EnumDecl
+            ?: error("DECL_ENUM expects EnumDecl at $constId")
+        val scope = frame.ensureScope()
+        val enumClass = ObjEnumClass.createSimpleEnum(decl.qualifiedName, decl.entries)
+        scope.addItem(decl.declaredName, false, enumClass, recordType = ObjRecord.Type.Enum)
+        if (decl.lifted) {
+            for (entry in decl.entries) {
+                val rec = enumClass.getInstanceMemberOrNull(entry, includeAbstract = false, includeStatic = true)
+                if (rec != null) {
+                    scope.addItem(entry, false, rec.value)
+                }
+            }
+        }
+        frame.storeObjResult(slot, enumClass)
+        return
+    }
+}
+
 class CmdDeclDestructure(internal val constId: Int, internal val slot: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         val decl = frame.fn.constants[constId] as? BytecodeConst.DestructureDecl

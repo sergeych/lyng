@@ -212,6 +212,7 @@ object CmdDisassembler {
             is CmdDeclDelegated -> Opcode.DECL_DELEGATED to intArrayOf(cmd.constId, cmd.slot)
             is CmdDeclDestructure -> Opcode.DECL_DESTRUCTURE to intArrayOf(cmd.constId, cmd.slot)
             is CmdDeclExec -> Opcode.DECL_EXEC to intArrayOf(cmd.constId, cmd.slot)
+            is CmdDeclEnum -> Opcode.DECL_ENUM to intArrayOf(cmd.constId, cmd.slot)
             is CmdDeclExtProperty -> Opcode.DECL_EXT_PROPERTY to intArrayOf(cmd.constId, cmd.slot)
             is CmdCallDirect -> Opcode.CALL_DIRECT to intArrayOf(cmd.id, cmd.argBase, cmd.argCount, cmd.dst)
             is CmdAssignDestructure -> Opcode.ASSIGN_DESTRUCTURE to intArrayOf(cmd.constId, cmd.slot)
@@ -283,7 +284,7 @@ object CmdDisassembler {
             Opcode.PUSH_TRY ->
                 listOf(OperandKind.SLOT, OperandKind.IP, OperandKind.IP)
             Opcode.DECL_LOCAL, Opcode.DECL_EXT_PROPERTY, Opcode.DECL_DELEGATED, Opcode.DECL_DESTRUCTURE,
-            Opcode.DECL_EXEC,
+            Opcode.DECL_EXEC, Opcode.DECL_ENUM,
             Opcode.ASSIGN_DESTRUCTURE ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.ADD_INT, Opcode.SUB_INT, Opcode.MUL_INT, Opcode.DIV_INT, Opcode.MOD_INT,

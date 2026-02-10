@@ -157,7 +157,7 @@ class CmdBuilder {
             Opcode.PUSH_TRY ->
                 listOf(OperandKind.SLOT, OperandKind.IP, OperandKind.IP)
             Opcode.DECL_LOCAL, Opcode.DECL_EXT_PROPERTY, Opcode.DECL_DELEGATED, Opcode.DECL_DESTRUCTURE,
-            Opcode.DECL_EXEC,
+            Opcode.DECL_EXEC, Opcode.DECL_ENUM,
             Opcode.ASSIGN_DESTRUCTURE ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.ADD_INT, Opcode.SUB_INT, Opcode.MUL_INT, Opcode.DIV_INT, Opcode.MOD_INT,
@@ -411,6 +411,7 @@ class CmdBuilder {
             Opcode.DECL_DELEGATED -> CmdDeclDelegated(operands[0], operands[1])
             Opcode.DECL_DESTRUCTURE -> CmdDeclDestructure(operands[0], operands[1])
             Opcode.DECL_EXEC -> CmdDeclExec(operands[0], operands[1])
+            Opcode.DECL_ENUM -> CmdDeclEnum(operands[0], operands[1])
             Opcode.DECL_EXT_PROPERTY -> CmdDeclExtProperty(operands[0], operands[1])
             Opcode.CALL_DIRECT -> CmdCallDirect(operands[0], operands[1], operands[2], operands[3])
             Opcode.ASSIGN_DESTRUCTURE -> CmdAssignDestructure(operands[0], operands[1])

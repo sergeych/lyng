@@ -5803,23 +5803,13 @@ class Compiler(
         }
 
         val stmtPos = startPos
-        val enumDeclStatement = object : Statement() {
-            override val pos: Pos = stmtPos
-            override suspend fun execute(scope: Scope): Obj {
-                val enumClass = ObjEnumClass.createSimpleEnum(qualifiedName, names)
-                scope.addItem(declaredName, false, enumClass, recordType = ObjRecord.Type.Enum)
-                if (lifted) {
-                    for (entry in names) {
-                        val rec = enumClass.getInstanceMemberOrNull(entry, includeAbstract = false, includeStatic = true)
-                        if (rec != null) {
-                            scope.addItem(entry, false, rec.value)
-                        }
-                    }
-                }
-                return enumClass
-            }
-        }
-        return EnumDeclStatement(StatementDeclExecutable(enumDeclStatement), stmtPos)
+        return EnumDeclStatement(
+            declaredName = declaredName,
+            qualifiedName = qualifiedName,
+            entries = names.toList(),
+            lifted = lifted,
+            startPos = stmtPos
+        )
     }
 
     private suspend fun parseObjectDeclaration(isExtern: Boolean = false): Statement {
