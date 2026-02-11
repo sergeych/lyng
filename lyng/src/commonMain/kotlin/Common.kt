@@ -27,7 +27,9 @@ import com.github.ajalt.clikt.parameters.arguments.optional
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import kotlinx.coroutines.runBlocking
+import net.sergeych.lyng.Compiler
 import net.sergeych.lyng.LyngVersion
+import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Script
 import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.Source
@@ -156,6 +158,7 @@ private class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() 
 
     val version by option("-v", "--version", help = "Print version and exit").flag()
     val benchmark by option("--benchmark", help = "Run JVM microbenchmarks and exit").flag()
+    val bytecodeFallbacks by option("--bytecode-fallbacks", help = "Report lambdas that fall back to interpreter").flag()
     val script by argument(help = "one or more scripts to execute").optional()
     val execute: String? by option(
         "-x", "--execute", help = """
@@ -198,7 +201,15 @@ private class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() 
                     launcher {
                         // there is no script name, it is a first argument instead:
                         processErrors {
-                            baseScope.eval(execute!!)
+                            val reporter = bytecodeFallbackReporter(bytecodeFallbacks)
+                            val script = Compiler.compileWithResolution(
+                                Source("<eval>", execute!!),
+                                baseScope.currentImportProvider,
+                                seedScope = baseScope,
+                                bytecodeFallbackReporter = reporter
+                            )
+                            script.execute(baseScope)
+                            flushBytecodeFallbacks(reporter)
                         }
                     }
                 }
@@ -209,7 +220,7 @@ private class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() 
                         echoFormattedHelp()
                     } else {
                         baseScope.addConst("ARGV", ObjList(args.map { ObjString(it) }.toMutableList()))
-                        launcher { executeFile(script!!) }
+                        launcher { executeFile(script!!, bytecodeFallbacks) }
                     }
                 }
             }
@@ -217,14 +228,14 @@ private class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() 
     }
 }
 
-fun executeFileWithArgs(fileName: String, args: List<String>) {
+fun executeFileWithArgs(fileName: String, args: List<String>, reportBytecodeFallbacks: Boolean = false) {
     runBlocking {
         baseScopeDefer.await().addConst("ARGV", ObjList(args.map { ObjString(it) }.toMutableList()))
-        executeFile(fileName)
+        executeFile(fileName, reportBytecodeFallbacks)
     }
 }
 
-suspend fun executeFile(fileName: String) {
+suspend fun executeFile(fileName: String, reportBytecodeFallbacks: Boolean = false) {
     var text = FileSystem.SYSTEM.source(fileName.toPath()).use { fileSource ->
         fileSource.buffer().use { bs ->
             bs.readUtf8()
@@ -236,7 +247,16 @@ suspend fun executeFile(fileName: String) {
         text = text.substring(pos + 1)
     }
     processErrors {
-        baseScopeDefer.await().eval(Source(fileName, text))
+        val scope = baseScopeDefer.await()
+        val reporter = bytecodeFallbackReporter(reportBytecodeFallbacks)
+        val script = Compiler.compileWithResolution(
+            Source(fileName, text),
+            scope.currentImportProvider,
+            seedScope = scope,
+            bytecodeFallbackReporter = reporter
+        )
+        script.execute(scope)
+        flushBytecodeFallbacks(reporter)
     }
 }
 
@@ -247,4 +267,23 @@ suspend fun processErrors(block: suspend () -> Unit) {
     catch (e: ScriptError) {
         println("\nError executing the script:\n$e\n")
     }
+}
+
+private fun bytecodeFallbackReporter(enabled: Boolean): ((Pos, String) -> Unit)? {
+    if (!enabled) return null
+    val reports = ArrayList<String>()
+    val reporter: (Pos, String) -> Unit = { pos, msg ->
+        reports.add("$pos: $msg")
+    }
+    return object : (Pos, String) -> Unit by reporter {
+        override fun invoke(pos: Pos, msg: String) = reporter(pos, msg)
+        override fun toString(): String = reports.joinToString("\n")
+    }
+}
+
+private fun flushBytecodeFallbacks(reporter: ((Pos, String) -> Unit)?) {
+    val text = reporter?.toString().orEmpty()
+    if (text.isBlank()) return
+    println("Bytecode lambda fallbacks:")
+    println(text)
 }
