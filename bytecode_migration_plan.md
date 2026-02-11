@@ -102,9 +102,9 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [x] Keep Scope creation only for reflection/Kotlin interop paths.
   - [x] JVM tests must be green before commit.
 - [x] Step 24D: Eliminate `ClosureScope` usage on bytecode execution paths.
-  - [ ] Avoid `ClosureScope` in bytecode-related call paths (Block/Lambda/ObjDynamic/ObjProperty).
-  - [ ] Keep interpreter path using `ClosureScope` until interpreter removal.
-  - [ ] JVM tests must be green before commit.
+  - [x] Avoid `ClosureScope` in bytecode-related call paths (Block/Lambda/ObjDynamic/ObjProperty).
+  - [x] Keep interpreter path using `ClosureScope` until interpreter removal.
+  - [x] JVM tests must be green before commit.
 - [x] Step 24E: Isolate interpreter-only capture logic.
   - [ ] Mark `resolveCaptureRecord` paths as interpreter-only.
   - [ ] Guard or delete any bytecode path that tries to sync captures into scopes.

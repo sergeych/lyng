@@ -192,7 +192,14 @@ internal suspend fun executeFunctionDecl(scope: Scope, spec: FunctionDeclSpec): 
             override val pos: Pos = spec.startPos
             override suspend fun execute(scope: Scope): Obj {
                 val result = (scope.thisObj as? ObjInstance)?.let { i ->
-                    compiledFnBody.execute(ClosureScope(scope, i.instanceScope))
+                    val execScope = if (compiledFnBody is net.sergeych.lyng.bytecode.BytecodeStatement) {
+                        scope.applyClosureForBytecode(i.instanceScope).also {
+                            it.args = scope.args
+                        }
+                    } else {
+                        ClosureScope(scope, i.instanceScope)
+                    }
+                    compiledFnBody.execute(execScope)
                 } ?: compiledFnBody.execute(scope.thisObj.autoInstanceScope(scope))
                 return result
             }

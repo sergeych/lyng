@@ -84,6 +84,32 @@ class ClosureScope(
     }
 }
 
+/**
+ * Bytecode-oriented closure scope that keeps the call scope parent chain for stack traces
+ * while carrying the lexical closure for `this` variants and module resolution.
+ * Unlike [ClosureScope], it does not override name lookup.
+ */
+class BytecodeClosureScope(
+    val callScope: Scope,
+    val closureScope: Scope,
+    private val preferredThisType: String? = null
+) :
+    Scope(callScope, callScope.args, thisObj = closureScope.thisObj) {
+
+    init {
+        val desired = preferredThisType?.let { typeName ->
+            callScope.thisVariants.firstOrNull { it.objClass.className == typeName }
+        }
+        val primaryThis = closureScope.thisObj
+        val merged = ArrayList<Obj>(callScope.thisVariants.size + closureScope.thisVariants.size + 1)
+        desired?.let { merged.add(it) }
+        merged.addAll(callScope.thisVariants)
+        merged.addAll(closureScope.thisVariants)
+        setThisVariants(primaryThis, merged)
+        this.currentClassCtx = closureScope.currentClassCtx ?: callScope.currentClassCtx
+    }
+}
+
 class ApplyScope(val callScope: Scope, val applied: Scope) :
     Scope(callScope, thisObj = applied.thisObj) {
 

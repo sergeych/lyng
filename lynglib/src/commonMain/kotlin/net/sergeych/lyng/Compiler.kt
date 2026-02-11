@@ -6929,8 +6929,15 @@ class Compiler(
                     // restore closure where the function was defined, and making a copy of it
                     // for local space. If there is no closure, we are in, say, class context where
                     // the closure is in the class initialization and we needn't more:
-                    val context = closureBox.closure?.let { ClosureScope(callerContext, it) }
-                        ?: callerContext
+                    val context = closureBox.closure?.let { closure ->
+                        if (fnStatements is BytecodeStatement) {
+                            callerContext.applyClosureForBytecode(closure).also {
+                                it.args = callerContext.args
+                            }
+                        } else {
+                            ClosureScope(callerContext, closure)
+                        }
+                    } ?: callerContext
 
                     // Capacity hint: parameters + declared locals + small overhead
                     val capacityHint = paramNames.size + fnLocalDecls + 4

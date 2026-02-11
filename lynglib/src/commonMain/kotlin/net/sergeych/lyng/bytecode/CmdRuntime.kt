@@ -2004,6 +2004,8 @@ class CmdFrame(
             current.parent?.let { queue.add(it) }
             if (current is ClosureScope) {
                 queue.add(current.closureScope)
+            } else if (current is BytecodeClosureScope) {
+                queue.add(current.closureScope)
             } else if (current is ApplyScope) {
                 queue.add(current.applied)
             }
@@ -2022,6 +2024,28 @@ class CmdFrame(
             if (current.parent is ModuleScope) return current
             current.parent?.let { queue.add(it) }
             if (current is ClosureScope) {
+                queue.add(current.closureScope)
+            } else if (current is BytecodeClosureScope) {
+                queue.add(current.closureScope)
+            } else if (current is ApplyScope) {
+                queue.add(current.applied)
+            }
+        }
+        return null
+    }
+
+    private fun findScopeWithRecord(scope: Scope, name: String): Scope? {
+        val visited = HashSet<Scope>(16)
+        val queue = ArrayDeque<Scope>()
+        queue.add(scope)
+        while (queue.isNotEmpty()) {
+            val current = queue.removeFirst()
+            if (!visited.add(current)) continue
+            if (current.getLocalRecordDirect(name) != null) return current
+            current.parent?.let { queue.add(it) }
+            if (current is ClosureScope) {
+                queue.add(current.closureScope)
+            } else if (current is BytecodeClosureScope) {
                 queue.add(current.closureScope)
             } else if (current is ApplyScope) {
                 queue.add(current.applied)
