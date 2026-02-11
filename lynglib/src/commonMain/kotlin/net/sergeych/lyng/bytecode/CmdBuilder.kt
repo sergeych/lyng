@@ -69,7 +69,8 @@ class CmdBuilder {
         scopeSlotIsModule: BooleanArray = BooleanArray(0),
         localSlotNames: Array<String?> = emptyArray(),
         localSlotMutables: BooleanArray = BooleanArray(0),
-        localSlotDelegated: BooleanArray = BooleanArray(0)
+        localSlotDelegated: BooleanArray = BooleanArray(0),
+        localSlotCaptures: BooleanArray = BooleanArray(0)
     ): CmdFunction {
         val scopeSlotCount = scopeSlotIndices.size
         require(scopeSlotNames.isEmpty() || scopeSlotNames.size == scopeSlotCount) {
@@ -80,6 +81,7 @@ class CmdBuilder {
         }
         require(localSlotNames.size == localSlotMutables.size) { "local slot metadata size mismatch" }
         require(localSlotNames.size == localSlotDelegated.size) { "local slot delegation size mismatch" }
+        require(localSlotNames.size == localSlotCaptures.size) { "local slot capture size mismatch" }
         val labelIps = mutableMapOf<Label, Int>()
         for ((label, idx) in labelPositions) {
             labelIps[label] = idx
@@ -114,6 +116,7 @@ class CmdBuilder {
             localSlotNames = localSlotNames,
             localSlotMutables = localSlotMutables,
             localSlotDelegated = localSlotDelegated,
+            localSlotCaptures = localSlotCaptures,
             constants = constPool.toList(),
             cmds = cmds.toTypedArray(),
             posByIp = posByInstr.toTypedArray()
@@ -150,7 +153,8 @@ class CmdBuilder {
                 listOf(OperandKind.SLOT, OperandKind.ADDR)
             Opcode.CONST_NULL ->
                 listOf(OperandKind.SLOT)
-            Opcode.CONST_OBJ, Opcode.CONST_INT, Opcode.CONST_REAL, Opcode.CONST_BOOL, Opcode.MAKE_VALUE_FN ->
+            Opcode.CONST_OBJ, Opcode.CONST_INT, Opcode.CONST_REAL, Opcode.CONST_BOOL,
+            Opcode.MAKE_VALUE_FN ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.PUSH_SCOPE, Opcode.PUSH_SLOT_PLAN ->
                 listOf(OperandKind.CONST)

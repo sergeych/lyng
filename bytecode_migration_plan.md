@@ -106,9 +106,9 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [x] Keep interpreter path using `ClosureScope` until interpreter removal.
   - [x] JVM tests must be green before commit.
 - [x] Step 24E: Isolate interpreter-only capture logic.
-  - [ ] Mark `resolveCaptureRecord` paths as interpreter-only.
-  - [ ] Guard or delete any bytecode path that tries to sync captures into scopes.
-  - [ ] JVM tests must be green before commit.
+  - [x] Mark `resolveCaptureRecord` paths as interpreter-only.
+  - [x] Guard or delete any bytecode path that tries to sync captures into scopes.
+  - [x] JVM tests must be green before commit.
 
 ## Interpreter Removal (next)
 

@@ -20,6 +20,8 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.*
+import net.sergeych.lyng.FrameSlotRef
+import net.sergeych.lyng.RecordSlotRef
 
 /**
  * A reference to a value with optional write-back path.
@@ -43,7 +45,12 @@ sealed interface ObjRef {
         if (rec.receiver != null && rec.declaringClass != null) {
             return rec.receiver!!.resolveRecord(scope, rec, "unknown", rec.declaringClass).value
         }
-        return rec.value
+        val value = rec.value
+        return when (value) {
+            is FrameSlotRef -> value.read()
+            is RecordSlotRef -> value.read()
+            else -> value
+        }
     }
     suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
         throw ScriptError(pos, "can't assign value")

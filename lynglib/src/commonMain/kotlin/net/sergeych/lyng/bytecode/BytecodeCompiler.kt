@@ -53,10 +53,13 @@ class BytecodeCompiler(
     private val localSlotInfoMap = LinkedHashMap<ScopeSlotKey, LocalSlotInfo>()
     private val localSlotIndexByKey = LinkedHashMap<ScopeSlotKey, Int>()
     private val localSlotIndexByName = LinkedHashMap<String, Int>()
+    private val captureSlotKeys = LinkedHashSet<ScopeSlotKey>()
+    private val forcedObjSlots = LinkedHashSet<Int>()
     private val loopSlotOverrides = LinkedHashMap<String, Int>()
     private var localSlotNames = emptyArray<String?>()
     private var localSlotMutables = BooleanArray(0)
     private var localSlotDelegated = BooleanArray(0)
+    private var localSlotCaptures = BooleanArray(0)
     private val declaredLocalKeys = LinkedHashSet<ScopeSlotKey>()
     private val localRangeRefs = LinkedHashMap<ScopeSlotKey, RangeRef>()
     private val slotTypes = mutableMapOf<Int, SlotType>()
@@ -65,6 +68,7 @@ class BytecodeCompiler(
     private val knownClassNames = knownNameObjClass.keys.toSet()
     private val slotInitClassByKey = mutableMapOf<ScopeSlotKey, ObjClass>()
     private val intLoopVarNames = LinkedHashSet<String>()
+    private val valueFnRefs = LinkedHashSet<ValueFnRef>()
     private val loopStack = ArrayDeque<LoopContext>()
     private var forceScopeSlots = false
     private var currentPos: Pos? = null
@@ -100,8 +104,9 @@ class BytecodeCompiler(
                     scopeSlotNames,
                     scopeSlotIsModule,
                     localSlotNames,
-            localSlotMutables,
-            localSlotDelegated
+                    localSlotMutables,
+                    localSlotDelegated,
+                    localSlotCaptures
                 )
             }
             is BlockStatement -> compileBlock(name, stmt)
@@ -120,8 +125,9 @@ class BytecodeCompiler(
                     scopeSlotNames,
                     scopeSlotIsModule,
                     localSlotNames,
-            localSlotMutables,
-            localSlotDelegated
+                    localSlotMutables,
+                    localSlotDelegated,
+                    localSlotCaptures
                 )
             }
             is DestructuringVarDeclStatement -> {
@@ -137,8 +143,9 @@ class BytecodeCompiler(
                     scopeSlotNames,
                     scopeSlotIsModule,
                     localSlotNames,
-            localSlotMutables,
-            localSlotDelegated
+                    localSlotMutables,
+                    localSlotDelegated,
+                    localSlotCaptures
                 )
             }
             is net.sergeych.lyng.ThrowStatement -> compileThrowStatement(name, stmt)
@@ -156,8 +163,9 @@ class BytecodeCompiler(
                     scopeSlotNames,
                     scopeSlotIsModule,
                     localSlotNames,
-            localSlotMutables,
-            localSlotDelegated
+                    localSlotMutables,
+                    localSlotDelegated,
+                    localSlotCaptures
                 )
             }
             is net.sergeych.lyng.ClassDeclStatement -> {
@@ -173,8 +181,9 @@ class BytecodeCompiler(
                     scopeSlotNames,
                     scopeSlotIsModule,
                     localSlotNames,
-            localSlotMutables,
-            localSlotDelegated
+                    localSlotMutables,
+                    localSlotDelegated,
+                    localSlotCaptures
                 )
             }
             is net.sergeych.lyng.FunctionDeclStatement -> {
@@ -190,8 +199,9 @@ class BytecodeCompiler(
                     scopeSlotNames,
                     scopeSlotIsModule,
                     localSlotNames,
-            localSlotMutables,
-            localSlotDelegated
+                    localSlotMutables,
+                    localSlotDelegated,
+                    localSlotCaptures
                 )
             }
             is net.sergeych.lyng.EnumDeclStatement -> {
@@ -207,8 +217,9 @@ class BytecodeCompiler(
                     scopeSlotNames,
                     scopeSlotIsModule,
                     localSlotNames,
-            localSlotMutables,
-            localSlotDelegated
+                    localSlotMutables,
+                    localSlotDelegated,
+                    localSlotCaptures
                 )
             }
             is net.sergeych.lyng.NopStatement -> {
@@ -225,8 +236,9 @@ class BytecodeCompiler(
                     scopeSlotNames,
                     scopeSlotIsModule,
                     localSlotNames,
-            localSlotMutables,
-            localSlotDelegated
+                    localSlotMutables,
+                    localSlotDelegated,
+                    localSlotCaptures
                 )
             }
             else -> null
@@ -246,8 +258,9 @@ class BytecodeCompiler(
             scopeSlotIsModule,
             localSlotNames,
             localSlotMutables,
-            localSlotDelegated
-                )
+            localSlotDelegated,
+            localSlotCaptures
+        )
     }
 
     private fun compileExtensionPropertyDecl(
@@ -268,8 +281,9 @@ class BytecodeCompiler(
             scopeSlotIsModule,
             localSlotNames,
             localSlotMutables,
-            localSlotDelegated
-                )
+            localSlotDelegated,
+            localSlotCaptures
+        )
     }
 
     fun compileExpression(name: String, stmt: ExpressionStatement): CmdFunction? {
@@ -287,8 +301,9 @@ class BytecodeCompiler(
             scopeSlotIsModule,
             localSlotNames,
             localSlotMutables,
-            localSlotDelegated
-                )
+            localSlotDelegated,
+            localSlotCaptures
+        )
     }
 
     private data class CompiledValue(val slot: Int, val type: SlotType)
@@ -358,13 +373,13 @@ class BytecodeCompiler(
                 }
                 if (allowLocalSlots) {
                     if (!forceScopeSlots) {
-                    scopeSlotIndexByName[ref.name]?.let { slot ->
-                        val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
-                        return CompiledValue(slot, resolved)
-                    }
                     val localIndex = localSlotIndexByName[ref.name]
                     if (localIndex != null) {
                         val slot = scopeSlotCount + localIndex
+                        val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
+                        return CompiledValue(slot, resolved)
+                    }
+                    scopeSlotIndexByName[ref.name]?.let { slot ->
                         val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
                         return CompiledValue(slot, resolved)
                     }
@@ -388,13 +403,13 @@ class BytecodeCompiler(
                 }
                 if (allowLocalSlots) {
                     if (!forceScopeSlots) {
-                    scopeSlotIndexByName[ref.name]?.let { slot ->
-                        val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
-                        return CompiledValue(slot, resolved)
-                    }
                     val localIndex = localSlotIndexByName[ref.name]
                     if (localIndex != null) {
                         val slot = scopeSlotCount + localIndex
+                        val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
+                        return CompiledValue(slot, resolved)
+                    }
+                    scopeSlotIndexByName[ref.name]?.let { slot ->
                         val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
                         return CompiledValue(slot, resolved)
                     }
@@ -3970,8 +3985,9 @@ class BytecodeCompiler(
             scopeSlotIsModule,
             localSlotNames,
             localSlotMutables,
-            localSlotDelegated
-                )
+            localSlotDelegated,
+            localSlotCaptures
+        )
     }
 
     private fun compileForIn(name: String, stmt: net.sergeych.lyng.ForInStatement): CmdFunction? {
@@ -3988,8 +4004,9 @@ class BytecodeCompiler(
             scopeSlotIsModule,
             localSlotNames,
             localSlotMutables,
-            localSlotDelegated
-                )
+            localSlotDelegated,
+            localSlotCaptures
+        )
     }
 
     private fun compileWhile(name: String, stmt: net.sergeych.lyng.WhileStatement): CmdFunction? {
@@ -4007,8 +4024,9 @@ class BytecodeCompiler(
             scopeSlotIsModule,
             localSlotNames,
             localSlotMutables,
-            localSlotDelegated
-                )
+            localSlotDelegated,
+            localSlotCaptures
+        )
     }
 
     private fun compileDoWhile(name: String, stmt: net.sergeych.lyng.DoWhileStatement): CmdFunction? {
@@ -4026,8 +4044,9 @@ class BytecodeCompiler(
             scopeSlotIsModule,
             localSlotNames,
             localSlotMutables,
-            localSlotDelegated
-                )
+            localSlotDelegated,
+            localSlotCaptures
+        )
     }
 
     private fun compileBlock(name: String, stmt: BlockStatement): CmdFunction? {
@@ -4048,8 +4067,9 @@ class BytecodeCompiler(
             scopeSlotIsModule,
             localSlotNames,
             localSlotMutables,
-            localSlotDelegated
-                )
+            localSlotDelegated,
+            localSlotCaptures
+        )
     }
 
     private fun compileVarDecl(name: String, stmt: VarDeclStatement): CmdFunction? {
@@ -4066,8 +4086,9 @@ class BytecodeCompiler(
             scopeSlotIsModule,
             localSlotNames,
             localSlotMutables,
-            localSlotDelegated
-                )
+            localSlotDelegated,
+            localSlotCaptures
+        )
     }
 
     private fun compileStatementValue(stmt: Statement): CompiledValue? {
@@ -4520,8 +4541,9 @@ class BytecodeCompiler(
             scopeSlotIsModule,
             localSlotNames,
             localSlotMutables,
-            localSlotDelegated
-                )
+            localSlotDelegated,
+            localSlotCaptures
+        )
     }
 
     private fun compileLoopBody(stmt: Statement, needResult: Boolean): CompiledValue? {
@@ -4788,7 +4810,9 @@ class BytecodeCompiler(
         val typedRangeLocal = if (range == null && rangeRef == null) extractTypedRangeLocal(stmt.source) else null
         val loopSlotPlan = stmt.loopSlotPlan
         var useLoopScope = loopSlotPlan.isNotEmpty()
-        val loopLocalIndex = localSlotIndexByName[stmt.loopVarName]
+        val loopSlotIndex = stmt.loopSlotPlan[stmt.loopVarName]
+        val loopKey = loopSlotIndex?.let { ScopeSlotKey(stmt.loopScopeId, it) }
+        val loopLocalIndex = loopKey?.let { localSlotIndexByKey[it] } ?: localSlotIndexByName[stmt.loopVarName]
         var usedOverride = false
         var loopSlotId = when {
             loopLocalIndex != null -> scopeSlotCount + loopLocalIndex
@@ -4905,7 +4929,7 @@ class BytecodeCompiler(
             val nextSlot = allocSlot()
             builder.emit(Opcode.CALL_MEMBER_SLOT, iterSlot, nextMethodId, 0, 0, nextSlot)
             val nextObj = ensureObjSlot(CompiledValue(nextSlot, SlotType.UNKNOWN))
-            builder.emit(Opcode.MOVE_OBJ, nextObj.slot, loopSlotId)
+            emitMove(CompiledValue(nextObj.slot, SlotType.OBJ), loopSlotId)
             updateSlotType(loopSlotId, SlotType.OBJ)
             updateSlotTypeByName(stmt.loopVarName, SlotType.OBJ)
             if (emitDeclLocal) {
@@ -5012,7 +5036,7 @@ class BytecodeCompiler(
                     Opcode.JMP_IF_TRUE,
                     listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(endLabel))
                 )
-                builder.emit(Opcode.MOVE_INT, iSlot, loopSlotId)
+                emitMove(CompiledValue(iSlot, SlotType.INT), loopSlotId)
                 updateSlotType(loopSlotId, SlotType.INT)
                 updateSlotTypeByName(stmt.loopVarName, SlotType.INT)
                 if (emitDeclLocal) {
@@ -6084,16 +6108,22 @@ class BytecodeCompiler(
             scopeSlotIndexByName[ref.name]?.let { return it }
         }
         if (ref.captureOwnerScopeId != null) {
-            val ownerKey = ScopeSlotKey(ref.captureOwnerScopeId, ref.captureOwnerSlot ?: refSlot(ref))
-            val ownerLocal = localSlotIndexByKey[ownerKey]
-            if (ownerLocal != null) {
-                return scopeSlotCount + ownerLocal
+            val scopeKey = ScopeSlotKey(refScopeId(ref), refSlot(ref))
+            val localIndex = localSlotIndexByKey[scopeKey]
+            if (localIndex != null) {
+                if (localSlotCaptures.getOrNull(localIndex) == true) {
+                    return scopeSlotCount + localIndex
+                }
             }
             val nameLocal = localSlotIndexByName[ref.name]
-            if (nameLocal != null) {
+            if (nameLocal != null && localSlotCaptures.getOrNull(nameLocal) == true) {
                 return scopeSlotCount + nameLocal
             }
-            val scopeKey = ScopeSlotKey(refScopeId(ref), refSlot(ref))
+            for (idx in localSlotNames.indices) {
+                if (localSlotNames[idx] != ref.name) continue
+                if (localSlotCaptures.getOrNull(idx) != true) continue
+                return scopeSlotCount + idx
+            }
             return scopeSlotMap[scopeKey]
         }
         if (ref.isDelegated) {
@@ -6117,6 +6147,7 @@ class BytecodeCompiler(
     }
 
     private fun updateSlotType(slot: Int, type: SlotType) {
+        if (forcedObjSlots.contains(slot) && type != SlotType.OBJ) return
         if (type == SlotType.UNKNOWN) {
             slotTypes.remove(slot)
         } else {
@@ -6141,18 +6172,22 @@ class BytecodeCompiler(
         localSlotInfoMap.clear()
         localSlotIndexByKey.clear()
         localSlotIndexByName.clear()
+        captureSlotKeys.clear()
+        forcedObjSlots.clear()
         loopSlotOverrides.clear()
         scopeSlotIndexByName.clear()
         pendingScopeNameRefs.clear()
         localSlotNames = emptyArray()
         localSlotMutables = BooleanArray(0)
         localSlotDelegated = BooleanArray(0)
+        localSlotCaptures = BooleanArray(0)
         declaredLocalKeys.clear()
         localRangeRefs.clear()
         intLoopVarNames.clear()
+        valueFnRefs.clear()
         addrSlotByScopeSlot.clear()
         loopStack.clear()
-        forceScopeSlots = allowLocalSlots && containsValueFnRef(stmt)
+        forceScopeSlots = false
         if (slotTypeByScopeId.isNotEmpty()) {
             for ((scopeId, slots) in slotTypeByScopeId) {
                 for ((slotIndex, cls) in slots) {
@@ -6166,6 +6201,22 @@ class BytecodeCompiler(
         collectScopeSlots(stmt)
         if (allowLocalSlots) {
             collectLoopSlotPlans(stmt, 0)
+        }
+        if (allowLocalSlots && valueFnRefs.isNotEmpty() && lambdaCaptureEntriesByRef.isNotEmpty()) {
+            for (ref in valueFnRefs) {
+                val entries = lambdaCaptureEntriesByRef[ref] ?: continue
+                for (entry in entries) {
+                    if (entry.ownerKind != CaptureOwnerFrameKind.LOCAL) continue
+                    val key = ScopeSlotKey(entry.ownerScopeId, entry.ownerSlotId)
+                    if (!localSlotInfoMap.containsKey(key)) {
+                        localSlotInfoMap[key] = LocalSlotInfo(
+                            entry.ownerName,
+                            entry.ownerIsMutable,
+                            entry.ownerIsDelegated
+                        )
+                    }
+                }
+            }
         }
         if (pendingScopeNameRefs.isNotEmpty()) {
             val existingNames = HashSet<String>(scopeSlotNameMap.values)
@@ -6208,6 +6259,21 @@ class BytecodeCompiler(
             localSlotNames = names.toTypedArray()
             localSlotMutables = mutables
             localSlotDelegated = delegated
+        }
+        localSlotCaptures = BooleanArray(localSlotNames.size)
+        if (captureSlotKeys.isNotEmpty()) {
+            for (key in captureSlotKeys) {
+                val localIndex = localSlotIndexByKey[key] ?: continue
+                val slot = scopeSlotCount + localIndex
+                localSlotCaptures[localIndex] = true
+                forcedObjSlots.add(slot)
+                slotTypes[slot] = SlotType.OBJ
+            }
+        }
+        for (i in localSlotNames.indices) {
+            if (localSlotCaptures.getOrNull(i) != true) continue
+            val name = localSlotNames[i] ?: continue
+            localSlotIndexByName[name] = i
         }
         if (scopeSlotCount > 0) {
             for ((key, index) in scopeSlotMap) {
@@ -6572,12 +6638,12 @@ class BytecodeCompiler(
                 val scopeId = refScopeId(ref)
                 val key = ScopeSlotKey(scopeId, refSlot(ref))
                 if (ref.captureOwnerScopeId != null) {
-                    if (!scopeSlotMap.containsKey(key)) {
-                        scopeSlotMap[key] = scopeSlotMap.size
+                    if (allowLocalSlots) {
+                        if (!localSlotInfoMap.containsKey(key)) {
+                            localSlotInfoMap[key] = LocalSlotInfo(ref.name, ref.isMutable, ref.isDelegated)
+                        }
                     }
-                    if (!scopeSlotNameMap.containsKey(key)) {
-                        scopeSlotNameMap[key] = ref.name
-                    }
+                    captureSlotKeys.add(key)
                     return
                 }
                 val shouldLocalize = ref.isDelegated || !forceScopeSlots || intLoopVarNames.contains(ref.name)
@@ -6622,12 +6688,12 @@ class BytecodeCompiler(
                     val scopeId = refScopeId(target)
                     val key = ScopeSlotKey(scopeId, refSlot(target))
                     if (target.captureOwnerScopeId != null) {
-                        if (!scopeSlotMap.containsKey(key)) {
-                            scopeSlotMap[key] = scopeSlotMap.size
+                        if (allowLocalSlots) {
+                            if (!localSlotInfoMap.containsKey(key)) {
+                                localSlotInfoMap[key] = LocalSlotInfo(target.name, target.isMutable, target.isDelegated)
+                            }
                         }
-                        if (!scopeSlotNameMap.containsKey(key)) {
-                            scopeSlotNameMap[key] = target.name
-                        }
+                        captureSlotKeys.add(key)
                     } else {
                         val shouldLocalize = target.isDelegated || !forceScopeSlots || intLoopVarNames.contains(target.name)
                         val isModuleSlot = if (target.isDelegated) false else isModuleSlot(scopeId, target.name)
@@ -6655,6 +6721,9 @@ class BytecodeCompiler(
             is AssignOpRef -> {
                 collectScopeSlotsRef(ref.target)
                 collectScopeSlotsRef(ref.value)
+            }
+            is ValueFnRef -> {
+                valueFnRefs.add(ref)
             }
             is AssignIfNullRef -> {
                 collectScopeSlotsRef(ref.target)

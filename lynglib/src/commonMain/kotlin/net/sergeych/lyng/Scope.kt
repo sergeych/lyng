@@ -60,6 +60,7 @@ open class Scope(
     private val slots: MutableList<ObjRecord> = mutableListOf()
     private val nameToSlot: MutableMap<String, Int> = mutableMapOf()
     internal var captureRecords: List<ObjRecord>? = null
+    internal var captureNames: List<String>? = null
     /**
      * Auxiliary per-frame map of local bindings (locals declared in this frame).
      * This helps resolving locals across suspension when slot ownership isn't

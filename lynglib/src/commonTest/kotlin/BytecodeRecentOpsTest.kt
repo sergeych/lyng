@@ -181,6 +181,39 @@ class BytecodeRecentOpsTest {
     }
 
     @Test
+    fun lambdaCapturesLocalByReference() = runTest {
+        eval(
+            """
+            fun make() {
+                var base = 3
+                val f = { x -> x + base }
+                base = 7
+                return f(1)
+            }
+            assertEquals(8, make())
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun lambdaCapturesDelegatedLocal() = runTest {
+        eval(
+            """
+            class BoxDelegate(var v) : Delegate {
+                override fun getValue(thisRef: Object, name: String): Object = v
+                override fun setValue(thisRef: Object, name: String, value: Object) { v = value }
+            }
+            fun make() {
+                var x by BoxDelegate(1)
+                val f = { y -> x += y; return x }
+                return f(2)
+            }
+            assertEquals(3, make())
+            """.trimIndent()
+        )
+    }
+
+    @Test
     fun delegatedMemberAccessAndCall() = runTest {
         eval(
             """

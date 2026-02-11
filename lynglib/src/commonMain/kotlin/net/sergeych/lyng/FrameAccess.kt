@@ -55,3 +55,16 @@ class FrameSlotRef(
         }
     }
 }
+
+class RecordSlotRef(
+    private val record: ObjRecord,
+) : net.sergeych.lyng.obj.Obj() {
+    fun read(): Obj {
+        val direct = record.value
+        return if (direct is FrameSlotRef) direct.read() else direct
+    }
+
+    fun write(value: Obj) {
+        record.value = value
+    }
+}

@@ -22,6 +22,9 @@ data class LambdaCaptureEntry(
     val ownerKind: CaptureOwnerFrameKind,
     val ownerScopeId: Int,
     val ownerSlotId: Int,
+    val ownerName: String,
+    val ownerIsMutable: Boolean,
+    val ownerIsDelegated: Boolean,
 )
 
 data class BytecodeCaptureEntry(

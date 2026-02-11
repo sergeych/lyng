@@ -99,6 +99,7 @@ class ForInStatement(
     val label: String?,
     val canBreak: Boolean,
     val loopSlotPlan: Map<String, Int>,
+    val loopScopeId: Int,
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {

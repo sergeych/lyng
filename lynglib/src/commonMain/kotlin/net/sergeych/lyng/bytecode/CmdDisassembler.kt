@@ -279,7 +279,8 @@ object CmdDisassembler {
                 listOf(OperandKind.SLOT, OperandKind.ADDR)
             Opcode.CONST_NULL ->
                 listOf(OperandKind.SLOT)
-            Opcode.CONST_OBJ, Opcode.CONST_INT, Opcode.CONST_REAL, Opcode.CONST_BOOL, Opcode.MAKE_VALUE_FN ->
+            Opcode.CONST_OBJ, Opcode.CONST_INT, Opcode.CONST_REAL, Opcode.CONST_BOOL,
+            Opcode.MAKE_VALUE_FN ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.PUSH_SCOPE, Opcode.PUSH_SLOT_PLAN ->
                 listOf(OperandKind.CONST)

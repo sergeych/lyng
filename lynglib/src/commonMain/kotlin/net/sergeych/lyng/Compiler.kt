@@ -1705,9 +1705,12 @@ class Compiler(
     private val currentRangeParamNames: Set<String>
         get() = rangeParamNamesStack.lastOrNull() ?: emptySet()
     private val capturePlanStack = mutableListOf<CapturePlan>()
+    private var lambdaDepth = 0
 
     private data class CapturePlan(
         val slotPlan: SlotPlan,
+        val isFunction: Boolean,
+        val propagateToParentFunction: Boolean,
         val captures: MutableList<CaptureSlot> = mutableListOf(),
         val captureMap: MutableMap<String, CaptureSlot> = mutableMapOf(),
         val captureOwners: MutableMap<String, SlotLocation> = mutableMapOf()
@@ -1715,6 +1718,19 @@ class Compiler(
 
     private fun recordCaptureSlot(name: String, slotLoc: SlotLocation) {
         val plan = capturePlanStack.lastOrNull() ?: return
+        recordCaptureSlotInto(plan, name, slotLoc)
+        if (plan.propagateToParentFunction) {
+            for (i in capturePlanStack.size - 2 downTo 0) {
+                val parent = capturePlanStack[i]
+                if (parent.isFunction) {
+                    recordCaptureSlotInto(parent, name, slotLoc)
+                    break
+                }
+            }
+        }
+    }
+
+    private fun recordCaptureSlotInto(plan: CapturePlan, name: String, slotLoc: SlotLocation) {
         if (plan.captureMap.containsKey(name)) return
         val capture = CaptureSlot(
             name = name,
@@ -1734,6 +1750,12 @@ class Compiler(
 
     private fun captureLocalRef(name: String, slotLoc: SlotLocation, pos: Pos): LocalSlotRef? {
         if (capturePlanStack.isEmpty() || slotLoc.depth == 0) return null
+        val functionPlan = capturePlanStack.asReversed().firstOrNull { it.isFunction } ?: return null
+        val functionIndex = functionPlan?.let { plan ->
+            slotPlanStack.indexOfLast { it.id == plan.slotPlan.id }
+        } ?: -1
+        val scopeIndex = slotPlanStack.indexOfLast { it.id == slotLoc.scopeId }
+        if (functionIndex >= 0 && scopeIndex >= functionIndex) return null
         val moduleId = moduleSlotPlan()?.id
         if (moduleId != null && slotLoc.scopeId == moduleId) return null
         recordCaptureSlot(name, slotLoc)
@@ -2158,6 +2180,7 @@ class Compiler(
                     stmt.label,
                     stmt.canBreak,
                     stmt.loopSlotPlan,
+                    stmt.loopScopeId,
                     stmt.pos
                 )
             }
@@ -2843,7 +2866,7 @@ class Compiler(
 
         label?.let { cc.labels.add(it) }
         slotPlanStack.add(paramSlotPlan)
-        val capturePlan = CapturePlan(paramSlotPlan)
+        val capturePlan = CapturePlan(paramSlotPlan, isFunction = true, propagateToParentFunction = false)
         capturePlanStack.add(capturePlan)
         val parsedBody = try {
             inCodeContext(CodeContext.Function("<lambda>", implicitThisMembers = true, implicitThisTypeName = expectedReceiverType)) {
@@ -2854,8 +2877,13 @@ class Compiler(
                     for (param in slotParamNames) {
                         resolutionSink?.declareSymbol(param, SymbolKind.PARAM, isMutable = false, pos = startPos)
                     }
-                    withLocalNames(slotParamNames.toSet()) {
-                        parseBlock(skipLeadingBrace = true)
+                    lambdaDepth += 1
+                    try {
+                        withLocalNames(slotParamNames.toSet()) {
+                            parseBlock(skipLeadingBrace = true)
+                        }
+                    } finally {
+                        lambdaDepth -= 1
                     }
                 } finally {
                     resolutionSink?.exitScope(cc.currentPos())
@@ -2872,25 +2900,56 @@ class Compiler(
         val paramSlotPlanSnapshot = slotPlanIndices(paramSlotPlan)
         val captureSlots = capturePlan.captures.toList()
         val returnClass = inferReturnClassFromStatement(body)
+        val paramKnownClasses = mutableMapOf<String, ObjClass>()
+        argsDeclaration?.params?.forEach { param ->
+            val cls = resolveTypeDeclObjClass(param.type) ?: return@forEach
+            paramKnownClasses[param.name] = cls
+        }
+        val returnLabels = label?.let { setOf(it) } ?: emptySet()
+        val fnStatements = if (useBytecodeStatements && !containsUnsupportedForBytecode(body)) {
+            returnLabelStack.addLast(returnLabels)
+            try {
+                wrapFunctionBytecode(body, "<lambda>", paramKnownClasses)
+            } catch (e: net.sergeych.lyng.bytecode.BytecodeCompileException) {
+                body
+            } finally {
+                returnLabelStack.removeLast()
+            }
+        } else {
+            body
+        }
         val ref = ValueFnRef { closureScope ->
-            val stmt = object : Statement() {
-                override val pos: Pos = body.pos
+            val captureRecords = closureScope.captureRecords
+            val stmt = object : Statement(), BytecodeBodyProvider {
+                override val pos: Pos = fnStatements.pos
+
+                override fun bytecodeBody(): BytecodeStatement? = fnStatements as? BytecodeStatement
+
                 override suspend fun execute(scope: Scope): Obj {
-                    // and the source closure of the lambda which might have other thisObj.
-                    val useBytecodeClosure = closureScope.captureRecords != null
-                    val context = if (useBytecodeClosure) {
-                        scope.applyClosureForBytecode(closureScope, preferredThisType = expectedReceiverType)
+                    // TODO(bytecode): remove this fallback once lambdas are fully bytecode-backed (Step 26).
+                    val usesBytecodeBody = fnStatements is BytecodeStatement &&
+                        (captureSlots.isEmpty() || captureRecords != null)
+                    val useBytecodeClosure = captureRecords != null && usesBytecodeBody
+                    val context = if (usesBytecodeBody) {
+                        scope.applyClosureForBytecode(closureScope, preferredThisType = expectedReceiverType).also {
+                            it.args = scope.args
+                        }
                     } else {
                         scope.applyClosure(closureScope, preferredThisType = expectedReceiverType)
                     }
                     if (paramSlotPlanSnapshot.isNotEmpty()) context.applySlotPlan(paramSlotPlanSnapshot)
                     if (captureSlots.isNotEmpty()) {
-                        val captureRecords = closureScope.captureRecords
                         if (captureRecords != null) {
-                            for (i in captureSlots.indices) {
-                                val rec = captureRecords.getOrNull(i)
-                                    ?: closureScope.raiseSymbolNotFound("capture ${captureSlots[i].name} not found")
-                                context.updateSlotFor(captureSlots[i].name, rec)
+                            val records = captureRecords as List<ObjRecord>
+                            if (useBytecodeClosure) {
+                                context.captureRecords = records
+                                context.captureNames = captureSlots.map { it.name }
+                            } else {
+                                for (i in captureSlots.indices) {
+                                    val rec = records.getOrNull(i)
+                                        ?: closureScope.raiseSymbolNotFound("capture ${captureSlots[i].name} not found")
+                                    context.updateSlotFor(captureSlots[i].name, rec)
+                                }
                             }
                         } else {
                             val moduleScope = if (context is ApplyScope) {
@@ -2902,38 +2961,44 @@ class Compiler(
                             } else {
                                 null
                             }
+                            val usesBytecodeBody = fnStatements is BytecodeStatement
+                            val resolvedRecords = if (usesBytecodeBody) ArrayList<ObjRecord>() else null
+                            val resolvedNames = if (usesBytecodeBody) ArrayList<String>() else null
                             for (capture in captureSlots) {
                                 if (moduleScope != null && moduleScope.getLocalRecordDirect(capture.name) != null) {
                                     continue
                                 }
                                 val rec = closureScope.resolveCaptureRecord(capture.name)
                                     ?: closureScope.raiseSymbolNotFound("symbol ${capture.name} not found")
-                                context.updateSlotFor(capture.name, rec)
+                                if (usesBytecodeBody) {
+                                    resolvedRecords?.add(rec)
+                                    resolvedNames?.add(capture.name)
+                                } else {
+                                    context.updateSlotFor(capture.name, rec)
+                                }
+                            }
+                            if (usesBytecodeBody) {
+                                context.captureRecords = resolvedRecords
+                                context.captureNames = resolvedNames
                             }
                         }
                     }
-                    // Execute lambda body in a closure-aware context. Blocks inside the lambda
-                    // will create child scopes as usual, so re-declarations inside loops work.
                     if (argsDeclaration == null) {
-                        // no args: automatic var 'it'
                         val l = scope.args.list
                         val itValue: Obj = when (l.size) {
-                            // no args: it == void
                             0 -> ObjVoid
-                            // one args: it is this arg
                             1 -> l[0]
-                            // more args: it is a list of args
                             else -> ObjList(l.toMutableList())
                         }
                         context.addItem("it", false, itValue, recordType = ObjRecord.Type.Argument)
                     } else {
-                        // assign vars as declared the standard way
-                        argsDeclaration.assignToContext(context, defaultAccessType = AccessType.Val)
+                        argsDeclaration.assignToContext(context, scope.args, defaultAccessType = AccessType.Val)
                     }
+                    val effectiveStatements = if (usesBytecodeBody) fnStatements else body
                     return try {
-                        body.execute(context)
+                        effectiveStatements.execute(context)
                     } catch (e: ReturnException) {
-                        if (e.label == null || e.label == label) e.result
+                        if (e.label == null || returnLabels.contains(e.label)) e.result
                         else throw e
                     }
                 }
@@ -2948,22 +3013,27 @@ class Compiler(
         if (returnClass != null) {
             lambdaReturnTypeByRef[ref] = returnClass
         }
-        val moduleScopeId = moduleSlotPlan()?.id
-        val captureEntries = captureSlots.map { capture ->
-            val owner = capturePlan.captureOwners[capture.name]
-                ?: error("Missing capture owner for ${capture.name}")
-            val kind = if (moduleScopeId != null && owner.scopeId == moduleScopeId) {
-                net.sergeych.lyng.bytecode.CaptureOwnerFrameKind.MODULE
-            } else {
-                net.sergeych.lyng.bytecode.CaptureOwnerFrameKind.LOCAL
+        if (captureSlots.isNotEmpty()) {
+            val moduleScopeId = moduleSlotPlan()?.id
+            val captureEntries = captureSlots.map { capture ->
+                val owner = capturePlan.captureOwners[capture.name]
+                    ?: error("Missing capture owner for ${capture.name}")
+                val kind = if (moduleScopeId != null && owner.scopeId == moduleScopeId) {
+                    net.sergeych.lyng.bytecode.CaptureOwnerFrameKind.MODULE
+                } else {
+                    net.sergeych.lyng.bytecode.CaptureOwnerFrameKind.LOCAL
+                }
+                net.sergeych.lyng.bytecode.LambdaCaptureEntry(
+                    ownerKind = kind,
+                    ownerScopeId = owner.scopeId,
+                    ownerSlotId = owner.slot,
+                    ownerName = capture.name,
+                    ownerIsMutable = owner.isMutable,
+                    ownerIsDelegated = owner.isDelegated
+                )
             }
-            net.sergeych.lyng.bytecode.LambdaCaptureEntry(
-                ownerKind = kind,
-                ownerScopeId = owner.scopeId,
-                ownerSlotId = owner.slot
-            )
+            lambdaCaptureEntriesByRef[ref] = captureEntries
         }
-        lambdaCaptureEntriesByRef[ref] = captureEntries
         return ref
     }
 
@@ -3039,7 +3109,7 @@ class Compiler(
         return when (t.value) {
             "class" -> {
                 val ref = ValueFnRef { scope ->
-                    operand.get(scope).value.objClass.asReadonly
+                    operand.evalValue(scope).objClass.asReadonly
                 }
                 lambdaReturnTypeByRef[ref] = ObjClassType
                 ref
@@ -4162,6 +4232,7 @@ class Compiler(
             val payload = inferEncodedPayloadClass(ref.args)
             if (payload != null) return payload
         }
+        val receiverClass = resolveReceiverClassForMember(ref.receiver)
         return inferMethodCallReturnClass(ref.name)
     }
 
@@ -6393,6 +6464,7 @@ class Compiler(
                 label = label,
                 canBreak = canBreak,
                 loopSlotPlan = loopSlotPlanSnapshot,
+                loopScopeId = loopSlotPlan.id,
                 pos = body.pos
             )
         } else {
@@ -6818,7 +6890,7 @@ class Compiler(
             val typeParamNames = mergedTypeParamDecls.map { it.name }
             val paramNames: Set<String> = paramNamesList.toSet()
             val paramSlotPlan = buildParamSlotPlan(paramNamesList + typeParamNames)
-            val capturePlan = CapturePlan(paramSlotPlan)
+            val capturePlan = CapturePlan(paramSlotPlan, isFunction = true, propagateToParentFunction = false)
             val rangeParamNames = argsDeclaration.params
                 .filter { isRangeType(it.type) }
                 .map { it.name }
@@ -6945,11 +7017,17 @@ class Compiler(
                     if (paramSlotPlanSnapshot.isNotEmpty()) context.applySlotPlan(paramSlotPlanSnapshot)
                     val captureBase = closureBox.captureContext ?: closureBox.closure
                     if (captureBase != null && captureSlots.isNotEmpty()) {
-                        for (capture in captureSlots) {
-                            // Interpreter-only capture resolution; bytecode functions do not use resolveCaptureRecord.
-                            val rec = captureBase.resolveCaptureRecord(capture.name)
-                                ?: captureBase.raiseSymbolNotFound("symbol ${capture.name} not found")
-                            context.updateSlotFor(capture.name, rec)
+                        if (fnStatements is BytecodeStatement) {
+                            captureBase.raiseIllegalState(
+                                "bytecode function captures require frame slots; scope capture resolution disabled"
+                            )
+                        } else {
+                            for (capture in captureSlots) {
+                                // Interpreter-only capture resolution; bytecode functions do not use resolveCaptureRecord.
+                                val rec = captureBase.resolveCaptureRecord(capture.name)
+                                    ?: captureBase.raiseSymbolNotFound("symbol ${capture.name} not found")
+                                context.updateSlotFor(capture.name, rec)
+                            }
                         }
                     }
 
@@ -7040,7 +7118,7 @@ class Compiler(
             resolutionSink?.declareSymbol(name, SymbolKind.LOCAL, isMutable, startPos, isOverride = false)
         }
         slotPlanStack.add(exprSlotPlan)
-        val capturePlan = CapturePlan(exprSlotPlan)
+        val capturePlan = CapturePlan(exprSlotPlan, isFunction = false, propagateToParentFunction = lambdaDepth > 0)
         capturePlanStack.add(capturePlan)
         val expr = try {
             parseExpression() ?: throw ScriptError(cc.current().pos, "Expected expression")
@@ -7062,7 +7140,7 @@ class Compiler(
             declareSlotNameIn(blockSlotPlan, name, isMutable, isDelegated = false)
         }
         slotPlanStack.add(blockSlotPlan)
-        val capturePlan = CapturePlan(blockSlotPlan)
+        val capturePlan = CapturePlan(blockSlotPlan, isFunction = false, propagateToParentFunction = lambdaDepth > 0)
         capturePlanStack.add(capturePlan)
         val expr = try {
             parseExpression() ?: throw ScriptError(cc.current().pos, "Expected expression")
@@ -7379,7 +7457,7 @@ class Compiler(
             }
         }
         slotPlanStack.add(blockSlotPlan)
-        val capturePlan = CapturePlan(blockSlotPlan)
+        val capturePlan = CapturePlan(blockSlotPlan, isFunction = false, propagateToParentFunction = lambdaDepth > 0)
         capturePlanStack.add(capturePlan)
         val block = try {
             parseScript()
@@ -7410,7 +7488,7 @@ class Compiler(
         resolutionSink?.enterScope(ScopeKind.BLOCK, startPos, null)
         val blockSlotPlan = SlotPlan(mutableMapOf(), 0, nextScopeId++)
         slotPlanStack.add(blockSlotPlan)
-        val capturePlan = CapturePlan(blockSlotPlan)
+        val capturePlan = CapturePlan(blockSlotPlan, isFunction = false, propagateToParentFunction = lambdaDepth > 0)
         capturePlanStack.add(capturePlan)
         val block = try {
             parseScript()
@@ -7440,7 +7518,7 @@ class Compiler(
         resolutionSink?.enterScope(ScopeKind.BLOCK, startPos, null)
         val blockSlotPlan = SlotPlan(mutableMapOf(), 0, nextScopeId++)
         slotPlanStack.add(blockSlotPlan)
-        val capturePlan = CapturePlan(blockSlotPlan)
+        val capturePlan = CapturePlan(blockSlotPlan, isFunction = false, propagateToParentFunction = lambdaDepth > 0)
         capturePlanStack.add(capturePlan)
         val block = try {
             parseScript()

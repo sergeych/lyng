@@ -212,6 +212,7 @@ class BytecodeStatement private constructor(
                         stmt.label,
                         stmt.canBreak,
                         stmt.loopSlotPlan,
+                        stmt.loopScopeId,
                         stmt.pos
                     )
                 }
