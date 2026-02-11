@@ -8555,6 +8555,7 @@ class Compiler(
             importManager: ImportProvider,
             miniSink: MiniAstSink? = null,
             resolutionSink: ResolutionSink? = null,
+            bytecodeFallbackReporter: ((Pos, String) -> Unit)? = null,
             useBytecodeStatements: Boolean = true,
             strictSlotRefs: Boolean = true,
             allowUnresolvedRefs: Boolean = false,
@@ -8567,6 +8568,7 @@ class Compiler(
                 Settings(
                     miniAstSink = miniSink,
                     resolutionSink = resolutionSink,
+                    bytecodeFallbackReporter = bytecodeFallbackReporter,
                     useBytecodeStatements = useBytecodeStatements,
                     strictSlotRefs = strictSlotRefs,
                     allowUnresolvedRefs = allowUnresolvedRefs,
