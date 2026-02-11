@@ -1040,6 +1040,7 @@ class Compiler(
     class Settings(
         val miniAstSink: MiniAstSink? = null,
         val resolutionSink: ResolutionSink? = null,
+        val bytecodeFallbackReporter: ((Pos, String) -> Unit)? = null,
         val useBytecodeStatements: Boolean = true,
         val strictSlotRefs: Boolean = true,
         val allowUnresolvedRefs: Boolean = false,
@@ -1050,6 +1051,7 @@ class Compiler(
     // Optional sink for mini-AST streaming (null by default, zero overhead when not used)
     private val miniSink: MiniAstSink? = settings.miniAstSink
     private val resolutionSink: ResolutionSink? = settings.resolutionSink
+    private val bytecodeFallbackReporter: ((Pos, String) -> Unit)? = settings.bytecodeFallbackReporter
     private val seedScope: Scope? = settings.seedScope
     private val useFastLocalRefs: Boolean = settings.useFastLocalRefs
     private var resolutionScriptDepth = 0
@@ -2907,14 +2909,27 @@ class Compiler(
             paramKnownClasses[param.name] = cls
         }
         val returnLabels = label?.let { setOf(it) } ?: emptySet()
-        val fnStatements = if (useBytecodeStatements && !containsUnsupportedForBytecode(body)) {
-            returnLabelStack.addLast(returnLabels)
-            try {
-                wrapFunctionBytecode(body, "<lambda>", paramKnownClasses)
-            } catch (e: net.sergeych.lyng.bytecode.BytecodeCompileException) {
+        val fnStatements = if (useBytecodeStatements) {
+            if (containsUnsupportedForBytecode(body)) {
+                bytecodeFallbackReporter?.invoke(
+                    body.pos,
+                    "lambda contains unsupported bytecode statements"
+                )
                 body
-            } finally {
-                returnLabelStack.removeLast()
+            } else {
+                returnLabelStack.addLast(returnLabels)
+                try {
+                    wrapFunctionBytecode(body, "<lambda>", paramKnownClasses)
+                } catch (e: net.sergeych.lyng.bytecode.BytecodeCompileException) {
+                    val pos = e.pos ?: body.pos
+                    bytecodeFallbackReporter?.invoke(
+                        pos,
+                        "lambda bytecode compile failed: ${e.message}"
+                    )
+                    body
+                } finally {
+                    returnLabelStack.removeLast()
+                }
             }
         } else {
             body

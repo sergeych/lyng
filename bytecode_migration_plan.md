@@ -129,6 +129,7 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [ ] Delete `BytecodeConst.ValueFn`, `CmdMakeValueFn`, and `MAKE_VALUE_FN` (blocked: some lambdas still fall back to non-bytecode bodies).
   - [x] Delete `BytecodeConst.StatementVal`, `CmdEvalStmt`, and `EVAL_STMT`.
   - [x] Add bytecode-backed `::class` via `ClassOperatorRef` + `GET_OBJ_CLASS` to avoid ValueFn for class operator.
+  - [x] Add a bytecode fallback reporter hook for lambdas to locate remaining non-bytecode cases.
   - [ ] Remove `emitStatementCall`/`emitStatementEval` once unused.
 - [ ] Step 28: Scope as facade only.
   - [ ] Audit bytecode execution paths for `Statement.execute` usage and remove remaining calls.
