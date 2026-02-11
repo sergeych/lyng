@@ -123,7 +123,7 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
 - [ ] Step 26: Bytecode-backed lambdas (remove `ValueFnRef` runtime execution).
   - [x] Compile lambda bodies to bytecode and emit an opcode to create a callable from bytecode + capture plan.
   - [x] Remove `containsValueFnRef` helper now that lambdas are bytecode-backed.
-  - [ ] Remove `forceScopeSlots` branches once no bytecode paths depend on scope slots.
+  - [x] Remove `forceScopeSlots` branches once no bytecode paths depend on scope slots.
   - [x] Add JVM tests for captured locals and delegated locals inside lambdas on the bytecode path.
 - [ ] Step 27: Remove interpreter opcodes and constants from bytecode runtime.
   - [ ] Delete `BytecodeConst.ValueFn`, `CmdMakeValueFn`, and `MAKE_VALUE_FN`.

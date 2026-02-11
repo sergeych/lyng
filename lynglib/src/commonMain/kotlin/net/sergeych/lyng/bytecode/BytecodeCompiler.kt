@@ -70,7 +70,6 @@ class BytecodeCompiler(
     private val intLoopVarNames = LinkedHashSet<String>()
     private val valueFnRefs = LinkedHashSet<ValueFnRef>()
     private val loopStack = ArrayDeque<LoopContext>()
-    private var forceScopeSlots = false
     private var currentPos: Pos? = null
 
     private data class LoopContext(
@@ -372,7 +371,6 @@ class BytecodeCompiler(
                     return CompiledValue(slot, resolved)
                 }
                 if (allowLocalSlots) {
-                    if (!forceScopeSlots) {
                     val localIndex = localSlotIndexByName[ref.name]
                     if (localIndex != null) {
                         val slot = scopeSlotCount + localIndex
@@ -382,13 +380,6 @@ class BytecodeCompiler(
                     scopeSlotIndexByName[ref.name]?.let { slot ->
                         val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
                         return CompiledValue(slot, resolved)
-                    }
-                    }
-                    if (forceScopeSlots) {
-                        scopeSlotIndexByName[ref.name]?.let { slot ->
-                            val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
-                            return CompiledValue(slot, resolved)
-                        }
                     }
                 }
                 null
@@ -402,7 +393,6 @@ class BytecodeCompiler(
                     return CompiledValue(slot, resolved)
                 }
                 if (allowLocalSlots) {
-                    if (!forceScopeSlots) {
                     val localIndex = localSlotIndexByName[ref.name]
                     if (localIndex != null) {
                         val slot = scopeSlotCount + localIndex
@@ -412,13 +402,6 @@ class BytecodeCompiler(
                     scopeSlotIndexByName[ref.name]?.let { slot ->
                         val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
                         return CompiledValue(slot, resolved)
-                    }
-                    }
-                    if (forceScopeSlots) {
-                        scopeSlotIndexByName[ref.name]?.let { slot ->
-                            val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
-                            return CompiledValue(slot, resolved)
-                        }
                     }
                 }
                 null
@@ -3620,19 +3603,12 @@ class BytecodeCompiler(
             return CompiledValue(slot, resolved)
         }
         if (!allowLocalSlots) return null
-        if (!forceScopeSlots) {
-            scopeSlotIndexByName[name]?.let { slot ->
-                val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
-                return CompiledValue(slot, resolved)
-            }
-            localSlotIndexByName[name]?.let { localIndex ->
-                val slot = scopeSlotCount + localIndex
-                val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
-                return CompiledValue(slot, resolved)
-            }
-            return null
-        }
         scopeSlotIndexByName[name]?.let { slot ->
+            val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
+            return CompiledValue(slot, resolved)
+        }
+        localSlotIndexByName[name]?.let { localIndex ->
+            val slot = scopeSlotCount + localIndex
             val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
             return CompiledValue(slot, resolved)
         }
@@ -4560,7 +4536,7 @@ class BytecodeCompiler(
         emitInlineStatements(stmt.statements(), needResult)
 
     private fun shouldInlineBlock(stmt: BlockStatement): Boolean {
-        return allowLocalSlots && !forceScopeSlots
+        return allowLocalSlots
     }
 
     private fun compileInlineBlock(name: String, stmt: net.sergeych.lyng.InlineBlockStatement): CmdFunction? {
@@ -4585,7 +4561,7 @@ class BytecodeCompiler(
     private fun compileLoopBody(stmt: Statement, needResult: Boolean): CompiledValue? {
         val target = if (stmt is BytecodeStatement) stmt.original else stmt
         if (target is BlockStatement) {
-            val useInline = !forceScopeSlots && target.slotPlan.isEmpty() && target.captureSlots.isEmpty()
+            val useInline = target.slotPlan.isEmpty() && target.captureSlots.isEmpty()
             return if (useInline) emitInlineBlock(target, needResult) else emitBlock(target, needResult)
         }
         return compileStatementValueOrFallback(target, needResult)
@@ -4650,7 +4626,7 @@ class BytecodeCompiler(
             updateSlotObjClass(localSlot, stmt.initializer, stmt.initializerObjClass)
             updateNameObjClassFromSlot(stmt.name, localSlot)
             val shadowedScopeSlot = scopeSlotIndexByName.containsKey(stmt.name)
-            if (forceScopeSlots || !shadowedScopeSlot) {
+            if (!shadowedScopeSlot) {
                 val declId = builder.addConst(
                     BytecodeConst.LocalDecl(
                         stmt.name,
@@ -4867,14 +4843,14 @@ class BytecodeCompiler(
             slot
         }
         var emitDeclLocal = usedOverride
-        if (useLoopScope && !forceScopeSlots) {
+        if (useLoopScope) {
             val loopVarOnly = loopSlotPlan.size == 1 && loopSlotPlan.containsKey(stmt.loopVarName)
             val loopVarIsLocal = loopSlotId >= scopeSlotCount
             if (loopVarOnly && loopVarIsLocal) {
                 useLoopScope = false
             }
         }
-        if (useLoopScope && allowLocalSlots && !forceScopeSlots) {
+        if (useLoopScope && allowLocalSlots) {
             val needsScope = allowedScopeNames?.let { names ->
                 loopSlotPlan.keys.any { names.contains(it) }
             } == true
@@ -4883,7 +4859,7 @@ class BytecodeCompiler(
             }
         }
         emitDeclLocal = emitDeclLocal && useLoopScope
-        if (!forceScopeSlots && loopSlotId < scopeSlotCount) {
+        if (loopSlotId < scopeSlotCount) {
             val localSlot = allocSlot()
             loopSlotOverrides[stmt.loopVarName] = localSlot
             usedOverride = true
@@ -5738,7 +5714,7 @@ class BytecodeCompiler(
             val loopKeys = loopSlotOverrides.keys.sorted().joinToString(prefix = "[", postfix = "]")
             val localKeys = localSlotIndexByName.keys.sorted().joinToString(prefix = "[", postfix = "]")
             val scopeKeys = scopeSlotIndexByName.keys.sorted().joinToString(prefix = "[", postfix = "]")
-            val info = " ref=$refKind loopSlots=$loopKeys localSlots=$localKeys scopeSlots=$scopeKeys forceScopeSlots=$forceScopeSlots"
+            val info = " ref=$refKind loopSlots=$loopKeys localSlots=$localKeys scopeSlots=$scopeKeys"
             throw BytecodeCompileException("Unresolved name '$name'.$info", pos)
         }
         val refInfo = when (ref) {
@@ -6169,10 +6145,6 @@ class BytecodeCompiler(
             val nameIndex = localSlotIndexByName[ref.name]
             if (nameIndex != null) return scopeSlotCount + nameIndex
         }
-        if (forceScopeSlots) {
-            val scopeKey = ScopeSlotKey(refScopeId(ref), refSlot(ref))
-            return scopeSlotMap[scopeKey]
-        }
         val localKey = ScopeSlotKey(refScopeId(ref), refSlot(ref))
         val localIndex = localSlotIndexByKey[localKey]
         if (localIndex != null) return scopeSlotCount + localIndex
@@ -6223,7 +6195,6 @@ class BytecodeCompiler(
         valueFnRefs.clear()
         addrSlotByScopeSlot.clear()
         loopStack.clear()
-        forceScopeSlots = false
         if (slotTypeByScopeId.isNotEmpty()) {
             for ((scopeId, slots) in slotTypeByScopeId) {
                 for ((slotIndex, cls) in slots) {
@@ -6366,7 +6337,7 @@ class BytecodeCompiler(
                     }
                 }
                 val isModuleSlot = isModuleSlot(scopeId, stmt.name)
-                if (allowLocalSlots && !forceScopeSlots && slotIndex != null && !isModuleSlot) {
+                if (allowLocalSlots && slotIndex != null && !isModuleSlot) {
                     val key = ScopeSlotKey(scopeId, slotIndex)
                     declaredLocalKeys.add(key)
                     if (!localSlotInfoMap.containsKey(key)) {
@@ -6461,56 +6432,6 @@ class BytecodeCompiler(
     private fun collectLoopSlotPlans(stmt: Statement, scopeDepth: Int) {
         if (stmt is BytecodeStatement) {
             collectLoopSlotPlans(stmt.original, scopeDepth)
-            return
-        }
-        if (forceScopeSlots) {
-            when (stmt) {
-                is net.sergeych.lyng.ForInStatement -> {
-                    collectLoopSlotPlans(stmt.source, scopeDepth)
-                    val loopDepth = scopeDepth + 1
-                    collectLoopSlotPlans(stmt.body, loopDepth)
-                    stmt.elseStatement?.let { collectLoopSlotPlans(it, loopDepth) }
-                }
-                is net.sergeych.lyng.WhileStatement -> {
-                    collectLoopSlotPlans(stmt.condition, scopeDepth)
-                    val loopDepth = scopeDepth + 1
-                    collectLoopSlotPlans(stmt.body, loopDepth)
-                    stmt.elseStatement?.let { collectLoopSlotPlans(it, loopDepth) }
-                }
-                is net.sergeych.lyng.DoWhileStatement -> {
-                    val loopDepth = scopeDepth + 1
-                    collectLoopSlotPlans(stmt.body, loopDepth)
-                    collectLoopSlotPlans(stmt.condition, loopDepth)
-                    stmt.elseStatement?.let { collectLoopSlotPlans(it, loopDepth) }
-                }
-                is BlockStatement -> {
-                    val nextDepth = scopeDepth + 1
-                    for (child in stmt.statements()) {
-                        collectLoopSlotPlans(child, nextDepth)
-                    }
-                }
-                is net.sergeych.lyng.InlineBlockStatement -> {
-                    for (child in stmt.statements()) {
-                        collectLoopSlotPlans(child, scopeDepth)
-                    }
-                }
-                is IfStatement -> {
-                    collectLoopSlotPlans(stmt.condition, scopeDepth)
-                    collectLoopSlotPlans(stmt.ifBody, scopeDepth)
-                    stmt.elseBody?.let { collectLoopSlotPlans(it, scopeDepth) }
-                }
-                is VarDeclStatement -> {
-                    stmt.initializer?.let { collectLoopSlotPlans(it, scopeDepth) }
-                }
-                is ExpressionStatement -> {}
-                is net.sergeych.lyng.ReturnStatement -> {
-                    stmt.resultExpr?.let { collectLoopSlotPlans(it, scopeDepth) }
-                }
-                is net.sergeych.lyng.ThrowStatement -> {
-                    collectLoopSlotPlans(stmt.throwExpr, scopeDepth)
-                }
-                else -> {}
-            }
             return
         }
         when (stmt) {
@@ -6682,9 +6603,8 @@ class BytecodeCompiler(
                     captureSlotKeys.add(key)
                     return
                 }
-                val shouldLocalize = ref.isDelegated || !forceScopeSlots || intLoopVarNames.contains(ref.name)
                 val isModuleSlot = if (ref.isDelegated) false else isModuleSlot(scopeId, ref.name)
-                if (allowLocalSlots && shouldLocalize && !isModuleSlot) {
+                if (allowLocalSlots && !isModuleSlot) {
                     if (!localSlotInfoMap.containsKey(key)) {
                         localSlotInfoMap[key] = LocalSlotInfo(ref.name, ref.isMutable, ref.isDelegated)
                     }
@@ -6731,9 +6651,8 @@ class BytecodeCompiler(
                         }
                         captureSlotKeys.add(key)
                     } else {
-                        val shouldLocalize = target.isDelegated || !forceScopeSlots || intLoopVarNames.contains(target.name)
                         val isModuleSlot = if (target.isDelegated) false else isModuleSlot(scopeId, target.name)
-                        if (allowLocalSlots && shouldLocalize && !isModuleSlot) {
+                        if (allowLocalSlots && !isModuleSlot) {
                             if (!localSlotInfoMap.containsKey(key)) {
                                 localSlotInfoMap[key] = LocalSlotInfo(target.name, target.isMutable, target.isDelegated)
                             }
