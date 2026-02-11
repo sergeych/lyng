@@ -16,6 +16,7 @@
 
 package net.sergeych.lyng.bytecode
 
+import net.sergeych.lyng.ArgsDeclaration
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Visibility
 import net.sergeych.lyng.obj.ListLiteralRef
@@ -36,6 +37,17 @@ sealed class BytecodeConst {
     data class ValueFn(
         val fn: suspend (net.sergeych.lyng.Scope) -> net.sergeych.lyng.obj.ObjRecord,
         val captureTableId: Int? = null,
+    ) : BytecodeConst()
+    data class LambdaFn(
+        val fn: CmdFunction,
+        val captureTableId: Int?,
+        val captureNames: List<String>,
+        val paramSlotPlan: Map<String, Int>,
+        val argsDeclaration: ArgsDeclaration?,
+        val preferredThisType: String?,
+        val wrapAsExtensionCallable: Boolean,
+        val returnLabels: Set<String>,
+        val pos: Pos,
     ) : BytecodeConst()
     data class DeclExec(val executable: net.sergeych.lyng.DeclExecutable) : BytecodeConst()
     data class EnumDecl(

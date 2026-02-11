@@ -2918,7 +2918,9 @@ class Compiler(
         } else {
             body
         }
-        val ref = ValueFnRef { closureScope ->
+        val bytecodeFn = (fnStatements as? BytecodeStatement)?.bytecodeFunction()
+        val ref = LambdaFnRef(
+            valueFn = { closureScope ->
             val captureRecords = closureScope.captureRecords
             val stmt = object : Statement(), BytecodeBodyProvider {
                 override val pos: Pos = fnStatements.pos
@@ -3009,7 +3011,15 @@ class Compiler(
                 stmt
             }
             callable.asReadonly
-        }
+            },
+            bytecodeFn = bytecodeFn,
+            paramSlotPlan = paramSlotPlanSnapshot,
+            argsDeclaration = argsDeclaration,
+            preferredThisType = expectedReceiverType,
+            wrapAsExtensionCallable = wrapAsExtensionCallable,
+            returnLabels = returnLabels,
+            pos = startPos
+        )
         if (returnClass != null) {
             lambdaReturnTypeByRef[ref] = returnClass
         }

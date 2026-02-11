@@ -1505,7 +1505,7 @@ class CmdCallSlot(
         } else {
             // Pooling for Statement-based callables (lambdas) can still alter closure semantics; keep safe path for now.
             val scope = frame.ensureScope()
-            if (callee is Statement && callee !is BytecodeStatement) {
+            if (callee is Statement && callee !is BytecodeStatement && callee !is BytecodeCallable) {
                 frame.syncFrameToScope(useRefs = true)
             }
             callee.callOn(scope.createChildScope(scope.pos, args = args))
@@ -1889,6 +1889,74 @@ class CmdMakeValueFn(internal val id: Int, internal val dst: Int) : Cmd() {
         scope.captureRecords = previousCaptures
         frame.storeObjResult(dst, result)
         return
+    }
+}
+
+class CmdMakeLambda(internal val id: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val lambdaConst = frame.fn.constants.getOrNull(id) as? BytecodeConst.LambdaFn
+            ?: error("MAKE_LAMBDA_FN expects LambdaFn at $id")
+        val scope = frame.ensureScope()
+        val captureRecords = lambdaConst.captureTableId?.let { frame.buildCaptureRecords(it) }
+        val stmt = BytecodeLambdaCallable(
+            fn = lambdaConst.fn,
+            closureScope = scope,
+            captureRecords = captureRecords,
+            captureNames = lambdaConst.captureNames,
+            paramSlotPlan = lambdaConst.paramSlotPlan,
+            argsDeclaration = lambdaConst.argsDeclaration,
+            preferredThisType = lambdaConst.preferredThisType,
+            returnLabels = lambdaConst.returnLabels,
+            pos = lambdaConst.pos
+        )
+        val callable: Obj = if (lambdaConst.wrapAsExtensionCallable) {
+            ObjExtensionMethodCallable("<lambda>", stmt)
+        } else {
+            stmt
+        }
+        frame.storeObjResult(dst, callable.asReadonly.value)
+        return
+    }
+}
+
+class BytecodeLambdaCallable(
+    private val fn: CmdFunction,
+    private val closureScope: Scope,
+    private val captureRecords: List<ObjRecord>?,
+    private val captureNames: List<String>,
+    private val paramSlotPlan: Map<String, Int>,
+    private val argsDeclaration: ArgsDeclaration?,
+    private val preferredThisType: String?,
+    private val returnLabels: Set<String>,
+    override val pos: Pos,
+) : Statement(), BytecodeCallable {
+    override suspend fun execute(scope: Scope): Obj {
+        val context = scope.applyClosureForBytecode(closureScope, preferredThisType).also {
+            it.args = scope.args
+        }
+        if (paramSlotPlan.isNotEmpty()) context.applySlotPlan(paramSlotPlan)
+        if (captureRecords != null) {
+            context.captureRecords = captureRecords
+            context.captureNames = captureNames
+        } else if (captureNames.isNotEmpty()) {
+            closureScope.raiseIllegalState("bytecode lambda capture records missing")
+        }
+        if (argsDeclaration == null) {
+            val l = scope.args.list
+            val itValue: Obj = when (l.size) {
+                0 -> ObjVoid
+                1 -> l[0]
+                else -> ObjList(l.toMutableList())
+            }
+            context.addItem("it", false, itValue, recordType = ObjRecord.Type.Argument)
+        } else {
+            argsDeclaration.assignToContext(context, scope.args, defaultAccessType = AccessType.Val)
+        }
+        return try {
+            CmdVm().execute(fn, context, scope.args.list)
+        } catch (e: ReturnException) {
+            if (e.label == null || returnLabels.contains(e.label)) e.result else throw e
+        }
     }
 }
 

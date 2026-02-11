@@ -623,6 +623,42 @@ class BytecodeCompiler(
     }
 
     private fun compileValueFnRef(ref: ValueFnRef): CompiledValue? {
+        if (ref is LambdaFnRef && ref.bytecodeFn != null) {
+            val captures = lambdaCaptureEntriesByRef[ref].orEmpty()
+            val captureTableId = if (captures.isEmpty()) {
+                null
+            } else {
+                val resolved = captures.map { entry ->
+                    val slotIndex = resolveCaptureSlot(entry)
+                    BytecodeCaptureEntry(
+                        ownerKind = entry.ownerKind,
+                        ownerScopeId = entry.ownerScopeId,
+                        ownerSlotId = entry.ownerSlotId,
+                        slotIndex = slotIndex
+                    )
+                }
+                builder.addConst(BytecodeConst.CaptureTable(resolved))
+            }
+            val captureNames = captures.map { it.ownerName }
+            val id = builder.addConst(
+                BytecodeConst.LambdaFn(
+                    fn = ref.bytecodeFn,
+                    captureTableId = captureTableId,
+                    captureNames = captureNames,
+                    paramSlotPlan = ref.paramSlotPlan,
+                    argsDeclaration = ref.argsDeclaration,
+                    preferredThisType = ref.preferredThisType,
+                    wrapAsExtensionCallable = ref.wrapAsExtensionCallable,
+                    returnLabels = ref.returnLabels,
+                    pos = ref.pos
+                )
+            )
+            val slot = allocSlot()
+            builder.emit(Opcode.MAKE_LAMBDA_FN, id, slot)
+            updateSlotType(slot, SlotType.OBJ)
+            return CompiledValue(slot, SlotType.OBJ)
+        }
+
         val captureTableId = lambdaCaptureEntriesByRef[ref]?.let { captures ->
             if (captures.isEmpty()) return@let null
             val resolved = captures.map { entry ->

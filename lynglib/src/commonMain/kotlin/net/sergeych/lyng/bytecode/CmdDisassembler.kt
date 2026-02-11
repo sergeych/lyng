@@ -87,6 +87,7 @@ object CmdDisassembler {
             is CmdLoadThisVariant -> Opcode.LOAD_THIS_VARIANT to intArrayOf(cmd.typeId, cmd.dst)
             is CmdConstNull -> Opcode.CONST_NULL to intArrayOf(cmd.dst)
             is CmdMakeValueFn -> Opcode.MAKE_VALUE_FN to intArrayOf(cmd.id, cmd.dst)
+            is CmdMakeLambda -> Opcode.MAKE_LAMBDA_FN to intArrayOf(cmd.id, cmd.dst)
             is CmdBoxObj -> Opcode.BOX_OBJ to intArrayOf(cmd.src, cmd.dst)
             is CmdObjToBool -> Opcode.OBJ_TO_BOOL to intArrayOf(cmd.src, cmd.dst)
             is CmdCheckIs -> Opcode.CHECK_IS to intArrayOf(cmd.objSlot, cmd.typeSlot, cmd.dst)
@@ -280,7 +281,7 @@ object CmdDisassembler {
             Opcode.CONST_NULL ->
                 listOf(OperandKind.SLOT)
             Opcode.CONST_OBJ, Opcode.CONST_INT, Opcode.CONST_REAL, Opcode.CONST_BOOL,
-            Opcode.MAKE_VALUE_FN ->
+            Opcode.MAKE_VALUE_FN, Opcode.MAKE_LAMBDA_FN ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.PUSH_SCOPE, Opcode.PUSH_SLOT_PLAN ->
                 listOf(OperandKind.CONST)

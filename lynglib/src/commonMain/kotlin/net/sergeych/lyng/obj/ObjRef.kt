@@ -72,7 +72,7 @@ sealed interface ObjRef {
 }
 
 /** Runtime-computed read-only reference backed by a lambda. */
-class ValueFnRef(private val fn: suspend (Scope) -> ObjRecord) : ObjRef {
+open class ValueFnRef(private val fn: suspend (Scope) -> ObjRecord) : ObjRef {
     internal fun valueFn(): suspend (Scope) -> ObjRecord = fn
 
     override suspend fun get(scope: Scope): ObjRecord = fn(scope)

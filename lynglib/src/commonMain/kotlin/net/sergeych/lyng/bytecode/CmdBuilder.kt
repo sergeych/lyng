@@ -154,7 +154,7 @@ class CmdBuilder {
             Opcode.CONST_NULL ->
                 listOf(OperandKind.SLOT)
             Opcode.CONST_OBJ, Opcode.CONST_INT, Opcode.CONST_REAL, Opcode.CONST_BOOL,
-            Opcode.MAKE_VALUE_FN ->
+            Opcode.MAKE_VALUE_FN, Opcode.MAKE_LAMBDA_FN ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.PUSH_SCOPE, Opcode.PUSH_SLOT_PLAN ->
                 listOf(OperandKind.CONST)
@@ -255,6 +255,7 @@ class CmdBuilder {
             Opcode.CONST_BOOL -> CmdConstBool(operands[0], operands[1])
             Opcode.CONST_NULL -> CmdConstNull(operands[0])
             Opcode.MAKE_VALUE_FN -> CmdMakeValueFn(operands[0], operands[1])
+            Opcode.MAKE_LAMBDA_FN -> CmdMakeLambda(operands[0], operands[1])
             Opcode.BOX_OBJ -> CmdBoxObj(operands[0], operands[1])
             Opcode.OBJ_TO_BOOL -> CmdObjToBool(operands[0], operands[1])
             Opcode.RANGE_INT_BOUNDS -> CmdRangeIntBounds(operands[0], operands[1], operands[2], operands[3])
