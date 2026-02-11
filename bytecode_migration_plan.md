@@ -122,7 +122,8 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [x] Add JVM disasm coverage to ensure module init has no `CALL_SLOT` to `Callable@...` for declarations.
 - [ ] Step 26: Bytecode-backed lambdas (remove `ValueFnRef` runtime execution).
   - [x] Compile lambda bodies to bytecode and emit an opcode to create a callable from bytecode + capture plan.
-  - [ ] Remove `containsValueFnRef`/`forceScopeSlots` workaround once lambdas are bytecode.
+  - [x] Remove `containsValueFnRef` helper now that lambdas are bytecode-backed.
+  - [ ] Remove `forceScopeSlots` branches once no bytecode paths depend on scope slots.
   - [x] Add JVM tests for captured locals and delegated locals inside lambdas on the bytecode path.
 - [ ] Step 27: Remove interpreter opcodes and constants from bytecode runtime.
   - [ ] Delete `BytecodeConst.ValueFn`, `CmdMakeValueFn`, and `MAKE_VALUE_FN`.
