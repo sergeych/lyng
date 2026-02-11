@@ -126,8 +126,8 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [x] Remove `forceScopeSlots` branches once no bytecode paths depend on scope slots.
   - [x] Add JVM tests for captured locals and delegated locals inside lambdas on the bytecode path.
 - [ ] Step 27: Remove interpreter opcodes and constants from bytecode runtime.
-  - [ ] Delete `BytecodeConst.ValueFn`, `CmdMakeValueFn`, and `MAKE_VALUE_FN`.
-  - [ ] Delete `BytecodeConst.StatementVal`, `CmdEvalStmt`, and `EVAL_STMT`.
+  - [ ] Delete `BytecodeConst.ValueFn`, `CmdMakeValueFn`, and `MAKE_VALUE_FN` (blocked: some lambdas still fall back to non-bytecode bodies).
+  - [x] Delete `BytecodeConst.StatementVal`, `CmdEvalStmt`, and `EVAL_STMT`.
   - [ ] Remove `emitStatementCall`/`emitStatementEval` once unused.
 - [ ] Step 28: Scope as facade only.
   - [ ] Audit bytecode execution paths for `Statement.execute` usage and remove remaining calls.

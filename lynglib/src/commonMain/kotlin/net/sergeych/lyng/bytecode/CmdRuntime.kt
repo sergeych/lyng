@@ -1861,22 +1861,6 @@ class CmdEvalRef(internal val id: Int, internal val dst: Int) : Cmd() {
     }
 }
 
-class CmdEvalStmt(internal val id: Int, internal val dst: Int) : Cmd() {
-    override suspend fun perform(frame: CmdFrame) {
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncFrameToScope(useRefs = true)
-        }
-        val stmt = frame.fn.constants.getOrNull(id) as? BytecodeConst.StatementVal
-            ?: error("EVAL_STMT expects StatementVal at $id")
-        val result = stmt.statement.execute(frame.ensureScope())
-        if (frame.fn.localSlotNames.isNotEmpty()) {
-            frame.syncScopeToFrame()
-        }
-        frame.storeObjResult(dst, result)
-        return
-    }
-}
-
 class CmdMakeValueFn(internal val id: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         val valueFn = frame.fn.constants.getOrNull(id) as? BytecodeConst.ValueFn

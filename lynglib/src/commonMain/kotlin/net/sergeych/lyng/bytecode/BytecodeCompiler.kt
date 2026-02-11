@@ -641,7 +641,6 @@ class BytecodeCompiler(
             updateSlotType(slot, SlotType.OBJ)
             return CompiledValue(slot, SlotType.OBJ)
         }
-
         val captureTableId = lambdaCaptureEntriesByRef[ref]?.let { captures ->
             if (captures.isEmpty()) return@let null
             val resolved = captures.map { entry ->
