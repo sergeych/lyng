@@ -2044,6 +2044,7 @@ class Compiler(
             is QualifiedThisMethodSlotCallRef -> false
             is QualifiedThisFieldSlotRef -> false
             is ClassScopeMemberRef -> false
+            is ClassOperatorRef -> containsUnsupportedRef(ref.target)
             else -> false
         }
     }
@@ -3118,9 +3119,7 @@ class Compiler(
         if (t.type != Token.Type.ID) throw ScriptError(t.pos, "Expecting ID after ::")
         return when (t.value) {
             "class" -> {
-                val ref = ValueFnRef { scope ->
-                    operand.evalValue(scope).objClass.asReadonly
-                }
+                val ref = ClassOperatorRef(operand, t.pos)
                 lambdaReturnTypeByRef[ref] = ObjClassType
                 ref
             }
@@ -7247,6 +7246,7 @@ class Compiler(
                 decl?.let { resolveClassByName(it.typeName) }
             }
             is ValueFnRef -> lambdaReturnTypeByRef[directRef]
+            is ClassOperatorRef -> lambdaReturnTypeByRef[directRef]
             is CastRef -> resolveTypeRefClass(directRef.castTypeRef())
             is BinaryOpRef -> inferBinaryOpReturnClass(directRef)
             is ImplicitThisMethodCallRef -> {

@@ -129,7 +129,7 @@ class CmdBuilder {
             Opcode.CLEAR_PENDING_THROWABLE, Opcode.RETHROW_PENDING -> emptyList()
             Opcode.MOVE_OBJ, Opcode.MOVE_INT, Opcode.MOVE_REAL, Opcode.MOVE_BOOL, Opcode.BOX_OBJ,
             Opcode.INT_TO_REAL, Opcode.REAL_TO_INT, Opcode.BOOL_TO_INT, Opcode.INT_TO_BOOL,
-            Opcode.OBJ_TO_BOOL,
+            Opcode.OBJ_TO_BOOL, Opcode.GET_OBJ_CLASS,
             Opcode.NEG_INT, Opcode.NEG_REAL, Opcode.NOT_BOOL, Opcode.INV_INT,
             Opcode.ASSERT_IS ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT)
@@ -258,6 +258,7 @@ class CmdBuilder {
             Opcode.MAKE_LAMBDA_FN -> CmdMakeLambda(operands[0], operands[1])
             Opcode.BOX_OBJ -> CmdBoxObj(operands[0], operands[1])
             Opcode.OBJ_TO_BOOL -> CmdObjToBool(operands[0], operands[1])
+            Opcode.GET_OBJ_CLASS -> CmdGetObjClass(operands[0], operands[1])
             Opcode.RANGE_INT_BOUNDS -> CmdRangeIntBounds(operands[0], operands[1], operands[2], operands[3])
             Opcode.LOAD_THIS -> CmdLoadThis(operands[0])
             Opcode.LOAD_THIS_VARIANT -> CmdLoadThisVariant(operands[0], operands[1])

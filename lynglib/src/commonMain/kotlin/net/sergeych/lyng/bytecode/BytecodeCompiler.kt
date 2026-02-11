@@ -420,6 +420,14 @@ class BytecodeCompiler(
                 CompiledValue(slot, resolved)
             }
             is ValueFnRef -> compileValueFnRef(ref)
+            is ClassOperatorRef -> {
+                val target = compileRefWithFallback(ref.target, null, Pos.builtIn) ?: return null
+                val dst = allocSlot()
+                builder.emit(Opcode.GET_OBJ_CLASS, target.slot, dst)
+                updateSlotType(dst, SlotType.OBJ)
+                slotObjClass[dst] = ObjClassType
+                CompiledValue(dst, SlotType.OBJ)
+            }
             is ListLiteralRef -> compileListLiteral(ref)
             is MapLiteralRef -> compileMapLiteral(ref)
             is ThisMethodSlotCallRef -> compileThisMethodSlotCall(ref)

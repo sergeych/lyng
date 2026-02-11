@@ -90,6 +90,7 @@ object CmdDisassembler {
             is CmdMakeLambda -> Opcode.MAKE_LAMBDA_FN to intArrayOf(cmd.id, cmd.dst)
             is CmdBoxObj -> Opcode.BOX_OBJ to intArrayOf(cmd.src, cmd.dst)
             is CmdObjToBool -> Opcode.OBJ_TO_BOOL to intArrayOf(cmd.src, cmd.dst)
+            is CmdGetObjClass -> Opcode.GET_OBJ_CLASS to intArrayOf(cmd.src, cmd.dst)
             is CmdCheckIs -> Opcode.CHECK_IS to intArrayOf(cmd.objSlot, cmd.typeSlot, cmd.dst)
             is CmdAssertIs -> Opcode.ASSERT_IS to intArrayOf(cmd.objSlot, cmd.typeSlot)
             is CmdMakeQualifiedView -> Opcode.MAKE_QUALIFIED_VIEW to intArrayOf(cmd.objSlot, cmd.typeSlot, cmd.dst)
@@ -256,7 +257,7 @@ object CmdDisassembler {
             Opcode.INT_TO_REAL, Opcode.REAL_TO_INT, Opcode.BOOL_TO_INT, Opcode.INT_TO_BOOL,
             Opcode.NEG_INT, Opcode.NEG_REAL, Opcode.NOT_BOOL, Opcode.INV_INT ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT)
-            Opcode.OBJ_TO_BOOL, Opcode.ASSERT_IS ->
+            Opcode.OBJ_TO_BOOL, Opcode.GET_OBJ_CLASS, Opcode.ASSERT_IS ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT)
             Opcode.CHECK_IS, Opcode.MAKE_QUALIFIED_VIEW ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)

@@ -78,6 +78,13 @@ open class ValueFnRef(private val fn: suspend (Scope) -> ObjRecord) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord = fn(scope)
 }
 
+/** Compile-time supported ::class operator reference. */
+class ClassOperatorRef(val target: ObjRef, val pos: Pos) : ObjRef {
+    override suspend fun get(scope: Scope): ObjRecord {
+        return target.evalValue(scope).objClass.asReadonly
+    }
+}
+
 /** Unary operations supported by ObjRef. */
 enum class UnaryOp { NOT, NEGATE, BITNOT }
 

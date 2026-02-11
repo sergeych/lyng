@@ -214,6 +214,14 @@ class CmdObjToBool(internal val src: Int, internal val dst: Int) : Cmd() {
     }
 }
 
+class CmdGetObjClass(internal val src: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val cls = frame.slotToObj(src).objClass
+        frame.setObj(dst, cls)
+        return
+    }
+}
+
 class CmdCheckIs(internal val objSlot: Int, internal val typeSlot: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         val obj = frame.slotToObj(objSlot)
