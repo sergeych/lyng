@@ -20,7 +20,6 @@ package net.sergeych.lyng.obj
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import net.sergeych.lyng.Scope
-import net.sergeych.lyng.Statement
 import net.sergeych.lyng.miniast.ParamDoc
 import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lyng.miniast.type
@@ -41,11 +40,11 @@ class ObjMutex(val mutex: Mutex): Obj() {
                 returns = type("lyng.Any"),
                 moduleName = "lyng.stdlib"
             ) {
-                val f = requiredArg<Statement>(0)
+                val f = requiredArg<Obj>(0)
                 // Execute user lambda directly in the current scope to preserve the active scope
-                // ancestry across suspension points. The lambda still constructs a ClosureScope
+                // ancestry across suspension points. The lambda still constructs a closure scope
                 // on top of this frame, and parseLambdaExpression sets skipScopeCreation for its body.
-                thisAs<ObjMutex>().mutex.withLock { f.execute(this) }
+                thisAs<ObjMutex>().mutex.withLock { f.callOn(this) }
             }
         }
     }

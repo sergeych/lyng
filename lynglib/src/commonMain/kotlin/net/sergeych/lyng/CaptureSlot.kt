@@ -19,4 +19,6 @@ package net.sergeych.lyng
 
 data class CaptureSlot(
     val name: String,
+    val ownerScopeId: Int? = null,
+    val ownerSlot: Int? = null,
 )

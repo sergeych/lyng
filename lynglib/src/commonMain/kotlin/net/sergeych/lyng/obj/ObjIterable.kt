@@ -18,7 +18,6 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Arguments
-import net.sergeych.lyng.Statement
 import net.sergeych.lyng.miniast.ParamDoc
 import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lyng.miniast.addPropertyDoc
@@ -131,10 +130,11 @@ val ObjIterable by lazy {
             returns = type("lyng.Map"),
             moduleName = "lyng.stdlib"
         ) {
-            val association = requireOnlyArg<Statement>()
+            val association = requireOnlyArg<Obj>()
             val result = ObjMap()
             thisObj.toFlow(this).collect {
-                result.map[association.call(this, it)] = it
+                val callScope = createChildScope(args = Arguments(it))
+                result.map[association.callOn(callScope)] = it
             }
             result
         }
@@ -147,10 +147,10 @@ val ObjIterable by lazy {
             moduleName = "lyng.stdlib"
         ) {
             val it = thisObj.invokeInstanceMethod(this, "iterator")
-            val fn = requiredArg<Statement>(0)
+            val fn = requiredArg<Obj>(0)
             while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
                 val x = it.invokeInstanceMethod(this, "next")
-                fn.execute(this.createChildScope(Arguments(listOf(x))))
+                fn.callOn(this.createChildScope(Arguments(listOf(x))))
             }
             ObjVoid
         }
@@ -163,10 +163,11 @@ val ObjIterable by lazy {
             isOpen = true,
             moduleName = "lyng.stdlib"
         ) {
-            val fn = requiredArg<Statement>(0)
+            val fn = requiredArg<Obj>(0)
             val result = mutableListOf<Obj>()
             thisObj.toFlow(this).collect {
-                result.add(fn.call(this, it))
+                val callScope = createChildScope(args = Arguments(it))
+                result.add(fn.callOn(callScope))
             }
             ObjList(result)
         }
@@ -179,10 +180,11 @@ val ObjIterable by lazy {
             isOpen = true,
             moduleName = "lyng.stdlib"
         ) {
-            val fn = requiredArg<Statement>(0)
+            val fn = requiredArg<Obj>(0)
             val result = mutableListOf<Obj>()
             thisObj.toFlow(this).collect {
-                val transformed = fn.call(this, it)
+                val callScope = createChildScope(args = Arguments(it))
+                val transformed = fn.callOn(callScope)
                 if( transformed != ObjNull) result.add(transformed)
             }
             ObjList(result)
@@ -228,9 +230,10 @@ val ObjIterable by lazy {
             moduleName = "lyng.stdlib"
         ) {
             val list = thisObj.callMethod<ObjList>(this, "toList")
-            val comparator = requireOnlyArg<Statement>()
+            val comparator = requireOnlyArg<Obj>()
             list.quicksort { a, b ->
-                comparator.call(this, a, b).toInt()
+                val callScope = createChildScope(args = Arguments(a, b))
+                comparator.callOn(callScope).toInt()
             }
             list
         }

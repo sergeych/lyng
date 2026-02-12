@@ -21,7 +21,6 @@ import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.RegexCache
 import net.sergeych.lyng.Scope
-import net.sergeych.lyng.Statement
 import net.sergeych.lyng.miniast.*
 
 class ObjRegex(val regex: Regex) : Obj() {
@@ -76,14 +75,10 @@ class ObjRegex(val regex: Regex) : Obj() {
                 }
                 createField(
                     name = "operatorMatch",
-                    initialValue = object : Statement() {
-                        override val pos: Pos = Pos.builtIn
-
-                        override suspend fun execute(scope: Scope): Obj {
-                            val other = scope.args.firstAndOnly(pos)
-                            val targetScope = scope.parent ?: scope
-                            return (scope.thisObj as ObjRegex).operatorMatch(targetScope, other)
-                        }
+                    initialValue = ObjNativeCallable {
+                        val other = args.firstAndOnly(Pos.builtIn)
+                        val targetScope = parent ?: this
+                        (thisObj as ObjRegex).operatorMatch(targetScope, other)
                     },
                     type = ObjRecord.Type.Fun
                 )

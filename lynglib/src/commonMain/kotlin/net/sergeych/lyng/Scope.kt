@@ -39,7 +39,7 @@ fun nextFrameId(): Long = FrameIdGen.nextId()
  *
  *  There are special types of scopes:
  *
- *  - [ClosureScope] - scope used to apply a closure to some thisObj scope
+ *  - [BytecodeClosureScope] - scope used to apply a closure to some thisObj scope
  */
 open class Scope(
     var parent: Scope?,
@@ -76,11 +76,19 @@ open class Scope(
 
     internal fun setThisVariants(primary: Obj, extras: List<Obj>) {
         thisObj = primary
-        thisVariants.clear()
-        thisVariants.add(primary)
-        for (obj in extras) {
-            if (obj !== primary && !thisVariants.contains(obj)) {
-                thisVariants.add(obj)
+        val extrasSnapshot = when {
+            extras.isEmpty() -> emptyList()
+            extras === thisVariants -> extras.toList()
+            extras is MutableList<*> -> synchronized(extras) { extras.toList() }
+            else -> extras.toList()
+        }
+        synchronized(thisVariants) {
+            thisVariants.clear()
+            thisVariants.add(primary)
+            for (obj in extrasSnapshot) {
+                if (obj !== primary && !thisVariants.contains(obj)) {
+                    thisVariants.add(obj)
+                }
             }
         }
     }
@@ -98,7 +106,7 @@ open class Scope(
             for (cls in receiverClass.mro) {
                 s.extensions[cls]?.get(name)?.let { return it }
             }
-            if (s is ClosureScope) {
+            if (s is BytecodeClosureScope) {
                 s.closureScope.findExtension(receiverClass, name)?.let { return it }
             }
             s = s.parent
@@ -122,7 +130,7 @@ open class Scope(
 
     /**
      * Internal lookup helpers that deliberately avoid invoking overridden `get` implementations
-     * (notably in ClosureScope) to prevent accidental ping-pong and infinite recursion across
+     * (notably in BytecodeClosureScope) to prevent accidental ping-pong and infinite recursion across
      * intertwined closure frames. They traverse the plain parent chain and consult only locals
      * and bindings of each frame. Instance/class member fallback must be decided by the caller.
      */
@@ -165,23 +173,16 @@ open class Scope(
         val effectiveCaller = caller ?: currentClassCtx
         while (s != null && hops++ < 1024) {
             tryGetLocalRecord(s, name, effectiveCaller)?.let { return it }
-            s = if (followClosure && s is ClosureScope) s.closureScope else s.parent
+            s = if (followClosure && s is BytecodeClosureScope) s.closureScope else s.parent
         }
         return null
-    }
-
-    internal fun resolveCaptureRecord(name: String): ObjRecord? {
-        if (captureRecords != null) {
-            raiseIllegalState("resolveCaptureRecord is interpreter-only; bytecode captures use captureRecords")
-        }
-        return chainLookupIgnoreClosure(name, followClosure = true, caller = currentClassCtx)
     }
 
     /**
      * Perform base Scope.get semantics for this frame without delegating into parent.get
      * virtual dispatch. This checks:
      *  - locals/bindings in this frame
-     *  - walks raw parent chain for locals/bindings (ignoring ClosureScope-specific overrides)
+     *  - walks raw parent chain for locals/bindings (ignoring BytecodeClosureScope-specific overrides)
      *  - finally falls back to this frame's `thisObj` instance/class members
      */
     internal fun baseGetIgnoreClosure(name: String): ObjRecord? {
@@ -211,7 +212,7 @@ open class Scope(
      *  - locals/bindings of each frame
      *  - then instance/class members of each frame's `thisObj`.
      * This completely avoids invoking overridden `get` implementations, preventing
-     * ping-pong recursion between `ClosureScope` frames.
+     * ping-pong recursion between `BytecodeClosureScope` frames.
      */
     internal fun chainLookupWithMembers(name: String, caller: net.sergeych.lyng.obj.ObjClass? = currentClassCtx, followClosure: Boolean = false): ObjRecord? {
         var s: Scope? = this
@@ -228,7 +229,7 @@ open class Scope(
                     } else return rec
                 }
             }
-            s = if (followClosure && s is ClosureScope) s.closureScope else s.parent
+            s = if (followClosure && s is BytecodeClosureScope) s.closureScope else s.parent
         }
         return null
     }
@@ -635,11 +636,6 @@ open class Scope(
             it.value = value
             // keep local binding index consistent within the frame
             localBindings[name] = it
-            // If we are a ClosureScope, mirror binding into the caller frame to keep it discoverable
-            // across suspension when resumed on the call frame
-            if (this is ClosureScope) {
-                callScope.localBindings[name] = it
-            }
             bumpClassLayoutIfNeeded(name, value, recordType)
             it
         } ?: addItem(name, true, value, visibility, writeVisibility, recordType, isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride)
@@ -694,19 +690,6 @@ open class Scope(
         }
         // Index this binding within the current frame to help resolve locals across suspension
         localBindings[name] = rec
-        // If we are a ClosureScope, mirror binding into the caller frame to keep it discoverable
-        // across suspension when resumed on the call frame
-        if (this is ClosureScope) {
-            callScope.localBindings[name] = rec
-            // Additionally, expose the binding in caller's objects and slot map so identifier
-            // resolution after suspension can still find it even if the active scope is a child
-            // of the callScope (e.g., due to internal withChildFrame usage).
-            // This keeps visibility within the method body but prevents leaking outside the caller frame.
-            callScope.objects[name] = rec
-            if (callScope.getSlotIndexOf(name) == null) {
-                callScope.allocateSlotFor(name, rec)
-            }
-        }
         // Map to a slot for fast local access (ensure consistency)
         if (nameToSlot.isEmpty()) {
             allocateSlotFor(name, rec)
@@ -751,12 +734,7 @@ open class Scope(
     }
 
     fun addFn(vararg names: String, callSignature: CallSignature? = null, fn: suspend Scope.() -> Obj) {
-        val newFn = object : Statement() {
-            override val pos: Pos = Pos.builtIn
-
-            override suspend fun execute(scope: Scope): Obj = scope.fn()
-
-        }
+        val newFn = net.sergeych.lyng.obj.ObjNativeCallable { fn() }
         for (name in names) {
             addItem(
                 name,
@@ -834,7 +812,7 @@ open class Scope(
     }
 
     open fun applyClosure(closure: Scope, preferredThisType: String? = null): Scope =
-        ClosureScope(this, closure, preferredThisType)
+        BytecodeClosureScope(this, closure, preferredThisType)
 
     internal fun applyClosureForBytecode(closure: Scope, preferredThisType: String? = null): Scope {
         return BytecodeClosureScope(this, closure, preferredThisType)

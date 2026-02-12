@@ -217,7 +217,7 @@ private suspend inline fun Scope.processGuard(crossinline block: suspend () -> O
 
 private fun Flow<String>.toLyngFlow(flowScope: Scope): ObjFlow {
     val producer = statement {
-        val builder = (this as? net.sergeych.lyng.ClosureScope)?.callScope?.thisObj as? ObjFlowBuilder
+        val builder = (this as? net.sergeych.lyng.BytecodeClosureScope)?.callScope?.thisObj as? ObjFlowBuilder
             ?: this.thisObj as? ObjFlowBuilder
 
         this@toLyngFlow.collect {

@@ -32,32 +32,14 @@ class BlockStatement(
         if (slotPlan.isNotEmpty()) target.applySlotPlan(slotPlan)
         if (captureSlots.isNotEmpty()) {
             val captureRecords = scope.captureRecords
-            if (captureRecords != null) {
-                for (i in captureSlots.indices) {
-                    val capture = captureSlots[i]
-                    val rec = captureRecords.getOrNull(i)
-                        ?: scope.raiseSymbolNotFound("capture ${capture.name} not found")
-                    target.updateSlotFor(capture.name, rec)
-                }
-            } else {
-                val applyScope = scope as? ApplyScope
-                for (capture in captureSlots) {
-                    // Interpreter-only capture resolution; bytecode paths must use captureRecords instead.
-                    val rec = if (applyScope != null) {
-                        applyScope.resolveCaptureRecord(capture.name)
-                            ?: applyScope.callScope.resolveCaptureRecord(capture.name)
-                    } else {
-                        scope.resolveCaptureRecord(capture.name)
-                    }
-                    if (rec == null) {
-                        if (scope.getSlotIndexOf(capture.name) == null && scope.getLocalRecordDirect(capture.name) == null) {
-                            continue
-                        }
-                        (applyScope?.callScope ?: scope)
-                            .raiseSymbolNotFound("symbol ${capture.name} not found")
-                    }
-                    target.updateSlotFor(capture.name, rec)
-                }
+            if (captureRecords == null) {
+                scope.raiseIllegalState("missing bytecode capture records")
+            }
+            for (i in captureSlots.indices) {
+                val capture = captureSlots[i]
+                val rec = captureRecords.getOrNull(i)
+                    ?: scope.raiseSymbolNotFound("capture ${capture.name} not found")
+                target.updateSlotFor(capture.name, rec)
             }
         }
         return block.execute(target)

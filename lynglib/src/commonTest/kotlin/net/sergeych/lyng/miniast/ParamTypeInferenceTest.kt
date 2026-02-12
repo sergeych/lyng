@@ -45,8 +45,7 @@ class ParamTypeInferenceTest {
         Compiler.compileWithResolution(
             Source("<eval>", code.trimIndent()),
             Script.defaultImportManager,
-            miniSink = sink,
-            useBytecodeStatements = false
+            miniSink = sink
         )
         val mini = sink.build()!!
         val binding = Binder.bind(code, mini)

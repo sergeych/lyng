@@ -18,76 +18,12 @@
 package net.sergeych.lyng
 
 import net.sergeych.lyng.obj.Obj
-import net.sergeych.lyng.obj.ObjClass
 import net.sergeych.lyng.obj.ObjRecord
-
-/**
- * Scope that adds a "closure" to caller; most often it is used to apply class instance to caller scope.
- * Inherits [Scope.args] and [Scope.thisObj] from [callScope] and adds lookup for symbols
- * from [closureScope] with proper precedence
- */
-class ClosureScope(
-    val callScope: Scope,
-    val closureScope: Scope,
-    private val preferredThisType: String? = null
-) :
-    // Important: use closureScope.thisObj so unqualified members (e.g., fields) resolve to the instance
-    // we captured, not to the caller's `this` (e.g., FlowBuilder).
-    Scope(callScope, callScope.args, thisObj = closureScope.thisObj) {
-
-    init {
-        val desired = preferredThisType?.let { typeName ->
-            callScope.thisVariants.firstOrNull { it.objClass.className == typeName }
-        }
-        val primaryThis = closureScope.thisObj
-        val merged = ArrayList<Obj>(callScope.thisVariants.size + closureScope.thisVariants.size + 1)
-        desired?.let { merged.add(it) }
-        merged.addAll(callScope.thisVariants)
-        merged.addAll(closureScope.thisVariants)
-        setThisVariants(primaryThis, merged)
-        // Preserve the lexical class context of the closure by default. This ensures that lambdas
-        // created inside a class method keep access to that class's private/protected members even
-        // when executed from within another object's method (e.g., Mutex.withLock), which may set
-        // its own currentClassCtx temporarily. If the closure has no class context, inherit caller's.
-        this.currentClassCtx = closureScope.currentClassCtx ?: callScope.currentClassCtx
-    }
-
-    override fun get(name: String): ObjRecord? {
-        if (name == "this") return thisObj.asReadonly
-
-        // 1. Current frame locals (parameters, local variables)
-        tryGetLocalRecord(this, name, currentClassCtx)?.let { return it }
-
-        // 2. Lexical environment (captured locals from entire ancestry)
-        closureScope.chainLookupIgnoreClosure(name, followClosure = true, caller = currentClassCtx)?.let { return it }
-
-        // 3. Lexical this members (captured receiver)
-        val receiver = thisObj
-        val effectiveClass = receiver as? ObjClass ?: receiver.objClass
-        for (cls in effectiveClass.mro) {
-            val rec = cls.members[name] ?: cls.classScope?.objects?.get(name)
-            if (rec != null && !rec.isAbstract) {
-                if (canAccessMember(rec.visibility, rec.declaringClass ?: cls, currentClassCtx, name)) {
-                    return rec.copy(receiver = receiver)
-                }
-            }
-        }
-        // Finally, root object fallback
-        Obj.rootObjectType.members[name]?.let { rec ->
-            if (canAccessMember(rec.visibility, rec.declaringClass, currentClassCtx, name)) {
-                return rec.copy(receiver = receiver)
-            }
-        }
-
-        // 4. Call environment (caller locals, caller this, and global fallback)
-        return callScope.get(name)
-    }
-}
 
 /**
  * Bytecode-oriented closure scope that keeps the call scope parent chain for stack traces
  * while carrying the lexical closure for `this` variants and module resolution.
- * Unlike [ClosureScope], it does not override name lookup.
+ * Unlike interpreter closure scopes, it does not override name lookup.
  */
 class BytecodeClosureScope(
     val callScope: Scope,
@@ -118,7 +54,7 @@ class ApplyScope(val callScope: Scope, val applied: Scope) :
     }
 
     override fun applyClosure(closure: Scope, preferredThisType: String?): Scope {
-        return ClosureScope(this, closure, preferredThisType)
+        return BytecodeClosureScope(this, closure, preferredThisType)
     }
 
 }

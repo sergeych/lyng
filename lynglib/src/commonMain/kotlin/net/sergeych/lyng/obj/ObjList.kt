@@ -20,7 +20,7 @@ package net.sergeych.lyng.obj
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import net.sergeych.lyng.Scope
-import net.sergeych.lyng.Statement
+import net.sergeych.lyng.Arguments
 import net.sergeych.lyng.miniast.ParamDoc
 import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lyng.miniast.addPropertyDoc
@@ -371,8 +371,11 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 params = listOf(ParamDoc("comparator")),
                 moduleName = "lyng.stdlib"
             ) {
-                val comparator = requireOnlyArg<Statement>()
-                thisAs<ObjList>().quicksort { a, b -> comparator.call(this, a, b).toInt() }
+                val comparator = requireOnlyArg<Obj>()
+                thisAs<ObjList>().quicksort { a, b ->
+                    val callScope = createChildScope(args = Arguments(a, b))
+                    comparator.callOn(callScope).toInt()
+                }
                 ObjVoid
             }
             addFnDoc(
@@ -522,4 +525,3 @@ fun <T>MutableList<T>.swap(i: Int, j: Int) {
         this[j] = temp
     }
 }
-

@@ -215,6 +215,15 @@ object CmdDisassembler {
             is CmdDeclEnum -> Opcode.DECL_ENUM to intArrayOf(cmd.constId, cmd.slot)
             is CmdDeclFunction -> Opcode.DECL_FUNCTION to intArrayOf(cmd.constId, cmd.slot)
             is CmdDeclClass -> Opcode.DECL_CLASS to intArrayOf(cmd.constId, cmd.slot)
+            is CmdDeclClassField -> Opcode.DECL_CLASS_FIELD to intArrayOf(cmd.constId, cmd.slot)
+            is CmdDeclClassDelegated -> Opcode.DECL_CLASS_DELEGATED to intArrayOf(cmd.constId, cmd.slot)
+            is CmdDeclClassInstanceInit -> Opcode.DECL_CLASS_INSTANCE_INIT to intArrayOf(cmd.constId, cmd.slot)
+            is CmdDeclClassInstanceField -> Opcode.DECL_CLASS_INSTANCE_FIELD to intArrayOf(cmd.constId, cmd.slot)
+            is CmdDeclClassInstanceProperty -> Opcode.DECL_CLASS_INSTANCE_PROPERTY to intArrayOf(cmd.constId, cmd.slot)
+            is CmdDeclClassInstanceDelegated -> Opcode.DECL_CLASS_INSTANCE_DELEGATED to intArrayOf(cmd.constId, cmd.slot)
+            is CmdDeclInstanceField -> Opcode.DECL_INSTANCE_FIELD to intArrayOf(cmd.constId, cmd.slot)
+            is CmdDeclInstanceProperty -> Opcode.DECL_INSTANCE_PROPERTY to intArrayOf(cmd.constId, cmd.slot)
+            is CmdDeclInstanceDelegated -> Opcode.DECL_INSTANCE_DELEGATED to intArrayOf(cmd.constId, cmd.slot)
             is CmdDeclExtProperty -> Opcode.DECL_EXT_PROPERTY to intArrayOf(cmd.constId, cmd.slot)
             is CmdCallDirect -> Opcode.CALL_DIRECT to intArrayOf(cmd.id, cmd.argBase, cmd.argCount, cmd.dst)
             is CmdAssignDestructure -> Opcode.ASSIGN_DESTRUCTURE to intArrayOf(cmd.constId, cmd.slot)
@@ -287,7 +296,10 @@ object CmdDisassembler {
             Opcode.PUSH_TRY ->
                 listOf(OperandKind.SLOT, OperandKind.IP, OperandKind.IP)
             Opcode.DECL_LOCAL, Opcode.DECL_EXT_PROPERTY, Opcode.DECL_DELEGATED, Opcode.DECL_DESTRUCTURE,
-            Opcode.DECL_ENUM, Opcode.DECL_FUNCTION, Opcode.DECL_CLASS,
+            Opcode.DECL_ENUM, Opcode.DECL_FUNCTION, Opcode.DECL_CLASS, Opcode.DECL_CLASS_FIELD,
+            Opcode.DECL_CLASS_DELEGATED, Opcode.DECL_CLASS_INSTANCE_INIT, Opcode.DECL_CLASS_INSTANCE_FIELD,
+            Opcode.DECL_CLASS_INSTANCE_PROPERTY, Opcode.DECL_CLASS_INSTANCE_DELEGATED, Opcode.DECL_INSTANCE_FIELD,
+            Opcode.DECL_INSTANCE_PROPERTY, Opcode.DECL_INSTANCE_DELEGATED,
             Opcode.ASSIGN_DESTRUCTURE ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.ADD_INT, Opcode.SUB_INT, Opcode.MUL_INT, Opcode.DIV_INT, Opcode.MOD_INT,

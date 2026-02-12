@@ -392,7 +392,6 @@ class BytecodeRecentOpsTest {
         val script = Compiler.compileWithResolution(
             Source("<fast-local>", code),
             Script.defaultImportManager,
-            useBytecodeStatements = true,
             useFastLocalRefs = true
         )
         val result = script.execute(Script.defaultImportManager.newStdScope())

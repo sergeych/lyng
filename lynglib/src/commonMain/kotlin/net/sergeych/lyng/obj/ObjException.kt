@@ -139,7 +139,7 @@ open class ObjException(
         class ExceptionClass(val name: String, vararg parents: ObjClass) : ObjClass(name, *parents) {
             init {
                 constructorMeta = ArgsDeclaration(
-                    listOf(ArgsDeclaration.Item("message", defaultValue = statement { ObjString(name) })),
+                    listOf(ArgsDeclaration.Item("message", defaultValue = ObjNativeCallable { ObjString(name) })),
                     Token.Type.RPAREN
                 )
             }
@@ -177,7 +177,7 @@ open class ObjException(
         }
 
         val Root = ExceptionClass("Exception").apply {
-            instanceInitializers.add(statement {
+            instanceInitializers.add(ObjNativeCallable {
                 if (thisObj is ObjInstance) {
                     val msg = get("message")?.value ?: ObjString("Exception")
                     (thisObj as ObjInstance).instanceScope.addItem("Exception::message", false, msg)
@@ -187,7 +187,7 @@ open class ObjException(
                 }
                 ObjVoid
             })
-            instanceConstructor = statement { ObjVoid }
+            instanceConstructor = ObjNativeCallable { ObjVoid }
             addPropertyDoc(
                 name = "message",
                 doc = "Human‑readable error message.",

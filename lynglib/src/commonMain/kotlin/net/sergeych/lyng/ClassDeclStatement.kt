@@ -45,7 +45,12 @@ data class ClassDeclSpec(
     val initScope: List<Statement>,
 )
 
-internal suspend fun executeClassDecl(scope: Scope, spec: ClassDeclSpec): Obj {
+internal suspend fun executeClassDecl(
+    scope: Scope,
+    spec: ClassDeclSpec,
+    bodyCaptureRecords: List<ObjRecord>? = null,
+    bodyCaptureNames: List<String>? = null
+): Obj {
     if (spec.isObject) {
         val parentClasses = spec.baseSpecs.map { baseSpec ->
             val rec = scope[baseSpec.name] ?: throw ScriptError(spec.startPos, "unknown base class: ${baseSpec.name}")
@@ -61,6 +66,10 @@ internal suspend fun executeClassDecl(scope: Scope, spec: ClassDeclSpec): Obj {
         }
 
         val classScope = scope.createChildScope(newThisObj = newClass)
+        if (!bodyCaptureRecords.isNullOrEmpty() && !bodyCaptureNames.isNullOrEmpty()) {
+            classScope.captureRecords = bodyCaptureRecords
+            classScope.captureNames = bodyCaptureNames
+        }
         classScope.currentClassCtx = newClass
         newClass.classScope = classScope
         classScope.addConst("object", newClass)
@@ -133,6 +142,10 @@ internal suspend fun executeClassDecl(scope: Scope, spec: ClassDeclSpec): Obj {
 
     spec.declaredName?.let { scope.addItem(it, false, newClass) }
     val classScope = scope.createChildScope(newThisObj = newClass)
+    if (!bodyCaptureRecords.isNullOrEmpty() && !bodyCaptureNames.isNullOrEmpty()) {
+        classScope.captureRecords = bodyCaptureRecords
+        classScope.captureNames = bodyCaptureNames
+    }
     classScope.currentClassCtx = newClass
     newClass.classScope = classScope
     spec.bodyInit?.execute(classScope)

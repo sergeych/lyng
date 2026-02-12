@@ -161,7 +161,10 @@ class CmdBuilder {
             Opcode.PUSH_TRY ->
                 listOf(OperandKind.SLOT, OperandKind.IP, OperandKind.IP)
             Opcode.DECL_LOCAL, Opcode.DECL_EXT_PROPERTY, Opcode.DECL_DELEGATED, Opcode.DECL_DESTRUCTURE,
-            Opcode.DECL_ENUM, Opcode.DECL_FUNCTION, Opcode.DECL_CLASS,
+            Opcode.DECL_ENUM, Opcode.DECL_FUNCTION, Opcode.DECL_CLASS, Opcode.DECL_CLASS_FIELD,
+            Opcode.DECL_CLASS_DELEGATED, Opcode.DECL_CLASS_INSTANCE_INIT, Opcode.DECL_CLASS_INSTANCE_FIELD,
+            Opcode.DECL_CLASS_INSTANCE_PROPERTY, Opcode.DECL_CLASS_INSTANCE_DELEGATED, Opcode.DECL_INSTANCE_FIELD,
+            Opcode.DECL_INSTANCE_PROPERTY, Opcode.DECL_INSTANCE_DELEGATED,
             Opcode.ASSIGN_DESTRUCTURE ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.ADD_INT, Opcode.SUB_INT, Opcode.MUL_INT, Opcode.DIV_INT, Opcode.MOD_INT,
@@ -418,6 +421,15 @@ class CmdBuilder {
             Opcode.DECL_ENUM -> CmdDeclEnum(operands[0], operands[1])
             Opcode.DECL_FUNCTION -> CmdDeclFunction(operands[0], operands[1])
             Opcode.DECL_CLASS -> CmdDeclClass(operands[0], operands[1])
+            Opcode.DECL_CLASS_FIELD -> CmdDeclClassField(operands[0], operands[1])
+            Opcode.DECL_CLASS_DELEGATED -> CmdDeclClassDelegated(operands[0], operands[1])
+            Opcode.DECL_CLASS_INSTANCE_INIT -> CmdDeclClassInstanceInit(operands[0], operands[1])
+            Opcode.DECL_CLASS_INSTANCE_FIELD -> CmdDeclClassInstanceField(operands[0], operands[1])
+            Opcode.DECL_CLASS_INSTANCE_PROPERTY -> CmdDeclClassInstanceProperty(operands[0], operands[1])
+            Opcode.DECL_CLASS_INSTANCE_DELEGATED -> CmdDeclClassInstanceDelegated(operands[0], operands[1])
+            Opcode.DECL_INSTANCE_FIELD -> CmdDeclInstanceField(operands[0], operands[1])
+            Opcode.DECL_INSTANCE_PROPERTY -> CmdDeclInstanceProperty(operands[0], operands[1])
+            Opcode.DECL_INSTANCE_DELEGATED -> CmdDeclInstanceDelegated(operands[0], operands[1])
             Opcode.DECL_EXT_PROPERTY -> CmdDeclExtProperty(operands[0], operands[1])
             Opcode.CALL_DIRECT -> CmdCallDirect(operands[0], operands[1], operands[2], operands[3])
             Opcode.ASSIGN_DESTRUCTURE -> CmdAssignDestructure(operands[0], operands[1])

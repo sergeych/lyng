@@ -40,6 +40,7 @@ class Script(
     private val moduleBytecode: CmdFunction? = null,
 //    private val catchReturn: Boolean = false,
 ) : Statement() {
+    fun statements(): List<Statement> = statements
 
     override suspend fun execute(scope: Scope): Obj {
         scope.pos = pos
@@ -86,11 +87,10 @@ class Script(
         moduleBytecode?.let { fn ->
             return CmdVm().execute(fn, scope, scope.args)
         }
-        var lastResult: Obj = ObjVoid
-        for (s in statements) {
-            lastResult = s.execute(scope)
+        if (statements.isNotEmpty()) {
+            scope.raiseIllegalState("interpreter execution is not supported; missing module bytecode")
         }
-        return lastResult
+        return ObjVoid
     }
 
     private suspend fun seedModuleSlots(scope: Scope) {
@@ -332,7 +332,7 @@ class Script(
             addVoidFn("assert") {
                 val cond = requiredArg<ObjBool>(0)
                 val message = if (args.size > 1)
-                    ": " + (args[1] as Statement).execute(this).toString(this).value
+                    ": " + (args[1] as Obj).callOn(this).toString(this).value
                 else ""
                 if (!cond.value == true)
                     raiseError(ObjAssertionFailedException(this, "Assertion failed$message"))
@@ -385,23 +385,23 @@ class Script(
                     will be accepted.
                 """.trimIndent()
             ) {
-                val code: Statement
+                val code: Obj
                 val expectedClass: ObjClass?
                 when (args.size) {
                     1 -> {
-                        code = requiredArg<Statement>(0)
+                        code = requiredArg<Obj>(0)
                         expectedClass = null
                     }
 
                     2 -> {
-                        code = requiredArg<Statement>(1)
+                        code = requiredArg<Obj>(1)
                         expectedClass = requiredArg<ObjClass>(0)
                     }
 
                     else -> raiseIllegalArgument("Expected 1 or 2 arguments, got ${args.size}")
                 }
                 val result = try {
-                    code.execute(this)
+                    code.callOn(this)
                     null
                 } catch (e: ExecutionError) {
                     e.errorObject
@@ -441,7 +441,7 @@ class Script(
                 val condition = requiredArg<ObjBool>(0)
                 if (!condition.value) {
                     var message = args.list.getOrNull(1)
-                    if (message is Statement) message = message.execute(this)
+                    if (message is Obj && message.objClass == Statement.type) message = message.callOn(this)
                     raiseIllegalArgument(message?.toString() ?: "requirement not met")
                 }
                 ObjVoid
@@ -450,7 +450,7 @@ class Script(
                 val condition = requiredArg<ObjBool>(0)
                 if (!condition.value) {
                     var message = args.list.getOrNull(1)
-                    if (message is Statement) message = message.execute(this)
+                    if (message is Obj && message.objClass == Statement.type) message = message.callOn(this)
                     raiseIllegalState(message?.toString() ?: "check failed")
                 }
                 ObjVoid
@@ -460,27 +460,23 @@ class Script(
                 ObjVoid
             }
             addFn("run") {
-                requireOnlyArg<Statement>().execute(this)
+                requireOnlyArg<Obj>().callOn(this)
             }
             addFn("cached") {
-                val builder = requireOnlyArg<Statement>()
+                val builder = requireOnlyArg<Obj>()
                 val capturedScope = this
                 var calculated = false
                 var cachedValue: Obj = ObjVoid
-                val thunk = object : Statement() {
-                    override val pos: Pos = Pos.builtIn
-                    override suspend fun execute(scope: Scope): Obj {
-                        if (!calculated) {
-                            cachedValue = builder.execute(capturedScope)
-                            calculated = true
-                        }
-                        return cachedValue
+                ObjNativeCallable {
+                    if (!calculated) {
+                        cachedValue = builder.callOn(capturedScope)
+                        calculated = true
                     }
+                    cachedValue
                 }
-                thunk
             }
             addFn("lazy") {
-                val builder = requireOnlyArg<Statement>()
+                val builder = requireOnlyArg<Obj>()
                 ObjLazyDelegate(builder, this)
             }
             addVoidFn("delay") {
@@ -527,9 +523,9 @@ class Script(
             addConst("MapEntry", ObjMapEntry.type)
 
             addFn("launch") {
-                val callable = requireOnlyArg<Statement>()
+                val callable = requireOnlyArg<Obj>()
                 ObjDeferred(globalDefer {
-                    callable.execute(this@addFn)
+                    callable.callOn(this@addFn)
                 })
             }
 
@@ -541,7 +537,7 @@ class Script(
             addFn("flow", callSignature = CallSignature(tailBlockReceiverType = "FlowBuilder")) {
                 // important is: current context contains closure often used in call;
                 // we'll need it for the producer
-                ObjFlow(requireOnlyArg<Statement>(), this)
+                ObjFlow(requireOnlyArg<Obj>(), this)
             }
 
             val pi = ObjReal(PI)

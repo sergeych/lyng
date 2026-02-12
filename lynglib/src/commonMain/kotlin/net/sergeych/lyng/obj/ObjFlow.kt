@@ -71,13 +71,13 @@ class ObjFlowBuilder(val output: SendChannel<Obj>) : Obj() {
     }
 }
 
-private fun createLyngFlowInput(scope: Scope, producer: Statement): ReceiveChannel<Obj> {
+private fun createLyngFlowInput(scope: Scope, producer: Obj): ReceiveChannel<Obj> {
     val channel = Channel<Obj>(Channel.RENDEZVOUS)
     val builder = ObjFlowBuilder(channel)
     val builderScope = scope.createChildScope(newThisObj = builder)
     globalLaunch {
         try {
-            producer.execute(builderScope)
+            producer.callOn(builderScope)
         } catch (x: ScriptFlowIsNoMoreCollected) {
             // premature flow closing, OK
         } catch (x: Exception) {
@@ -89,7 +89,7 @@ private fun createLyngFlowInput(scope: Scope, producer: Statement): ReceiveChann
     return channel
 }
 
-class ObjFlow(val producer: Statement, val scope: Scope) : Obj() {
+class ObjFlow(val producer: Obj, val scope: Scope) : Obj() {
 
     override val objClass get() = type
 
@@ -106,8 +106,8 @@ class ObjFlow(val producer: Statement, val scope: Scope) : Obj() {
                 moduleName = "lyng.stdlib"
             ) {
                 val objFlow = thisAs<ObjFlow>()
-                ObjFlowIterator(statement {
-                    objFlow.producer.execute(this)
+                ObjFlowIterator(ObjNativeCallable {
+                    objFlow.producer.callOn(this)
                 })
             }
         }
@@ -115,7 +115,7 @@ class ObjFlow(val producer: Statement, val scope: Scope) : Obj() {
 }
 
 
-class ObjFlowIterator(val producer: Statement) : Obj() {
+class ObjFlowIterator(val producer: Obj) : Obj() {
 
     override val objClass: ObjClass get() = type
 

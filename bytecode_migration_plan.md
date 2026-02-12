@@ -136,6 +136,38 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [x] Keep scope sync only for reflection/Kotlin interop, not for execution.
   - [x] Replace bytecode entry seeding from Scope with frame-only arg/local binding.
 
+## Interpreter Removal v2 (2026-02-12)
+
+Goal: remove interpreter execution paths entirely without regressing semantics; all runtime execution must be bytecode + frame slots.
+
+- [ ] Step A1: Interpreter path audit (map all remaining runtime `Statement.execute` and scope-lookup paths).
+  - [x] Audit results (current hotspots):
+    - `ClassDeclStatement.executeClassDecl`: executes class body/init via `spec.bodyInit?.execute` and `spec.initScope` (Statement list).
+    - `FunctionDeclStatement.executeFunctionDecl`: class-body delegated function init uses `Statement.execute` in initializer thunk.
+    - `EnumDeclStatement.execute`: direct execution path exists (bytecode also emits DECL_ENUM).
+    - `BlockStatement.execute`: creates child scope, applies slot plan/captures, then executes `Script` (which may interpret).
+    - `Script.execute`: interpreter loop when `moduleBytecode` is null or disabled.
+    - `ObjClass.addFn/addProperty` wrappers use `ObjNativeCallable` calling into `Statement.execute` for declared bodies.
+    - Object expressions: class body executed via `executeClassDecl` path (same as above).
+    - Extension wrappers: `ObjExtensionMethodCallable` uses callable that executes `Statement`.
+
+- [ ] Step A2: Bytecode-backed class + init.
+  - Replace class-body and instance init execution with bytecode functions (per-class + per-instance).
+  - Remove all class init `Statement.execute` calls.
+  - [x] Introduce `ClassStaticFieldInitStatement` + bytecode ops `DECL_CLASS_FIELD`/`DECL_CLASS_DELEGATED` for static class field init.
+
+- [ ] Step A3: Bytecode-safe delegated properties/functions and object expressions.
+  - Use explicit `object : Statement()` where needed.
+  - No inline suspend lambdas in hot paths.
+  - Remove interpreter fallbacks.
+
+- [ ] Step A4: Bytecode for all blocks/lambdas (including class bodies).
+  - Compile non-module blocks/lambdas to bytecode; eliminate interpreter gate flags.
+
+- [ ] Step A5: Delete interpreter execution path and dead code.
+  - Remove interpreter ops/constants and any runtime name-lookup fallbacks.
+  - Full test suite green.
+
 ## Notes
 
 - Keep imports bound to module frame slots; no scope map writes for imports.

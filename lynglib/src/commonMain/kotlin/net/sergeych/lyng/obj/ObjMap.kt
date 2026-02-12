@@ -20,7 +20,6 @@ package net.sergeych.lyng.obj
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import net.sergeych.lyng.Scope
-import net.sergeych.lyng.Statement
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
@@ -261,8 +260,8 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
             ) {
                 val key = requiredArg<Obj>(0)
                 thisAs<ObjMap>().map.getOrPut(key) {
-                    val lambda = requiredArg<Statement>(1)
-                    lambda.execute(this)
+                    val lambda = requiredArg<Obj>(1)
+                    lambda.callOn(this)
                 }
             }
             addPropertyDoc(

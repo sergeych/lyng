@@ -23,7 +23,7 @@ import net.sergeych.lyng.*
  * Lazy delegate used by `val x by lazy { ... }`.
  */
 class ObjLazyDelegate(
-    private val builder: Statement,
+    private val builder: Obj,
     private val capturedScope: Scope,
 ) : Obj() {
     override val objClass: ObjClass = type

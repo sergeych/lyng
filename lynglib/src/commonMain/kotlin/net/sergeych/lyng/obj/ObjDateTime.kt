@@ -21,7 +21,6 @@ import kotlinx.datetime.*
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.Scope
-import net.sergeych.lyng.Statement
 import net.sergeych.lyng.miniast.addClassFnDoc
 import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lyng.miniast.addPropertyDoc
@@ -47,14 +46,19 @@ class ObjDateTime(val instant: Instant, val timeZone: TimeZone) : Obj() {
             if (rec != null) {
                 if (rec.type == ObjRecord.Type.Property) {
                     val prop = rec.value as? ObjProperty
-                        ?: (rec.value as? Statement)?.execute(scope) as? ObjProperty
                     if (prop != null) {
                         return ObjRecord(prop.callGetter(scope, this, rec.declaringClass ?: cls), rec.isMutable)
                     }
                 }
-                if (rec.type == ObjRecord.Type.Fun || rec.value is Statement) {
-                    val s = rec.value as Statement
-                    return ObjRecord(net.sergeych.lyng.statement { s.execute(this.createChildScope(newThisObj = this@ObjDateTime)) }, rec.isMutable)
+                if (rec.type == ObjRecord.Type.Fun) {
+                    val target = rec.value
+                    return ObjRecord(
+                        ObjNativeCallable {
+                            val callScope = createChildScope(args = args, newThisObj = this@ObjDateTime)
+                            target.callOn(callScope)
+                        },
+                        rec.isMutable
+                    )
                 }
                 return resolveRecord(scope, rec, name, rec.declaringClass ?: cls)
             }

@@ -72,14 +72,24 @@ class CmdNop : Cmd() {
 
 class CmdMoveObj(internal val src: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setObj(dst, frame.slotToObj(src))
+        val value = frame.slotToObj(src)
+        if (frame.shouldBypassImmutableWrite(dst)) {
+            frame.setObjUnchecked(dst, value)
+        } else {
+            frame.setObj(dst, value)
+        }
         return
     }
 }
 
 class CmdMoveInt(internal val src: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setInt(dst, frame.getInt(src))
+        val value = frame.getInt(src)
+        if (frame.shouldBypassImmutableWrite(dst)) {
+            frame.setIntUnchecked(dst, value)
+        } else {
+            frame.setInt(dst, value)
+        }
         return
     }
 }
@@ -93,14 +103,24 @@ class CmdMoveIntLocal(internal val src: Int, internal val dst: Int) : Cmd() {
 
 class CmdMoveReal(internal val src: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setReal(dst, frame.getReal(src))
+        val value = frame.getReal(src)
+        if (frame.shouldBypassImmutableWrite(dst)) {
+            frame.setRealUnchecked(dst, value)
+        } else {
+            frame.setReal(dst, value)
+        }
         return
     }
 }
 
 class CmdMoveBool(internal val src: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setBool(dst, frame.getBool(src))
+        val value = frame.getBool(src)
+        if (frame.shouldBypassImmutableWrite(dst)) {
+            frame.setBoolUnchecked(dst, value)
+        } else {
+            frame.setBool(dst, value)
+        }
         return
     }
 }
@@ -336,7 +356,12 @@ class CmdResolveScopeSlot(internal val scopeSlot: Int, internal val addrSlot: In
 
 class CmdLoadObjAddr(internal val addrSlot: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setObj(dst, frame.getAddrObj(addrSlot))
+        val value = frame.getAddrObj(addrSlot)
+        if (frame.shouldBypassImmutableWrite(dst)) {
+            frame.setObjUnchecked(dst, value)
+        } else {
+            frame.setObj(dst, value)
+        }
         return
     }
 }
@@ -350,7 +375,12 @@ class CmdStoreObjAddr(internal val src: Int, internal val addrSlot: Int) : Cmd()
 
 class CmdLoadIntAddr(internal val addrSlot: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setInt(dst, frame.getAddrInt(addrSlot))
+        val value = frame.getAddrInt(addrSlot)
+        if (frame.shouldBypassImmutableWrite(dst)) {
+            frame.setIntUnchecked(dst, value)
+        } else {
+            frame.setInt(dst, value)
+        }
         return
     }
 }
@@ -364,7 +394,12 @@ class CmdStoreIntAddr(internal val src: Int, internal val addrSlot: Int) : Cmd()
 
 class CmdLoadRealAddr(internal val addrSlot: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setReal(dst, frame.getAddrReal(addrSlot))
+        val value = frame.getAddrReal(addrSlot)
+        if (frame.shouldBypassImmutableWrite(dst)) {
+            frame.setRealUnchecked(dst, value)
+        } else {
+            frame.setReal(dst, value)
+        }
         return
     }
 }
@@ -378,7 +413,12 @@ class CmdStoreRealAddr(internal val src: Int, internal val addrSlot: Int) : Cmd(
 
 class CmdLoadBoolAddr(internal val addrSlot: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.setBool(dst, frame.getAddrBool(addrSlot))
+        val value = frame.getAddrBool(addrSlot)
+        if (frame.shouldBypassImmutableWrite(dst)) {
+            frame.setBoolUnchecked(dst, value)
+        } else {
+            frame.setBool(dst, value)
+        }
         return
     }
 }
@@ -1302,17 +1342,23 @@ class CmdClearPendingThrowable : Cmd() {
 
 class CmdDeclLocal(internal val constId: Int, internal val slot: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        val decl = frame.fn.constants[constId] as? BytecodeConst.LocalDecl
-            ?: error("DECL_LOCAL expects LocalDecl at $constId")
-        val value = frame.slotToObj(slot).byValueCopy()
-        frame.ensureScope().addItem(
-            decl.name,
-            decl.isMutable,
-            value,
-            decl.visibility,
-            recordType = ObjRecord.Type.Other,
-            isTransient = decl.isTransient
-        )
+        if (slot < frame.fn.scopeSlotCount) {
+            val decl = frame.fn.constants[constId] as? BytecodeConst.LocalDecl
+                ?: error("DECL_LOCAL expects LocalDecl at $constId")
+            val target = frame.scopeTarget(slot)
+            frame.ensureScopeSlot(target, slot)
+            val value = frame.slotToObj(slot).byValueCopy()
+            target.updateSlotFor(
+                decl.name,
+                ObjRecord(
+                    value,
+                    decl.isMutable,
+                    decl.visibility,
+                    isTransient = decl.isTransient,
+                    type = ObjRecord.Type.Other
+                )
+            )
+        }
         return
     }
 }
@@ -1332,16 +1378,21 @@ class CmdDeclDelegated(internal val constId: Int, internal val slot: Int) : Cmd(
         } catch (_: Exception) {
             initValue
         }
-        val rec = frame.ensureScope().addItem(
-            decl.name,
-            decl.isMutable,
-            ObjNull,
-            decl.visibility,
-            recordType = ObjRecord.Type.Delegated,
-            isTransient = decl.isTransient
-        )
-        rec.delegate = finalDelegate
-        frame.storeObjResult(slot, finalDelegate)
+        if (slot < frame.fn.scopeSlotCount) {
+            val target = frame.scopeTarget(slot)
+            frame.ensureScopeSlot(target, slot)
+            target.updateSlotFor(
+                decl.name,
+                ObjRecord(
+                    ObjNull,
+                    decl.isMutable,
+                    decl.visibility,
+                    isTransient = decl.isTransient,
+                    type = ObjRecord.Type.Delegated
+                ).also { it.delegate = finalDelegate }
+            )
+        }
+        frame.setObjUnchecked(slot, finalDelegate)
         return
     }
 }
@@ -1361,7 +1412,7 @@ class CmdDeclEnum(internal val constId: Int, internal val slot: Int) : Cmd() {
                 }
             }
         }
-        frame.storeObjResult(slot, enumClass)
+        frame.setObjUnchecked(slot, enumClass)
         return
     }
 }
@@ -1370,18 +1421,387 @@ class CmdDeclFunction(internal val constId: Int, internal val slot: Int) : Cmd()
     override suspend fun perform(frame: CmdFrame) {
         val decl = frame.fn.constants[constId] as? BytecodeConst.FunctionDecl
             ?: error("DECL_FUNCTION expects FunctionDecl at $constId")
-        val result = executeFunctionDecl(frame.ensureScope(), decl.spec)
-        frame.storeObjResult(slot, result)
+        val captureNames = captureNamesForFunctionDecl(decl.spec)
+        val captureRecords = buildFunctionCaptureRecords(frame, captureNames)
+        val result = executeFunctionDecl(frame.ensureScope(), decl.spec, captureRecords)
+        frame.setObjUnchecked(slot, result)
         return
     }
+}
+
+private fun captureNamesForFunctionDecl(spec: net.sergeych.lyng.FunctionDeclSpec): List<String> {
+    if (spec.captureSlots.isNotEmpty()) {
+        return spec.captureSlots.map { it.name }
+    }
+    return captureNamesForStatement(spec.fnBody)
+}
+
+private fun captureNamesForStatement(stmt: Statement?): List<String> {
+    if (stmt == null) return emptyList()
+    val bytecode = when (stmt) {
+        is BytecodeStatement -> stmt.bytecodeFunction()
+        is BytecodeBodyProvider -> stmt.bytecodeBody()?.bytecodeFunction()
+        else -> null
+    } ?: return emptyList()
+    val names = bytecode.localSlotNames
+    val captures = bytecode.localSlotCaptures
+    val ordered = LinkedHashSet<String>()
+    for (i in names.indices) {
+        if (captures.getOrNull(i) != true) continue
+        val name = names[i] ?: continue
+        ordered.add(name)
+    }
+    return ordered.toList()
+}
+
+private fun buildFunctionCaptureRecords(frame: CmdFrame, captureNames: List<String>): List<ObjRecord>? {
+    if (captureNames.isEmpty()) return null
+    val records = ArrayList<ObjRecord>(captureNames.size)
+    for (name in captureNames) {
+        val localIndex = resolveLocalSlotIndex(frame.fn, name, preferCapture = true)
+        if (localIndex != null) {
+            val isMutable = frame.fn.localSlotMutables.getOrNull(localIndex) ?: false
+            val isDelegated = frame.fn.localSlotDelegated.getOrNull(localIndex) ?: false
+            if (isDelegated) {
+                val delegate = frame.frame.getObj(localIndex)
+                records += ObjRecord(ObjNull, isMutable, type = ObjRecord.Type.Delegated).also {
+                    it.delegate = delegate
+                }
+            } else {
+                records += ObjRecord(FrameSlotRef(frame.frame, localIndex), isMutable)
+            }
+            continue
+        }
+        val scopeSlot = frame.fn.scopeSlotNames.indexOfFirst { it == name }
+        if (scopeSlot >= 0) {
+            val target = frame.scopeTarget(scopeSlot)
+            val index = frame.fn.scopeSlotIndices[scopeSlot]
+            records += target.getSlotRecord(index)
+            continue
+        }
+        val scopeCaptures = frame.scope.captureRecords
+        val scopeCaptureNames = frame.scope.captureNames
+        if (scopeCaptures != null && scopeCaptureNames != null) {
+            val idx = scopeCaptureNames.indexOf(name)
+            if (idx >= 0) {
+                val rec = scopeCaptures.getOrNull(idx)
+                if (rec != null) {
+                    records += rec
+                    continue
+                }
+            }
+        }
+        frame.ensureScope().raiseSymbolNotFound("capture $name not found")
+    }
+    return records
 }
 
 class CmdDeclClass(internal val constId: Int, internal val slot: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         val decl = frame.fn.constants[constId] as? BytecodeConst.ClassDecl
             ?: error("DECL_CLASS expects ClassDecl at $constId")
-        val result = executeClassDecl(frame.ensureScope(), decl.spec)
-        frame.storeObjResult(slot, result)
+        val bodyCaptureNames = mergeCaptureNames(
+            captureNamesForStatement(decl.spec.bodyInit),
+            captureNamesFromFrame(frame)
+        )
+        val bodyCaptureRecords = buildFunctionCaptureRecords(frame, bodyCaptureNames)
+        val result = executeClassDecl(frame.ensureScope(), decl.spec, bodyCaptureRecords, bodyCaptureNames)
+        frame.setObjUnchecked(slot, result)
+        return
+    }
+}
+
+private fun mergeCaptureNames(primary: List<String>, fallback: List<String>): List<String> {
+    if (fallback.isEmpty()) return primary
+    if (primary.isEmpty()) return fallback
+    val ordered = LinkedHashSet<String>(primary.size + fallback.size)
+    ordered.addAll(primary)
+    ordered.addAll(fallback)
+    return ordered.toList()
+}
+
+private fun captureNamesFromFrame(frame: CmdFrame): List<String> {
+    val ordered = LinkedHashSet<String>()
+    for (name in frame.fn.localSlotNames) {
+        if (name != null) ordered.add(name)
+    }
+    return ordered.toList()
+}
+
+class CmdDeclClassField(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.ClassFieldDecl
+            ?: error("DECL_CLASS_FIELD expects ClassFieldDecl at $constId")
+        val scope = frame.ensureScope()
+        val cls = scope.thisObj as? ObjClass
+            ?: scope.raiseIllegalState("class field init requires class scope")
+        val value = frame.slotToObj(slot).byValueCopy()
+        cls.createClassField(
+            decl.name,
+            value,
+            decl.isMutable,
+            decl.visibility,
+            decl.writeVisibility,
+            Pos.builtIn,
+            isTransient = decl.isTransient
+        )
+        scope.addItem(
+            decl.name,
+            decl.isMutable,
+            value,
+            decl.visibility,
+            decl.writeVisibility,
+            recordType = ObjRecord.Type.Field,
+            isTransient = decl.isTransient
+        )
+        return
+    }
+}
+
+class CmdDeclClassDelegated(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.ClassDelegatedDecl
+            ?: error("DECL_CLASS_DELEGATED expects ClassDelegatedDecl at $constId")
+        val scope = frame.ensureScope()
+        val cls = scope.thisObj as? ObjClass
+            ?: scope.raiseIllegalState("class delegated init requires class scope")
+        val initValue = frame.slotToObj(slot)
+        val accessTypeStr = if (decl.isMutable) "Var" else "Val"
+        val accessType = ObjString(accessTypeStr)
+        val finalDelegate = try {
+            initValue.invokeInstanceMethod(
+                scope,
+                "bind",
+                Arguments(ObjString(decl.name), accessType, scope.thisObj)
+            )
+        } catch (_: Exception) {
+            initValue
+        }
+        cls.createClassField(
+            decl.name,
+            ObjUnset,
+            decl.isMutable,
+            decl.visibility,
+            decl.writeVisibility,
+            Pos.builtIn,
+            isTransient = decl.isTransient,
+            type = ObjRecord.Type.Delegated
+        ).apply {
+            delegate = finalDelegate
+        }
+        scope.addItem(
+            decl.name,
+            decl.isMutable,
+            ObjUnset,
+            decl.visibility,
+            decl.writeVisibility,
+            recordType = ObjRecord.Type.Delegated,
+            isTransient = decl.isTransient
+        ).apply {
+            delegate = finalDelegate
+        }
+        frame.storeObjResult(slot, finalDelegate)
+        return
+    }
+}
+
+class CmdDeclClassInstanceInit(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.ClassInstanceInitDecl
+            ?: error("DECL_CLASS_INSTANCE_INIT expects ClassInstanceInitDecl at $constId")
+        val scope = frame.ensureScope()
+        val cls = scope.thisObj as? ObjClass
+            ?: scope.raiseIllegalState("class instance init requires class scope")
+        cls.instanceInitializers += decl.initStatement
+        frame.storeObjResult(slot, ObjVoid)
+        return
+    }
+}
+
+class CmdDeclClassInstanceField(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.ClassInstanceFieldDecl
+            ?: error("DECL_CLASS_INSTANCE_FIELD expects ClassInstanceFieldDecl at $constId")
+        val scope = frame.ensureScope()
+        val cls = scope.thisObj as? ObjClass
+            ?: scope.raiseIllegalState("class instance field requires class scope")
+        cls.createField(
+            decl.name,
+            ObjNull,
+            isMutable = decl.isMutable,
+            visibility = decl.visibility,
+            writeVisibility = decl.writeVisibility,
+            pos = decl.pos,
+            declaringClass = cls,
+            isAbstract = decl.isAbstract,
+            isClosed = decl.isClosed,
+            isOverride = decl.isOverride,
+            isTransient = decl.isTransient,
+            type = ObjRecord.Type.Field,
+            fieldId = decl.fieldId
+        )
+        if (!decl.isAbstract) {
+            decl.initStatement?.let { cls.instanceInitializers += it }
+        }
+        frame.storeObjResult(slot, ObjVoid)
+        return
+    }
+}
+
+class CmdDeclClassInstanceProperty(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.ClassInstancePropertyDecl
+            ?: error("DECL_CLASS_INSTANCE_PROPERTY expects ClassInstancePropertyDecl at $constId")
+        val scope = frame.ensureScope()
+        val cls = scope.thisObj as? ObjClass
+            ?: scope.raiseIllegalState("class instance property requires class scope")
+        cls.addProperty(
+            name = decl.name,
+            visibility = decl.visibility,
+            writeVisibility = decl.writeVisibility,
+            declaringClass = cls,
+            isAbstract = decl.isAbstract,
+            isClosed = decl.isClosed,
+            isOverride = decl.isOverride,
+            pos = decl.pos,
+            prop = decl.prop,
+            methodId = decl.methodId
+        )
+        if (!decl.isAbstract) {
+            decl.initStatement?.let { cls.instanceInitializers += it }
+        }
+        frame.storeObjResult(slot, ObjVoid)
+        return
+    }
+}
+
+class CmdDeclClassInstanceDelegated(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.ClassInstanceDelegatedDecl
+            ?: error("DECL_CLASS_INSTANCE_DELEGATED expects ClassInstanceDelegatedDecl at $constId")
+        val scope = frame.ensureScope()
+        val cls = scope.thisObj as? ObjClass
+            ?: scope.raiseIllegalState("class instance delegated requires class scope")
+        cls.createField(
+            decl.name,
+            ObjUnset,
+            isMutable = decl.isMutable,
+            visibility = decl.visibility,
+            writeVisibility = decl.writeVisibility,
+            pos = decl.pos,
+            declaringClass = cls,
+            isAbstract = decl.isAbstract,
+            isClosed = decl.isClosed,
+            isOverride = decl.isOverride,
+            isTransient = decl.isTransient,
+            type = ObjRecord.Type.Delegated,
+            methodId = decl.methodId
+        )
+        if (!decl.isAbstract) {
+            decl.initStatement?.let { cls.instanceInitializers += it }
+        }
+        frame.storeObjResult(slot, ObjVoid)
+        return
+    }
+}
+
+class CmdDeclInstanceField(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.InstanceFieldDecl
+            ?: error("DECL_INSTANCE_FIELD expects InstanceFieldDecl at $constId")
+        val scope = frame.ensureScope()
+        val value = frame.slotToObj(slot).byValueCopy()
+        scope.addItem(
+            decl.name,
+            decl.isMutable,
+            value,
+            decl.visibility,
+            decl.writeVisibility,
+            recordType = ObjRecord.Type.Field,
+            isAbstract = decl.isAbstract,
+            isClosed = decl.isClosed,
+            isOverride = decl.isOverride,
+            isTransient = decl.isTransient
+        )
+        if (slot >= frame.fn.scopeSlotCount) {
+            frame.storeObjResult(slot, ObjVoid)
+        }
+        return
+    }
+}
+
+class CmdDeclInstanceProperty(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.InstancePropertyDecl
+            ?: error("DECL_INSTANCE_PROPERTY expects InstancePropertyDecl at $constId")
+        val scope = frame.ensureScope()
+        val prop = frame.slotToObj(slot)
+        scope.addItem(
+            decl.name,
+            decl.isMutable,
+            prop,
+            decl.visibility,
+            decl.writeVisibility,
+            recordType = ObjRecord.Type.Property,
+            isAbstract = decl.isAbstract,
+            isClosed = decl.isClosed,
+            isOverride = decl.isOverride,
+            isTransient = decl.isTransient
+        )
+        if (slot >= frame.fn.scopeSlotCount) {
+            frame.storeObjResult(slot, ObjVoid)
+        }
+        return
+    }
+}
+
+class CmdDeclInstanceDelegated(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.InstanceDelegatedDecl
+            ?: error("DECL_INSTANCE_DELEGATED expects InstanceDelegatedDecl at $constId")
+        val scope = frame.ensureScope()
+        var initValue = frame.slotToObj(slot)
+        val debugName = if (slot < frame.fn.scopeSlotCount) {
+            frame.fn.scopeSlotNames.getOrNull(slot)
+        } else {
+            val localIndex = slot - frame.fn.scopeSlotCount
+            frame.fn.localSlotNames.getOrNull(localIndex)
+        }
+        if (initValue === ObjUnset) {
+            if (debugName != null) {
+                val resolved = scope.get(debugName)
+                if (resolved != null && resolved.value !== ObjUnset) {
+                    initValue = resolved.value
+                }
+            }
+        }
+        val accessType = ObjString(decl.accessTypeLabel)
+        val finalDelegate = try {
+            initValue.invokeInstanceMethod(
+                scope,
+                "bind",
+                Arguments(ObjString(decl.memberName), accessType, scope.thisObj)
+            )
+        } catch (_: Exception) {
+            initValue
+        }
+        scope.addItem(
+            decl.storageName,
+            decl.isMutable,
+            ObjUnset,
+            decl.visibility,
+            decl.writeVisibility,
+            recordType = ObjRecord.Type.Delegated,
+            isAbstract = decl.isAbstract,
+            isClosed = decl.isClosed,
+            isOverride = decl.isOverride,
+            isTransient = decl.isTransient
+        ).apply {
+            delegate = finalDelegate
+        }
+        if (slot >= frame.fn.scopeSlotCount) {
+            frame.storeObjResult(slot, ObjVoid)
+        }
         return
     }
 }
@@ -1504,33 +1924,6 @@ private fun resolveLocalSlotIndex(fn: CmdFunction, name: String, preferCapture: 
     return null
 }
 
-private fun isAstStatement(stmt: Statement): Boolean {
-    return when (stmt) {
-        is ExpressionStatement,
-        is IfStatement,
-        is ForInStatement,
-        is WhileStatement,
-        is DoWhileStatement,
-        is BlockStatement,
-        is InlineBlockStatement,
-        is VarDeclStatement,
-        is DelegatedVarDeclStatement,
-        is DestructuringVarDeclStatement,
-        is BreakStatement,
-        is ContinueStatement,
-        is ReturnStatement,
-        is ThrowStatement,
-        is net.sergeych.lyng.NopStatement,
-        is ExtensionPropertyDeclStatement,
-        is ClassDeclStatement,
-        is FunctionDeclStatement,
-        is EnumDeclStatement,
-        is TryStatement,
-        is WhenStatement -> true
-        else -> false
-    }
-}
-
 class CmdDeclExtProperty(internal val constId: Int, internal val slot: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         val decl = frame.fn.constants[constId] as? BytecodeConst.ExtensionPropertyDecl
@@ -1578,7 +1971,7 @@ class CmdCallDirect(
         val args = frame.buildArguments(argBase, argCount)
         if (callee is Statement) {
             val bytecodeBody = (callee as? BytecodeBodyProvider)?.bytecodeBody()
-            if (callee !is BytecodeStatement && callee !is BytecodeCallable && bytecodeBody == null && isAstStatement(callee)) {
+            if (callee !is BytecodeStatement && callee !is BytecodeCallable && bytecodeBody == null) {
                 frame.ensureScope().raiseIllegalState("bytecode runtime cannot call non-bytecode Statement")
             }
         }
@@ -1619,7 +2012,7 @@ class CmdCallSlot(
             val scope = frame.ensureScope()
             if (callee is Statement) {
                 val bytecodeBody = (callee as? BytecodeBodyProvider)?.bytecodeBody()
-                if (callee !is BytecodeStatement && callee !is BytecodeCallable && bytecodeBody == null && isAstStatement(callee)) {
+                if (callee !is BytecodeStatement && callee !is BytecodeCallable && bytecodeBody == null) {
                     scope.raiseIllegalState("bytecode runtime cannot call non-bytecode Statement")
                 }
             }
@@ -1897,18 +2290,26 @@ class CmdCallMemberSlot(
             frame.storeObjResult(dst, result)
             return
         }
+        val scope = frame.ensureScope()
         val decl = rec.declaringClass ?: receiver.objClass
+        if (!canAccessMember(rec.visibility, decl, scope.currentClassCtx, name)) {
+            scope.raiseError(
+                ObjIllegalAccessException(
+                    scope,
+                    "can't invoke ${name}: not visible (declared in ${decl.className}, caller ${scope.currentClassCtx?.className ?: "?"})"
+                )
+            )
+        }
         val result = when (rec.type) {
             ObjRecord.Type.Property -> {
-                if (callArgs.isEmpty()) (rec.value as ObjProperty).callGetter(frame.ensureScope(), receiver, decl)
-                else frame.ensureScope().raiseError("property $name cannot be called with arguments")
+                if (callArgs.isEmpty()) (rec.value as ObjProperty).callGetter(scope, receiver, decl)
+                else scope.raiseError("property $name cannot be called with arguments")
             }
             ObjRecord.Type.Fun -> {
-                val callScope = inst?.instanceScope ?: frame.ensureScope()
+                val callScope = inst?.instanceScope ?: scope
                 rec.value.invoke(callScope, receiver, callArgs, decl)
             }
             ObjRecord.Type.Delegated -> {
-                val scope = frame.ensureScope()
                 val delegate = when (receiver) {
                     is ObjInstance -> {
                         val storageName = decl.mangledName(name)
@@ -2002,7 +2403,6 @@ class BytecodeLambdaCallable(
         val context = scope.applyClosureForBytecode(closureScope, preferredThisType).also {
             it.args = scope.args
         }
-        if (paramSlotPlan.isNotEmpty()) context.applySlotPlan(paramSlotPlan)
         if (captureRecords != null) {
             context.captureRecords = captureRecords
             context.captureNames = captureNames
@@ -2027,19 +2427,13 @@ class BytecodeLambdaCallable(
                     val itSlot = slotPlan["it"]
                     if (itSlot != null) {
                         frame.frame.setObj(itSlot, itValue)
-                        if (context.getLocalRecordDirect("it") == null) {
-                            context.addItem("it", false, FrameSlotRef(frame.frame, itSlot), recordType = ObjRecord.Type.Argument)
-                        }
-                    } else if (context.getLocalRecordDirect("it") == null) {
-                        context.addItem("it", false, itValue, recordType = ObjRecord.Type.Argument)
                     }
                 } else {
                     argsDeclaration.assignToFrame(
                         context,
                         arguments,
                         slotPlan,
-                        frame.frame,
-                        defaultAccessType = AccessType.Val
+                        frame.frame
                     )
                 }
             }
@@ -2235,9 +2629,7 @@ class CmdFrame(
             if (!visited.add(current)) continue
             if (current.getSlotIndexOf(slotName) != null) return current
             current.parent?.let { queue.add(it) }
-            if (current is ClosureScope) {
-                queue.add(current.closureScope)
-            } else if (current is BytecodeClosureScope) {
+            if (current is BytecodeClosureScope) {
                 queue.add(current.closureScope)
             } else if (current is ApplyScope) {
                 queue.add(current.applied)
@@ -2255,9 +2647,7 @@ class CmdFrame(
             if (!visited.add(current)) continue
             if (current.getLocalRecordDirect(name) != null) return current
             current.parent?.let { queue.add(it) }
-            if (current is ClosureScope) {
-                queue.add(current.closureScope)
-            } else if (current is BytecodeClosureScope) {
+            if (current is BytecodeClosureScope) {
                 queue.add(current.closureScope)
             } else if (current is ApplyScope) {
                 queue.add(current.applied)
@@ -2276,9 +2666,7 @@ class CmdFrame(
             if (current is ModuleScope) return current
             if (current.parent is ModuleScope) return current
             current.parent?.let { queue.add(it) }
-            if (current is ClosureScope) {
-                queue.add(current.closureScope)
-            } else if (current is BytecodeClosureScope) {
+            if (current is BytecodeClosureScope) {
                 queue.add(current.closureScope)
             } else if (current is ApplyScope) {
                 queue.add(current.applied)
@@ -2360,7 +2748,7 @@ class CmdFrame(
 
     fun pushScope(plan: Map<String, Int>, captures: List<String>) {
         if (scope.skipScopeCreation) {
-            val snapshot = scope.applySlotPlanWithSnapshot(plan)
+            val snapshot = emptyMap<String, Int?>()
             slotPlanStack.addLast(snapshot)
             virtualDepth += 1
             scopeStack.addLast(scope)
@@ -2369,9 +2757,6 @@ class CmdFrame(
             scopeStack.addLast(scope)
             scopeVirtualStack.addLast(false)
             scope = scope.createChildScope()
-            if (plan.isNotEmpty()) {
-                scope.applySlotPlan(plan)
-            }
         }
         captureStack.addLast(captures)
         scopeDepth += 1
@@ -2417,11 +2802,8 @@ class CmdFrame(
             scopeStack.addLast(scope)
             slotPlanScopeStack.addLast(true)
             scope = scope.createChildScope()
-            if (plan.isNotEmpty()) {
-                scope.applySlotPlan(plan)
-            }
         } else {
-            val snapshot = scope.applySlotPlanWithSnapshot(plan)
+            val snapshot = emptyMap<String, Int?>()
             slotPlanStack.addLast(snapshot)
             slotPlanScopeStack.addLast(false)
             virtualDepth += 1
@@ -2456,9 +2838,15 @@ class CmdFrame(
         if (slot < fn.scopeSlotCount) {
             val target = scopeTarget(slot)
             val index = ensureScopeSlot(target, slot)
+            val record = target.getSlotRecord(index)
+            if (!record.isMutable) {
+                val name = fn.scopeSlotNames[slot] ?: "slot#$index"
+                ensureScope().raiseError("can't assign to read-only variable: $name")
+            }
             target.setSlotValue(index, value)
         } else {
             val localIndex = slot - fn.scopeSlotCount
+            ensureLocalMutable(localIndex)
             when (val existing = frame.getRawObj(localIndex)) {
                 is FrameSlotRef -> {
                     existing.write(value)
@@ -2471,6 +2859,15 @@ class CmdFrame(
                 else -> {}
             }
             frame.setObj(localIndex, value)
+        }
+    }
+
+    fun shouldBypassImmutableWrite(slot: Int): Boolean {
+        val next = fn.cmds.getOrNull(ip) ?: return false
+        return when (next) {
+            is CmdDeclLocal -> next.slot == slot
+            is CmdDeclDelegated -> next.slot == slot
+            else -> false
         }
     }
 
@@ -2498,13 +2895,41 @@ class CmdFrame(
 
     fun getLocalInt(local: Int): Long = frame.getInt(local)
 
-    fun setInt(slot: Int, value: Long) {
+    fun setIntUnchecked(slot: Int, value: Long) {
         if (slot < fn.scopeSlotCount) {
             val target = scopeTarget(slot)
             val index = ensureScopeSlot(target, slot)
             target.setSlotValue(index, ObjInt.of(value))
         } else {
             val localIndex = slot - fn.scopeSlotCount
+            when (val existing = frame.getRawObj(localIndex)) {
+                is FrameSlotRef -> {
+                    existing.write(ObjInt.of(value))
+                    return
+                }
+                is RecordSlotRef -> {
+                    existing.write(ObjInt.of(value))
+                    return
+                }
+                else -> {}
+            }
+            frame.setInt(localIndex, value)
+        }
+    }
+
+    fun setInt(slot: Int, value: Long) {
+        if (slot < fn.scopeSlotCount) {
+            val target = scopeTarget(slot)
+            val index = ensureScopeSlot(target, slot)
+            val record = target.getSlotRecord(index)
+            if (!record.isMutable) {
+                val name = fn.scopeSlotNames[slot] ?: "slot#$index"
+                ensureScope().raiseError("can't assign to read-only variable: $name")
+            }
+            target.setSlotValue(index, ObjInt.of(value))
+        } else {
+            val localIndex = slot - fn.scopeSlotCount
+            ensureLocalMutable(localIndex)
             when (val existing = frame.getRawObj(localIndex)) {
                 is FrameSlotRef -> {
                     existing.write(ObjInt.of(value))
@@ -2547,6 +2972,34 @@ class CmdFrame(
     }
 
     fun setReal(slot: Int, value: Double) {
+        if (slot < fn.scopeSlotCount) {
+            val target = scopeTarget(slot)
+            val index = ensureScopeSlot(target, slot)
+            val record = target.getSlotRecord(index)
+            if (!record.isMutable) {
+                val name = fn.scopeSlotNames[slot] ?: "slot#$index"
+                ensureScope().raiseError("can't assign to read-only variable: $name")
+            }
+            target.setSlotValue(index, ObjReal.of(value))
+        } else {
+            val localIndex = slot - fn.scopeSlotCount
+            ensureLocalMutable(localIndex)
+            when (val existing = frame.getRawObj(localIndex)) {
+                is FrameSlotRef -> {
+                    existing.write(ObjReal.of(value))
+                    return
+                }
+                is RecordSlotRef -> {
+                    existing.write(ObjReal.of(value))
+                    return
+                }
+                else -> {}
+            }
+            frame.setReal(localIndex, value)
+        }
+    }
+
+    fun setRealUnchecked(slot: Int, value: Double) {
         if (slot < fn.scopeSlotCount) {
             val target = scopeTarget(slot)
             val index = ensureScopeSlot(target, slot)
@@ -2593,6 +3046,34 @@ class CmdFrame(
     fun getLocalBool(local: Int): Boolean = frame.getBool(local)
 
     fun setBool(slot: Int, value: Boolean) {
+        if (slot < fn.scopeSlotCount) {
+            val target = scopeTarget(slot)
+            val index = ensureScopeSlot(target, slot)
+            val record = target.getSlotRecord(index)
+            if (!record.isMutable) {
+                val name = fn.scopeSlotNames[slot] ?: "slot#$index"
+                ensureScope().raiseError("can't assign to read-only variable: $name")
+            }
+            target.setSlotValue(index, if (value) ObjTrue else ObjFalse)
+        } else {
+            val localIndex = slot - fn.scopeSlotCount
+            ensureLocalMutable(localIndex)
+            when (val existing = frame.getRawObj(localIndex)) {
+                is FrameSlotRef -> {
+                    existing.write(if (value) ObjTrue else ObjFalse)
+                    return
+                }
+                is RecordSlotRef -> {
+                    existing.write(if (value) ObjTrue else ObjFalse)
+                    return
+                }
+                else -> {}
+            }
+            frame.setBool(localIndex, value)
+        }
+    }
+
+    fun setBoolUnchecked(slot: Int, value: Boolean) {
         if (slot < fn.scopeSlotCount) {
             val target = scopeTarget(slot)
             val index = ensureScopeSlot(target, slot)
@@ -2684,6 +3165,16 @@ class CmdFrame(
             is ObjReal -> setReal(dst, result.value)
             is ObjBool -> setBool(dst, result.value)
             else -> setObj(dst, result)
+        }
+    }
+
+    fun setObjUnchecked(slot: Int, value: Obj) {
+        if (slot < fn.scopeSlotCount) {
+            val target = scopeTarget(slot)
+            val index = ensureScopeSlot(target, slot)
+            target.setSlotValue(index, value)
+        } else {
+            frame.setObj(slot - fn.scopeSlotCount, value)
         }
     }
 
@@ -2887,6 +3378,18 @@ class CmdFrame(
             target.updateSlotFor(name, resolved)
         }
         return index
+    }
+
+    private fun ensureLocalMutable(localIndex: Int) {
+        val name = fn.localSlotNames.getOrNull(localIndex) ?: return
+        val isMutable = fn.localSlotMutables.getOrNull(localIndex) ?: true
+        if (!isMutable) {
+            val typeCode = frame.getSlotTypeCode(localIndex)
+            if (typeCode == SlotType.UNKNOWN.code) return
+            val rawObj = frame.getRawObj(localIndex)
+            if (rawObj === ObjUnset) return
+            ensureScope().raiseError("can't assign to read-only variable: $name")
+        }
     }
 
     // Scope depth resolution is no longer used; all scope slots are resolved against the current frame.

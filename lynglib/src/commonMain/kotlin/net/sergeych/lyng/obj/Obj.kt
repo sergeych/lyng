@@ -447,7 +447,7 @@ open class Obj {
             caller.members[name]?.let { rec ->
                 if (rec.visibility == Visibility.Private && !rec.isAbstract) {
                     val resolved = resolveRecord(scope, rec, name, caller)
-                    if (resolved.type == ObjRecord.Type.Fun && resolved.value is Statement)
+                    if (resolved.type == ObjRecord.Type.Fun)
                         return resolved.copy(value = resolved.value.invoke(scope, this, Arguments.EMPTY, caller))
                     return resolved
                 }
@@ -461,7 +461,7 @@ open class Obj {
             if (rec != null && !rec.isAbstract) {
                 val decl = rec.declaringClass ?: cls
                 val resolved = resolveRecord(scope, rec, name, decl)
-                if (resolved.type == ObjRecord.Type.Fun && resolved.value is Statement)
+                if (resolved.type == ObjRecord.Type.Fun)
                     return resolved.copy(value = resolved.value.invoke(scope, this, Arguments.EMPTY, decl))
                 return resolved
             }
@@ -476,7 +476,7 @@ open class Obj {
                     if (!canAccessMember(rec.visibility, decl, caller, name))
                         scope.raiseError(ObjIllegalAccessException(scope, "can't access field ${name}: not visible (declared in ${decl.className}, caller ${caller?.className ?: "?"})"))
                     val resolved = resolveRecord(scope, rec, name, decl)
-                    if (resolved.type == ObjRecord.Type.Fun && resolved.value is Statement)
+                    if (resolved.type == ObjRecord.Type.Fun)
                         return resolved.copy(value = resolved.value.invoke(scope, this, Arguments.EMPTY, decl))
                     return resolved
                 }
@@ -500,16 +500,17 @@ open class Obj {
         if (obj.type == ObjRecord.Type.Delegated) {
             val del = obj.delegate ?: scope.raiseError("Internal error: delegated property $name has no delegate")
             val th = if (this === ObjVoid) ObjNull else this
-            val getValueRec = del.objClass.getInstanceMemberOrNull("getValue")
+            val getValueRec = when (del) {
+                is ObjInstance -> del.methodRecordForKey("getValue")
+                    ?: del.instanceScope.objects["getValue"]
+                    ?: del.objClass.getInstanceMemberOrNull("getValue")
+                else -> del.objClass.getInstanceMemberOrNull("getValue")
+            }
             if (getValueRec == null || getValueRec.declaringClass?.className == "Delegate") {
-                val wrapper = object : Statement() {
-                    override val pos: Pos = Pos.builtIn
-
-                    override suspend fun execute(s: Scope): Obj {
-                        val th2 = if (s.thisObj === ObjVoid) ObjNull else s.thisObj
-                        val allArgs = (listOf(th2, ObjString(name)) + s.args.list).toTypedArray()
-                        return del.invokeInstanceMethod(s, "invoke", Arguments(*allArgs))
-                    }
+                val wrapper = ObjNativeCallable {
+                    val th2 = if (thisObj === ObjVoid) ObjNull else thisObj
+                    val allArgs = (listOf(th2, ObjString(name)) + args.list).toTypedArray()
+                    del.invokeInstanceMethod(this, "invoke", Arguments(*allArgs))
                 }
                 return obj.copy(
                     value = wrapper,
@@ -517,14 +518,11 @@ open class Obj {
                 )
             }
             val res = del.invokeInstanceMethod(scope, "getValue", Arguments(th, ObjString(name)))
-            return obj.copy(
-                value = res,
-                type = ObjRecord.Type.Other
-            )
+            return obj.copy(value = res, type = ObjRecord.Type.Other)
         }
         val value = obj.value
         if (value is ObjProperty || obj.type == ObjRecord.Type.Property) {
-            val prop = if (value is ObjProperty) value else (value as? Statement)?.execute(scope.createChildScope(scope.pos, newThisObj = this)) as? ObjProperty
+            val prop = (value as? ObjProperty)
                 ?: scope.raiseError("Expected ObjProperty for property member $name, got ${value::class}")
             val res = prop.callGetter(scope, this, decl)
             return ObjRecord(res, obj.isMutable)

@@ -38,7 +38,6 @@ class CompileTimeResolutionRuntimeTest {
         val script = Compiler.compileWithResolution(
             Source("<strict-slot>", code),
             Script.defaultImportManager,
-            useBytecodeStatements = false,
             strictSlotRefs = true
         )
         val result = script.execute(Script.defaultImportManager.newStdScope())
@@ -61,7 +60,6 @@ class CompileTimeResolutionRuntimeTest {
         val script = Compiler.compileWithResolution(
             Source("<shadow-slot>", code),
             Script.defaultImportManager,
-            useBytecodeStatements = true,
             strictSlotRefs = true
         )
         val result = script.execute(Script.defaultImportManager.newStdScope())
@@ -85,7 +83,6 @@ class CompileTimeResolutionRuntimeTest {
         val script = Compiler.compileWithResolution(
             Source("<shadow-block>", code),
             Script.defaultImportManager,
-            useBytecodeStatements = true,
             strictSlotRefs = true
         )
         val result = script.execute(Script.defaultImportManager.newStdScope())

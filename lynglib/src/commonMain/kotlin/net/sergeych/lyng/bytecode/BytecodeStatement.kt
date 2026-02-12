@@ -144,6 +144,21 @@ class BytecodeStatement private constructor(
                 is net.sergeych.lyng.ClassDeclStatement -> false
                 is net.sergeych.lyng.FunctionDeclStatement -> false
                 is net.sergeych.lyng.EnumDeclStatement -> false
+                is net.sergeych.lyng.ClassStaticFieldInitStatement ->
+                    target.initializer?.let { containsUnsupportedStatement(it) } ?: false
+                is net.sergeych.lyng.ClassInstanceInitDeclStatement ->
+                    containsUnsupportedStatement(target.initStatement)
+                is net.sergeych.lyng.ClassInstanceFieldDeclStatement ->
+                    target.initStatement?.let { containsUnsupportedStatement(it) } ?: false
+                is net.sergeych.lyng.ClassInstancePropertyDeclStatement ->
+                    target.initStatement?.let { containsUnsupportedStatement(it) } ?: false
+                is net.sergeych.lyng.ClassInstanceDelegatedDeclStatement ->
+                    target.initStatement?.let { containsUnsupportedStatement(it) } ?: false
+                is net.sergeych.lyng.InstanceFieldInitStatement ->
+                    target.initializer?.let { containsUnsupportedStatement(it) } ?: false
+                is net.sergeych.lyng.InstancePropertyInitStatement -> false
+                is net.sergeych.lyng.InstanceDelegatedInitStatement ->
+                    containsUnsupportedStatement(target.initializer)
                 is net.sergeych.lyng.TryStatement -> {
                     containsUnsupportedStatement(target.body) ||
                         target.catches.any { containsUnsupportedStatement(it.block) } ||
@@ -263,6 +278,115 @@ class BytecodeStatement private constructor(
                             )
                         },
                         stmt.elseCase?.let { unwrapDeep(it) },
+                        stmt.pos
+                    )
+                }
+                is net.sergeych.lyng.ClassStaticFieldInitStatement -> {
+                    net.sergeych.lyng.ClassStaticFieldInitStatement(
+                        stmt.name,
+                        stmt.isMutable,
+                        stmt.visibility,
+                        stmt.writeVisibility,
+                        stmt.initializer?.let { unwrapDeep(it) },
+                        stmt.isDelegated,
+                        stmt.isTransient,
+                        stmt.pos
+                    )
+                }
+                is net.sergeych.lyng.ClassInstanceInitDeclStatement -> {
+                    net.sergeych.lyng.ClassInstanceInitDeclStatement(
+                        unwrapDeep(stmt.initStatement),
+                        stmt.pos
+                    )
+                }
+                is net.sergeych.lyng.ClassInstanceFieldDeclStatement -> {
+                    net.sergeych.lyng.ClassInstanceFieldDeclStatement(
+                        stmt.name,
+                        stmt.isMutable,
+                        stmt.visibility,
+                        stmt.writeVisibility,
+                        stmt.isAbstract,
+                        stmt.isClosed,
+                        stmt.isOverride,
+                        stmt.isTransient,
+                        stmt.fieldId,
+                        stmt.initStatement?.let { unwrapDeep(it) },
+                        stmt.pos
+                    )
+                }
+                is net.sergeych.lyng.ClassInstancePropertyDeclStatement -> {
+                    net.sergeych.lyng.ClassInstancePropertyDeclStatement(
+                        stmt.name,
+                        stmt.isMutable,
+                        stmt.visibility,
+                        stmt.writeVisibility,
+                        stmt.isAbstract,
+                        stmt.isClosed,
+                        stmt.isOverride,
+                        stmt.isTransient,
+                        stmt.prop,
+                        stmt.methodId,
+                        stmt.initStatement?.let { unwrapDeep(it) },
+                        stmt.pos
+                    )
+                }
+                is net.sergeych.lyng.ClassInstanceDelegatedDeclStatement -> {
+                    net.sergeych.lyng.ClassInstanceDelegatedDeclStatement(
+                        stmt.name,
+                        stmt.isMutable,
+                        stmt.visibility,
+                        stmt.writeVisibility,
+                        stmt.isAbstract,
+                        stmt.isClosed,
+                        stmt.isOverride,
+                        stmt.isTransient,
+                        stmt.methodId,
+                        stmt.initStatement?.let { unwrapDeep(it) },
+                        stmt.pos
+                    )
+                }
+                is net.sergeych.lyng.InstanceFieldInitStatement -> {
+                    net.sergeych.lyng.InstanceFieldInitStatement(
+                        stmt.storageName,
+                        stmt.isMutable,
+                        stmt.visibility,
+                        stmt.writeVisibility,
+                        stmt.isAbstract,
+                        stmt.isClosed,
+                        stmt.isOverride,
+                        stmt.isTransient,
+                        stmt.isLateInitVal,
+                        stmt.initializer?.let { unwrapDeep(it) },
+                        stmt.pos
+                    )
+                }
+                is net.sergeych.lyng.InstancePropertyInitStatement -> {
+                    net.sergeych.lyng.InstancePropertyInitStatement(
+                        stmt.storageName,
+                        stmt.isMutable,
+                        stmt.visibility,
+                        stmt.writeVisibility,
+                        stmt.isAbstract,
+                        stmt.isClosed,
+                        stmt.isOverride,
+                        stmt.isTransient,
+                        stmt.prop,
+                        stmt.pos
+                    )
+                }
+                is net.sergeych.lyng.InstanceDelegatedInitStatement -> {
+                    net.sergeych.lyng.InstanceDelegatedInitStatement(
+                        stmt.storageName,
+                        stmt.memberName,
+                        stmt.isMutable,
+                        stmt.visibility,
+                        stmt.writeVisibility,
+                        stmt.isAbstract,
+                        stmt.isClosed,
+                        stmt.isOverride,
+                        stmt.isTransient,
+                        stmt.accessTypeLabel,
+                        unwrapDeep(stmt.initializer),
                         stmt.pos
                     )
                 }

@@ -61,7 +61,7 @@ val ObjClassType by lazy {
                 val names = mutableListOf<Obj>()
                 for (c in cls.mro) {
                     for ((n, rec) in c.members) {
-                        if (rec.value !is Statement && seen.add(n)) names += ObjString(n)
+                        if (rec.type != ObjRecord.Type.Fun && seen.add(n)) names += ObjString(n)
                     }
                 }
                 ObjList(names.toMutableList())
@@ -79,7 +79,7 @@ val ObjClassType by lazy {
                 val names = mutableListOf<Obj>()
                 for (c in cls.mro) {
                     for ((n, rec) in c.members) {
-                        if (rec.value is Statement && seen.add(n)) names += ObjString(n)
+                        if (rec.type == ObjRecord.Type.Fun && seen.add(n)) names += ObjString(n)
                     }
                 }
                 ObjList(names.toMutableList())
@@ -136,7 +136,7 @@ open class ObjClass(
                     }
                 }
                 cls.classScope?.objects?.forEach { (name, rec) ->
-                    if (rec.visibility == Visibility.Public && (rec.value is Statement || rec.type == ObjRecord.Type.Delegated)) {
+                    if (rec.visibility == Visibility.Public && (rec.type == ObjRecord.Type.Fun || rec.type == ObjRecord.Type.Delegated)) {
                         val key = if (rec.type == ObjRecord.Type.Delegated) cls.mangledName(name) else name
                         res[name] = key
                     }
@@ -150,13 +150,13 @@ open class ObjClass(
     val classNameObj by lazy { ObjString(className) }
 
     var constructorMeta: ArgsDeclaration? = null
-    var instanceConstructor: Statement? = null
+    var instanceConstructor: Obj? = null
 
     /**
      * Per-instance initializers collected from class body (for instance fields). These are executed
      * during construction in the instance scope of the object, once per class in the hierarchy.
      */
-    val instanceInitializers: MutableList<Statement> = mutableListOf()
+    val instanceInitializers: MutableList<Obj> = mutableListOf()
 
     /**
      * the scope for class methods, initialize class vars, etc.
@@ -349,8 +349,7 @@ open class ObjClass(
             if (cls.className == "Obj") break
             for ((name, rec) in cls.members) {
                 if (rec.isAbstract) continue
-                if (rec.value !is Statement &&
-                    rec.type != ObjRecord.Type.Delegated &&
+                if (rec.type != ObjRecord.Type.Delegated &&
                     rec.type != ObjRecord.Type.Fun &&
                     rec.type != ObjRecord.Type.Property) {
                     continue
@@ -363,9 +362,9 @@ open class ObjClass(
             }
             cls.classScope?.objects?.forEach { (name, rec) ->
                 if (rec.isAbstract) return@forEach
-                if (rec.value !is Statement &&
-                    rec.type != ObjRecord.Type.Delegated &&
-                    rec.type != ObjRecord.Type.Property) return@forEach
+                if (rec.type != ObjRecord.Type.Delegated &&
+                    rec.type != ObjRecord.Type.Property &&
+                    rec.type != ObjRecord.Type.Fun) return@forEach
                 val key = if (rec.visibility == Visibility.Private || rec.type == ObjRecord.Type.Delegated) cls.mangledName(name) else name
                 if (res.containsKey(key)) return@forEach
                 val methodId = rec.methodId ?: cls.assignMethodId(name, rec)
@@ -533,7 +532,7 @@ open class ObjClass(
         for (cls in mro) {
             // 1) members-defined methods and fields
             for ((k, v) in cls.members) {
-                if (!v.isAbstract && (v.value is Statement || v.type == ObjRecord.Type.Delegated || v.type == ObjRecord.Type.Field || v.type == ObjRecord.Type.ConstructorField)) {
+                if (!v.isAbstract && (v.type == ObjRecord.Type.Fun || v.type == ObjRecord.Type.Property || v.type == ObjRecord.Type.Delegated || v.type == ObjRecord.Type.Field || v.type == ObjRecord.Type.ConstructorField)) {
                     val key = if (v.visibility == Visibility.Private || v.type == ObjRecord.Type.Field || v.type == ObjRecord.Type.ConstructorField || v.type == ObjRecord.Type.Delegated) cls.mangledName(k) else k
                     if (!res.containsKey(key)) {
                         res[key] = v
@@ -544,7 +543,7 @@ open class ObjClass(
             cls.classScope?.objects?.forEach { (k, rec) ->
                 // ONLY copy methods and delegated members from class scope to instance scope.
                 // Fields in class scope are static fields and must NOT be per-instance.
-                if (!rec.isAbstract && (rec.value is Statement || rec.type == ObjRecord.Type.Delegated)) {
+                if (!rec.isAbstract && (rec.type == ObjRecord.Type.Fun || rec.type == ObjRecord.Type.Property || rec.type == ObjRecord.Type.Delegated)) {
                     val key = if (rec.visibility == Visibility.Private || rec.type == ObjRecord.Type.Delegated) cls.mangledName(k) else k
                     // if not already present, copy reference for dispatch
                     if (!res.containsKey(key)) {
@@ -715,7 +714,7 @@ open class ObjClass(
             instance.instanceScope.currentClassCtx = c
             try {
                 for (initStmt in c.instanceInitializers) {
-                    initStmt.execute(instance.instanceScope)
+                    initStmt.callOn(instance.instanceScope)
                 }
             } finally {
                 instance.instanceScope.currentClassCtx = savedCtx
@@ -726,7 +725,7 @@ open class ObjClass(
             c.instanceConstructor?.let { ctor ->
                 val execScope =
                     instance.instanceScope.createChildScope(args = argsForThis ?: Arguments.EMPTY, newThisObj = instance)
-                ctor.execute(execScope)
+                ctor.callOn(execScope)
             }
         }
     }
@@ -933,7 +932,7 @@ open class ObjClass(
         methodId: Int? = null,
         code: (suspend Scope.() -> Obj)? = null
     ) {
-        val stmt = code?.let { statement { it() } } ?: ObjNull
+        val stmt = code?.let { ObjNativeCallable { it() } } ?: ObjNull
         createField(
             name, stmt, isMutable, visibility, writeVisibility, pos, declaringClass,
             isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride,
@@ -958,8 +957,8 @@ open class ObjClass(
         prop: ObjProperty? = null,
         methodId: Int? = null
     ) {
-        val g = getter?.let { statement { it() } }
-        val s = setter?.let { statement { it(requiredArg(0)); ObjVoid } }
+        val g = getter?.let { ObjNativeCallable { it() } }
+        val s = setter?.let { ObjNativeCallable { it(requiredArg(0)); ObjVoid } }
         val finalProp = prop ?: if (isAbstract) ObjNull else ObjProperty(name, g, s)
         createField(
             name, finalProp, false, visibility, writeVisibility, pos, declaringClass,
@@ -971,7 +970,7 @@ open class ObjClass(
 
     fun addClassConst(name: String, value: Obj) = createClassField(name, value)
     fun addClassFn(name: String, isOpen: Boolean = false, code: suspend Scope.() -> Obj) {
-        createClassField(name, statement { code() }, isOpen, type = ObjRecord.Type.Fun)
+        createClassField(name, ObjNativeCallable { code() }, isOpen, type = ObjRecord.Type.Fun)
     }
 
 

@@ -19,7 +19,6 @@ package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Arguments
 import net.sergeych.lyng.Scope
-import net.sergeych.lyng.Statement
 
 /**
  * Property accessor storage. Per instructions, properties do NOT have
@@ -27,8 +26,8 @@ import net.sergeych.lyng.Statement
  */
 class ObjProperty(
     val name: String,
-    val getter: Statement?,
-    val setter: Statement?
+    val getter: Obj?,
+    val setter: Obj?
 ) : Obj() {
 
     suspend fun callGetter(scope: Scope, instance: Obj, declaringClass: ObjClass? = null): Obj {
@@ -38,7 +37,7 @@ class ObjProperty(
         val instanceScope = (instance as? ObjInstance)?.instanceScope ?: instance.autoInstanceScope(scope)
         val execScope = scope.applyClosure(instanceScope).createChildScope(newThisObj = instance)
         execScope.currentClassCtx = declaringClass
-        return g.execute(execScope)
+        return g.callOn(execScope)
     }
 
     suspend fun callSetter(scope: Scope, instance: Obj, value: Obj, declaringClass: ObjClass? = null) {
@@ -48,7 +47,7 @@ class ObjProperty(
         val instanceScope = (instance as? ObjInstance)?.instanceScope ?: instance.autoInstanceScope(scope)
         val execScope = scope.applyClosure(instanceScope).createChildScope(args = Arguments(value), newThisObj = instance)
         execScope.currentClassCtx = declaringClass
-        s.execute(execScope)
+        s.callOn(execScope)
     }
 
     override fun toString(): String = "Property($name)"

@@ -170,16 +170,17 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 }
             }
             del = del ?: scope.raiseError("Internal error: delegated property $name has no delegate")
-            val getValueRec = del.objClass.getInstanceMemberOrNull("getValue")
+            val getValueRec = when (del) {
+                is ObjInstance -> del.methodRecordForKey("getValue")
+                    ?: del.instanceScope.objects["getValue"]
+                    ?: del.objClass.getInstanceMemberOrNull("getValue")
+                else -> del.objClass.getInstanceMemberOrNull("getValue")
+            }
             if (getValueRec == null || getValueRec.declaringClass?.className == "Delegate") {
-                val wrapper = object : Statement() {
-                    override val pos: Pos = Pos.builtIn
-
-                    override suspend fun execute(s: Scope): Obj {
-                        val th2 = if (s.thisObj === ObjVoid) ObjNull else s.thisObj
-                        val allArgs = (listOf(th2, ObjString(name)) + s.args.list).toTypedArray()
-                        return del.invokeInstanceMethod(s, "invoke", Arguments(*allArgs))
-                    }
+                val wrapper = ObjNativeCallable {
+                    val th2 = if (thisObj === ObjVoid) ObjNull else thisObj
+                    val allArgs = (listOf(th2, ObjString(name)) + args.list).toTypedArray()
+                    del.invokeInstanceMethod(this, "invoke", Arguments(*allArgs))
                 }
                 return obj.copy(value = wrapper, type = ObjRecord.Type.Other)
             }

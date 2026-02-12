@@ -70,7 +70,7 @@ object CompileTimeResolver {
             source,
             importProvider,
             resolutionSink = collector,
-            useBytecodeStatements = false,
+            compileBytecode = false,
             allowUnresolvedRefs = true
         )
         return collector.buildReport()

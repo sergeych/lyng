@@ -113,7 +113,7 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
         }
 
         suspend fun missingValue(a: Item, error: String): Obj {
-            return a.defaultValue?.execute(scope)
+            return a.defaultValue?.callOn(scope)
                 ?: if (a.type.isNullable) ObjNull else scope.raiseIllegalArgument(error)
         }
 
@@ -252,36 +252,20 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
 
     /**
      * Assign arguments directly into frame slots using [paramSlotPlan] without creating scope locals.
-     * Still allows default expressions to evaluate by exposing FrameSlotRef facades in [scope].
+     * Default expressions must resolve through frame slots (no scope mirroring).
      */
     suspend fun assignToFrame(
         scope: Scope,
         arguments: Arguments = scope.args,
         paramSlotPlan: Map<String, Int>,
         frame: FrameAccess,
-        slotOffset: Int = 0,
-        defaultAccessType: AccessType = AccessType.Var,
-        defaultVisibility: Visibility = Visibility.Public,
-        declaringClass: net.sergeych.lyng.obj.ObjClass? = scope.currentClassCtx
+        slotOffset: Int = 0
     ) {
         fun slotFor(name: String): Int {
             val full = paramSlotPlan[name] ?: scope.raiseIllegalState("parameter slot for '$name' is missing")
             val slot = full - slotOffset
             if (slot < 0) scope.raiseIllegalState("parameter slot for '$name' is out of range")
             return slot
-        }
-
-        fun ensureScopeRef(a: Item, slot: Int, recordType: ObjRecord.Type) {
-            if (scope.getLocalRecordDirect(a.name) != null) return
-            scope.addItem(
-                a.name,
-                (a.accessType ?: defaultAccessType).isMutable,
-                FrameSlotRef(frame, slot),
-                a.visibility ?: defaultVisibility,
-                recordType = recordType,
-                declaringClass = declaringClass,
-                isTransient = a.isTransient
-            )
         }
 
         fun setFrameValue(slot: Int, value: Obj) {
@@ -294,18 +278,12 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
         }
 
         fun assign(a: Item, value: Obj) {
-            val recordType = if (declaringClass != null && a.accessType != null) {
-                ObjRecord.Type.ConstructorField
-            } else {
-                ObjRecord.Type.Argument
-            }
             val slot = slotFor(a.name)
             setFrameValue(slot, value.byValueCopy())
-            ensureScopeRef(a, slot, recordType)
         }
 
         suspend fun missingValue(a: Item, error: String): Obj {
-            return a.defaultValue?.execute(scope)
+            return a.defaultValue?.callOn(scope)
                 ?: if (a.type.isNullable) ObjNull else scope.raiseIllegalArgument(error)
         }
 
@@ -459,7 +437,7 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
     /**
      * Single argument declaration descriptor.
      *
-     * @param defaultValue default value, if set, can't be an [Obj] as it can depend on the call site, call args, etc.
+     * @param defaultValue default value, callable evaluated at call site.
      *      If not null, could be executed on __caller context__ only.
      */
     data class Item(
@@ -472,7 +450,7 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
          * Default value, if set, can't be an [Obj] as it can depend on the call site, call args, etc.
          * So it is a [Statement] that must be executed on __caller context__.
          */
-        val defaultValue: Statement? = null,
+        val defaultValue: Obj? = null,
         val accessType: AccessType? = null,
         val visibility: Visibility? = null,
         val isTransient: Boolean = false,

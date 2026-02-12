@@ -28,6 +28,7 @@ import net.sergeych.lyng.obj.ObjVoid
 class FunctionClosureBox(
     var closure: Scope? = null,
     var captureContext: Scope? = null,
+    var captureRecords: List<ObjRecord>? = null,
 )
 
 data class FunctionDeclSpec(
@@ -40,6 +41,7 @@ data class FunctionDeclSpec(
     val isTransient: Boolean,
     val isDelegated: Boolean,
     val delegateExpression: Statement?,
+    val delegateInitStatement: Statement?,
     val extTypeName: String?,
     val extensionWrapperName: String?,
     val memberMethodId: Int?,
@@ -50,10 +52,17 @@ data class FunctionDeclSpec(
     val fnBody: Statement,
     val closureBox: FunctionClosureBox,
     val captureSlots: List<CaptureSlot>,
+    val slotIndex: Int?,
+    val scopeId: Int?,
     val startPos: Pos,
 )
 
-internal suspend fun executeFunctionDecl(scope: Scope, spec: FunctionDeclSpec): Obj {
+internal suspend fun executeFunctionDecl(
+    scope: Scope,
+    spec: FunctionDeclSpec,
+    captureRecords: List<ObjRecord>? = null
+): Obj {
+    spec.closureBox.captureRecords = captureRecords
     if (spec.actualExtern && spec.extTypeName == null && !spec.parentIsClassBody) {
         val existing = scope.get(spec.name)
         if (existing != null) {
@@ -88,8 +97,8 @@ internal suspend fun executeFunctionDecl(scope: Scope, spec: FunctionDeclSpec): 
                     delegate = finalDelegate
                 }
             )
-            return ObjVoid
-        }
+    return ObjVoid
+}
 
         val th = scope.thisObj
         if (spec.isStatic) {
@@ -117,7 +126,6 @@ internal suspend fun executeFunctionDecl(scope: Scope, spec: FunctionDeclSpec): 
             }
         } else if (th is ObjClass) {
             val cls: ObjClass = th
-            val storageName = "${cls.className}::${spec.name}"
             cls.createField(
                 spec.name,
                 ObjUnset,
@@ -133,33 +141,9 @@ internal suspend fun executeFunctionDecl(scope: Scope, spec: FunctionDeclSpec): 
                 type = ObjRecord.Type.Delegated,
                 methodId = spec.memberMethodId
             )
-            cls.instanceInitializers += object : Statement() {
-                override val pos: Pos = spec.startPos
-                override suspend fun execute(scp: Scope): Obj {
-                    val accessType2 = ObjString("Callable")
-                    val initValue2 = delegateExpr.execute(scp)
-                    val finalDelegate2 = try {
-                        initValue2.invokeInstanceMethod(scp, "bind", Arguments(ObjString(spec.name), accessType2, scp.thisObj))
-                    } catch (e: Exception) {
-                        initValue2
-                    }
-                    scp.addItem(
-                        storageName,
-                        false,
-                        ObjUnset,
-                        spec.visibility,
-                        null,
-                        recordType = ObjRecord.Type.Delegated,
-                        isAbstract = spec.isAbstract,
-                        isClosed = spec.isClosed,
-                        isOverride = spec.isOverride,
-                        isTransient = spec.isTransient
-                    ).apply {
-                        delegate = finalDelegate2
-                    }
-                    return ObjVoid
-                }
-            }
+            val initStmt = spec.delegateInitStatement
+                ?: scope.raiseIllegalState("missing delegated init statement for ${spec.name}")
+            cls.instanceInitializers += initStmt
         } else {
             scope.addItem(
                 spec.name,
@@ -178,7 +162,7 @@ internal suspend fun executeFunctionDecl(scope: Scope, spec: FunctionDeclSpec): 
     if (spec.isStatic || !spec.parentIsClassBody) {
         spec.closureBox.closure = scope
     }
-    if (spec.parentIsClassBody && spec.captureSlots.isNotEmpty()) {
+    if (spec.parentIsClassBody) {
         spec.closureBox.captureContext = scope
     }
 
@@ -188,25 +172,18 @@ internal suspend fun executeFunctionDecl(scope: Scope, spec: FunctionDeclSpec): 
     spec.extTypeName?.let { typeName ->
         val type = scope[typeName]?.value ?: scope.raiseSymbolNotFound("class $typeName not found")
         if (type !is ObjClass) scope.raiseClassCastError("$typeName is not the class instance")
-        val stmt = object : Statement() {
-            override val pos: Pos = spec.startPos
-            override suspend fun execute(scope: Scope): Obj {
-                val result = (scope.thisObj as? ObjInstance)?.let { i ->
-                    val execScope = if (compiledFnBody is net.sergeych.lyng.bytecode.BytecodeStatement) {
-                        scope.applyClosureForBytecode(i.instanceScope).also {
-                            it.args = scope.args
-                        }
-                    } else {
-                        ClosureScope(scope, i.instanceScope)
-                    }
-                    compiledFnBody.execute(execScope)
-                } ?: compiledFnBody.execute(scope.thisObj.autoInstanceScope(scope))
-                return result
-            }
+        val callable = net.sergeych.lyng.obj.ObjNativeCallable {
+            val result = (thisObj as? ObjInstance)?.let { i ->
+                val execScope = applyClosureForBytecode(i.instanceScope).also {
+                    it.args = args
+                }
+                compiledFnBody.execute(execScope)
+            } ?: compiledFnBody.execute(thisObj.autoInstanceScope(this))
+            result
         }
-        scope.addExtension(type, spec.name, ObjRecord(stmt, isMutable = false, visibility = spec.visibility, declaringClass = null))
+        scope.addExtension(type, spec.name, ObjRecord(callable, isMutable = false, visibility = spec.visibility, declaringClass = null))
         val wrapperName = spec.extensionWrapperName ?: extensionCallableName(typeName, spec.name)
-        val wrapper = ObjExtensionMethodCallable(spec.name, stmt)
+        val wrapper = ObjExtensionMethodCallable(spec.name, callable)
         scope.addItem(wrapperName, false, wrapper, spec.visibility, recordType = ObjRecord.Type.Fun)
     } ?: run {
         val th = scope.thisObj
@@ -238,7 +215,8 @@ internal suspend fun executeFunctionDecl(scope: Scope, spec: FunctionDeclSpec): 
                     this.currentClassCtx = savedCtx
                 }
             }
-            scope.addItem(spec.name, false, compiledFnBody, spec.visibility, callSignature = spec.externCallSignature)
+            val memberValue = cls.members[spec.name]?.value ?: compiledFnBody
+            scope.addItem(spec.name, false, memberValue, spec.visibility, callSignature = spec.externCallSignature)
             compiledFnBody
         } else {
             scope.addItem(spec.name, false, compiledFnBody, spec.visibility, callSignature = spec.externCallSignature)

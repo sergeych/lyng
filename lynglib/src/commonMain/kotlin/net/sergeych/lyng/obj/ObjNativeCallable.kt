@@ -12,16 +12,22 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
-package net.sergeych.lyng
+package net.sergeych.lyng.obj
 
-import net.sergeych.lyng.obj.Obj
+import net.sergeych.lyng.Scope
+import net.sergeych.lyng.Statement
 
-interface DeclExecutable {
-    suspend fun execute(scope: Scope): Obj
-}
+class ObjNativeCallable(
+    private val fn: suspend Scope.() -> Obj
+) : Obj() {
 
-class StatementDeclExecutable(private val delegate: Statement) : DeclExecutable {
-    override suspend fun execute(scope: Scope): Obj = delegate.execute(scope)
+    override val objClass: ObjClass
+        get() = Statement.type
+
+    override suspend fun callOn(scope: Scope): Obj = scope.fn()
+
+    override fun toString(): String = "NativeCallable@${hashCode()}"
 }

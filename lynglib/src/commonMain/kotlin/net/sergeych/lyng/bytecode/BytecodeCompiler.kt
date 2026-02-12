@@ -113,8 +113,152 @@ class BytecodeCompiler(
             is BlockStatement -> compileBlock(name, stmt)
             is net.sergeych.lyng.InlineBlockStatement -> compileInlineBlock(name, stmt)
             is VarDeclStatement -> compileVarDecl(name, stmt)
+            is net.sergeych.lyng.ClassStaticFieldInitStatement -> {
+                val value = emitClassStaticFieldInit(stmt) ?: return null
+                builder.emit(Opcode.RET, value.slot)
+                val localCount = maxOf(nextSlot, value.slot + 1) - scopeSlotCount
+                builder.build(
+                    name,
+                    localCount,
+                    addrCount = nextAddrSlot,
+                    returnLabels = returnLabels,
+                    scopeSlotIndices,
+                    scopeSlotNames,
+                    scopeSlotIsModule,
+                    localSlotNames,
+                    localSlotMutables,
+                    localSlotDelegated,
+                    localSlotCaptures
+                )
+            }
+            is net.sergeych.lyng.ClassInstanceInitDeclStatement -> {
+                val value = emitClassInstanceInitDecl(stmt) ?: return null
+                builder.emit(Opcode.RET, value.slot)
+                val localCount = maxOf(nextSlot, value.slot + 1) - scopeSlotCount
+                builder.build(
+                    name,
+                    localCount,
+                    addrCount = nextAddrSlot,
+                    returnLabels = returnLabels,
+                    scopeSlotIndices,
+                    scopeSlotNames,
+                    scopeSlotIsModule,
+                    localSlotNames,
+                    localSlotMutables,
+                    localSlotDelegated,
+                    localSlotCaptures
+                )
+            }
+            is net.sergeych.lyng.ClassInstanceFieldDeclStatement -> {
+                val value = emitClassInstanceFieldDecl(stmt) ?: return null
+                builder.emit(Opcode.RET, value.slot)
+                val localCount = maxOf(nextSlot, value.slot + 1) - scopeSlotCount
+                builder.build(
+                    name,
+                    localCount,
+                    addrCount = nextAddrSlot,
+                    returnLabels = returnLabels,
+                    scopeSlotIndices,
+                    scopeSlotNames,
+                    scopeSlotIsModule,
+                    localSlotNames,
+                    localSlotMutables,
+                    localSlotDelegated,
+                    localSlotCaptures
+                )
+            }
+            is net.sergeych.lyng.ClassInstancePropertyDeclStatement -> {
+                val value = emitClassInstancePropertyDecl(stmt) ?: return null
+                builder.emit(Opcode.RET, value.slot)
+                val localCount = maxOf(nextSlot, value.slot + 1) - scopeSlotCount
+                builder.build(
+                    name,
+                    localCount,
+                    addrCount = nextAddrSlot,
+                    returnLabels = returnLabels,
+                    scopeSlotIndices,
+                    scopeSlotNames,
+                    scopeSlotIsModule,
+                    localSlotNames,
+                    localSlotMutables,
+                    localSlotDelegated,
+                    localSlotCaptures
+                )
+            }
+            is net.sergeych.lyng.ClassInstanceDelegatedDeclStatement -> {
+                val value = emitClassInstanceDelegatedDecl(stmt) ?: return null
+                builder.emit(Opcode.RET, value.slot)
+                val localCount = maxOf(nextSlot, value.slot + 1) - scopeSlotCount
+                builder.build(
+                    name,
+                    localCount,
+                    addrCount = nextAddrSlot,
+                    returnLabels = returnLabels,
+                    scopeSlotIndices,
+                    scopeSlotNames,
+                    scopeSlotIsModule,
+                    localSlotNames,
+                    localSlotMutables,
+                    localSlotDelegated,
+                    localSlotCaptures
+                )
+            }
             is DelegatedVarDeclStatement -> {
                 val value = emitDelegatedVarDecl(stmt) ?: return null
+                builder.emit(Opcode.RET, value.slot)
+                val localCount = maxOf(nextSlot, value.slot + 1) - scopeSlotCount
+                builder.build(
+                    name,
+                    localCount,
+                    addrCount = nextAddrSlot,
+                    returnLabels = returnLabels,
+                    scopeSlotIndices,
+                    scopeSlotNames,
+                    scopeSlotIsModule,
+                    localSlotNames,
+                    localSlotMutables,
+                    localSlotDelegated,
+                    localSlotCaptures
+                )
+            }
+            is net.sergeych.lyng.InstanceFieldInitStatement -> {
+                val value = emitInstanceFieldInit(stmt) ?: return null
+                builder.emit(Opcode.RET, value.slot)
+                val localCount = maxOf(nextSlot, value.slot + 1) - scopeSlotCount
+                builder.build(
+                    name,
+                    localCount,
+                    addrCount = nextAddrSlot,
+                    returnLabels = returnLabels,
+                    scopeSlotIndices,
+                    scopeSlotNames,
+                    scopeSlotIsModule,
+                    localSlotNames,
+                    localSlotMutables,
+                    localSlotDelegated,
+                    localSlotCaptures
+                )
+            }
+            is net.sergeych.lyng.InstancePropertyInitStatement -> {
+                val value = emitInstancePropertyInit(stmt) ?: return null
+                builder.emit(Opcode.RET, value.slot)
+                val localCount = maxOf(nextSlot, value.slot + 1) - scopeSlotCount
+                builder.build(
+                    name,
+                    localCount,
+                    addrCount = nextAddrSlot,
+                    returnLabels = returnLabels,
+                    scopeSlotIndices,
+                    scopeSlotNames,
+                    scopeSlotIsModule,
+                    localSlotNames,
+                    localSlotMutables,
+                    localSlotDelegated,
+                    localSlotCaptures
+                )
+            }
+            is net.sergeych.lyng.InstanceDelegatedInitStatement -> {
+                val value = emitInstanceDelegatedInit(stmt) ?: return null
                 builder.emit(Opcode.RET, value.slot)
                 val localCount = maxOf(nextSlot, value.slot + 1) - scopeSlotCount
                 builder.build(
@@ -315,6 +459,17 @@ class BytecodeCompiler(
         if (id == null) return null
         if (receiverClass == ObjClassType) return -(id + 2)
         return id
+    }
+
+    private fun missingMemberMessage(receiverClass: ObjClass, name: String): String {
+        return "no such member: $name on ${receiverClass.className}. " +
+            "Considered order: ${receiverClass.renderLinearization(true)}. " +
+            "Tip: try this@Base.$name(...) or (obj as Base).$name(...) if ambiguous"
+    }
+
+    private fun missingFieldMessage(receiverClass: ObjClass, name: String): String {
+        return "no such field: $name on ${receiverClass.className}. " +
+            "Considered order: ${receiverClass.renderLinearization(true)}"
     }
 
     private fun compileRef(ref: ObjRef): CompiledValue? {
@@ -2535,15 +2690,7 @@ class BytecodeCompiler(
     }
 
     private fun compileFieldRef(ref: FieldRef): CompiledValue? {
-        val receiverClass = resolveReceiverClass(ref.target)
-            ?: if (isAllowedObjectMember(ref.name)) {
-                Obj.rootObjectType
-            } else {
-                throw BytecodeCompileException(
-                    "Member access requires compile-time receiver type: ${ref.name}",
-                    Pos.builtIn
-                )
-            }
+        val receiverClass = resolveReceiverClass(ref.target) ?: ObjDynamic.type
         if (receiverClass == ObjDynamic.type) {
             val receiver = compileRefWithFallback(ref.target, null, Pos.builtIn) ?: return null
             val dst = allocSlot()
@@ -2625,7 +2772,7 @@ class BytecodeCompiler(
         }
         val extSlot = resolveExtensionGetterSlot(receiverClass, ref.name)
             ?: throw BytecodeCompileException(
-                "Unknown member ${ref.name} on ${receiverClass.className}",
+                missingFieldMessage(receiverClass, ref.name),
                 Pos.builtIn
             )
         val callee = ensureObjSlot(extSlot)
@@ -3627,15 +3774,7 @@ class BytecodeCompiler(
 
     private fun compileMethodCall(ref: MethodCallRef): CompiledValue? {
         val callPos = callSitePos()
-        val receiverClass = resolveReceiverClass(ref.receiver)
-            ?: if (isAllowedObjectMember(ref.name)) {
-                Obj.rootObjectType
-            } else {
-                throw BytecodeCompileException(
-                    "Member call requires compile-time receiver type: ${ref.name}",
-                    Pos.builtIn
-                )
-            }
+        val receiverClass = resolveReceiverClass(ref.receiver) ?: ObjDynamic.type
         val receiver = compileRefWithFallback(ref.receiver, null, refPosOrCurrent(ref.receiver)) ?: return null
         val dst = allocSlot()
         if (receiverClass == ObjDynamic.type) {
@@ -3695,6 +3834,41 @@ class BytecodeCompiler(
             builder.mark(endLabel)
             return CompiledValue(dst, SlotType.OBJ)
         }
+        val fieldId = receiverClass.instanceFieldIdMap()[ref.name]
+        if (fieldId != null) {
+            val encodedFieldId = encodeMemberId(receiverClass, fieldId) ?: fieldId
+            val calleeSlot = allocSlot()
+            if (!ref.isOptional) {
+                builder.emit(Opcode.GET_MEMBER_SLOT, receiver.slot, encodedFieldId, -1, calleeSlot)
+            }
+            if (!ref.isOptional) {
+                val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
+                val encodedCount = encodeCallArgCount(args) ?: return null
+                setPos(callPos)
+                builder.emit(Opcode.CALL_SLOT, calleeSlot, args.base, encodedCount, dst)
+            } else {
+                val nullSlot = allocSlot()
+                builder.emit(Opcode.CONST_NULL, nullSlot)
+                val cmpSlot = allocSlot()
+                builder.emit(Opcode.CMP_REF_EQ_OBJ, receiver.slot, nullSlot, cmpSlot)
+                val nullLabel = builder.label()
+                val endLabel = builder.label()
+                builder.emit(
+                    Opcode.JMP_IF_TRUE,
+                    listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
+                )
+                builder.emit(Opcode.GET_MEMBER_SLOT, receiver.slot, encodedFieldId, -1, calleeSlot)
+                val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
+                val encodedCount = encodeCallArgCount(args) ?: return null
+                setPos(callPos)
+                builder.emit(Opcode.CALL_SLOT, calleeSlot, args.base, encodedCount, dst)
+                builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
+                builder.mark(nullLabel)
+                builder.emit(Opcode.CONST_NULL, dst)
+                builder.mark(endLabel)
+            }
+            return CompiledValue(dst, SlotType.OBJ)
+        }
         if (isKnownClassReceiver(ref.receiver)) {
             val nameId = builder.addConst(BytecodeConst.StringVal(ref.name))
             val memberSlot = allocSlot()
@@ -3725,7 +3899,7 @@ class BytecodeCompiler(
         }
         val extSlot = resolveExtensionCallableSlot(receiverClass, ref.name)
             ?: throw BytecodeCompileException(
-                "Unknown member ${ref.name} on ${receiverClass.className}",
+                missingMemberMessage(receiverClass, ref.name),
                 Pos.builtIn
             )
         val callee = ensureObjSlot(extSlot)
@@ -3932,15 +4106,16 @@ class BytecodeCompiler(
         return CallArgs(base = argSlots[0], count = argSlots.size, planId = planId)
     }
 
-    private fun compileArgValue(stmt: Statement): CompiledValue? {
-        return when (stmt) {
-            is ExpressionStatement -> compileRefWithFallback(stmt.ref, null, stmt.pos)
-            else -> {
+    private fun compileArgValue(value: Obj): CompiledValue? {
+        return when (value) {
+            is ExpressionStatement -> compileRefWithFallback(value.ref, null, value.pos)
+            is Statement -> {
                 throw BytecodeCompileException(
                     "Bytecode compile error: unsupported argument expression",
-                    stmt.pos
+                    value.pos
                 )
             }
+            else -> compileConst(value)
         }
     }
 
@@ -4137,7 +4312,12 @@ class BytecodeCompiler(
 
     private fun emitDeclFunction(stmt: net.sergeych.lyng.FunctionDeclStatement): CompiledValue {
         val constId = builder.addConst(BytecodeConst.FunctionDecl(stmt.spec))
-        val dst = allocSlot()
+        val dst = stmt.spec.slotIndex?.let { slotIndex ->
+            val scopeId = stmt.spec.scopeId ?: 0
+            val key = ScopeSlotKey(scopeId, slotIndex)
+            localSlotIndexByKey[key]?.let { scopeSlotCount + it }
+                ?: scopeSlotMap[key]
+        } ?: allocSlot()
         builder.emit(Opcode.DECL_FUNCTION, constId, dst)
         updateSlotType(dst, SlotType.OBJ)
         return CompiledValue(dst, SlotType.OBJ)
@@ -4149,6 +4329,190 @@ class BytecodeCompiler(
         builder.emit(Opcode.DECL_CLASS, constId, dst)
         updateSlotType(dst, SlotType.OBJ)
         return CompiledValue(dst, SlotType.OBJ)
+    }
+
+    private fun emitClassStaticFieldInit(stmt: net.sergeych.lyng.ClassStaticFieldInitStatement): CompiledValue? {
+        val initValue = if (stmt.initializer != null) {
+            val compiled = compileStatementValueOrFallback(stmt.initializer) ?: return null
+            ensureObjSlot(compiled)
+        } else {
+            val slot = allocSlot()
+            builder.emit(Opcode.CONST_NULL, slot)
+            updateSlotType(slot, SlotType.OBJ)
+            CompiledValue(slot, SlotType.OBJ)
+        }
+        val constId = if (stmt.isDelegated) {
+            builder.addConst(
+                BytecodeConst.ClassDelegatedDecl(
+                    name = stmt.name,
+                    isMutable = stmt.isMutable,
+                    visibility = stmt.visibility,
+                    writeVisibility = stmt.writeVisibility,
+                    isTransient = stmt.isTransient
+                )
+            )
+        } else {
+            builder.addConst(
+                BytecodeConst.ClassFieldDecl(
+                    name = stmt.name,
+                    isMutable = stmt.isMutable,
+                    visibility = stmt.visibility,
+                    writeVisibility = stmt.writeVisibility,
+                    isTransient = stmt.isTransient
+                )
+            )
+        }
+        val opcode = if (stmt.isDelegated) Opcode.DECL_CLASS_DELEGATED else Opcode.DECL_CLASS_FIELD
+        builder.emit(opcode, constId, initValue.slot)
+        updateSlotType(initValue.slot, SlotType.OBJ)
+        return initValue
+    }
+
+    private fun emitClassInstanceInitDecl(stmt: net.sergeych.lyng.ClassInstanceInitDeclStatement): CompiledValue? {
+        val constId = builder.addConst(BytecodeConst.ClassInstanceInitDecl(stmt.initStatement))
+        val slot = allocSlot()
+        builder.emit(Opcode.DECL_CLASS_INSTANCE_INIT, constId, slot)
+        updateSlotType(slot, SlotType.OBJ)
+        return CompiledValue(slot, SlotType.OBJ)
+    }
+
+    private fun emitClassInstanceFieldDecl(stmt: net.sergeych.lyng.ClassInstanceFieldDeclStatement): CompiledValue? {
+        val constId = builder.addConst(
+            BytecodeConst.ClassInstanceFieldDecl(
+                name = stmt.name,
+                isMutable = stmt.isMutable,
+                visibility = stmt.visibility,
+                writeVisibility = stmt.writeVisibility,
+                isTransient = stmt.isTransient,
+                isAbstract = stmt.isAbstract,
+                isClosed = stmt.isClosed,
+                isOverride = stmt.isOverride,
+                fieldId = stmt.fieldId,
+                initStatement = stmt.initStatement,
+                pos = stmt.pos
+            )
+        )
+        val slot = allocSlot()
+        builder.emit(Opcode.DECL_CLASS_INSTANCE_FIELD, constId, slot)
+        updateSlotType(slot, SlotType.OBJ)
+        return CompiledValue(slot, SlotType.OBJ)
+    }
+
+    private fun emitClassInstancePropertyDecl(stmt: net.sergeych.lyng.ClassInstancePropertyDeclStatement): CompiledValue? {
+        val constId = builder.addConst(
+            BytecodeConst.ClassInstancePropertyDecl(
+                name = stmt.name,
+                isMutable = stmt.isMutable,
+                visibility = stmt.visibility,
+                writeVisibility = stmt.writeVisibility,
+                isTransient = stmt.isTransient,
+                isAbstract = stmt.isAbstract,
+                isClosed = stmt.isClosed,
+                isOverride = stmt.isOverride,
+                prop = stmt.prop,
+                methodId = stmt.methodId,
+                initStatement = stmt.initStatement,
+                pos = stmt.pos
+            )
+        )
+        val slot = allocSlot()
+        builder.emit(Opcode.DECL_CLASS_INSTANCE_PROPERTY, constId, slot)
+        updateSlotType(slot, SlotType.OBJ)
+        return CompiledValue(slot, SlotType.OBJ)
+    }
+
+    private fun emitClassInstanceDelegatedDecl(stmt: net.sergeych.lyng.ClassInstanceDelegatedDeclStatement): CompiledValue? {
+        val constId = builder.addConst(
+            BytecodeConst.ClassInstanceDelegatedDecl(
+                name = stmt.name,
+                isMutable = stmt.isMutable,
+                visibility = stmt.visibility,
+                writeVisibility = stmt.writeVisibility,
+                isTransient = stmt.isTransient,
+                isAbstract = stmt.isAbstract,
+                isClosed = stmt.isClosed,
+                isOverride = stmt.isOverride,
+                methodId = stmt.methodId,
+                initStatement = stmt.initStatement,
+                pos = stmt.pos
+            )
+        )
+        val slot = allocSlot()
+        builder.emit(Opcode.DECL_CLASS_INSTANCE_DELEGATED, constId, slot)
+        updateSlotType(slot, SlotType.OBJ)
+        return CompiledValue(slot, SlotType.OBJ)
+    }
+
+    private fun emitInstanceFieldInit(stmt: net.sergeych.lyng.InstanceFieldInitStatement): CompiledValue? {
+        val value = stmt.initializer?.let { compileStatementValueOrFallback(it) } ?: run {
+            val slot = allocSlot()
+            val constId = if (stmt.isLateInitVal) {
+                builder.addConst(BytecodeConst.ObjRef(ObjUnset))
+            } else {
+                builder.addConst(BytecodeConst.ObjRef(ObjNull))
+            }
+            builder.emit(Opcode.CONST_OBJ, constId, slot)
+            updateSlotType(slot, SlotType.OBJ)
+            CompiledValue(slot, SlotType.OBJ)
+        }
+        val declId = builder.addConst(
+            BytecodeConst.InstanceFieldDecl(
+                name = stmt.storageName,
+                isMutable = stmt.isMutable,
+                visibility = stmt.visibility,
+                writeVisibility = stmt.writeVisibility,
+                isTransient = stmt.isTransient,
+                isAbstract = stmt.isAbstract,
+                isClosed = stmt.isClosed,
+                isOverride = stmt.isOverride
+            )
+        )
+        builder.emit(Opcode.DECL_INSTANCE_FIELD, declId, value.slot)
+        updateSlotType(value.slot, SlotType.OBJ)
+        return value
+    }
+
+    private fun emitInstancePropertyInit(stmt: net.sergeych.lyng.InstancePropertyInitStatement): CompiledValue? {
+        val slot = allocSlot()
+        val constId = builder.addConst(BytecodeConst.ObjRef(stmt.prop))
+        builder.emit(Opcode.CONST_OBJ, constId, slot)
+        updateSlotType(slot, SlotType.OBJ)
+        val declId = builder.addConst(
+            BytecodeConst.InstancePropertyDecl(
+                name = stmt.storageName,
+                isMutable = stmt.isMutable,
+                visibility = stmt.visibility,
+                writeVisibility = stmt.writeVisibility,
+                isTransient = stmt.isTransient,
+                isAbstract = stmt.isAbstract,
+                isClosed = stmt.isClosed,
+                isOverride = stmt.isOverride
+            )
+        )
+        builder.emit(Opcode.DECL_INSTANCE_PROPERTY, declId, slot)
+        updateSlotType(slot, SlotType.OBJ)
+        return CompiledValue(slot, SlotType.OBJ)
+    }
+
+    private fun emitInstanceDelegatedInit(stmt: net.sergeych.lyng.InstanceDelegatedInitStatement): CompiledValue? {
+        val value = compileStatementValueOrFallback(stmt.initializer) ?: return null
+        val declId = builder.addConst(
+            BytecodeConst.InstanceDelegatedDecl(
+                storageName = stmt.storageName,
+                memberName = stmt.memberName,
+                isMutable = stmt.isMutable,
+                visibility = stmt.visibility,
+                writeVisibility = stmt.writeVisibility,
+                isTransient = stmt.isTransient,
+                isAbstract = stmt.isAbstract,
+                isClosed = stmt.isClosed,
+                isOverride = stmt.isOverride,
+                accessTypeLabel = stmt.accessTypeLabel
+            )
+        )
+        builder.emit(Opcode.DECL_INSTANCE_DELEGATED, declId, value.slot)
+        updateSlotType(value.slot, SlotType.OBJ)
+        return CompiledValue(value.slot, SlotType.OBJ)
     }
 
     private fun compileStatementValueOrFallback(stmt: Statement, needResult: Boolean = true): CompiledValue? {
@@ -4181,8 +4545,16 @@ class BytecodeCompiler(
                 }
                 is BlockStatement -> emitBlock(target, true)
                 is VarDeclStatement -> emitVarDecl(target)
+                is net.sergeych.lyng.ClassStaticFieldInitStatement -> emitClassStaticFieldInit(target)
+                is net.sergeych.lyng.ClassInstanceInitDeclStatement -> emitClassInstanceInitDecl(target)
+                is net.sergeych.lyng.ClassInstanceFieldDeclStatement -> emitClassInstanceFieldDecl(target)
+                is net.sergeych.lyng.ClassInstancePropertyDeclStatement -> emitClassInstancePropertyDecl(target)
+                is net.sergeych.lyng.ClassInstanceDelegatedDeclStatement -> emitClassInstanceDelegatedDecl(target)
                 is DelegatedVarDeclStatement -> emitDelegatedVarDecl(target)
                 is DestructuringVarDeclStatement -> emitDestructuringVarDecl(target)
+                is net.sergeych.lyng.InstanceFieldInitStatement -> emitInstanceFieldInit(target)
+                is net.sergeych.lyng.InstancePropertyInitStatement -> emitInstancePropertyInit(target)
+                is net.sergeych.lyng.InstanceDelegatedInitStatement -> emitInstanceDelegatedInit(target)
                 is net.sergeych.lyng.ExtensionPropertyDeclStatement -> emitExtensionPropertyDecl(target)
                 is net.sergeych.lyng.ClassDeclStatement -> emitDeclClass(target)
                 is net.sergeych.lyng.FunctionDeclStatement -> emitDeclFunction(target)
@@ -4215,7 +4587,15 @@ class BytecodeCompiler(
                     }
                 }
                 is VarDeclStatement -> emitVarDecl(target)
+                is net.sergeych.lyng.ClassStaticFieldInitStatement -> emitClassStaticFieldInit(target)
+                is net.sergeych.lyng.ClassInstanceInitDeclStatement -> emitClassInstanceInitDecl(target)
+                is net.sergeych.lyng.ClassInstanceFieldDeclStatement -> emitClassInstanceFieldDecl(target)
+                is net.sergeych.lyng.ClassInstancePropertyDeclStatement -> emitClassInstancePropertyDecl(target)
+                is net.sergeych.lyng.ClassInstanceDelegatedDeclStatement -> emitClassInstanceDelegatedDecl(target)
                 is DelegatedVarDeclStatement -> emitDelegatedVarDecl(target)
+                is net.sergeych.lyng.InstanceFieldInitStatement -> emitInstanceFieldInit(target)
+                is net.sergeych.lyng.InstancePropertyInitStatement -> emitInstancePropertyInit(target)
+                is net.sergeych.lyng.InstanceDelegatedInitStatement -> emitInstanceDelegatedInit(target)
                 is IfStatement -> compileIfStatement(target)
                 is net.sergeych.lyng.ClassDeclStatement -> emitDeclClass(target)
                 is net.sergeych.lyng.FunctionDeclStatement -> emitDeclFunction(target)
@@ -5858,6 +6238,11 @@ class BytecodeCompiler(
     private fun resolveTypeRefClass(ref: ObjRef): ObjClass? {
         return when (ref) {
             is ConstRef -> ref.constValue as? ObjClass
+            is TypeDeclRef -> when (val decl = ref.decl()) {
+                is TypeDecl.Simple -> resolveTypeNameClass(decl.name) ?: nameObjClass[decl.name]
+                is TypeDecl.Generic -> resolveTypeNameClass(decl.name) ?: nameObjClass[decl.name]
+                else -> null
+            }
             is LocalSlotRef -> resolveTypeNameClass(ref.name) ?: nameObjClass[ref.name]
             is LocalVarRef -> resolveTypeNameClass(ref.name) ?: nameObjClass[ref.name]
             is FastLocalVarRef -> resolveTypeNameClass(ref.name) ?: nameObjClass[ref.name]
@@ -6336,6 +6721,25 @@ class BytecodeCompiler(
                 }
                 stmt.initializer?.let { collectScopeSlots(it) }
             }
+            is net.sergeych.lyng.FunctionDeclStatement -> {
+                val slotIndex = stmt.spec.slotIndex
+                val scopeId = stmt.spec.scopeId ?: 0
+                if (slotIndex != null) {
+                    val key = ScopeSlotKey(scopeId, slotIndex)
+                    if (allowLocalSlots) {
+                        if (!localSlotInfoMap.containsKey(key)) {
+                            localSlotInfoMap[key] = LocalSlotInfo(stmt.spec.name, isMutable = false, isDelegated = false)
+                        }
+                    } else {
+                        if (!scopeSlotMap.containsKey(key)) {
+                            scopeSlotMap[key] = scopeSlotMap.size
+                        }
+                        if (!scopeSlotNameMap.containsKey(key)) {
+                            scopeSlotNameMap[key] = stmt.spec.name
+                        }
+                    }
+                }
+            }
             is DelegatedVarDeclStatement -> {
                 val slotIndex = stmt.slotIndex
                 val scopeId = stmt.scopeId ?: 0
@@ -6398,6 +6802,15 @@ class BytecodeCompiler(
             }
             is net.sergeych.lyng.ReturnStatement -> {
                 stmt.resultExpr?.let { collectScopeSlots(it) }
+            }
+            is net.sergeych.lyng.ClassStaticFieldInitStatement -> {
+                stmt.initializer?.let { collectScopeSlots(it) }
+            }
+            is net.sergeych.lyng.InstanceFieldInitStatement -> {
+                stmt.initializer?.let { collectScopeSlots(it) }
+            }
+            is net.sergeych.lyng.InstanceDelegatedInitStatement -> {
+                collectScopeSlots(stmt.initializer)
             }
             is net.sergeych.lyng.ThrowStatement -> {
                 collectScopeSlots(stmt.throwExpr)
@@ -6466,7 +6879,11 @@ class BytecodeCompiler(
     }
 
     private fun isModuleSlot(scopeId: Int, name: String?): Boolean {
-        val moduleId = moduleScopeId ?: 0
+        val moduleId = moduleScopeId
+        if (moduleId == null) {
+            if (allowedScopeNames == null || name == null) return false
+            return allowedScopeNames.contains(name)
+        }
         if (scopeId != moduleId) return false
         if (allowedScopeNames == null || name == null) return true
         return allowedScopeNames.contains(name)

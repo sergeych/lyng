@@ -25,7 +25,6 @@ import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.RegexCache
 import net.sergeych.lyng.Scope
-import net.sergeych.lyng.Statement
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
@@ -344,14 +343,10 @@ data class ObjString(val value: String) : Obj() {
                 name = "re",
                 initialValue = ObjProperty(
                     name = "re",
-                    getter = object : Statement() {
-                        override val pos: Pos = Pos.builtIn
-
-                        override suspend fun execute(scope: Scope): Obj {
-                            val pattern = (scope.thisObj as ObjString).value
-                            val re = if (PerfFlags.REGEX_CACHE) RegexCache.get(pattern) else pattern.toRegex()
-                            return ObjRegex(re)
-                        }
+                    getter = ObjNativeCallable {
+                        val pattern = (thisObj as ObjString).value
+                        val re = if (PerfFlags.REGEX_CACHE) RegexCache.get(pattern) else pattern.toRegex()
+                        ObjRegex(re)
                     },
                     setter = null
                 ),
@@ -359,14 +354,10 @@ data class ObjString(val value: String) : Obj() {
             )
             createField(
                 name = "operatorMatch",
-                initialValue = object : Statement() {
-                    override val pos: Pos = Pos.builtIn
-
-                    override suspend fun execute(scope: Scope): Obj {
-                        val other = scope.args.firstAndOnly(pos)
-                        val targetScope = scope.parent ?: scope
-                        return (scope.thisObj as ObjString).operatorMatch(targetScope, other)
-                    }
+                initialValue = ObjNativeCallable {
+                    val other = args.firstAndOnly(Pos.builtIn)
+                    val targetScope = parent ?: this
+                    (thisObj as ObjString).operatorMatch(targetScope, other)
                 },
                 type = ObjRecord.Type.Fun
             )

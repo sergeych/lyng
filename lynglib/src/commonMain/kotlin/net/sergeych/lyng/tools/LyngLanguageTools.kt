@@ -106,7 +106,7 @@ object LyngLanguageTools {
                 request.importProvider,
                 miniSink = miniSink,
                 resolutionSink = resolutionCollector,
-                useBytecodeStatements = false,
+                compileBytecode = false,
                 allowUnresolvedRefs = true,
                 seedScope = request.seedScope
             )
