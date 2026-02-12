@@ -38,7 +38,7 @@ class InstanceFieldInitStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        val initValue = initializer?.execute(scope)?.byValueCopy()
+        val initValue = initializer?.let { execBytecodeOnly(scope, it, "instance field init") }?.byValueCopy()
             ?: if (isLateInitVal) ObjUnset else ObjNull
         scope.addItem(
             storageName,
@@ -53,6 +53,15 @@ class InstanceFieldInitStatement(
             isTransient = isTransient
         )
         return ObjVoid
+    }
+
+    private suspend fun execBytecodeOnly(scope: Scope, stmt: Statement, label: String): Obj {
+        val bytecode = when (stmt) {
+            is net.sergeych.lyng.bytecode.BytecodeStatement -> stmt
+            is BytecodeBodyProvider -> stmt.bytecodeBody()
+            else -> null
+        } ?: scope.raiseIllegalState("$label requires bytecode statement")
+        return bytecode.execute(scope)
     }
 }
 
@@ -100,7 +109,7 @@ class InstanceDelegatedInitStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        val initValue = initializer.execute(scope)
+        val initValue = execBytecodeOnly(scope, initializer, "instance delegated init")
         val accessType = ObjString(accessTypeLabel)
         val finalDelegate = try {
             initValue.invokeInstanceMethod(
@@ -126,5 +135,14 @@ class InstanceDelegatedInitStatement(
             delegate = finalDelegate
         }
         return ObjVoid
+    }
+
+    private suspend fun execBytecodeOnly(scope: Scope, stmt: Statement, label: String): Obj {
+        val bytecode = when (stmt) {
+            is net.sergeych.lyng.bytecode.BytecodeStatement -> stmt
+            is BytecodeBodyProvider -> stmt.bytecodeBody()
+            else -> null
+        } ?: scope.raiseIllegalState("$label requires bytecode statement")
+        return bytecode.execute(scope)
     }
 }

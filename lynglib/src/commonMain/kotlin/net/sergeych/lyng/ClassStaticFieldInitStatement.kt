@@ -37,7 +37,8 @@ class ClassStaticFieldInitStatement(
     override val pos: Pos = startPos
 
     override suspend fun execute(scope: Scope): Obj {
-        val initValue = initializer?.execute(scope)?.byValueCopy() ?: ObjNull
+        val initValue = initializer?.let { execBytecodeOnly(scope, it, "class static field init") }?.byValueCopy()
+            ?: ObjNull
         val cls = scope.thisObj as? ObjClass
             ?: scope.raiseIllegalState("static field init requires class scope")
         return if (isDelegated) {
@@ -97,5 +98,14 @@ class ClassStaticFieldInitStatement(
             )
             initValue
         }
+    }
+
+    private suspend fun execBytecodeOnly(scope: Scope, stmt: Statement, label: String): Obj {
+        val bytecode = when (stmt) {
+            is net.sergeych.lyng.bytecode.BytecodeStatement -> stmt
+            is BytecodeBodyProvider -> stmt.bytecodeBody()
+            else -> null
+        } ?: scope.raiseIllegalState("$label requires bytecode statement")
+        return bytecode.execute(scope)
     }
 }
