@@ -154,14 +154,14 @@ class CmdBuilder {
             Opcode.CONST_NULL ->
                 listOf(OperandKind.SLOT)
             Opcode.CONST_OBJ, Opcode.CONST_INT, Opcode.CONST_REAL, Opcode.CONST_BOOL,
-            Opcode.MAKE_VALUE_FN, Opcode.MAKE_LAMBDA_FN ->
+            Opcode.MAKE_LAMBDA_FN ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.PUSH_SCOPE, Opcode.PUSH_SLOT_PLAN ->
                 listOf(OperandKind.CONST)
             Opcode.PUSH_TRY ->
                 listOf(OperandKind.SLOT, OperandKind.IP, OperandKind.IP)
             Opcode.DECL_LOCAL, Opcode.DECL_EXT_PROPERTY, Opcode.DECL_DELEGATED, Opcode.DECL_DESTRUCTURE,
-            Opcode.DECL_EXEC, Opcode.DECL_ENUM, Opcode.DECL_FUNCTION, Opcode.DECL_CLASS,
+            Opcode.DECL_ENUM, Opcode.DECL_FUNCTION, Opcode.DECL_CLASS,
             Opcode.ASSIGN_DESTRUCTURE ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.ADD_INT, Opcode.SUB_INT, Opcode.MUL_INT, Opcode.DIV_INT, Opcode.MOD_INT,
@@ -254,7 +254,6 @@ class CmdBuilder {
             Opcode.CONST_REAL -> CmdConstReal(operands[0], operands[1])
             Opcode.CONST_BOOL -> CmdConstBool(operands[0], operands[1])
             Opcode.CONST_NULL -> CmdConstNull(operands[0])
-            Opcode.MAKE_VALUE_FN -> CmdMakeValueFn(operands[0], operands[1])
             Opcode.MAKE_LAMBDA_FN -> CmdMakeLambda(operands[0], operands[1])
             Opcode.BOX_OBJ -> CmdBoxObj(operands[0], operands[1])
             Opcode.OBJ_TO_BOOL -> CmdObjToBool(operands[0], operands[1])
@@ -416,7 +415,6 @@ class CmdBuilder {
             Opcode.DECL_LOCAL -> CmdDeclLocal(operands[0], operands[1])
             Opcode.DECL_DELEGATED -> CmdDeclDelegated(operands[0], operands[1])
             Opcode.DECL_DESTRUCTURE -> CmdDeclDestructure(operands[0], operands[1])
-            Opcode.DECL_EXEC -> CmdDeclExec(operands[0], operands[1])
             Opcode.DECL_ENUM -> CmdDeclEnum(operands[0], operands[1])
             Opcode.DECL_FUNCTION -> CmdDeclFunction(operands[0], operands[1])
             Opcode.DECL_CLASS -> CmdDeclClass(operands[0], operands[1])

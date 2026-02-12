@@ -40,9 +40,23 @@ class BytecodeFrame(
         slotTypes[slot] = type.code
     }
 
-    override fun getObj(slot: Int): Obj = objSlots[slot] ?: ObjNull
+    override fun getObj(slot: Int): Obj {
+        val value = objSlots[slot] ?: return ObjNull
+        return when (value) {
+            is net.sergeych.lyng.FrameSlotRef -> value.read()
+            is net.sergeych.lyng.RecordSlotRef -> value.read()
+            else -> value
+        }
+    }
+
+    internal fun getRawObj(slot: Int): Obj? = objSlots[slot]
+
     override fun setObj(slot: Int, value: Obj) {
-        objSlots[slot] = value
+        when (val current = objSlots[slot]) {
+            is net.sergeych.lyng.FrameSlotRef -> current.write(value)
+            is net.sergeych.lyng.RecordSlotRef -> current.write(value)
+            else -> objSlots[slot] = value
+        }
         slotTypes[slot] = SlotType.OBJ.code
     }
 

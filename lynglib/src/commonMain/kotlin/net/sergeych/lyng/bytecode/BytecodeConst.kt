@@ -31,12 +31,7 @@ sealed class BytecodeConst {
     data class StringVal(val value: String) : BytecodeConst()
     data class PosVal(val pos: Pos) : BytecodeConst()
     data class ObjRef(val value: Obj) : BytecodeConst()
-    data class Ref(val value: net.sergeych.lyng.obj.ObjRef) : BytecodeConst()
     data class ListLiteralPlan(val spreads: List<Boolean>) : BytecodeConst()
-    data class ValueFn(
-        val fn: suspend (net.sergeych.lyng.Scope) -> net.sergeych.lyng.obj.ObjRecord,
-        val captureTableId: Int? = null,
-    ) : BytecodeConst()
     data class LambdaFn(
         val fn: CmdFunction,
         val captureTableId: Int?,
@@ -48,7 +43,6 @@ sealed class BytecodeConst {
         val returnLabels: Set<String>,
         val pos: Pos,
     ) : BytecodeConst()
-    data class DeclExec(val executable: net.sergeych.lyng.DeclExecutable) : BytecodeConst()
     data class EnumDecl(
         val declaredName: String,
         val qualifiedName: String,

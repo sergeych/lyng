@@ -26,6 +26,8 @@ class BytecodeCompiler(
     private val rangeLocalNames: Set<String> = emptySet(),
     private val allowedScopeNames: Set<String>? = null,
     private val moduleScopeId: Int? = null,
+    private val forcedLocalSlots: Map<String, Int> = emptyMap(),
+    private val forcedLocalScopeId: Int? = null,
     private val slotTypeByScopeId: Map<Int, Map<Int, ObjClass>> = emptyMap(),
     private val knownNameObjClass: Map<String, ObjClass> = emptyMap(),
     private val knownObjectNames: Set<String> = emptySet(),
@@ -649,24 +651,12 @@ class BytecodeCompiler(
             updateSlotType(slot, SlotType.OBJ)
             return CompiledValue(slot, SlotType.OBJ)
         }
-        val captureTableId = lambdaCaptureEntriesByRef[ref]?.let { captures ->
-            if (captures.isEmpty()) return@let null
-            val resolved = captures.map { entry ->
-                val slotIndex = resolveCaptureSlot(entry)
-                BytecodeCaptureEntry(
-                    ownerKind = entry.ownerKind,
-                    ownerScopeId = entry.ownerScopeId,
-                    ownerSlotId = entry.ownerSlotId,
-                    slotIndex = slotIndex
-                )
-            }
-            builder.addConst(BytecodeConst.CaptureTable(resolved))
-        }
-        val id = builder.addConst(BytecodeConst.ValueFn(ref.valueFn(), captureTableId))
-        val slot = allocSlot()
-        builder.emit(Opcode.MAKE_VALUE_FN, id, slot)
-        updateSlotType(slot, SlotType.OBJ)
-        return CompiledValue(slot, SlotType.OBJ)
+        val pos = (ref as? LambdaFnRef)?.pos ?: Pos.builtIn
+        val refName = ref::class.simpleName ?: "ValueFnRef"
+        throw BytecodeCompileException(
+            "Bytecode compile error: non-bytecode lambda $refName encountered",
+            pos
+        )
     }
 
     private fun resolveCaptureSlot(entry: LambdaCaptureEntry): Int {
@@ -4130,36 +4120,6 @@ class BytecodeCompiler(
         )
     }
 
-    private fun emitStatementEval(stmt: Statement): CompiledValue {
-        val stmtName = stmt::class.simpleName ?: "UnknownStatement"
-        throw BytecodeCompileException("Unsupported statement in bytecode: $stmtName", stmt.pos)
-    }
-
-    private fun emitStatementCall(stmt: Statement): CompiledValue {
-        val constId = builder.addConst(BytecodeConst.ObjRef(stmt))
-        val calleeSlot = allocSlot()
-        builder.emit(Opcode.CONST_OBJ, constId, calleeSlot)
-        updateSlotType(calleeSlot, SlotType.OBJ)
-        val dst = allocSlot()
-        builder.emit(Opcode.CALL_SLOT, calleeSlot, 0, 0, dst)
-        updateSlotType(dst, SlotType.OBJ)
-        return CompiledValue(dst, SlotType.OBJ)
-    }
-
-    private fun emitDeclExec(stmt: Statement): CompiledValue {
-        val executable = when (stmt) {
-            else -> throw BytecodeCompileException(
-                "Bytecode compile error: unsupported declaration ${stmt::class.simpleName}",
-                stmt.pos
-            )
-        }
-        val constId = builder.addConst(BytecodeConst.DeclExec(executable))
-        val dst = allocSlot()
-        builder.emit(Opcode.DECL_EXEC, constId, dst)
-        updateSlotType(dst, SlotType.OBJ)
-        return CompiledValue(dst, SlotType.OBJ)
-    }
-
     private fun emitDeclEnum(stmt: net.sergeych.lyng.EnumDeclStatement): CompiledValue {
         val constId = builder.addConst(
             BytecodeConst.EnumDecl(
@@ -5746,13 +5706,15 @@ class BytecodeCompiler(
                 if (knownObjectNames.contains(ref.name)) {
                     return nameObjClass[ref.name] ?: ObjDynamic.type
                 }
+                val ownerScopeId = ref.captureOwnerScopeId ?: ref.scopeId
+                val ownerSlot = ref.captureOwnerSlot ?: ref.slot
                 val slot = resolveSlot(ref)
                 val fromSlot = slot?.let { slotObjClass[it] }
                 fromSlot
-                    ?: slotTypeByScopeId[refScopeId(ref)]?.get(refSlot(ref))
+                    ?: slotTypeByScopeId[ownerScopeId]?.get(ownerSlot)
                     ?: nameObjClass[ref.name]
                     ?: resolveTypeNameClass(ref.name)
-                    ?: slotInitClassByKey[ScopeSlotKey(refScopeId(ref), refSlot(ref))]
+                    ?: slotInitClassByKey[ScopeSlotKey(ownerScopeId, ownerSlot)]
                     ?: run {
                         val match = slotInitClassByKey.entries.firstOrNull { (key, _) ->
                             val name = localSlotInfoMap[key]?.name ?: scopeSlotNameMap[key]
@@ -6215,6 +6177,14 @@ class BytecodeCompiler(
         collectScopeSlots(stmt)
         if (allowLocalSlots) {
             collectLoopSlotPlans(stmt, 0)
+        }
+        if (allowLocalSlots && forcedLocalSlots.isNotEmpty() && forcedLocalScopeId != null) {
+            for ((name, slotIndex) in forcedLocalSlots) {
+                val key = ScopeSlotKey(forcedLocalScopeId, slotIndex)
+                if (!localSlotInfoMap.containsKey(key)) {
+                    localSlotInfoMap[key] = LocalSlotInfo(name, isMutable = false, isDelegated = false)
+                }
+            }
         }
         if (allowLocalSlots && valueFnRefs.isNotEmpty() && lambdaCaptureEntriesByRef.isNotEmpty()) {
             for (ref in valueFnRefs) {

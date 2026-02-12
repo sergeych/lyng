@@ -31,7 +31,6 @@ enum class Opcode(val code: Int) {
     RANGE_INT_BOUNDS(0x0B),
     MAKE_RANGE(0x0C),
     LOAD_THIS(0x0D),
-    MAKE_VALUE_FN(0x0E),
     LOAD_THIS_VARIANT(0x0F),
 
     INT_TO_REAL(0x10),
@@ -160,7 +159,6 @@ enum class Opcode(val code: Int) {
     STORE_BOOL_ADDR(0xB9),
     THROW(0xBB),
     RETHROW_PENDING(0xBC),
-    DECL_EXEC(0xBD),
     DECL_ENUM(0xBE),
     ITER_PUSH(0xBF),
     ITER_POP(0xC0),

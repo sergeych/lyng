@@ -251,6 +251,212 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
     }
 
     /**
+     * Assign arguments directly into frame slots using [paramSlotPlan] without creating scope locals.
+     * Still allows default expressions to evaluate by exposing FrameSlotRef facades in [scope].
+     */
+    suspend fun assignToFrame(
+        scope: Scope,
+        arguments: Arguments = scope.args,
+        paramSlotPlan: Map<String, Int>,
+        frame: FrameAccess,
+        slotOffset: Int = 0,
+        defaultAccessType: AccessType = AccessType.Var,
+        defaultVisibility: Visibility = Visibility.Public,
+        declaringClass: net.sergeych.lyng.obj.ObjClass? = scope.currentClassCtx
+    ) {
+        fun slotFor(name: String): Int {
+            val full = paramSlotPlan[name] ?: scope.raiseIllegalState("parameter slot for '$name' is missing")
+            val slot = full - slotOffset
+            if (slot < 0) scope.raiseIllegalState("parameter slot for '$name' is out of range")
+            return slot
+        }
+
+        fun ensureScopeRef(a: Item, slot: Int, recordType: ObjRecord.Type) {
+            if (scope.getLocalRecordDirect(a.name) != null) return
+            scope.addItem(
+                a.name,
+                (a.accessType ?: defaultAccessType).isMutable,
+                FrameSlotRef(frame, slot),
+                a.visibility ?: defaultVisibility,
+                recordType = recordType,
+                declaringClass = declaringClass,
+                isTransient = a.isTransient
+            )
+        }
+
+        fun setFrameValue(slot: Int, value: Obj) {
+            when (value) {
+                is net.sergeych.lyng.obj.ObjInt -> frame.setInt(slot, value.value)
+                is net.sergeych.lyng.obj.ObjReal -> frame.setReal(slot, value.value)
+                is net.sergeych.lyng.obj.ObjBool -> frame.setBool(slot, value.value)
+                else -> frame.setObj(slot, value)
+            }
+        }
+
+        fun assign(a: Item, value: Obj) {
+            val recordType = if (declaringClass != null && a.accessType != null) {
+                ObjRecord.Type.ConstructorField
+            } else {
+                ObjRecord.Type.Argument
+            }
+            val slot = slotFor(a.name)
+            setFrameValue(slot, value.byValueCopy())
+            ensureScopeRef(a, slot, recordType)
+        }
+
+        suspend fun missingValue(a: Item, error: String): Obj {
+            return a.defaultValue?.execute(scope)
+                ?: if (a.type.isNullable) ObjNull else scope.raiseIllegalArgument(error)
+        }
+
+        // Fast path for simple positional-only calls with no ellipsis and no defaults
+        if (arguments.named.isEmpty() && !arguments.tailBlockMode) {
+            var hasComplex = false
+            for (p in params) {
+                if (p.isEllipsis || p.defaultValue != null) {
+                    hasComplex = true
+                    break
+                }
+            }
+            if (!hasComplex) {
+                if (arguments.list.size > params.size)
+                    scope.raiseIllegalArgument("expected ${params.size} arguments, got ${arguments.list.size}")
+                if (arguments.list.size < params.size) {
+                    for (i in arguments.list.size until params.size) {
+                        val a = params[i]
+                        if (!a.type.isNullable) {
+                            scope.raiseIllegalArgument("expected ${params.size} arguments, got ${arguments.list.size}")
+                        }
+                    }
+                }
+
+                for (i in params.indices) {
+                    val a = params[i]
+                    val value = if (i < arguments.list.size) arguments.list[i] else ObjNull
+                    assign(a, value)
+                }
+                return
+            }
+        }
+
+        // Prepare positional args and parameter count, handle tail-block binding
+        val callArgs: List<Obj>
+        val paramsSize: Int
+        if (arguments.tailBlockMode) {
+            val lastParam = params.last()
+            if (arguments.named.containsKey(lastParam.name))
+                scope.raiseIllegalArgument("trailing block cannot be used when the last parameter is already assigned by a named argument")
+            paramsSize = params.size - 1
+            assign(lastParam, arguments.list.last())
+            callArgs = arguments.list.dropLast(1)
+        } else {
+            paramsSize = params.size
+            callArgs = arguments.list
+        }
+
+        val coveredByPositional = BooleanArray(paramsSize)
+        run {
+            var headRequired = 0
+            var tailRequired = 0
+            val ellipsisIdx = params.subList(0, paramsSize).indexOfFirst { it.isEllipsis }
+            if (ellipsisIdx >= 0) {
+                for (i in 0 until ellipsisIdx) if (!params[i].isEllipsis && params[i].defaultValue == null) headRequired++
+                for (i in paramsSize - 1 downTo ellipsisIdx + 1) if (params[i].defaultValue == null) tailRequired++
+            } else {
+                for (i in 0 until paramsSize) if (params[i].defaultValue == null) headRequired++
+            }
+            val P = callArgs.size
+            if (ellipsisIdx < 0) {
+                val k = minOf(P, paramsSize)
+                for (i in 0 until k) coveredByPositional[i] = true
+            } else {
+                val headTake = minOf(P, headRequired)
+                for (i in 0 until headTake) coveredByPositional[i] = true
+                val remaining = P - headTake
+                val tailTake = minOf(remaining, tailRequired)
+                var j = paramsSize - 1
+                var taken = 0
+                while (j > ellipsisIdx && taken < tailTake) {
+                    coveredByPositional[j] = true
+                    j--
+                    taken++
+                }
+            }
+        }
+
+        val assignedByName = BooleanArray(paramsSize)
+        val namedValues = arrayOfNulls<Obj>(paramsSize)
+        if (arguments.named.isNotEmpty()) {
+            for ((k, v) in arguments.named) {
+                val idx = params.subList(0, paramsSize).indexOfFirst { it.name == k }
+                if (idx < 0) scope.raiseIllegalArgument("unknown parameter '$k'")
+                if (params[idx].isEllipsis) scope.raiseIllegalArgument("ellipsis (variadic) parameter cannot be assigned by name: '$k'")
+                if (coveredByPositional[idx]) scope.raiseIllegalArgument("argument '$k' is already set by positional argument")
+                if (assignedByName[idx]) scope.raiseIllegalArgument("argument '$k' is already set")
+                assignedByName[idx] = true
+                namedValues[idx] = v
+            }
+        }
+
+        suspend fun processHead(index: Int, headPos: Int): Pair<Int, Int> {
+            var i = index
+            var hp = headPos
+            while (i < paramsSize) {
+                val a = params[i]
+                if (a.isEllipsis) break
+                if (assignedByName[i]) {
+                    assign(a, namedValues[i]!!)
+                } else {
+                    val value = if (hp < callArgs.size) callArgs[hp++]
+                    else missingValue(a, "too few arguments for the call (missing ${a.name})")
+                    assign(a, value)
+                }
+                i++
+            }
+            return i to hp
+        }
+
+        suspend fun processTail(startExclusive: Int, tailStart: Int, headPosBound: Int): Int {
+            var i = paramsSize - 1
+            var tp = tailStart
+            while (i > startExclusive) {
+                val a = params[i]
+                if (a.isEllipsis) break
+                if (i < assignedByName.size && assignedByName[i]) {
+                    assign(a, namedValues[i]!!)
+                } else {
+                    val value = if (tp >= headPosBound) callArgs[tp--]
+                    else missingValue(a, "too few arguments for the call")
+                    assign(a, value)
+                }
+                i--
+            }
+            return tp
+        }
+
+        fun processEllipsis(index: Int, headPos: Int, tailPos: Int) {
+            val a = params[index]
+            val from = headPos
+            val to = tailPos
+            val l = if (from > to) ObjList()
+            else ObjList(callArgs.subList(from, to + 1).toMutableList())
+            assign(a, l)
+        }
+
+        val ellipsisIndex = params.subList(0, paramsSize).indexOfFirst { it.isEllipsis }
+
+        if (ellipsisIndex >= 0) {
+            val (_, headConsumedTo) = processHead(0, 0)
+            val tailConsumedFrom = processTail(ellipsisIndex, callArgs.size - 1, headConsumedTo)
+            processEllipsis(ellipsisIndex, headConsumedTo, tailConsumedFrom)
+        } else {
+            val (_, headConsumedTo) = processHead(0, 0)
+            if (headConsumedTo != callArgs.size)
+                scope.raiseIllegalArgument("too many arguments for the call")
+        }
+    }
+
+    /**
      * Single argument declaration descriptor.
      *
      * @param defaultValue default value, if set, can't be an [Obj] as it can depend on the call site, call args, etc.

@@ -1892,10 +1892,11 @@ class Compiler(
     private fun wrapFunctionBytecode(
         stmt: Statement,
         name: String,
-        extraKnownNameObjClass: Map<String, ObjClass> = emptyMap()
+        extraKnownNameObjClass: Map<String, ObjClass> = emptyMap(),
+        forcedLocalSlots: Map<String, Int> = emptyMap(),
+        forcedLocalScopeId: Int? = null
     ): Statement {
         if (!useBytecodeStatements) return stmt
-        if (containsUnsupportedForBytecode(stmt)) return stmt
         val returnLabels = returnLabelStack.lastOrNull() ?: emptySet()
         val allowedScopeNames = moduleSlotPlan()?.slots?.keys
         val knownNames = if (extraKnownNameObjClass.isEmpty()) {
@@ -1914,6 +1915,8 @@ class Compiler(
             rangeLocalNames = currentRangeParamNames,
             allowedScopeNames = allowedScopeNames,
             moduleScopeId = moduleSlotPlan()?.id,
+            forcedLocalSlots = forcedLocalSlots,
+            forcedLocalScopeId = forcedLocalScopeId,
             slotTypeByScopeId = slotTypeByScopeId,
             knownNameObjClass = knownNames,
             knownObjectNames = objectDeclNames,
@@ -2910,26 +2913,24 @@ class Compiler(
         }
         val returnLabels = label?.let { setOf(it) } ?: emptySet()
         val fnStatements = if (useBytecodeStatements) {
-            if (containsUnsupportedForBytecode(body)) {
-                bytecodeFallbackReporter?.invoke(
-                    body.pos,
-                    "lambda contains unsupported bytecode statements"
+            returnLabelStack.addLast(returnLabels)
+            try {
+                wrapFunctionBytecode(
+                    body,
+                    "<lambda>",
+                    paramKnownClasses,
+                    forcedLocalSlots = paramSlotPlanSnapshot,
+                    forcedLocalScopeId = paramSlotPlan.id
                 )
-                body
-            } else {
-                returnLabelStack.addLast(returnLabels)
-                try {
-                    wrapFunctionBytecode(body, "<lambda>", paramKnownClasses)
-                } catch (e: net.sergeych.lyng.bytecode.BytecodeCompileException) {
-                    val pos = e.pos ?: body.pos
-                    bytecodeFallbackReporter?.invoke(
-                        pos,
-                        "lambda bytecode compile failed: ${e.message}"
-                    )
-                    body
-                } finally {
-                    returnLabelStack.removeLast()
-                }
+            } catch (e: net.sergeych.lyng.bytecode.BytecodeCompileException) {
+                val pos = e.pos ?: body.pos
+                bytecodeFallbackReporter?.invoke(
+                    pos,
+                    "lambda bytecode compile failed: ${e.message}"
+                )
+                throw e
+            } finally {
+                returnLabelStack.removeLast()
             }
         } else {
             body
@@ -3001,23 +3002,65 @@ class Compiler(
                             }
                         }
                     }
-                    if (argsDeclaration == null) {
-                        val l = scope.args.list
-                        val itValue: Obj = when (l.size) {
-                            0 -> ObjVoid
-                            1 -> l[0]
-                            else -> ObjList(l.toMutableList())
+                    if (usesBytecodeBody && fnStatements is BytecodeStatement) {
+                        val bytecodeFn = fnStatements.bytecodeFunction()
+                        val binder: suspend (net.sergeych.lyng.bytecode.CmdFrame, Arguments) -> Unit = { frame, arguments ->
+                            val slotPlan = bytecodeFn.localSlotPlanByName()
+                            if (argsDeclaration == null) {
+                                val l = arguments.list
+                                val itValue: Obj = when (l.size) {
+                                    0 -> ObjVoid
+                                    1 -> l[0]
+                                    else -> ObjList(l.toMutableList())
+                                }
+                                val itSlot = slotPlan["it"]
+                                if (itSlot != null) {
+                                    frame.frame.setObj(itSlot, itValue)
+                                    if (context.getLocalRecordDirect("it") == null) {
+                                        context.addItem(
+                                            "it",
+                                            false,
+                                            FrameSlotRef(frame.frame, itSlot),
+                                            recordType = ObjRecord.Type.Argument
+                                        )
+                                    }
+                                } else if (context.getLocalRecordDirect("it") == null) {
+                                    context.addItem("it", false, itValue, recordType = ObjRecord.Type.Argument)
+                                }
+                            } else {
+                                argsDeclaration.assignToFrame(
+                                    context,
+                                    arguments,
+                                    slotPlan,
+                                    frame.frame,
+                                    defaultAccessType = AccessType.Val
+                                )
+                            }
                         }
-                        context.addItem("it", false, itValue, recordType = ObjRecord.Type.Argument)
+                        return try {
+                            net.sergeych.lyng.bytecode.CmdVm().execute(bytecodeFn, context, scope.args, binder)
+                        } catch (e: ReturnException) {
+                            if (e.label == null || returnLabels.contains(e.label)) e.result
+                            else throw e
+                        }
                     } else {
-                        argsDeclaration.assignToContext(context, scope.args, defaultAccessType = AccessType.Val)
-                    }
-                    val effectiveStatements = if (usesBytecodeBody) fnStatements else body
-                    return try {
-                        effectiveStatements.execute(context)
-                    } catch (e: ReturnException) {
-                        if (e.label == null || returnLabels.contains(e.label)) e.result
-                        else throw e
+                        if (argsDeclaration == null) {
+                            val l = scope.args.list
+                            val itValue: Obj = when (l.size) {
+                                0 -> ObjVoid
+                                1 -> l[0]
+                                else -> ObjList(l.toMutableList())
+                            }
+                            context.addItem("it", false, itValue, recordType = ObjRecord.Type.Argument)
+                        } else {
+                            argsDeclaration.assignToContext(context, scope.args, defaultAccessType = AccessType.Val)
+                        }
+                        return try {
+                            body.execute(context)
+                        } catch (e: ReturnException) {
+                            if (e.label == null || returnLabels.contains(e.label)) e.result
+                            else throw e
+                        }
                     }
                 }
             }
@@ -4716,30 +4759,43 @@ class Compiler(
         context: Scope,
         argsDeclaration: ArgsDeclaration,
         typeParams: List<TypeDecl.TypeParam>
-    ) {
-        if (typeParams.isEmpty()) return
+    ): Map<String, Obj> {
+        if (typeParams.isEmpty()) return emptyMap()
         val inferred = mutableMapOf<String, TypeDecl>()
         for (param in argsDeclaration.params) {
             val rec = context.getLocalRecordDirect(param.name) ?: continue
-            val value = rec.value
+            val direct = rec.value
+            val value = when (direct) {
+                is FrameSlotRef -> direct.read()
+                is RecordSlotRef -> direct.read()
+                else -> direct
+            }
             if (value is Obj) {
                 collectRuntimeTypeVarBindings(param.type, value, inferred)
             }
         }
+        val boundValues = LinkedHashMap<String, Obj>(typeParams.size)
         for (tp in typeParams) {
             val inferredType = inferred[tp.name] ?: tp.defaultType ?: TypeDecl.TypeAny
             val normalized = normalizeRuntimeTypeDecl(inferredType)
             val cls = resolveTypeDeclObjClass(normalized)
-            if (cls != null && !normalized.isNullable && normalized !is TypeDecl.Union && normalized !is TypeDecl.Intersection) {
-                context.addConst(tp.name, cls)
+            val boundValue = if (cls != null &&
+                !normalized.isNullable &&
+                normalized !is TypeDecl.Union &&
+                normalized !is TypeDecl.Intersection
+            ) {
+                cls
             } else {
-                context.addConst(tp.name, net.sergeych.lyng.obj.ObjTypeExpr(normalized))
+                net.sergeych.lyng.obj.ObjTypeExpr(normalized)
             }
+            context.addConst(tp.name, boundValue)
+            boundValues[tp.name] = boundValue
             val bound = tp.bound ?: continue
             if (!typeDeclSatisfiesBound(normalized, bound)) {
                 context.raiseError("type argument ${typeDeclName(normalized)} does not satisfy bound ${typeDeclName(bound)}")
             }
         }
+        return boundValues
     }
 
     private fun collectRuntimeTypeVarBindings(
@@ -6994,6 +7050,12 @@ class Compiler(
                         inferredReturnClass
                 }
             }
+            val paramSlotPlanSnapshot = slotPlanIndices(paramSlotPlan)
+            val forcedLocalSlots = LinkedHashMap<String, Int>()
+            for (name in paramNamesList) {
+                val idx = paramSlotPlanSnapshot[name] ?: continue
+                forcedLocalSlots[name] = idx
+            }
             val fnStatements = rawFnStatements?.let { stmt ->
                 if (useBytecodeStatements &&
                     parentContext !is CodeContext.ClassBody &&
@@ -7004,7 +7066,13 @@ class Compiler(
                         val cls = resolveTypeDeclObjClass(param.type) ?: continue
                         paramKnownClasses[param.name] = cls
                     }
-                    wrapFunctionBytecode(stmt, name, paramKnownClasses)
+                    wrapFunctionBytecode(
+                        stmt,
+                        name,
+                        paramKnownClasses,
+                        forcedLocalSlots = forcedLocalSlots,
+                        forcedLocalScopeId = paramSlotPlan.id
+                    )
                 } else {
                     stmt
                 }
@@ -7014,7 +7082,6 @@ class Compiler(
 
             val closureBox = FunctionClosureBox()
 
-            val paramSlotPlanSnapshot = slotPlanIndices(paramSlotPlan)
             val captureSlots = capturePlan.captures.toList()
             val fnBody = object : Statement(), BytecodeBodyProvider {
                 override val pos: Pos = start
@@ -7055,17 +7122,48 @@ class Compiler(
                         }
                     }
 
-                    // load params from caller context
-                    argsDeclaration.assignToContext(context, callerContext.args, defaultAccessType = AccessType.Val)
-                    bindTypeParamsAtRuntime(context, argsDeclaration, mergedTypeParamDecls)
-                    if (extTypeName != null) {
-                        context.thisObj = callerContext.thisObj
-                    }
-                    return try {
-                        fnStatements?.execute(context) ?: ObjVoid
-                    } catch (e: ReturnException) {
-                        if (e.label == null || e.label == name || e.label == outerLabel) e.result
-                        else throw e
+                    val bytecodeBody = (fnStatements as? BytecodeStatement)
+                    if (bytecodeBody != null) {
+                        val bytecodeFn = bytecodeBody.bytecodeFunction()
+                        val binder: suspend (net.sergeych.lyng.bytecode.CmdFrame, Arguments) -> Unit = { frame, arguments ->
+                            val slotPlan = bytecodeFn.localSlotPlanByName()
+                            argsDeclaration.assignToFrame(
+                                context,
+                                arguments,
+                                slotPlan,
+                                frame.frame,
+                                defaultAccessType = AccessType.Val
+                            )
+                            val typeBindings = bindTypeParamsAtRuntime(context, argsDeclaration, mergedTypeParamDecls)
+                            if (typeBindings.isNotEmpty()) {
+                                for ((name, bound) in typeBindings) {
+                                    val slot = slotPlan[name] ?: continue
+                                    frame.frame.setObj(slot, bound)
+                                }
+                            }
+                            if (extTypeName != null) {
+                                context.thisObj = callerContext.thisObj
+                            }
+                        }
+                        return try {
+                            net.sergeych.lyng.bytecode.CmdVm().execute(bytecodeFn, context, callerContext.args, binder)
+                        } catch (e: ReturnException) {
+                            if (e.label == null || e.label == name || e.label == outerLabel) e.result
+                            else throw e
+                        }
+                    } else {
+                        // load params from caller context
+                        argsDeclaration.assignToContext(context, callerContext.args, defaultAccessType = AccessType.Val)
+                        bindTypeParamsAtRuntime(context, argsDeclaration, mergedTypeParamDecls)
+                        if (extTypeName != null) {
+                            context.thisObj = callerContext.thisObj
+                        }
+                        return try {
+                            fnStatements?.execute(context) ?: ObjVoid
+                        } catch (e: ReturnException) {
+                            if (e.label == null || e.label == name || e.label == outerLabel) e.result
+                            else throw e
+                        }
                     }
                 }
             }

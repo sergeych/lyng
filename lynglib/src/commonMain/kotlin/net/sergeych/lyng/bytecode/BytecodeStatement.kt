@@ -30,7 +30,7 @@ class BytecodeStatement private constructor(
 
     override suspend fun execute(scope: Scope): Obj {
         scope.pos = pos
-        return CmdVm().execute(function, scope, scope.args.list)
+        return CmdVm().execute(function, scope, scope.args)
     }
 
     internal fun bytecodeFunction(): CmdFunction = function
@@ -44,6 +44,8 @@ class BytecodeStatement private constructor(
             rangeLocalNames: Set<String> = emptySet(),
             allowedScopeNames: Set<String>? = null,
             moduleScopeId: Int? = null,
+            forcedLocalSlots: Map<String, Int> = emptyMap(),
+            forcedLocalScopeId: Int? = null,
             slotTypeByScopeId: Map<Int, Map<Int, ObjClass>> = emptyMap(),
             knownNameObjClass: Map<String, ObjClass> = emptyMap(),
             knownObjectNames: Set<String> = emptySet(),
@@ -69,6 +71,8 @@ class BytecodeStatement private constructor(
                 rangeLocalNames = rangeLocalNames,
                 allowedScopeNames = allowedScopeNames,
                 moduleScopeId = moduleScopeId,
+                forcedLocalSlots = forcedLocalSlots,
+                forcedLocalScopeId = forcedLocalScopeId,
                 slotTypeByScopeId = slotTypeByScopeId,
                 knownNameObjClass = knownNameObjClass,
                 knownObjectNames = knownObjectNames,

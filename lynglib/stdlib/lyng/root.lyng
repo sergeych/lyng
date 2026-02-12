@@ -31,6 +31,12 @@ extern class List<T> : Array<T> {
     fun add(value: T, more...): Void
 }
 
+extern class RingBuffer<T> : Iterable<T> {
+    val size: Int
+    fun first(): T
+    fun add(value: T): Void
+}
+
 extern class Set<T> : Collection<T> {
 }
 
@@ -270,8 +276,10 @@ fun Iterable<T>.shuffled(): List<T> {
 */
 fun Iterable<Iterable<T>>.flatten(): List<T> {
     var result: List<T> = List()
-    forEach { i ->
-        i.forEach { result += it }
+    for (i in this) {
+        for (item in i) {
+            result += item
+        }
     }
     result
 }

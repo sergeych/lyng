@@ -125,15 +125,16 @@ Goal: migrate the compiler so all values live in frames/bytecode, keeping JVM te
   - [x] Remove `containsValueFnRef` helper now that lambdas are bytecode-backed.
   - [x] Remove `forceScopeSlots` branches once no bytecode paths depend on scope slots.
   - [x] Add JVM tests for captured locals and delegated locals inside lambdas on the bytecode path.
-- [ ] Step 27: Remove interpreter opcodes and constants from bytecode runtime.
-  - [ ] Delete `BytecodeConst.ValueFn`, `CmdMakeValueFn`, and `MAKE_VALUE_FN` (blocked: some lambdas still fall back to non-bytecode bodies).
+- [x] Step 27: Remove interpreter opcodes and constants from bytecode runtime.
+  - [x] Delete `BytecodeConst.ValueFn`, `CmdMakeValueFn`, and `MAKE_VALUE_FN`.
   - [x] Delete `BytecodeConst.StatementVal`, `CmdEvalStmt`, and `EVAL_STMT`.
   - [x] Add bytecode-backed `::class` via `ClassOperatorRef` + `GET_OBJ_CLASS` to avoid ValueFn for class operator.
   - [x] Add a bytecode fallback reporter hook for lambdas to locate remaining non-bytecode cases.
-  - [ ] Remove `emitStatementCall`/`emitStatementEval` once unused.
+  - [x] Remove `emitStatementCall`/`emitStatementEval` once unused.
 - [ ] Step 28: Scope as facade only.
-  - [ ] Audit bytecode execution paths for `Statement.execute` usage and remove remaining calls.
-  - [ ] Keep scope sync only for reflection/Kotlin interop, not for execution.
+  - [x] Audit bytecode execution paths for `Statement.execute` usage and remove remaining calls.
+  - [x] Keep scope sync only for reflection/Kotlin interop, not for execution.
+  - [x] Replace bytecode entry seeding from Scope with frame-only arg/local binding.
 
 ## Notes
 

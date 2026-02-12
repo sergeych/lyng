@@ -86,7 +86,6 @@ object CmdDisassembler {
             is CmdLoadThis -> Opcode.LOAD_THIS to intArrayOf(cmd.dst)
             is CmdLoadThisVariant -> Opcode.LOAD_THIS_VARIANT to intArrayOf(cmd.typeId, cmd.dst)
             is CmdConstNull -> Opcode.CONST_NULL to intArrayOf(cmd.dst)
-            is CmdMakeValueFn -> Opcode.MAKE_VALUE_FN to intArrayOf(cmd.id, cmd.dst)
             is CmdMakeLambda -> Opcode.MAKE_LAMBDA_FN to intArrayOf(cmd.id, cmd.dst)
             is CmdBoxObj -> Opcode.BOX_OBJ to intArrayOf(cmd.src, cmd.dst)
             is CmdObjToBool -> Opcode.OBJ_TO_BOOL to intArrayOf(cmd.src, cmd.dst)
@@ -213,7 +212,6 @@ object CmdDisassembler {
             is CmdDeclLocal -> Opcode.DECL_LOCAL to intArrayOf(cmd.constId, cmd.slot)
             is CmdDeclDelegated -> Opcode.DECL_DELEGATED to intArrayOf(cmd.constId, cmd.slot)
             is CmdDeclDestructure -> Opcode.DECL_DESTRUCTURE to intArrayOf(cmd.constId, cmd.slot)
-            is CmdDeclExec -> Opcode.DECL_EXEC to intArrayOf(cmd.constId, cmd.slot)
             is CmdDeclEnum -> Opcode.DECL_ENUM to intArrayOf(cmd.constId, cmd.slot)
             is CmdDeclFunction -> Opcode.DECL_FUNCTION to intArrayOf(cmd.constId, cmd.slot)
             is CmdDeclClass -> Opcode.DECL_CLASS to intArrayOf(cmd.constId, cmd.slot)
@@ -282,14 +280,14 @@ object CmdDisassembler {
             Opcode.CONST_NULL ->
                 listOf(OperandKind.SLOT)
             Opcode.CONST_OBJ, Opcode.CONST_INT, Opcode.CONST_REAL, Opcode.CONST_BOOL,
-            Opcode.MAKE_VALUE_FN, Opcode.MAKE_LAMBDA_FN ->
+            Opcode.MAKE_LAMBDA_FN ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.PUSH_SCOPE, Opcode.PUSH_SLOT_PLAN ->
                 listOf(OperandKind.CONST)
             Opcode.PUSH_TRY ->
                 listOf(OperandKind.SLOT, OperandKind.IP, OperandKind.IP)
             Opcode.DECL_LOCAL, Opcode.DECL_EXT_PROPERTY, Opcode.DECL_DELEGATED, Opcode.DECL_DESTRUCTURE,
-            Opcode.DECL_EXEC, Opcode.DECL_ENUM, Opcode.DECL_FUNCTION, Opcode.DECL_CLASS,
+            Opcode.DECL_ENUM, Opcode.DECL_FUNCTION, Opcode.DECL_CLASS,
             Opcode.ASSIGN_DESTRUCTURE ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.ADD_INT, Opcode.SUB_INT, Opcode.MUL_INT, Opcode.DIV_INT, Opcode.MOD_INT,

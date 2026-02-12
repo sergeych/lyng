@@ -47,4 +47,23 @@ data class CmdFunction(
             require(posByIp.size == cmds.size) { "posByIp size mismatch" }
         }
     }
+
+    fun localSlotPlanByName(): Map<String, Int> {
+        val result = LinkedHashMap<String, Int>()
+        for (i in localSlotNames.indices) {
+            val name = localSlotNames[i] ?: continue
+            val existing = result[name]
+            if (existing == null) {
+                result[name] = i
+                continue
+            }
+            val existingIsCapture = localSlotCaptures.getOrNull(existing) == true
+            val currentIsCapture = localSlotCaptures.getOrNull(i) == true
+            if (existingIsCapture && !currentIsCapture) {
+                result[name] = i
+            }
+        }
+        return result
+    }
+
 }

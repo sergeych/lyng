@@ -84,7 +84,7 @@ class Script(
             seedModuleSlots(moduleTarget)
         }
         moduleBytecode?.let { fn ->
-            return CmdVm().execute(fn, scope, scope.args.list)
+            return CmdVm().execute(fn, scope, scope.args)
         }
         var lastResult: Obj = ObjVoid
         for (s in statements) {
