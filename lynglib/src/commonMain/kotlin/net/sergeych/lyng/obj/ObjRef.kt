@@ -1587,7 +1587,14 @@ class IndexRef(
  * R-value reference that wraps a Statement (used during migration for expressions parsed as Statement).
  */
 class StatementRef(internal val statement: Statement) : ObjRef {
-    override suspend fun get(scope: Scope): ObjRecord = statement.execute(scope).asReadonly
+    override suspend fun get(scope: Scope): ObjRecord {
+        val bytecode = when (statement) {
+            is net.sergeych.lyng.bytecode.BytecodeStatement -> statement
+            is BytecodeBodyProvider -> statement.bytecodeBody()
+            else -> null
+        } ?: scope.raiseIllegalState("StatementRef requires bytecode statement")
+        return bytecode.execute(scope).asReadonly
+    }
 }
 
 /**
