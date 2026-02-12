@@ -1576,6 +1576,12 @@ class CmdCallDirect(
             ?: error("CALL_DIRECT expects ObjRef at $id")
         val callee = ref.value
         val args = frame.buildArguments(argBase, argCount)
+        if (callee is Statement) {
+            val bytecodeBody = (callee as? BytecodeBodyProvider)?.bytecodeBody()
+            if (callee !is BytecodeStatement && callee !is BytecodeCallable && bytecodeBody == null && isAstStatement(callee)) {
+                frame.ensureScope().raiseIllegalState("bytecode runtime cannot call non-bytecode Statement")
+            }
+        }
         val result = if (PerfFlags.SCOPE_POOL) {
             frame.ensureScope().withChildFrame(args) { child -> callee.callOn(child) }
         } else {
