@@ -18,6 +18,7 @@ package net.sergeych.lyng
 
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjClass
+import net.sergeych.lyng.obj.ObjExternCallable
 import net.sergeych.lyng.obj.ObjExtensionMethodCallable
 import net.sergeych.lyng.obj.ObjInstance
 import net.sergeych.lyng.obj.ObjRecord
@@ -66,21 +67,22 @@ internal suspend fun executeFunctionDecl(
     if (spec.actualExtern && spec.extTypeName == null && !spec.parentIsClassBody) {
         val existing = scope.get(spec.name)
         if (existing != null) {
+            val value = (existing.value as? ObjExternCallable) ?: ObjExternCallable.wrap(existing.value)
             scope.addItem(
                 spec.name,
                 false,
-                existing.value,
+                value,
                 spec.visibility,
                 callSignature = existing.callSignature
             )
-            return existing.value
+            return value
         }
     }
 
     if (spec.isDelegated) {
         val delegateExpr = spec.delegateExpression ?: scope.raiseError("delegated function missing delegate")
         val accessType = ObjString("Callable")
-        val initValue = delegateExpr.execute(scope)
+        val initValue = requireBytecodeBody(scope, delegateExpr, "delegated function").execute(scope)
         val finalDelegate = try {
             initValue.invokeInstanceMethod(scope, "bind", Arguments(ObjString(spec.name), accessType, scope.thisObj))
         } catch (e: Exception) {
@@ -143,7 +145,7 @@ internal suspend fun executeFunctionDecl(
             )
             val initStmt = spec.delegateInitStatement
                 ?: scope.raiseIllegalState("missing delegated init statement for ${spec.name}")
-            cls.instanceInitializers += initStmt
+            cls.instanceInitializers += requireBytecodeBody(scope, initStmt, "delegated function init")
         } else {
             scope.addItem(
                 spec.name,
@@ -223,6 +225,19 @@ internal suspend fun executeFunctionDecl(
         }
     }
     return annotatedFnBody
+}
+
+private suspend fun requireBytecodeBody(
+    scope: Scope,
+    stmt: Statement,
+    label: String
+): net.sergeych.lyng.bytecode.BytecodeStatement {
+    val bytecode = when (stmt) {
+        is net.sergeych.lyng.bytecode.BytecodeStatement -> stmt
+        is BytecodeBodyProvider -> stmt.bytecodeBody()
+        else -> null
+    }
+    return bytecode ?: scope.raiseIllegalState("$label requires bytecode statement")
 }
 
 class FunctionDeclStatement(

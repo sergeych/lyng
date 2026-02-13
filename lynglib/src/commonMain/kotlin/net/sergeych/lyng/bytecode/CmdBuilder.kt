@@ -197,7 +197,7 @@ class CmdBuilder {
                 listOf(OperandKind.ID, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
             Opcode.CALL_MEMBER_SLOT ->
                 listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
-            Opcode.CALL_SLOT ->
+            Opcode.CALL_SLOT, Opcode.CALL_BRIDGE_SLOT ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
             Opcode.CALL_DYNAMIC_MEMBER ->
                 listOf(OperandKind.SLOT, OperandKind.CONST, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
@@ -435,6 +435,7 @@ class CmdBuilder {
             Opcode.ASSIGN_DESTRUCTURE -> CmdAssignDestructure(operands[0], operands[1])
             Opcode.CALL_MEMBER_SLOT -> CmdCallMemberSlot(operands[0], operands[1], operands[2], operands[3], operands[4])
             Opcode.CALL_SLOT -> CmdCallSlot(operands[0], operands[1], operands[2], operands[3])
+            Opcode.CALL_BRIDGE_SLOT -> CmdCallBridgeSlot(operands[0], operands[1], operands[2], operands[3])
             Opcode.CALL_DYNAMIC_MEMBER -> CmdCallDynamicMember(operands[0], operands[1], operands[2], operands[3], operands[4])
             Opcode.GET_INDEX -> CmdGetIndex(operands[0], operands[1], operands[2])
             Opcode.SET_INDEX -> CmdSetIndex(operands[0], operands[1], operands[2])

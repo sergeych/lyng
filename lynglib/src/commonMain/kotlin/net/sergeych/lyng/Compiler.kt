@@ -176,6 +176,7 @@ class Compiler(
     private val encodedPayloadTypeByScopeId: MutableMap<Int, MutableMap<Int, ObjClass>> = mutableMapOf()
     private val encodedPayloadTypeByName: MutableMap<String, ObjClass> = mutableMapOf()
     private val objectDeclNames: MutableSet<String> = mutableSetOf()
+    private val externCallableNames: MutableSet<String> = mutableSetOf()
 
     private fun seedSlotPlanFromScope(scope: Scope, includeParents: Boolean = false) {
         val plan = moduleSlotPlan() ?: return
@@ -1853,6 +1854,7 @@ class Compiler(
             enumEntriesByName = enumEntriesByName,
             callableReturnTypeByScopeId = callableReturnTypeByScopeId,
             callableReturnTypeByName = callableReturnTypeByName,
+            externCallableNames = externCallableNames,
             lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef
         )
     }
@@ -1876,6 +1878,7 @@ class Compiler(
             enumEntriesByName = enumEntriesByName,
             callableReturnTypeByScopeId = callableReturnTypeByScopeId,
             callableReturnTypeByName = callableReturnTypeByName,
+            externCallableNames = externCallableNames,
             lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef
         )
     }
@@ -1920,6 +1923,7 @@ class Compiler(
             enumEntriesByName = enumEntriesByName,
             callableReturnTypeByScopeId = callableReturnTypeByScopeId,
             callableReturnTypeByName = callableReturnTypeByName,
+            externCallableNames = externCallableNames,
             lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef
         )
     }
@@ -6689,6 +6693,12 @@ class Compiler(
         }
         if (extensionWrapperName != null) {
             declareLocalName(extensionWrapperName, isMutable = false)
+        }
+        if (actualExtern && declKind != SymbolKind.MEMBER) {
+            externCallableNames.add(name)
+        }
+        if (actualExtern && extensionWrapperName != null) {
+            externCallableNames.add(extensionWrapperName)
         }
         val declSlotPlan = if (declKind != SymbolKind.MEMBER) slotPlanStack.lastOrNull() else null
         val declSlotIndex = declSlotPlan?.slots?.get(name)?.index

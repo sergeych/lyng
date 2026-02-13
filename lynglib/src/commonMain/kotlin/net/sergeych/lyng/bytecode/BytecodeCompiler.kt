@@ -35,6 +35,7 @@ class BytecodeCompiler(
     private val enumEntriesByName: Map<String, List<String>> = emptyMap(),
     private val callableReturnTypeByScopeId: Map<Int, Map<Int, ObjClass>> = emptyMap(),
     private val callableReturnTypeByName: Map<String, ObjClass> = emptyMap(),
+    private val externCallableNames: Set<String> = emptySet(),
     private val lambdaCaptureEntriesByRef: Map<ValueFnRef, List<LambdaCaptureEntry>> = emptyMap(),
 ) {
     private var builder = CmdBuilder()
@@ -3688,6 +3689,7 @@ class BytecodeCompiler(
     private fun compileCall(ref: CallRef): CompiledValue? {
         val callPos = callSitePos()
         val localTarget = ref.target as? LocalVarRef
+        val isExternCall = localTarget != null && externCallableNames.contains(localTarget.name)
         if (localTarget != null) {
             val direct = resolveDirectNameSlot(localTarget.name)
             if (direct == null) {
@@ -3711,7 +3713,13 @@ class BytecodeCompiler(
             val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
             val encodedCount = encodeCallArgCount(args) ?: return null
             setPos(callPos)
-            builder.emit(Opcode.CALL_SLOT, callee.slot, args.base, encodedCount, dst)
+            builder.emit(
+                if (isExternCall) Opcode.CALL_BRIDGE_SLOT else Opcode.CALL_SLOT,
+                callee.slot,
+                args.base,
+                encodedCount,
+                dst
+            )
             if (initClass != null) {
                 slotObjClass[dst] = initClass
             }
@@ -3730,7 +3738,13 @@ class BytecodeCompiler(
         val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
         val encodedCount = encodeCallArgCount(args) ?: return null
         setPos(callPos)
-        builder.emit(Opcode.CALL_SLOT, callee.slot, args.base, encodedCount, dst)
+        builder.emit(
+            if (isExternCall) Opcode.CALL_BRIDGE_SLOT else Opcode.CALL_SLOT,
+            callee.slot,
+            args.base,
+            encodedCount,
+            dst
+        )
         if (initClass != null) {
             slotObjClass[dst] = initClass
         }

@@ -2023,6 +2023,40 @@ class CmdCallSlot(
     }
 }
 
+class CmdCallBridgeSlot(
+    internal val calleeSlot: Int,
+    internal val argBase: Int,
+    internal val argCount: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val callee = frame.slotToObj(calleeSlot)
+        if (callee === ObjUnset) {
+            val name = if (calleeSlot < frame.fn.scopeSlotCount) {
+                frame.fn.scopeSlotNames[calleeSlot]
+            } else {
+                val localIndex = calleeSlot - frame.fn.scopeSlotCount
+                frame.fn.localSlotNames.getOrNull(localIndex)
+            }
+            val message = name?.let { "property '$it' is unset (not initialized)" }
+                ?: "property is unset (not initialized) in ${frame.fn.name} at slot $calleeSlot"
+            frame.ensureScope().raiseUnset(message)
+        }
+        if (callee !is net.sergeych.lyng.obj.ObjExternCallable) {
+            frame.ensureScope().raiseIllegalState("CALL_BRIDGE_SLOT expects extern callable")
+        }
+        val args = frame.buildArguments(argBase, argCount)
+        val result = if (PerfFlags.SCOPE_POOL) {
+            frame.ensureScope().withChildFrame(args) { child -> callee.callOn(child) }
+        } else {
+            val scope = frame.ensureScope()
+            callee.callOn(scope.createChildScope(scope.pos, args = args))
+        }
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
 class CmdListLiteral(
     internal val planId: Int,
     internal val baseSlot: Int,

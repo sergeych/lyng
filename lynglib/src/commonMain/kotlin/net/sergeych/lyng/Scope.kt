@@ -78,7 +78,6 @@ open class Scope(
         thisObj = primary
         val extrasSnapshot = when {
             extras.isEmpty() -> emptyList()
-            extras === thisVariants -> extras.toList()
             extras is MutableList<*> -> synchronized(extras) { extras.toList() }
             else -> extras.toList()
         }

@@ -136,6 +136,7 @@ enum class Opcode(val code: Int) {
     ASSIGN_DESTRUCTURE(0x91),
     CALL_MEMBER_SLOT(0x92),
     CALL_SLOT(0x93),
+    CALL_BRIDGE_SLOT(0x94),
 
     GET_INDEX(0xA2),
     SET_INDEX(0xA3),

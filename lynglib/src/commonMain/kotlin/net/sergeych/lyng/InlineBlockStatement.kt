@@ -28,10 +28,19 @@ class InlineBlockStatement(
     override suspend fun execute(scope: Scope): Obj {
         var last: Obj = ObjVoid
         for (stmt in statements) {
-            last = stmt.execute(scope)
+            last = requireBytecodeBody(scope, stmt, "inline block").execute(scope)
         }
         return last
     }
 
     fun statements(): List<Statement> = statements
+
+    private suspend fun requireBytecodeBody(scope: Scope, stmt: Statement, label: String): net.sergeych.lyng.bytecode.BytecodeStatement {
+        val bytecode = when (stmt) {
+            is net.sergeych.lyng.bytecode.BytecodeStatement -> stmt
+            is BytecodeBodyProvider -> stmt.bytecodeBody()
+            else -> null
+        }
+        return bytecode ?: scope.raiseIllegalState("$label requires bytecode statement")
+    }
 }

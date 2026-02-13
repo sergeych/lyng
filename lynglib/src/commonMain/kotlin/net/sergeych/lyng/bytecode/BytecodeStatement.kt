@@ -53,6 +53,7 @@ class BytecodeStatement private constructor(
             enumEntriesByName: Map<String, List<String>> = emptyMap(),
             callableReturnTypeByScopeId: Map<Int, Map<Int, ObjClass>> = emptyMap(),
             callableReturnTypeByName: Map<String, ObjClass> = emptyMap(),
+            externCallableNames: Set<String> = emptySet(),
             lambdaCaptureEntriesByRef: Map<ValueFnRef, List<LambdaCaptureEntry>> = emptyMap(),
         ): Statement {
             if (statement is BytecodeStatement) return statement
@@ -80,6 +81,7 @@ class BytecodeStatement private constructor(
                 enumEntriesByName = enumEntriesByName,
                 callableReturnTypeByScopeId = callableReturnTypeByScopeId,
                 callableReturnTypeByName = callableReturnTypeByName,
+                externCallableNames = externCallableNames,
                 lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef
             )
             val compiled = compiler.compileStatement(nameHint, statement)

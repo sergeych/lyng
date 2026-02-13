@@ -229,6 +229,7 @@ object CmdDisassembler {
             is CmdAssignDestructure -> Opcode.ASSIGN_DESTRUCTURE to intArrayOf(cmd.constId, cmd.slot)
             is CmdCallMemberSlot -> Opcode.CALL_MEMBER_SLOT to intArrayOf(cmd.recvSlot, cmd.methodId, cmd.argBase, cmd.argCount, cmd.dst)
             is CmdCallSlot -> Opcode.CALL_SLOT to intArrayOf(cmd.calleeSlot, cmd.argBase, cmd.argCount, cmd.dst)
+            is CmdCallBridgeSlot -> Opcode.CALL_BRIDGE_SLOT to intArrayOf(cmd.calleeSlot, cmd.argBase, cmd.argCount, cmd.dst)
             is CmdCallDynamicMember -> Opcode.CALL_DYNAMIC_MEMBER to intArrayOf(cmd.recvSlot, cmd.nameId, cmd.argBase, cmd.argCount, cmd.dst)
             is CmdGetIndex -> Opcode.GET_INDEX to intArrayOf(cmd.targetSlot, cmd.indexSlot, cmd.dst)
             is CmdSetIndex -> Opcode.SET_INDEX to intArrayOf(cmd.targetSlot, cmd.indexSlot, cmd.valueSlot)
@@ -330,7 +331,7 @@ object CmdDisassembler {
                 listOf(OperandKind.SLOT, OperandKind.IP)
             Opcode.CALL_DIRECT ->
                 listOf(OperandKind.ID, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
-            Opcode.CALL_SLOT ->
+            Opcode.CALL_SLOT, Opcode.CALL_BRIDGE_SLOT ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
             Opcode.CALL_MEMBER_SLOT ->
                 listOf(OperandKind.SLOT, OperandKind.ID, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)

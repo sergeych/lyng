@@ -20,7 +20,6 @@ import net.sergeych.lyng.bytecode.CmdFrame
 import net.sergeych.lyng.bytecode.CmdVm
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjNull
-import net.sergeych.lyng.obj.ObjRecord
 
 class PropertyAccessorStatement(
     val body: Statement,
@@ -29,32 +28,33 @@ class PropertyAccessorStatement(
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
         if (argName != null) {
-            val value = scope.args.list.firstOrNull() ?: ObjNull
             val prev = scope.skipScopeCreation
             scope.skipScopeCreation = true
             return try {
-                if (body is net.sergeych.lyng.bytecode.BytecodeStatement) {
-                    val fn = body.bytecodeFunction()
-                    val binder: suspend (CmdFrame, Arguments) -> Unit = { frame, arguments ->
-                        val slotPlan = fn.localSlotPlanByName()
-                        val slotIndex = slotPlan[argName]
-                        val argValue = arguments.list.firstOrNull() ?: ObjNull
-                        if (slotIndex != null) {
-                            frame.frame.setObj(slotIndex, argValue)
-                        } else if (scope.getLocalRecordDirect(argName) == null) {
-                            scope.addItem(argName, true, argValue, recordType = ObjRecord.Type.Argument)
-                        }
-                    }
-                    scope.pos = pos
-                    CmdVm().execute(fn, scope, scope.args, binder)
-                } else {
-                    scope.addItem(argName, true, value, recordType = ObjRecord.Type.Argument)
-                    body.execute(scope)
+                val bytecodeStmt = requireBytecodeBody(scope, body, "property accessor")
+                val fn = bytecodeStmt.bytecodeFunction()
+                val binder: suspend (CmdFrame, Arguments) -> Unit = { frame, arguments ->
+                    val slotPlan = fn.localSlotPlanByName()
+                    val slotIndex = slotPlan[argName]
+                        ?: scope.raiseIllegalState("property accessor argument $argName missing from slot plan")
+                    val argValue = arguments.list.firstOrNull() ?: ObjNull
+                    frame.frame.setObj(slotIndex, argValue)
                 }
+                scope.pos = pos
+                CmdVm().execute(fn, scope, scope.args, binder)
             } finally {
                 scope.skipScopeCreation = prev
             }
         }
-        return body.execute(scope)
+        return requireBytecodeBody(scope, body, "property accessor").execute(scope)
+    }
+
+    private suspend fun requireBytecodeBody(scope: Scope, stmt: Statement, label: String): net.sergeych.lyng.bytecode.BytecodeStatement {
+        val bytecode = when (stmt) {
+            is net.sergeych.lyng.bytecode.BytecodeStatement -> stmt
+            is BytecodeBodyProvider -> stmt.bytecodeBody()
+            else -> null
+        }
+        return bytecode ?: scope.raiseIllegalState("$label requires bytecode statement")
     }
 }

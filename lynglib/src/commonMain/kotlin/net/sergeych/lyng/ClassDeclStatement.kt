@@ -74,7 +74,7 @@ internal suspend fun executeClassDecl(
         newClass.classScope = classScope
         classScope.addConst("object", newClass)
 
-        spec.bodyInit?.execute(classScope)
+        spec.bodyInit?.let { requireBytecodeBody(scope, it, "object body init").execute(classScope) }
 
         val instance = newClass.callOn(scope.createChildScope(Arguments.EMPTY))
         if (spec.declaredName != null) {
@@ -148,14 +148,27 @@ internal suspend fun executeClassDecl(
     }
     classScope.currentClassCtx = newClass
     newClass.classScope = classScope
-    spec.bodyInit?.execute(classScope)
+    spec.bodyInit?.let { requireBytecodeBody(scope, it, "class body init").execute(classScope) }
     if (spec.initScope.isNotEmpty()) {
         for (s in spec.initScope) {
-            s.execute(classScope)
+            requireBytecodeBody(scope, s, "class init").execute(classScope)
         }
     }
     newClass.checkAbstractSatisfaction(spec.startPos)
     return newClass
+}
+
+private suspend fun requireBytecodeBody(
+    scope: Scope,
+    stmt: Statement,
+    label: String
+): net.sergeych.lyng.bytecode.BytecodeStatement {
+    val bytecode = when (stmt) {
+        is net.sergeych.lyng.bytecode.BytecodeStatement -> stmt
+        is BytecodeBodyProvider -> stmt.bytecodeBody()
+        else -> null
+    }
+    return bytecode ?: scope.raiseIllegalState("$label requires bytecode statement")
 }
 
 class ClassDeclStatement(
