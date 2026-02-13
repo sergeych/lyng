@@ -29,6 +29,6 @@ class DestructuringVarDeclStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(context: Scope): Obj {
-        return interpreterDisabled(context, "destructuring declaration")
+        return bytecodeOnly(context, "destructuring declaration")
     }
 }

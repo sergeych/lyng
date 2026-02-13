@@ -65,10 +65,10 @@ class ObjRangeIterator(
     companion object {
         val type = ObjClass("RangeIterator", ObjIterator).apply {
             addFn("hasNext") {
-                thisAs<ObjRangeIterator>().hasNext(this).toObj()
+                thisAs<ObjRangeIterator>().hasNext(requireScope()).toObj()
             }
             addFn("next") {
-                thisAs<ObjRangeIterator>().next(this)
+                thisAs<ObjRangeIterator>().next(requireScope())
             }
         }
     }
@@ -98,7 +98,7 @@ class ObjFastIntRangeIterator(private val start: Int, private val endExclusive: 
     companion object {
         val type = ObjClass("FastIntRangeIterator", ObjIterator).apply {
             addFn("hasNext") { thisAs<ObjFastIntRangeIterator>().hasNext().toObj() }
-            addFn("next") { thisAs<ObjFastIntRangeIterator>().next(this) }
+            addFn("next") { thisAs<ObjFastIntRangeIterator>().next(requireScope()) }
         }
     }
 }

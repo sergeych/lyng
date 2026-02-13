@@ -930,9 +930,9 @@ open class ObjClass(
         isOverride: Boolean = false,
         pos: Pos = Pos.builtIn,
         methodId: Int? = null,
-        code: (suspend Scope.() -> Obj)? = null
+        code: (suspend net.sergeych.lyng.ScopeFacade.() -> Obj)? = null
     ) {
-        val stmt = code?.let { ObjNativeCallable { it() } } ?: ObjNull
+        val stmt = code?.let { ObjExternCallable.fromBridge { it() } } ?: ObjNull
         createField(
             name, stmt, isMutable, visibility, writeVisibility, pos, declaringClass,
             isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride,
@@ -945,8 +945,8 @@ open class ObjClass(
 
     fun addProperty(
         name: String,
-        getter: (suspend Scope.() -> Obj)? = null,
-        setter: (suspend Scope.(Obj) -> Unit)? = null,
+        getter: (suspend net.sergeych.lyng.ScopeFacade.() -> Obj)? = null,
+        setter: (suspend net.sergeych.lyng.ScopeFacade.(Obj) -> Unit)? = null,
         visibility: Visibility = Visibility.Public,
         writeVisibility: Visibility? = null,
         declaringClass: ObjClass? = this,
@@ -957,8 +957,8 @@ open class ObjClass(
         prop: ObjProperty? = null,
         methodId: Int? = null
     ) {
-        val g = getter?.let { ObjNativeCallable { it() } }
-        val s = setter?.let { ObjNativeCallable { it(requiredArg(0)); ObjVoid } }
+        val g = getter?.let { ObjExternCallable.fromBridge { it() } }
+        val s = setter?.let { ObjExternCallable.fromBridge { it(requiredArg(0)); ObjVoid } }
         val finalProp = prop ?: if (isAbstract) ObjNull else ObjProperty(name, g, s)
         createField(
             name, finalProp, false, visibility, writeVisibility, pos, declaringClass,
@@ -969,8 +969,8 @@ open class ObjClass(
     }
 
     fun addClassConst(name: String, value: Obj) = createClassField(name, value)
-    fun addClassFn(name: String, isOpen: Boolean = false, code: suspend Scope.() -> Obj) {
-        createClassField(name, ObjNativeCallable { code() }, isOpen, type = ObjRecord.Type.Fun)
+    fun addClassFn(name: String, isOpen: Boolean = false, code: suspend net.sergeych.lyng.ScopeFacade.() -> Obj) {
+        createClassField(name, ObjExternCallable.fromBridge { code() }, isOpen, type = ObjRecord.Type.Fun)
     }
 
 

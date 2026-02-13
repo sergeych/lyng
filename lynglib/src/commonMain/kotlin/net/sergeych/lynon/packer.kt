@@ -18,6 +18,8 @@
 package net.sergeych.lynon
 
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.requireOnlyArg
+import net.sergeych.lyng.requireScope
 import net.sergeych.lyng.obj.*
 
 // Most often used types:
@@ -42,10 +44,10 @@ object ObjLynonClass : ObjClass("Lynon") {
     init {
         addClassConst("test", ObjString("test_const"))
         addClassFn("encode") {
-            encodeAny(this, requireOnlyArg<Obj>())
+            encodeAny(requireScope(), requireOnlyArg<Obj>())
         }
         addClassFn("decode") {
-            decodeAny(this, requireOnlyArg<Obj>())
+            decodeAny(requireScope(), requireOnlyArg<Obj>())
         }
     }
 }

@@ -725,7 +725,7 @@ open class Scope(
         return ns.objClass
     }
 
-    inline fun addVoidFn(vararg names: String, crossinline fn: suspend Scope.() -> Unit) {
+    inline fun addVoidFn(vararg names: String, crossinline fn: suspend ScopeFacade.() -> Unit) {
         addFn(*names) {
             fn(this)
             ObjVoid
@@ -741,8 +741,8 @@ open class Scope(
         return CmdDisassembler.disassemble(bytecode)
     }
 
-    fun addFn(vararg names: String, callSignature: CallSignature? = null, fn: suspend Scope.() -> Obj) {
-        val newFn = net.sergeych.lyng.obj.ObjNativeCallable { fn() }
+    fun addFn(vararg names: String, callSignature: CallSignature? = null, fn: suspend ScopeFacade.() -> Obj) {
+        val newFn = net.sergeych.lyng.obj.ObjExternCallable.fromBridge { fn() }
         for (name in names) {
             addItem(
                 name,

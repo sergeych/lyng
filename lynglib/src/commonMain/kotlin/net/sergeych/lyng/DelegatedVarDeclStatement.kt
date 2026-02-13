@@ -32,6 +32,6 @@ class DelegatedVarDeclStatement(
     override val pos: Pos = startPos
 
     override suspend fun execute(context: Scope): Obj {
-        return interpreterDisabled(context, "delegated var declaration")
+        return bytecodeOnly(context, "delegated var declaration")
     }
 }

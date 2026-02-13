@@ -139,7 +139,7 @@ open class ObjException(
         class ExceptionClass(val name: String, vararg parents: ObjClass) : ObjClass(name, *parents) {
             init {
                 constructorMeta = ArgsDeclaration(
-                    listOf(ArgsDeclaration.Item("message", defaultValue = ObjNativeCallable { ObjString(name) })),
+                    listOf(ArgsDeclaration.Item("message", defaultValue = ObjExternCallable.fromBridge { ObjString(name) })),
                     Token.Type.RPAREN
                 )
             }
@@ -177,17 +177,17 @@ open class ObjException(
         }
 
         val Root = ExceptionClass("Exception").apply {
-            instanceInitializers.add(ObjNativeCallable {
+            instanceInitializers.add(ObjExternCallable.fromBridge {
                 if (thisObj is ObjInstance) {
                     val msg = get("message")?.value ?: ObjString("Exception")
                     (thisObj as ObjInstance).instanceScope.addItem("Exception::message", false, msg)
 
-                    val stack = captureStackTrace(this)
+                    val stack = captureStackTrace(requireScope())
                     (thisObj as ObjInstance).instanceScope.addItem("Exception::stackTrace", false, stack)
                 }
                 ObjVoid
             })
-            instanceConstructor = ObjNativeCallable { ObjVoid }
+            instanceConstructor = ObjExternCallable.fromBridge { ObjVoid }
             addPropertyDoc(
                 name = "message",
                 doc = "Human‑readable error message.",
@@ -244,7 +244,7 @@ open class ObjException(
                     is ObjInstance -> t.instanceScope.get("Exception::stackTrace")?.value as? ObjList ?: ObjList()
                     else -> ObjList()
                 }
-                val at = stack.list.firstOrNull()?.toString(this) ?: ObjString("(unknown)")
+                val at = stack.list.firstOrNull()?.let { toStringOf(it) } ?: ObjString("(unknown)")
                 ObjString("${thisObj.objClass.className}: $msg at $at")
             }
         }

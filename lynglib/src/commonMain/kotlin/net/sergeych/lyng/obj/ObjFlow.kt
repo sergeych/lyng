@@ -106,8 +106,8 @@ class ObjFlow(val producer: Obj, val scope: Scope) : Obj() {
                 moduleName = "lyng.stdlib"
             ) {
                 val objFlow = thisAs<ObjFlow>()
-                ObjFlowIterator(ObjNativeCallable {
-                    objFlow.producer.callOn(this)
+                ObjFlowIterator(ObjExternCallable.fromBridge {
+                    call(objFlow.producer)
                 })
             }
         }
@@ -164,7 +164,7 @@ class ObjFlowIterator(val producer: Obj) : Obj() {
                 doc = "Whether another element is available from the flow.",
                 returns = type("lyng.Bool"),
                 moduleName = "lyng.stdlib"
-            ) { thisAs<ObjFlowIterator>().hasNext(this).toObj() }
+            ) { thisAs<ObjFlowIterator>().hasNext(requireScope()).toObj() }
             addFnDoc(
                 name = "next",
                 doc = "Receive the next element from the flow or throw if completed.",
@@ -172,7 +172,7 @@ class ObjFlowIterator(val producer: Obj) : Obj() {
                 moduleName = "lyng.stdlib"
             ) {
                 val x = thisAs<ObjFlowIterator>()
-                x.next(this)
+                x.next(requireScope())
             }
             addFnDoc(
                 name = "cancelIteration",

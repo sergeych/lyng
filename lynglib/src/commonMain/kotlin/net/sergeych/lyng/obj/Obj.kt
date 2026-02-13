@@ -562,10 +562,10 @@ open class Obj {
                 else -> del.objClass.getInstanceMemberOrNull("getValue")
             }
             if (getValueRec == null || getValueRec.declaringClass?.className == "Delegate") {
-                val wrapper = ObjNativeCallable {
+                val wrapper = ObjExternCallable.fromBridge {
                     val th2 = if (thisObj === ObjVoid) ObjNull else thisObj
                     val allArgs = (listOf(th2, ObjString(name)) + args.list).toTypedArray()
-                    del.invokeInstanceMethod(this, "invoke", Arguments(*allArgs))
+                    del.invokeInstanceMethod(requireScope(), "invoke", Arguments(*allArgs))
                 }
                 return obj.copy(
                     value = wrapper,
@@ -740,7 +740,7 @@ open class Obj {
                 returns = type("lyng.String"),
                 moduleName = "lyng.stdlib"
             ) {
-                thisObj.toString(this, true)
+                toStringOf(thisObj, true)
             }
             addFnDoc(
                 name = "inspect",
@@ -748,7 +748,7 @@ open class Obj {
                 returns = type("lyng.String"),
                 moduleName = "lyng.stdlib"
             ) {
-                thisObj.inspect(this).toObj()
+                inspect(thisObj).toObj()
             }
             addFnDoc(
                 name = "contains",
@@ -757,7 +757,7 @@ open class Obj {
                 returns = type("lyng.Bool"),
                 moduleName = "lyng.stdlib"
             ) {
-                ObjBool(thisObj.contains(this, args.firstAndOnly()))
+                ObjBool(thisObj.contains(requireScope(), args.firstAndOnly()))
             }
             // utilities
             addFnDoc(
@@ -766,7 +766,7 @@ open class Obj {
                 params = listOf(ParamDoc("block")),
                 moduleName = "lyng.stdlib"
             ) {
-                args.firstAndOnly().callOn(createChildScope(Arguments(thisObj)))
+                call(args.firstAndOnly(), Arguments(thisObj))
             }
             addFnDoc(
                 name = "apply",
@@ -775,11 +775,12 @@ open class Obj {
                 moduleName = "lyng.stdlib"
             ) {
                 val body = args.firstAndOnly()
+                val scope = requireScope()
                 (thisObj as? ObjInstance)?.let {
-                    body.callOn(ApplyScope(this, it.instanceScope))
+                    body.callOn(ApplyScope(scope, it.instanceScope))
                 } ?: run {
-                    val appliedScope = createChildScope(newThisObj = thisObj)
-                    body.callOn(ApplyScope(this, appliedScope))
+                    val appliedScope = scope.createChildScope(newThisObj = thisObj)
+                    body.callOn(ApplyScope(scope, appliedScope))
                 }
                 thisObj
             }
@@ -789,7 +790,7 @@ open class Obj {
                 params = listOf(ParamDoc("block")),
                 moduleName = "lyng.stdlib"
             ) {
-                args.firstAndOnly().callOn(createChildScope(Arguments(thisObj)))
+                call(args.firstAndOnly(), Arguments(thisObj))
                 thisObj
             }
             addFnDoc(
@@ -798,16 +799,16 @@ open class Obj {
                 params = listOf(ParamDoc("block")),
                 moduleName = "lyng.stdlib"
             ) {
-                args.firstAndOnly().callOn(this)
+                call(args.firstAndOnly())
             }
             addFn("getAt") {
                 requireExactCount(1)
-                thisObj.getAt(this, requiredArg<Obj>(0))
+                thisObj.getAt(requireScope(), requiredArg<Obj>(0))
             }
             addFn("putAt") {
                 requireExactCount(2)
                 val newValue = args[1]
-                thisObj.putAt(this, requiredArg<Obj>(0), newValue)
+                thisObj.putAt(requireScope(), requiredArg<Obj>(0), newValue)
                 newValue
             }
             addFnDoc(
@@ -816,7 +817,7 @@ open class Obj {
                 returns = type("lyng.String"),
                 moduleName = "lyng.stdlib"
             ) {
-                thisObj.toJson(this).toString().toObj()
+                thisObj.toJson(requireScope()).toString().toObj()
             }
             addFnDoc(
                 name = "toJsonString",
@@ -824,7 +825,7 @@ open class Obj {
                 returns = type("lyng.String"),
                 moduleName = "lyng.stdlib"
             ) {
-                thisObj.toJson(this).toString().toObj()
+                thisObj.toJson(requireScope()).toString().toObj()
             }
             addFnDoc(
                 name = "clamp",
@@ -836,12 +837,12 @@ open class Obj {
 
                 var result = thisObj
                 if (range.start != null && !range.start.isNull) {
-                    if (result.compareTo(this, range.start) < 0) {
+                    if (result.compareTo(requireScope(), range.start) < 0) {
                         result = range.start
                     }
                 }
                 if (range.end != null && !range.end.isNull) {
-                    val cmp = range.end.compareTo(this, result)
+                    val cmp = range.end.compareTo(requireScope(), result)
                     if (range.isEndInclusive) {
                         if (cmp < 0) result = range.end
                     } else {

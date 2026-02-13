@@ -270,7 +270,7 @@ class ObjRange(
                 moduleName = "lyng.stdlib"
             ) {
                 val self = thisAs<ObjRange>()
-                self.buildIterator(this)
+                self.buildIterator(requireScope())
             }
         }
     }

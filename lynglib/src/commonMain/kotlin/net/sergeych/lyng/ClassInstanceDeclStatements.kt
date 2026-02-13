@@ -24,7 +24,7 @@ class ClassInstanceInitDeclStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        return interpreterDisabled(scope, "class instance init declaration")
+        return bytecodeOnly(scope, "class instance init declaration")
     }
 }
 
@@ -42,7 +42,7 @@ class ClassInstanceFieldDeclStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        return interpreterDisabled(scope, "class instance field declaration")
+        return bytecodeOnly(scope, "class instance field declaration")
     }
 }
 
@@ -61,7 +61,7 @@ class ClassInstancePropertyDeclStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        return interpreterDisabled(scope, "class instance property declaration")
+        return bytecodeOnly(scope, "class instance property declaration")
     }
 }
 
@@ -79,6 +79,6 @@ class ClassInstanceDelegatedDeclStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        return interpreterDisabled(scope, "class instance delegated declaration")
+        return bytecodeOnly(scope, "class instance delegated declaration")
     }
 }

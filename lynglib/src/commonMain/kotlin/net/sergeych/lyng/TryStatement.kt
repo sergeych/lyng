@@ -36,7 +36,7 @@ class TryStatement(
     )
 
     override suspend fun execute(scope: Scope): Obj {
-        return interpreterDisabled(scope, "try statement")
+        return bytecodeOnly(scope, "try statement")
     }
 
     private fun resolveExceptionClass(scope: Scope, name: String): ObjClass {

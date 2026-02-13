@@ -1880,11 +1880,21 @@ private suspend fun assignDestructurePattern(frame: CmdFrame, pattern: ListLiter
 
 private suspend fun assignDestructureTarget(frame: CmdFrame, ref: ObjRef, value: Obj, pos: Pos) {
     when (ref) {
-        is ListLiteralRef -> assignDestructurePattern(frame, ref, value, pos)
+        is ListLiteralRef -> {
+            assignDestructurePattern(frame, ref, value, pos)
+            return
+        }
         is LocalSlotRef -> {
             val index = resolveLocalSlotIndex(frame.fn, ref.name, preferCapture = ref.captureOwnerScopeId != null)
             if (index != null) {
                 frame.frame.setObj(index, value)
+                return
+            }
+            val scopeSlot = frame.fn.scopeSlotNames.indexOfFirst { it == ref.name }
+            if (scopeSlot >= 0) {
+                val target = frame.scopeTarget(scopeSlot)
+                val slotIndex = frame.ensureScopeSlot(target, scopeSlot)
+                target.setSlotValue(slotIndex, value)
                 return
             }
         }
@@ -1894,11 +1904,25 @@ private suspend fun assignDestructureTarget(frame: CmdFrame, ref: ObjRef, value:
                 frame.frame.setObj(index, value)
                 return
             }
+            val scopeSlot = frame.fn.scopeSlotNames.indexOfFirst { it == ref.name }
+            if (scopeSlot >= 0) {
+                val target = frame.scopeTarget(scopeSlot)
+                val slotIndex = frame.ensureScopeSlot(target, scopeSlot)
+                target.setSlotValue(slotIndex, value)
+                return
+            }
         }
         is FastLocalVarRef -> {
             val index = resolveLocalSlotIndex(frame.fn, ref.name, preferCapture = false)
             if (index != null) {
                 frame.frame.setObj(index, value)
+                return
+            }
+            val scopeSlot = frame.fn.scopeSlotNames.indexOfFirst { it == ref.name }
+            if (scopeSlot >= 0) {
+                val target = frame.scopeTarget(scopeSlot)
+                val slotIndex = frame.ensureScopeSlot(target, scopeSlot)
+                target.setSlotValue(slotIndex, value)
                 return
             }
         }

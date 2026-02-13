@@ -28,7 +28,7 @@ class EnumDeclStatement(
     override val pos: Pos = startPos
 
     override suspend fun execute(scope: Scope): Obj {
-        return interpreterDisabled(scope, "enum declaration")
+        return bytecodeOnly(scope, "enum declaration")
     }
 
     override suspend fun callOn(scope: Scope): Obj {

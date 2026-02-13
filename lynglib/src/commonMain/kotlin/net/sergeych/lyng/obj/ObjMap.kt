@@ -261,7 +261,7 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
                 val key = requiredArg<Obj>(0)
                 thisAs<ObjMap>().map.getOrPut(key) {
                     val lambda = requiredArg<Obj>(1)
-                    lambda.callOn(this)
+                    call(lambda)
                 }
             }
             addPropertyDoc(

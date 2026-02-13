@@ -28,7 +28,7 @@ class BlockStatement(
     override val pos: Pos = startPos
 
     override suspend fun execute(scope: Scope): Obj {
-        return interpreterDisabled(scope, "block statement")
+        return bytecodeOnly(scope, "block statement")
     }
 
     fun statements(): List<Statement> = block.debugStatements()

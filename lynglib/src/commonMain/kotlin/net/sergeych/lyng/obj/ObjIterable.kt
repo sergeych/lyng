@@ -41,10 +41,11 @@ val ObjIterable by lazy {
             returns = type("lyng.List"),
             moduleName = "lyng.stdlib"
         ) {
+            val scope = requireScope()
             val result = mutableListOf<Obj>()
-            val it = thisObj.invokeInstanceMethod(this, "iterator")
-            while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
-                result.add(it.invokeInstanceMethod(this, "next"))
+            val it = thisObj.invokeInstanceMethod(scope, "iterator")
+            while (it.invokeInstanceMethod(scope, "hasNext").toBool()) {
+                result.add(it.invokeInstanceMethod(scope, "next"))
             }
             ObjList(result)
         }
@@ -58,10 +59,11 @@ val ObjIterable by lazy {
             isOpen = true,
             moduleName = "lyng.stdlib"
         ) {
+            val scope = requireScope()
             val obj = args.firstAndOnly()
-            val it = thisObj.invokeInstanceMethod(this, "iterator")
-            while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
-                if (obj.equals(this, it.invokeInstanceMethod(this, "next")))
+            val it = thisObj.invokeInstanceMethod(scope, "iterator")
+            while (it.invokeInstanceMethod(scope, "hasNext").toBool()) {
+                if (obj.equals(scope, it.invokeInstanceMethod(scope, "next")))
                     return@addFnDoc ObjTrue
             }
             ObjFalse
@@ -75,11 +77,12 @@ val ObjIterable by lazy {
             isOpen = true,
             moduleName = "lyng.stdlib"
         ) {
+            val scope = requireScope()
             val obj = args.firstAndOnly()
             var index = 0
-            val it = thisObj.invokeInstanceMethod(this, "iterator")
-            while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
-                if (obj.equals(this, it.invokeInstanceMethod(this, "next")))
+            val it = thisObj.invokeInstanceMethod(scope, "iterator")
+            while (it.invokeInstanceMethod(scope, "hasNext").toBool()) {
+                if (obj.equals(scope, it.invokeInstanceMethod(scope, "next")))
                     return@addFnDoc ObjInt(index.toLong())
                 index++
             }
@@ -96,9 +99,10 @@ val ObjIterable by lazy {
                     this.thisObj
                 else {
                     val result = mutableSetOf<Obj>()
-                    val it = this.thisObj.invokeInstanceMethod(this, "iterator")
-                    while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
-                        result.add(it.invokeInstanceMethod(this, "next"))
+                    val scope = requireScope()
+                    val it = this.thisObj.invokeInstanceMethod(scope, "iterator")
+                    while (it.invokeInstanceMethod(scope, "hasNext").toBool()) {
+                        result.add(it.invokeInstanceMethod(scope, "next"))
                     }
                     ObjSet(result)
                 }
@@ -112,10 +116,11 @@ val ObjIterable by lazy {
             moduleName = "lyng.stdlib",
             getter = {
                 val result = mutableMapOf<Obj, Obj>()
-                this.thisObj.enumerate(this) { pair ->
+                val scope = requireScope()
+                this.thisObj.enumerate(scope) { pair ->
                     when (pair) {
                         is ObjMapEntry -> result[pair.key] = pair.value
-                        else -> result[pair.getAt(this, 0)] = pair.getAt(this, 1)
+                        else -> result[pair.getAt(scope, 0)] = pair.getAt(scope, 1)
                     }
                     true
                 }
@@ -132,9 +137,8 @@ val ObjIterable by lazy {
         ) {
             val association = requireOnlyArg<Obj>()
             val result = ObjMap()
-            thisObj.toFlow(this).collect {
-                val callScope = createChildScope(args = Arguments(it))
-                result.map[association.callOn(callScope)] = it
+            thisObj.toFlow(requireScope()).collect {
+                result.map[call(association, Arguments(it))] = it
             }
             result
         }
@@ -146,11 +150,12 @@ val ObjIterable by lazy {
             isOpen = true,
             moduleName = "lyng.stdlib"
         ) {
-            val it = thisObj.invokeInstanceMethod(this, "iterator")
+            val scope = requireScope()
+            val it = thisObj.invokeInstanceMethod(scope, "iterator")
             val fn = requiredArg<Obj>(0)
-            while (it.invokeInstanceMethod(this, "hasNext").toBool()) {
-                val x = it.invokeInstanceMethod(this, "next")
-                fn.callOn(this.createChildScope(Arguments(listOf(x))))
+            while (it.invokeInstanceMethod(scope, "hasNext").toBool()) {
+                val x = it.invokeInstanceMethod(scope, "next")
+                call(fn, Arguments(listOf(x)))
             }
             ObjVoid
         }
@@ -165,9 +170,8 @@ val ObjIterable by lazy {
         ) {
             val fn = requiredArg<Obj>(0)
             val result = mutableListOf<Obj>()
-            thisObj.toFlow(this).collect {
-                val callScope = createChildScope(args = Arguments(it))
-                result.add(fn.callOn(callScope))
+            thisObj.toFlow(requireScope()).collect {
+                result.add(call(fn, Arguments(it)))
             }
             ObjList(result)
         }
@@ -182,9 +186,8 @@ val ObjIterable by lazy {
         ) {
             val fn = requiredArg<Obj>(0)
             val result = mutableListOf<Obj>()
-            thisObj.toFlow(this).collect {
-                val callScope = createChildScope(args = Arguments(it))
-                val transformed = fn.callOn(callScope)
+            thisObj.toFlow(requireScope()).collect {
+                val transformed = call(fn, Arguments(it))
                 if( transformed != ObjNull) result.add(transformed)
             }
             ObjList(result)
@@ -200,7 +203,7 @@ val ObjIterable by lazy {
             var n = requireOnlyArg<ObjInt>().value.toInt()
             val result = mutableListOf<Obj>()
             if (n > 0) {
-                thisObj.enumerate(this) {
+                thisObj.enumerate(requireScope()) {
                     result.add(it)
                     --n > 0
                 }
@@ -215,8 +218,8 @@ val ObjIterable by lazy {
             moduleName = "lyng.stdlib",
             getter = {
                 ObjBool(
-                    this.thisObj.invokeInstanceMethod(this, "iterator")
-                        .invokeInstanceMethod(this, "hasNext").toBool()
+                    this.thisObj.invokeInstanceMethod(requireScope(), "iterator")
+                        .invokeInstanceMethod(requireScope(), "hasNext").toBool()
                         .not()
                 )
             }
@@ -229,11 +232,10 @@ val ObjIterable by lazy {
             returns = type("lyng.List"),
             moduleName = "lyng.stdlib"
         ) {
-            val list = thisObj.callMethod<ObjList>(this, "toList")
+            val list = thisObj.callMethod<ObjList>(requireScope(), "toList")
             val comparator = requireOnlyArg<Obj>()
             list.quicksort { a, b ->
-                val callScope = createChildScope(args = Arguments(a, b))
-                comparator.callOn(callScope).toInt()
+                call(comparator, Arguments(a, b)).toInt()
             }
             list
         }
@@ -244,7 +246,7 @@ val ObjIterable by lazy {
             returns = type("lyng.List"),
             moduleName = "lyng.stdlib"
         ) {
-            val list = thisObj.callMethod<ObjList>(this, "toList")
+            val list = thisObj.callMethod<ObjList>(requireScope(), "toList")
             list.list.reverse()
             list
         }

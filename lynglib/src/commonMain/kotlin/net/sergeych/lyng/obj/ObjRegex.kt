@@ -21,6 +21,7 @@ import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.RegexCache
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.requireScope
 import net.sergeych.lyng.miniast.*
 
 class ObjRegex(val regex: Regex) : Obj() {
@@ -75,9 +76,10 @@ class ObjRegex(val regex: Regex) : Obj() {
                 }
                 createField(
                     name = "operatorMatch",
-                    initialValue = ObjNativeCallable {
+                    initialValue = ObjExternCallable.fromBridge {
                         val other = args.firstAndOnly(Pos.builtIn)
-                        val targetScope = parent ?: this
+                        val scope = requireScope()
+                        val targetScope = scope.parent ?: scope
                         (thisObj as ObjRegex).operatorMatch(targetScope, other)
                     },
                     type = ObjRecord.Type.Fun

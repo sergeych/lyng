@@ -19,6 +19,7 @@ package net.sergeych.lyng.miniast
 
 import net.sergeych.lyng.ModuleScope
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeFacade
 import net.sergeych.lyng.Visibility
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjClass
@@ -40,7 +41,7 @@ inline fun <reified T : Obj> Scope.addFnDoc(
     tags: Map<String, List<String>> = emptyMap(),
     moduleName: String? = null,
     callSignature: net.sergeych.lyng.CallSignature? = null,
-    crossinline fn: suspend Scope.() -> T
+    crossinline fn: suspend ScopeFacade.() -> T
 ) {
     // Register runtime function(s)
     addFn(*names, callSignature = callSignature) { fn() }
@@ -57,7 +58,7 @@ inline fun Scope.addVoidFnDoc(
     doc: String,
     tags: Map<String, List<String>> = emptyMap(),
     moduleName: String? = null,
-    crossinline fn: suspend Scope.() -> Unit
+    crossinline fn: suspend ScopeFacade.() -> Unit
 ) {
     addFnDoc<ObjVoid>(
         *names,
@@ -98,7 +99,7 @@ fun ObjClass.addFnDoc(
     visibility: Visibility = Visibility.Public,
     tags: Map<String, List<String>> = emptyMap(),
     moduleName: String? = null,
-    code: suspend Scope.() -> Obj
+    code: suspend ScopeFacade.() -> Obj
 ) {
     // Register runtime method
     addFn(name, isOpen, visibility, code = code)
@@ -136,7 +137,7 @@ fun ObjClass.addClassFnDoc(
     isOpen: Boolean = false,
     tags: Map<String, List<String>> = emptyMap(),
     moduleName: String? = null,
-    code: suspend Scope.() -> Obj
+    code: suspend ScopeFacade.() -> Obj
 ) {
     addClassFn(name, isOpen, code)
     BuiltinDocRegistry.module(moduleName ?: ownerModuleNameFromClassOrUnknown()) {
@@ -152,8 +153,8 @@ fun ObjClass.addPropertyDoc(
     type: TypeDoc? = null,
     visibility: Visibility = Visibility.Public,
     moduleName: String? = null,
-    getter: (suspend Scope.() -> Obj)? = null,
-    setter: (suspend Scope.(Obj) -> Unit)? = null
+    getter: (suspend ScopeFacade.() -> Obj)? = null,
+    setter: (suspend ScopeFacade.(Obj) -> Unit)? = null
 ) {
     addProperty(name, getter, setter, visibility)
     BuiltinDocRegistry.module(moduleName ?: ownerModuleNameFromClassOrUnknown()) {

@@ -177,10 +177,10 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 else -> del.objClass.getInstanceMemberOrNull("getValue")
             }
             if (getValueRec == null || getValueRec.declaringClass?.className == "Delegate") {
-                val wrapper = ObjNativeCallable {
+                val wrapper = ObjExternCallable.fromBridge {
                     val th2 = if (thisObj === ObjVoid) ObjNull else thisObj
                     val allArgs = (listOf(th2, ObjString(name)) + args.list).toTypedArray()
-                    del.invokeInstanceMethod(this, "invoke", Arguments(*allArgs))
+                    del.invokeInstanceMethod(requireScope(), "invoke", Arguments(*allArgs))
                 }
                 return obj.copy(value = wrapper, type = ObjRecord.Type.Other)
             }

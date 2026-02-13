@@ -373,8 +373,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
             ) {
                 val comparator = requireOnlyArg<Obj>()
                 thisAs<ObjList>().quicksort { a, b ->
-                    val callScope = createChildScope(args = Arguments(a, b))
-                    comparator.callOn(callScope).toInt()
+                    call(comparator, Arguments(a, b)).toInt()
                 }
                 ObjVoid
             }
@@ -394,6 +393,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 val self = thisAs<ObjList>()
                 val l = self.list
                 if (l.isEmpty()) return@addFnDoc ObjNull
+                val scope = requireScope()
                 if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
                     // Fast path: all ints → accumulate as long
                     var i = 0
@@ -407,7 +407,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                             // Fallback to generic dynamic '+' accumulation starting from current acc
                             var res: Obj = ObjInt(acc)
                             while (i < l.size) {
-                                res = res.plus(this, l[i])
+                                res = res.plus(scope, l[i])
                                 i++
                             }
                             return@addFnDoc res
@@ -419,7 +419,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 var res: Obj = l[0]
                 var k = 1
                 while (k < l.size) {
-                    res = res.plus(this, l[k])
+                    res = res.plus(scope, l[k])
                     k++
                 }
                 res
@@ -431,6 +431,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
             ) {
                 val l = thisAs<ObjList>().list
                 if (l.isEmpty()) return@addFnDoc ObjNull
+                val scope = requireScope()
                 if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
                     var i = 0
                     var hasOnlyInts = true
@@ -451,7 +452,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 var i = 1
                 while (i < l.size) {
                     val v = l[i]
-                    if (v.compareTo(this, res) < 0) res = v
+                    if (v.compareTo(scope, res) < 0) res = v
                     i++
                 }
                 res
@@ -463,6 +464,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
             ) {
                 val l = thisAs<ObjList>().list
                 if (l.isEmpty()) return@addFnDoc ObjNull
+                val scope = requireScope()
                 if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
                     var i = 0
                     var hasOnlyInts = true
@@ -483,7 +485,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 var i = 1
                 while (i < l.size) {
                     val v = l[i]
-                    if (v.compareTo(this, res) > 0) res = v
+                    if (v.compareTo(scope, res) > 0) res = v
                     i++
                 }
                 res
@@ -497,6 +499,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
             ) {
                 val l = thisAs<ObjList>().list
                 val needle = args.firstAndOnly()
+                val scope = requireScope()
                 if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS && needle is ObjInt) {
                     var i = 0
                     while (i < l.size) {
@@ -508,7 +511,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 }
                 var i = 0
                 while (i < l.size) {
-                    if (l[i].compareTo(this, needle) == 0) return@addFnDoc ObjInt(i.toLong())
+                    if (l[i].compareTo(scope, needle) == 0) return@addFnDoc ObjInt(i.toLong())
                     i++
                 }
                 ObjInt((-1).toLong())

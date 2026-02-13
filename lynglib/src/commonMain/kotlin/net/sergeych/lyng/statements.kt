@@ -60,8 +60,8 @@ abstract class Statement(
 
     suspend fun call(scope: Scope, vararg args: Obj) = execute(scope.createChildScope(args =  Arguments(*args)))
 
-    protected fun interpreterDisabled(scope: Scope, label: String): Nothing {
-        return scope.raiseIllegalState("interpreter execution is not supported; $label requires bytecode")
+    protected fun bytecodeOnly(scope: Scope, label: String): Nothing {
+        return scope.raiseIllegalState("bytecode-only execution is required; $label needs compiled bytecode")
     }
 
 }
@@ -73,7 +73,7 @@ class IfStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        return interpreterDisabled(scope, "if statement")
+        return bytecodeOnly(scope, "if statement")
     }
 }
 
@@ -92,7 +92,7 @@ class ForInStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        return interpreterDisabled(scope, "for-in statement")
+        return bytecodeOnly(scope, "for-in statement")
     }
 }
 
@@ -106,7 +106,7 @@ class WhileStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        return interpreterDisabled(scope, "while statement")
+        return bytecodeOnly(scope, "while statement")
     }
 }
 
@@ -119,7 +119,7 @@ class DoWhileStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        return interpreterDisabled(scope, "do-while statement")
+        return bytecodeOnly(scope, "do-while statement")
     }
 }
 
@@ -129,7 +129,7 @@ class BreakStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        return interpreterDisabled(scope, "break statement")
+        return bytecodeOnly(scope, "break statement")
     }
 }
 
@@ -138,7 +138,7 @@ class ContinueStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        return interpreterDisabled(scope, "continue statement")
+        return bytecodeOnly(scope, "continue statement")
     }
 }
 
@@ -148,7 +148,7 @@ class ReturnStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        return interpreterDisabled(scope, "return statement")
+        return bytecodeOnly(scope, "return statement")
     }
 }
 
@@ -157,7 +157,7 @@ class ThrowStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        return interpreterDisabled(scope, "throw statement")
+        return bytecodeOnly(scope, "throw statement")
     }
 }
 
@@ -165,7 +165,7 @@ class ExpressionStatement(
     val ref: net.sergeych.lyng.obj.ObjRef,
     override val pos: Pos
 ) : Statement() {
-    override suspend fun execute(scope: Scope): Obj = interpreterDisabled(scope, "expression statement")
+    override suspend fun execute(scope: Scope): Obj = bytecodeOnly(scope, "expression statement")
 }
 
 fun Statement.raise(text: String): Nothing {
@@ -180,5 +180,5 @@ fun Statement.require(cond: Boolean, message: () -> String) {
 object NopStatement: Statement(true, true, ObjType.Void) {
     override val pos: Pos = Pos.builtIn
 
-    override suspend fun execute(scope: Scope): Obj = interpreterDisabled(scope, "nop statement")
+    override suspend fun execute(scope: Scope): Obj = bytecodeOnly(scope, "nop statement")
 }

@@ -178,11 +178,11 @@ suspend fun DocTest.test(_scope: Scope? = null) {
     scope.apply {
         addFn("println") {
             if( bookMode ) {
-                println("${currentTest.fileNamePart}:${currentTest.line}> ${args.map{it.toString(this).value}.joinToString(" ")}")
+                println("${currentTest.fileNamePart}:${currentTest.line}> ${args.map{toStringOf(it).value}.joinToString(" ")}")
             }
             else {
                 for ((i, a) in args.withIndex()) {
-                    if (i > 0) collectedOutput.append(' '); collectedOutput.append(a.toString(this).value)
+                    if (i > 0) collectedOutput.append(' '); collectedOutput.append(toStringOf(a).value)
                     collectedOutput.append('\n')
                 }
             }

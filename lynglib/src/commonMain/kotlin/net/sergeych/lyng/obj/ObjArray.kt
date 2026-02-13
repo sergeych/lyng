@@ -32,7 +32,7 @@ val ObjArray by lazy {
             doc = "Iterator over elements of this array using its indexer.",
             returns = TypeGenericDoc(type("lyng.Iterator"), listOf(type("lyng.Any"))),
             moduleName = "lyng.stdlib"
-        ) { ObjArrayIterator(thisObj).also { it.init(this) } }
+        ) { ObjArrayIterator(thisObj).also { it.init(requireScope()) } }
 
         addFnDoc(
             name = "contains",
@@ -42,9 +42,10 @@ val ObjArray by lazy {
             isOpen = true,
             moduleName = "lyng.stdlib"
         ) {
+            val scope = requireScope()
             val obj = args.firstAndOnly()
-            for (i in 0..<thisObj.invokeInstanceMethod(this, "size").toInt()) {
-                if (thisObj.getAt(this, ObjInt(i.toLong())).compareTo(this, obj) == 0) return@addFnDoc ObjTrue
+            for (i in 0..<thisObj.invokeInstanceMethod(scope, "size").toInt()) {
+                if (thisObj.getAt(scope, ObjInt(i.toLong())).compareTo(scope, obj) == 0) return@addFnDoc ObjTrue
             }
             ObjFalse
         }
@@ -55,10 +56,11 @@ val ObjArray by lazy {
             type = type("lyng.Any"),
             moduleName = "lyng.stdlib",
             getter = {
+                val scope = requireScope()
                 this.thisObj.invokeInstanceMethod(
-                    this,
+                    scope,
                     "getAt",
-                    (this.thisObj.invokeInstanceMethod(this, "size").toInt() - 1).toObj()
+                    (this.thisObj.invokeInstanceMethod(scope, "size").toInt() - 1).toObj()
                 )
             }
         )
@@ -68,7 +70,10 @@ val ObjArray by lazy {
             doc = "Index of the last element (size - 1).",
             type = type("lyng.Int"),
             moduleName = "lyng.stdlib",
-            getter = { (this.thisObj.invokeInstanceMethod(this, "size").toInt() - 1).toObj() }
+            getter = {
+                val scope = requireScope()
+                (this.thisObj.invokeInstanceMethod(scope, "size").toInt() - 1).toObj()
+            }
         )
 
         addPropertyDoc(
@@ -76,7 +81,10 @@ val ObjArray by lazy {
             doc = "Range of valid indices for this array.",
             type = type("lyng.Range"),
             moduleName = "lyng.stdlib",
-            getter = { ObjRange(0.toObj(), this.thisObj.invokeInstanceMethod(this, "size"), false) }
+            getter = {
+                val scope = requireScope()
+                ObjRange(0.toObj(), this.thisObj.invokeInstanceMethod(scope, "size"), false)
+            }
         )
 
         addFnDoc(
@@ -86,15 +94,16 @@ val ObjArray by lazy {
             returns = type("lyng.Int"),
             moduleName = "lyng.stdlib"
         ) {
+            val scope = requireScope()
             val target = args.firstAndOnly()
             var low = 0
-            var high = thisObj.invokeInstanceMethod(this, "size").toInt() - 1
+            var high = thisObj.invokeInstanceMethod(scope, "size").toInt() - 1
 
             while (low <= high) {
                 val mid = (low + high) / 2
-                val midVal = thisObj.getAt(this, ObjInt(mid.toLong()))
+                val midVal = thisObj.getAt(scope, ObjInt(mid.toLong()))
 
-                val cmp = midVal.compareTo(this, target)
+                val cmp = midVal.compareTo(scope, target)
                 when {
                     cmp == 0 -> return@addFnDoc (mid).toObj()
                     cmp > 0 -> high = mid - 1

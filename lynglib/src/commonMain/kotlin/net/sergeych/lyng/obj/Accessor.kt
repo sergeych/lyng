@@ -20,7 +20,6 @@ package net.sergeych.lyng.obj
 import net.sergeych.lyng.Compiler
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Scope
-import net.sergeych.lyng.ScriptError
 
 // avoid KDOC bug: keep it
 @Suppress("unused")
@@ -37,10 +36,11 @@ private class LambdaRef(
     private val getterFn: suspend (Scope) -> ObjRecord,
     private val setterFn: (suspend (Pos, Scope, Obj) -> Unit)? = null
 ) : ObjRef {
-    override suspend fun get(scope: Scope): ObjRecord = getterFn(scope)
+    override suspend fun get(scope: Scope): ObjRecord {
+        return scope.raiseIllegalState("bytecode-only execution is required; Accessor evaluation is disabled")
+    }
     override suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
-        val s = setterFn ?: throw ScriptError(pos, "can't assign value")
-        s(pos, scope, newValue)
+        scope.raiseIllegalState("bytecode-only execution is required; Accessor assignment is disabled")
     }
 }
 

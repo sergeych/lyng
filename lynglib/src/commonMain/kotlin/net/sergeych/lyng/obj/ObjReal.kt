@@ -125,7 +125,7 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
             // roundToInt: number rounded to the nearest integer
             addConstDoc(
                 name = "roundToInt",
-                value = ObjNativeCallable {
+                value = ObjExternCallable.fromBridge {
                     (thisObj as ObjReal).value.roundToLong().toObj()
                 },
                 doc = "This real number rounded to the nearest integer.",

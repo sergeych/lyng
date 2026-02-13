@@ -53,9 +53,8 @@ class ObjDateTime(val instant: Instant, val timeZone: TimeZone) : Obj() {
                 if (rec.type == ObjRecord.Type.Fun) {
                     val target = rec.value
                     return ObjRecord(
-                        ObjNativeCallable {
-                            val callScope = createChildScope(args = args, newThisObj = this@ObjDateTime)
-                            target.callOn(callScope)
+                        ObjExternCallable.fromBridge {
+                            call(target, args, newThisObj = this@ObjDateTime)
                         },
                         rec.isMutable
                     )

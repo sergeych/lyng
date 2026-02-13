@@ -23,6 +23,8 @@ package net.sergeych.lyng.io.fs
 
 import net.sergeych.lyng.ModuleScope
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeFacade
+import net.sergeych.lyng.requireScope
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
@@ -437,7 +439,7 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
             moduleName = module.packageName
         ) {
             fsGuard {
-                val chunkIt = thisObj.invokeInstanceMethod(this, "readUtf8Chunks")
+                val chunkIt = thisObj.invokeInstanceMethod(requireScope(), "readUtf8Chunks")
                 ObjFsLinesIterator(chunkIt)
             }
         }
@@ -463,7 +465,7 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
 
 // --- Helper classes and utilities ---
 
-private fun parsePathArg(scope: Scope, self: ObjPath, arg: Obj): LyngPath {
+private fun parsePathArg(scope: ScopeFacade, self: ObjPath, arg: Obj): LyngPath {
     return when (arg) {
         is ObjString -> arg.value.toPath()
         is ObjPath -> arg.path
@@ -472,11 +474,11 @@ private fun parsePathArg(scope: Scope, self: ObjPath, arg: Obj): LyngPath {
 }
 
 // Map Fs access denials to Lyng runtime exceptions for script-friendly errors
-private suspend inline fun Scope.fsGuard(crossinline block: suspend () -> Obj): Obj {
+private suspend inline fun ScopeFacade.fsGuard(crossinline block: suspend () -> Obj): Obj {
     return try {
         block()
     } catch (e: AccessDeniedException) {
-        raiseError(ObjIllegalOperationException(this, e.reasonDetail ?: "access denied"))
+        raiseError(ObjIllegalOperationException(requireScope(), e.reasonDetail ?: "access denied"))
     }
 }
 
@@ -668,16 +670,17 @@ class ObjFsLinesIterator(
         }
     }
 
-    private suspend fun ensureBufferFilled(scope: Scope) {
+    private suspend fun ensureBufferFilled(scope: ScopeFacade) {
         if (buffer.contains('\n') || exhausted) return
+        val actualScope = scope.requireScope()
         // Pull next chunk from the underlying iterator
-        val it = chunksIterator.invokeInstanceMethod(scope, "iterator")
-        val hasNext = it.invokeInstanceMethod(scope, "hasNext").toBool()
+        val it = chunksIterator.invokeInstanceMethod(actualScope, "iterator")
+        val hasNext = it.invokeInstanceMethod(actualScope, "hasNext").toBool()
         if (!hasNext) {
             exhausted = true
             return
         }
-        val next = it.invokeInstanceMethod(scope, "next")
+        val next = it.invokeInstanceMethod(actualScope, "next")
         buffer += next.toString()
     }
 }

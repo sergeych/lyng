@@ -90,7 +90,7 @@ class Script(
             }
         }
         if (statements.isNotEmpty()) {
-            scope.raiseIllegalState("interpreter execution is not supported; missing module bytecode")
+            scope.raiseIllegalState("bytecode-only execution is required; missing module bytecode")
         }
         return ObjVoid
     }
@@ -212,15 +212,15 @@ class Script(
             addConst("Unset", ObjUnset)
             addFn("print") {
                 for ((i, a) in args.withIndex()) {
-                    if (i > 0) print(' ' + a.toString(this).value)
-                    else print(a.toString(this).value)
+                    if (i > 0) print(' ' + toStringOf(a).value)
+                    else print(toStringOf(a).value)
                 }
                 ObjVoid
             }
             addFn("println") {
                 for ((i, a) in args.withIndex()) {
-                    if (i > 0) print(' ' + a.toString(this).value)
-                    else print(a.toString(this).value)
+                    if (i > 0) print(' ' + toStringOf(a).value)
+                    else print(toStringOf(a).value)
                 }
                 println()
                 ObjVoid
@@ -233,7 +233,7 @@ class Script(
                 } else {
                     Arguments.EMPTY
                 }
-                callee.callOn(createChildScope(pos, args = rest))
+                call(callee, rest)
             }
             addFn("floor") {
                 val x = args.firstAndOnly()
@@ -331,12 +331,12 @@ class Script(
                 
                 var result = value
                 if (range.start != null && !range.start.isNull) {
-                    if (result.compareTo(this, range.start) < 0) {
+                    if (result.compareTo(requireScope(), range.start) < 0) {
                         result = range.start
                     }
                 }
                 if (range.end != null && !range.end.isNull) {
-                    val cmp = range.end.compareTo(this, result)
+                    val cmp = range.end.compareTo(requireScope(), result)
                     if (range.isEndInclusive) {
                         if (cmp < 0) result = range.end
                     } else {
@@ -359,20 +359,20 @@ class Script(
             addVoidFn("assert") {
                 val cond = requiredArg<ObjBool>(0)
                 val message = if (args.size > 1)
-                    ": " + (args[1] as Obj).callOn(this).toString(this).value
+                    ": " + toStringOf(call(args[1] as Obj)).value
                 else ""
                 if (!cond.value == true)
-                    raiseError(ObjAssertionFailedException(this, "Assertion failed$message"))
+                    raiseError(ObjAssertionFailedException(requireScope(), "Assertion failed$message"))
             }
 
             addVoidFn("assertEquals") {
                 val a = requiredArg<Obj>(0)
                 val b = requiredArg<Obj>(1)
-                if (a.compareTo(this, b) != 0)
+                if (a.compareTo(requireScope(), b) != 0)
                     raiseError(
                         ObjAssertionFailedException(
-                            this,
-                            "Assertion failed: ${a.inspect(this)} == ${b.inspect(this)}"
+                            requireScope(),
+                            "Assertion failed: ${inspect(a)} == ${inspect(b)}"
                         )
                     )
             }
@@ -380,22 +380,22 @@ class Script(
             addVoidFn("assertEqual") {
                 val a = requiredArg<Obj>(0)
                 val b = requiredArg<Obj>(1)
-                if (a.compareTo(this, b) != 0)
+                if (a.compareTo(requireScope(), b) != 0)
                     raiseError(
                         ObjAssertionFailedException(
-                            this,
-                            "Assertion failed: ${a.inspect(this)} == ${b.inspect(this)}"
+                            requireScope(),
+                            "Assertion failed: ${inspect(a)} == ${inspect(b)}"
                         )
                     )
             }
             addVoidFn("assertNotEquals") {
                 val a = requiredArg<Obj>(0)
                 val b = requiredArg<Obj>(1)
-                if (a.compareTo(this, b) == 0)
+                if (a.compareTo(requireScope(), b) == 0)
                     raiseError(
                         ObjAssertionFailedException(
-                            this,
-                            "Assertion failed: ${a.inspect(this)} != ${b.inspect(this)}"
+                            requireScope(),
+                            "Assertion failed: ${inspect(a)} != ${inspect(b)}"
                         )
                     )
             }
@@ -428,7 +428,7 @@ class Script(
                     else -> raiseIllegalArgument("Expected 1 or 2 arguments, got ${args.size}")
                 }
                 val result = try {
-                    code.callOn(this)
+                    call(code)
                     null
                 } catch (e: ExecutionError) {
                     e.errorObject
@@ -437,7 +437,7 @@ class Script(
                 }
                 if (result == null) raiseError(
                     ObjAssertionFailedException(
-                        this,
+                        requireScope(),
                         "Expected exception but nothing was thrown"
                     )
                 )
@@ -451,7 +451,7 @@ class Script(
             }
 
             addFn("dynamic", callSignature = CallSignature(tailBlockReceiverType = "DelegateContext")) {
-                ObjDynamic.create(this, requireOnlyArg())
+                ObjDynamic.create(requireScope(), requireOnlyArg())
             }
 
             val root = this
@@ -468,7 +468,7 @@ class Script(
                 val condition = requiredArg<ObjBool>(0)
                 if (!condition.value) {
                     var message = args.list.getOrNull(1)
-                    if (message is Obj && message.objClass == Statement.type) message = message.callOn(this)
+                    if (message is Obj && message.objClass == Statement.type) message = call(message)
                     raiseIllegalArgument(message?.toString() ?: "requirement not met")
                 }
                 ObjVoid
@@ -477,26 +477,26 @@ class Script(
                 val condition = requiredArg<ObjBool>(0)
                 if (!condition.value) {
                     var message = args.list.getOrNull(1)
-                    if (message is Obj && message.objClass == Statement.type) message = message.callOn(this)
+                    if (message is Obj && message.objClass == Statement.type) message = call(message)
                     raiseIllegalState(message?.toString() ?: "check failed")
                 }
                 ObjVoid
             }
             addFn("traceScope") {
-                this.trace(args.getOrNull(0)?.toString() ?: "")
+                trace(args.getOrNull(0)?.toString() ?: "")
                 ObjVoid
             }
             addFn("run") {
-                requireOnlyArg<Obj>().callOn(this)
+                call(requireOnlyArg())
             }
             addFn("cached") {
                 val builder = requireOnlyArg<Obj>()
                 val capturedScope = this
                 var calculated = false
                 var cachedValue: Obj = ObjVoid
-                ObjNativeCallable {
+                net.sergeych.lyng.obj.ObjExternCallable.fromBridge {
                     if (!calculated) {
-                        cachedValue = builder.callOn(capturedScope)
+                        cachedValue = capturedScope.call(builder)
                         calculated = true
                     }
                     cachedValue
@@ -504,7 +504,7 @@ class Script(
             }
             addFn("lazy") {
                 val builder = requireOnlyArg<Obj>()
-                ObjLazyDelegate(builder, this)
+                ObjLazyDelegate(builder, requireScope())
             }
             addVoidFn("delay") {
                 val a = args.firstAndOnly()
@@ -512,7 +512,7 @@ class Script(
                     is ObjInt -> delay(a.value)
                     is ObjReal -> delay((a.value * 1000).roundToLong())
                     is ObjDuration -> delay(a.duration)
-                    else -> raiseIllegalArgument("Expected Int, Real or Duration, got ${a.inspect(this)}")
+                    else -> raiseIllegalArgument("Expected Int, Real or Duration, got ${inspect(a)}")
                 }
             }
 
@@ -551,8 +551,9 @@ class Script(
 
             addFn("launch") {
                 val callable = requireOnlyArg<Obj>()
+                val captured = this
                 ObjDeferred(globalDefer {
-                    callable.callOn(this@addFn)
+                    captured.call(callable)
                 })
             }
 
@@ -564,7 +565,7 @@ class Script(
             addFn("flow", callSignature = CallSignature(tailBlockReceiverType = "FlowBuilder")) {
                 // important is: current context contains closure often used in call;
                 // we'll need it for the producer
-                ObjFlow(requireOnlyArg<Obj>(), this)
+                ObjFlow(requireOnlyArg<Obj>(), requireScope())
             }
 
             val pi = ObjReal(PI)
@@ -639,7 +640,7 @@ class Script(
                             is ObjInt -> delay(a.value * 1000)
                             is ObjReal -> delay((a.value * 1000).roundToLong())
                             is ObjDuration -> delay(a.duration)
-                            else -> raiseIllegalArgument("Expected Duration, Int or Real, got ${a.inspect(this)}")
+                            else -> raiseIllegalArgument("Expected Duration, Int or Real, got ${inspect(a)}")
                         }
                     }
                 }

@@ -23,7 +23,7 @@ import net.sergeych.lyng.obj.ObjRecord
 /**
  * Bytecode-oriented closure scope that keeps the call scope parent chain for stack traces
  * while carrying the lexical closure for `this` variants and module resolution.
- * Unlike interpreter closure scopes, it does not override name lookup.
+ * Unlike legacy closure scopes, it does not override name lookup.
  */
 class BytecodeClosureScope(
     val callScope: Scope,

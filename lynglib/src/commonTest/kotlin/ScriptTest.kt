@@ -30,6 +30,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.encodeToJsonElement
 import net.sergeych.lyng.*
 import net.sergeych.lyng.obj.*
+import net.sergeych.lyng.thisAs
 import net.sergeych.lyng.pacman.InlineSourcesImportProvider
 import net.sergeych.mp_tools.globalDefer
 import net.sergeych.tools.bm
