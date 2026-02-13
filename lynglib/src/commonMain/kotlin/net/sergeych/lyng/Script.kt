@@ -85,7 +85,9 @@ class Script(
             seedModuleSlots(moduleTarget)
         }
         moduleBytecode?.let { fn ->
-            return CmdVm().execute(fn, scope, scope.args)
+            return CmdVm().execute(fn, scope, scope.args) { frame, _ ->
+                seedModuleLocals(frame, moduleTarget)
+            }
         }
         if (statements.isNotEmpty()) {
             scope.raiseIllegalState("interpreter execution is not supported; missing module bytecode")
@@ -96,6 +98,31 @@ class Script(
     private suspend fun seedModuleSlots(scope: Scope) {
         if (importBindings.isEmpty() && importedModules.isEmpty()) return
         seedImportBindings(scope)
+    }
+
+    private suspend fun seedModuleLocals(frame: net.sergeych.lyng.bytecode.CmdFrame, scope: Scope) {
+        if (importBindings.isEmpty()) return
+        val localNames = frame.fn.localSlotNames
+        if (localNames.isEmpty()) return
+        val values = HashMap<String, Obj>(importBindings.size)
+        for (name in importBindings.keys) {
+            val record = scope.getLocalRecordDirect(name) ?: continue
+            val value = if (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property) {
+                scope.resolve(record, name)
+            } else {
+                record.value
+            }
+            if (value !== ObjUnset) {
+                values[name] = value
+            }
+        }
+        if (values.isEmpty()) return
+        val base = frame.fn.scopeSlotCount
+        for (i in localNames.indices) {
+            val name = localNames[i] ?: continue
+            val value = values[name] ?: continue
+            frame.setObjUnchecked(base + i, value)
+        }
     }
 
     private suspend fun seedImportBindings(scope: Scope) {

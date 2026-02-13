@@ -23,7 +23,6 @@ import net.sergeych.lyng.Scope
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
-import net.sergeych.lyng.statement
 import net.sergeych.lyngio.process.*
 import net.sergeych.lyngio.process.security.ProcessAccessDeniedException
 import net.sergeych.lyngio.process.security.ProcessAccessPolicy
@@ -216,7 +215,7 @@ private suspend inline fun Scope.processGuard(crossinline block: suspend () -> O
 }
 
 private fun Flow<String>.toLyngFlow(flowScope: Scope): ObjFlow {
-    val producer = statement {
+    val producer = ObjNativeCallable {
         val builder = (this as? net.sergeych.lyng.BytecodeClosureScope)?.callScope?.thisObj as? ObjFlowBuilder
             ?: this.thisObj as? ObjFlowBuilder
 

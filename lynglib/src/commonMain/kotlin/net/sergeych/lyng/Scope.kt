@@ -78,8 +78,17 @@ open class Scope(
         thisObj = primary
         val extrasSnapshot = when {
             extras.isEmpty() -> emptyList()
-            extras is MutableList<*> -> synchronized(extras) { extras.toList() }
-            else -> extras.toList()
+            else -> {
+                try {
+                    if (extras is MutableList<*>) {
+                        synchronized(extras) { extras.toList() }
+                    } else {
+                        extras.toList()
+                    }
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            }
         }
         synchronized(thisVariants) {
             thisVariants.clear()
@@ -818,34 +827,27 @@ open class Scope(
     }
 
     /**
-     * Resolve and evaluate a qualified identifier exactly as compiled code would.
-     * For input like `A.B.C`, it builds the same ObjRef chain the compiler emits:
-     * `LocalVarRef("A", Pos.builtIn)` followed by `FieldRef` for each segment, then evaluates it.
-     * This mirrors `eval("A.B.C")` resolution semantics without invoking the compiler.
+     * Resolve and evaluate a qualified identifier (e.g. `A.B.C`) using the same name/field
+     * resolution rules as compiled code, without invoking the compiler or ObjRef evaluation.
      */
     suspend fun resolveQualifiedIdentifier(qualifiedName: String): Obj {
         val trimmed = qualifiedName.trim()
         if (trimmed.isEmpty()) raiseSymbolNotFound("empty identifier")
         val parts = trimmed.split('.')
         val first = parts[0]
-        val ref: ObjRef = if (first == "this") {
-            ConstRef(thisObj.asReadonly)
+        val base: Obj = if (first == "this") {
+            thisObj
         } else {
-            var s: Scope? = this
-            var slot: Int? = null
-            var guard = 0
-            while (s != null && guard++ < 1024 && slot == null) {
-                slot = s.getSlotIndexOf(first)
-                s = s.parent
-            }
-            if (slot == null) raiseSymbolNotFound(first)
-            LocalSlotRef(first, slot, 0, isMutable = false, isDelegated = false, Pos.builtIn, strict = true)
+            val rec = get(first) ?: raiseSymbolNotFound(first)
+            resolve(rec, first)
         }
-        var ref0: ObjRef = ref
+        var current = base
         for (i in 1 until parts.size) {
-            ref0 = FieldRef(ref0, parts[i], false)
+            val name = parts[i]
+            val rec = current.readField(this, name)
+            current = resolve(rec, name)
         }
-        return ref0.evalValue(this)
+        return current
     }
 
     suspend fun resolve(rec: ObjRecord, name: String): Obj {

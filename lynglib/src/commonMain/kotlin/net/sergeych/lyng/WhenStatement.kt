@@ -19,6 +19,10 @@ package net.sergeych.lyng
 import net.sergeych.lyng.obj.Obj
 
 sealed class WhenCondition(open val expr: Statement, open val pos: Pos) {
+    protected fun interpreterDisabled(scope: Scope): Nothing {
+        return scope.raiseIllegalState("interpreter execution is not supported; when condition requires bytecode")
+    }
+
     abstract suspend fun matches(scope: Scope, value: Obj): Boolean
 }
 
@@ -27,7 +31,7 @@ class WhenEqualsCondition(
     override val pos: Pos,
 ) : WhenCondition(expr, pos) {
     override suspend fun matches(scope: Scope, value: Obj): Boolean {
-        return expr.execute(scope).compareTo(scope, value) == 0
+        return interpreterDisabled(scope)
     }
 }
 
@@ -37,8 +41,7 @@ class WhenInCondition(
     override val pos: Pos,
 ) : WhenCondition(expr, pos) {
     override suspend fun matches(scope: Scope, value: Obj): Boolean {
-        val result = expr.execute(scope).contains(scope, value)
-        return if (negated) !result else result
+        return interpreterDisabled(scope)
     }
 }
 
@@ -48,12 +51,7 @@ class WhenIsCondition(
     override val pos: Pos,
 ) : WhenCondition(expr, pos) {
     override suspend fun matches(scope: Scope, value: Obj): Boolean {
-        val typeExpr = expr.execute(scope)
-        val result = when (typeExpr) {
-            is net.sergeych.lyng.obj.ObjTypeExpr -> net.sergeych.lyng.obj.matchesTypeDecl(scope, value, typeExpr.typeDecl)
-            else -> value.isInstanceOf(typeExpr)
-        }
-        return if (negated) !result else result
+        return interpreterDisabled(scope)
     }
 }
 

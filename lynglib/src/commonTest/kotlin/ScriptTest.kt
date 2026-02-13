@@ -656,56 +656,58 @@ class ScriptTest {
 
     @Test
     fun whileTest() = runTest {
-        assertEquals(
-            5.0,
-            eval(
-                """
-                var acc = 0
-                while( acc < 5 ) acc = acc + 0.5
-                acc
-                """
-            ).toDouble()
-        )
-        assertEquals(
-            5.0,
-            eval(
-                """
-                var acc = 0
-                // return from while
-                while( acc < 5 ) {
-                    acc = acc + 0.5
+        withTimeout(2.seconds) {
+            assertEquals(
+                5.0,
+                eval(
+                    """
+                    var acc = 0
+                    while( acc < 5 ) acc = acc + 0.5
                     acc
-                }
-                """
-            ).toDouble()
-        )
-        assertEquals(
-            3.0,
-            eval(
-                """
-                var acc = 0
-                while( acc < 5 ) {
-                    acc = acc + 0.5
-                    if( acc >= 3 ) break
-                }
+                    """
+                ).toDouble()
+            )
+            assertEquals(
+                5.0,
+                eval(
+                    """
+                    var acc = 0
+                    // return from while
+                    while( acc < 5 ) {
+                        acc = acc + 0.5
+                        acc
+                    }
+                    """
+                ).toDouble()
+            )
+            assertEquals(
+                3.0,
+                eval(
+                    """
+                    var acc = 0
+                    while( acc < 5 ) {
+                        acc = acc + 0.5
+                        if( acc >= 3 ) break
+                    }
 
-                acc
+                    acc
 
-                """
-            ).toDouble()
-        )
-        assertEquals(
-            17.0,
-            eval(
-                """
-                var acc = 0
-                while( acc < 5 ) {
-                    acc = acc + 0.5
-                    if( acc >= 3 ) break 17
-                }
-                """
-            ).toDouble()
-        )
+                    """
+                ).toDouble()
+            )
+            assertEquals(
+                17.0,
+                eval(
+                    """
+                    var acc = 0
+                    while( acc < 5 ) {
+                        acc = acc + 0.5
+                        if( acc >= 3 ) break 17
+                    }
+                    """
+                ).toDouble()
+            )
+        }
     }
 
     @Test

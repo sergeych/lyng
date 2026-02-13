@@ -2219,8 +2219,30 @@ class CmdGetClassScope(
         val scope = frame.ensureScope()
         val cls = frame.slotToObj(classSlot) as? ObjClass
             ?: scope.raiseSymbolNotFound(nameConst.value)
-        val rec = cls.readField(scope, nameConst.value)
-        val value = scope.resolve(rec, nameConst.value)
+        val name = nameConst.value
+        var rec: ObjRecord? = null
+        var decl: ObjClass? = null
+        for (c in cls.mro) {
+            if (c.className == "Obj") break
+            val candidate = c.classScope?.objects?.get(name) ?: c.members[name]
+            if (candidate == null || candidate.isAbstract) continue
+            val declared = candidate.declaringClass ?: c
+            if (!canAccessMember(candidate.visibility, declared, scope.currentClassCtx, name)) {
+                scope.raiseError(
+                    ObjIllegalAccessException(
+                        scope,
+                        "can't access field ${name}: not visible (declared in ${declared.className}, caller ${scope.currentClassCtx?.className ?: "?"})"
+                    )
+                )
+            }
+            rec = candidate
+            decl = declared
+            break
+        }
+        val resolved = rec ?: scope.raiseSymbolNotFound(name)
+        val declClass = decl ?: cls
+        val resolvedRec = cls.resolveRecord(scope, resolved, name, declClass)
+        val value = resolvedRec.value
         frame.storeObjResult(dst, value)
         return
     }
@@ -3187,7 +3209,11 @@ class CmdFrame(
             SlotType.BOOL.code -> if (frame.getBool(local)) ObjTrue else ObjFalse
             SlotType.OBJ.code -> {
                 val obj = frame.getObj(local)
-                if (obj is FrameSlotRef) obj.read() else obj
+                when (obj) {
+                    is FrameSlotRef -> obj.read()
+                    is RecordSlotRef -> obj.read()
+                    else -> obj
+                }
             }
             else -> ObjVoid
         }
@@ -3347,6 +3373,7 @@ class CmdFrame(
         val record = target.getSlotRecord(index)
         val direct = record.value
         if (direct is FrameSlotRef) return direct.read()
+        if (direct is RecordSlotRef) return direct.read()
         val name = fn.scopeSlotNames[slot]
         if (name != null && (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || direct is ObjProperty)) {
             return target.resolve(record, name)
@@ -3368,6 +3395,7 @@ class CmdFrame(
         val record = target.getSlotRecord(index)
         val direct = record.value
         if (direct is FrameSlotRef) return direct.read()
+        if (direct is RecordSlotRef) return direct.read()
         val slotId = addrScopeSlots[addrSlot]
         val name = fn.scopeSlotNames.getOrNull(slotId)
         if (name != null && (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || direct is ObjProperty)) {

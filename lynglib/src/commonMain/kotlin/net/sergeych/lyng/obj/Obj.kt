@@ -265,13 +265,35 @@ open class Obj {
     open val objClass: ObjClass get() = rootObjectType
 
     open suspend fun plus(scope: Scope, other: Obj): Obj {
-        return invokeInstanceMethod(scope, "plus", Arguments(other)) {
+        val otherValue = when (other) {
+            is FrameSlotRef -> other.read()
+            is RecordSlotRef -> other.read()
+            else -> other
+        }
+        val self = when (this) {
+            is FrameSlotRef -> this.read()
+            is RecordSlotRef -> this.read()
+            else -> this
+        }
+        if (self !== this) return self.plus(scope, otherValue)
+        return invokeInstanceMethod(scope, "plus", Arguments(otherValue)) {
             scope.raiseNotImplemented("plus for ${objClass.className}")
         }
     }
 
     open suspend fun minus(scope: Scope, other: Obj): Obj {
-        return invokeInstanceMethod(scope, "minus", Arguments(other)) {
+        val otherValue = when (other) {
+            is FrameSlotRef -> other.read()
+            is RecordSlotRef -> other.read()
+            else -> other
+        }
+        val self = when (this) {
+            is FrameSlotRef -> this.read()
+            is RecordSlotRef -> this.read()
+            else -> this
+        }
+        if (self !== this) return self.minus(scope, otherValue)
+        return invokeInstanceMethod(scope, "minus", Arguments(otherValue)) {
             scope.raiseNotImplemented("minus for ${objClass.className}")
         }
     }
@@ -283,19 +305,52 @@ open class Obj {
     }
 
     open suspend fun mul(scope: Scope, other: Obj): Obj {
-        return invokeInstanceMethod(scope, "mul", Arguments(other)) {
+        val otherValue = when (other) {
+            is FrameSlotRef -> other.read()
+            is RecordSlotRef -> other.read()
+            else -> other
+        }
+        val self = when (this) {
+            is FrameSlotRef -> this.read()
+            is RecordSlotRef -> this.read()
+            else -> this
+        }
+        if (self !== this) return self.mul(scope, otherValue)
+        return invokeInstanceMethod(scope, "mul", Arguments(otherValue)) {
             scope.raiseNotImplemented("mul for ${objClass.className}")
         }
     }
 
     open suspend fun div(scope: Scope, other: Obj): Obj {
-        return invokeInstanceMethod(scope, "div", Arguments(other)) {
+        val otherValue = when (other) {
+            is FrameSlotRef -> other.read()
+            is RecordSlotRef -> other.read()
+            else -> other
+        }
+        val self = when (this) {
+            is FrameSlotRef -> this.read()
+            is RecordSlotRef -> this.read()
+            else -> this
+        }
+        if (self !== this) return self.div(scope, otherValue)
+        return invokeInstanceMethod(scope, "div", Arguments(otherValue)) {
             scope.raiseNotImplemented("div for ${objClass.className}")
         }
     }
 
     open suspend fun mod(scope: Scope, other: Obj): Obj {
-        return invokeInstanceMethod(scope, "mod", Arguments(other)) {
+        val otherValue = when (other) {
+            is FrameSlotRef -> other.read()
+            is RecordSlotRef -> other.read()
+            else -> other
+        }
+        val self = when (this) {
+            is FrameSlotRef -> this.read()
+            is RecordSlotRef -> this.read()
+            else -> this
+        }
+        if (self !== this) return self.mod(scope, otherValue)
+        return invokeInstanceMethod(scope, "mod", Arguments(otherValue)) {
             scope.raiseNotImplemented("mod for ${objClass.className}")
         }
     }
@@ -754,6 +809,14 @@ open class Obj {
                 val newValue = args[1]
                 thisObj.putAt(this, requiredArg<Obj>(0), newValue)
                 newValue
+            }
+            addFnDoc(
+                name = "toJson",
+                doc = "Encodes this object to JSON.",
+                returns = type("lyng.String"),
+                moduleName = "lyng.stdlib"
+            ) {
+                thisObj.toJson(this).toString().toObj()
             }
             addFnDoc(
                 name = "toJsonString",

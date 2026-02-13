@@ -24,7 +24,6 @@ import net.sergeych.lyng.Scope
 import net.sergeych.lyng.miniast.addConstDoc
 import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lyng.miniast.type
-import net.sergeych.lyng.statement
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType

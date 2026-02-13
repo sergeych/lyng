@@ -174,54 +174,49 @@ internal suspend fun executeFunctionDecl(
     spec.extTypeName?.let { typeName ->
         val type = scope[typeName]?.value ?: scope.raiseSymbolNotFound("class $typeName not found")
         if (type !is ObjClass) scope.raiseClassCastError("$typeName is not the class instance")
-        val callable = net.sergeych.lyng.obj.ObjNativeCallable {
-            val result = (thisObj as? ObjInstance)?.let { i ->
-                val execScope = applyClosureForBytecode(i.instanceScope).also {
-                    it.args = args
-                }
-                compiledFnBody.execute(execScope)
-            } ?: compiledFnBody.execute(thisObj.autoInstanceScope(this))
-            result
-        }
-        scope.addExtension(type, spec.name, ObjRecord(callable, isMutable = false, visibility = spec.visibility, declaringClass = null))
+        scope.addExtension(
+            type,
+            spec.name,
+            ObjRecord(
+                compiledFnBody,
+                isMutable = false,
+                visibility = spec.visibility,
+                declaringClass = null,
+                type = ObjRecord.Type.Fun
+            )
+        )
         val wrapperName = spec.extensionWrapperName ?: extensionCallableName(typeName, spec.name)
-        val wrapper = ObjExtensionMethodCallable(spec.name, callable)
+        val wrapper = ObjExtensionMethodCallable(spec.name, compiledFnBody)
         scope.addItem(wrapperName, false, wrapper, spec.visibility, recordType = ObjRecord.Type.Fun)
     } ?: run {
         val th = scope.thisObj
         if (!spec.isStatic && th is ObjClass) {
             val cls: ObjClass = th
-            cls.addFn(
+            cls.createField(
                 spec.name,
+                compiledFnBody,
                 isMutable = true,
                 visibility = spec.visibility,
+                pos = spec.startPos,
+                declaringClass = cls,
                 isAbstract = spec.isAbstract,
                 isClosed = spec.isClosed,
                 isOverride = spec.isOverride,
-                pos = spec.startPos,
+                type = ObjRecord.Type.Fun,
                 methodId = spec.memberMethodId
-            ) {
-                val savedCtx = this.currentClassCtx
-                this.currentClassCtx = cls
-                try {
-                    (thisObj as? ObjInstance)?.let { i ->
-                        val execScope = i.instanceScope.createChildScope(
-                            pos = this.pos,
-                            args = this.args,
-                            newThisObj = i
-                        )
-                        execScope.currentClassCtx = cls
-                        compiledFnBody.execute(execScope)
-                    } ?: compiledFnBody.execute(thisObj.autoInstanceScope(this))
-                } finally {
-                    this.currentClassCtx = savedCtx
-                }
-            }
+            )
             val memberValue = cls.members[spec.name]?.value ?: compiledFnBody
             scope.addItem(spec.name, false, memberValue, spec.visibility, callSignature = spec.externCallSignature)
             compiledFnBody
         } else {
-            scope.addItem(spec.name, false, compiledFnBody, spec.visibility, callSignature = spec.externCallSignature)
+            scope.addItem(
+                spec.name,
+                false,
+                compiledFnBody,
+                spec.visibility,
+                recordType = ObjRecord.Type.Fun,
+                callSignature = spec.externCallSignature
+            )
         }
     }
     return annotatedFnBody

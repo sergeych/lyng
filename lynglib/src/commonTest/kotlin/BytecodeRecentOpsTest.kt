@@ -397,4 +397,5 @@ class BytecodeRecentOpsTest {
         val result = script.execute(Script.defaultImportManager.newStdScope())
         assertEquals(2, result.toInt())
     }
+
 }

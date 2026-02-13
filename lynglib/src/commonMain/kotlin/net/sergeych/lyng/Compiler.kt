@@ -112,6 +112,9 @@ class Compiler(
         if (!added) {
             currentShadowedLocalNames?.add(name)
         }
+        if (added) {
+            scopeSeedNames.remove(name)
+        }
         if (added && localDeclCountStack.isNotEmpty()) {
             localDeclCountStack[localDeclCountStack.lastIndex] = currentLocalDeclCount + 1
         }
@@ -136,6 +139,9 @@ class Compiler(
         if (plan.slots.containsKey(name)) return
         plan.slots[name] = SlotEntry(plan.nextIndex, isMutable, isDelegated)
         plan.nextIndex += 1
+        if (!seedingSlotPlan && plan == moduleSlotPlan()) {
+            moduleDeclaredNames.add(name)
+        }
     }
 
     private fun declareSlotNameAt(
@@ -155,6 +161,7 @@ class Compiler(
     private fun moduleSlotPlan(): SlotPlan? = slotPlanStack.firstOrNull()
     private val slotTypeByScopeId: MutableMap<Int, MutableMap<Int, ObjClass>> = mutableMapOf()
     private val nameObjClass: MutableMap<String, ObjClass> = mutableMapOf()
+    private val scopeSeedNames: MutableSet<String> = mutableSetOf()
     private val slotTypeDeclByScopeId: MutableMap<Int, MutableMap<Int, TypeDecl>> = mutableMapOf()
     private val nameTypeDecl: MutableMap<String, TypeDecl> = mutableMapOf()
     private data class TypeAliasDecl(
@@ -177,69 +184,81 @@ class Compiler(
     private val encodedPayloadTypeByName: MutableMap<String, ObjClass> = mutableMapOf()
     private val objectDeclNames: MutableSet<String> = mutableSetOf()
     private val externCallableNames: MutableSet<String> = mutableSetOf()
+    private val moduleDeclaredNames: MutableSet<String> = mutableSetOf()
+    private var seedingSlotPlan: Boolean = false
 
     private fun seedSlotPlanFromScope(scope: Scope, includeParents: Boolean = false) {
         val plan = moduleSlotPlan() ?: return
-        var current: Scope? = scope
-        while (current != null) {
-            for ((name, record) in current.objects) {
-                if (!record.visibility.isPublic) continue
-                if (plan.slots.containsKey(name)) continue
-                declareSlotNameIn(plan, name, record.isMutable, record.type == ObjRecord.Type.Delegated)
-                val instance = record.value as? ObjInstance
-                if (instance != null && nameObjClass[name] == null) {
-                    nameObjClass[name] = instance.objClass
-                }
-            }
-            for ((cls, map) in current.extensions) {
-                for ((name, record) in map) {
+        seedingSlotPlan = true
+        try {
+            var current: Scope? = scope
+            while (current != null) {
+                for ((name, record) in current.objects) {
                     if (!record.visibility.isPublic) continue
-                    when (record.type) {
-                        ObjRecord.Type.Property -> {
-                            val getterName = extensionPropertyGetterName(cls.className, name)
-                            if (!plan.slots.containsKey(getterName)) {
-                                declareSlotNameIn(
-                                    plan,
-                                    getterName,
-                                    isMutable = false,
-                                    isDelegated = false
-                                )
-                            }
-                            val prop = record.value as? ObjProperty
-                            if (prop?.setter != null) {
-                                val setterName = extensionPropertySetterName(cls.className, name)
-                                if (!plan.slots.containsKey(setterName)) {
+                    if (plan.slots.containsKey(name)) continue
+                    declareSlotNameIn(plan, name, record.isMutable, record.type == ObjRecord.Type.Delegated)
+                    scopeSeedNames.add(name)
+                    val instance = record.value as? ObjInstance
+                    if (instance != null && nameObjClass[name] == null) {
+                        nameObjClass[name] = instance.objClass
+                    }
+                }
+                for ((cls, map) in current.extensions) {
+                    for ((name, record) in map) {
+                        if (!record.visibility.isPublic) continue
+                        when (record.type) {
+                            ObjRecord.Type.Property -> {
+                                val getterName = extensionPropertyGetterName(cls.className, name)
+                                if (!plan.slots.containsKey(getterName)) {
                                     declareSlotNameIn(
                                         plan,
-                                        setterName,
+                                        getterName,
                                         isMutable = false,
                                         isDelegated = false
                                     )
+                                    scopeSeedNames.add(getterName)
+                                }
+                                val prop = record.value as? ObjProperty
+                                if (prop?.setter != null) {
+                                    val setterName = extensionPropertySetterName(cls.className, name)
+                                    if (!plan.slots.containsKey(setterName)) {
+                                        declareSlotNameIn(
+                                            plan,
+                                            setterName,
+                                            isMutable = false,
+                                            isDelegated = false
+                                        )
+                                        scopeSeedNames.add(setterName)
+                                    }
                                 }
                             }
-                        }
-                        else -> {
-                            val callableName = extensionCallableName(cls.className, name)
-                            if (!plan.slots.containsKey(callableName)) {
-                                declareSlotNameIn(
-                                    plan,
-                                    callableName,
-                                    isMutable = false,
-                                    isDelegated = false
-                                )
+                            else -> {
+                                val callableName = extensionCallableName(cls.className, name)
+                                if (!plan.slots.containsKey(callableName)) {
+                                    declareSlotNameIn(
+                                        plan,
+                                        callableName,
+                                        isMutable = false,
+                                        isDelegated = false
+                                    )
+                                    scopeSeedNames.add(callableName)
+                                }
                             }
                         }
                     }
                 }
+                for ((name, slotIndex) in current.slotNameToIndexSnapshot()) {
+                    val record = current.getSlotRecord(slotIndex)
+                    if (!record.visibility.isPublic) continue
+                    if (plan.slots.containsKey(name)) continue
+                    declareSlotNameIn(plan, name, record.isMutable, record.type == ObjRecord.Type.Delegated)
+                    scopeSeedNames.add(name)
+                }
+                if (!includeParents) return
+                current = current.parent
             }
-            for ((name, slotIndex) in current.slotNameToIndexSnapshot()) {
-                val record = current.getSlotRecord(slotIndex)
-                if (!record.visibility.isPublic) continue
-                if (plan.slots.containsKey(name)) continue
-                declareSlotNameIn(plan, name, record.isMutable, record.type == ObjRecord.Type.Delegated)
-            }
-            if (!includeParents) return
-            current = current.parent
+        } finally {
+            seedingSlotPlan = false
         }
     }
 
@@ -254,6 +273,7 @@ class Compiler(
                 record.isMutable,
                 record.type == ObjRecord.Type.Delegated
             )
+            scopeSeedNames.add(name)
         }
     }
 
@@ -322,6 +342,7 @@ class Compiler(
                                 val nameToken = nextNonWs()
                                 if (nameToken.type == Token.Type.ID) {
                                     declareSlotNameIn(plan, nameToken.value, isMutable = false, isDelegated = false)
+                                    scopeSeedNames.add(nameToken.value)
                                 }
                             }
                             "enum" -> {
@@ -329,6 +350,7 @@ class Compiler(
                                 val nameToken = if (next.type == Token.Type.ID && next.value == "class") nextNonWs() else next
                                 if (nameToken.type == Token.Type.ID) {
                                     declareSlotNameIn(plan, nameToken.value, isMutable = false, isDelegated = false)
+                                    scopeSeedNames.add(nameToken.value)
                                 }
                             }
                         }
@@ -1557,6 +1579,7 @@ class Compiler(
                         "<script>",
                         allowLocalSlots = true,
                         allowedScopeNames = modulePlan.keys,
+                        scopeSlotNameSet = scopeSeedNames,
                         moduleScopeId = moduleSlotPlan()?.id,
                         slotTypeByScopeId = slotTypeByScopeId,
                         knownNameObjClass = knownClassMapForBytecode(),
@@ -1765,8 +1788,11 @@ class Compiler(
         } ?: -1
         val scopeIndex = slotPlanStack.indexOfLast { it.id == slotLoc.scopeId }
         if (functionIndex >= 0 && scopeIndex >= functionIndex) return null
-        val moduleId = moduleSlotPlan()?.id
-        if (moduleId != null && slotLoc.scopeId == moduleId) return null
+        if (scopeSeedNames.contains(name)) return null
+        val modulePlan = moduleSlotPlan()
+        if (modulePlan != null && slotLoc.scopeId == modulePlan.id) {
+            return null
+        }
         recordCaptureSlot(name, slotLoc)
         val plan = capturePlanStack.lastOrNull() ?: return null
         val entry = plan.slotPlan.slots[name] ?: return null
@@ -1846,6 +1872,7 @@ class Compiler(
             returnLabels = returnLabels,
             rangeLocalNames = currentRangeParamNames,
             allowedScopeNames = allowedScopeNames,
+            scopeSlotNameSet = scopeSeedNames,
             moduleScopeId = moduleSlotPlan()?.id,
             slotTypeByScopeId = slotTypeByScopeId,
             knownNameObjClass = knownClassMapForBytecode(),
@@ -1870,6 +1897,7 @@ class Compiler(
             returnLabels = returnLabels,
             rangeLocalNames = currentRangeParamNames,
             allowedScopeNames = allowedScopeNames,
+            scopeSlotNameSet = scopeSeedNames,
             moduleScopeId = moduleSlotPlan()?.id,
             slotTypeByScopeId = slotTypeByScopeId,
             knownNameObjClass = knownClassMapForBytecode(),
@@ -1913,6 +1941,7 @@ class Compiler(
             returnLabels = returnLabels,
             rangeLocalNames = currentRangeParamNames,
             allowedScopeNames = allowedScopeNames,
+            scopeSlotNameSet = scopeSeedNames,
             moduleScopeId = moduleSlotPlan()?.id,
             forcedLocalSlots = forcedLocalSlots,
             forcedLocalScopeId = forcedLocalScopeId,
@@ -2390,8 +2419,14 @@ class Compiler(
                                         val args = parsed.first
                                         val tailBlock = parsed.second
                                         isCall = true
-                                        val field = FieldRef(left, next.value, isOptional)
-                                        operand = CallRef(field, args, tailBlock, isOptional)
+                                        val receiverClass = resolveReceiverClassForMember(left)
+                                        val nestedClass = receiverClass?.let { resolveClassByName("${it.className}.${next.value}") }
+                                        if (nestedClass != null) {
+                                            val field = FieldRef(left, next.value, isOptional)
+                                            operand = CallRef(field, args, tailBlock, isOptional)
+                                        } else {
+                                            operand = MethodCallRef(left, next.value, args, tailBlock, isOptional)
+                                        }
                                     } else {
                                         // instance method call
                                         val receiverType = if (next.value == "apply" || next.value == "run") {
@@ -2967,17 +3002,11 @@ class Compiler(
             lambdaReturnTypeByRef[ref] = returnClass
         }
         if (captureSlots.isNotEmpty()) {
-            val moduleScopeId = moduleSlotPlan()?.id
             val captureEntries = captureSlots.map { capture ->
                 val owner = capturePlan.captureOwners[capture.name]
                     ?: error("Missing capture owner for ${capture.name}")
-                val kind = if (moduleScopeId != null && owner.scopeId == moduleScopeId) {
-                    net.sergeych.lyng.bytecode.CaptureOwnerFrameKind.MODULE
-                } else {
-                    net.sergeych.lyng.bytecode.CaptureOwnerFrameKind.LOCAL
-                }
                 net.sergeych.lyng.bytecode.LambdaCaptureEntry(
-                    ownerKind = kind,
+                    ownerKind = net.sergeych.lyng.bytecode.CaptureOwnerFrameKind.LOCAL,
                     ownerScopeId = owner.scopeId,
                     ownerSlotId = owner.slot,
                     ownerName = capture.name,
@@ -5725,6 +5754,9 @@ class Compiler(
         val outerClassName = currentEnclosingClassName()
         val qualifiedName = if (outerClassName != null) "$outerClassName.$declaredName" else declaredName
         resolutionSink?.declareSymbol(declaredName, SymbolKind.ENUM, isMutable = false, pos = nameToken.pos)
+        if (codeContexts.lastOrNull() is CodeContext.Module) {
+            scopeSeedNames.add(declaredName)
+        }
         if (outerClassName != null) {
             val outerCtx = codeContexts.asReversed().firstOrNull { it is CodeContext.ClassBody } as? CodeContext.ClassBody
             outerCtx?.classScopeMembers?.add(declaredName)
@@ -6024,6 +6056,9 @@ class Compiler(
         val outerClassName = currentEnclosingClassName()
         val qualifiedName = if (outerClassName != null) "$outerClassName.$declaredName" else declaredName
         resolutionSink?.declareSymbol(declaredName, SymbolKind.CLASS, isMutable = false, pos = nameToken.pos)
+        if (codeContexts.lastOrNull() is CodeContext.Module) {
+            scopeSeedNames.add(declaredName)
+        }
         if (outerClassName != null) {
             val outerCtx = codeContexts.asReversed().firstOrNull { it is CodeContext.ClassBody } as? CodeContext.ClassBody
             outerCtx?.classScopeMembers?.add(declaredName)
@@ -7909,29 +7944,7 @@ class Compiler(
             pendingDeclDoc = null
         }
 
-        if (declaringClassNameCaptured == null &&
-            extTypeName == null &&
-            !isStatic &&
-            !isProperty &&
-            !actualExtern &&
-            !isAbstract
-        ) {
-            if (isDelegate) {
-                val initExpr = initialExpression ?: throw ScriptError(start, "Delegate must be initialized")
-                val slotPlan = slotPlanStack.lastOrNull()
-                val slotIndex = slotPlan?.slots?.get(name)?.index
-                val scopeId = slotPlan?.id
-                return DelegatedVarDeclStatement(
-                    name,
-                    isMutable,
-                    visibility,
-                    initExpr,
-                    isTransient,
-                    slotIndex,
-                    scopeId,
-                    start
-                )
-            }
+        fun buildVarDecl(initialExpression: Statement?): VarDeclStatement {
             val slotPlan = slotPlanStack.lastOrNull()
             val slotIndex = slotPlan?.slots?.get(name)?.index
             val scopeId = slotPlan?.id
@@ -7981,6 +7994,30 @@ class Compiler(
                 start,
                 initObjClass
             )
+        }
+
+        if (declaringClassNameCaptured == null &&
+            extTypeName == null &&
+            !isStatic &&
+            !isProperty
+        ) {
+            if (isDelegate) {
+                val initExpr = initialExpression ?: throw ScriptError(start, "Delegate must be initialized")
+                val slotPlan = slotPlanStack.lastOrNull()
+                val slotIndex = slotPlan?.slots?.get(name)?.index
+                val scopeId = slotPlan?.id
+                return DelegatedVarDeclStatement(
+                    name,
+                    isMutable,
+                    visibility,
+                    initExpr,
+                    isTransient,
+                    slotIndex,
+                    scopeId,
+                    start
+                )
+            }
+            return buildVarDecl(initialExpression)
         }
 
         if (isStatic) {
@@ -8288,56 +8325,7 @@ class Compiler(
             )
         }
 
-        return object : Statement() {
-            override val pos: Pos = start
-            override suspend fun execute(context: Scope): Obj {
-                if (context.containsLocal(name)) {
-                    throw ScriptError(start, "Variable $name is already defined")
-                }
-
-                if (isDelegate) {
-                    val initValue = initialExpression!!.execute(context)
-                    val accessTypeStr = if (isMutable) "Var" else "Val"
-                    val accessType = ObjString(accessTypeStr)
-                    val finalDelegate = try {
-                        initValue.invokeInstanceMethod(context, "bind", Arguments(ObjString(name), accessType, ObjNull))
-                    } catch (_: Exception) {
-                        initValue
-                    }
-                    val rec = context.addItem(
-                        name, isMutable, ObjUnset, visibility, setterVisibility,
-                        recordType = ObjRecord.Type.Delegated,
-                        isAbstract = isAbstract,
-                        isClosed = isClosed,
-                        isOverride = isOverride,
-                        isTransient = isTransient
-                    )
-                    rec.delegate = finalDelegate
-                    return finalDelegate
-                }
-
-                if (getter != null || setter != null) {
-                    val prop = ObjProperty(name, getter, setter)
-                    context.addItem(
-                        name, isMutable, prop, visibility, setterVisibility,
-                        recordType = ObjRecord.Type.Property,
-                        isAbstract = isAbstract,
-                        isClosed = isClosed,
-                        isOverride = isOverride,
-                        isTransient = isTransient
-                    )
-                    return prop
-                }
-
-                val initValue = initialExpression?.execute(context)?.byValueCopy() ?: ObjNull
-                context.addItem(
-                    name, isMutable, initValue, visibility,
-                    recordType = ObjRecord.Type.Other,
-                    isTransient = isTransient
-                )
-                return initValue
-            }
-        }
+        return buildVarDecl(initialExpression)
     } finally {
         if (implicitTypeParams.isNotEmpty()) pendingTypeParamStack.removeLast()
     }

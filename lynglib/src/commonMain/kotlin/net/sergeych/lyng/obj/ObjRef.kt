@@ -35,22 +35,7 @@ sealed interface ObjRef {
      * Default implementation calls [get] and returns its value. Nodes can override to avoid record traffic.
      */
     suspend fun evalValue(scope: Scope): Obj {
-        val rec = get(scope)
-        if (rec.type == ObjRecord.Type.Delegated) {
-            val receiver = rec.receiver ?: scope.thisObj
-            // Use resolve to handle delegated property logic
-            return scope.resolve(rec, "unknown")
-        }
-        // Template record: must map to instance storage
-        if (rec.receiver != null && rec.declaringClass != null) {
-            return rec.receiver!!.resolveRecord(scope, rec, "unknown", rec.declaringClass).value
-        }
-        val value = rec.value
-        return when (value) {
-            is FrameSlotRef -> value.read()
-            is RecordSlotRef -> value.read()
-            else -> value
-        }
+        scope.raiseIllegalState("interpreter execution is not supported; ObjRef evaluation requires bytecode")
     }
     suspend fun setAt(pos: Pos, scope: Scope, newValue: Obj) {
         throw ScriptError(pos, "can't assign value")
