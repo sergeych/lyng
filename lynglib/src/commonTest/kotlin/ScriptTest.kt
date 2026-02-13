@@ -734,7 +734,7 @@ class ScriptTest {
             listOf(
                 ArgsDeclaration.Item("a"),
                 ArgsDeclaration.Item("b"),
-                ArgsDeclaration.Item("c", defaultValue = statement { ObjInt(100) }),
+                ArgsDeclaration.Item("c", defaultValue = ObjExternCallable.fromBridge { ObjInt(100) }),
             ), ttEnd
         )
         pa.assignToContext(c)

@@ -17,8 +17,6 @@
 package net.sergeych.lyng
 
 import net.sergeych.lyng.obj.Obj
-import net.sergeych.lyng.obj.ObjEnumClass
-import net.sergeych.lyng.obj.ObjRecord
 
 class EnumDeclStatement(
     val declaredName: String,
@@ -30,17 +28,7 @@ class EnumDeclStatement(
     override val pos: Pos = startPos
 
     override suspend fun execute(scope: Scope): Obj {
-        val enumClass = ObjEnumClass.createSimpleEnum(qualifiedName, entries)
-        scope.addItem(declaredName, false, enumClass, recordType = ObjRecord.Type.Enum)
-        if (lifted) {
-            for (entry in entries) {
-                val rec = enumClass.getInstanceMemberOrNull(entry, includeAbstract = false, includeStatic = true)
-                if (rec != null) {
-                    scope.addItem(entry, false, rec.value)
-                }
-            }
-        }
-        return enumClass
+        return interpreterDisabled(scope, "enum declaration")
     }
 
     override suspend fun callOn(scope: Scope): Obj {

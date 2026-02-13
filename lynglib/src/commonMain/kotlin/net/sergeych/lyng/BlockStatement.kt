@@ -28,21 +28,7 @@ class BlockStatement(
     override val pos: Pos = startPos
 
     override suspend fun execute(scope: Scope): Obj {
-        val target = if (scope.skipScopeCreation) scope else scope.createChildScope(startPos)
-        if (slotPlan.isNotEmpty()) target.applySlotPlan(slotPlan)
-        if (captureSlots.isNotEmpty()) {
-            val captureRecords = scope.captureRecords
-            if (captureRecords == null) {
-                scope.raiseIllegalState("missing bytecode capture records")
-            }
-            for (i in captureSlots.indices) {
-                val capture = captureSlots[i]
-                val rec = captureRecords.getOrNull(i)
-                    ?: scope.raiseSymbolNotFound("capture ${capture.name} not found")
-                target.updateSlotFor(capture.name, rec)
-            }
-        }
-        return block.execute(target)
+        return interpreterDisabled(scope, "block statement")
     }
 
     fun statements(): List<Statement> = block.debugStatements()

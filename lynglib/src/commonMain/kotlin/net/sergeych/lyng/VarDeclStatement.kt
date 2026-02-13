@@ -18,9 +18,6 @@ package net.sergeych.lyng
 
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjClass
-import net.sergeych.lyng.obj.ObjNull
-import net.sergeych.lyng.obj.ObjRecord
-import net.sergeych.lyng.obj.ObjUnset
 
 class VarDeclStatement(
     val name: String,
@@ -36,15 +33,6 @@ class VarDeclStatement(
     override val pos: Pos = startPos
 
     override suspend fun execute(context: Scope): Obj {
-        val initValue = initializer?.execute(context)?.byValueCopy() ?: ObjUnset
-        context.addItem(
-            name,
-            isMutable,
-            initValue,
-            visibility,
-            recordType = ObjRecord.Type.Other,
-            isTransient = isTransient
-        )
-        return initValue
+        return interpreterDisabled(context, "var declaration")
     }
 }

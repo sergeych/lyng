@@ -1928,6 +1928,64 @@ class Compiler(
         )
     }
 
+    private fun wrapDefaultArgsBytecode(
+        args: ArgsDeclaration,
+        forcedLocalSlots: Map<String, Int>,
+        forcedLocalScopeId: Int
+    ): ArgsDeclaration {
+        if (!compileBytecode) return args
+        if (args.params.none { it.defaultValue is Statement }) return args
+        val updated = args.params.map { param ->
+            val defaultValue = param.defaultValue
+            val stmt = defaultValue as? Statement
+            if (stmt == null) return@map param
+            val bytecode = when (stmt) {
+                is BytecodeStatement -> stmt
+                is BytecodeBodyProvider -> stmt.bytecodeBody()
+                else -> null
+            }
+            if (bytecode != null) {
+                param
+            } else {
+                val wrapped = wrapFunctionBytecode(
+                    stmt,
+                    "argDefault@${param.name}",
+                    forcedLocalSlots = forcedLocalSlots,
+                    forcedLocalScopeId = forcedLocalScopeId
+                )
+                param.copy(defaultValue = wrapped)
+            }
+        }
+        return if (updated == args.params) args else args.copy(params = updated)
+    }
+
+    private fun wrapParsedArgsBytecode(
+        args: List<ParsedArgument>?,
+        forcedLocalSlots: Map<String, Int> = emptyMap(),
+        forcedLocalScopeId: Int? = null
+    ): List<ParsedArgument>? {
+        if (!compileBytecode || args == null || args.isEmpty()) return args
+        var changed = false
+        val updated = args.mapIndexed { index, arg ->
+            val stmt = arg.value as? Statement ?: return@mapIndexed arg
+            val bytecode = when (stmt) {
+                is BytecodeStatement -> stmt
+                is BytecodeBodyProvider -> stmt.bytecodeBody()
+                else -> null
+            }
+            if (bytecode != null) return@mapIndexed arg
+            val wrapped = wrapFunctionBytecode(
+                stmt,
+                "arg@${index}",
+                forcedLocalSlots = forcedLocalSlots,
+                forcedLocalScopeId = forcedLocalScopeId
+            )
+            changed = true
+            arg.copy(value = wrapped)
+        }
+        return if (changed) updated else args
+    }
+
     private fun containsDelegatedRefs(stmt: Statement): Boolean {
         val target = if (stmt is BytecodeStatement) stmt.original else stmt
         return when (target) {
@@ -5827,6 +5885,7 @@ class Compiler(
                 if (cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true)) {
                     argsList = parseArgsNoTailBlock()
                 }
+                argsList = wrapParsedArgsBytecode(argsList)
                 baseSpecs += BaseSpec(baseId.value, argsList)
             } while (cc.skipTokenOfType(Token.Type.COMMA, isOptional = true))
         }
@@ -5978,7 +6037,7 @@ class Compiler(
             val classTypeParams = typeParamDecls.map { it.name }.toSet()
             classCtx?.typeParams = classTypeParams
             pendingTypeParamStack.add(classTypeParams)
-            val constructorArgsDeclaration: ArgsDeclaration?
+            var constructorArgsDeclaration: ArgsDeclaration?
             try {
                 constructorArgsDeclaration =
                     if (cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true))
@@ -6009,6 +6068,16 @@ class Compiler(
                 val mutable = param.accessType?.isMutable ?: false
                 declareSlotNameIn(classSlotPlan, param.name, mutable, isDelegated = false)
             }
+            val ctorForcedLocalSlots = LinkedHashMap<String, Int>()
+            if (constructorArgsDeclaration != null) {
+                val snapshot = slotPlanIndices(classSlotPlan)
+                for (param in constructorArgsDeclaration!!.params) {
+                    val idx = snapshot[param.name] ?: continue
+                    ctorForcedLocalSlots[param.name] = idx
+                }
+                constructorArgsDeclaration =
+                    wrapDefaultArgsBytecode(constructorArgsDeclaration!!, ctorForcedLocalSlots, classSlotPlan.id)
+            }
             constructorArgsDeclaration?.params?.forEach { param ->
                 if (param.accessType != null) {
                     classCtx?.declaredMembers?.add(param.name)
@@ -6036,6 +6105,7 @@ class Compiler(
                             // Parse args without consuming any following block so that a class body can follow safely
                             argsList = parseArgsNoTailBlock()
                         }
+                        argsList = wrapParsedArgsBytecode(argsList, ctorForcedLocalSlots, classSlotPlan.id)
                         baseSpecs += BaseSpec(baseName, argsList)
                     } while (cc.skipTokenOfType(Token.Type.COMMA, isOptional = true))
                 }
@@ -6717,7 +6787,7 @@ class Compiler(
         }
         val typeParams = mergedTypeParamDecls.map { it.name }.toSet()
         pendingTypeParamStack.add(typeParams)
-        val argsDeclaration: ArgsDeclaration
+        var argsDeclaration: ArgsDeclaration
         val returnTypeMini: MiniTypeRef?
         val returnTypeDecl: TypeDecl?
         try {
@@ -6811,6 +6881,17 @@ class Compiler(
             val typeParamNames = mergedTypeParamDecls.map { it.name }
             val paramNames: Set<String> = paramNamesList.toSet()
             val paramSlotPlan = buildParamSlotPlan(paramNamesList + typeParamNames)
+            val paramSlotPlanSnapshot = slotPlanIndices(paramSlotPlan)
+            val forcedLocalSlots = LinkedHashMap<String, Int>()
+            for (name in paramNamesList) {
+                val idx = paramSlotPlanSnapshot[name] ?: continue
+                forcedLocalSlots[name] = idx
+            }
+            for (name in typeParamNames) {
+                val idx = paramSlotPlanSnapshot[name] ?: continue
+                forcedLocalSlots[name] = idx
+            }
+            argsDeclaration = wrapDefaultArgsBytecode(argsDeclaration, forcedLocalSlots, paramSlotPlan.id)
             val capturePlan = CapturePlan(paramSlotPlan, isFunction = true, propagateToParentFunction = false)
             val rangeParamNames = argsDeclaration.params
                 .filter { isRangeType(it.type) }
@@ -6886,12 +6967,6 @@ class Compiler(
                     callableReturnTypeByScopeId.getOrPut(slotLoc.scopeId) { mutableMapOf() }[slotLoc.slot] =
                         inferredReturnClass
                 }
-            }
-            val paramSlotPlanSnapshot = slotPlanIndices(paramSlotPlan)
-            val forcedLocalSlots = LinkedHashMap<String, Int>()
-            for (name in paramNamesList) {
-                val idx = paramSlotPlanSnapshot[name] ?: continue
-                forcedLocalSlots[name] = idx
             }
             val fnStatements = rawFnStatements?.let { stmt ->
                 if (!compileBytecode) return@let stmt

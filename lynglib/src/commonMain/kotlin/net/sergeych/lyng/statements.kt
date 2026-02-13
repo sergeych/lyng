@@ -19,10 +19,10 @@ package net.sergeych.lyng
 
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjClass
+import net.sergeych.lyng.obj.ObjException
 import net.sergeych.lyng.obj.ObjInt
 import net.sergeych.lyng.obj.ObjIterable
 import net.sergeych.lyng.obj.ObjNull
-import net.sergeych.lyng.obj.ObjException
 import net.sergeych.lyng.obj.ObjRange
 import net.sergeych.lyng.obj.ObjRecord
 import net.sergeych.lyng.obj.ObjString
@@ -71,6 +71,10 @@ abstract class Statement(
 
     suspend fun call(scope: Scope, vararg args: Obj) = execute(scope.createChildScope(args =  Arguments(*args)))
 
+    protected fun interpreterDisabled(scope: Scope, label: String): Nothing {
+        return scope.raiseIllegalState("interpreter execution is not supported; $label requires bytecode")
+    }
+
 }
 
 class IfStatement(
@@ -80,11 +84,7 @@ class IfStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        return if (condition.execute(scope).toBool()) {
-            ifBody.execute(scope)
-        } else {
-            elseBody?.execute(scope) ?: ObjVoid
-        }
+        return interpreterDisabled(scope, "if statement")
     }
 }
 
@@ -103,89 +103,7 @@ class ForInStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        val forContext = scope.createChildScope(pos)
-        if (loopSlotPlan.isNotEmpty()) {
-            forContext.applySlotPlan(loopSlotPlan)
-        }
-
-        val loopSO = forContext.addItem(loopVarName, true, ObjNull)
-        val loopSlotIndex = forContext.getSlotIndexOf(loopVarName) ?: -1
-
-        if (constRange != null && PerfFlags.PRIMITIVE_FASTOPS) {
-            return loopIntRange(
-                forContext,
-                constRange.start,
-                constRange.endExclusive,
-                loopSO,
-                loopSlotIndex,
-                body,
-                elseStatement,
-                label,
-                canBreak
-            )
-        }
-
-        val sourceObj = source.execute(forContext)
-        return if (sourceObj is ObjRange && sourceObj.isIntRange && !sourceObj.hasExplicitStep && PerfFlags.PRIMITIVE_FASTOPS) {
-            loopIntRange(
-                forContext,
-                sourceObj.start!!.toLong(),
-                if (sourceObj.isEndInclusive) sourceObj.end!!.toLong() + 1 else sourceObj.end!!.toLong(),
-                loopSO,
-                loopSlotIndex,
-                body,
-                elseStatement,
-                label,
-                canBreak
-            )
-        } else if (sourceObj.isInstanceOf(ObjIterable)) {
-            loopIterable(forContext, sourceObj, loopSO, body, elseStatement, label, canBreak)
-        } else {
-            val size = runCatching { sourceObj.readField(forContext, "size").value.toInt() }
-                .getOrElse {
-                    throw ScriptError(
-                        pos,
-                        "object is not enumerable: no size in $sourceObj",
-                        it
-                    )
-                }
-
-            var result: Obj = ObjVoid
-            var breakCaught = false
-
-            if (size > 0) {
-                var current = runCatching { sourceObj.getAt(forContext, ObjInt.of(0)) }
-                    .getOrElse {
-                        throw ScriptError(
-                            pos,
-                            "object is not enumerable: no index access for ${sourceObj.inspect(scope)}",
-                            it
-                        )
-                    }
-                var index = 0
-                while (true) {
-                    loopSO.value = current
-                    try {
-                        result = body.execute(forContext)
-                    } catch (lbe: LoopBreakContinueException) {
-                        if (lbe.label == label || lbe.label == null) {
-                            breakCaught = true
-                            if (lbe.doContinue) continue
-                            result = lbe.result
-                            break
-                        } else {
-                            throw lbe
-                        }
-                    }
-                    if (++index >= size) break
-                    current = sourceObj.getAt(forContext, ObjInt.of(index.toLong()))
-                }
-            }
-            if (!breakCaught && elseStatement != null) {
-                result = elseStatement.execute(scope)
-            }
-            result
-        }
+        return interpreterDisabled(scope, "for-in statement")
     }
 
     private suspend fun loopIntRange(
@@ -310,29 +228,7 @@ class WhileStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        var result: Obj = ObjVoid
-        var wasBroken = false
-        while (condition.execute(scope).toBool()) {
-            val loopScope = scope.createChildScope().apply { skipScopeCreation = true }
-            if (canBreak) {
-                try {
-                    result = body.execute(loopScope)
-                } catch (lbe: LoopBreakContinueException) {
-                    if (lbe.label == label || lbe.label == null) {
-                        if (lbe.doContinue) continue
-                        result = lbe.result
-                        wasBroken = true
-                        break
-                    } else {
-                        throw lbe
-                    }
-                }
-            } else {
-                result = body.execute(loopScope)
-            }
-        }
-        if (!wasBroken) elseStatement?.let { s -> result = s.execute(scope) }
-        return result
+        return interpreterDisabled(scope, "while statement")
     }
 }
 
@@ -345,30 +241,7 @@ class DoWhileStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        var wasBroken = false
-        var result: Obj = ObjVoid
-        while (true) {
-            val doScope = scope.createChildScope().apply { skipScopeCreation = true }
-            try {
-                result = body.execute(doScope)
-            } catch (e: LoopBreakContinueException) {
-                if (e.label == label || e.label == null) {
-                    if (!e.doContinue) {
-                        result = e.result
-                        wasBroken = true
-                        break
-                    }
-                    // continue: fall through to condition check
-                } else {
-                    throw e
-                }
-            }
-            if (!condition.execute(doScope).toBool()) {
-                break
-            }
-        }
-        if (!wasBroken) elseStatement?.let { s -> result = s.execute(scope) }
-        return result
+        return interpreterDisabled(scope, "do-while statement")
     }
 }
 
@@ -378,12 +251,7 @@ class BreakStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        val returnValue = resultExpr?.execute(scope)
-        throw LoopBreakContinueException(
-            doContinue = false,
-            label = label,
-            result = returnValue ?: ObjVoid
-        )
+        return interpreterDisabled(scope, "break statement")
     }
 }
 
@@ -392,10 +260,7 @@ class ContinueStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        throw LoopBreakContinueException(
-            doContinue = true,
-            label = label,
-        )
+        return interpreterDisabled(scope, "continue statement")
     }
 }
 
@@ -405,8 +270,7 @@ class ReturnStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        val returnValue = resultExpr?.execute(scope) ?: ObjVoid
-        throw ReturnException(returnValue, label)
+        return interpreterDisabled(scope, "return statement")
     }
 }
 
@@ -415,28 +279,7 @@ class ThrowStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        var errorObject = throwExpr.execute(scope)
-        val throwScope = scope.createChildScope(pos = pos)
-        if (errorObject is ObjString) {
-            errorObject = ObjException(throwScope, errorObject.value).apply { getStackTrace() }
-        }
-        if (!errorObject.isInstanceOf(ObjException.Root)) {
-            throwScope.raiseError("this is not an exception object: $errorObject")
-        }
-        if (errorObject is ObjException) {
-            errorObject = ObjException(
-                errorObject.exceptionClass,
-                throwScope,
-                errorObject.message,
-                errorObject.extraData,
-                errorObject.useStackTrace
-            ).apply { getStackTrace() }
-            throwScope.raiseError(errorObject)
-        } else {
-            val msg = errorObject.invokeInstanceMethod(scope, "message").toString(scope).value
-            throwScope.raiseError(errorObject, pos, msg)
-        }
-        return ObjVoid
+        return interpreterDisabled(scope, "throw statement")
     }
 }
 
@@ -444,7 +287,7 @@ class ExpressionStatement(
     val ref: net.sergeych.lyng.obj.ObjRef,
     override val pos: Pos
 ) : Statement() {
-    override suspend fun execute(scope: Scope): Obj = ref.evalValue(scope)
+    override suspend fun execute(scope: Scope): Obj = interpreterDisabled(scope, "expression statement")
 }
 
 fun Statement.raise(text: String): Nothing {
@@ -459,17 +302,17 @@ fun Statement.require(cond: Boolean, message: () -> String) {
 fun statement(pos: Pos, isStaticConst: Boolean = false, isConst: Boolean = false, f: suspend (Scope) -> Obj): Statement =
     object : Statement(isStaticConst, isConst) {
         override val pos: Pos = pos
-        override suspend fun execute(scope: Scope): Obj = f(scope)
+        override suspend fun execute(scope: Scope): Obj = interpreterDisabled(scope, "statement bridge")
     }
 
 fun statement(isStaticConst: Boolean = false, isConst: Boolean = false, f: suspend Scope.() -> Obj): Statement =
     object : Statement(isStaticConst, isConst) {
         override val pos: Pos = Pos.builtIn
-        override suspend fun execute(scope: Scope): Obj = f(scope)
+        override suspend fun execute(scope: Scope): Obj = interpreterDisabled(scope, "statement bridge")
     }
 
 object NopStatement: Statement(true, true, ObjType.Void) {
     override val pos: Pos = Pos.builtIn
 
-    override suspend fun execute(scope: Scope): Obj = ObjVoid
+    override suspend fun execute(scope: Scope): Obj = interpreterDisabled(scope, "nop statement")
 }

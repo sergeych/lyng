@@ -17,11 +17,7 @@
 package net.sergeych.lyng
 
 import net.sergeych.lyng.obj.Obj
-import net.sergeych.lyng.obj.ObjClass
-import net.sergeych.lyng.obj.ObjExtensionPropertyGetterCallable
-import net.sergeych.lyng.obj.ObjExtensionPropertySetterCallable
 import net.sergeych.lyng.obj.ObjProperty
-import net.sergeych.lyng.obj.ObjRecord
 
 class ExtensionPropertyDeclStatement(
     val extTypeName: String,
@@ -33,28 +29,6 @@ class ExtensionPropertyDeclStatement(
     override val pos: Pos = startPos
 
     override suspend fun execute(context: Scope): Obj {
-        val type = context[extTypeName]?.value ?: context.raiseSymbolNotFound("class $extTypeName not found")
-        if (type !is ObjClass) context.raiseClassCastError("$extTypeName is not the class instance")
-        context.addExtension(
-            type,
-            property.name,
-            ObjRecord(
-                property,
-                isMutable = false,
-                visibility = visibility,
-                writeVisibility = setterVisibility,
-                declaringClass = null,
-                type = ObjRecord.Type.Property
-            )
-        )
-        val getterName = extensionPropertyGetterName(extTypeName, property.name)
-        val getterWrapper = ObjExtensionPropertyGetterCallable(property.name, property)
-        context.addItem(getterName, false, getterWrapper, visibility, recordType = ObjRecord.Type.Fun)
-        if (property.setter != null) {
-            val setterName = extensionPropertySetterName(extTypeName, property.name)
-            val setterWrapper = ObjExtensionPropertySetterCallable(property.name, property)
-            context.addItem(setterName, false, setterWrapper, visibility, recordType = ObjRecord.Type.Fun)
-        }
-        return property
+        return interpreterDisabled(context, "extension property declaration")
     }
 }

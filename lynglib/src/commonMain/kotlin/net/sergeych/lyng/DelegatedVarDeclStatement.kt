@@ -18,9 +18,6 @@
 package net.sergeych.lyng
 
 import net.sergeych.lyng.obj.Obj
-import net.sergeych.lyng.obj.ObjNull
-import net.sergeych.lyng.obj.ObjRecord
-import net.sergeych.lyng.obj.ObjString
 
 class DelegatedVarDeclStatement(
     val name: String,
@@ -35,23 +32,6 @@ class DelegatedVarDeclStatement(
     override val pos: Pos = startPos
 
     override suspend fun execute(context: Scope): Obj {
-        val initValue = initializer.execute(context)
-        val accessTypeStr = if (isMutable) "Var" else "Val"
-        val accessType = ObjString(accessTypeStr)
-        val finalDelegate = try {
-            initValue.invokeInstanceMethod(context, "bind", Arguments(ObjString(name), accessType, ObjNull))
-        } catch (e: Exception) {
-            initValue
-        }
-        val rec = context.addItem(
-            name,
-            isMutable,
-            ObjNull,
-            visibility,
-            recordType = ObjRecord.Type.Delegated,
-            isTransient = isTransient
-        )
-        rec.delegate = finalDelegate
-        return finalDelegate
+        return interpreterDisabled(context, "delegated var declaration")
     }
 }

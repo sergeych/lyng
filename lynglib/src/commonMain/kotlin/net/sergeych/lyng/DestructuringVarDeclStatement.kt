@@ -18,7 +18,6 @@ package net.sergeych.lyng
 
 import net.sergeych.lyng.obj.ListLiteralRef
 import net.sergeych.lyng.obj.Obj
-import net.sergeych.lyng.obj.ObjVoid
 
 class DestructuringVarDeclStatement(
     val pattern: ListLiteralRef,
@@ -30,20 +29,6 @@ class DestructuringVarDeclStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(context: Scope): Obj {
-        val value = initializer.execute(context)
-        for (name in names) {
-            context.addItem(name, true, ObjVoid, visibility, isTransient = isTransient)
-        }
-        pattern.setAt(pos, context, value)
-        if (!isMutable) {
-            for (name in names) {
-                val rec = context.objects[name]!!
-                val immutableRec = rec.copy(isMutable = false)
-                context.objects[name] = immutableRec
-                context.localBindings[name] = immutableRec
-                context.updateSlotFor(name, immutableRec)
-            }
-        }
-        return ObjVoid
+        return interpreterDisabled(context, "destructuring declaration")
     }
 }

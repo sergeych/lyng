@@ -17,7 +17,6 @@
 package net.sergeych.lyng
 
 import net.sergeych.lyng.obj.Obj
-import net.sergeych.lyng.obj.ObjVoid
 
 sealed class WhenCondition(open val expr: Statement, open val pos: Pos) {
     abstract suspend fun matches(scope: Scope, value: Obj): Boolean
@@ -67,14 +66,6 @@ class WhenStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        val whenValue = value.execute(scope)
-        for (case in cases) {
-            for (condition in case.conditions) {
-                if (condition.matches(scope, whenValue)) {
-                    return case.block.execute(scope)
-                }
-            }
-        }
-        return elseCase?.execute(scope) ?: ObjVoid
+        return interpreterDisabled(scope, "when statement")
     }
 }
