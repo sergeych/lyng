@@ -26,6 +26,7 @@ import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.stdlib_included.rootLyng
+import net.sergeych.lyng.bridge.LyngClassBridge
 import net.sergeych.lynon.ObjLynonClass
 import net.sergeych.mp_tools.globalDefer
 import kotlin.math.*
@@ -560,9 +561,12 @@ class Script(
 
         val defaultImportManager: ImportManager by lazy {
             ImportManager(rootScope, SecurityManager.allowAll).apply {
-                addTextPackages(
-                    rootLyng
-                )
+                addPackage("lyng.stdlib") { module ->
+                    module.eval(Source("lyng.stdlib", rootLyng))
+                    val cls = module["KotlinIterator"]?.value as? ObjClass
+                        ?: module.raiseSymbolNotFound("KotlinIterator")
+                    ObjKotlinIterator.bindTo(cls)
+                }
                 addPackage("lyng.buffer") {
                     it.addConstDoc(
                         name = "Buffer",

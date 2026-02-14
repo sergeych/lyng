@@ -21,6 +21,12 @@ extern class Iterator<T> {
     fun toList(): List<T>
 }
 
+// Host-provided iterator wrapper for Kotlin collections.
+class KotlinIterator<T> : Iterator<T> {
+    extern override fun hasNext(): Bool
+    extern override fun next(): T
+}
+
 extern class Collection<T> : Iterable<T> {
 }
 

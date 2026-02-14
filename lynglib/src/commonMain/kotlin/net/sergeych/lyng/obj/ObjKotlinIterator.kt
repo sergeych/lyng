@@ -22,6 +22,7 @@ package net.sergeych.lyng.obj
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.bridge.LyngClassBridge
 
 /**
  * Iterator wrapper to allow Kotlin collections to be returned from Lyng objects;
@@ -32,9 +33,33 @@ class ObjKotlinIterator(val iterator: Iterator<Any?>) : Obj() {
     override val objClass get() = type
 
     companion object {
-        val type = ObjClass("KotlinIterator", ObjIterator).apply {
-            addFn("next") { thisAs<ObjKotlinIterator>().iterator.next().toObj() }
-            addFn("hasNext") { thisAs<ObjKotlinIterator>().iterator.hasNext().toObj() }
+        private var boundType: ObjClass? = null
+
+        val type: ObjClass
+            get() = boundType ?: error("KotlinIterator class is not bound; import lyng.stdlib first")
+
+        internal fun bindTo(cls: ObjClass) {
+            if (boundType != null) {
+                if (boundType === cls) return
+                return
+            }
+            boundType = cls
+            LyngClassBridge.bind(cls) {
+                addFun("next") { scope, self, _ ->
+                    when (self) {
+                        is ObjKotlinIterator -> self.iterator.next().toObj()
+                        is ObjKotlinObjIterator -> self.iterator.next()
+                        else -> scope.raiseClassCastError("Expected KotlinIterator, got ${self.objClass.className}")
+                    }
+                }
+                addFun("hasNext") { scope, self, _ ->
+                    when (self) {
+                        is ObjKotlinIterator -> self.iterator.hasNext().toObj()
+                        is ObjKotlinObjIterator -> self.iterator.hasNext().toObj()
+                        else -> scope.raiseClassCastError("Expected KotlinIterator, got ${self.objClass.className}")
+                    }
+                }
+            }
         }
 
     }
@@ -49,14 +74,8 @@ class ObjKotlinObjIterator(val iterator: Iterator<Obj>) : Obj() {
     override val objClass get() = type
 
     companion object {
-        val type = ObjClass("KotlinIterator", ObjIterator).apply {
-            addFn("next") {
-                thisAs<ObjKotlinObjIterator>().iterator.next()
-            }
-            addFn("hasNext") {
-                thisAs<ObjKotlinObjIterator>().iterator.hasNext().toObj()
-            }
-        }
+        val type: ObjClass
+            get() = ObjKotlinIterator.type
 
     }
 }
@@ -75,4 +94,3 @@ fun Obj.toFlow(scope: Scope): Flow<Obj> = flow {
         emit(next.invoke(scope, iterator))
     }
 }
-
