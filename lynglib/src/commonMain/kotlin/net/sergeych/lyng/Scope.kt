@@ -898,4 +898,10 @@ open class Scope(
         fun new(): Scope =
             Script.defaultImportManager.copy().newModuleAt(Pos.builtIn)
     }
+
+    fun requireClass(name: String): net.sergeych.lyng.obj.ObjClass {
+        val rec = get(name) ?: raiseSymbolNotFound(name)
+        return rec.value as? net.sergeych.lyng.obj.ObjClass
+            ?: raiseClassCastError("Expected class $name, got ${rec.value.objClass.className}")
+    }
 }

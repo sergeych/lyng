@@ -563,9 +563,7 @@ class Script(
             ImportManager(rootScope, SecurityManager.allowAll).apply {
                 addPackage("lyng.stdlib") { module ->
                     module.eval(Source("lyng.stdlib", rootLyng))
-                    val cls = module["KotlinIterator"]?.value as? ObjClass
-                        ?: module.raiseSymbolNotFound("KotlinIterator")
-                    ObjKotlinIterator.bindTo(cls)
+                    ObjKotlinIterator.bindTo(module.requireClass("KotlinIterator"))
                 }
                 addPackage("lyng.buffer") {
                     it.addConstDoc(
