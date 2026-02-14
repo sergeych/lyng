@@ -51,4 +51,33 @@ class BridgeResolverTest {
         val addByName = callByName.callByName(facade, "add", Arguments(ObjInt.of(4), ObjInt.of(6)))
         assertEquals(10, (addByName as ObjInt).value)
     }
+
+    @Test
+    fun testExtensionCallableHandle() = runTest {
+        val im = Script.defaultImportManager.copy()
+        val scope = im.newStdScope()
+        scope.eval(
+            """
+            class Foo {
+                var count: Int = 1
+            }
+
+            fun Foo.bumped() = count + 2
+
+            val f = Foo()
+            """.trimIndent()
+        )
+
+        val facade = scope.asFacade()
+        val resolver = facade.resolver()
+
+        val fooRec = scope["Foo"] ?: error("Foo not found")
+        val fooClass = scope.resolve(fooRec, "Foo") as net.sergeych.lyng.obj.ObjClass
+        val fRec = scope["f"] ?: error("f not found")
+        val fObj = scope.resolve(fRec, "f") as ObjInstance
+
+        val extHandle = resolver.resolveExtensionCallable(fooClass, "bumped")
+        val result = extHandle.call(facade, newThisObj = fObj) as ObjInt
+        assertEquals(3, result.value)
+    }
 }
