@@ -82,7 +82,7 @@ internal suspend fun executeFunctionDecl(
     if (spec.isDelegated) {
         val delegateExpr = spec.delegateExpression ?: scope.raiseError("delegated function missing delegate")
         val accessType = ObjString("Callable")
-        val initValue = requireBytecodeBody(scope, delegateExpr, "delegated function").execute(scope)
+        val initValue = executeBytecodeWithSeed(scope, delegateExpr, "delegated function")
         val finalDelegate = try {
             initValue.invokeInstanceMethod(scope, "bind", Arguments(ObjString(spec.name), accessType, scope.thisObj))
         } catch (e: Exception) {
@@ -99,8 +99,8 @@ internal suspend fun executeFunctionDecl(
                     delegate = finalDelegate
                 }
             )
-    return ObjVoid
-}
+            return finalDelegate
+        }
 
         val th = scope.thisObj
         if (spec.isStatic) {
@@ -158,7 +158,7 @@ internal suspend fun executeFunctionDecl(
                 delegate = finalDelegate
             }
         }
-        return ObjVoid
+        return finalDelegate
     }
 
     if (spec.isStatic || !spec.parentIsClassBody) {

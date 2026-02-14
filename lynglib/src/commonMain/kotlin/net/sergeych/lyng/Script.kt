@@ -35,6 +35,7 @@ class Script(
     override val pos: Pos,
     private val statements: List<Statement> = emptyList(),
     private val moduleSlotPlan: Map<String, Int> = emptyMap(),
+    private val moduleDeclaredNames: Set<String> = emptySet(),
     private val importBindings: Map<String, ImportBinding> = emptyMap(),
     private val importedModules: List<ImportBindingSource.Module> = emptyList(),
     private val moduleBytecode: CmdFunction? = null,
@@ -44,49 +45,19 @@ class Script(
 
     override suspend fun execute(scope: Scope): Obj {
         scope.pos = pos
-        val isModuleScope = scope is ModuleScope
-        val shouldSeedModule = isModuleScope || scope.thisObj === ObjVoid
-        val moduleTarget = scope
-        if (moduleSlotPlan.isNotEmpty() && shouldSeedModule) {
-            val hasPlanMapping = moduleSlotPlan.keys.any { moduleTarget.getSlotIndexOf(it) != null }
-            val needsReset = moduleTarget is ModuleScope ||
-                moduleTarget.slotCount() == 0 ||
-                moduleTarget.hasSlotPlanConflict(moduleSlotPlan) ||
-                (!hasPlanMapping && moduleTarget.slotCount() > 0)
-            if (needsReset) {
-                val preserved = LinkedHashMap<String, ObjRecord>()
-                for (name in moduleSlotPlan.keys) {
-                    moduleTarget.getLocalRecordDirect(name)?.let { preserved[name] = it }
-                }
-                moduleTarget.applySlotPlanReset(moduleSlotPlan, preserved)
-                for (name in moduleSlotPlan.keys) {
-                    if (preserved.containsKey(name)) continue
-                    val inherited = findSeedRecord(moduleTarget.parent, name)
-                    if (inherited != null && inherited.value !== ObjUnset) {
-                        moduleTarget.updateSlotFor(name, inherited)
-                    }
-                }
-            } else {
-                moduleTarget.applySlotPlan(moduleSlotPlan)
-                for (name in moduleSlotPlan.keys) {
-                    val local = moduleTarget.getLocalRecordDirect(name)
-                    if (local != null && local.value !== ObjUnset) {
-                        moduleTarget.updateSlotFor(name, local)
-                        continue
-                    }
-                    val inherited = findSeedRecord(moduleTarget.parent, name)
-                    if (inherited != null && inherited.value !== ObjUnset) {
-                        moduleTarget.updateSlotFor(name, inherited)
-                    }
-                }
-            }
-        }
+        val execScope = resolveModuleScope(scope) ?: scope
+        val isModuleScope = execScope is ModuleScope
+        val shouldSeedModule = isModuleScope || execScope.thisObj === ObjVoid
+        val moduleTarget = execScope
         if (shouldSeedModule) {
-            seedModuleSlots(moduleTarget)
+            seedModuleSlots(moduleTarget, scope)
         }
         moduleBytecode?.let { fn ->
-            return CmdVm().execute(fn, scope, scope.args) { frame, _ ->
-                seedModuleLocals(frame, moduleTarget)
+            if (execScope is ModuleScope) {
+                execScope.ensureModuleFrame(fn)
+            }
+            return CmdVm().execute(fn, execScope, scope.args) { frame, _ ->
+                seedModuleLocals(frame, moduleTarget, scope)
             }
         }
         if (statements.isNotEmpty()) {
@@ -95,37 +66,34 @@ class Script(
         return ObjVoid
     }
 
-    private suspend fun seedModuleSlots(scope: Scope) {
+    private suspend fun seedModuleSlots(scope: Scope, seedScope: Scope) {
         if (importBindings.isEmpty() && importedModules.isEmpty()) return
-        seedImportBindings(scope)
+        seedImportBindings(scope, seedScope)
     }
 
-    private suspend fun seedModuleLocals(frame: net.sergeych.lyng.bytecode.CmdFrame, scope: Scope) {
-        if (importBindings.isEmpty()) return
+    private suspend fun seedModuleLocals(
+        frame: net.sergeych.lyng.bytecode.CmdFrame,
+        scope: Scope,
+        seedScope: Scope
+    ) {
         val localNames = frame.fn.localSlotNames
         if (localNames.isEmpty()) return
-        val values = HashMap<String, Obj>(importBindings.size)
-        for (name in importBindings.keys) {
-            val record = scope.getLocalRecordDirect(name) ?: continue
+        val values = HashMap<String, Obj>()
+        val base = frame.fn.scopeSlotCount
+        for (i in localNames.indices) {
+            val name = localNames[i] ?: continue
+            if (moduleDeclaredNames.contains(name)) continue
+            val record = seedScope.getLocalRecordDirect(name) ?: findSeedRecord(seedScope, name) ?: continue
             val value = if (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property) {
                 scope.resolve(record, name)
             } else {
                 record.value
             }
-            if (value !== ObjUnset) {
-                values[name] = value
-            }
-        }
-        if (values.isEmpty()) return
-        val base = frame.fn.scopeSlotCount
-        for (i in localNames.indices) {
-            val name = localNames[i] ?: continue
-            val value = values[name] ?: continue
             frame.setObjUnchecked(base + i, value)
         }
     }
 
-    private suspend fun seedImportBindings(scope: Scope) {
+    private suspend fun seedImportBindings(scope: Scope, seedScope: Scope) {
         val provider = scope.currentImportProvider
         val importedModules = LinkedHashSet<ModuleScope>()
         for (moduleRef in this.importedModules) {
@@ -147,7 +115,7 @@ class Script(
                         ?: scope.raiseSymbolNotFound("symbol ${binding.symbol} not found")
                 }
                 ImportBindingSource.Seed -> {
-                    findSeedRecord(scope, binding.symbol)
+                    findSeedRecord(seedScope, binding.symbol)
                         ?: scope.raiseSymbolNotFound("symbol ${binding.symbol} not found")
                 }
             }
@@ -184,12 +152,7 @@ class Script(
     }
 
     private fun resolveModuleScope(scope: Scope): ModuleScope? {
-        var current: Scope? = scope
-        while (current != null) {
-            if (current is ModuleScope) return current
-            current = current.parent
-        }
-        return null
+        return scope as? ModuleScope
     }
 
     internal fun debugStatements(): List<Statement> = statements
@@ -365,21 +328,31 @@ class Script(
                     raiseError(ObjAssertionFailedException(requireScope(), "Assertion failed$message"))
             }
 
+            fun unwrapCompareArg(value: Obj): Obj {
+                val resolved = when (value) {
+                    is FrameSlotRef -> value.read()
+                    is RecordSlotRef -> value.read()
+                    else -> value
+                }
+                return if (resolved === ObjUnset.objClass) ObjUnset else resolved
+            }
+
             addVoidFn("assertEquals") {
-                val a = requiredArg<Obj>(0)
-                val b = requiredArg<Obj>(1)
-                if (a.compareTo(requireScope(), b) != 0)
+                val a = unwrapCompareArg(requiredArg(0))
+                val b = unwrapCompareArg(requiredArg(1))
+                if (a.compareTo(requireScope(), b) != 0) {
                     raiseError(
                         ObjAssertionFailedException(
                             requireScope(),
                             "Assertion failed: ${inspect(a)} == ${inspect(b)}"
                         )
                     )
+                }
             }
             // alias used in tests
             addVoidFn("assertEqual") {
-                val a = requiredArg<Obj>(0)
-                val b = requiredArg<Obj>(1)
+                val a = unwrapCompareArg(requiredArg(0))
+                val b = unwrapCompareArg(requiredArg(1))
                 if (a.compareTo(requireScope(), b) != 0)
                     raiseError(
                         ObjAssertionFailedException(
@@ -389,8 +362,8 @@ class Script(
                     )
             }
             addVoidFn("assertNotEquals") {
-                val a = requiredArg<Obj>(0)
-                val b = requiredArg<Obj>(1)
+                val a = unwrapCompareArg(requiredArg(0))
+                val b = unwrapCompareArg(requiredArg(1))
                 if (a.compareTo(requireScope(), b) == 0)
                     raiseError(
                         ObjAssertionFailedException(

@@ -977,7 +977,14 @@ object ObjNull : Obj() {
 @Serializable
 @SerialName("unset")
 object ObjUnset : Obj() {
-    override suspend fun compareTo(scope: Scope, other: Obj): Int = if (other === this) 0 else -1
+    override suspend fun compareTo(scope: Scope, other: Obj): Int {
+        val resolved = when (other) {
+            is FrameSlotRef -> other.read()
+            is RecordSlotRef -> other.read()
+            else -> other
+        }
+        return if (resolved === this) 0 else -1
+    }
     override fun equals(other: Any?): Boolean = other === this
     override fun toString(): String = "Unset"
 

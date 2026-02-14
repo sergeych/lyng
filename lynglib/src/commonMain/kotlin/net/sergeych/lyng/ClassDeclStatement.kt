@@ -74,7 +74,7 @@ internal suspend fun executeClassDecl(
         newClass.classScope = classScope
         classScope.addConst("object", newClass)
 
-        spec.bodyInit?.let { requireBytecodeBody(scope, it, "object body init").execute(classScope) }
+        spec.bodyInit?.let { executeBytecodeWithSeed(classScope, it, "object body init") }
 
         val instance = newClass.callOn(scope.createChildScope(Arguments.EMPTY))
         if (spec.declaredName != null) {
@@ -140,7 +140,17 @@ internal suspend fun executeClassDecl(
         }
     }
 
-    spec.declaredName?.let { scope.addItem(it, false, newClass) }
+    spec.declaredName?.let { name ->
+        scope.addItem(name, false, newClass)
+        val module = scope as? ModuleScope
+        val frame = module?.moduleFrame
+        if (module != null && frame != null) {
+            val idx = module.moduleFrameLocalSlotNames.indexOf(name)
+            if (idx >= 0) {
+                frame.setObj(idx, newClass)
+            }
+        }
+    }
     val classScope = scope.createChildScope(newThisObj = newClass)
     if (!bodyCaptureRecords.isNullOrEmpty() && !bodyCaptureNames.isNullOrEmpty()) {
         classScope.captureRecords = bodyCaptureRecords
@@ -148,10 +158,10 @@ internal suspend fun executeClassDecl(
     }
     classScope.currentClassCtx = newClass
     newClass.classScope = classScope
-    spec.bodyInit?.let { requireBytecodeBody(scope, it, "class body init").execute(classScope) }
+    spec.bodyInit?.let { executeBytecodeWithSeed(classScope, it, "class body init") }
     if (spec.initScope.isNotEmpty()) {
         for (s in spec.initScope) {
-            requireBytecodeBody(scope, s, "class init").execute(classScope)
+            executeBytecodeWithSeed(classScope, s, "class init")
         }
     }
     newClass.checkAbstractSatisfaction(spec.startPos)

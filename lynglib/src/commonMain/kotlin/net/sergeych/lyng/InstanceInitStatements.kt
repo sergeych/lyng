@@ -109,7 +109,7 @@ class InstanceDelegatedInitStatement(
     override val pos: Pos,
 ) : Statement() {
     override suspend fun execute(scope: Scope): Obj {
-        val initValue = execBytecodeOnly(scope, initializer, "instance delegated init")
+        val initValue = executeBytecodeWithSeed(scope, initializer, "instance delegated init")
         val accessType = ObjString(accessTypeLabel)
         val finalDelegate = try {
             initValue.invokeInstanceMethod(
@@ -135,14 +135,5 @@ class InstanceDelegatedInitStatement(
             delegate = finalDelegate
         }
         return ObjVoid
-    }
-
-    private suspend fun execBytecodeOnly(scope: Scope, stmt: Statement, label: String): Obj {
-        val bytecode = when (stmt) {
-            is net.sergeych.lyng.bytecode.BytecodeStatement -> stmt
-            is BytecodeBodyProvider -> stmt.bytecodeBody()
-            else -> null
-        } ?: scope.raiseIllegalState("$label requires bytecode statement")
-        return bytecode.execute(scope)
     }
 }

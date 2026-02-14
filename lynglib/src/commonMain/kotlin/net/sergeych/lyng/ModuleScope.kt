@@ -17,6 +17,8 @@
 
 package net.sergeych.lyng
 
+import net.sergeych.lyng.bytecode.BytecodeFrame
+import net.sergeych.lyng.bytecode.CmdFunction
 import net.sergeych.lyng.obj.ObjRecord
 import net.sergeych.lyng.obj.ObjString
 import net.sergeych.lyng.pacman.ImportProvider
@@ -34,6 +36,27 @@ class ModuleScope(
     constructor(importProvider: ImportProvider, source: Source) : this(importProvider, source.startPos, source.fileName)
 
     internal var importedModules: List<ModuleScope> = emptyList()
+    internal var moduleFrame: BytecodeFrame? = null
+    internal var moduleFrameLocalCount: Int = -1
+    internal var moduleFrameLocalSlotNames: Array<String?> = emptyArray()
+    internal var moduleFrameLocalSlotMutables: BooleanArray = BooleanArray(0)
+    internal var moduleFrameLocalSlotDelegated: BooleanArray = BooleanArray(0)
+
+    internal fun ensureModuleFrame(fn: CmdFunction): BytecodeFrame {
+        val current = moduleFrame
+        val frame = if (current == null || moduleFrameLocalCount != fn.localCount) {
+            BytecodeFrame(fn.localCount, 0).also {
+                moduleFrame = it
+                moduleFrameLocalCount = fn.localCount
+            }
+        } else {
+            current
+        }
+        moduleFrameLocalSlotNames = fn.localSlotNames
+        moduleFrameLocalSlotMutables = fn.localSlotMutables
+        moduleFrameLocalSlotDelegated = fn.localSlotDelegated
+        return frame
+    }
 
     /**
      * Import symbols into the scope. It _is called_ after the module is imported by [ImportProvider.prepareImport]

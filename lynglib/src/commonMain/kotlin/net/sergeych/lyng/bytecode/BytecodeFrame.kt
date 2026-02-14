@@ -53,7 +53,13 @@ class BytecodeFrame(
 
     override fun setObj(slot: Int, value: Obj) {
         when (val current = objSlots[slot]) {
-            is net.sergeych.lyng.FrameSlotRef -> current.write(value)
+            is net.sergeych.lyng.FrameSlotRef -> {
+                if (current.refersTo(this, slot)) {
+                    objSlots[slot] = value
+                } else {
+                    current.write(value)
+                }
+            }
             is net.sergeych.lyng.RecordSlotRef -> current.write(value)
             else -> objSlots[slot] = value
         }

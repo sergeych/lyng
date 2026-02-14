@@ -36,14 +36,28 @@ class FrameSlotRef(
     private val frame: FrameAccess,
     private val slot: Int,
 ) : net.sergeych.lyng.obj.Obj() {
+    override suspend fun compareTo(scope: Scope, other: Obj): Int {
+        val resolvedOther = when (other) {
+            is FrameSlotRef -> other.read()
+            is RecordSlotRef -> other.read()
+            else -> other
+        }
+        return read().compareTo(scope, resolvedOther)
+    }
+
     fun read(): Obj {
-        return when (frame.getSlotTypeCode(slot)) {
+        val typeCode = frame.getSlotTypeCode(slot)
+        return when (typeCode) {
             SlotType.INT.code -> ObjInt.of(frame.getInt(slot))
             SlotType.REAL.code -> ObjReal.of(frame.getReal(slot))
             SlotType.BOOL.code -> if (frame.getBool(slot)) ObjTrue else ObjFalse
             SlotType.OBJ.code -> frame.getObj(slot)
-            else -> ObjNull
+            else -> frame.getObj(slot)
         }
+    }
+
+    internal fun refersTo(frame: FrameAccess, slot: Int): Boolean {
+        return this.frame === frame && this.slot == slot
     }
 
     fun write(value: Obj) {
@@ -59,6 +73,15 @@ class FrameSlotRef(
 class RecordSlotRef(
     private val record: ObjRecord,
 ) : net.sergeych.lyng.obj.Obj() {
+    override suspend fun compareTo(scope: Scope, other: Obj): Int {
+        val resolvedOther = when (other) {
+            is FrameSlotRef -> other.read()
+            is RecordSlotRef -> other.read()
+            else -> other
+        }
+        return read().compareTo(scope, resolvedOther)
+    }
+
     fun read(): Obj {
         val direct = record.value
         return if (direct is FrameSlotRef) direct.read() else direct

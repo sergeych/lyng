@@ -575,6 +575,11 @@ open class ObjClass(
         val stableParent = classScope ?: scope.parent
         instance.instanceScope = Scope(stableParent, scope.args, scope.pos, instance)
         instance.instanceScope.currentClassCtx = null
+        val classCaptureRecords = classScope?.captureRecords
+        if (classCaptureRecords != null) {
+            instance.instanceScope.captureRecords = classCaptureRecords
+            instance.instanceScope.captureNames = classScope?.captureNames
+        }
         val fieldSlots = fieldSlotMap()
         if (fieldSlots.isNotEmpty()) {
             instance.initFieldSlots(fieldSlotCount())
@@ -714,7 +719,11 @@ open class ObjClass(
             instance.instanceScope.currentClassCtx = c
             try {
                 for (initStmt in c.instanceInitializers) {
-                    initStmt.callOn(instance.instanceScope)
+                    if (initStmt is net.sergeych.lyng.Statement) {
+                        executeBytecodeWithSeed(instance.instanceScope, initStmt, "instance init")
+                    } else {
+                        initStmt.callOn(instance.instanceScope)
+                    }
                 }
             } finally {
                 instance.instanceScope.currentClassCtx = savedCtx

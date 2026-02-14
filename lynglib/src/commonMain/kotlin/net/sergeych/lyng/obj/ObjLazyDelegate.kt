@@ -17,7 +17,12 @@
 
 package net.sergeych.lyng.obj
 
-import net.sergeych.lyng.*
+import net.sergeych.lyng.Arguments
+import net.sergeych.lyng.Pos
+import net.sergeych.lyng.Scope
+import net.sergeych.lyng.Statement
+import net.sergeych.lyng.Visibility
+import net.sergeych.lyng.executeBytecodeWithSeed
 
 /**
  * Lazy delegate used by `val x by lazy { ... }`.
@@ -41,7 +46,11 @@ class ObjLazyDelegate(
             "getValue" -> {
                 if (!calculated) {
                     val callScope = capturedScope.createChildScope(capturedScope.pos, args = Arguments.EMPTY)
-                    cachedValue = builder.callOn(callScope)
+                    cachedValue = if (builder is Statement) {
+                        executeBytecodeWithSeed(callScope, builder, "lazy delegate")
+                    } else {
+                        builder.callOn(callScope)
+                    }
                     calculated = true
                 }
                 cachedValue

@@ -7,7 +7,6 @@ Current focus
 - Enforce compile-time name/member resolution only; no runtime scope lookup or fallback.
 - Bytecode uses memberId-based ops (CALL_MEMBER_SLOT/GET_MEMBER_SLOT/SET_MEMBER_SLOT).
 - Runtime lookup opcodes (CALL_VIRTUAL/GET_FIELD/SET_FIELD) and fallback callsites are removed.
-- Migrate bytecode to frame-first locals with lazy scope reflection; avoid eager scope slot plans in compiled functions.
 - Use FrameSlotRef for captures and only materialize Scope for Kotlin interop; use frame.ip -> pos mapping for diagnostics.
 
 Key recent changes

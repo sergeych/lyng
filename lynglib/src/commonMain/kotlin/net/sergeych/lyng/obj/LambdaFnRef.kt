@@ -20,12 +20,14 @@ import net.sergeych.lyng.ArgsDeclaration
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.bytecode.CmdFunction
+import net.sergeych.lyng.bytecode.LambdaCaptureEntry
 
 class LambdaFnRef(
     valueFn: suspend (Scope) -> ObjRecord,
     val bytecodeFn: CmdFunction?,
     val paramSlotPlan: Map<String, Int>,
     val argsDeclaration: ArgsDeclaration?,
+    val captureEntries: List<LambdaCaptureEntry>,
     val preferredThisType: String?,
     val wrapAsExtensionCallable: Boolean,
     val returnLabels: Set<String>,

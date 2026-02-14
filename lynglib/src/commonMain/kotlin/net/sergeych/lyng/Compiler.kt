@@ -19,6 +19,7 @@ package net.sergeych.lyng
 
 import net.sergeych.lyng.Compiler.Companion.compile
 import net.sergeych.lyng.bytecode.BytecodeStatement
+import net.sergeych.lyng.bytecode.ForcedLocalSlotInfo
 import net.sergeych.lyng.bytecode.CmdListLiteral
 import net.sergeych.lyng.bytecode.CmdMakeRange
 import net.sergeych.lyng.bytecode.CmdRangeIntBounds
@@ -133,15 +134,15 @@ class Compiler(
         if (plan.slots.containsKey(name)) return
         plan.slots[name] = SlotEntry(plan.nextIndex, isMutable, isDelegated)
         plan.nextIndex += 1
+        if (!seedingSlotPlan && plan == moduleSlotPlan()) {
+            moduleDeclaredNames.add(name)
+        }
     }
 
     private fun declareSlotNameIn(plan: SlotPlan, name: String, isMutable: Boolean, isDelegated: Boolean) {
         if (plan.slots.containsKey(name)) return
         plan.slots[name] = SlotEntry(plan.nextIndex, isMutable, isDelegated)
         plan.nextIndex += 1
-        if (!seedingSlotPlan && plan == moduleSlotPlan()) {
-            moduleDeclaredNames.add(name)
-        }
     }
 
     private fun declareSlotNameAt(
@@ -186,6 +187,20 @@ class Compiler(
     private val externCallableNames: MutableSet<String> = mutableSetOf()
     private val moduleDeclaredNames: MutableSet<String> = mutableSetOf()
     private var seedingSlotPlan: Boolean = false
+
+    private fun moduleForcedLocalSlotInfo(): Map<String, ForcedLocalSlotInfo> {
+        val plan = moduleSlotPlan() ?: return emptyMap()
+        if (plan.slots.isEmpty()) return emptyMap()
+        val result = LinkedHashMap<String, ForcedLocalSlotInfo>(plan.slots.size)
+        for ((name, entry) in plan.slots) {
+            result[name] = ForcedLocalSlotInfo(
+                index = entry.index,
+                isMutable = entry.isMutable,
+                isDelegated = entry.isDelegated
+            )
+        }
+        return result
+    }
 
     private fun seedSlotPlanFromScope(scope: Scope, includeParents: Boolean = false) {
         val plan = moduleSlotPlan() ?: return
@@ -963,15 +978,29 @@ class Compiler(
                     resolutionSink?.reference(name, pos)
                     return ref
                 }
-                val ref = LocalSlotRef(
-                    name,
-                    moduleLoc.slot,
-                    moduleLoc.scopeId,
-                    moduleLoc.isMutable,
-                    moduleLoc.isDelegated,
-                    pos,
-                    strictSlotRefs
-                )
+                val ref = if (capturePlanStack.isEmpty() && moduleLoc.depth > 0) {
+                    LocalSlotRef(
+                        name,
+                        moduleLoc.slot,
+                        moduleLoc.scopeId,
+                        moduleLoc.isMutable,
+                        moduleLoc.isDelegated,
+                        pos,
+                        strictSlotRefs,
+                        captureOwnerScopeId = moduleLoc.scopeId,
+                        captureOwnerSlot = moduleLoc.slot
+                    )
+                } else {
+                    LocalSlotRef(
+                        name,
+                        moduleLoc.slot,
+                        moduleLoc.scopeId,
+                        moduleLoc.isMutable,
+                        moduleLoc.isDelegated,
+                        pos,
+                        strictSlotRefs
+                    )
+                }
                 resolutionSink?.reference(name, pos)
                 return ref
             }
@@ -983,11 +1012,13 @@ class Compiler(
                     } else {
                         null
                     }
-                    if (seedSlotIndex != null) {
+                    val seedSlotFree = seedSlotIndex != null &&
+                        modulePlan.slots.values.none { it.index == seedSlotIndex }
+                    if (seedSlotFree) {
                         declareSlotNameAt(
                             modulePlan,
                             name,
-                            seedSlotIndex,
+                            seedSlotIndex!!,
                             sourceRecord.isMutable,
                             sourceRecord.type == ObjRecord.Type.Delegated
                         )
@@ -1003,15 +1034,33 @@ class Compiler(
                 registerImportBinding(name, resolved.binding, pos)
                 val slot = lookupSlotLocation(name)
                 if (slot != null) {
-                    val ref = LocalSlotRef(
-                        name,
-                        slot.slot,
-                        slot.scopeId,
-                        slot.isMutable,
-                        slot.isDelegated,
-                        pos,
-                        strictSlotRefs
-                    )
+                    captureLocalRef(name, slot, pos)?.let { ref ->
+                        resolutionSink?.reference(name, pos)
+                        return ref
+                    }
+                    val ref = if (capturePlanStack.isEmpty() && slot.depth > 0) {
+                        LocalSlotRef(
+                            name,
+                            slot.slot,
+                            slot.scopeId,
+                            slot.isMutable,
+                            slot.isDelegated,
+                            pos,
+                            strictSlotRefs,
+                            captureOwnerScopeId = slot.scopeId,
+                            captureOwnerSlot = slot.slot
+                        )
+                    } else {
+                        LocalSlotRef(
+                            name,
+                            slot.slot,
+                            slot.scopeId,
+                            slot.isMutable,
+                            slot.isDelegated,
+                            pos,
+                            strictSlotRefs
+                        )
+                    }
                     resolutionSink?.reference(name, pos)
                     return ref
                 }
@@ -1202,6 +1251,7 @@ class Compiler(
     private fun registerImportBinding(name: String, binding: ImportBinding, pos: Pos) {
         val existing = importBindings[name] ?: run {
             importBindings[name] = binding
+            scopeSeedNames.add(name)
             return
         }
         if (!sameImportBinding(existing, binding)) {
@@ -1569,6 +1619,11 @@ class Compiler(
 
                 } while (true)
                 val modulePlan = if (needsSlotPlan) slotPlanIndices(slotPlanStack.last()) else emptyMap()
+                val forcedLocalInfo = if (useScopeSlots) emptyMap() else moduleForcedLocalSlotInfo()
+                val forcedLocalScopeId = if (useScopeSlots) null else moduleSlotPlan()?.id
+                val allowedScopeNames = if (useScopeSlots) modulePlan.keys else null
+                val scopeSlotNameSet = if (useScopeSlots) scopeSeedNames else null
+                val moduleScopeId = if (useScopeSlots) null else moduleSlotPlan()?.id
                 val isModuleScript = codeContexts.lastOrNull() is CodeContext.Module && resolutionScriptDepth == 1
                 val wrapScriptBytecode = compileBytecode && isModuleScript
                 val (finalStatements, moduleBytecode) = if (wrapScriptBytecode) {
@@ -1578,9 +1633,11 @@ class Compiler(
                         block,
                         "<script>",
                         allowLocalSlots = true,
-                        allowedScopeNames = modulePlan.keys,
-                        scopeSlotNameSet = scopeSeedNames,
-                        moduleScopeId = moduleSlotPlan()?.id,
+                        allowedScopeNames = allowedScopeNames,
+                        scopeSlotNameSet = scopeSlotNameSet,
+                        moduleScopeId = moduleScopeId,
+                        forcedLocalSlotInfo = forcedLocalInfo,
+                        forcedLocalScopeId = forcedLocalScopeId,
                         slotTypeByScopeId = slotTypeByScopeId,
                         knownNameObjClass = knownClassMapForBytecode(),
                         knownObjectNames = objectDeclNames,
@@ -1599,6 +1656,7 @@ class Compiler(
                     start,
                     finalStatements,
                     modulePlan,
+                    moduleDeclaredNames.toSet(),
                     importBindings.toMap(),
                     moduleRefs,
                     moduleBytecode
@@ -1645,6 +1703,7 @@ class Compiler(
     private val rangeParamNamesStack = mutableListOf<Set<String>>()
     private val extensionNames = mutableSetOf<String>()
     private val extensionNamesByType = mutableMapOf<String, MutableSet<String>>()
+    private val useScopeSlots: Boolean = seedScope != null && seedScope !is ModuleScope
 
     private fun registerExtensionName(typeName: String, memberName: String) {
         extensionNamesByType.getOrPut(typeName) { mutableSetOf() }.add(memberName)
@@ -1788,10 +1847,10 @@ class Compiler(
         } ?: -1
         val scopeIndex = slotPlanStack.indexOfLast { it.id == slotLoc.scopeId }
         if (functionIndex >= 0 && scopeIndex >= functionIndex) return null
-        if (scopeSeedNames.contains(name)) return null
         val modulePlan = moduleSlotPlan()
-        if (modulePlan != null && slotLoc.scopeId == modulePlan.id) {
-            return null
+        if (scopeSeedNames.contains(name)) {
+            val isModuleSlot = modulePlan != null && slotLoc.scopeId == modulePlan.id
+            if (!isModuleSlot || useScopeSlots) return null
         }
         recordCaptureSlot(name, slotLoc)
         val plan = capturePlanStack.lastOrNull() ?: return null
@@ -1864,7 +1923,10 @@ class Compiler(
         ) return stmt
         val allowLocals = codeContexts.lastOrNull() !is CodeContext.ClassBody
         val returnLabels = returnLabelStack.lastOrNull() ?: emptySet()
-        val allowedScopeNames = moduleSlotPlan()?.slots?.keys
+        val modulePlan = moduleSlotPlan()
+        val allowedScopeNames = if (useScopeSlots) modulePlan?.slots?.keys else null
+        val scopeSlotNameSet = if (useScopeSlots) scopeSeedNames else null
+        val moduleScopeId = modulePlan?.id
         return BytecodeStatement.wrap(
             stmt,
             "stmt@${stmt.pos}",
@@ -1872,8 +1934,8 @@ class Compiler(
             returnLabels = returnLabels,
             rangeLocalNames = currentRangeParamNames,
             allowedScopeNames = allowedScopeNames,
-            scopeSlotNameSet = scopeSeedNames,
-            moduleScopeId = moduleSlotPlan()?.id,
+            scopeSlotNameSet = scopeSlotNameSet,
+            moduleScopeId = moduleScopeId,
             slotTypeByScopeId = slotTypeByScopeId,
             knownNameObjClass = knownClassMapForBytecode(),
             knownObjectNames = objectDeclNames,
@@ -1889,7 +1951,10 @@ class Compiler(
     private fun wrapClassBodyBytecode(stmt: Statement, name: String): Statement {
         val target = if (stmt is Script) InlineBlockStatement(stmt.statements(), stmt.pos) else stmt
         val returnLabels = returnLabelStack.lastOrNull() ?: emptySet()
-        val allowedScopeNames = moduleSlotPlan()?.slots?.keys
+        val modulePlan = moduleSlotPlan()
+        val allowedScopeNames = if (useScopeSlots) modulePlan?.slots?.keys else null
+        val scopeSlotNameSet = if (useScopeSlots) scopeSeedNames else null
+        val moduleScopeId = modulePlan?.id
         return BytecodeStatement.wrap(
             target,
             name,
@@ -1897,8 +1962,8 @@ class Compiler(
             returnLabels = returnLabels,
             rangeLocalNames = currentRangeParamNames,
             allowedScopeNames = allowedScopeNames,
-            scopeSlotNameSet = scopeSeedNames,
-            moduleScopeId = moduleSlotPlan()?.id,
+            scopeSlotNameSet = scopeSlotNameSet,
+            moduleScopeId = moduleScopeId,
             slotTypeByScopeId = slotTypeByScopeId,
             knownNameObjClass = knownClassMapForBytecode(),
             knownObjectNames = objectDeclNames,
@@ -1925,7 +1990,12 @@ class Compiler(
         forcedLocalScopeId: Int? = null
     ): Statement {
         val returnLabels = returnLabelStack.lastOrNull() ?: emptySet()
-        val allowedScopeNames = moduleSlotPlan()?.slots?.keys
+        val modulePlan = moduleSlotPlan()
+        val allowedScopeNames = if (useScopeSlots) modulePlan?.slots?.keys else null
+        val scopeSlotNameSet = if (useScopeSlots) scopeSeedNames else null
+        val moduleScopeId = modulePlan?.id
+        val globalSlotInfo = if (useScopeSlots) emptyMap() else moduleForcedLocalSlotInfo()
+        val globalSlotScopeId = if (useScopeSlots) null else moduleScopeId
         val knownNames = if (extraKnownNameObjClass.isEmpty()) {
             knownClassMapForBytecode()
         } else {
@@ -1941,10 +2011,12 @@ class Compiler(
             returnLabels = returnLabels,
             rangeLocalNames = currentRangeParamNames,
             allowedScopeNames = allowedScopeNames,
-            scopeSlotNameSet = scopeSeedNames,
-            moduleScopeId = moduleSlotPlan()?.id,
+            scopeSlotNameSet = scopeSlotNameSet,
+            moduleScopeId = moduleScopeId,
             forcedLocalSlots = forcedLocalSlots,
             forcedLocalScopeId = forcedLocalScopeId,
+            globalSlotInfo = globalSlotInfo,
+            globalSlotScopeId = globalSlotScopeId,
             slotTypeByScopeId = slotTypeByScopeId,
             knownNameObjClass = knownNames,
             knownObjectNames = objectDeclNames,
@@ -2860,7 +2932,7 @@ class Compiler(
 
         label?.let { cc.labels.add(it) }
         slotPlanStack.add(paramSlotPlan)
-        val capturePlan = CapturePlan(paramSlotPlan, isFunction = true, propagateToParentFunction = false)
+        val capturePlan = CapturePlan(paramSlotPlan, isFunction = true, propagateToParentFunction = lambdaDepth > 0)
         capturePlanStack.add(capturePlan)
         val parsedBody = try {
             inCodeContext(CodeContext.Function("<lambda>", implicitThisMembers = true, implicitThisTypeName = expectedReceiverType)) {
@@ -2893,6 +2965,22 @@ class Compiler(
 
         val paramSlotPlanSnapshot = slotPlanIndices(paramSlotPlan)
         val captureSlots = capturePlan.captures.toList()
+        val captureEntries = if (captureSlots.isNotEmpty()) {
+            captureSlots.map { capture ->
+                val owner = capturePlan.captureOwners[capture.name]
+                    ?: error("Missing capture owner for ${capture.name}")
+                net.sergeych.lyng.bytecode.LambdaCaptureEntry(
+                    ownerKind = net.sergeych.lyng.bytecode.CaptureOwnerFrameKind.LOCAL,
+                    ownerScopeId = owner.scopeId,
+                    ownerSlotId = owner.slot,
+                    ownerName = capture.name,
+                    ownerIsMutable = owner.isMutable,
+                    ownerIsDelegated = owner.isDelegated
+                )
+            }
+        } else {
+            emptyList()
+        }
         val returnClass = inferReturnClassFromStatement(body)
         val paramKnownClasses = mutableMapOf<String, ObjClass>()
         argsDeclaration?.params?.forEach { param ->
@@ -2993,6 +3081,7 @@ class Compiler(
             bytecodeFn = bytecodeFn,
             paramSlotPlan = paramSlotPlanSnapshot,
             argsDeclaration = argsDeclaration,
+            captureEntries = captureEntries,
             preferredThisType = expectedReceiverType,
             wrapAsExtensionCallable = wrapAsExtensionCallable,
             returnLabels = returnLabels,
@@ -3001,19 +3090,7 @@ class Compiler(
         if (returnClass != null) {
             lambdaReturnTypeByRef[ref] = returnClass
         }
-        if (captureSlots.isNotEmpty()) {
-            val captureEntries = captureSlots.map { capture ->
-                val owner = capturePlan.captureOwners[capture.name]
-                    ?: error("Missing capture owner for ${capture.name}")
-                net.sergeych.lyng.bytecode.LambdaCaptureEntry(
-                    ownerKind = net.sergeych.lyng.bytecode.CaptureOwnerFrameKind.LOCAL,
-                    ownerScopeId = owner.scopeId,
-                    ownerSlotId = owner.slot,
-                    ownerName = capture.name,
-                    ownerIsMutable = owner.isMutable,
-                    ownerIsDelegated = owner.isDelegated
-                )
-            }
+        if (captureEntries.isNotEmpty()) {
             lambdaCaptureEntriesByRef[ref] = captureEntries
         }
         return ref
@@ -6057,6 +6134,9 @@ class Compiler(
         val qualifiedName = if (outerClassName != null) "$outerClassName.$declaredName" else declaredName
         resolutionSink?.declareSymbol(declaredName, SymbolKind.CLASS, isMutable = false, pos = nameToken.pos)
         if (codeContexts.lastOrNull() is CodeContext.Module) {
+            declareLocalName(declaredName, isMutable = false)
+        }
+        if (codeContexts.lastOrNull() is CodeContext.Module) {
             scopeSeedNames.add(declaredName)
         }
         if (outerClassName != null) {
@@ -6856,6 +6936,13 @@ class Compiler(
                 delegateExpression = wrapFunctionBytecode(delegateExpression!!, "delegate@$name")
             }
         }
+        if (isDelegated && declKind != SymbolKind.MEMBER) {
+            val plan = slotPlanStack.lastOrNull()
+            val entry = plan?.slots?.get(name)
+            if (entry != null && !entry.isDelegated) {
+                plan.slots[name] = SlotEntry(entry.index, entry.isMutable, isDelegated = true)
+            }
+        }
 
         if (!isDelegated && argsDeclaration.endTokenType != Token.Type.RPAREN)
             throw ScriptError(
@@ -7313,6 +7400,14 @@ class Compiler(
         }
         val directRef = unwrapDirectRef(unwrapped)
         return when (directRef) {
+            is ConstRef -> when (directRef.constValue) {
+                is ObjInt -> ObjInt.type
+                is ObjReal -> ObjReal.type
+                is ObjBool -> ObjBool.type
+                is ObjString -> ObjString.type
+                is ObjRange -> ObjRange.type
+                else -> null
+            }
             is ListLiteralRef -> ObjList.type
             is MapLiteralRef -> ObjMap.type
             is RangeRef -> ObjRange.type

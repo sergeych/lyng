@@ -4026,6 +4026,37 @@ class ScriptTest {
     }
 
     @Test
+    fun moduleFramePersistsAcrossEval() = runTest {
+        val scope = ModuleScope(Script.defaultImportManager, Pos.builtIn, "test.mod")
+        scope.eval(
+            """
+            var x = 1
+            x
+            """.trimIndent()
+        )
+        assertEquals(1, scope.eval("x").toInt())
+        scope.eval("x = x + 1")
+        assertEquals(2, scope.eval("x").toInt())
+    }
+
+    @Test
+    fun moduleExtensionWrapperUsesFrameSlots() = runTest {
+        val scope = ModuleScope(Script.defaultImportManager, Pos.builtIn, "test.mod.ext")
+        scope.eval(
+            """
+            fun String.foo() { this + "_m" }
+            """.trimIndent()
+        )
+        assertEquals("a_m", scope.eval("""__ext__String__foo("a")""").toString())
+        scope.eval(
+            """
+            fun String.foo() { this + "_n" }
+            """.trimIndent()
+        )
+        assertEquals("a_n", scope.eval("""__ext__String__foo("a")""").toString())
+    }
+
+    @Test
     fun testThrowReportsSource() = runTest {
         try {
             eval(

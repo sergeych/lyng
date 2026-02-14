@@ -17,8 +17,10 @@
 
 package net.sergeych.lyng.obj
 
+import net.sergeych.lyng.FrameSlotRef
 import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.Pos
+import net.sergeych.lyng.RecordSlotRef
 import net.sergeych.lyng.RegexCache
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.requireScope
@@ -29,7 +31,20 @@ class ObjRegex(val regex: Regex) : Obj() {
 
     override suspend fun operatorMatch(scope: Scope, other: Obj): Obj {
         return regex.find(other.cast<ObjString>(scope).value)?.let {
-            scope.addOrUpdateItem("$~", ObjRegexMatch(it))
+            val match = ObjRegexMatch(it)
+            val record = scope.chainLookupIgnoreClosure("$~", followClosure = true)
+            if (record != null) {
+                if (!record.isMutable) {
+                    scope.raiseIllegalAssignment("symbol is readonly: $~")
+                }
+                when (val value = record.value) {
+                    is FrameSlotRef -> value.write(match)
+                    is RecordSlotRef -> value.write(match)
+                    else -> record.value = match
+                }
+            } else {
+                scope.addOrUpdateItem("$~", match)
+            }
             ObjTrue
         } ?: ObjFalse
     }
