@@ -288,6 +288,14 @@ open class ObjClass(
     private var methodSlotLayoutVersion: Int = -1
     private var methodSlotMap: Map<String, MethodSlot> = emptyMap()
     private var methodSlotCount: Int = 0
+    
+    /** Kotlin bridge class-level storage (no name lookup). */
+    internal var kotlinClassData: Any? = null
+    
+    /** Kotlin bridge instance init hooks. */
+    internal var bridgeInitHooks: MutableList<suspend (net.sergeych.lyng.ScopeFacade, ObjInstance) -> Unit>? = null
+
+    internal var instanceTemplateBuilt: Boolean = false
 
     private fun ensureFieldSlots(): Map<String, FieldSlot> {
         if (fieldSlotLayoutVersion == layoutVersion) return fieldSlotMap
@@ -480,11 +488,19 @@ open class ObjClass(
         val existingId = rec.methodId
         if (existingId != null) {
             methodIdMap[name] = existingId
+            if (existingId >= nextMethodId) {
+                nextMethodId = existingId + 1
+            }
             return existingId
         }
         val id = methodIdMap.getOrPut(name) { nextMethodId++ }
+        if (id >= nextMethodId) {
+            nextMethodId = id + 1
+        }
         return id
     }
+
+    internal fun ensureMethodIdForBridge(name: String, rec: ObjRecord): Int = assignMethodId(name, rec)
 
     private fun ensureMethodIdSeeded() {
         if (methodIdSeeded) return
@@ -513,6 +529,17 @@ open class ObjClass(
             nextMethodId = maxId + 1
         }
         methodIdSeeded = true
+    }
+
+    internal fun replaceMemberForBridge(name: String, newRecord: ObjRecord) {
+        members[name] = newRecord
+        layoutVersion += 1
+    }
+
+    internal fun replaceClassScopeMemberForBridge(name: String, newRecord: ObjRecord) {
+        initClassScope()
+        classScope!!.objects[name] = newRecord
+        layoutVersion += 1
     }
 
     override fun toString(): String = className
@@ -552,6 +579,7 @@ open class ObjClass(
                 }
             }
         }
+        instanceTemplateBuilt = true
         res
     }
 
@@ -634,6 +662,14 @@ open class ObjClass(
         args: Arguments?,
         runConstructors: Boolean
     ) {
+        bridgeInitHooks?.let { hooks ->
+            if (hooks.isNotEmpty()) {
+                val facade = instance.instanceScope.asFacade()
+                for (hook in hooks) {
+                    hook(facade, instance)
+                }
+            }
+        }
         val visited = hashSetOf<ObjClass>()
         initClassInternal(instance, visited, this, args, isRoot = true, runConstructors = runConstructors)
     }

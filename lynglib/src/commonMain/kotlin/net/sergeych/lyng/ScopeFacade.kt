@@ -73,6 +73,9 @@ internal class ScopeBridge(internal val scope: Scope) : ScopeFacade {
     override fun trace(text: String) = scope.trace(text)
 }
 
+/** Public factory for bridge facades. */
+fun Scope.asFacade(): ScopeFacade = ScopeBridge(this)
+
 inline fun <reified T : Obj> ScopeFacade.requiredArg(index: Int): T {
     if (args.list.size <= index) raiseError("Expected at least ${index + 1} argument, got ${args.list.size}")
     return (args.list[index].byValueCopy() as? T)

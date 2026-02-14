@@ -29,6 +29,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
     internal lateinit var instanceScope: Scope
     internal var fieldSlots: Array<ObjRecord?> = emptyArray()
     internal var methodSlots: Array<ObjRecord?> = emptyArray()
+    internal var kotlinInstanceData: Any? = null
 
     internal fun initFieldSlots(size: Int) {
         fieldSlots = arrayOfNulls(size)
