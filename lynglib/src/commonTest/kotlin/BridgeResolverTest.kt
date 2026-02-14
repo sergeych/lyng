@@ -4,6 +4,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.bridge.BridgeCallByName
+import net.sergeych.lyng.bridge.LookupSpec
+import net.sergeych.lyng.bridge.LookupTarget
 import net.sergeych.lyng.bridge.resolver
 import net.sergeych.lyng.obj.ObjInstance
 import net.sergeych.lyng.obj.ObjInt
@@ -79,5 +81,28 @@ class BridgeResolverTest {
         val extHandle = resolver.resolveExtensionCallable(fooClass, "bumped")
         val result = extHandle.call(facade, newThisObj = fObj) as ObjInt
         assertEquals(3, result.value)
+    }
+
+    @Test
+    fun testModuleFrameLookup() = runTest {
+        val im = Script.defaultImportManager.copy()
+        val module = im.newModuleAt(Pos.builtIn)
+        module.eval(
+            """
+            var x = 7
+            """.trimIndent()
+        )
+        val child = module.createChildScope()
+        child.eval(
+            """
+            var x = 1
+            """.trimIndent()
+        )
+
+        val facade = child.asFacade()
+        val resolver = facade.resolver()
+        val handle = resolver.resolveVal("x", LookupSpec(targets = setOf(LookupTarget.ModuleFrame)))
+        val result = handle.get(facade) as ObjInt
+        assertEquals(7, result.value)
     }
 }
