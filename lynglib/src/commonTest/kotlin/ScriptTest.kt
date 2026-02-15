@@ -1937,7 +1937,6 @@ class ScriptTest {
                         println("limit reached after "+n+" rounds")
                         break sum
                     }
-                    n++
                 }
                 else {
                     println("limit not reached")

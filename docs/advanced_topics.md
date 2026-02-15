@@ -105,6 +105,7 @@ arguments list in almost arbitrary ways. For example:
         var result = ""
         for( a in args ) result += a
     }
+    // loop variables are read-only inside the loop body
 
     assertEquals( 
         "4231", 

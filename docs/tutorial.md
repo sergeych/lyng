@@ -739,6 +739,7 @@ See also: [Testing and Assertions](Testing.md)
         var result = []
         for( x in iterable ) result += transform(x)
     }
+    // loop variables are read-only inside the loop body
     assert( [11, 21, 31] == mapValues( [1,2,3], { it*10+1 }))
     >>> void
 

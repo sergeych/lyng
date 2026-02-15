@@ -176,6 +176,42 @@ object CmdDisassembler {
             is CmdCmpGteRealInt -> Opcode.CMP_GTE_REAL_INT to intArrayOf(cmd.a, cmd.b, cmd.dst)
             is CmdCmpNeqIntReal -> Opcode.CMP_NEQ_INT_REAL to intArrayOf(cmd.a, cmd.b, cmd.dst)
             is CmdCmpNeqRealInt -> Opcode.CMP_NEQ_REAL_INT to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdJmpIfEqInt -> Opcode.JMP_IF_EQ_INT to intArrayOf(cmd.a, cmd.b, cmd.target)
+            is CmdJmpIfEqIntLocal -> Opcode.JMP_IF_EQ_INT to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.target
+            )
+            is CmdJmpIfNeqInt -> Opcode.JMP_IF_NEQ_INT to intArrayOf(cmd.a, cmd.b, cmd.target)
+            is CmdJmpIfNeqIntLocal -> Opcode.JMP_IF_NEQ_INT to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.target
+            )
+            is CmdJmpIfLtInt -> Opcode.JMP_IF_LT_INT to intArrayOf(cmd.a, cmd.b, cmd.target)
+            is CmdJmpIfLtIntLocal -> Opcode.JMP_IF_LT_INT to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.target
+            )
+            is CmdJmpIfLteInt -> Opcode.JMP_IF_LTE_INT to intArrayOf(cmd.a, cmd.b, cmd.target)
+            is CmdJmpIfLteIntLocal -> Opcode.JMP_IF_LTE_INT to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.target
+            )
+            is CmdJmpIfGtInt -> Opcode.JMP_IF_GT_INT to intArrayOf(cmd.a, cmd.b, cmd.target)
+            is CmdJmpIfGtIntLocal -> Opcode.JMP_IF_GT_INT to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.target
+            )
+            is CmdJmpIfGteInt -> Opcode.JMP_IF_GTE_INT to intArrayOf(cmd.a, cmd.b, cmd.target)
+            is CmdJmpIfGteIntLocal -> Opcode.JMP_IF_GTE_INT to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.target
+            )
             is CmdCmpEqObj -> Opcode.CMP_EQ_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
             is CmdCmpNeqObj -> Opcode.CMP_NEQ_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
             is CmdCmpRefEqObj -> Opcode.CMP_REF_EQ_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
@@ -329,6 +365,10 @@ object CmdDisassembler {
                 listOf(OperandKind.IP)
             Opcode.JMP_IF_TRUE, Opcode.JMP_IF_FALSE ->
                 listOf(OperandKind.SLOT, OperandKind.IP)
+            Opcode.JMP_IF_EQ_INT, Opcode.JMP_IF_NEQ_INT,
+            Opcode.JMP_IF_LT_INT, Opcode.JMP_IF_LTE_INT,
+            Opcode.JMP_IF_GT_INT, Opcode.JMP_IF_GTE_INT ->
+                listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.IP)
             Opcode.CALL_DIRECT ->
                 listOf(OperandKind.ID, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
             Opcode.CALL_SLOT, Opcode.CALL_BRIDGE_SLOT ->

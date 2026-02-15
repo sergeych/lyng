@@ -63,6 +63,8 @@ In spite of this you can use ranges in for loops:
     >>> 3
     >>> void
 
+The loop variable is read-only inside the loop body (behaves like a `val`).
+
 but
 
     for( i in 1..<3 ) 

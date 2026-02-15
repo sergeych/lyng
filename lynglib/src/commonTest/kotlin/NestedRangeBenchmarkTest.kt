@@ -17,11 +17,13 @@
 
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.Benchmarks
+import net.sergeych.lyng.BytecodeBodyProvider
 import net.sergeych.lyng.Compiler
 import net.sergeych.lyng.ForInStatement
 import net.sergeych.lyng.Script
 import net.sergeych.lyng.Statement
 import net.sergeych.lyng.bytecode.CmdDisassembler
+import net.sergeych.lyng.bytecode.CmdFunction
 import net.sergeych.lyng.bytecode.BytecodeStatement
 import net.sergeych.lyng.obj.ObjInt
 import kotlin.time.TimeSource
@@ -57,6 +59,7 @@ class NestedRangeBenchmarkTest {
         scope.eval(script)
         val fnDisasm = scope.disassembleSymbol("naiveCountHappyNumbers")
         println("[DEBUG_LOG] [BENCH] nested-happy function naiveCountHappyNumbers cmd:\n$fnDisasm")
+        dumpFunctionSlots(scope, "naiveCountHappyNumbers")
         runMode(scope)
     }
 
@@ -94,6 +97,32 @@ class NestedRangeBenchmarkTest {
         if (depth == 1) {
             println("[DEBUG_LOG] [BENCH] nested-happy cmd: <not found>")
         }
+    }
+
+    private fun dumpFunctionSlots(scope: net.sergeych.lyng.Scope, name: String) {
+        val record = scope[name]?.value as? Statement ?: return
+        val fn = bytecodeFromStatement(record) ?: return
+        val scopeNames = fn.scopeSlotNames.mapIndexedNotNull { idx, slotName ->
+            slotName?.let { "$it@${fn.scopeSlotIndices[idx]}" }
+        }
+        val localNames = fn.localSlotNames.mapIndexedNotNull { idx, slotName ->
+            slotName?.let { "$it@$idx" }
+        }
+        val captures = fn.localSlotNames.mapIndexedNotNull { idx, slotName ->
+            if (slotName != null && fn.localSlotCaptures.getOrNull(idx) == true) "$slotName@$idx" else null
+        }
+        println(
+            "[DEBUG_LOG] [BENCH] nested-happy function $name slots: " +
+                "scopeCount=${fn.scopeSlotCount} " +
+                "scope=[${scopeNames.joinToString(", ")}] " +
+                "locals=[${localNames.joinToString(", ")}] " +
+                "captures=[${captures.joinToString(", ")}]"
+        )
+    }
+
+    private fun bytecodeFromStatement(stmt: Statement): CmdFunction? {
+        return (stmt as? BytecodeStatement)?.bytecodeFunction()
+            ?: (stmt as? BytecodeBodyProvider)?.bytecodeBody()?.bytecodeFunction()
     }
 
 }

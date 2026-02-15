@@ -36,10 +36,12 @@ class CmdVm {
         val cmds = fn.cmds
         try {
             while (result == null) {
-                val cmd = cmds[frame.ip]
-                frame.ip += 1
                 try {
-                    cmd.perform(frame)
+                    while (result == null) {
+                        val cmd = cmds[frame.ip]
+                        frame.ip += 1
+                        cmd.perform(frame)
+                    }
                 } catch (e: Throwable) {
                     if (!frame.handleException(e)) {
                         frame.cancelIterators()
@@ -1297,6 +1299,114 @@ class CmdJmpIfTrue(internal val cond: Int, internal val target: Int) : Cmd() {
 class CmdJmpIfFalse(internal val cond: Int, internal val target: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         if (!frame.getBool(cond)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfEqInt(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.getInt(a) == frame.getInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfEqIntLocal(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.getLocalInt(a) == frame.getLocalInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfNeqInt(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.getInt(a) != frame.getInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfNeqIntLocal(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.getLocalInt(a) != frame.getLocalInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfLtInt(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.getInt(a) < frame.getInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfLtIntLocal(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.getLocalInt(a) < frame.getLocalInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfLteInt(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.getInt(a) <= frame.getInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfLteIntLocal(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.getLocalInt(a) <= frame.getLocalInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfGtInt(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.getInt(a) > frame.getInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfGtIntLocal(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.getLocalInt(a) > frame.getLocalInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfGteInt(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.getInt(a) >= frame.getInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfGteIntLocal(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.getLocalInt(a) >= frame.getLocalInt(b)) {
             frame.ip = target
         }
         return

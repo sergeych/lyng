@@ -193,6 +193,10 @@ class CmdBuilder {
                 listOf(OperandKind.IP)
             Opcode.JMP_IF_TRUE, Opcode.JMP_IF_FALSE ->
                 listOf(OperandKind.SLOT, OperandKind.IP)
+            Opcode.JMP_IF_EQ_INT, Opcode.JMP_IF_NEQ_INT,
+            Opcode.JMP_IF_LT_INT, Opcode.JMP_IF_LTE_INT,
+            Opcode.JMP_IF_GT_INT, Opcode.JMP_IF_GTE_INT ->
+                listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.IP)
             Opcode.CALL_DIRECT ->
                 listOf(OperandKind.ID, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
             Opcode.CALL_MEMBER_SLOT ->
@@ -406,6 +410,36 @@ class CmdBuilder {
             Opcode.JMP -> CmdJmp(operands[0])
             Opcode.JMP_IF_TRUE -> CmdJmpIfTrue(operands[0], operands[1])
             Opcode.JMP_IF_FALSE -> CmdJmpIfFalse(operands[0], operands[1])
+            Opcode.JMP_IF_EQ_INT -> if (operands[0] >= scopeSlotCount && operands[1] >= scopeSlotCount) {
+                CmdJmpIfEqIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2])
+            } else {
+                CmdJmpIfEqInt(operands[0], operands[1], operands[2])
+            }
+            Opcode.JMP_IF_NEQ_INT -> if (operands[0] >= scopeSlotCount && operands[1] >= scopeSlotCount) {
+                CmdJmpIfNeqIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2])
+            } else {
+                CmdJmpIfNeqInt(operands[0], operands[1], operands[2])
+            }
+            Opcode.JMP_IF_LT_INT -> if (operands[0] >= scopeSlotCount && operands[1] >= scopeSlotCount) {
+                CmdJmpIfLtIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2])
+            } else {
+                CmdJmpIfLtInt(operands[0], operands[1], operands[2])
+            }
+            Opcode.JMP_IF_LTE_INT -> if (operands[0] >= scopeSlotCount && operands[1] >= scopeSlotCount) {
+                CmdJmpIfLteIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2])
+            } else {
+                CmdJmpIfLteInt(operands[0], operands[1], operands[2])
+            }
+            Opcode.JMP_IF_GT_INT -> if (operands[0] >= scopeSlotCount && operands[1] >= scopeSlotCount) {
+                CmdJmpIfGtIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2])
+            } else {
+                CmdJmpIfGtInt(operands[0], operands[1], operands[2])
+            }
+            Opcode.JMP_IF_GTE_INT -> if (operands[0] >= scopeSlotCount && operands[1] >= scopeSlotCount) {
+                CmdJmpIfGteIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2])
+            } else {
+                CmdJmpIfGteInt(operands[0], operands[1], operands[2])
+            }
             Opcode.RET -> CmdRet(operands[0])
             Opcode.RET_VOID -> CmdRetVoid()
             Opcode.PUSH_SCOPE -> CmdPushScope(operands[0])
