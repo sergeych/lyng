@@ -20,6 +20,7 @@
  */
 package net.sergeych.lyng.miniast
 
+import net.sergeych.lyng.Pos
 import net.sergeych.lyng.binding.BindingSnapshot
 import net.sergeych.lyng.highlight.offsetOf
 
@@ -301,32 +302,42 @@ object DocLookupUtils {
         isExtern = false
     )
 
-    fun resolveMemberWithInheritance(importedModules: List<String>, className: String, member: String, localMini: MiniScript? = null): Pair<String, MiniNamedDecl>? {
+    fun resolveMemberWithInheritance(
+        importedModules: List<String>,
+        className: String,
+        member: String,
+        localMini: MiniScript? = null,
+        staticOnly: Boolean = false
+    ): Pair<String, MiniNamedDecl>? {
         val classes = aggregateClasses(importedModules, localMini)
         fun dfs(name: String, visited: MutableSet<String>): Pair<String, MiniNamedDecl>? {
             if (!visited.add(name)) return null
             val cls = classes[name]
             if (cls != null) {
-                cls.members.firstOrNull { it.name == member }?.let { return name to it }
-                cls.ctorFields.firstOrNull { it.name == member }?.let { return name to toMemberVal(it) }
-                cls.classFields.firstOrNull { it.name == member }?.let { return name to toMemberVal(it) }
+                cls.members.firstOrNull { it.name == member && (!staticOnly || it.isStatic) }?.let { return name to it }
+                if (!staticOnly) {
+                    cls.ctorFields.firstOrNull { it.name == member }?.let { return name to toMemberVal(it) }
+                    cls.classFields.firstOrNull { it.name == member }?.let { return name to toMemberVal(it) }
+                }
                 for (baseName in cls.bases) {
                     dfs(baseName, visited)?.let { return it }
                 }
             }
-            // 1) local extensions in this class or bases
-            localMini?.declarations?.firstOrNull { d ->
-                (d is MiniFunDecl && d.receiver != null && simpleClassNameOf(d.receiver) == name && d.name == member) ||
-                        (d is MiniValDecl && d.receiver != null && simpleClassNameOf(d.receiver) == name && d.name == member)
-            }?.let { return name to it as MiniNamedDecl }
-
-            // 2) built-in extensions from BuiltinDocRegistry
-            for (mod in importedModules) {
-                val decls = BuiltinDocRegistry.docsForModule(mod)
-                decls.firstOrNull { d ->
+            if (!staticOnly) {
+                // 1) local extensions in this class or bases
+                localMini?.declarations?.firstOrNull { d ->
                     (d is MiniFunDecl && d.receiver != null && simpleClassNameOf(d.receiver) == name && d.name == member) ||
                             (d is MiniValDecl && d.receiver != null && simpleClassNameOf(d.receiver) == name && d.name == member)
                 }?.let { return name to it as MiniNamedDecl }
+
+                // 2) built-in extensions from BuiltinDocRegistry
+                for (mod in importedModules) {
+                    val decls = BuiltinDocRegistry.docsForModule(mod)
+                    decls.firstOrNull { d ->
+                        (d is MiniFunDecl && d.receiver != null && simpleClassNameOf(d.receiver) == name && d.name == member) ||
+                                (d is MiniValDecl && d.receiver != null && simpleClassNameOf(d.receiver) == name && d.name == member)
+                    }?.let { return name to it as MiniNamedDecl }
+                }
             }
 
             return null
@@ -430,6 +441,7 @@ object DocLookupUtils {
             if (ref != null) {
                 val sym = binding.symbols.firstOrNull { it.id == ref.symbolId }
                 if (sym != null) {
+                    simpleClassNameOfType(sym.type)?.let { return it }
                     val type = findTypeByRange(mini, sym.name, sym.declStart, text, imported)
                     simpleClassNameOf(type)?.let { return it }
                 }
@@ -437,6 +449,7 @@ object DocLookupUtils {
                 // Check if it's a declaration (e.g. static access to a class)
                 val sym = binding.symbols.firstOrNull { it.declStart == wordRange.first && it.name == ident }
                 if (sym != null) {
+                    simpleClassNameOfType(sym.type)?.let { return it }
                     val type = findTypeByRange(mini, sym.name, sym.declStart, text, imported)
                     simpleClassNameOf(type)?.let { return it }
                     // if it's a class/enum, return its name directly
@@ -1042,6 +1055,16 @@ object DocLookupUtils {
         is MiniTypeIntersection -> null
     }
 
+    fun simpleClassNameOfType(type: String?): String? {
+        if (type.isNullOrBlank()) return null
+        var t = type.trim()
+        if (t.endsWith("?")) t = t.dropLast(1)
+        val first = t.split('|', '&').firstOrNull()?.trim() ?: return null
+        val base = first.substringBefore('<').trim()
+        val short = base.substringAfterLast('.').trim()
+        return short.ifBlank { null }
+    }
+
     fun typeOf(t: MiniTypeRef?): String = when (t) {
         is MiniTypeName -> t.segments.joinToString(".") { it.name } + (if (t.nullable) "?" else "")
         is MiniGenericType -> typeOf(t.base) + "<" + t.args.joinToString(", ") { typeOf(it) } + ">" + (if (t.nullable) "?" else "")
@@ -1053,6 +1076,90 @@ object DocLookupUtils {
         is MiniTypeUnion -> t.options.joinToString(" | ") { typeOf(it) } + (if (t.nullable) "?" else "")
         is MiniTypeIntersection -> t.options.joinToString(" & ") { typeOf(it) } + (if (t.nullable) "?" else "")
         null -> ""
+    }
+
+    fun collectLocalsFromBinding(mini: MiniScript?, binding: BindingSnapshot?, offset: Int): List<net.sergeych.lyng.binding.Symbol> {
+        if (mini == null || binding == null) return emptyList()
+        val src = mini.range.start.source
+        data class FnCtx(val nameStart: Pos, val body: MiniRange)
+        fun consider(nameStart: Pos, body: MiniRange?, best: FnCtx?): FnCtx? {
+            if (body == null) return best
+            val start = src.offsetOf(body.start)
+            val end = src.offsetOf(body.end)
+            if (offset < start || offset > end) return best
+            val len = end - start
+            val bestLen = best?.let { src.offsetOf(it.body.end) - src.offsetOf(it.body.start) } ?: Int.MAX_VALUE
+            return if (len < bestLen) FnCtx(nameStart, body) else best
+        }
+
+        var best: FnCtx? = null
+        for (d in mini.declarations) {
+            when (d) {
+                is MiniFunDecl -> best = consider(d.nameStart, d.body?.range, best)
+                is MiniClassDecl -> {
+                    for (m in d.members) {
+                        if (m is MiniMemberFunDecl) {
+                            best = consider(m.nameStart, m.body?.range, best)
+                        }
+                    }
+                }
+                else -> {}
+            }
+        }
+        val fn = best ?: return emptyList()
+        val fnDeclStart = src.offsetOf(fn.nameStart)
+        val fnSym = binding.symbols.firstOrNull {
+            it.kind == net.sergeych.lyng.binding.SymbolKind.Function && it.declStart == fnDeclStart
+        } ?: return emptyList()
+        return binding.symbols.filter {
+            it.containerId == fnSym.id &&
+                (it.kind == net.sergeych.lyng.binding.SymbolKind.Parameter ||
+                    it.kind == net.sergeych.lyng.binding.SymbolKind.Value ||
+                    it.kind == net.sergeych.lyng.binding.SymbolKind.Variable) &&
+                it.declStart < offset
+        }
+    }
+
+    fun isStaticReceiver(
+        mini: MiniScript?,
+        text: String,
+        dotPos: Int,
+        importedModules: List<String>,
+        binding: BindingSnapshot? = null
+    ): Boolean {
+        val i = prevNonWs(text, dotPos - 1)
+        if (i < 0 || !isIdentChar(text[i])) return false
+        val wordRange = wordRangeAt(text, i + 1) ?: return false
+        val ident = text.substring(wordRange.first, wordRange.second)
+        if (ident == "this") return false
+
+        if (binding != null) {
+            val ref = binding.references.firstOrNull { wordRange.first >= it.start && wordRange.first < it.end }
+            val sym = ref?.let { r -> binding.symbols.firstOrNull { it.id == r.symbolId } }
+                ?: binding.symbols.firstOrNull { it.declStart == wordRange.first && it.name == ident }
+            if (sym != null) {
+                return sym.kind == net.sergeych.lyng.binding.SymbolKind.Class ||
+                    sym.kind == net.sergeych.lyng.binding.SymbolKind.Enum ||
+                    sym.kind == net.sergeych.lyng.binding.SymbolKind.TypeAlias
+            }
+        }
+
+        if (mini != null) {
+            val src = mini.range.start.source
+            val decl = mini.declarations
+                .filter { it.name == ident && src.offsetOf(it.nameStart) < dotPos }
+                .maxByOrNull { src.offsetOf(it.nameStart) }
+            if (decl is MiniClassDecl || decl is MiniEnumDecl || decl is MiniTypeAliasDecl) return true
+            if (decl is MiniFunDecl || decl is MiniValDecl) return false
+        }
+
+        val classes = aggregateClasses(importedModules, mini)
+        if (classes.containsKey(ident)) return true
+        for (mod in importedModules) {
+            val aliases = BuiltinDocRegistry.docsForModule(mod).filterIsInstance<MiniTypeAliasDecl>()
+            if (aliases.any { it.name == ident }) return true
+        }
+        return false
     }
 
     fun findDotLeft(text: String, offset: Int): Int? {

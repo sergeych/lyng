@@ -48,9 +48,10 @@ class LyngPsiReference(element: PsiElement) : PsiPolyVariantReferenceBase<PsiEle
         if (dotPos != null) {
             val receiverClass = DocLookupUtils.guessReceiverClassViaMini(mini, text, dotPos, imported.toList(), binding)
                 ?: DocLookupUtils.guessReceiverClass(text, dotPos, imported.toList(), mini)
+            val staticOnly = DocLookupUtils.isStaticReceiver(mini, text, dotPos, imported.toList(), binding)
             
             if (receiverClass != null) {
-                val resolved = DocLookupUtils.resolveMemberWithInheritance(imported.toList(), receiverClass, name, mini)
+                val resolved = DocLookupUtils.resolveMemberWithInheritance(imported.toList(), receiverClass, name, mini, staticOnly = staticOnly)
                 if (resolved != null) {
                     val owner = resolved.first
                     val member = resolved.second

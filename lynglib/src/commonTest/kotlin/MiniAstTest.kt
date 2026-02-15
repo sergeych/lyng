@@ -226,6 +226,21 @@ class MiniAstTest {
     }
 
     @Test
+    fun complete_static_members_only() = runTest {
+        val code = """
+            class C {
+                static fun s() {}
+                fun i() {}
+            }
+            C.<caret>
+        """
+        val items = CompletionEngineLight.completeAtMarkerSuspend(code)
+        val names = items.map { it.name }.toSet()
+        assertTrue(names.contains("s"), "Should contain static member")
+        assertTrue(!names.contains("i"), "Should not contain instance member")
+    }
+
+    @Test
     fun miniAst_captures_extern_docs() = runTest {
         val code = """
             // Doc1

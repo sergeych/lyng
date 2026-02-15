@@ -85,6 +85,23 @@ class LyngLanguageToolsTest {
     }
 
     @Test
+    fun languageTools_completion_includes_local_types() = runTest {
+        val code = """
+            fun f() {
+                val local: String = "x"
+                <caret>
+            }
+        """.trimIndent()
+        val caret = code.indexOf("<caret>")
+        val text = code.replace("<caret>", "")
+        val res = LyngLanguageTools.analyze(text, "locals.lyng")
+        val items = LyngLanguageTools.completions(text, caret, res)
+        val local = items.firstOrNull { it.name == "local" }
+        assertNotNull(local, "Completion should include local")
+        assertTrue(local.typeText?.contains("String") == true, "Expected type for local, got ${local.typeText}")
+    }
+
+    @Test
     fun languageTools_definition_and_usages() = runTest {
         val code = """
             val answer = 42

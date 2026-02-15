@@ -74,29 +74,30 @@ object CompletionEngineLight {
         val word = DocLookupUtils.wordRangeAt(text, caret)
         val memberDot = DocLookupUtils.findDotLeft(text, word?.first ?: caret)
         if (memberDot != null) {
+            val staticOnly = DocLookupUtils.isStaticReceiver(mini, text, memberDot, imported, binding)
             val inferredCls = (DocLookupUtils.guessReturnClassFromMemberCallBeforeMini(mini, text, memberDot, imported, binding) ?: DocLookupUtils.guessReceiverClass(text, memberDot, imported, mini))
             // 0) Try chained member call return type inference
             DocLookupUtils.guessReturnClassFromMemberCallBeforeMini(mini, text, memberDot, imported, binding)?.let { cls ->
-                offerMembersAdd(out, prefix, imported, cls, mini)
+                offerMembersAdd(out, prefix, imported, cls, mini, staticOnly)
                 return out
             }
             DocLookupUtils.guessReturnClassFromMemberCallBefore(text, memberDot, imported, mini)?.let { cls ->
-                offerMembersAdd(out, prefix, imported, cls, mini)
+                offerMembersAdd(out, prefix, imported, cls, mini, staticOnly)
                 return out
             }
             // 0a) Top-level call before dot
             DocLookupUtils.guessReturnClassFromTopLevelCallBefore(text, memberDot, imported, mini)?.let { cls ->
-                offerMembersAdd(out, prefix, imported, cls, mini)
+                offerMembersAdd(out, prefix, imported, cls, mini, staticOnly)
                 return out
             }
             // 0b) Across-known-callees (Iterable/Iterator/List preference)
             DocLookupUtils.guessReturnClassAcrossKnownCallees(text, memberDot, imported, mini)?.let { cls ->
-                offerMembersAdd(out, prefix, imported, cls, mini)
+                offerMembersAdd(out, prefix, imported, cls, mini, staticOnly)
                 return out
             }
             // 1) Receiver inference fallback
             (DocLookupUtils.guessReceiverClassViaMini(mini, text, memberDot, imported, binding) ?: DocLookupUtils.guessReceiverClass(text, memberDot, imported, mini))?.let { cls ->
-                offerMembersAdd(out, prefix, imported, cls, mini)
+                offerMembersAdd(out, prefix, imported, cls, mini, staticOnly)
                 return out
             }
             // In member context and unknown receiver/return type: show nothing (no globals after dot)
@@ -106,10 +107,20 @@ object CompletionEngineLight {
         // Global identifiers: params > local decls > imported > stdlib; Functions > Classes > Values; alphabetical
         offerParamsInScope(out, prefix, mini, text, caret)
 
-        val locals = DocLookupUtils.extractLocalsAt(text, caret)
-        for (name in locals) {
-            if (name.startsWith(prefix, true)) {
-                out.add(CompletionItem(name, Kind.Value, priority = 150.0))
+        val localsFromBinding = DocLookupUtils.collectLocalsFromBinding(mini, binding, caret)
+        if (localsFromBinding.isNotEmpty()) {
+            for (sym in localsFromBinding) {
+                if (sym.name.startsWith(prefix, true)) {
+                    val t = sym.type?.let { ": $it" }
+                    out.add(CompletionItem(sym.name, Kind.Value, typeText = t, priority = 150.0))
+                }
+            }
+        } else {
+            val locals = DocLookupUtils.extractLocalsAt(text, caret)
+            for (name in locals) {
+                if (name.startsWith(prefix, true)) {
+                    out.add(CompletionItem(name, Kind.Value, priority = 150.0))
+                }
             }
         }
 
@@ -238,7 +249,7 @@ object CompletionEngineLight {
         }
     }
 
-    private fun offerMembersAdd(out: MutableList<CompletionItem>, prefix: String, imported: List<String>, className: String, mini: MiniScript? = null) {
+    private fun offerMembersAdd(out: MutableList<CompletionItem>, prefix: String, imported: List<String>, className: String, mini: MiniScript? = null, staticOnly: Boolean = false) {
         val classes = DocLookupUtils.aggregateClasses(imported, mini)
         val visited = mutableSetOf<String>()
         val directMap = LinkedHashMap<String, MutableList<MiniMemberDecl>>()
@@ -247,10 +258,15 @@ object CompletionEngineLight {
         fun addMembersOf(name: String, direct: Boolean) {
             val cls = classes[name] ?: return
             val target = if (direct) directMap else inheritedMap
-            for (cf in cls.ctorFields + cls.classFields) {
-                target.getOrPut(cf.name) { mutableListOf() }.add(DocLookupUtils.toMemberVal(cf))
+            if (!staticOnly) {
+                for (cf in cls.ctorFields + cls.classFields) {
+                    target.getOrPut(cf.name) { mutableListOf() }.add(DocLookupUtils.toMemberVal(cf))
+                }
             }
-            for (m in cls.members) target.getOrPut(m.name) { mutableListOf() }.add(m)
+            for (m in cls.members) {
+                if (staticOnly && !m.isStatic) continue
+                target.getOrPut(m.name) { mutableListOf() }.add(m)
+            }
             for (b in cls.bases) if (visited.add(b)) addMembersOf(b, false)
         }
 
@@ -310,7 +326,7 @@ object CompletionEngineLight {
         emitGroup(inheritedMap, 0.0)
 
         // Supplement with extension members (both stdlib and local)
-        run {
+        if (!staticOnly) run {
             val already = (directMap.keys + inheritedMap.keys).toMutableSet()
             val extensions = DocLookupUtils.collectExtensionMemberNames(imported, className, mini)
             for (name in extensions) {

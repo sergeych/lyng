@@ -317,7 +317,8 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                 }
                 if (DEBUG_LOG) log.info("[LYNG_DEBUG] QuickDoc: memberCtx dotPos=${dotPos} chBeforeDot='${if (dotPos > 0) text[dotPos - 1] else ' '}' classGuess=${className} imports=${importedModules}")
                 if (className != null) {
-                    DocLookupUtils.resolveMemberWithInheritance(importedModules, className, ident, mini)?.let { (owner, member) ->
+                    val staticOnly = DocLookupUtils.isStaticReceiver(mini, text, dotPos, importedModules, analysis.binding)
+                    DocLookupUtils.resolveMemberWithInheritance(importedModules, className, ident, mini, staticOnly = staticOnly)?.let { (owner, member) ->
                         if (DEBUG_INHERITANCE) log.info("[LYNG_DEBUG] QuickDoc: literal/call '$ident' resolved to $owner.${member.name}")
                         return when (member) {
                             is MiniMemberFunDecl -> renderMemberFunDoc(owner, member)
@@ -380,7 +381,9 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         val lhs = previousWordBefore(text, idRange.startOffset)
         if (lhs != null && hasDotBetween(text, lhs.endOffset, idRange.startOffset)) {
             val className = text.substring(lhs.startOffset, lhs.endOffset)
-            DocLookupUtils.resolveMemberWithInheritance(importedModules, className, ident, mini)?.let { (owner, member) ->
+            val dotPos = findDotLeft(text, idRange.startOffset)
+            val staticOnly = dotPos?.let { DocLookupUtils.isStaticReceiver(mini, text, it, importedModules, analysis.binding) } ?: false
+            DocLookupUtils.resolveMemberWithInheritance(importedModules, className, ident, mini, staticOnly = staticOnly)?.let { (owner, member) ->
                 if (DEBUG_INHERITANCE) log.info("[LYNG_DEBUG] Inheritance resolved $className.$ident to $owner.${member.name}")
                 return when (member) {
                     is MiniMemberFunDecl -> renderMemberFunDoc(owner, member)
@@ -405,7 +408,8 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                     else -> DocLookupUtils.guessClassFromCallBefore(text, dotPos, importedModules, mini)
                 }
                 if (guessed != null) {
-                    DocLookupUtils.resolveMemberWithInheritance(importedModules, guessed, ident, mini)?.let { (owner, member) ->
+                    val staticOnly = DocLookupUtils.isStaticReceiver(mini, text, dotPos, importedModules, analysis.binding)
+                    DocLookupUtils.resolveMemberWithInheritance(importedModules, guessed, ident, mini, staticOnly = staticOnly)?.let { (owner, member) ->
                         if (DEBUG_INHERITANCE) log.info("[LYNG_DEBUG] Heuristic '$guessed.$ident' resolved via inheritance to $owner.${member.name}")
                         return when (member) {
                             is MiniMemberFunDecl -> renderMemberFunDoc(owner, member)
@@ -424,7 +428,8 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                     run {
                         val candidates = listOf("String", "Iterable", "Iterator", "List", "Collection", "Array", "Dict", "Regex")
                         for (c in candidates) {
-                            DocLookupUtils.resolveMemberWithInheritance(importedModules, c, ident, mini)?.let { (owner, member) ->
+                            val staticOnly = DocLookupUtils.isStaticReceiver(mini, text, dotPos, importedModules, analysis.binding)
+                            DocLookupUtils.resolveMemberWithInheritance(importedModules, c, ident, mini, staticOnly = staticOnly)?.let { (owner, member) ->
                                 if (DEBUG_INHERITANCE) log.info("[LYNG_DEBUG] Candidate '$c.$ident' resolved via inheritance to $owner.${member.name}")
                                 return when (member) {
                                     is MiniMemberFunDecl -> renderMemberFunDoc(owner, member)
@@ -461,11 +466,13 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                         return when (member) {
                             is MiniMemberFunDecl -> renderMemberFunDoc(owner, member)
                             is MiniMemberValDecl -> renderMemberValDoc(owner, member)
+                            is MiniMemberTypeAliasDecl -> renderMemberTypeAliasDoc(owner, member)
                             is MiniInitDecl -> null
                             is MiniFunDecl -> renderDeclDoc(member, text, mini, importedModules)
                             is MiniValDecl -> renderDeclDoc(member, text, mini, importedModules)
                             is MiniClassDecl -> renderDeclDoc(member, text, mini, importedModules)
                             is MiniEnumDecl -> renderDeclDoc(member, text, mini, importedModules)
+                            is MiniTypeAliasDecl -> renderDeclDoc(member, text, mini, importedModules)
                         }
                     }
                 }
