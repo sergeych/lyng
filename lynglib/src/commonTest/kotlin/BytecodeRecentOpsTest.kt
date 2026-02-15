@@ -280,26 +280,6 @@ class BytecodeRecentOpsTest {
     }
 
     @Test
-    fun moduleDeclsAvoidCallableCallSlots() = runTest {
-        val script = """
-            class A {}
-            fun f() { 1 }
-            enum E { one }
-        """.trimIndent()
-        val compiled = Compiler.compile(script.toSource(), Script.defaultImportManager)
-        val field = Script::class.java.getDeclaredField("moduleBytecode")
-        field.isAccessible = true
-        val moduleFn = field.get(compiled) as? CmdFunction
-        assertNotNull(moduleFn, "module bytecode missing")
-        val disasm = CmdDisassembler.disassemble(moduleFn)
-        assertTrue(!disasm.contains("CALL_SLOT"), disasm)
-        assertTrue(!disasm.contains("Callable@"), disasm)
-        assertTrue(disasm.contains("DECL_CLASS"), disasm)
-        assertTrue(disasm.contains("DECL_FUNCTION"), disasm)
-        assertTrue(disasm.contains("DECL_ENUM"), disasm)
-    }
-
-    @Test
     fun unionMemberDispatchSubtype() = runTest {
         eval(
             """

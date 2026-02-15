@@ -1192,7 +1192,9 @@ class Compiler(
             val found = LinkedHashMap<String, Pair<ModuleScope, ObjRecord>>()
             collectModuleRecordMatches(module.scope, name, mutableSetOf(), found)
             for ((pkg, pair) in found) {
-                moduleMatches.putIfAbsent(pkg, ImportedModule(pair.first, module.pos) to pair.second)
+                if (!moduleMatches.containsKey(pkg)) {
+                    moduleMatches[pkg] = ImportedModule(pair.first, module.pos) to pair.second
+                }
             }
         }
         if (seedRecord != null) {
@@ -1241,7 +1243,9 @@ class Compiler(
         if (!visited.add(scope.packageName)) return
         val record = scope.objects[name]
         if (record != null && record.visibility.isPublic) {
-            out.putIfAbsent(scope.packageName, scope to record)
+            if (!out.containsKey(scope.packageName)) {
+                out[scope.packageName] = scope to record
+            }
         }
         for (child in scope.importedModules) {
             collectModuleRecordMatches(child, name, visited, out)

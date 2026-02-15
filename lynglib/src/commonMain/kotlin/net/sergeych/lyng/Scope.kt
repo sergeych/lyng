@@ -80,23 +80,17 @@ open class Scope(
             extras.isEmpty() -> emptyList()
             else -> {
                 try {
-                    if (extras is MutableList<*>) {
-                        synchronized(extras) { extras.toList() }
-                    } else {
-                        extras.toList()
-                    }
+                    extras.toList()
                 } catch (_: Exception) {
                     emptyList()
                 }
             }
         }
-        synchronized(thisVariants) {
-            thisVariants.clear()
-            thisVariants.add(primary)
-            for (obj in extrasSnapshot) {
-                if (obj !== primary && !thisVariants.contains(obj)) {
-                    thisVariants.add(obj)
-                }
+        thisVariants.clear()
+        thisVariants.add(primary)
+        for (obj in extrasSnapshot) {
+            if (obj !== primary && !thisVariants.contains(obj)) {
+                thisVariants.add(obj)
             }
         }
     }
