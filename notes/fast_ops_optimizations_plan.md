@@ -10,8 +10,9 @@ Candidates (not started)
 2) Mixed numeric ops (done)
    - Allow INT+REAL arithmetic to use primitive REAL ops (no obj fallback).
    - MixedCompareBenchmarkTest: 347 ms -> 275 ms.
-3) Boolean conversion
-   - Skip OBJ_TO_BOOL when compiler already has a BOOL slot.
+3) Boolean conversion (done; do not revert without review)
+   - Skip redundant OBJ_TO_BOOL in logical AND/OR when compiler already emits BOOL.
+   - MixedCompareBenchmarkTest: 275 ms -> 249 ms.
 4) Range/loop hot path
    - Keep range iteration in INT ops, avoid accidental boxing.
    - Confirm loop-var slots avoid re-boxing in loop bodies.

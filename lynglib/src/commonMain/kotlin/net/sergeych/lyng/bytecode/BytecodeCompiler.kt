@@ -2339,60 +2339,36 @@ class BytecodeCompiler(
 
     private fun compileLogicalAnd(ref: LogicalAndRef): CompiledValue? {
         val leftValue = compileRefWithFallback(ref.left(), SlotType.BOOL, Pos.builtIn) ?: return null
-        val leftBool = if (leftValue.type == SlotType.BOOL) {
-            leftValue
-        } else {
-            val slot = allocSlot()
-            builder.emit(Opcode.OBJ_TO_BOOL, leftValue.slot, slot)
-            CompiledValue(slot, SlotType.BOOL)
-        }
+        if (leftValue.type != SlotType.BOOL) return null
         val resultSlot = allocSlot()
         val falseId = builder.addConst(BytecodeConst.Bool(false))
         builder.emit(Opcode.CONST_BOOL, falseId, resultSlot)
         val endLabel = builder.label()
         builder.emit(
             Opcode.JMP_IF_FALSE,
-            listOf(CmdBuilder.Operand.IntVal(leftBool.slot), CmdBuilder.Operand.LabelRef(endLabel))
+            listOf(CmdBuilder.Operand.IntVal(leftValue.slot), CmdBuilder.Operand.LabelRef(endLabel))
         )
         val rightValue = compileRefWithFallback(ref.right(), SlotType.BOOL, Pos.builtIn) ?: return null
-        val rightBool = if (rightValue.type == SlotType.BOOL) {
-            rightValue
-        } else {
-            val slot = allocSlot()
-            builder.emit(Opcode.OBJ_TO_BOOL, rightValue.slot, slot)
-            CompiledValue(slot, SlotType.BOOL)
-        }
-        builder.emit(Opcode.MOVE_BOOL, rightBool.slot, resultSlot)
+        if (rightValue.type != SlotType.BOOL) return null
+        builder.emit(Opcode.MOVE_BOOL, rightValue.slot, resultSlot)
         builder.mark(endLabel)
         return CompiledValue(resultSlot, SlotType.BOOL)
     }
 
     private fun compileLogicalOr(ref: LogicalOrRef): CompiledValue? {
         val leftValue = compileRefWithFallback(ref.left(), SlotType.BOOL, Pos.builtIn) ?: return null
-        val leftBool = if (leftValue.type == SlotType.BOOL) {
-            leftValue
-        } else {
-            val slot = allocSlot()
-            builder.emit(Opcode.OBJ_TO_BOOL, leftValue.slot, slot)
-            CompiledValue(slot, SlotType.BOOL)
-        }
+        if (leftValue.type != SlotType.BOOL) return null
         val resultSlot = allocSlot()
         val trueId = builder.addConst(BytecodeConst.Bool(true))
         builder.emit(Opcode.CONST_BOOL, trueId, resultSlot)
         val endLabel = builder.label()
         builder.emit(
             Opcode.JMP_IF_TRUE,
-            listOf(CmdBuilder.Operand.IntVal(leftBool.slot), CmdBuilder.Operand.LabelRef(endLabel))
+            listOf(CmdBuilder.Operand.IntVal(leftValue.slot), CmdBuilder.Operand.LabelRef(endLabel))
         )
         val rightValue = compileRefWithFallback(ref.right(), SlotType.BOOL, Pos.builtIn) ?: return null
-        val rightBool = if (rightValue.type == SlotType.BOOL) {
-            rightValue
-        } else {
-            val slot = allocSlot()
-            builder.emit(Opcode.OBJ_TO_BOOL, rightValue.slot, slot)
-            CompiledValue(slot, SlotType.BOOL)
-        }
-        builder.emit(Opcode.MOVE_BOOL, rightBool.slot, resultSlot)
+        if (rightValue.type != SlotType.BOOL) return null
+        builder.emit(Opcode.MOVE_BOOL, rightValue.slot, resultSlot)
         builder.mark(endLabel)
         return CompiledValue(resultSlot, SlotType.BOOL)
     }
