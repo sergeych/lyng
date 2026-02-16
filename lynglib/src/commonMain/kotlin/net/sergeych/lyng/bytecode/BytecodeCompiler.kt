@@ -1374,23 +1374,6 @@ class BytecodeCompiler(
         val rightRef = binaryRight(ref)
         var a = compileRefWithFallback(leftRef, null, refPos(ref)) ?: return null
         var b = compileRefWithFallback(rightRef, null, refPos(ref)) ?: return null
-        if (op in setOf(BinOp.PLUS, BinOp.MINUS, BinOp.STAR, BinOp.SLASH, BinOp.PERCENT)) {
-            val leftNeedsObj = a.type == SlotType.INT && b.type == SlotType.REAL
-            val rightNeedsObj = b.type == SlotType.INT && a.type == SlotType.REAL
-            if (leftNeedsObj || rightNeedsObj) {
-                val leftObj = if (leftNeedsObj) {
-                    compileScopeSlotObj(leftRef) ?: a
-                } else {
-                    a
-                }
-                val rightObj = if (rightNeedsObj) {
-                    compileScopeSlotObj(rightRef) ?: b
-                } else {
-                    b
-                }
-                return compileObjBinaryOp(leftRef, leftObj, rightObj, op, refPos(ref))
-            }
-        }
         val intOps = setOf(
             BinOp.PLUS, BinOp.MINUS, BinOp.STAR, BinOp.SLASH, BinOp.PERCENT,
             BinOp.BAND, BinOp.BOR, BinOp.BXOR, BinOp.SHL, BinOp.SHR
@@ -1413,7 +1396,11 @@ class BytecodeCompiler(
         }
         val typesMismatch = a.type != b.type && a.type != SlotType.UNKNOWN && b.type != SlotType.UNKNOWN
         val allowMixedNumeric = op in setOf(BinOp.PLUS, BinOp.MINUS, BinOp.STAR, BinOp.SLASH)
-        if (typesMismatch && op in setOf(BinOp.PLUS, BinOp.MINUS, BinOp.STAR, BinOp.SLASH, BinOp.PERCENT)) {
+        val isMixedNumeric = (a.type == SlotType.INT && b.type == SlotType.REAL) ||
+            (a.type == SlotType.REAL && b.type == SlotType.INT)
+        if (typesMismatch && op in setOf(BinOp.PLUS, BinOp.MINUS, BinOp.STAR, BinOp.SLASH, BinOp.PERCENT) &&
+            !(allowMixedNumeric && isMixedNumeric)
+        ) {
             return compileObjBinaryOp(leftRef, a, b, op, refPos(ref))
         }
         if ((a.type == SlotType.UNKNOWN || b.type == SlotType.UNKNOWN) &&

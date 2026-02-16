@@ -7,8 +7,9 @@ Candidates (not started)
 1) Primitive comparisons (done)
    - Emit fast CMP variants for known ObjString/ObjInt/ObjReal using temp/stable slots.
    - MixedCompareBenchmarkTest: 374 ms -> 347 ms.
-2) Mixed numeric ops
-   - Ensure INT+REAL arithmetic uses INT_TO_REAL + REAL op with no extra moves/boxing.
+2) Mixed numeric ops (done)
+   - Allow INT+REAL arithmetic to use primitive REAL ops (no obj fallback).
+   - MixedCompareBenchmarkTest: 347 ms -> 275 ms.
 3) Boolean conversion
    - Skip OBJ_TO_BOOL when compiler already has a BOOL slot.
 4) Range/loop hot path
