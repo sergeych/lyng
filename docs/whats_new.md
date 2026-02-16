@@ -1,7 +1,7 @@
 # What's New in Lyng
 
 This document highlights the latest additions and improvements to the Lyng language and its ecosystem.
-For a programmer-focused migration summary, see `docs/whats_new_1_3.md`.
+For a programmer-focused migration summary, see `docs/whats_new_1_5.md`.
 
 ## Language Features
 
@@ -102,7 +102,7 @@ Singleton objects are declared using the `object` keyword. They provide a conven
 
 ```lyng
 object Config {
-    val version = "1.2.3"
+    val version = "1.5.0-SNAPSHOT"
     fun show() = println("Config version: " + version)
 }
 

@@ -1,4 +1,4 @@
-# Lyng Language AI Specification (V1.3)
+# Lyng Language AI Specification (V1.5.0-SNAPSHOT)
 
 High-density specification for LLMs. Reference this for all Lyng code generation.
 

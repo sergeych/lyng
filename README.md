@@ -48,7 +48,7 @@ assertEquals(A.One, A.E.One)
 
 - [Language home](https://lynglang.com)
 - [introduction and tutorial](docs/tutorial.md) - start here please
-- [What's New in 1.3](docs/whats_new_1_3.md)
+- [What's New in 1.5](docs/whats_new_1_5.md)
 - [Testing and Assertions](docs/Testing.md)
 - [Filesystem and Processes (lyngio)](docs/lyngio.md)
 - [Return Statement](docs/return_statement.md)
@@ -64,7 +64,7 @@ assertEquals(A.One, A.E.One)
 
 ```kotlin
 // update to current please:
-val lyngVersion = "0.6.1-SNAPSHOT"
+val lyngVersion = "1.5.0-SNAPSHOT"
 
 repositories {
     // ...
@@ -177,7 +177,7 @@ Designed to add scripting to kotlin multiplatform application in easy and effici
 
 # Language Roadmap
 
-We are now at **v1.0**: basic optimization performed, battery included: standard library is 90% here, initial
+We are now at **v1.5.0-SNAPSHOT** (stable development cycle): basic optimization performed, battery included: standard library is 90% here, initial
 support in HTML, popular editors, and IDEA; tools to syntax highlight and format code are ready. It was released closed to schedule.
 
 Ready features:
@@ -217,7 +217,7 @@ Ready features:
 
 All of this is documented in the [language site](https://lynglang.com) and locally [docs/language.md](docs/tutorial.md). the current nightly builds published on the site and in the private maven repository.  
 
-## plan: towards v1.5 Enhancing
+## plan: towards v2.0 Next Generation
 
 - [x] site with integrated interpreter to give a try
 - [x] kotlin part public API good docs, integration focused

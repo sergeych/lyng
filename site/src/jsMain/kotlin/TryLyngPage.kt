@@ -22,6 +22,7 @@ import net.sergeych.lyng.Script
 import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.highlight.TextRange
 import net.sergeych.lyng.miniast.CompletionItem
+import net.sergeych.lyng.requireScope
 import net.sergeych.lyng.tools.LyngDiagnostic
 import net.sergeych.lyng.tools.LyngDiagnosticSeverity
 import net.sergeych.lyng.tools.LyngSymbolInfo
@@ -48,11 +49,18 @@ fun TryLyngPage(route: String) {
     var code by remember(initialCode) {
         mutableStateOf(
             initialCode ?: """
-            // Welcome to Lyng! Edit and run.
-            // Try changing the data and press Ctrl+Enter or click Run.
-            
-            val data = 1..5 // or [1, 2, 3, 4, 5]
-            data.filter { it % 2 == 0 }.map { it * it }
+            // Welcome to Lyng! Modern scripting with strict types and generics.
+
+            typealias Numeric = Int | Real
+
+            fun process<T: Numeric>(items: List<T>): List<T> {
+                items.filter { it > 0 }.map { it * it }
+            }
+
+            val data: List<Int> = [-2, -1, 0, 1, 2]
+            println("Processed: " + process(data))
+
+            // Try changing data or adding Real numbers!
             """.trimIndent()
         )
     }
@@ -94,13 +102,13 @@ fun TryLyngPage(route: String) {
                 s.addVoidFn("print") {
                     for ((i, a) in this.args.withIndex()) {
                         if (i > 0) printed.append(' ')
-                        printed.append(a.toString(this).value)
+                        printed.append(a.toString(this.requireScope()).value)
                     }
                 }
                 s.addVoidFn("println") {
                     for ((i, a) in this.args.withIndex()) {
                         if (i > 0) printed.append(' ')
-                        printed.append(a.toString(this).value)
+                        printed.append(a.toString(this.requireScope()).value)
                     }
                     printed.append('\n')
                 }
@@ -154,8 +162,8 @@ fun TryLyngPage(route: String) {
 
     fun resetCode() {
         code = initialCode ?: """
-            // Welcome to Lyng! Edit and run.
-            [1,2,3].map { it * 10 }
+            // Welcome to Lyng! Modern scripting with strict types and generics.
+            [1, 2, 3].map { it * 10 }
         """.trimIndent()
         output = null
         error = null
