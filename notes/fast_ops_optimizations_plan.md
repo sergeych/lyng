@@ -22,3 +22,18 @@ Candidates (not started)
 6) Box/unbox audit (done)
    - Unbox ObjInt/ObjReal in assign-op when target is INT/REAL to avoid boxing + obj ops.
    - MixedCompareBenchmarkTest: 240 ms -> 234 ms.
+7) Mixed compare coverage
+   - Emit CMP_*_REAL when one operand is known ObjReal in more expression forms (not just assign-op).
+   - Verify with disassembly that fast cmp opcodes are emitted.
+8) Range-loop invariant hoist
+   - Cache range end/step into temps once per loop; avoid repeated slot reads/boxing in body.
+   - Confirm no extra CONST_OBJ in hot path.
+9) Boxing elision pass
+   - Remove redundant BOX_OBJ when value feeds only primitive ops afterward (local liveness).
+   - Ensure no impact on closures/escaping values.
+10) Closed-type fast paths expansion
+   - Apply closed-type trust for ObjBool/ObjInt/ObjReal/ObjString in ternaries and conditional chains.
+   - Guard with exact non-null temp/slot checks only.
+11) VM hot op micro-optimizations
+   - Reduce frame reads/writes in ADD_INT, MUL_REAL, CMP_*_INT/REAL when operands are temps.
+   - Compare against baseline; revert if regression after 10-run median.
