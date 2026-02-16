@@ -1,15 +1,27 @@
 /*
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+/*
  * Kotlin bridge reflection facade: handle-based access for fast get/set/call.
  */
 
 package net.sergeych.lyng.bridge
 
-import net.sergeych.lyng.Arguments
-import net.sergeych.lyng.Pos
-import net.sergeych.lyng.Scope
-import net.sergeych.lyng.ScopeFacade
-import net.sergeych.lyng.canAccessMember
-import net.sergeych.lyng.extensionCallableName
+import net.sergeych.lyng.*
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjClass
 import net.sergeych.lyng.obj.ObjIllegalAccessException
@@ -20,54 +32,85 @@ import net.sergeych.lyng.obj.ObjString
 import net.sergeych.lyng.obj.ObjUnset
 import net.sergeych.lyng.obj.ObjVoid
 import net.sergeych.lyng.requireScope
-import net.sergeych.lyng.ModuleScope
 
-/** Where to resolve names from. */
+/**
+ * Where a bridge resolver should search for names.
+ *
+ * Used by [LookupSpec] to control reflection scope for Kotlin-side tooling and bindings.
+ */
 enum class LookupTarget {
+    /** Resolve from the current frame only (locals/params declared in the active scope). */
     CurrentFrame,
+    /** Resolve by walking the raw parent chain of frames (locals only, no member fallback). */
     ParentChain,
+    /** Resolve against the module frame (top-level declarations in the module). */
     ModuleFrame
 }
 
-/** Explicit receiver view (like this@Base). */
+/**
+ * Explicit receiver view, similar to `this@Base` in Lyng.
+ *
+ * When provided, the resolver will treat `this` as the requested type
+ * for member resolution and visibility checks.
+ */
 data class ReceiverView(
     val type: ObjClass? = null,
     val typeName: String? = null
 )
 
-/** Lookup rules for bridge resolution. */
+/**
+ * Lookup rules for bridge resolution.
+ *
+ * @property targets where to resolve names from
+ * @property receiverView optional explicit receiver for member lookup (like `this@Base`)
+ */
 data class LookupSpec(
     val targets: Set<LookupTarget> = setOf(LookupTarget.CurrentFrame, LookupTarget.ModuleFrame),
     val receiverView: ReceiverView? = null
 )
 
-/** Base handle type. */
+/**
+ * Base handle type returned by the Kotlin reflection bridge.
+ *
+ * Handles are inexpensive to keep and cache; they resolve lazily and
+ * may internally cache slots/records once a frame is known.
+ */
 sealed interface BridgeHandle {
+    /** Name of the underlying symbol (as written in Lyng). */
     val name: String
 }
 
-/** Read-only value handle. */
+/** Read-only value handle resolved in a [ScopeFacade]. */
 interface ValHandle : BridgeHandle {
+    /** Read the current value. */
     suspend fun get(scope: ScopeFacade): Obj
 }
 
-/** Read/write value handle. */
+/** Read/write value handle resolved in a [ScopeFacade]. */
 interface VarHandle : ValHandle {
+    /** Assign a new value. */
     suspend fun set(scope: ScopeFacade, value: Obj)
 }
 
 /** Callable handle (function/closure/method). */
 interface CallableHandle : BridgeHandle {
+    /**
+     * Call the target with optional [args].
+     *
+     * @param newThisObj overrides receiver for member calls (defaults to current `this`/record receiver).
+     */
     suspend fun call(scope: ScopeFacade, args: Arguments = Arguments.EMPTY, newThisObj: Obj? = null): Obj
 }
 
 /** Member handle resolved against an instance or receiver view. */
 interface MemberHandle : BridgeHandle {
+    /** Declaring class resolved for the last call/get/set (if known). */
     val declaringClass: ObjClass?
+    /** Explicit receiver view used for resolution (if any). */
     val receiverView: ReceiverView?
 }
 
-/** Member field/property. */
+/** Member field/property (read-only). */
 interface MemberValHandle : MemberHandle, ValHandle
 
 /** Member var/property with write access. */
@@ -76,41 +119,64 @@ interface MemberVarHandle : MemberHandle, VarHandle
 /** Member callable (method or extension). */
 interface MemberCallableHandle : MemberHandle, CallableHandle
 
-/** Direct record handle (debug/inspection). */
+/**
+ * Direct record handle (debug/inspection).
+ *
+ * Exposes raw [ObjRecord] access and should be used only in tooling.
+ */
 interface RecordHandle : BridgeHandle {
+    /** Resolve and return the raw [ObjRecord]. */
     fun record(): ObjRecord
 }
 
-/** Bridge resolver API (entry point for Kotlin bindings). */
+/**
+ * Bridge resolver API (entry point for Kotlin reflection and bindings).
+ *
+ * Obtain via [ScopeFacade.resolver] and reuse for multiple lookups.
+ * Resolver methods return handles that can be cached and reused across calls.
+ */
 interface BridgeResolver {
+    /** Source position used for error reporting. */
     val pos: Pos
 
+    /** Treat `this` as [type] for member lookup (like `this@Type`). */
     fun selfAs(type: ObjClass): BridgeResolver
+    /** Treat `this` as [typeName] for member lookup (like `this@Type`). */
     fun selfAs(typeName: String): BridgeResolver
 
+    /** Resolve a read-only value by name using [lookup]. */
     fun resolveVal(name: String, lookup: LookupSpec = LookupSpec()): ValHandle
+    /** Resolve a mutable value by name using [lookup]. */
     fun resolveVar(name: String, lookup: LookupSpec = LookupSpec()): VarHandle
+    /** Resolve a callable by name using [lookup]. */
     fun resolveCallable(name: String, lookup: LookupSpec = LookupSpec()): CallableHandle
 
+    /** Resolve a member value on [receiver]. */
     fun resolveMemberVal(
         receiver: Obj,
         name: String,
         lookup: LookupSpec = LookupSpec()
     ): MemberValHandle
 
+    /** Resolve a mutable member on [receiver]. */
     fun resolveMemberVar(
         receiver: Obj,
         name: String,
         lookup: LookupSpec = LookupSpec()
     ): MemberVarHandle
 
+    /** Resolve a member callable on [receiver]. */
     fun resolveMemberCallable(
         receiver: Obj,
         name: String,
         lookup: LookupSpec = LookupSpec()
     ): MemberCallableHandle
 
-    /** Extension function treated as a member for reflection. */
+    /**
+     * Resolve an extension function treated as a member for reflection.
+     *
+     * This uses the extension wrapper name (same rules as Lyng compiler).
+     */
     fun resolveExtensionCallable(
         receiverClass: ObjClass,
         name: String,
@@ -119,14 +185,20 @@ interface BridgeResolver {
 
     /** Debug: resolve locals by name (optional, for tooling). */
     fun resolveLocalVal(name: String): ValHandle
+    /** Debug: resolve mutable locals by name (optional, for tooling). */
     fun resolveLocalVar(name: String): VarHandle
 
     /** Debug: access raw record handles if needed. */
     fun resolveRecord(name: String, lookup: LookupSpec = LookupSpec()): RecordHandle
 }
 
-/** Convenience: call by name with implicit caching in resolver implementation. */
+/**
+ * Convenience: call by name with implicit caching in resolver implementation.
+ *
+ * Implemented by the default resolver; useful for lightweight call-by-name flows.
+ */
 interface BridgeCallByName {
+    /** Resolve and call [name] with [args] using [lookup]. */
     suspend fun callByName(
         scope: ScopeFacade,
         name: String,
@@ -135,12 +207,21 @@ interface BridgeCallByName {
     ): Obj
 }
 
-/** Optional typed wrappers (sugar). */
+/**
+ * Optional typed wrapper (sugar) around [ValHandle].
+ *
+ * Performs a runtime cast to [T] and raises a class cast error on mismatch.
+ */
 interface TypedHandle<T : Obj> : ValHandle {
+    /** Read value and cast it to [T]. */
     suspend fun getTyped(scope: ScopeFacade): T
 }
 
-/** Factory for bridge resolver. */
+/**
+ * Factory for bridge resolver.
+ *
+ * Prefer this over ad-hoc lookups when writing Kotlin extensions or tooling.
+ */
 fun ScopeFacade.resolver(): BridgeResolver = BridgeResolverImpl(this)
 
 private class BridgeResolverImpl(

@@ -31,6 +31,7 @@ data class ClassDeclSpec(
     val startPos: Pos,
     val isExtern: Boolean,
     val isAbstract: Boolean,
+    val isClosed: Boolean,
     val isObject: Boolean,
     val isAnonymous: Boolean,
     val baseSpecs: List<ClassDeclBaseSpec>,
@@ -118,6 +119,7 @@ internal suspend fun executeClassDecl(
 
     val newClass = ObjInstanceClass(spec.className, *parentClasses.toTypedArray()).also {
         it.isAbstract = spec.isAbstract
+        it.isClosed = spec.isClosed
         it.instanceConstructor = constructorCode
         it.constructorMeta = spec.constructorArgs
         for (i in parentClasses.indices) {

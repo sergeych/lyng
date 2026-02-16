@@ -243,3 +243,11 @@ You can enable it in **Settings | Lyng Formatter | Enable Lyng autocompletion**.
 
 ### Kotlin API: Exception Handling
 The `Obj.getLyngExceptionMessageWithStackTrace()` extension method has been added to simplify retrieving detailed error information from Lyng exception objects in Kotlin. Additionally, `getLyngExceptionMessage()` and `raiseAsExecutionError()` now accept an optional `Scope`, making it easier to use them when a scope is not immediately available.
+
+### Kotlin API: Bridge Reflection and Class Binding (Preferred Extensions)
+Lyng now provides a public Kotlin reflection bridge and a Lyng‑first class binding workflow. This is the **preferred** way to write Kotlin extensions and library integrations:
+
+- **Bridge resolver**: explicit handles for values, vars, and callables with predictable lookup rules.
+- **Class bridge binding**: declare classes/members in Lyng (marked `extern`) and bind the implementations in Kotlin before the first instance is created.
+
+See **Embedding Lyng** for full samples and usage details.

@@ -5331,8 +5331,8 @@ class Compiler(
 
         val isMember = (codeContexts.lastOrNull() is CodeContext.ClassBody)
 
-        if (!isMember && isClosed)
-            throw ScriptError(currentToken.pos, "modifier closed is only allowed for class members")
+        if (!isMember && isClosed && currentToken.value != "class")
+            throw ScriptError(currentToken.pos, "modifier closed at top level is only allowed for classes")
 
         if (!isMember && isOverride && currentToken.value != "fun" && currentToken.value != "fn")
             throw ScriptError(currentToken.pos, "modifier override outside class is only allowed for extension functions")
@@ -5345,12 +5345,12 @@ class Compiler(
             "var" -> parseVarDeclaration(true, visibility, isAbstract, isClosed, isOverride, isStatic, isExtern)
             "fun", "fn" -> parseFunctionDeclaration(visibility, isAbstract, isClosed, isOverride, isExtern, isStatic)
             "class" -> {
-                if (isStatic || isClosed || isOverride)
+                if (isStatic || isOverride)
                     throw ScriptError(
                         currentToken.pos,
                         "unsupported modifiers for class: ${modifiers.joinToString(" ")}"
                     )
-                parseClassDeclaration(isAbstract, isExtern)
+                parseClassDeclaration(isAbstract, isExtern, isClosed)
             }
 
             "object" -> {
@@ -5478,8 +5478,11 @@ class Compiler(
         "type" -> {
             pendingDeclStart = id.pos
             pendingDeclDoc = consumePendingDoc()
-            if (!looksLikeTypeAliasDeclaration()) return null
-            parseTypeAliasDeclaration()
+            if (looksLikeTypeAliasDeclaration()) {
+                parseTypeAliasDeclaration()
+            } else {
+                null
+            }
         }
 
         "try" -> parseTryStatement()
@@ -6116,6 +6119,7 @@ class Compiler(
             startPos = startPos,
             isExtern = false,
             isAbstract = false,
+            isClosed = false,
             isObject = true,
             isAnonymous = nameToken == null,
             baseSpecs = baseSpecs.map { ClassDeclBaseSpec(it.name, it.args) },
@@ -6127,7 +6131,7 @@ class Compiler(
         return ClassDeclStatement(spec)
     }
 
-    private suspend fun parseClassDeclaration(isAbstract: Boolean = false, isExtern: Boolean = false): Statement {
+    private suspend fun parseClassDeclaration(isAbstract: Boolean = false, isExtern: Boolean = false, isClosed: Boolean = false): Statement {
         val nameToken = cc.requireToken(Token.Type.ID)
         val startPos = pendingDeclStart ?: nameToken.pos
         val doc = pendingDeclDoc ?: consumePendingDoc()
@@ -6474,6 +6478,7 @@ class Compiler(
                 startPos = startPos,
                 isExtern = isExtern,
                 isAbstract = isAbstract,
+                isClosed = isClosed,
                 isObject = false,
                 isAnonymous = false,
                 baseSpecs = baseSpecs.map { ClassDeclBaseSpec(it.name, it.args) },
