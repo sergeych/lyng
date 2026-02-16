@@ -3533,6 +3533,11 @@ class BytecodeCompiler(
         val elementClass = listElementClassBySlot[receiver.slot] ?: listElementClassFromReceiverRef(ref.targetRef)
         if (elementClass != null) {
             slotObjClass[dst] = elementClass
+            if (elementClass == ObjString.type && elementClass.isClosed) {
+                stableObjSlots.add(dst)
+            } else {
+                stableObjSlots.remove(dst)
+            }
         }
         return CompiledValue(dst, SlotType.OBJ)
     }

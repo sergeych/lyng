@@ -16,7 +16,8 @@ Candidates (not started)
 4) Range/loop hot path (done)
    - Reuse a cached ObjVoid slot for if-statements in statement context (avoids per-iteration CONST_OBJ).
    - MixedCompareBenchmarkTest: 249 ms -> 247 ms.
-5) String ops
-   - Extend fast path for string comparisons in hot loops.
+5) String ops (done)
+   - Mark GET_INDEX results as stable only for closed ObjString elements to enable fast compares.
+   - MixedCompareBenchmarkTest: 247 ms -> 240 ms.
 6) Box/unbox audit
    - Identify remaining BOX_OBJ / OBJ_TO_* in inner loops and eliminate when safe.
