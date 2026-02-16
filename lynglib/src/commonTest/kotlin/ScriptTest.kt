@@ -1259,6 +1259,28 @@ class ScriptTest {
     }
 
     @Test
+    fun testForLoopRealWidenDisasm() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun widenFor() {
+                var acc = 0
+                for(i in 0..3) {
+                    if (i == 1) acc = 0.5
+                }
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("widenFor")
+        println("[DEBUG_LOG] widenFor disasm:\n$disasm")
+        val incIndex = disasm.indexOf("INC_INT")
+        assertTrue(incIndex >= 0, "expected INC_INT in for-loop disasm")
+        val convIndex = disasm.indexOf("INT_TO_REAL")
+        assertTrue(convIndex >= 0, "expected INT_TO_REAL in for-loop disasm")
+        assertTrue(convIndex > incIndex, "INT_TO_REAL should appear after INC_INT")
+    }
+
+    @Test
     fun testIntClosedRangeInclusive() = runTest {
         eval(
             """

@@ -6002,6 +6002,11 @@ class BytecodeCompiler(
 
         try {
         val needsBreakFlag = stmt.canBreak || stmt.elseStatement != null
+        val realWidenSlots = collectLoopRealWidenSlots(stmt.body)
+        val hasRealWiden = realWidenSlots.isNotEmpty()
+        if (hasRealWiden) {
+            applySlotTypes(realWidenSlots, SlotType.REAL)
+        }
         val breakFlagSlot = allocSlot()
         if (range == null && rangeRef == null && typedRangeLocal == null) {
             val sourceValue = compileStatementValueOrFallback(stmt.source) ?: return null
@@ -6075,12 +6080,18 @@ class BytecodeCompiler(
                 )
             )
             val bodyValue = compileLoopBody(stmt.body, wantResult) ?: return null
+            if (hasRealWiden) {
+                applySlotTypes(realWidenSlots, SlotType.UNKNOWN)
+            }
             loopStack.removeLast()
             if (wantResult) {
                 val bodyObj = ensureObjSlot(bodyValue)
                 builder.emit(Opcode.MOVE_OBJ, bodyObj.slot, resultSlot!!)
             }
             builder.mark(continueLabel)
+            if (hasRealWiden) {
+                emitLoopRealCoercions(realWidenSlots)
+            }
             builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(loopLabel)))
 
             builder.mark(endLabel)
@@ -6188,6 +6199,9 @@ class BytecodeCompiler(
                     )
                 )
                 val bodyValue = compileLoopBody(stmt.body, wantResult) ?: return null
+                if (hasRealWiden) {
+                    applySlotTypes(realWidenSlots, SlotType.UNKNOWN)
+                }
                 loopStack.removeLast()
                 if (wantResult) {
                     val bodyObj = ensureObjSlot(bodyValue)
@@ -6195,6 +6209,9 @@ class BytecodeCompiler(
                 }
                 builder.mark(continueLabel)
                 builder.emit(Opcode.INC_INT, iSlot)
+                if (hasRealWiden) {
+                    emitLoopRealCoercions(realWidenSlots)
+                }
                 builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(loopLabel)))
 
                 builder.mark(endLabel)
@@ -6265,6 +6282,9 @@ class BytecodeCompiler(
             )
         )
         val bodyValue = compileLoopBody(stmt.body, wantResult) ?: return null
+        if (hasRealWiden) {
+            applySlotTypes(realWidenSlots, SlotType.UNKNOWN)
+        }
         loopStack.removeLast()
         if (wantResult) {
             val bodyObj = ensureObjSlot(bodyValue)
@@ -6272,6 +6292,9 @@ class BytecodeCompiler(
         }
         builder.mark(continueLabel)
         builder.emit(Opcode.INC_INT, iSlot)
+        if (hasRealWiden) {
+            emitLoopRealCoercions(realWidenSlots)
+        }
         builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(loopLabel)))
 
         builder.mark(endLabel)
@@ -6331,6 +6354,9 @@ class BytecodeCompiler(
             )
         )
         val bodyValue = compileLoopBody(stmt.body, wantResult) ?: return null
+        if (hasRealWiden) {
+            applySlotTypes(realWidenSlots, SlotType.UNKNOWN)
+        }
         loopStack.removeLast()
         if (wantResult) {
             val bodyObj = ensureObjSlot(bodyValue)
