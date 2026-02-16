@@ -4,8 +4,9 @@ Baseline
 - See `notes/nested_range_baseline.md`
 
 Candidates (not started)
-1) Primitive comparisons
-   - Emit fast CMP variants for known ObjString/ObjInt/ObjReal/ObjBool across all comparison operators.
+1) Primitive comparisons (done)
+   - Emit fast CMP variants for known ObjString/ObjInt/ObjReal using temp/stable slots.
+   - MixedCompareBenchmarkTest: 374 ms -> 347 ms.
 2) Mixed numeric ops
    - Ensure INT+REAL arithmetic uses INT_TO_REAL + REAL op with no extra moves/boxing.
 3) Boolean conversion

@@ -1683,12 +1683,12 @@ class BytecodeCompiler(
         val left = ensureObjSlot(a)
         val right = ensureObjSlot(b)
         val opcode = when {
-            isExactNonNullSlotClass(left.slot, ObjString.type) &&
-                isExactNonNullSlotClass(right.slot, ObjString.type) -> stringOp
-            isExactNonNullSlotClass(left.slot, ObjInt.type) &&
-                isExactNonNullSlotClass(right.slot, ObjInt.type) -> intOp
-            isExactNonNullSlotClass(left.slot, ObjReal.type) &&
-                isExactNonNullSlotClass(right.slot, ObjReal.type) -> realOp
+            isExactNonNullSlotClassOrTemp(left.slot, ObjString.type) &&
+                isExactNonNullSlotClassOrTemp(right.slot, ObjString.type) -> stringOp
+            isExactNonNullSlotClassOrTemp(left.slot, ObjInt.type) &&
+                isExactNonNullSlotClassOrTemp(right.slot, ObjInt.type) -> intOp
+            isExactNonNullSlotClassOrTemp(left.slot, ObjReal.type) &&
+                isExactNonNullSlotClassOrTemp(right.slot, ObjReal.type) -> realOp
             else -> objOp
         }
         builder.emit(opcode, left.slot, right.slot, out)
