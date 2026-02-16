@@ -13,9 +13,9 @@ Candidates (not started)
 3) Boolean conversion (done; do not revert without review)
    - Skip redundant OBJ_TO_BOOL in logical AND/OR when compiler already emits BOOL.
    - MixedCompareBenchmarkTest: 275 ms -> 249 ms.
-4) Range/loop hot path
-   - Keep range iteration in INT ops, avoid accidental boxing.
-   - Confirm loop-var slots avoid re-boxing in loop bodies.
+4) Range/loop hot path (done)
+   - Reuse a cached ObjVoid slot for if-statements in statement context (avoids per-iteration CONST_OBJ).
+   - MixedCompareBenchmarkTest: 249 ms -> 247 ms.
 5) String ops
    - Extend fast path for string comparisons in hot loops.
 6) Box/unbox audit

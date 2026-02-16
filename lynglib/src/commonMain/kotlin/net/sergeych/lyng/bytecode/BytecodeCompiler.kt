@@ -86,6 +86,7 @@ class BytecodeCompiler(
     private val loopVarSlots = HashSet<Int>()
     private val loopStack = ArrayDeque<LoopContext>()
     private var currentPos: Pos? = null
+    private var cachedVoidSlot: Int? = null
 
     private data class LoopContext(
         val label: String?,
@@ -5623,6 +5624,17 @@ class BytecodeCompiler(
     private fun emitInlineBlock(stmt: BlockStatement, needResult: Boolean): CompiledValue? =
         emitInlineStatements(stmt.statements(), needResult)
 
+    private fun ensureVoidSlot(): Int {
+        val existing = cachedVoidSlot
+        if (existing != null) return existing
+        val slot = allocSlot()
+        val voidId = builder.addConst(BytecodeConst.ObjRef(ObjVoid))
+        builder.emit(Opcode.CONST_OBJ, voidId, slot)
+        updateSlotType(slot, SlotType.OBJ)
+        cachedVoidSlot = slot
+        return slot
+    }
+
     private fun shouldInlineBlock(stmt: BlockStatement): Boolean {
         return allowLocalSlots
     }
@@ -6449,10 +6461,7 @@ class BytecodeCompiler(
             restoreFlowTypeOverride(elseRestore)
         }
         builder.mark(endLabel)
-        val slot = allocSlot()
-        val voidId = builder.addConst(BytecodeConst.ObjRef(ObjVoid))
-        builder.emit(Opcode.CONST_OBJ, voidId, slot)
-        return CompiledValue(slot, SlotType.OBJ)
+        return CompiledValue(ensureVoidSlot(), SlotType.OBJ)
     }
 
     private fun updateSlotTypeByName(name: String, type: SlotType) {
