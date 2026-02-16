@@ -3604,6 +3604,12 @@ class BytecodeCompiler(
                     }
                     SlotType.OBJ -> {
                         if (objOp == null) return null
+                        if (isExactNonNullSlotClassOrTemp(rhs.slot, ObjInt.type)) {
+                            val right = allocSlot()
+                            builder.emit(Opcode.UNBOX_INT_OBJ, rhs.slot, right)
+                            builder.emit(intOp, out, right, out)
+                            return CompiledValue(out, SlotType.INT)
+                        }
                         val leftObj = allocSlot()
                         builder.emit(Opcode.BOX_OBJ, out, leftObj)
                         updateSlotType(leftObj, SlotType.OBJ)
@@ -3629,6 +3635,12 @@ class BytecodeCompiler(
                     }
                     SlotType.OBJ -> {
                         if (objOp == null) return null
+                        if (isExactNonNullSlotClassOrTemp(rhs.slot, ObjReal.type)) {
+                            val right = allocSlot()
+                            builder.emit(Opcode.UNBOX_REAL_OBJ, rhs.slot, right)
+                            builder.emit(realOp, out, right, out)
+                            return CompiledValue(out, SlotType.REAL)
+                        }
                         val leftObj = allocSlot()
                         builder.emit(Opcode.BOX_OBJ, out, leftObj)
                         updateSlotType(leftObj, SlotType.OBJ)

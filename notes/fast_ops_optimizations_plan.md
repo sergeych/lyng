@@ -19,5 +19,6 @@ Candidates (not started)
 5) String ops (done)
    - Mark GET_INDEX results as stable only for closed ObjString elements to enable fast compares.
    - MixedCompareBenchmarkTest: 247 ms -> 240 ms.
-6) Box/unbox audit
-   - Identify remaining BOX_OBJ / OBJ_TO_* in inner loops and eliminate when safe.
+6) Box/unbox audit (done)
+   - Unbox ObjInt/ObjReal in assign-op when target is INT/REAL to avoid boxing + obj ops.
+   - MixedCompareBenchmarkTest: 240 ms -> 234 ms.
