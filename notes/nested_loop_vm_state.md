@@ -37,6 +37,12 @@
 - 2026-02-15 baseline (fused int-compare jumps): 74 ms.
   - Command: `./gradlew :lynglib:jvmTest -Pbenchmarks=true --tests '*NestedRangeBenchmarkTest*'`
   - Notes: loop range checks use `JMP_IF_GTE_INT` (no CMP+bool temp).
+- 2026-02-15 experiment (fast non-suspend cmds in hot path): 57 ms.
+  - Command: `./gradlew :lynglib:jvmTest -Pbenchmarks=true --tests '*NestedRangeBenchmarkTest*'`
+  - Notes: fast path for local int ops + local JMP_IF_FALSE/TRUE in VM.
+- 2026-02-15 experiment (full fast-path sweep + capture-safe locals): 59 ms.
+  - Command: `./gradlew :lynglib:jvmTest -Pbenchmarks=true --tests '*NestedRangeBenchmarkTest*'`
+  - Notes: local numeric/bool/mixed-compare fast ops gated by non-captured locals.
 
 ### Hypothesis for Native slowdown
 - Suspend/virtual dispatch per opcode dominates on K/N, even with no allocations in int ops.

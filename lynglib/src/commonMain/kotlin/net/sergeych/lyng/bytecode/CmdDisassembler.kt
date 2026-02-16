@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Sergey S. Chernov
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 package net.sergeych.lyng.bytecode
@@ -76,6 +77,8 @@ object CmdDisassembler {
             is CmdMoveObj -> Opcode.MOVE_OBJ to intArrayOf(cmd.src, cmd.dst)
             is CmdMoveInt -> Opcode.MOVE_INT to intArrayOf(cmd.src, cmd.dst)
             is CmdMoveIntLocal -> Opcode.MOVE_INT to intArrayOf(cmd.src + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
+            is CmdMoveRealLocal -> Opcode.MOVE_REAL to intArrayOf(cmd.src + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
+            is CmdMoveBoolLocal -> Opcode.MOVE_BOOL to intArrayOf(cmd.src + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdMoveReal -> Opcode.MOVE_REAL to intArrayOf(cmd.src, cmd.dst)
             is CmdMoveBool -> Opcode.MOVE_BOOL to intArrayOf(cmd.src, cmd.dst)
             is CmdConstObj -> Opcode.CONST_OBJ to intArrayOf(cmd.constId, cmd.dst)
@@ -114,9 +117,13 @@ object CmdDisassembler {
             is CmdLoadBoolAddr -> Opcode.LOAD_BOOL_ADDR to intArrayOf(cmd.addrSlot, cmd.dst)
             is CmdStoreBoolAddr -> Opcode.STORE_BOOL_ADDR to intArrayOf(cmd.src, cmd.addrSlot)
             is CmdIntToReal -> Opcode.INT_TO_REAL to intArrayOf(cmd.src, cmd.dst)
+            is CmdIntToRealLocal -> Opcode.INT_TO_REAL to intArrayOf(cmd.src + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdRealToInt -> Opcode.REAL_TO_INT to intArrayOf(cmd.src, cmd.dst)
+            is CmdRealToIntLocal -> Opcode.REAL_TO_INT to intArrayOf(cmd.src + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdBoolToInt -> Opcode.BOOL_TO_INT to intArrayOf(cmd.src, cmd.dst)
+            is CmdBoolToIntLocal -> Opcode.BOOL_TO_INT to intArrayOf(cmd.src + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdIntToBool -> Opcode.INT_TO_BOOL to intArrayOf(cmd.src, cmd.dst)
+            is CmdIntToBoolLocal -> Opcode.INT_TO_BOOL to intArrayOf(cmd.src + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdAddInt -> Opcode.ADD_INT to intArrayOf(cmd.a, cmd.b, cmd.dst)
             is CmdAddIntLocal -> Opcode.ADD_INT to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdSubInt -> Opcode.SUB_INT to intArrayOf(cmd.a, cmd.b, cmd.dst)
@@ -128,22 +135,35 @@ object CmdDisassembler {
             is CmdModInt -> Opcode.MOD_INT to intArrayOf(cmd.a, cmd.b, cmd.dst)
             is CmdModIntLocal -> Opcode.MOD_INT to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdNegInt -> Opcode.NEG_INT to intArrayOf(cmd.src, cmd.dst)
+            is CmdNegIntLocal -> Opcode.NEG_INT to intArrayOf(cmd.src + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdIncInt -> Opcode.INC_INT to intArrayOf(cmd.slot)
             is CmdIncIntLocal -> Opcode.INC_INT to intArrayOf(cmd.slot + fn.scopeSlotCount)
             is CmdDecInt -> Opcode.DEC_INT to intArrayOf(cmd.slot)
             is CmdDecIntLocal -> Opcode.DEC_INT to intArrayOf(cmd.slot + fn.scopeSlotCount)
             is CmdAddReal -> Opcode.ADD_REAL to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdAddRealLocal -> Opcode.ADD_REAL to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdSubReal -> Opcode.SUB_REAL to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdSubRealLocal -> Opcode.SUB_REAL to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdMulReal -> Opcode.MUL_REAL to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdMulRealLocal -> Opcode.MUL_REAL to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdDivReal -> Opcode.DIV_REAL to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdDivRealLocal -> Opcode.DIV_REAL to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdNegReal -> Opcode.NEG_REAL to intArrayOf(cmd.src, cmd.dst)
+            is CmdNegRealLocal -> Opcode.NEG_REAL to intArrayOf(cmd.src + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdAndInt -> Opcode.AND_INT to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdAndIntLocal -> Opcode.AND_INT to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdOrInt -> Opcode.OR_INT to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdOrIntLocal -> Opcode.OR_INT to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdXorInt -> Opcode.XOR_INT to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdXorIntLocal -> Opcode.XOR_INT to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdShlInt -> Opcode.SHL_INT to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdShlIntLocal -> Opcode.SHL_INT to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdShrInt -> Opcode.SHR_INT to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdShrIntLocal -> Opcode.SHR_INT to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdUshrInt -> Opcode.USHR_INT to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdUshrIntLocal -> Opcode.USHR_INT to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdInvInt -> Opcode.INV_INT to intArrayOf(cmd.src, cmd.dst)
+            is CmdInvIntLocal -> Opcode.INV_INT to intArrayOf(cmd.src + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdCmpEqInt -> Opcode.CMP_EQ_INT to intArrayOf(cmd.a, cmd.b, cmd.dst)
             is CmdCmpEqIntLocal -> Opcode.CMP_EQ_INT to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdCmpNeqInt -> Opcode.CMP_NEQ_INT to intArrayOf(cmd.a, cmd.b, cmd.dst)
@@ -157,25 +177,45 @@ object CmdDisassembler {
             is CmdCmpGteInt -> Opcode.CMP_GTE_INT to intArrayOf(cmd.a, cmd.b, cmd.dst)
             is CmdCmpGteIntLocal -> Opcode.CMP_GTE_INT to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdCmpEqReal -> Opcode.CMP_EQ_REAL to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpEqRealLocal -> Opcode.CMP_EQ_REAL to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdCmpNeqReal -> Opcode.CMP_NEQ_REAL to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpNeqRealLocal -> Opcode.CMP_NEQ_REAL to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdCmpLtReal -> Opcode.CMP_LT_REAL to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpLtRealLocal -> Opcode.CMP_LT_REAL to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdCmpLteReal -> Opcode.CMP_LTE_REAL to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpLteRealLocal -> Opcode.CMP_LTE_REAL to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdCmpGtReal -> Opcode.CMP_GT_REAL to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpGtRealLocal -> Opcode.CMP_GT_REAL to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdCmpGteReal -> Opcode.CMP_GTE_REAL to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpGteRealLocal -> Opcode.CMP_GTE_REAL to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdCmpEqBool -> Opcode.CMP_EQ_BOOL to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpEqBoolLocal -> Opcode.CMP_EQ_BOOL to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdCmpNeqBool -> Opcode.CMP_NEQ_BOOL to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpNeqBoolLocal -> Opcode.CMP_NEQ_BOOL to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdCmpEqIntReal -> Opcode.CMP_EQ_INT_REAL to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpEqIntRealLocal -> Opcode.CMP_EQ_INT_REAL to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdCmpEqRealInt -> Opcode.CMP_EQ_REAL_INT to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpEqRealIntLocal -> Opcode.CMP_EQ_REAL_INT to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdCmpLtIntReal -> Opcode.CMP_LT_INT_REAL to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpLtIntRealLocal -> Opcode.CMP_LT_INT_REAL to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdCmpLtRealInt -> Opcode.CMP_LT_REAL_INT to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpLtRealIntLocal -> Opcode.CMP_LT_REAL_INT to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdCmpLteIntReal -> Opcode.CMP_LTE_INT_REAL to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpLteIntRealLocal -> Opcode.CMP_LTE_INT_REAL to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdCmpLteRealInt -> Opcode.CMP_LTE_REAL_INT to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpLteRealIntLocal -> Opcode.CMP_LTE_REAL_INT to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdCmpGtIntReal -> Opcode.CMP_GT_INT_REAL to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpGtIntRealLocal -> Opcode.CMP_GT_INT_REAL to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdCmpGtRealInt -> Opcode.CMP_GT_REAL_INT to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpGtRealIntLocal -> Opcode.CMP_GT_REAL_INT to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdCmpGteIntReal -> Opcode.CMP_GTE_INT_REAL to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpGteIntRealLocal -> Opcode.CMP_GTE_INT_REAL to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdCmpGteRealInt -> Opcode.CMP_GTE_REAL_INT to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpGteRealIntLocal -> Opcode.CMP_GTE_REAL_INT to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdCmpNeqIntReal -> Opcode.CMP_NEQ_INT_REAL to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpNeqIntRealLocal -> Opcode.CMP_NEQ_INT_REAL to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdCmpNeqRealInt -> Opcode.CMP_NEQ_REAL_INT to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpNeqRealIntLocal -> Opcode.CMP_NEQ_REAL_INT to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdJmpIfEqInt -> Opcode.JMP_IF_EQ_INT to intArrayOf(cmd.a, cmd.b, cmd.target)
             is CmdJmpIfEqIntLocal -> Opcode.JMP_IF_EQ_INT to intArrayOf(
                 cmd.a + fn.scopeSlotCount,
@@ -216,13 +256,194 @@ object CmdDisassembler {
             is CmdCmpNeqObj -> Opcode.CMP_NEQ_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
             is CmdCmpRefEqObj -> Opcode.CMP_REF_EQ_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
             is CmdCmpRefNeqObj -> Opcode.CMP_REF_NEQ_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpEqStr -> Opcode.CMP_EQ_STR to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpEqStrLocal -> Opcode.CMP_EQ_STR to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdCmpNeqStr -> Opcode.CMP_NEQ_STR to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpNeqStrLocal -> Opcode.CMP_NEQ_STR to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdCmpLtStr -> Opcode.CMP_LT_STR to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpLtStrLocal -> Opcode.CMP_LT_STR to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdCmpLteStr -> Opcode.CMP_LTE_STR to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpLteStrLocal -> Opcode.CMP_LTE_STR to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdCmpGtStr -> Opcode.CMP_GT_STR to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpGtStrLocal -> Opcode.CMP_GT_STR to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdCmpGteStr -> Opcode.CMP_GTE_STR to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpGteStrLocal -> Opcode.CMP_GTE_STR to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdCmpEqIntObj -> Opcode.CMP_EQ_INT_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpEqIntObjLocal -> Opcode.CMP_EQ_INT_OBJ to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdCmpNeqIntObj -> Opcode.CMP_NEQ_INT_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpNeqIntObjLocal -> Opcode.CMP_NEQ_INT_OBJ to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdCmpLtIntObj -> Opcode.CMP_LT_INT_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpLtIntObjLocal -> Opcode.CMP_LT_INT_OBJ to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdCmpLteIntObj -> Opcode.CMP_LTE_INT_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpLteIntObjLocal -> Opcode.CMP_LTE_INT_OBJ to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdCmpGtIntObj -> Opcode.CMP_GT_INT_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpGtIntObjLocal -> Opcode.CMP_GT_INT_OBJ to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdCmpGteIntObj -> Opcode.CMP_GTE_INT_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpGteIntObjLocal -> Opcode.CMP_GTE_INT_OBJ to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdCmpEqRealObj -> Opcode.CMP_EQ_REAL_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpEqRealObjLocal -> Opcode.CMP_EQ_REAL_OBJ to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdCmpNeqRealObj -> Opcode.CMP_NEQ_REAL_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpNeqRealObjLocal -> Opcode.CMP_NEQ_REAL_OBJ to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdCmpLtRealObj -> Opcode.CMP_LT_REAL_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpLtRealObjLocal -> Opcode.CMP_LT_REAL_OBJ to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdCmpLteRealObj -> Opcode.CMP_LTE_REAL_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpLteRealObjLocal -> Opcode.CMP_LTE_REAL_OBJ to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdCmpGtRealObj -> Opcode.CMP_GT_REAL_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpGtRealObjLocal -> Opcode.CMP_GT_REAL_OBJ to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdCmpGteRealObj -> Opcode.CMP_GTE_REAL_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdCmpGteRealObjLocal -> Opcode.CMP_GTE_REAL_OBJ to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
             is CmdNotBool -> Opcode.NOT_BOOL to intArrayOf(cmd.src, cmd.dst)
+            is CmdNotBoolLocal -> Opcode.NOT_BOOL to intArrayOf(cmd.src + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdAndBool -> Opcode.AND_BOOL to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdAndBoolLocal -> Opcode.AND_BOOL to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
             is CmdOrBool -> Opcode.OR_BOOL to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdOrBoolLocal -> Opcode.OR_BOOL to intArrayOf(cmd.a + fn.scopeSlotCount, cmd.b + fn.scopeSlotCount, cmd.dst + fn.scopeSlotCount)
+            is CmdUnboxIntObj -> Opcode.UNBOX_INT_OBJ to intArrayOf(cmd.src, cmd.dst)
+            is CmdUnboxIntObjLocal -> Opcode.UNBOX_INT_OBJ to intArrayOf(
+                cmd.src + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdUnboxRealObj -> Opcode.UNBOX_REAL_OBJ to intArrayOf(cmd.src, cmd.dst)
+            is CmdUnboxRealObjLocal -> Opcode.UNBOX_REAL_OBJ to intArrayOf(
+                cmd.src + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
             is CmdCmpLtObj -> Opcode.CMP_LT_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
             is CmdCmpLteObj -> Opcode.CMP_LTE_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
             is CmdCmpGtObj -> Opcode.CMP_GT_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
             is CmdCmpGteObj -> Opcode.CMP_GTE_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdAddIntObj -> Opcode.ADD_INT_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdAddIntObjLocal -> Opcode.ADD_INT_OBJ to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdSubIntObj -> Opcode.SUB_INT_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdSubIntObjLocal -> Opcode.SUB_INT_OBJ to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdMulIntObj -> Opcode.MUL_INT_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdMulIntObjLocal -> Opcode.MUL_INT_OBJ to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdDivIntObj -> Opcode.DIV_INT_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdDivIntObjLocal -> Opcode.DIV_INT_OBJ to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdModIntObj -> Opcode.MOD_INT_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdModIntObjLocal -> Opcode.MOD_INT_OBJ to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdAddRealObj -> Opcode.ADD_REAL_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdAddRealObjLocal -> Opcode.ADD_REAL_OBJ to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdSubRealObj -> Opcode.SUB_REAL_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdSubRealObjLocal -> Opcode.SUB_REAL_OBJ to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdMulRealObj -> Opcode.MUL_REAL_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdMulRealObjLocal -> Opcode.MUL_REAL_OBJ to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdDivRealObj -> Opcode.DIV_REAL_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdDivRealObjLocal -> Opcode.DIV_REAL_OBJ to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
+            is CmdModRealObj -> Opcode.MOD_REAL_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
+            is CmdModRealObjLocal -> Opcode.MOD_REAL_OBJ to intArrayOf(
+                cmd.a + fn.scopeSlotCount,
+                cmd.b + fn.scopeSlotCount,
+                cmd.dst + fn.scopeSlotCount
+            )
             is CmdAddObj -> Opcode.ADD_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
             is CmdSubObj -> Opcode.SUB_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
             is CmdMulObj -> Opcode.MUL_OBJ to intArrayOf(cmd.a, cmd.b, cmd.dst)
@@ -232,7 +453,9 @@ object CmdDisassembler {
             is CmdAssignOpObj -> Opcode.ASSIGN_OP_OBJ to intArrayOf(cmd.opId, cmd.targetSlot, cmd.valueSlot, cmd.dst, cmd.nameId)
             is CmdJmp -> Opcode.JMP to intArrayOf(cmd.target)
             is CmdJmpIfTrue -> Opcode.JMP_IF_TRUE to intArrayOf(cmd.cond, cmd.target)
+            is CmdJmpIfTrueLocal -> Opcode.JMP_IF_TRUE to intArrayOf(cmd.cond + fn.scopeSlotCount, cmd.target)
             is CmdJmpIfFalse -> Opcode.JMP_IF_FALSE to intArrayOf(cmd.cond, cmd.target)
+            is CmdJmpIfFalseLocal -> Opcode.JMP_IF_FALSE to intArrayOf(cmd.cond + fn.scopeSlotCount, cmd.target)
             is CmdRet -> Opcode.RET to intArrayOf(cmd.slot)
             is CmdRetLabel -> Opcode.RET_LABEL to intArrayOf(cmd.labelId, cmd.slot)
             is CmdRetVoid -> Opcode.RET_VOID to intArrayOf()
@@ -298,6 +521,7 @@ object CmdDisassembler {
             Opcode.CLEAR_PENDING_THROWABLE, Opcode.RETHROW_PENDING,
             Opcode.ITER_POP, Opcode.ITER_CANCEL -> emptyList()
             Opcode.MOVE_OBJ, Opcode.MOVE_INT, Opcode.MOVE_REAL, Opcode.MOVE_BOOL, Opcode.BOX_OBJ,
+            Opcode.UNBOX_INT_OBJ, Opcode.UNBOX_REAL_OBJ,
             Opcode.INT_TO_REAL, Opcode.REAL_TO_INT, Opcode.BOOL_TO_INT, Opcode.INT_TO_BOOL,
             Opcode.NEG_INT, Opcode.NEG_REAL, Opcode.NOT_BOOL, Opcode.INV_INT ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT)
@@ -351,7 +575,14 @@ object CmdDisassembler {
             Opcode.CMP_LTE_INT_REAL, Opcode.CMP_LTE_REAL_INT, Opcode.CMP_GT_INT_REAL, Opcode.CMP_GT_REAL_INT,
             Opcode.CMP_GTE_INT_REAL, Opcode.CMP_GTE_REAL_INT, Opcode.CMP_NEQ_INT_REAL, Opcode.CMP_NEQ_REAL_INT,
             Opcode.CMP_EQ_OBJ, Opcode.CMP_NEQ_OBJ, Opcode.CMP_REF_EQ_OBJ, Opcode.CMP_REF_NEQ_OBJ,
+            Opcode.CMP_EQ_STR, Opcode.CMP_NEQ_STR, Opcode.CMP_LT_STR, Opcode.CMP_LTE_STR,
+            Opcode.CMP_GT_STR, Opcode.CMP_GTE_STR,
+            Opcode.CMP_EQ_INT_OBJ, Opcode.CMP_NEQ_INT_OBJ, Opcode.CMP_LT_INT_OBJ, Opcode.CMP_LTE_INT_OBJ,
+            Opcode.CMP_GT_INT_OBJ, Opcode.CMP_GTE_INT_OBJ, Opcode.CMP_EQ_REAL_OBJ, Opcode.CMP_NEQ_REAL_OBJ,
+            Opcode.CMP_LT_REAL_OBJ, Opcode.CMP_LTE_REAL_OBJ, Opcode.CMP_GT_REAL_OBJ, Opcode.CMP_GTE_REAL_OBJ,
             Opcode.CMP_LT_OBJ, Opcode.CMP_LTE_OBJ, Opcode.CMP_GT_OBJ, Opcode.CMP_GTE_OBJ,
+            Opcode.ADD_INT_OBJ, Opcode.SUB_INT_OBJ, Opcode.MUL_INT_OBJ, Opcode.DIV_INT_OBJ, Opcode.MOD_INT_OBJ,
+            Opcode.ADD_REAL_OBJ, Opcode.SUB_REAL_OBJ, Opcode.MUL_REAL_OBJ, Opcode.DIV_REAL_OBJ, Opcode.MOD_REAL_OBJ,
             Opcode.ADD_OBJ, Opcode.SUB_OBJ, Opcode.MUL_OBJ, Opcode.DIV_OBJ, Opcode.MOD_OBJ, Opcode.CONTAINS_OBJ,
             Opcode.AND_BOOL, Opcode.OR_BOOL ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)

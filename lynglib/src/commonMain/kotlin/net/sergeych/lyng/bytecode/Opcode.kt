@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Sergey S. Chernov
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 package net.sergeych.lyng.bytecode
@@ -98,6 +99,36 @@ enum class Opcode(val code: Int) {
     CMP_NEQ_OBJ(0x6D),
     CMP_REF_EQ_OBJ(0x6E),
     CMP_REF_NEQ_OBJ(0x6F),
+    CMP_EQ_STR(0xD6),
+    CMP_NEQ_STR(0xD7),
+    CMP_LT_STR(0xD8),
+    CMP_LTE_STR(0xD9),
+    CMP_GT_STR(0xDA),
+    CMP_GTE_STR(0xDB),
+    CMP_EQ_INT_OBJ(0xDC),
+    CMP_NEQ_INT_OBJ(0xDD),
+    CMP_LT_INT_OBJ(0xDE),
+    CMP_LTE_INT_OBJ(0xDF),
+    CMP_GT_INT_OBJ(0xE0),
+    CMP_GTE_INT_OBJ(0xE1),
+    CMP_EQ_REAL_OBJ(0xE2),
+    CMP_NEQ_REAL_OBJ(0xE3),
+    CMP_LT_REAL_OBJ(0xE4),
+    CMP_LTE_REAL_OBJ(0xE5),
+    CMP_GT_REAL_OBJ(0xE6),
+    CMP_GTE_REAL_OBJ(0xE7),
+    UNBOX_INT_OBJ(0xF2),
+    UNBOX_REAL_OBJ(0xF3),
+    ADD_INT_OBJ(0xE8),
+    SUB_INT_OBJ(0xE9),
+    MUL_INT_OBJ(0xEA),
+    DIV_INT_OBJ(0xEB),
+    MOD_INT_OBJ(0xEC),
+    ADD_REAL_OBJ(0xED),
+    SUB_REAL_OBJ(0xEE),
+    MUL_REAL_OBJ(0xEF),
+    DIV_REAL_OBJ(0xF0),
+    MOD_REAL_OBJ(0xF1),
 
     NOT_BOOL(0x70),
     AND_BOOL(0x71),

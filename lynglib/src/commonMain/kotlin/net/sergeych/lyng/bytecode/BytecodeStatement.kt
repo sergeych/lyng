@@ -59,6 +59,7 @@ class BytecodeStatement private constructor(
             callableReturnTypeByName: Map<String, ObjClass> = emptyMap(),
             externCallableNames: Set<String> = emptySet(),
             lambdaCaptureEntriesByRef: Map<ValueFnRef, List<LambdaCaptureEntry>> = emptyMap(),
+            slotTypeDeclByScopeId: Map<Int, Map<Int, TypeDecl>> = emptyMap(),
         ): Statement {
             if (statement is BytecodeStatement) return statement
             val hasUnsupported = containsUnsupportedStatement(statement)
@@ -83,6 +84,7 @@ class BytecodeStatement private constructor(
                 globalSlotInfo = globalSlotInfo,
                 globalSlotScopeId = globalSlotScopeId,
                 slotTypeByScopeId = slotTypeByScopeId,
+                slotTypeDeclByScopeId = slotTypeDeclByScopeId,
                 knownNameObjClass = knownNameObjClass,
                 knownObjectNames = knownObjectNames,
                 classFieldTypesByName = classFieldTypesByName,

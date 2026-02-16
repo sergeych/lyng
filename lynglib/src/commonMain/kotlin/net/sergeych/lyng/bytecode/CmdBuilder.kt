@@ -102,7 +102,7 @@ class CmdBuilder {
                 }
                 operands[i] = v
             }
-            cmds.add(createCmd(ins.op, operands, scopeSlotCount))
+            cmds.add(createCmd(ins.op, operands, scopeSlotCount, localSlotCaptures))
         }
         return CmdFunction(
             name = name,
@@ -128,6 +128,7 @@ class CmdBuilder {
             Opcode.NOP, Opcode.RET_VOID, Opcode.POP_SCOPE, Opcode.POP_SLOT_PLAN, Opcode.POP_TRY,
             Opcode.CLEAR_PENDING_THROWABLE, Opcode.RETHROW_PENDING -> emptyList()
             Opcode.MOVE_OBJ, Opcode.MOVE_INT, Opcode.MOVE_REAL, Opcode.MOVE_BOOL, Opcode.BOX_OBJ,
+            Opcode.UNBOX_INT_OBJ, Opcode.UNBOX_REAL_OBJ,
             Opcode.INT_TO_REAL, Opcode.REAL_TO_INT, Opcode.BOOL_TO_INT, Opcode.INT_TO_BOOL,
             Opcode.OBJ_TO_BOOL, Opcode.GET_OBJ_CLASS,
             Opcode.NEG_INT, Opcode.NEG_REAL, Opcode.NOT_BOOL, Opcode.INV_INT,
@@ -179,7 +180,14 @@ class CmdBuilder {
             Opcode.CMP_LTE_INT_REAL, Opcode.CMP_LTE_REAL_INT, Opcode.CMP_GT_INT_REAL, Opcode.CMP_GT_REAL_INT,
             Opcode.CMP_GTE_INT_REAL, Opcode.CMP_GTE_REAL_INT, Opcode.CMP_NEQ_INT_REAL, Opcode.CMP_NEQ_REAL_INT,
             Opcode.CMP_EQ_OBJ, Opcode.CMP_NEQ_OBJ, Opcode.CMP_REF_EQ_OBJ, Opcode.CMP_REF_NEQ_OBJ,
+            Opcode.CMP_EQ_STR, Opcode.CMP_NEQ_STR, Opcode.CMP_LT_STR, Opcode.CMP_LTE_STR,
+            Opcode.CMP_GT_STR, Opcode.CMP_GTE_STR,
+            Opcode.CMP_EQ_INT_OBJ, Opcode.CMP_NEQ_INT_OBJ, Opcode.CMP_LT_INT_OBJ, Opcode.CMP_LTE_INT_OBJ,
+            Opcode.CMP_GT_INT_OBJ, Opcode.CMP_GTE_INT_OBJ, Opcode.CMP_EQ_REAL_OBJ, Opcode.CMP_NEQ_REAL_OBJ,
+            Opcode.CMP_LT_REAL_OBJ, Opcode.CMP_LTE_REAL_OBJ, Opcode.CMP_GT_REAL_OBJ, Opcode.CMP_GTE_REAL_OBJ,
             Opcode.CMP_LT_OBJ, Opcode.CMP_LTE_OBJ, Opcode.CMP_GT_OBJ, Opcode.CMP_GTE_OBJ,
+            Opcode.ADD_INT_OBJ, Opcode.SUB_INT_OBJ, Opcode.MUL_INT_OBJ, Opcode.DIV_INT_OBJ, Opcode.MOD_INT_OBJ,
+            Opcode.ADD_REAL_OBJ, Opcode.SUB_REAL_OBJ, Opcode.MUL_REAL_OBJ, Opcode.DIV_REAL_OBJ, Opcode.MOD_REAL_OBJ,
             Opcode.ADD_OBJ, Opcode.SUB_OBJ, Opcode.MUL_OBJ, Opcode.DIV_OBJ, Opcode.MOD_OBJ, Opcode.CONTAINS_OBJ,
             Opcode.AND_BOOL, Opcode.OR_BOOL ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
@@ -241,19 +249,37 @@ class CmdBuilder {
         ID,
     }
 
-    private fun createCmd(op: Opcode, operands: IntArray, scopeSlotCount: Int): Cmd {
+    private fun createCmd(
+        op: Opcode,
+        operands: IntArray,
+        scopeSlotCount: Int,
+        localSlotCaptures: BooleanArray
+    ): Cmd {
+        fun isFastLocal(slot: Int): Boolean {
+            if (slot < scopeSlotCount) return false
+            val localIndex = slot - scopeSlotCount
+            return localSlotCaptures.getOrNull(localIndex) != true
+        }
         return when (op) {
             Opcode.NOP -> CmdNop()
             Opcode.MOVE_OBJ -> CmdMoveObj(operands[0], operands[1])
-            Opcode.MOVE_INT -> if (operands[0] >= scopeSlotCount && operands[1] >= scopeSlotCount) {
+            Opcode.MOVE_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1])) {
                 CmdMoveIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount)
             } else {
                 CmdMoveInt(operands[0], operands[1])
             }
-            Opcode.MOVE_REAL -> CmdMoveReal(operands[0], operands[1])
-            Opcode.MOVE_BOOL -> CmdMoveBool(operands[0], operands[1])
+            Opcode.MOVE_REAL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1])) {
+                CmdMoveRealLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount)
+            } else {
+                CmdMoveReal(operands[0], operands[1])
+            }
+            Opcode.MOVE_BOOL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1])) {
+                CmdMoveBoolLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount)
+            } else {
+                CmdMoveBool(operands[0], operands[1])
+            }
             Opcode.CONST_OBJ -> CmdConstObj(operands[0], operands[1])
-            Opcode.CONST_INT -> if (operands[1] >= scopeSlotCount) {
+            Opcode.CONST_INT -> if (isFastLocal(operands[1])) {
                 CmdConstIntLocal(operands[0], operands[1] - scopeSlotCount)
             } else {
                 CmdConstInt(operands[0], operands[1])
@@ -263,6 +289,16 @@ class CmdBuilder {
             Opcode.CONST_NULL -> CmdConstNull(operands[0])
             Opcode.MAKE_LAMBDA_FN -> CmdMakeLambda(operands[0], operands[1])
             Opcode.BOX_OBJ -> CmdBoxObj(operands[0], operands[1])
+            Opcode.UNBOX_INT_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1])) {
+                CmdUnboxIntObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount)
+            } else {
+                CmdUnboxIntObj(operands[0], operands[1])
+            }
+            Opcode.UNBOX_REAL_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1])) {
+                CmdUnboxRealObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount)
+            } else {
+                CmdUnboxRealObj(operands[0], operands[1])
+            }
             Opcode.OBJ_TO_BOOL -> CmdObjToBool(operands[0], operands[1])
             Opcode.GET_OBJ_CLASS -> CmdGetObjClass(operands[0], operands[1])
             Opcode.RANGE_INT_BOUNDS -> CmdRangeIntBounds(operands[0], operands[1], operands[2], operands[3])
@@ -287,119 +323,419 @@ class CmdBuilder {
             Opcode.STORE_REAL_ADDR -> CmdStoreRealAddr(operands[0], operands[1])
             Opcode.LOAD_BOOL_ADDR -> CmdLoadBoolAddr(operands[0], operands[1])
             Opcode.STORE_BOOL_ADDR -> CmdStoreBoolAddr(operands[0], operands[1])
-            Opcode.INT_TO_REAL -> CmdIntToReal(operands[0], operands[1])
-            Opcode.REAL_TO_INT -> CmdRealToInt(operands[0], operands[1])
-            Opcode.BOOL_TO_INT -> CmdBoolToInt(operands[0], operands[1])
-            Opcode.INT_TO_BOOL -> CmdIntToBool(operands[0], operands[1])
-            Opcode.ADD_INT -> if (operands[0] >= scopeSlotCount && operands[1] >= scopeSlotCount && operands[2] >= scopeSlotCount) {
+            Opcode.INT_TO_REAL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1])) {
+                CmdIntToRealLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount)
+            } else {
+                CmdIntToReal(operands[0], operands[1])
+            }
+            Opcode.REAL_TO_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1])) {
+                CmdRealToIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount)
+            } else {
+                CmdRealToInt(operands[0], operands[1])
+            }
+            Opcode.BOOL_TO_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1])) {
+                CmdBoolToIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount)
+            } else {
+                CmdBoolToInt(operands[0], operands[1])
+            }
+            Opcode.INT_TO_BOOL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1])) {
+                CmdIntToBoolLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount)
+            } else {
+                CmdIntToBool(operands[0], operands[1])
+            }
+            Opcode.ADD_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
                 CmdAddIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
             } else {
                 CmdAddInt(operands[0], operands[1], operands[2])
             }
-            Opcode.SUB_INT -> if (operands[0] >= scopeSlotCount && operands[1] >= scopeSlotCount && operands[2] >= scopeSlotCount) {
+            Opcode.SUB_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
                 CmdSubIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
             } else {
                 CmdSubInt(operands[0], operands[1], operands[2])
             }
-            Opcode.MUL_INT -> if (operands[0] >= scopeSlotCount && operands[1] >= scopeSlotCount && operands[2] >= scopeSlotCount) {
+            Opcode.MUL_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
                 CmdMulIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
             } else {
                 CmdMulInt(operands[0], operands[1], operands[2])
             }
-            Opcode.DIV_INT -> if (operands[0] >= scopeSlotCount && operands[1] >= scopeSlotCount && operands[2] >= scopeSlotCount) {
+            Opcode.DIV_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
                 CmdDivIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
             } else {
                 CmdDivInt(operands[0], operands[1], operands[2])
             }
-            Opcode.MOD_INT -> if (operands[0] >= scopeSlotCount && operands[1] >= scopeSlotCount && operands[2] >= scopeSlotCount) {
+            Opcode.MOD_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
                 CmdModIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
             } else {
                 CmdModInt(operands[0], operands[1], operands[2])
             }
-            Opcode.NEG_INT -> CmdNegInt(operands[0], operands[1])
-            Opcode.INC_INT -> if (operands[0] >= scopeSlotCount) {
+            Opcode.NEG_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1])) {
+                CmdNegIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount)
+            } else {
+                CmdNegInt(operands[0], operands[1])
+            }
+            Opcode.INC_INT -> if (isFastLocal(operands[0])) {
                 CmdIncIntLocal(operands[0] - scopeSlotCount)
             } else {
                 CmdIncInt(operands[0])
             }
-            Opcode.DEC_INT -> if (operands[0] >= scopeSlotCount) {
+            Opcode.DEC_INT -> if (isFastLocal(operands[0])) {
                 CmdDecIntLocal(operands[0] - scopeSlotCount)
             } else {
                 CmdDecInt(operands[0])
             }
-            Opcode.ADD_REAL -> CmdAddReal(operands[0], operands[1], operands[2])
-            Opcode.SUB_REAL -> CmdSubReal(operands[0], operands[1], operands[2])
-            Opcode.MUL_REAL -> CmdMulReal(operands[0], operands[1], operands[2])
-            Opcode.DIV_REAL -> CmdDivReal(operands[0], operands[1], operands[2])
-            Opcode.NEG_REAL -> CmdNegReal(operands[0], operands[1])
-            Opcode.AND_INT -> CmdAndInt(operands[0], operands[1], operands[2])
-            Opcode.OR_INT -> CmdOrInt(operands[0], operands[1], operands[2])
-            Opcode.XOR_INT -> CmdXorInt(operands[0], operands[1], operands[2])
-            Opcode.SHL_INT -> CmdShlInt(operands[0], operands[1], operands[2])
-            Opcode.SHR_INT -> CmdShrInt(operands[0], operands[1], operands[2])
-            Opcode.USHR_INT -> CmdUshrInt(operands[0], operands[1], operands[2])
-            Opcode.INV_INT -> CmdInvInt(operands[0], operands[1])
-            Opcode.CMP_EQ_INT -> if (operands[0] >= scopeSlotCount && operands[1] >= scopeSlotCount && operands[2] >= scopeSlotCount) {
+            Opcode.ADD_REAL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdAddRealLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdAddReal(operands[0], operands[1], operands[2])
+            }
+            Opcode.SUB_REAL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdSubRealLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdSubReal(operands[0], operands[1], operands[2])
+            }
+            Opcode.MUL_REAL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdMulRealLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdMulReal(operands[0], operands[1], operands[2])
+            }
+            Opcode.DIV_REAL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdDivRealLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdDivReal(operands[0], operands[1], operands[2])
+            }
+            Opcode.NEG_REAL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1])) {
+                CmdNegRealLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount)
+            } else {
+                CmdNegReal(operands[0], operands[1])
+            }
+            Opcode.AND_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdAndIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdAndInt(operands[0], operands[1], operands[2])
+            }
+            Opcode.OR_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdOrIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdOrInt(operands[0], operands[1], operands[2])
+            }
+            Opcode.XOR_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdXorIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdXorInt(operands[0], operands[1], operands[2])
+            }
+            Opcode.SHL_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdShlIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdShlInt(operands[0], operands[1], operands[2])
+            }
+            Opcode.SHR_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdShrIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdShrInt(operands[0], operands[1], operands[2])
+            }
+            Opcode.USHR_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdUshrIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdUshrInt(operands[0], operands[1], operands[2])
+            }
+            Opcode.INV_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1])) {
+                CmdInvIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount)
+            } else {
+                CmdInvInt(operands[0], operands[1])
+            }
+            Opcode.CMP_EQ_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
                 CmdCmpEqIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
             } else {
                 CmdCmpEqInt(operands[0], operands[1], operands[2])
             }
-            Opcode.CMP_NEQ_INT -> if (operands[0] >= scopeSlotCount && operands[1] >= scopeSlotCount && operands[2] >= scopeSlotCount) {
+            Opcode.CMP_NEQ_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
                 CmdCmpNeqIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
             } else {
                 CmdCmpNeqInt(operands[0], operands[1], operands[2])
             }
-            Opcode.CMP_LT_INT -> if (operands[0] >= scopeSlotCount && operands[1] >= scopeSlotCount && operands[2] >= scopeSlotCount) {
+            Opcode.CMP_LT_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
                 CmdCmpLtIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
             } else {
                 CmdCmpLtInt(operands[0], operands[1], operands[2])
             }
-            Opcode.CMP_LTE_INT -> if (operands[0] >= scopeSlotCount && operands[1] >= scopeSlotCount && operands[2] >= scopeSlotCount) {
+            Opcode.CMP_LTE_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
                 CmdCmpLteIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
             } else {
                 CmdCmpLteInt(operands[0], operands[1], operands[2])
             }
-            Opcode.CMP_GT_INT -> if (operands[0] >= scopeSlotCount && operands[1] >= scopeSlotCount && operands[2] >= scopeSlotCount) {
+            Opcode.CMP_GT_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
                 CmdCmpGtIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
             } else {
                 CmdCmpGtInt(operands[0], operands[1], operands[2])
             }
-            Opcode.CMP_GTE_INT -> if (operands[0] >= scopeSlotCount && operands[1] >= scopeSlotCount && operands[2] >= scopeSlotCount) {
+            Opcode.CMP_GTE_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
                 CmdCmpGteIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
             } else {
                 CmdCmpGteInt(operands[0], operands[1], operands[2])
             }
-            Opcode.CMP_EQ_REAL -> CmdCmpEqReal(operands[0], operands[1], operands[2])
-            Opcode.CMP_NEQ_REAL -> CmdCmpNeqReal(operands[0], operands[1], operands[2])
-            Opcode.CMP_LT_REAL -> CmdCmpLtReal(operands[0], operands[1], operands[2])
-            Opcode.CMP_LTE_REAL -> CmdCmpLteReal(operands[0], operands[1], operands[2])
-            Opcode.CMP_GT_REAL -> CmdCmpGtReal(operands[0], operands[1], operands[2])
-            Opcode.CMP_GTE_REAL -> CmdCmpGteReal(operands[0], operands[1], operands[2])
-            Opcode.CMP_EQ_BOOL -> CmdCmpEqBool(operands[0], operands[1], operands[2])
-            Opcode.CMP_NEQ_BOOL -> CmdCmpNeqBool(operands[0], operands[1], operands[2])
-            Opcode.CMP_EQ_INT_REAL -> CmdCmpEqIntReal(operands[0], operands[1], operands[2])
-            Opcode.CMP_EQ_REAL_INT -> CmdCmpEqRealInt(operands[0], operands[1], operands[2])
-            Opcode.CMP_LT_INT_REAL -> CmdCmpLtIntReal(operands[0], operands[1], operands[2])
-            Opcode.CMP_LT_REAL_INT -> CmdCmpLtRealInt(operands[0], operands[1], operands[2])
-            Opcode.CMP_LTE_INT_REAL -> CmdCmpLteIntReal(operands[0], operands[1], operands[2])
-            Opcode.CMP_LTE_REAL_INT -> CmdCmpLteRealInt(operands[0], operands[1], operands[2])
-            Opcode.CMP_GT_INT_REAL -> CmdCmpGtIntReal(operands[0], operands[1], operands[2])
-            Opcode.CMP_GT_REAL_INT -> CmdCmpGtRealInt(operands[0], operands[1], operands[2])
-            Opcode.CMP_GTE_INT_REAL -> CmdCmpGteIntReal(operands[0], operands[1], operands[2])
-            Opcode.CMP_GTE_REAL_INT -> CmdCmpGteRealInt(operands[0], operands[1], operands[2])
-            Opcode.CMP_NEQ_INT_REAL -> CmdCmpNeqIntReal(operands[0], operands[1], operands[2])
-            Opcode.CMP_NEQ_REAL_INT -> CmdCmpNeqRealInt(operands[0], operands[1], operands[2])
+            Opcode.CMP_EQ_REAL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpEqRealLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpEqReal(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_NEQ_REAL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpNeqRealLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpNeqReal(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_LT_REAL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpLtRealLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpLtReal(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_LTE_REAL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpLteRealLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpLteReal(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_GT_REAL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpGtRealLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpGtReal(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_GTE_REAL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpGteRealLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpGteReal(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_EQ_BOOL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpEqBoolLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpEqBool(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_NEQ_BOOL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpNeqBoolLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpNeqBool(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_EQ_INT_REAL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpEqIntRealLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpEqIntReal(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_EQ_REAL_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpEqRealIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpEqRealInt(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_LT_INT_REAL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpLtIntRealLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpLtIntReal(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_LT_REAL_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpLtRealIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpLtRealInt(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_LTE_INT_REAL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpLteIntRealLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpLteIntReal(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_LTE_REAL_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpLteRealIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpLteRealInt(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_GT_INT_REAL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpGtIntRealLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpGtIntReal(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_GT_REAL_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpGtRealIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpGtRealInt(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_GTE_INT_REAL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpGteIntRealLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpGteIntReal(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_GTE_REAL_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpGteRealIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpGteRealInt(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_NEQ_INT_REAL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpNeqIntRealLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpNeqIntReal(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_NEQ_REAL_INT -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpNeqRealIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpNeqRealInt(operands[0], operands[1], operands[2])
+            }
             Opcode.CMP_EQ_OBJ -> CmdCmpEqObj(operands[0], operands[1], operands[2])
             Opcode.CMP_NEQ_OBJ -> CmdCmpNeqObj(operands[0], operands[1], operands[2])
             Opcode.CMP_REF_EQ_OBJ -> CmdCmpRefEqObj(operands[0], operands[1], operands[2])
             Opcode.CMP_REF_NEQ_OBJ -> CmdCmpRefNeqObj(operands[0], operands[1], operands[2])
-            Opcode.NOT_BOOL -> CmdNotBool(operands[0], operands[1])
-            Opcode.AND_BOOL -> CmdAndBool(operands[0], operands[1], operands[2])
-            Opcode.OR_BOOL -> CmdOrBool(operands[0], operands[1], operands[2])
+            Opcode.CMP_EQ_STR -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpEqStrLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpEqStr(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_NEQ_STR -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpNeqStrLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpNeqStr(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_LT_STR -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpLtStrLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpLtStr(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_LTE_STR -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpLteStrLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpLteStr(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_GT_STR -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpGtStrLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpGtStr(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_GTE_STR -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpGteStrLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpGteStr(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_EQ_INT_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpEqIntObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpEqIntObj(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_NEQ_INT_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpNeqIntObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpNeqIntObj(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_LT_INT_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpLtIntObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpLtIntObj(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_LTE_INT_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpLteIntObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpLteIntObj(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_GT_INT_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpGtIntObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpGtIntObj(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_GTE_INT_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpGteIntObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpGteIntObj(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_EQ_REAL_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpEqRealObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpEqRealObj(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_NEQ_REAL_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpNeqRealObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpNeqRealObj(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_LT_REAL_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpLtRealObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpLtRealObj(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_LTE_REAL_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpLteRealObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpLteRealObj(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_GT_REAL_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpGtRealObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpGtRealObj(operands[0], operands[1], operands[2])
+            }
+            Opcode.CMP_GTE_REAL_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdCmpGteRealObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdCmpGteRealObj(operands[0], operands[1], operands[2])
+            }
+            Opcode.NOT_BOOL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1])) {
+                CmdNotBoolLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount)
+            } else {
+                CmdNotBool(operands[0], operands[1])
+            }
+            Opcode.AND_BOOL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdAndBoolLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdAndBool(operands[0], operands[1], operands[2])
+            }
+            Opcode.OR_BOOL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdOrBoolLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdOrBool(operands[0], operands[1], operands[2])
+            }
             Opcode.CMP_LT_OBJ -> CmdCmpLtObj(operands[0], operands[1], operands[2])
             Opcode.CMP_LTE_OBJ -> CmdCmpLteObj(operands[0], operands[1], operands[2])
             Opcode.CMP_GT_OBJ -> CmdCmpGtObj(operands[0], operands[1], operands[2])
             Opcode.CMP_GTE_OBJ -> CmdCmpGteObj(operands[0], operands[1], operands[2])
+            Opcode.ADD_INT_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdAddIntObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdAddIntObj(operands[0], operands[1], operands[2])
+            }
+            Opcode.SUB_INT_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdSubIntObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdSubIntObj(operands[0], operands[1], operands[2])
+            }
+            Opcode.MUL_INT_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdMulIntObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdMulIntObj(operands[0], operands[1], operands[2])
+            }
+            Opcode.DIV_INT_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdDivIntObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdDivIntObj(operands[0], operands[1], operands[2])
+            }
+            Opcode.MOD_INT_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdModIntObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdModIntObj(operands[0], operands[1], operands[2])
+            }
+            Opcode.ADD_REAL_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdAddRealObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdAddRealObj(operands[0], operands[1], operands[2])
+            }
+            Opcode.SUB_REAL_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdSubRealObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdSubRealObj(operands[0], operands[1], operands[2])
+            }
+            Opcode.MUL_REAL_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdMulRealObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdMulRealObj(operands[0], operands[1], operands[2])
+            }
+            Opcode.DIV_REAL_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdDivRealObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdDivRealObj(operands[0], operands[1], operands[2])
+            }
+            Opcode.MOD_REAL_OBJ -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
+                CmdModRealObjLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
+            } else {
+                CmdModRealObj(operands[0], operands[1], operands[2])
+            }
             Opcode.ADD_OBJ -> CmdAddObj(operands[0], operands[1], operands[2])
             Opcode.SUB_OBJ -> CmdSubObj(operands[0], operands[1], operands[2])
             Opcode.MUL_OBJ -> CmdMulObj(operands[0], operands[1], operands[2])
@@ -408,8 +744,16 @@ class CmdBuilder {
             Opcode.CONTAINS_OBJ -> CmdContainsObj(operands[0], operands[1], operands[2])
             Opcode.ASSIGN_OP_OBJ -> CmdAssignOpObj(operands[0], operands[1], operands[2], operands[3], operands[4])
             Opcode.JMP -> CmdJmp(operands[0])
-            Opcode.JMP_IF_TRUE -> CmdJmpIfTrue(operands[0], operands[1])
-            Opcode.JMP_IF_FALSE -> CmdJmpIfFalse(operands[0], operands[1])
+            Opcode.JMP_IF_TRUE -> if (operands[0] >= scopeSlotCount) {
+                CmdJmpIfTrueLocal(operands[0] - scopeSlotCount, operands[1])
+            } else {
+                CmdJmpIfTrue(operands[0], operands[1])
+            }
+            Opcode.JMP_IF_FALSE -> if (operands[0] >= scopeSlotCount) {
+                CmdJmpIfFalseLocal(operands[0] - scopeSlotCount, operands[1])
+            } else {
+                CmdJmpIfFalse(operands[0], operands[1])
+            }
             Opcode.JMP_IF_EQ_INT -> if (operands[0] >= scopeSlotCount && operands[1] >= scopeSlotCount) {
                 CmdJmpIfEqIntLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2])
             } else {

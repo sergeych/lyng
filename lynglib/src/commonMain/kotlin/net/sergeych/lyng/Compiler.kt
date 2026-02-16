@@ -18,11 +18,7 @@
 package net.sergeych.lyng
 
 import net.sergeych.lyng.Compiler.Companion.compile
-import net.sergeych.lyng.bytecode.BytecodeStatement
-import net.sergeych.lyng.bytecode.ForcedLocalSlotInfo
-import net.sergeych.lyng.bytecode.CmdListLiteral
-import net.sergeych.lyng.bytecode.CmdMakeRange
-import net.sergeych.lyng.bytecode.CmdRangeIntBounds
+import net.sergeych.lyng.bytecode.*
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
@@ -1643,6 +1639,7 @@ class Compiler(
                         forcedLocalSlotInfo = forcedLocalInfo,
                         forcedLocalScopeId = forcedLocalScopeId,
                         slotTypeByScopeId = slotTypeByScopeId,
+                        slotTypeDeclByScopeId = slotTypeDeclByScopeId,
                         knownNameObjClass = knownClassMapForBytecode(),
                         knownObjectNames = objectDeclNames,
                         classFieldTypesByName = classFieldTypesByName,
@@ -1941,6 +1938,7 @@ class Compiler(
             scopeSlotNameSet = scopeSlotNameSet,
             moduleScopeId = moduleScopeId,
             slotTypeByScopeId = slotTypeByScopeId,
+            slotTypeDeclByScopeId = slotTypeDeclByScopeId,
             knownNameObjClass = knownClassMapForBytecode(),
             knownObjectNames = objectDeclNames,
             classFieldTypesByName = classFieldTypesByName,
@@ -1969,6 +1967,7 @@ class Compiler(
             scopeSlotNameSet = scopeSlotNameSet,
             moduleScopeId = moduleScopeId,
             slotTypeByScopeId = slotTypeByScopeId,
+            slotTypeDeclByScopeId = slotTypeDeclByScopeId,
             knownNameObjClass = knownClassMapForBytecode(),
             knownObjectNames = objectDeclNames,
             classFieldTypesByName = classFieldTypesByName,
@@ -2022,6 +2021,7 @@ class Compiler(
             globalSlotInfo = globalSlotInfo,
             globalSlotScopeId = globalSlotScopeId,
             slotTypeByScopeId = slotTypeByScopeId,
+            slotTypeDeclByScopeId = slotTypeDeclByScopeId,
             knownNameObjClass = knownNames,
             knownObjectNames = objectDeclNames,
             classFieldTypesByName = classFieldTypesByName,
@@ -7580,6 +7580,10 @@ class Compiler(
         val info = compileClassInfos[name] ?: return null
         val stub = compileClassStubs.getOrPut(info.name) {
             val parents = info.baseNames.mapNotNull { resolveClassByName(it) }
+            val closedParent = parents.firstOrNull { it.isClosed }
+            if (closedParent != null) {
+                throw ScriptError(Pos.builtIn, "can't inherit from closed class ${closedParent.className}")
+            }
             ObjInstanceClass(info.name, *parents.toTypedArray())
         }
         if (stub is ObjInstanceClass) {

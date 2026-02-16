@@ -109,6 +109,7 @@ open class ObjClass(
     var isAnonymous: Boolean = false
 
     var isAbstract: Boolean = false
+    var isClosed: Boolean = false
 
     // Stable identity and simple structural version for PICs
     val classId: Long = ClassIdGen.nextId()
@@ -399,7 +400,16 @@ open class ObjClass(
     internal fun fieldSlotMap(): Map<String, FieldSlot> = ensureFieldSlots()
     internal fun fieldRecordForId(fieldId: Int): ObjRecord? {
         ensureFieldSlots()
-        return fieldSlotMap.values.firstOrNull { it.slot == fieldId }?.record
+        fieldSlotMap.values.firstOrNull { it.slot == fieldId }?.record?.let { return it }
+        // Fallback: resolve by id through name mapping if slot map is stale.
+        val name = fieldIdMap.entries.firstOrNull { it.value == fieldId }?.key
+        if (name != null) {
+            for (cls in mro) {
+                cls.members[name]?.let { return it }
+                cls.classScope?.objects?.get(name)?.let { return it }
+            }
+        }
+        return null
     }
     internal fun resolveInstanceMember(name: String): ResolvedMember? = ensureInstanceMemberCache()[name]
     internal fun methodSlotCount(): Int {
@@ -423,8 +433,17 @@ open class ObjClass(
                 if (rec.methodId == methodId) return rec
             }
         }
+        // Final fallback: resolve by id through name mapping if slot map is stale.
+        val name = methodIdMap.entries.firstOrNull { it.value == methodId }?.key
+        if (name != null) {
+            for (cls in mro) {
+                cls.members[name]?.let { return it }
+                cls.classScope?.objects?.get(name)?.let { return it }
+            }
+        }
         return null
     }
+
 
     internal fun instanceFieldIdMap(): Map<String, Int> {
         val result = mutableMapOf<String, Int>()
@@ -479,7 +498,13 @@ open class ObjClass(
             fieldIdMap[name] = existingId
             return existingId
         }
-        val id = fieldIdMap.getOrPut(name) { nextFieldId++ }
+        val id = fieldIdMap[name] ?: run {
+            val next = nextFieldId++
+            fieldIdMap[name] = next
+            // Field id map affects slot layout; invalidate caches when a new id is assigned.
+            layoutVersion += 1
+            next
+        }
         return id
     }
 
@@ -493,7 +518,13 @@ open class ObjClass(
             }
             return existingId
         }
-        val id = methodIdMap.getOrPut(name) { nextMethodId++ }
+        val id = methodIdMap[name] ?: run {
+            val next = nextMethodId++
+            methodIdMap[name] = next
+            // Method id map affects slot layout; invalidate caches when a new id is assigned.
+            layoutVersion += 1
+            next
+        }
         if (id >= nextMethodId) {
             nextMethodId = id + 1
         }

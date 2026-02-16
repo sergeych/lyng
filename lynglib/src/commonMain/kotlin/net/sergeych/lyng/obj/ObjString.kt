@@ -25,8 +25,8 @@ import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.RegexCache
 import net.sergeych.lyng.Scope
-import net.sergeych.lyng.requireScope
 import net.sergeych.lyng.miniast.*
+import net.sergeych.lyng.requireScope
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
@@ -137,6 +137,7 @@ data class ObjString(val value: String) : Obj() {
             override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj =
                 ObjString(decoder.unpackBinaryData().decodeToString())
         }.apply {
+            isClosed = true
             addFnDoc(
                 name = "iterator",
                 doc = "Iterator over characters of this string.",

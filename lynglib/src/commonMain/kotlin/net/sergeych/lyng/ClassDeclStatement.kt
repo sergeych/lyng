@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Sergey S. Chernov
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,17 +12,12 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 package net.sergeych.lyng
 
-import net.sergeych.lyng.obj.Obj
-import net.sergeych.lyng.obj.ObjClass
-import net.sergeych.lyng.obj.ObjException
-import net.sergeych.lyng.obj.ObjInstance
-import net.sergeych.lyng.obj.ObjInstanceClass
-import net.sergeych.lyng.obj.ObjNull
-import net.sergeych.lyng.obj.ObjRecord
+import net.sergeych.lyng.obj.*
 
 data class ClassDeclBaseSpec(
     val name: String,
@@ -51,11 +46,16 @@ internal suspend fun executeClassDecl(
     bodyCaptureRecords: List<ObjRecord>? = null,
     bodyCaptureNames: List<String>? = null
 ): Obj {
+    fun checkClosedParents(parents: List<ObjClass>, pos: Pos) {
+        val closedParent = parents.firstOrNull { it.isClosed } ?: return
+        throw ScriptError(pos, "can't inherit from closed class ${closedParent.className}")
+    }
     if (spec.isObject) {
         val parentClasses = spec.baseSpecs.map { baseSpec ->
             val rec = scope[baseSpec.name] ?: throw ScriptError(spec.startPos, "unknown base class: ${baseSpec.name}")
             (rec.value as? ObjClass) ?: throw ScriptError(spec.startPos, "${baseSpec.name} is not a class")
         }
+        checkClosedParents(parentClasses, spec.startPos)
 
         val newClass = ObjInstanceClass(spec.className, *parentClasses.toTypedArray())
         newClass.isAnonymous = spec.isAnonymous
@@ -106,6 +106,7 @@ internal suspend fun executeClassDecl(
         if (rec == null) throw ScriptError(spec.startPos, "unknown base class: ${baseSpec.name}")
         throw ScriptError(spec.startPos, "${baseSpec.name} is not a class")
     }
+    checkClosedParents(parentClasses, spec.startPos)
 
     val constructorCode = object : Statement() {
         override val pos: Pos = spec.startPos

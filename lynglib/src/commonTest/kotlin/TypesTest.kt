@@ -187,10 +187,22 @@ class TypesTest {
             val base = [1, 2]
             acceptInts([...base, 3])
         """.trimIndent())
+        eval("""
+            fun acceptReals<T: Real>(xs: List<T>) { }
+            acceptReals([1.0, 2.0, 3.0])
+            val base = [1.0, 2.0]
+            acceptReals([...base, 3.0])
+        """.trimIndent())
         assertFailsWith<net.sergeych.lyng.ScriptError> {
             eval("""
                 fun acceptInts<T: Int>(xs: List<T>) { }
                 acceptInts([1, "a"])
+            """.trimIndent())
+        }
+        assertFailsWith<net.sergeych.lyng.ScriptError> {
+            eval("""
+                fun acceptReals<T: Real>(xs: List<T>) { }
+                acceptReals([1.0, "a"])
             """.trimIndent())
         }
     }
