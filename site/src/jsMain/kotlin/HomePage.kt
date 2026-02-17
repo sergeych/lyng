@@ -106,7 +106,7 @@ fun HomePage() {
             }
 
             class App() : Logger, Auth {
-                fun run() {
+                override fun run() {
                     log("Starting...")
                     login("admin")
                 }
@@ -137,7 +137,7 @@ fun HomePage() {
             """
             // Easy operator overloading
             class Vector(val x: Real, val y: Real) {
-                override fun plus(other: Vector): Vector = Vector(x + other.x, y + other.y)
+                fun plus(other: Vector): Vector = Vector(x + other.x, y + other.y)
                 override fun toString(): String = "Vector(%g, %g)"(x, y)
             }
 
