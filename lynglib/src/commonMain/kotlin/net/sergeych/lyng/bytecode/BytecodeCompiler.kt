@@ -1142,7 +1142,11 @@ class BytecodeCompiler(
     ): CompiledValue? {
         val memberName = operatorMemberName(op) ?: return null
         val receiverClass = resolveReceiverClass(leftRef)
-        if (receiverClass == null) {
+        if (receiverClass == null ||
+            receiverClass.className == "Delegate" ||
+            receiverClass.className == "LazyDelegate" ||
+            receiverClass.implementingNames.contains("Delegate")
+        ) {
             val objOpcode = when (op) {
                 BinOp.PLUS -> Opcode.ADD_OBJ
                 BinOp.MINUS -> Opcode.SUB_OBJ
@@ -2517,7 +2521,9 @@ class BytecodeCompiler(
                 }
                 return value
             }
-            if (isKnownClassReceiver(target.target)) {
+            if ((isKnownClassReceiver(target.target) || isClassNameRef(target.target, receiverClass)) &&
+                (isClassSlot(receiver.slot) || receiverClass == ObjClassType)
+            ) {
                 val nameId = builder.addConst(BytecodeConst.StringVal(target.name))
                 if (!target.isOptional) {
                     builder.emit(Opcode.SET_CLASS_SCOPE, receiver.slot, nameId, value.slot)
@@ -2866,7 +2872,7 @@ class BytecodeCompiler(
             }
             val fieldId = if (resolvedMember != null) receiverClass.instanceFieldIdMap()[fieldTarget.name] else null
             val methodId = if (resolvedMember != null) receiverClass.instanceMethodIdMap(includeAbstract = true)[fieldTarget.name] else null
-            if (fieldId == null && methodId == null && isKnownClassReceiver(fieldTarget.target)) {
+            if (fieldId == null && methodId == null && (receiverClass == ObjClassType || isKnownClassReceiver(fieldTarget.target) || isClassNameRef(fieldTarget.target, receiverClass))) {
                 val nameId = builder.addConst(BytecodeConst.StringVal(fieldTarget.name))
                 if (!fieldTarget.isOptional) {
                     builder.emit(Opcode.GET_CLASS_SCOPE, receiver.slot, nameId, current)
@@ -3259,6 +3265,9 @@ class BytecodeCompiler(
     }
 
     private fun compileFieldRef(ref: FieldRef): CompiledValue? {
+        if (ref.name.isBlank()) {
+            return compileRefWithFallback(ref.target, null, Pos.builtIn)
+        }
         val receiverClass = resolveReceiverClass(ref.target) ?: ObjDynamic.type
         if (receiverClass == ObjDynamic.type) {
             val receiver = compileRefWithFallback(ref.target, null, Pos.builtIn) ?: return null
@@ -3345,7 +3354,9 @@ class BytecodeCompiler(
         val encodedMethodId = encodeMemberId(receiverClass, methodId)
         val receiver = compileRefWithFallback(ref.target, null, Pos.builtIn) ?: return null
         val dst = allocSlot()
-        if (fieldId == null && methodId == null && isKnownClassReceiver(ref.target)) {
+        if (fieldId == null && methodId == null && (isKnownClassReceiver(ref.target) || isClassNameRef(ref.target, receiverClass)) &&
+            (isClassSlot(receiver.slot) || receiverClass == ObjClassType)
+        ) {
             val nameId = builder.addConst(BytecodeConst.StringVal(ref.name))
             if (!ref.isOptional) {
                 builder.emit(Opcode.GET_CLASS_SCOPE, receiver.slot, nameId, dst)
@@ -3939,8 +3950,8 @@ class BytecodeCompiler(
                     "Member access requires compile-time receiver type: ${fieldTarget.name}",
                     Pos.builtIn
                 )
+            val receiver = compileRefWithFallback(fieldTarget.target, null, Pos.builtIn) ?: return null
             if (receiverClass == ObjDynamic.type) {
-                val receiver = compileRefWithFallback(fieldTarget.target, null, Pos.builtIn) ?: return null
                 val nameId = builder.addConst(BytecodeConst.StringVal(fieldTarget.name))
                 val resultSlot = allocSlot()
                 if (fieldTarget.isOptional) {
@@ -4005,8 +4016,9 @@ class BytecodeCompiler(
             }
             val fieldId = receiverClass.instanceFieldIdMap()[fieldTarget.name]
             val methodId = receiverClass.instanceMethodIdMap(includeAbstract = true)[fieldTarget.name]
-            if (fieldId == null && methodId == null && isKnownClassReceiver(fieldTarget.target)) {
-                val receiver = compileRefWithFallback(fieldTarget.target, null, Pos.builtIn) ?: return null
+            if (fieldId == null && methodId == null && (isKnownClassReceiver(fieldTarget.target) || isClassNameRef(fieldTarget.target, receiverClass)) &&
+                (isClassSlot(receiver.slot) || receiverClass == ObjClassType)
+            ) {
                 val nameId = builder.addConst(BytecodeConst.StringVal(fieldTarget.name))
                 val resultSlot = allocSlot()
                 if (fieldTarget.isOptional) {
@@ -4070,7 +4082,6 @@ class BytecodeCompiler(
                 return CompiledValue(resultSlot, SlotType.OBJ)
             }
             if (fieldId == null && methodId == null) return null
-            val receiver = compileRefWithFallback(fieldTarget.target, null, Pos.builtIn) ?: return null
             val resultSlot = allocSlot()
             if (fieldTarget.isOptional) {
                 val nullSlot = allocSlot()
@@ -5107,6 +5118,7 @@ class BytecodeCompiler(
         } ?: allocSlot()
         builder.emit(Opcode.DECL_CLASS, constId, dst)
         updateSlotType(dst, SlotType.OBJ)
+        slotObjClass[dst] = if (stmt.spec.isObject) ObjDynamic.type else ObjClassType
         stmt.spec.declaredName?.let { updateNameObjClassFromSlot(it, dst) }
         return CompiledValue(dst, SlotType.OBJ)
     }
@@ -7065,25 +7077,52 @@ class BytecodeCompiler(
         return when (ref) {
             is LocalVarRef -> {
                 val name = ref.name
+                if (nameObjClass[name] == ObjClassType) return true
+                val directSlot = resolveDirectNameSlot(name)?.slot
+                if (directSlot != null && slotObjClass[directSlot] == ObjClassType) return true
                 if (localSlotIndexByName.containsKey(name)) return false
                 if (localSlotInfoMap.values.any { it.name == name }) return false
-                knownClassNames.contains(name) && !knownObjectNames.contains(name)
+                (knownClassNames.contains(name) || classFieldTypesByName.containsKey(name)) &&
+                    !knownObjectNames.contains(name)
             }
             is LocalSlotRef -> {
                 val name = ref.name
+                if (slotObjClass[ref.slot] == ObjClassType) return true
+                if (nameObjClass[name] == ObjClassType) return true
+                val directSlot = resolveDirectNameSlot(name)?.slot
+                if (directSlot != null && slotObjClass[directSlot] == ObjClassType) return true
                 if (localSlotIndexByName.containsKey(name)) return false
                 if (localSlotInfoMap.values.any { it.name == name }) return false
-                knownClassNames.contains(name) && !knownObjectNames.contains(name)
+                (knownClassNames.contains(name) || classFieldTypesByName.containsKey(name)) &&
+                    !knownObjectNames.contains(name)
             }
             is FastLocalVarRef -> {
                 val name = ref.name
+                if (nameObjClass[name] == ObjClassType) return true
+                val directSlot = resolveDirectNameSlot(name)?.slot
+                if (directSlot != null && slotObjClass[directSlot] == ObjClassType) return true
                 if (localSlotIndexByName.containsKey(name)) return false
                 if (localSlotInfoMap.values.any { it.name == name }) return false
-                knownClassNames.contains(name) && !knownObjectNames.contains(name)
+                (knownClassNames.contains(name) || classFieldTypesByName.containsKey(name)) &&
+                    !knownObjectNames.contains(name)
             }
             else -> false
         }
     }
+
+    private fun isClassNameRef(ref: ObjRef, receiverClass: ObjClass): Boolean {
+        if (receiverClass !is ObjInstanceClass) return false
+        val name = when (ref) {
+            is LocalVarRef -> ref.name
+            is LocalSlotRef -> ref.name
+            is FastLocalVarRef -> ref.name
+            else -> return false
+        }
+        return name == receiverClass.className
+    }
+
+    private fun isClassSlot(slot: Int): Boolean = slotObjClass[slot] == ObjClassType
+
 
     private fun isThisReceiver(ref: ObjRef): Boolean {
         return when (ref) {
@@ -7193,13 +7232,33 @@ class BytecodeCompiler(
         return when (ref) {
             is ConstRef -> ref.constValue as? ObjClass
             is TypeDeclRef -> when (val decl = ref.decl()) {
-                is TypeDecl.Simple -> resolveTypeNameClass(decl.name) ?: nameObjClass[decl.name]
-                is TypeDecl.Generic -> resolveTypeNameClass(decl.name) ?: nameObjClass[decl.name]
+                is TypeDecl.Simple -> {
+                    resolveTypeNameClass(decl.name) ?: nameObjClass[decl.name]?.let { cls ->
+                        if (cls == ObjClassType) ObjDynamic.type else cls
+                    }
+                }
+                is TypeDecl.Generic -> {
+                    resolveTypeNameClass(decl.name) ?: nameObjClass[decl.name]?.let { cls ->
+                        if (cls == ObjClassType) ObjDynamic.type else cls
+                    }
+                }
                 else -> null
             }
-            is LocalSlotRef -> resolveTypeNameClass(ref.name) ?: nameObjClass[ref.name]
-            is LocalVarRef -> resolveTypeNameClass(ref.name) ?: nameObjClass[ref.name]
-            is FastLocalVarRef -> resolveTypeNameClass(ref.name) ?: nameObjClass[ref.name]
+            is LocalSlotRef -> {
+                resolveTypeNameClass(ref.name) ?: nameObjClass[ref.name]?.let { cls ->
+                    if (cls == ObjClassType) ObjDynamic.type else cls
+                }
+            }
+            is LocalVarRef -> {
+                resolveTypeNameClass(ref.name) ?: nameObjClass[ref.name]?.let { cls ->
+                    if (cls == ObjClassType) ObjDynamic.type else cls
+                }
+            }
+            is FastLocalVarRef -> {
+                resolveTypeNameClass(ref.name) ?: nameObjClass[ref.name]?.let { cls ->
+                    if (cls == ObjClassType) ObjDynamic.type else cls
+                }
+            }
             is QualifiedThisRef -> resolveTypeNameClass(ref.typeName)
             else -> null
         }
@@ -7242,12 +7301,28 @@ class BytecodeCompiler(
 
     private fun inferCallReturnClass(ref: CallRef): ObjClass? {
         return when (val target = ref.target) {
-            is LocalSlotRef -> callableReturnTypeByScopeId[target.scopeId]?.get(target.slot)
-                ?: nameObjClass[target.name]
-                ?: resolveTypeNameClass(target.name)
-            is LocalVarRef -> callableReturnTypeByName[target.name]
-                ?: nameObjClass[target.name]
-                ?: resolveTypeNameClass(target.name)
+            is LocalSlotRef -> {
+                callableReturnTypeByScopeId[target.scopeId]?.get(target.slot)
+                    ?: run {
+                        val nameClass = nameObjClass[target.name]
+                        if (nameClass == ObjClassType) {
+                            resolveTypeNameClass(target.name) ?: ObjDynamic.type
+                        } else {
+                            nameClass ?: resolveTypeNameClass(target.name)
+                        }
+                    }
+            }
+            is LocalVarRef -> {
+                callableReturnTypeByName[target.name]
+                    ?: run {
+                        val nameClass = nameObjClass[target.name]
+                        if (nameClass == ObjClassType) {
+                            resolveTypeNameClass(target.name) ?: ObjDynamic.type
+                        } else {
+                            nameClass ?: resolveTypeNameClass(target.name)
+                        }
+                    }
+            }
             is ConstRef -> target.constValue as? ObjClass
             else -> null
         }
@@ -7311,7 +7386,12 @@ class BytecodeCompiler(
     private fun inferFieldReturnClass(targetClass: ObjClass?, name: String): ObjClass? {
         if (targetClass == null) return null
         if (targetClass == ObjDynamic.type) return ObjDynamic.type
-        classFieldTypesByName[targetClass.className]?.get(name)?.let { return it }
+        classFieldTypesByName[targetClass.className]?.get(name)?.let { cls ->
+            if (cls.className == "Delegate" || cls.className == "LazyDelegate" || cls.implementingNames.contains("Delegate")) {
+                return null
+            }
+            return cls
+        }
         enumEntriesByName[targetClass.className]?.let { entries ->
             return when {
                 name == "entries" -> ObjList.type

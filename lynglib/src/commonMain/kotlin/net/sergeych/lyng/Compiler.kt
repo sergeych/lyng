@@ -2992,13 +2992,27 @@ class Compiler(
             paramKnownClasses[param.name] = cls
         }
         val returnLabels = label?.let { setOf(it) } ?: emptySet()
+        val extraKnownNames = if (compileClassInfos.isEmpty()) {
+            paramKnownClasses
+        } else {
+            val merged = LinkedHashMap<String, ObjClass>()
+            for (className in compileClassInfos.keys) {
+                merged[className] = if (objectDeclNames.contains(className)) {
+                    ObjDynamic.type
+                } else {
+                    ObjClassType
+                }
+            }
+            merged.putAll(paramKnownClasses)
+            merged
+        }
         val fnStatements = if (compileBytecode) {
             returnLabelStack.addLast(returnLabels)
             try {
                 wrapFunctionBytecode(
                     body,
                     "<lambda>",
-                    paramKnownClasses,
+                    extraKnownNames,
                     forcedLocalSlots = paramSlotPlanSnapshot,
                     forcedLocalScopeId = paramSlotPlan.id
                 )
