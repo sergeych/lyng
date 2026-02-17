@@ -132,15 +132,29 @@ class StdlibTest {
         """.trimIndent())
     }
 
-//    @Test
-//    fun testFunFromSample() = runTest {
-//         range should be iterable if it is intrange
-//        eval("""
-//            val data = 1..5 // or [1, 2, 3, 4, 5]
-//            fun test() {
-//                data.filter { it % 2 == 0 }.map { it * it }
-//            }
-//            test()
-//        """.trimIndent())
-//    }
+    @Test
+    fun testFilter1() = runTest {
+        // range should be iterable if it is intrange
+        eval("""
+            val data = 1..5 // or [1, 2, 3, 4, 5]
+            assert( data is Iterable<Int> )
+            fun test() {
+                data.filter { it % 2 == 0 }.map { it * it }
+            }
+            test()
+        """.trimIndent())
+    }
+
+    @Test
+    fun testFilter2() = runTest {
+        eval("""
+            val data = [1, 2, 3, 4, 5]
+            assert( data is Iterable<Int> )
+            fun test() {
+                data.filter { it % 2 == 0 }.map { it * it }
+            }
+            test()
+        """
+        )
+    }
 }

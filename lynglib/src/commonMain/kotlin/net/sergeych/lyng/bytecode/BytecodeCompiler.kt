@@ -7113,9 +7113,30 @@ class BytecodeCompiler(
 
     private fun resolveReceiverClassForScopeCollection(ref: ObjRef): ObjClass? {
         return when (ref) {
-            is LocalSlotRef -> nameObjClass[ref.name] ?: resolveTypeNameClass(ref.name)
-            is LocalVarRef -> nameObjClass[ref.name] ?: resolveTypeNameClass(ref.name)
-            is FastLocalVarRef -> nameObjClass[ref.name] ?: resolveTypeNameClass(ref.name)
+            is LocalSlotRef -> {
+                val ownerScopeId = ref.captureOwnerScopeId ?: ref.scopeId
+                val ownerSlot = ref.captureOwnerSlot ?: ref.slot
+                slotTypeByScopeId[ownerScopeId]?.get(ownerSlot)
+                    ?: slotInitClassByKey[ScopeSlotKey(ownerScopeId, ownerSlot)]
+                    ?: nameObjClass[ref.name]
+                    ?: resolveTypeNameClass(ref.name)
+            }
+            is LocalVarRef -> {
+                val key = localSlotInfoMap.entries.firstOrNull { it.value.name == ref.name }?.key
+                key?.let {
+                    slotTypeByScopeId[it.scopeId]?.get(it.slot)
+                        ?: slotInitClassByKey[it]
+                } ?: nameObjClass[ref.name]
+                    ?: resolveTypeNameClass(ref.name)
+            }
+            is FastLocalVarRef -> {
+                val key = localSlotInfoMap.entries.firstOrNull { it.value.name == ref.name }?.key
+                key?.let {
+                    slotTypeByScopeId[it.scopeId]?.get(it.slot)
+                        ?: slotInitClassByKey[it]
+                } ?: nameObjClass[ref.name]
+                    ?: resolveTypeNameClass(ref.name)
+            }
             is BoundLocalVarRef -> slotObjClass[ref.slotIndex()]
             is QualifiedThisRef -> resolveTypeNameClass(ref.typeName)
             is ListLiteralRef -> ObjList.type
