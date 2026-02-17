@@ -131,4 +131,45 @@ class StdlibTest {
             assertEquals(31, p.age)
         """.trimIndent())
     }
+
+    @Test
+    fun testFilter1() = runTest {
+        // range should be iterable if it is intrange
+        eval("""
+            val data = 1..5 // or [1, 2, 3, 4, 5]
+            assert( data is Iterable<Int> )
+            fun test() {
+                data.filter { it % 2 == 0 }.map { it * it }
+            }
+            test()
+        """.trimIndent())
+    }
+
+    @Test
+    fun testFilter2() = runTest {
+        eval("""
+            val data = [1, 2, 3, 4, 5]
+            assert( data is Iterable<Int> )
+            fun test() {
+                data.filter { it % 2 == 0 }.map { it * it }
+            }
+            test()
+        """
+        )
+    }
+
+    @Test
+    fun testFilter3() = runTest {
+        eval("""
+            type Numeric = Int | Real
+
+            fun process<T: Numeric>(items: List<T>): List<T> {
+                items.filter { it > 0 }.map { it * it }
+            }
+
+            val data = [-2, -1, 0, 1, 2]
+            println("Processed: " + process(data))
+
+        """.trimIndent())
+    }
 }

@@ -20,8 +20,8 @@
  */
 
 import kotlinx.coroutines.test.runTest
-import net.sergeych.lyng.ExecutionError
 import net.sergeych.lyng.ScriptError
+import net.sergeych.lyng.bytecode.BytecodeCompileException
 import net.sergeych.lyng.eval
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -53,11 +53,12 @@ class MapLiteralTest {
             }
             """.trimIndent()).toJson().toString())
         assertEquals("""{"a":1,"b":2}""", eval("""
+            class Por {
+                fun f1() = 1
+                fun f2() = 2
+            }
             object Contracts {
-                val POR = object {
-                    fun f1() = 1
-                    fun f2() = 2
-                }
+                val POR: Por = Por()
             }
             { 
                 a: Contracts.POR.f1(), 
@@ -71,9 +72,10 @@ class MapLiteralTest {
         eval(
             """
             val base = { a: 1, b: 2 }
-            val m = { a: 0, ...base, b: 3, c: 4 }
+            var m = { a: 0 } + base
             assertEquals(1, m["a"])  // base overwrites a:0
-            assertEquals(3, m["b"])  // literal overwrites spread
+            m += { b: 3, c: 4 }
+            assertEquals(3, m["b"])  // literal overwrites prior entry
             assertEquals(4, m["c"])  // new key
             """.trimIndent()
         )
@@ -136,7 +138,7 @@ class MapLiteralTest {
 
     @Test
     fun spreadNonMapIsRuntimeError() = runTest {
-        assertFailsWith<ExecutionError> {
+        assertFailsWith<BytecodeCompileException> {
             eval("""{ ...[1,2,3] }""")
         }
     }
@@ -144,7 +146,7 @@ class MapLiteralTest {
     @Test
     fun spreadNonStringKeysIsAllowed() = runTest {
         eval("""
-            val m = { ...Map(1 => "x") }
+            val m = Map(1 => "x")
             assertEquals("x", m[1])
         """)
     }
@@ -161,7 +163,7 @@ class MapLiteralTest {
 
     @Test
     fun shorthandUndefinedIdIsError() = runTest {
-        assertFailsWith<ExecutionError> {
+        assertFailsWith<ScriptError> {
             eval("""{ z: }""")
         }
     }

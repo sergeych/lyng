@@ -29,8 +29,8 @@ fun HomePage() {
         listOf(
             """
             // Everything is an expression
-            val x = 10
-            val status = if (x > 0) "Positive" else "Zero or Negative"
+            val x: Int = 10
+            val status: String = if (x > 0) "Positive" else "Zero or Negative"
 
             // Even loops return values!
             val result = for (i in 1..5) {
@@ -40,8 +40,8 @@ fun HomePage() {
             println("Result: " + result)
             """.trimIndent(),
             """
-            // Functional power with ranges and collections
-            val squares = (1..10)
+            // Functional power with generics and collections
+            val squares: List<Int> = (1..10)
                 .filter { it % 2 == 0 }
                 .map { it * it }
 
@@ -49,20 +49,43 @@ fun HomePage() {
             // Output: [4, 16, 36, 64, 100]
             """.trimIndent(),
             """
+            // Generics and type aliases
+            type Num = Int | Real
+            
+            class Box<out T: Num>(val value: T) {
+                fun get(): T = value
+            }
+            
+            val intBox = Box(42)
+            val realBox = Box(3.14)
+            println("Boxes: " + intBox.get() + ", " + realBox.get())
+            """.trimIndent(),
+            """
+            // Strict compile-time types and symbol resolution
+            fun greet(name: String, count: Int) {
+                for (i in 1..count) {
+                    println("Hello, " + name + "!")
+                }
+            }
+            
+            greet("Lyng", 3)
+            // greet(10, "error") // This would be a compile-time error!
+            """.trimIndent(),
+            """
             // Flexible map literals and shorthands
             val id = 101
             val name = "Lyng"
             val base = { id:, name: } // Shorthand for id: id, name: name
 
-            val full = { ...base, version: "1.0", status: "active" }
+            val full = { ...base, version: "1.5.0-SNAPSHOT", status: "active" }
             println(full)
             """.trimIndent(),
             """
             // Modern null safety
-            var config = null
+            var config: Map<String, Int>? = null
             config ?= { timeout: 30 } // Assign only if null
 
-            val timeout = config?.timeout ?: 60
+            val timeout = config?["timeout"] ?: 60
             println("Timeout is: " + timeout)
             """.trimIndent(),
             """
@@ -76,14 +99,14 @@ fun HomePage() {
             """
             // Diamond-safe Multiple Inheritance (C3 MRO)
             interface Logger {
-                fun log(m) = println("[LOG] " + m)
+                fun log(m: String) = println("[LOG] " + m)
             }
             interface Auth {
-                fun login(u) = println("Login: " + u)
+                fun login(u: String) = println("Login: " + u)
             }
 
             class App() : Logger, Auth {
-                fun run() {
+                override fun run() {
                     log("Starting...")
                     login("admin")
                 }
@@ -92,30 +115,30 @@ fun HomePage() {
             """.trimIndent(),
             """
             // Extension functions and properties
-            fun String.shout() = this.toUpperCase() + "!!!"
+            fun String.shout(): String = this.uppercase() + "!!!"
 
             println("hello".shout())
 
-            val List.second get = this[1]
+            val List<T>.second: T get() = this[1]
             println([10, 20, 30].second)
             """.trimIndent(),
             """
             // Non-local returns from closures
-            fun findFirst(list, predicate) {
+            fun findFirst<T>(list: Iterable<T>, predicate: (T)->Bool): T? {
                 list.forEach {
                     if (predicate(it)) return@findFirst it
                 }
                 null
             }
 
-            val found = findFirst([1, 5, 8, 12]) { it > 10 }
+            val found: Int? = findFirst([1, 5, 8, 12]) { it > 10 }
             println("Found: " + found)
             """.trimIndent(),
             """
             // Easy operator overloading
-            class Vector(val x, val y) {
-                override fun plus(other) = Vector(x + other.x, y + other.y)
-                override fun toString() = "Vector(%g, %g)"(x, y)
+            class Vector(val x: Real, val y: Real) {
+                fun plus(other: Vector): Vector = Vector(x + other.x, y + other.y)
+                override fun toString(): String = "Vector(%g, %g)"(x, y)
             }
 
             val v1 = Vector(1, 2)
@@ -125,7 +148,7 @@ fun HomePage() {
             """
             // Property delegation to Map
             class User() {
-                var name by Map()
+                var name: String by Map()
             }
 
             val u = User()
@@ -165,17 +188,18 @@ fun HomePage() {
         Div({ classes("text-center") }) {
             H1({ classes("display-5", "fw-bold", "mb-3") }) { Text("Welcome to Lyng") }
             P({ classes("lead", "text-muted", "mb-4") }) {
-                Text("A lightweight, expressive scripting language designed for clarity, composability, and fun. ")
+                Text("A lightweight but extremely powerful and expressive scripting language with strict static typing and functional power. ")
                 Br()
-                Text("Run it anywhere Kotlin runs — share logic across JS, JVM, and more.")
+                Text("Run it anywhere Kotlin runs — share logic across JS, JVM, Native and more.")
             }
             Div({ classes("d-flex", "justify-content-center", "gap-2", "flex-wrap", "mb-4") }) {
                 // Benefits pills
                 listOf(
-                    "Clean, familiar syntax",
+                    "Strict static typing",
+                    "Generics & Type Aliases",
+                    "Implicit coroutines",
                     "both FP and OOP",
-                    "Batteries-included standard library",
-                    "Embeddable and testable"
+                    "Batteries-included standard library"
                 ).forEach { b ->
                     Span({ classes("badge", "text-bg-secondary", "rounded-pill") }) { Text(b) }
                 }
@@ -233,7 +257,7 @@ fun HomePage() {
     // Short features list
     Div({ classes("row", "g-4", "mt-1") }) {
         listOf(
-            Triple("Fast to learn", "Familiar constructs and readable patterns — be productive in minutes.", "lightning"),
+            Triple("Safe and Robust", "Strict compile-time resolution, generics, and null safety catch errors early.", "shield-check"),
             Triple("Portable", "Runs wherever Kotlin runs: reuse logic across platforms.", "globe2"),
             Triple("Pragmatic", "A standard library that solves real problems without ceremony.", "gear-fill")
         ).forEach { (title, text, icon) ->

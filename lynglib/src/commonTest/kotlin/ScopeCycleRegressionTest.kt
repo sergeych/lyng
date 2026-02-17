@@ -4,6 +4,7 @@
 
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.eval
+import kotlin.test.Ignore
 import kotlin.test.Test
 
 class ScopeCycleRegressionTest {
@@ -18,10 +19,10 @@ class ScopeCycleRegressionTest {
                     }
                 }
 
-                fun ll() { Whatever() }
+                fun ll(): Whatever { Whatever() }
 
                 fun callTest1() {
-                    val l = ll()
+                    val l: Whatever = ll()
                     l.something()
                     "ok"
                 }

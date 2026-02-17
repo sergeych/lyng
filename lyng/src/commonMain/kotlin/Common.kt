@@ -27,6 +27,7 @@ import com.github.ajalt.clikt.parameters.arguments.optional
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import kotlinx.coroutines.runBlocking
+import net.sergeych.lyng.Compiler
 import net.sergeych.lyng.LyngVersion
 import net.sergeych.lyng.Script
 import net.sergeych.lyng.ScriptError
@@ -167,7 +168,7 @@ private class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() 
 
     override fun help(context: Context): String =
         """
-            The Lyng script language interpreter, language version is $LyngVersion.
+            The Lyng script language runtime, language version is $LyngVersion.
             
             Please refer form more information to the project site:
             https://gitea.sergeych.net/SergeychWorks/lyng
@@ -198,7 +199,12 @@ private class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() 
                     launcher {
                         // there is no script name, it is a first argument instead:
                         processErrors {
-                            baseScope.eval(execute!!)
+                            val script = Compiler.compileWithResolution(
+                                Source("<eval>", execute!!),
+                                baseScope.currentImportProvider,
+                                seedScope = baseScope
+                            )
+                            script.execute(baseScope)
                         }
                     }
                 }
@@ -236,7 +242,13 @@ suspend fun executeFile(fileName: String) {
         text = text.substring(pos + 1)
     }
     processErrors {
-        baseScopeDefer.await().eval(Source(fileName, text))
+        val scope = baseScopeDefer.await()
+        val script = Compiler.compileWithResolution(
+            Source(fileName, text),
+            scope.currentImportProvider,
+            seedScope = scope
+        )
+        script.execute(scope)
     }
 }
 

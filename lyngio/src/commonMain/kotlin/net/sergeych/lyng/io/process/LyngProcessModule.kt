@@ -20,10 +20,11 @@ package net.sergeych.lyng.io.process
 import kotlinx.coroutines.flow.Flow
 import net.sergeych.lyng.ModuleScope
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScopeFacade
+import net.sergeych.lyng.requireScope
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
-import net.sergeych.lyng.statement
 import net.sergeych.lyngio.process.*
 import net.sergeych.lyngio.process.security.ProcessAccessDeniedException
 import net.sergeych.lyngio.process.security.ProcessAccessPolicy
@@ -205,20 +206,21 @@ class ObjRunningProcess(
     override fun toString(): String = "RunningProcess($process)"
 }
 
-private suspend inline fun Scope.processGuard(crossinline block: suspend () -> Obj): Obj {
+private suspend inline fun ScopeFacade.processGuard(crossinline block: suspend () -> Obj): Obj {
     return try {
         block()
     } catch (e: ProcessAccessDeniedException) {
-        raiseError(ObjIllegalOperationException(this, e.reasonDetail ?: "process access denied"))
+        raiseError(ObjIllegalOperationException(requireScope(), e.reasonDetail ?: "process access denied"))
     } catch (e: Exception) {
-        raiseError(ObjIllegalOperationException(this, e.message ?: "process error"))
+        raiseError(ObjIllegalOperationException(requireScope(), e.message ?: "process error"))
     }
 }
 
-private fun Flow<String>.toLyngFlow(flowScope: Scope): ObjFlow {
-    val producer = statement {
-        val builder = (this as? net.sergeych.lyng.ClosureScope)?.callScope?.thisObj as? ObjFlowBuilder
-            ?: this.thisObj as? ObjFlowBuilder
+private fun Flow<String>.toLyngFlow(flowScope: ScopeFacade): ObjFlow {
+    val producer = net.sergeych.lyng.obj.ObjExternCallable.fromBridge {
+        val scope = requireScope()
+        val builder = (scope as? net.sergeych.lyng.BytecodeClosureScope)?.callScope?.thisObj as? ObjFlowBuilder
+            ?: scope.thisObj as? ObjFlowBuilder
 
         this@toLyngFlow.collect {
             try {
@@ -230,5 +232,5 @@ private fun Flow<String>.toLyngFlow(flowScope: Scope): ObjFlow {
         }
         ObjVoid
     }
-    return ObjFlow(producer, flowScope)
+    return ObjFlow(producer, flowScope.requireScope())
 }

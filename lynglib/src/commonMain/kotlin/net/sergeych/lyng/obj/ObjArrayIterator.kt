@@ -38,8 +38,8 @@ class ObjArrayIterator(val array: Obj) : Obj() {
                 addFn("next") {
                     val self = thisAs<ObjArrayIterator>()
                     if (self.nextIndex < self.lastIndex) {
-                        self.array.invokeInstanceMethod(this, "getAt", (self.nextIndex++).toObj())
-                    } else raiseError(ObjIterationFinishedException(this))
+                        self.array.invokeInstanceMethod(requireScope(), "getAt", (self.nextIndex++).toObj())
+                    } else raiseError(ObjIterationFinishedException(requireScope()))
                 }
                 addFn("hasNext") {
                     val self = thisAs<ObjArrayIterator>()

@@ -102,6 +102,7 @@ object BuiltinDocRegistry : BuiltinDocSource {
     // Register built-in lazy seeds
     init {
         registerLazy("lyng.stdlib") { buildStdlibDocs() }
+        registerLazy("lyng.time") { buildTimeDocs() }
     }
 
     /**
@@ -658,7 +659,32 @@ private fun buildStdlibDocs(): List<MiniDecl> {
     }
 
     decls += mod.build()
+
     return decls
+}
+
+private fun buildTimeDocs(): List<MiniDecl> {
+    val mod = ModuleDocsBuilder("lyng.time")
+    mod.classDoc(name = "Instant", doc = "Point in time (epoch-based).", bases = listOf(type("Obj"))) {
+        field(name = "distantFuture", doc = "An instant in the distant future.", type = type("lyng.Instant"), isStatic = true)
+        field(name = "distantPast", doc = "An instant in the distant past.", type = type("lyng.Instant"), isStatic = true)
+        method(name = "now", doc = "Return the current instant.", returns = type("lyng.Instant"), isStatic = true)
+        field(name = "epochSeconds", doc = "Seconds since Unix epoch.", type = type("lyng.Real"))
+        field(name = "epochWholeSeconds", doc = "Full seconds since Unix epoch.", type = type("lyng.Int"))
+        field(name = "nanosecondsOfSecond", doc = "Nanoseconds within the current second.", type = type("lyng.Int"))
+        method(name = "toRFC3339", doc = "Format as RFC3339 string.", returns = type("lyng.String"))
+        method(name = "toDateTime", doc = "Convert to localized DateTime.", params = listOf(ParamDoc("timeZone")), returns = type("lyng.DateTime"))
+        method(name = "truncateToMinute", doc = "Truncate to minute.", returns = type("lyng.Instant"))
+        method(name = "truncateToSecond", doc = "Truncate to second.", returns = type("lyng.Instant"))
+        method(name = "truncateToMillisecond", doc = "Truncate to millisecond.", returns = type("lyng.Instant"))
+        method(name = "truncateToMicrosecond", doc = "Truncate to microsecond.", returns = type("lyng.Instant"))
+    }
+    mod.classDoc(name = "DateTime", doc = "Localized date and time.", bases = listOf(type("Obj"))) {
+        method(name = "toInstant", doc = "Convert back to absolute Instant.", returns = type("lyng.Instant"))
+    }
+    mod.classDoc(name = "Duration", doc = "Time duration.", bases = listOf(type("Obj")))
+    mod.funDoc(name = "delay", doc = "Suspend execution.", params = listOf(ParamDoc("duration")))
+    return mod.build()
 }
 
 // (Registration for external modules is provided by their own libraries)

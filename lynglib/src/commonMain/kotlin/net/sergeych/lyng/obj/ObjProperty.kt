@@ -18,9 +18,11 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Arguments
-import net.sergeych.lyng.ClosureScope
+import net.sergeych.lyng.BytecodeBodyProvider
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Statement
+import net.sergeych.lyng.bytecode.BytecodeStatement
+import net.sergeych.lyng.executeBytecodeWithSeed
 
 /**
  * Property accessor storage. Per instructions, properties do NOT have
@@ -28,28 +30,44 @@ import net.sergeych.lyng.Statement
  */
 class ObjProperty(
     val name: String,
-    val getter: Statement?,
-    val setter: Statement?
+    val getter: Obj?,
+    val setter: Obj?
 ) : Obj() {
 
     suspend fun callGetter(scope: Scope, instance: Obj, declaringClass: ObjClass? = null): Obj {
         val g = getter ?: scope.raiseError("property $name has no getter")
         // Execute getter in a child scope of the instance with 'this' properly set
-        // Use ClosureScope to match extension function behavior (access to instance scope + call scope)
+        // Match extension function behavior (access to instance scope + call scope).
         val instanceScope = (instance as? ObjInstance)?.instanceScope ?: instance.autoInstanceScope(scope)
-        val execScope = ClosureScope(scope, instanceScope).createChildScope(newThisObj = instance)
+        val execScope = scope.applyClosure(instanceScope).createChildScope(newThisObj = instance)
         execScope.currentClassCtx = declaringClass
-        return g.execute(execScope)
+        return when (g) {
+            is BytecodeStatement -> executeBytecodeWithSeed(execScope, g, "property getter")
+            is BytecodeBodyProvider -> {
+                val body = g.bytecodeBody()
+                if (body != null) executeBytecodeWithSeed(execScope, body, "property getter") else g.callOn(execScope)
+            }
+            is Statement -> g.callOn(execScope)
+            else -> g.callOn(execScope)
+        }
     }
 
     suspend fun callSetter(scope: Scope, instance: Obj, value: Obj, declaringClass: ObjClass? = null) {
         val s = setter ?: scope.raiseError("property $name has no setter")
         // Execute setter in a child scope of the instance with 'this' properly set and the value as an argument
-        // Use ClosureScope to match extension function behavior
+        // Match extension function behavior (access to instance scope + call scope).
         val instanceScope = (instance as? ObjInstance)?.instanceScope ?: instance.autoInstanceScope(scope)
-        val execScope = ClosureScope(scope, instanceScope).createChildScope(args = Arguments(value), newThisObj = instance)
+        val execScope = scope.applyClosure(instanceScope).createChildScope(args = Arguments(value), newThisObj = instance)
         execScope.currentClassCtx = declaringClass
-        s.execute(execScope)
+        when (s) {
+            is BytecodeStatement -> executeBytecodeWithSeed(execScope, s, "property setter")
+            is BytecodeBodyProvider -> {
+                val body = s.bytecodeBody()
+                if (body != null) executeBytecodeWithSeed(execScope, body, "property setter") else s.callOn(execScope)
+            }
+            is Statement -> s.callOn(execScope)
+            else -> s.callOn(execScope)
+        }
     }
 
     override fun toString(): String = "Property($name)"

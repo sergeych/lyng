@@ -1,6 +1,31 @@
-## Changelog
+## 1.5.0-SNAPSHOT
 
-### Unreleased
+### Language Features
+- Added `return` statement with local and non-local exit support (`return@label`).
+- Support for `abstract` classes, methods, and variables.
+- Introduced `interface` as a synonym for `abstract class`.
+- Multiple Inheritance (MI) completed and enabled by default (C3 MRO).
+- Class properties with custom accessors (`get`, `set`).
+- Restricted setter visibility (`private set`, `protected set`).
+- Late-initialized `val` fields in classes with `Unset` protection.
+- Named arguments (`name: value`) and named splats (`...Map`).
+- Assign-if-null operator `?=`.
+- Refined `protected` visibility rules and `closed` modifier.
+- Transient attribute `@Transient` for serialization and equality.
+- Unified Delegation model for `val`, `var`, and `fun`.
+- Singleton objects (`object`) and object expressions.
+
+### Standard Library
+- Added `with(self, block)` for scoped execution.
+- Added `clamp()` function and extension.
+- Improved `Exception` and `StackTraceEntry` reporting.
+
+### Tooling and IDE
+- **CLI**: Added `fmt` as a first-class subcommand for code formatting.
+- **IDEA Plugin**: Lightweight autocompletion (experimental), improved docs, and Grazie integration.
+- **Highlighters**: Updated TextMate bundle and website highlighters for new syntax.
+
+### Detailed Changes:
 
 - Language: Refined `protected` visibility rules
   - Ancestor classes can now access `protected` members of their descendants, provided the ancestor also defines or inherits a member with the same name (indicating an override of a member known to the ancestor).
@@ -108,16 +133,6 @@
     - `as`/`as?` cast errors include actual and target type names.
 
 - Documentation updated (docs/OOP.md and tutorial quick-start) to reflect MI with active C3 MRO.
-
-Notes:
-- Existing single-inheritance code continues to work; resolution reduces to the single base.
-- If code previously relied on non-deterministic parent set iteration, C3 MRO provides a predictable order; disambiguate explicitly if needed using `this@Type`/casts.
-
-# Changelog
-
-All notable changes to this project will be documented in this file.
-
-## Unreleased
 
 - CLI: Added `fmt` as a first-class Clikt subcommand.
   - Default behavior: formats files to stdout (no in-place edits by default).

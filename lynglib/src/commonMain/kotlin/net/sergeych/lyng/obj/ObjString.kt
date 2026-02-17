@@ -22,9 +22,11 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.PerfFlags
+import net.sergeych.lyng.Pos
 import net.sergeych.lyng.RegexCache
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.miniast.*
+import net.sergeych.lyng.requireScope
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
@@ -135,6 +137,7 @@ data class ObjString(val value: String) : Obj() {
             override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj =
                 ObjString(decoder.unpackBinaryData().decodeToString())
         }.apply {
+            isClosed = true
             addFnDoc(
                 name = "iterator",
                 doc = "Iterator over characters of this string.",
@@ -338,6 +341,29 @@ data class ObjString(val value: String) : Obj() {
                     }
                 )
             }
+            createField(
+                name = "re",
+                initialValue = ObjProperty(
+                    name = "re",
+                    getter = ObjExternCallable.fromBridge {
+                        val pattern = (thisObj as ObjString).value
+                        val re = if (PerfFlags.REGEX_CACHE) RegexCache.get(pattern) else pattern.toRegex()
+                        ObjRegex(re)
+                    },
+                    setter = null
+                ),
+                type = ObjRecord.Type.Property
+            )
+            createField(
+                name = "operatorMatch",
+                initialValue = ObjExternCallable.fromBridge {
+                    val other = args.firstAndOnly(Pos.builtIn)
+                    val scope = requireScope()
+                    val targetScope = scope.parent ?: scope
+                    (thisObj as ObjString).operatorMatch(targetScope, other)
+                },
+                type = ObjRecord.Type.Fun
+            )
         }
     }
 }

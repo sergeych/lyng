@@ -21,6 +21,7 @@
 
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.eval
+import kotlin.test.Ignore
 import kotlin.test.Test
 
 class ScriptTest_OptionalAssign {
@@ -30,7 +31,7 @@ class ScriptTest_OptionalAssign {
         eval(
             """
             class C { var x = 1 }
-            var c = null
+            var c: C? = null
             // should be no-op and not throw
             c?.x = 5
             assertEquals(null, c?.x)
@@ -46,7 +47,7 @@ class ScriptTest_OptionalAssign {
     fun optionalIndexAssignIsNoOp() = runTest {
         eval(
             """
-            var a = null
+            var a: List<Int>? = null
             // should be no-op and not throw
             a?[0] = 42
             assertEquals(null, a?[0])

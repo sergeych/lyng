@@ -1,24 +1,84 @@
 package lyng.stdlib
 
+extern fun flow(builder: FlowBuilder.()->Void): Flow
+
+/* Built-in exception type. */
+extern class Exception
+extern class IllegalArgumentException
+extern class NotImplementedException
+extern class Delegate
+extern class Iterable<T> {
+    fun iterator(): Iterator<T>
+    fun forEach(action: (T)->Void): Void
+    fun map<R>(transform: (T)->R): List<R>
+    fun toList(): List<T>
+}
+
+extern class Iterator<T> {
+    fun hasNext(): Bool
+    fun next(): T
+    fun cancelIteration(): Void
+    fun toList(): List<T>
+}
+
+// Host-provided iterator wrapper for Kotlin collections.
+class KotlinIterator<T> : Iterator<T> {
+    extern override fun hasNext(): Bool
+    extern override fun next(): T
+}
+
+extern class Collection<T> : Iterable<T> {
+}
+
+extern class Array<T> : Collection<T> {
+}
+
+extern class List<T> : Array<T> {
+    fun add(value: T, more...): Void
+}
+
+extern class RingBuffer<T> : Iterable<T> {
+    val size: Int
+    fun first(): T
+    fun add(value: T): Void
+}
+
+extern class Set<T> : Collection<T> {
+}
+
+extern class Map<K,V> {
+}
+
+extern class MapEntry<K,V>
+
+// Built-in math helpers (implemented in host runtime).
+extern fun abs(x: Object): Real
+extern fun ln(x: Object): Real
+extern fun pow(x: Object, y: Object): Real
+extern fun sqrt(x: Object): Real
+
+// Last regex match result, updated by =~ / !~.
+var $~: Object? = null
+
 /*
     Wrap a builder into a zero-argument thunk that computes once and caches the result.
     The first call invokes builder() and stores the value; subsequent calls return the cached value.
 */
-fun cached(builder) {
-    var calculated = false
-    var value = null
+fun cached<T>(builder: ()->T): ()->T {
+    var calculated: Bool = false
+    var value: Object? = null
     {
         if( !calculated ) {
             value = builder()
             calculated = true
         }
-        value
+        value as T
     }
 }
 /* Filter elements of this iterable using the provided predicate and provide a flow
     of results. Coudl be used to map infinte flows, etc.
 */
-fun Iterable.filterFlow(predicate): Flow {
+fun Iterable<T>.filterFlow(predicate: (T)->Bool): Flow<T> {
     val list = this
     flow {
         for( item in list ) {
@@ -32,16 +92,16 @@ fun Iterable.filterFlow(predicate): Flow {
 /*
     Filter this iterable and return List of elements
 */
-fun Iterable.filter(predicate) {
-    val result = []
-    for( item in this ) if( predicate(item) ) result.add(item)
+fun Iterable<T>.filter(predicate: (T)->Bool): List<T> {
+    var result: List<T> = List()
+    for( item in this ) if( predicate(item) ) result += item
     result
 }
 
 /*
     Count all items in this iterable for which predicate returns true
 */
-fun Iterable.count(predicate): Int {
+fun Iterable<T>.count(predicate: (T)->Bool): Int {
     var hits = 0
     this.forEach {
         if( predicate(it) ) hits++
@@ -52,25 +112,25 @@ fun Iterable.count(predicate): Int {
     filter out all null elements from this collection (Iterable); flow of
     non-null elements is returned
 */
-fun Iterable.filterFlowNotNull(): Flow {
+fun Iterable<T>.filterFlowNotNull(): Flow<T> {
     filterFlow { it != null }
 }
 
 /* Filter non-null elements and collect them into a List
 */
-fun Iterable.filterNotNull(): List {
+fun Iterable<T>.filterNotNull(): List<T> {
     filter { it != null }
 }
 
 /* Skip the first N elements of this iterable. */
-fun Iterable.drop(n) {
+fun Iterable<T>.drop(n: Int): List<T> {
     var cnt = 0
     filter { cnt++ >= n }
 }
 
 /* Return the first element or throw if the iterable is empty. */
-val Iterable.first get() {
-    val i = iterator()
+val Iterable<T>.first: T get() {
+    val i: Iterator<T> = iterator()
     if( !i.hasNext() ) throw NoSuchElementException()
         i.next().also { i.cancelIteration() }
 }
@@ -79,7 +139,7 @@ val Iterable.first get() {
     Return the first element that matches the predicate or throws
     NuSuchElementException
 */
-fun Iterable.findFirst(predicate) {
+fun Iterable<T>.findFirst(predicate: (T)->Bool): T {
     for( x in this ) {
         if( predicate(x) )
             break x
@@ -90,7 +150,7 @@ fun Iterable.findFirst(predicate) {
 /*
     return the first element matching the predicate or null
 */
-fun Iterable.findFirstOrNull(predicate) {
+fun Iterable<T>.findFirstOrNull(predicate: (T)->Bool): T? {
     for( x in this ) {
         if( predicate(x) )
             break x
@@ -100,19 +160,19 @@ fun Iterable.findFirstOrNull(predicate) {
 
 
 /* Return the last element or throw if the iterable is empty. */
-val Iterable.last get() {
+val Iterable<T>.last: T get() {
     var found = false
-    var element = null
+    var element: Object = Unset
     for( i in this ) {
         element = i
         found = true
     }
     if( !found ) throw NoSuchElementException()
-        element
+        element as T
 }
 
 /* Emit all but the last N elements of this iterable. */
-fun Iterable.dropLast(n) {
+fun Iterable<T>.dropLast(n: Int): Flow<T> {
     val list = this
     val buffer = RingBuffer(n)
     flow {
@@ -125,25 +185,25 @@ fun Iterable.dropLast(n) {
 }
 
 /* Return the last N elements of this iterable as a buffer/list. */
-fun Iterable.takeLast(n) {
-    val buffer = RingBuffer(n)
+fun Iterable<T>.takeLast(n: Int): RingBuffer<T> {
+    val buffer: RingBuffer<T> = RingBuffer(n)
     for( item in this ) buffer += item
     buffer
 }
 
 /* Join elements into a string with a separator (separator parameter) and optional transformer. */
-fun Iterable.joinToString(separator=" ", transformer=null) {
-    var result = null
+fun Iterable<T>.joinToString(separator: String=" ", transformer: (T)->Object = { it }): String {
+    var result: String? = null
     for( part in this ) {
-        val transformed = transformer?(part)?.toString() ?: part.toString()
+        val transformed = transformer(part).toString()
         if( result == null ) result = transformed
-        else result += separator + transformed
+        else result = (result as String) + separator + transformed
     }
     result ?: ""
 }
 
 /* Return true if any element matches the predicate. */
-fun Iterable.any(predicate): Bool {
+fun Iterable<T>.any(predicate: (T)->Bool): Bool {
     for( i in this ) {
         if( predicate(i) )
             break true
@@ -151,13 +211,13 @@ fun Iterable.any(predicate): Bool {
 }
 
 /* Return true if all elements match the predicate. */
-fun Iterable.all(predicate): Bool {
+fun Iterable<T>.all(predicate: (T)->Bool): Bool {
     !any { !predicate(it) }
 }
 
 /* Sum all elements; returns null for empty collections. */
-fun Iterable.sum() {
-    val i = iterator()
+fun Iterable<T>.sum(): T? {
+    val i: Iterator<T> = iterator()
     if( i.hasNext() ) {
         var result = i.next()
         while( i.hasNext() ) result += i.next()
@@ -167,8 +227,8 @@ fun Iterable.sum() {
 }
 
 /* Sum mapped values of elements; returns null for empty collections. */
-fun Iterable.sumOf(f) {
-    val i = iterator()
+fun Iterable<T>.sumOf<R>(f: (T)->R): R? {
+    val i: Iterator<T> = iterator()
     if( i.hasNext() ) {
         var result = f(i.next())
         while( i.hasNext() ) result += f(i.next())
@@ -178,8 +238,8 @@ fun Iterable.sumOf(f) {
 }
 
 /* Minimum value of the given function applied to elements of the collection. */
-fun Iterable.minOf( lambda ) {
-    val i = iterator()
+fun Iterable<T>.minOf<R>(lambda: (T)->R): R {
+    val i: Iterator<T> = iterator()
     var minimum = lambda( i.next() )
     while( i.hasNext() ) {
         val x = lambda(i.next())
@@ -189,8 +249,8 @@ fun Iterable.minOf( lambda ) {
 }
 
 /* Maximum value of the given function applied to elements of the collection. */
-fun Iterable.maxOf( lambda ) {
-    val i = iterator()
+fun Iterable<T>.maxOf<R>(lambda: (T)->R): R {
+    val i: Iterator<T> = iterator()
     var maximum = lambda( i.next() )
     while( i.hasNext() ) {
         val x = lambda(i.next())
@@ -200,28 +260,32 @@ fun Iterable.maxOf( lambda ) {
 }
 
 /* Return elements sorted by natural order. */
-fun Iterable.sorted() {
+fun Iterable<T>.sorted(): List<T> {
     sortedWith { a, b -> a <=> b }
 }
 
 /* Return elements sorted by the key selector. */
-fun Iterable.sortedBy(predicate) {
+fun Iterable<T>.sortedBy<R>(predicate: (T)->R): List<T> {
     sortedWith { a, b -> predicate(a) <=> predicate(b) }
 }
 
 /* Return a shuffled copy of the iterable as a list. */
-fun Iterable.shuffled() {
-    toList.apply { shuffle() }
+fun Iterable<T>.shuffled(): List<T> {
+    val list: List<T> = toList()
+    list.shuffle()
+    list
 }
 
 /*
     Returns a single list of all elements from all collections in the given collection.
     @return List
 */
-fun Iterable.flatten() {
-    val result = []
-    forEach { i ->
-        i.forEach { result.add(it) }
+fun Iterable<Iterable<T>>.flatten(): List<T> {
+    var result: List<T> = List()
+    for (i in this) {
+        for (item in i) {
+            result += item
+        }
     }
     result
 }
@@ -230,50 +294,47 @@ fun Iterable.flatten() {
     Returns a single list of all elements yielded from results of transform function being
     invoked on each element of original collection.
 */
-fun Iterable.flatMap(transform): List {
-    map(transform).flatten()
+fun Iterable<T>.flatMap<R>(transform: (T)->Iterable<R>): List<R> {
+    val mapped: List<Iterable<R>> = map(transform)
+    mapped.flatten()
 }
 
 /* Return string representation like [a,b,c]. */
-override fun List.toString() {
-    "[" + joinToString(",") + "]"
+override fun List<T>.toString() {
+    var first = true
+    var result = "["
+    for (item in this) {
+        if (!first) result += ","
+        result += item.toString()
+        first = false
+    }
+    result + "]"
 }
 
 /* Sort list in-place by key selector. */
-fun List.sortBy(predicate) {
+fun List<T>.sortBy<R>(predicate: (T)->R): Void {
     sortWith { a, b -> predicate(a) <=> predicate(b) }
 }
 
 /* Sort list in-place by natural order. */
-fun List.sort() {
+fun List<T>.sort(): Void {
     sortWith { a, b -> a <=> b }
 }
 
-/* Represents a single stack trace element. */
-class StackTraceEntry(
-        val sourceName: String,
-        val line: Int,
-        val column: Int,
-        val sourceString: String
-) {
-    val at by lazy { "%s:%s:%s"(sourceName,line+1,column+1) }
-    /* Formatted representation: source:line:column: text. */
-    override fun toString() {
-        "%s: %s"(at, sourceString.trim())
+/* Print this exception and its stack trace to standard output. */
+fun Exception.printStackTrace(): Void {
+    println(this)
+    for( entry in stackTrace ) {
+        println("\tat "+entry.toString())
     }
 }
 
-/* Print this exception and its stack trace to standard output. */
-fun Exception.printStackTrace() {
-    println(this)
-    for( entry in stackTrace )
-        println("\tat "+entry.toString())
-}
-
 /* Compile this string into a regular expression. */
-val String.re get() = Regex(this)
+val String.re: Regex get() = Regex(this)
 
-fun TODO(message=null) = throw NotImplementedException(message ?: "not implemented")
+fun TODO(message: Object?=null): Void {
+    throw "not implemented"
+}
 
 /*
     Provides different access types for delegates.
@@ -290,31 +351,29 @@ enum DelegateAccess {
     Implementing this interface is optional as Lyng uses dynamic dispatch,
     but it is recommended for documentation and clarity.
 */
-interface Delegate {
+interface Delegate<T,ThisRefType=Void> {
     /* Called when a delegated 'val' or 'var' is read. */
-    fun getValue(thisRef, name) = TODO("delegate getter is not implemented")
+    fun getValue(thisRef: ThisRefType, name: String): T = TODO("delegate getter is not implemented")
 
     /* Called when a delegated 'var' is written. */
-    fun setValue(thisRef, name, newValue) = TODO("delegate setter is not implemented")
+    fun setValue(thisRef: ThisRefType, name: String, newValue: T): Void = TODO("delegate setter is not implemented")
 
     /* Called when a delegated function is invoked. */
-    fun invoke(thisRef, name, args...) = TODO("delegate invoke is not implemented")
+    fun invoke(thisRef: ThisRefType, name: String, args...): Object = TODO("delegate invoke is not implemented")
 
     /*
         Called once during initialization to configure or validate the delegate.
         Should return the delegate object to be used (usually 'this').
     */
-    fun bind(name, access, thisRef) = this
+    fun bind(name: String, access: DelegateAccess, thisRef: ThisRefType): Object = this
 }
 
 /*
     Executes the block with `this` set to self and
     returns what the block returns.
 */
-fun with(self, block) {
-    var result = Unset
-    self.apply { result = block() }
-    result
+fun with<T,R>(self: T, block: T.()->R): R {
+    block(self)
 }
 
 /*
@@ -322,18 +381,32 @@ fun with(self, block) {
     The provided creator lambda is called once on the first access to compute the value.
     Can only be used with 'val' properties.
 */
-class lazy(creatorParam) : Delegate {
-    private val creator = creatorParam
+class lazy<T,ThisRefType=Object>(creatorParam: ThisRefType.()->T) : Delegate<T,ThisRefType> {
+    private val creator: ThisRefType.()->T = creatorParam
     private var value = Unset
 
-    override fun bind(name, access, thisRef) {
+    override fun bind(name: String, access: DelegateAccess, thisRef: ThisRefType): Object {
         if (access != DelegateAccess.Val) throw "lazy delegate can only be used with 'val'"
         this
     }
 
-    override fun getValue(thisRef, name) {
+    override fun getValue(thisRef: ThisRefType, name: String): T {
         if (value == Unset)
             value = with(thisRef,creator)
-        value
+        value as T
+    }
+}
+
+/* Represents a single stack trace element. */
+class StackTraceEntry(
+        val sourceName: String,
+        val line: Int,
+        val column: Int,
+        val sourceString: String
+) {
+    val at by lazy { "%s:%s:%s"(sourceName,line+1,column+1) }
+    /* Formatted representation: source:line:column: text. */
+    override fun toString() {
+        "%s: %s"(at, sourceString)
     }
 }

@@ -1,6 +1,7 @@
 package net.sergeych.lyng
 
 import kotlinx.coroutines.test.runTest
+import kotlin.test.Ignore
 import kotlin.test.Test
 
 class PropsTest {

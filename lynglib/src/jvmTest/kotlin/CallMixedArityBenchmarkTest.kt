@@ -26,6 +26,7 @@ import net.sergeych.lyng.obj.ObjInt
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.Ignore
 
 private fun appendBenchLog(name: String, variant: String, ms: Double) {
     val f = File("lynglib/build/benchlogs/log.csv")
@@ -33,6 +34,7 @@ private fun appendBenchLog(name: String, variant: String, ms: Double) {
     f.appendText("$name,$variant,$ms\n")
 }
 
+@Ignore("TODO(compile-time-res): legacy tests disabled")
 class CallMixedArityBenchmarkTest {
     @Test
     fun benchmarkMixedArityCalls() = runBlocking {

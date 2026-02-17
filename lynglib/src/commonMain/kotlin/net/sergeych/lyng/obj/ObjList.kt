@@ -20,7 +20,7 @@ package net.sergeych.lyng.obj
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import net.sergeych.lyng.Scope
-import net.sergeych.lyng.Statement
+import net.sergeych.lyng.Arguments
 import net.sergeych.lyng.miniast.ParamDoc
 import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lyng.miniast.addPropertyDoc
@@ -247,6 +247,10 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
 
     companion object {
         val type = object : ObjClass("List", ObjArray) {
+            override suspend fun callOn(scope: Scope): Obj {
+                return ObjList(scope.args.list.toMutableList())
+            }
+
             override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj {
                 return ObjList(decoder.decodeAnyList(scope))
             }
@@ -367,8 +371,10 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 params = listOf(ParamDoc("comparator")),
                 moduleName = "lyng.stdlib"
             ) {
-                val comparator = requireOnlyArg<Statement>()
-                thisAs<ObjList>().quicksort { a, b -> comparator.call(this, a, b).toInt() }
+                val comparator = requireOnlyArg<Obj>()
+                thisAs<ObjList>().quicksort { a, b ->
+                    call(comparator, Arguments(a, b)).toInt()
+                }
                 ObjVoid
             }
             addFnDoc(
@@ -387,6 +393,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 val self = thisAs<ObjList>()
                 val l = self.list
                 if (l.isEmpty()) return@addFnDoc ObjNull
+                val scope = requireScope()
                 if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
                     // Fast path: all ints → accumulate as long
                     var i = 0
@@ -400,7 +407,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                             // Fallback to generic dynamic '+' accumulation starting from current acc
                             var res: Obj = ObjInt(acc)
                             while (i < l.size) {
-                                res = res.plus(this, l[i])
+                                res = res.plus(scope, l[i])
                                 i++
                             }
                             return@addFnDoc res
@@ -412,7 +419,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 var res: Obj = l[0]
                 var k = 1
                 while (k < l.size) {
-                    res = res.plus(this, l[k])
+                    res = res.plus(scope, l[k])
                     k++
                 }
                 res
@@ -424,6 +431,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
             ) {
                 val l = thisAs<ObjList>().list
                 if (l.isEmpty()) return@addFnDoc ObjNull
+                val scope = requireScope()
                 if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
                     var i = 0
                     var hasOnlyInts = true
@@ -444,7 +452,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 var i = 1
                 while (i < l.size) {
                     val v = l[i]
-                    if (v.compareTo(this, res) < 0) res = v
+                    if (v.compareTo(scope, res) < 0) res = v
                     i++
                 }
                 res
@@ -456,6 +464,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
             ) {
                 val l = thisAs<ObjList>().list
                 if (l.isEmpty()) return@addFnDoc ObjNull
+                val scope = requireScope()
                 if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
                     var i = 0
                     var hasOnlyInts = true
@@ -476,7 +485,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 var i = 1
                 while (i < l.size) {
                     val v = l[i]
-                    if (v.compareTo(this, res) > 0) res = v
+                    if (v.compareTo(scope, res) > 0) res = v
                     i++
                 }
                 res
@@ -490,6 +499,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
             ) {
                 val l = thisAs<ObjList>().list
                 val needle = args.firstAndOnly()
+                val scope = requireScope()
                 if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS && needle is ObjInt) {
                     var i = 0
                     while (i < l.size) {
@@ -501,7 +511,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 }
                 var i = 0
                 while (i < l.size) {
-                    if (l[i].compareTo(this, needle) == 0) return@addFnDoc ObjInt(i.toLong())
+                    if (l[i].compareTo(scope, needle) == 0) return@addFnDoc ObjInt(i.toLong())
                     i++
                 }
                 ObjInt((-1).toLong())
@@ -518,5 +528,3 @@ fun <T>MutableList<T>.swap(i: Int, j: Int) {
         this[j] = temp
     }
 }
-
-

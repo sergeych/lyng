@@ -20,10 +20,13 @@ package net.sergeych.lyng
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
 import net.sergeych.lyng.Script.Companion.defaultImportManager
+import net.sergeych.lyng.bytecode.CmdFunction
+import net.sergeych.lyng.bytecode.CmdVm
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.stdlib_included.rootLyng
+import net.sergeych.lyng.bridge.LyngClassBridge
 import net.sergeych.lynon.ObjLynonClass
 import net.sergeych.mp_tools.globalDefer
 import kotlin.math.*
@@ -32,16 +35,128 @@ import kotlin.math.*
 class Script(
     override val pos: Pos,
     private val statements: List<Statement> = emptyList(),
+    private val moduleSlotPlan: Map<String, Int> = emptyMap(),
+    private val moduleDeclaredNames: Set<String> = emptySet(),
+    private val importBindings: Map<String, ImportBinding> = emptyMap(),
+    private val importedModules: List<ImportBindingSource.Module> = emptyList(),
+    private val moduleBytecode: CmdFunction? = null,
 //    private val catchReturn: Boolean = false,
 ) : Statement() {
+    fun statements(): List<Statement> = statements
 
     override suspend fun execute(scope: Scope): Obj {
-        var lastResult: Obj = ObjVoid
-        for (s in statements) {
-            lastResult = s.execute(scope)
+        scope.pos = pos
+        val execScope = resolveModuleScope(scope) ?: scope
+        val isModuleScope = execScope is ModuleScope
+        val shouldSeedModule = isModuleScope || execScope.thisObj === ObjVoid
+        val moduleTarget = execScope
+        if (shouldSeedModule) {
+            seedModuleSlots(moduleTarget, scope)
         }
-        return lastResult
+        moduleBytecode?.let { fn ->
+            if (execScope is ModuleScope) {
+                execScope.ensureModuleFrame(fn)
+            }
+            return CmdVm().execute(fn, execScope, scope.args) { frame, _ ->
+                seedModuleLocals(frame, moduleTarget, scope)
+            }
+        }
+        if (statements.isNotEmpty()) {
+            scope.raiseIllegalState("bytecode-only execution is required; missing module bytecode")
+        }
+        return ObjVoid
     }
+
+    private suspend fun seedModuleSlots(scope: Scope, seedScope: Scope) {
+        if (importBindings.isEmpty() && importedModules.isEmpty()) return
+        seedImportBindings(scope, seedScope)
+    }
+
+    private suspend fun seedModuleLocals(
+        frame: net.sergeych.lyng.bytecode.CmdFrame,
+        scope: Scope,
+        seedScope: Scope
+    ) {
+        val localNames = frame.fn.localSlotNames
+        if (localNames.isEmpty()) return
+        val values = HashMap<String, Obj>()
+        val base = frame.fn.scopeSlotCount
+        for (i in localNames.indices) {
+            val name = localNames[i] ?: continue
+            if (moduleDeclaredNames.contains(name)) continue
+            val record = seedScope.getLocalRecordDirect(name) ?: findSeedRecord(seedScope, name) ?: continue
+            val value = if (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property) {
+                scope.resolve(record, name)
+            } else {
+                record.value
+            }
+            frame.setObjUnchecked(base + i, value)
+        }
+    }
+
+    private suspend fun seedImportBindings(scope: Scope, seedScope: Scope) {
+        val provider = scope.currentImportProvider
+        val importedModules = LinkedHashSet<ModuleScope>()
+        for (moduleRef in this.importedModules) {
+            importedModules.add(provider.prepareImport(moduleRef.pos, moduleRef.name, null))
+        }
+        if (scope is ModuleScope) {
+            scope.importedModules = importedModules.toList()
+        }
+        for ((name, binding) in importBindings) {
+            val record = when (val source = binding.source) {
+                is ImportBindingSource.Module -> {
+                    val module = provider.prepareImport(source.pos, source.name, null)
+                    importedModules.add(module)
+                    module.objects[binding.symbol]?.takeIf { it.visibility.isPublic }
+                        ?: scope.raiseSymbolNotFound("symbol ${source.name}.${binding.symbol} not found")
+                }
+                ImportBindingSource.Root -> {
+                    provider.rootScope.objects[binding.symbol]?.takeIf { it.visibility.isPublic }
+                        ?: scope.raiseSymbolNotFound("symbol ${binding.symbol} not found")
+                }
+                ImportBindingSource.Seed -> {
+                    findSeedRecord(seedScope, binding.symbol)
+                        ?: scope.raiseSymbolNotFound("symbol ${binding.symbol} not found")
+                }
+            }
+            if (name == "Exception" && record.value !is ObjClass) {
+                scope.updateSlotFor(name, ObjRecord(ObjException.Root, isMutable = false))
+            } else {
+                scope.updateSlotFor(name, record)
+            }
+        }
+        for (module in importedModules) {
+            for ((cls, map) in module.extensions) {
+                for ((symbol, record) in map) {
+                    if (record.visibility.isPublic) {
+                        scope.addExtension(cls, symbol, record)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun findSeedRecord(scope: Scope?, name: String): ObjRecord? {
+        var s = scope
+        var hops = 0
+        while (s != null && hops++ < 1024) {
+            s.objects[name]?.let { return it }
+            s.localBindings[name]?.let { return it }
+            s.getSlotIndexOf(name)?.let { idx ->
+                val rec = s.getSlotRecord(idx)
+                if (rec.value !== ObjUnset) return rec
+            }
+            s = s.parent
+        }
+        return null
+    }
+
+    private fun resolveModuleScope(scope: Scope): ModuleScope? {
+        return scope as? ModuleScope
+    }
+
+    internal fun debugStatements(): List<Statement> = statements
 
     suspend fun execute() = execute(
         defaultImportManager.newStdScope()
@@ -61,18 +176,28 @@ class Script(
             addConst("Unset", ObjUnset)
             addFn("print") {
                 for ((i, a) in args.withIndex()) {
-                    if (i > 0) print(' ' + a.toString(this).value)
-                    else print(a.toString(this).value)
+                    if (i > 0) print(' ' + toStringOf(a).value)
+                    else print(toStringOf(a).value)
                 }
                 ObjVoid
             }
             addFn("println") {
                 for ((i, a) in args.withIndex()) {
-                    if (i > 0) print(' ' + a.toString(this).value)
-                    else print(a.toString(this).value)
+                    if (i > 0) print(' ' + toStringOf(a).value)
+                    else print(toStringOf(a).value)
                 }
                 println()
                 ObjVoid
+            }
+            addFn("call") {
+                val callee = args.list.firstOrNull()
+                    ?: raiseError("call requires a callable as the first argument")
+                val rest = if (args.list.size > 1) {
+                    Arguments(args.list.drop(1))
+                } else {
+                    Arguments.EMPTY
+                }
+                call(callee, rest)
             }
             addFn("floor") {
                 val x = args.firstAndOnly()
@@ -170,12 +295,12 @@ class Script(
                 
                 var result = value
                 if (range.start != null && !range.start.isNull) {
-                    if (result.compareTo(this, range.start) < 0) {
+                    if (result.compareTo(requireScope(), range.start) < 0) {
                         result = range.start
                     }
                 }
                 if (range.end != null && !range.end.isNull) {
-                    val cmp = range.end.compareTo(this, result)
+                    val cmp = range.end.compareTo(requireScope(), result)
                     if (range.isEndInclusive) {
                         if (cmp < 0) result = range.end
                     } else {
@@ -198,43 +323,53 @@ class Script(
             addVoidFn("assert") {
                 val cond = requiredArg<ObjBool>(0)
                 val message = if (args.size > 1)
-                    ": " + (args[1] as Statement).execute(this).toString(this).value
+                    ": " + toStringOf(call(args[1] as Obj)).value
                 else ""
                 if (!cond.value == true)
-                    raiseError(ObjAssertionFailedException(this, "Assertion failed$message"))
+                    raiseError(ObjAssertionFailedException(requireScope(), "Assertion failed$message"))
+            }
+
+            fun unwrapCompareArg(value: Obj): Obj {
+                val resolved = when (value) {
+                    is FrameSlotRef -> value.read()
+                    is RecordSlotRef -> value.read()
+                    else -> value
+                }
+                return if (resolved === ObjUnset.objClass) ObjUnset else resolved
             }
 
             addVoidFn("assertEquals") {
-                val a = requiredArg<Obj>(0)
-                val b = requiredArg<Obj>(1)
-                if (a.compareTo(this, b) != 0)
+                val a = unwrapCompareArg(requiredArg(0))
+                val b = unwrapCompareArg(requiredArg(1))
+                if (a.compareTo(requireScope(), b) != 0) {
                     raiseError(
                         ObjAssertionFailedException(
-                            this,
-                            "Assertion failed: ${a.inspect(this)} == ${b.inspect(this)}"
+                            requireScope(),
+                            "Assertion failed: ${inspect(a)} == ${inspect(b)}"
                         )
                     )
+                }
             }
             // alias used in tests
             addVoidFn("assertEqual") {
-                val a = requiredArg<Obj>(0)
-                val b = requiredArg<Obj>(1)
-                if (a.compareTo(this, b) != 0)
+                val a = unwrapCompareArg(requiredArg(0))
+                val b = unwrapCompareArg(requiredArg(1))
+                if (a.compareTo(requireScope(), b) != 0)
                     raiseError(
                         ObjAssertionFailedException(
-                            this,
-                            "Assertion failed: ${a.inspect(this)} == ${b.inspect(this)}"
+                            requireScope(),
+                            "Assertion failed: ${inspect(a)} == ${inspect(b)}"
                         )
                     )
             }
             addVoidFn("assertNotEquals") {
-                val a = requiredArg<Obj>(0)
-                val b = requiredArg<Obj>(1)
-                if (a.compareTo(this, b) == 0)
+                val a = unwrapCompareArg(requiredArg(0))
+                val b = unwrapCompareArg(requiredArg(1))
+                if (a.compareTo(requireScope(), b) == 0)
                     raiseError(
                         ObjAssertionFailedException(
-                            this,
-                            "Assertion failed: ${a.inspect(this)} != ${b.inspect(this)}"
+                            requireScope(),
+                            "Assertion failed: ${inspect(a)} != ${inspect(b)}"
                         )
                     )
             }
@@ -251,23 +386,23 @@ class Script(
                     will be accepted.
                 """.trimIndent()
             ) {
-                val code: Statement
+                val code: Obj
                 val expectedClass: ObjClass?
                 when (args.size) {
                     1 -> {
-                        code = requiredArg<Statement>(0)
+                        code = requiredArg<Obj>(0)
                         expectedClass = null
                     }
 
                     2 -> {
-                        code = requiredArg<Statement>(1)
+                        code = requiredArg<Obj>(1)
                         expectedClass = requiredArg<ObjClass>(0)
                     }
 
                     else -> raiseIllegalArgument("Expected 1 or 2 arguments, got ${args.size}")
                 }
                 val result = try {
-                    code.execute(this)
+                    call(code)
                     null
                 } catch (e: ExecutionError) {
                     e.errorObject
@@ -276,7 +411,7 @@ class Script(
                 }
                 if (result == null) raiseError(
                     ObjAssertionFailedException(
-                        this,
+                        requireScope(),
                         "Expected exception but nothing was thrown"
                     )
                 )
@@ -289,8 +424,8 @@ class Script(
                 result
             }
 
-            addFn("dynamic") {
-                ObjDynamic.create(this, requireOnlyArg())
+            addFn("dynamic", callSignature = CallSignature(tailBlockReceiverType = "DelegateContext")) {
+                ObjDynamic.create(requireScope(), requireOnlyArg())
             }
 
             val root = this
@@ -307,7 +442,7 @@ class Script(
                 val condition = requiredArg<ObjBool>(0)
                 if (!condition.value) {
                     var message = args.list.getOrNull(1)
-                    if (message is Statement) message = message.execute(this)
+                    if (message is Obj && message.objClass == Statement.type) message = call(message)
                     raiseIllegalArgument(message?.toString() ?: "requirement not met")
                 }
                 ObjVoid
@@ -316,23 +451,42 @@ class Script(
                 val condition = requiredArg<ObjBool>(0)
                 if (!condition.value) {
                     var message = args.list.getOrNull(1)
-                    if (message is Statement) message = message.execute(this)
+                    if (message is Obj && message.objClass == Statement.type) message = call(message)
                     raiseIllegalState(message?.toString() ?: "check failed")
                 }
                 ObjVoid
             }
             addFn("traceScope") {
-                this.trace(args.getOrNull(0)?.toString() ?: "")
+                trace(args.getOrNull(0)?.toString() ?: "")
                 ObjVoid
             }
-
+            addFn("run") {
+                call(requireOnlyArg())
+            }
+            addFn("cached") {
+                val builder = requireOnlyArg<Obj>()
+                val capturedScope = this
+                var calculated = false
+                var cachedValue: Obj = ObjVoid
+                net.sergeych.lyng.obj.ObjExternCallable.fromBridge {
+                    if (!calculated) {
+                        cachedValue = capturedScope.call(builder)
+                        calculated = true
+                    }
+                    cachedValue
+                }
+            }
+            addFn("lazy") {
+                val builder = requireOnlyArg<Obj>()
+                ObjLazyDelegate(builder, requireScope())
+            }
             addVoidFn("delay") {
                 val a = args.firstAndOnly()
                 when (a) {
                     is ObjInt -> delay(a.value)
                     is ObjReal -> delay((a.value * 1000).roundToLong())
                     is ObjDuration -> delay(a.duration)
-                    else -> raiseIllegalArgument("Expected Int, Real or Duration, got ${a.inspect(this)}")
+                    else -> raiseIllegalArgument("Expected Int, Real or Duration, got ${inspect(a)}")
                 }
             }
 
@@ -352,6 +506,7 @@ class Script(
             // interfaces
             addConst("Iterable", ObjIterable)
             addConst("Collection", ObjCollection)
+            addConst("Iterator", ObjIterator)
             addConst("Array", ObjArray)
             addConst("RingBuffer", ObjRingBuffer.type)
             addConst("Class", ObjClassType)
@@ -360,13 +515,19 @@ class Script(
             addConst("CompletableDeferred", ObjCompletableDeferred.type)
             addConst("Mutex", ObjMutex.type)
             addConst("Flow", ObjFlow.type)
+            addConst("FlowBuilder", ObjFlowBuilder.type)
+            addConst("Delegate", ObjDynamic.type)
+            addConst("DelegateContext", ObjDynamicContext.type)
 
             addConst("Regex", ObjRegex.type)
+            addConst("RegexMatch", ObjRegexMatch.type)
+            addConst("MapEntry", ObjMapEntry.type)
 
             addFn("launch") {
-                val callable = requireOnlyArg<Statement>()
+                val callable = requireOnlyArg<Obj>()
+                val captured = this
                 ObjDeferred(globalDefer {
-                    callable.execute(this@addFn)
+                    captured.call(callable)
                 })
             }
 
@@ -375,10 +536,10 @@ class Script(
                 ObjVoid
             }
 
-            addFn("flow") {
+            addFn("flow", callSignature = CallSignature(tailBlockReceiverType = "FlowBuilder")) {
                 // important is: current context contains closure often used in call;
                 // we'll need it for the producer
-                ObjFlow(requireOnlyArg<Statement>(), this)
+                ObjFlow(requireOnlyArg<Obj>(), requireScope())
             }
 
             val pi = ObjReal(PI)
@@ -400,9 +561,10 @@ class Script(
 
         val defaultImportManager: ImportManager by lazy {
             ImportManager(rootScope, SecurityManager.allowAll).apply {
-                addTextPackages(
-                    rootLyng
-                )
+                addPackage("lyng.stdlib") { module ->
+                    module.eval(Source("lyng.stdlib", rootLyng))
+                    ObjKotlinIterator.bindTo(module.requireClass("KotlinIterator"))
+                }
                 addPackage("lyng.buffer") {
                     it.addConstDoc(
                         name = "Buffer",
@@ -453,7 +615,7 @@ class Script(
                             is ObjInt -> delay(a.value * 1000)
                             is ObjReal -> delay((a.value * 1000).roundToLong())
                             is ObjDuration -> delay(a.duration)
-                            else -> raiseIllegalArgument("Expected Duration, Int or Real, got ${a.inspect(this)}")
+                            else -> raiseIllegalArgument("Expected Duration, Int or Real, got ${inspect(a)}")
                         }
                     }
                 }

@@ -17,6 +17,8 @@
 
 package net.sergeych.lyng
 
+import net.sergeych.lyng.bytecode.BytecodeStatement
+import net.sergeych.lyng.bytecode.CmdDisassembler
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.pacman.ImportProvider
@@ -37,7 +39,7 @@ fun nextFrameId(): Long = FrameIdGen.nextId()
  *
  *  There are special types of scopes:
  *
- *  - [ClosureScope] - scope used to apply a closure to some thisObj scope
+ *  - [BytecodeClosureScope] - scope used to apply a closure to some thisObj scope
  */
 open class Scope(
     var parent: Scope?,
@@ -50,11 +52,15 @@ open class Scope(
     var currentClassCtx: net.sergeych.lyng.obj.ObjClass? = parent?.currentClassCtx
     // Unique id per scope frame for PICs; regenerated on each borrow from the pool.
     var frameId: Long = nextFrameId()
+    @PublishedApi
+    internal val thisVariants: MutableList<Obj> = mutableListOf()
 
     // Fast-path storage for local variables/arguments accessed by slot index.
     // Enabled by default for child scopes; module/class scopes can ignore it.
     private val slots: MutableList<ObjRecord> = mutableListOf()
     private val nameToSlot: MutableMap<String, Int> = mutableMapOf()
+    internal var captureRecords: List<ObjRecord>? = null
+    internal var captureNames: List<String>? = null
     /**
      * Auxiliary per-frame map of local bindings (locals declared in this frame).
      * This helps resolving locals across suspension when slot ownership isn't
@@ -63,6 +69,31 @@ open class Scope(
     internal val localBindings: MutableMap<String, ObjRecord> = mutableMapOf()
 
     internal val extensions: MutableMap<ObjClass, MutableMap<String, ObjRecord>> = mutableMapOf()
+
+    init {
+        setThisVariants(thisObj, parent?.thisVariants ?: emptyList())
+    }
+
+    internal fun setThisVariants(primary: Obj, extras: List<Obj>) {
+        thisObj = primary
+        val extrasSnapshot = when {
+            extras.isEmpty() -> emptyList()
+            else -> {
+                try {
+                    extras.toList()
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            }
+        }
+        thisVariants.clear()
+        thisVariants.add(primary)
+        for (obj in extrasSnapshot) {
+            if (obj !== primary && !thisVariants.contains(obj)) {
+                thisVariants.add(obj)
+            }
+        }
+    }
 
     fun addExtension(cls: ObjClass, name: String, record: ObjRecord) {
         extensions.getOrPut(cls) { mutableMapOf() }[name] = record
@@ -77,7 +108,7 @@ open class Scope(
             for (cls in receiverClass.mro) {
                 s.extensions[cls]?.get(name)?.let { return it }
             }
-            if (s is ClosureScope) {
+            if (s is BytecodeClosureScope) {
                 s.closureScope.findExtension(receiverClass, name)?.let { return it }
             }
             s = s.parent
@@ -101,7 +132,7 @@ open class Scope(
 
     /**
      * Internal lookup helpers that deliberately avoid invoking overridden `get` implementations
-     * (notably in ClosureScope) to prevent accidental ping-pong and infinite recursion across
+     * (notably in BytecodeClosureScope) to prevent accidental ping-pong and infinite recursion across
      * intertwined closure frames. They traverse the plain parent chain and consult only locals
      * and bindings of each frame. Instance/class member fallback must be decided by the caller.
      */
@@ -124,6 +155,14 @@ open class Scope(
         }
         s.getSlotIndexOf(name)?.let { idx ->
             val rec = s.getSlotRecord(idx)
+            val hasDirectBinding =
+                s.objects.containsKey(name) ||
+                    s.localBindings.containsKey(name) ||
+                    (caller?.let { ctx ->
+                        s.objects.containsKey(ctx.mangledName(name)) ||
+                            s.localBindings.containsKey(ctx.mangledName(name))
+                    } ?: false)
+            if (!hasDirectBinding && rec.value === ObjUnset) return null
             if (rec.declaringClass == null || canAccessMember(rec.visibility, rec.declaringClass, caller, name)) return rec
         }
         return null
@@ -136,7 +175,7 @@ open class Scope(
         val effectiveCaller = caller ?: currentClassCtx
         while (s != null && hops++ < 1024) {
             tryGetLocalRecord(s, name, effectiveCaller)?.let { return it }
-            s = if (followClosure && s is ClosureScope) s.closureScope else s.parent
+            s = if (followClosure && s is BytecodeClosureScope) s.closureScope else s.parent
         }
         return null
     }
@@ -145,7 +184,7 @@ open class Scope(
      * Perform base Scope.get semantics for this frame without delegating into parent.get
      * virtual dispatch. This checks:
      *  - locals/bindings in this frame
-     *  - walks raw parent chain for locals/bindings (ignoring ClosureScope-specific overrides)
+     *  - walks raw parent chain for locals/bindings (ignoring BytecodeClosureScope-specific overrides)
      *  - finally falls back to this frame's `thisObj` instance/class members
      */
     internal fun baseGetIgnoreClosure(name: String): ObjRecord? {
@@ -175,7 +214,7 @@ open class Scope(
      *  - locals/bindings of each frame
      *  - then instance/class members of each frame's `thisObj`.
      * This completely avoids invoking overridden `get` implementations, preventing
-     * ping-pong recursion between `ClosureScope` frames.
+     * ping-pong recursion between `BytecodeClosureScope` frames.
      */
     internal fun chainLookupWithMembers(name: String, caller: net.sergeych.lyng.obj.ObjClass? = currentClassCtx, followClosure: Boolean = false): ObjRecord? {
         var s: Scope? = this
@@ -192,7 +231,7 @@ open class Scope(
                     } else return rec
                 }
             }
-            s = if (followClosure && s is ClosureScope) s.closureScope else s.parent
+            s = if (followClosure && s is BytecodeClosureScope) s.closureScope else s.parent
         }
         return null
     }
@@ -326,19 +365,25 @@ open class Scope(
     }
 
     inline fun <reified T : Obj> thisAs(): T {
-        var s: Scope? = this
-        while (s != null) {
-            val t = s.thisObj
-            if (t is T) return t
-            s = s.parent
+        for (obj in thisVariants) {
+            if (obj is T) return obj
         }
         raiseClassCastError("Cannot cast ${thisObj.objClass.className} to ${T::class.simpleName}")
     }
 
     internal val objects = mutableMapOf<String, ObjRecord>()
 
+    internal fun getLocalRecordDirect(name: String): ObjRecord? = objects[name]
+
     open operator fun get(name: String): ObjRecord? {
         if (name == "this") return thisObj.asReadonly
+        if (name == "__PACKAGE__") {
+            var s: Scope? = this
+            while (s != null) {
+                if (s is ModuleScope) return s.packageNameObj
+                s = s.parent
+            }
+        }
 
         // 1. Prefer direct locals/bindings declared in this frame
         tryGetLocalRecord(this, name, currentClassCtx)?.let { return it }
@@ -377,10 +422,20 @@ open class Scope(
     // Slot fast-path API
     fun getSlotRecord(index: Int): ObjRecord = slots[index]
     fun setSlotValue(index: Int, newValue: Obj) {
-        slots[index].value = newValue
+        val record = slots[index]
+        val value = record.value
+        if (value is FrameSlotRef) {
+            value.write(newValue)
+            return
+        }
+        record.value = newValue
     }
+    val slotCount: Int
+        get() = slots.size
 
     fun getSlotIndexOf(name: String): Int? = nameToSlot[name]
+
+    internal fun slotNameToIndexSnapshot(): Map<String, Int> = nameToSlot.toMap()
     fun allocateSlotFor(name: String, record: ObjRecord): Int {
         val idx = slots.size
         slots.add(record)
@@ -390,6 +445,12 @@ open class Scope(
 
     fun updateSlotFor(name: String, record: ObjRecord) {
         nameToSlot[name]?.let { slots[it] = record }
+        if (objects[name] == null) {
+            objects[name] = record
+        }
+        if (localBindings[name] == null) {
+            localBindings[name] = record
+        }
     }
 
     /**
@@ -410,6 +471,66 @@ open class Scope(
         }
     }
 
+    internal fun applySlotPlanReset(plan: Map<String, Int>, records: Map<String, ObjRecord>) {
+        if (plan.isEmpty()) return
+        slots.clear()
+        nameToSlot.clear()
+        val maxIndex = plan.values.maxOrNull() ?: return
+        val targetSize = maxIndex + 1
+        repeat(targetSize) {
+            slots.add(ObjRecord(ObjUnset, isMutable = true))
+        }
+        for ((name, idx) in plan) {
+            nameToSlot[name] = idx
+            val record = records[name]
+            if (record != null && record.value !== ObjUnset) {
+                slots[idx] = record
+            }
+        }
+    }
+
+    fun applySlotPlanWithSnapshot(plan: Map<String, Int>): Map<String, Int?> {
+        if (plan.isEmpty()) return emptyMap()
+        val maxIndex = plan.values.maxOrNull() ?: return emptyMap()
+        if (slots.size <= maxIndex) {
+            val targetSize = maxIndex + 1
+            while (slots.size < targetSize) {
+                slots.add(ObjRecord(ObjUnset, isMutable = true))
+            }
+        }
+        val snapshot = LinkedHashMap<String, Int?>(plan.size)
+        for ((name, idx) in plan) {
+            snapshot[name] = nameToSlot[name]
+            nameToSlot[name] = idx
+        }
+        return snapshot
+    }
+
+    fun restoreSlotPlan(snapshot: Map<String, Int?>) {
+        if (snapshot.isEmpty()) return
+        for ((name, idx) in snapshot) {
+            if (idx == null) {
+                nameToSlot.remove(name)
+            } else {
+                nameToSlot[name] = idx
+            }
+        }
+    }
+
+    fun hasSlotPlanConflict(plan: Map<String, Int>): Boolean {
+        if (plan.isEmpty() || nameToSlot.isEmpty()) return false
+        val planIndexToNames = HashMap<Int, HashSet<String>>(plan.size)
+        for ((name, idx) in plan) {
+            val names = planIndexToNames.getOrPut(idx) { HashSet(2) }
+            names.add(name)
+        }
+        for ((existingName, existingIndex) in nameToSlot) {
+            val plannedNames = planIndexToNames[existingIndex] ?: continue
+            if (!plannedNames.contains(existingName)) return true
+        }
+        return false
+    }
+
     /**
      * Clear all references and maps to prevent memory leaks when pooled.
      */
@@ -417,6 +538,7 @@ open class Scope(
         this.parent = null
         this.skipScopeCreation = false
         this.currentClassCtx = null
+        thisVariants.clear()
         objects.clear()
         slots.clear()
         nameToSlot.clear()
@@ -447,7 +569,7 @@ open class Scope(
         this.parent = parent
         this.args = args
         this.pos = pos
-        this.thisObj = thisObj
+        setThisVariants(thisObj, parent?.thisVariants ?: emptyList())
         // Pre-size local slots for upcoming parameter assignment where possible
         reserveLocalCapacity(args.list.size + 4)
     }
@@ -516,11 +638,6 @@ open class Scope(
             it.value = value
             // keep local binding index consistent within the frame
             localBindings[name] = it
-            // If we are a ClosureScope, mirror binding into the caller frame to keep it discoverable
-            // across suspension when resumed on the call frame
-            if (this is ClosureScope) {
-                callScope.localBindings[name] = it
-            }
             bumpClassLayoutIfNeeded(name, value, recordType)
             it
         } ?: addItem(name, true, value, visibility, writeVisibility, recordType, isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride)
@@ -536,7 +653,10 @@ open class Scope(
         isAbstract: Boolean = false,
         isClosed: Boolean = false,
         isOverride: Boolean = false,
-        isTransient: Boolean = false
+        isTransient: Boolean = false,
+        callSignature: CallSignature? = null,
+        fieldId: Int? = null,
+        methodId: Int? = null
     ): ObjRecord {
         val rec = ObjRecord(
             value, isMutable, visibility, writeVisibility,
@@ -545,15 +665,19 @@ open class Scope(
             isAbstract = isAbstract,
             isClosed = isClosed,
             isOverride = isOverride,
-            isTransient = isTransient
+            isTransient = isTransient,
+            callSignature = callSignature,
+            memberName = name,
+            fieldId = fieldId,
+            methodId = methodId
         )
         objects[name] = rec
         bumpClassLayoutIfNeeded(name, value, recordType)
         if (recordType == ObjRecord.Type.Field || recordType == ObjRecord.Type.ConstructorField) {
             val inst = thisObj as? net.sergeych.lyng.obj.ObjInstance
             if (inst != null) {
-                val slot = inst.objClass.fieldSlotForKey(name)
-                if (slot != null) inst.setFieldSlotRecord(slot.slot, rec)
+                val slotId = rec.fieldId ?: inst.objClass.fieldSlotForKey(name)?.slot
+                if (slotId != null) inst.setFieldSlotRecord(slotId, rec)
             }
         }
         if (value is Statement ||
@@ -562,25 +686,12 @@ open class Scope(
             recordType == ObjRecord.Type.Property) {
             val inst = thisObj as? net.sergeych.lyng.obj.ObjInstance
             if (inst != null) {
-                val slot = inst.objClass.methodSlotForKey(name)
-                if (slot != null) inst.setMethodSlotRecord(slot.slot, rec)
+                val slotId = rec.methodId ?: inst.objClass.methodSlotForKey(name)?.slot
+                if (slotId != null) inst.setMethodSlotRecord(slotId, rec)
             }
         }
         // Index this binding within the current frame to help resolve locals across suspension
         localBindings[name] = rec
-        // If we are a ClosureScope, mirror binding into the caller frame to keep it discoverable
-        // across suspension when resumed on the call frame
-        if (this is ClosureScope) {
-            callScope.localBindings[name] = rec
-            // Additionally, expose the binding in caller's objects and slot map so identifier
-            // resolution after suspension can still find it even if the active scope is a child
-            // of the callScope (e.g., due to internal withChildFrame usage).
-            // This keeps visibility within the method body but prevents leaking outside the caller frame.
-            callScope.objects[name] = rec
-            if (callScope.getSlotIndexOf(name) == null) {
-                callScope.allocateSlotFor(name, rec)
-            }
-        }
         // Map to a slot for fast local access (ensure consistency)
         if (nameToSlot.isEmpty()) {
             allocateSlotFor(name, rec)
@@ -608,25 +719,31 @@ open class Scope(
         return ns.objClass
     }
 
-    inline fun addVoidFn(vararg names: String, crossinline fn: suspend Scope.() -> Unit) {
+    inline fun addVoidFn(vararg names: String, crossinline fn: suspend ScopeFacade.() -> Unit) {
         addFn(*names) {
             fn(this)
             ObjVoid
         }
     }
 
-    fun addFn(vararg names: String, fn: suspend Scope.() -> Obj) {
-        val newFn = object : Statement() {
-            override val pos: Pos = Pos.builtIn
+    fun disassembleSymbol(name: String): String {
+        val record = get(name) ?: return "$name is not found"
+        val stmt = record.value as? Statement ?: return "$name is not a compiled body"
+        val bytecode = (stmt as? BytecodeStatement)?.bytecodeFunction()
+            ?: (stmt as? BytecodeBodyProvider)?.bytecodeBody()?.bytecodeFunction()
+            ?: return "$name is not a compiled body"
+        return CmdDisassembler.disassemble(bytecode)
+    }
 
-            override suspend fun execute(scope: Scope): Obj = scope.fn()
-
-        }
+    fun addFn(vararg names: String, callSignature: CallSignature? = null, fn: suspend ScopeFacade.() -> Obj) {
+        val newFn = net.sergeych.lyng.obj.ObjExternCallable.fromBridge { fn() }
         for (name in names) {
             addItem(
                 name,
                 false,
-                newFn
+                newFn,
+                recordType = ObjRecord.Type.Fun,
+                callSignature = callSignature
             )
         }
     }
@@ -640,9 +757,10 @@ open class Scope(
         eval(code.toSource())
 
     suspend fun eval(source: Source): Obj {
-        return Compiler.compile(
+        return Compiler.compileWithResolution(
             source,
-            currentImportProvider
+            currentImportProvider,
+            seedScope = this
         ).execute(this)
     }
 
@@ -695,31 +813,53 @@ open class Scope(
         println("--------------------")
     }
 
-    open fun applyClosure(closure: Scope): Scope = ClosureScope(this, closure)
+    open fun applyClosure(closure: Scope, preferredThisType: String? = null): Scope =
+        BytecodeClosureScope(this, closure, preferredThisType)
+
+    internal fun applyClosureForBytecode(closure: Scope, preferredThisType: String? = null): Scope {
+        return BytecodeClosureScope(this, closure, preferredThisType)
+    }
 
     /**
-     * Resolve and evaluate a qualified identifier exactly as compiled code would.
-     * For input like `A.B.C`, it builds the same ObjRef chain the compiler emits:
-     * `LocalVarRef("A", Pos.builtIn)` followed by `FieldRef` for each segment, then evaluates it.
-     * This mirrors `eval("A.B.C")` resolution semantics without invoking the compiler.
+     * Resolve and evaluate a qualified identifier (e.g. `A.B.C`) using the same name/field
+     * resolution rules as compiled code, without invoking the compiler or ObjRef evaluation.
      */
     suspend fun resolveQualifiedIdentifier(qualifiedName: String): Obj {
         val trimmed = qualifiedName.trim()
         if (trimmed.isEmpty()) raiseSymbolNotFound("empty identifier")
         val parts = trimmed.split('.')
-        var ref: ObjRef = LocalVarRef(parts[0], Pos.builtIn)
-        for (i in 1 until parts.size) {
-            ref = FieldRef(ref, parts[i], false)
+        val first = parts[0]
+        val base: Obj = if (first == "this") {
+            thisObj
+        } else {
+            val rec = get(first) ?: raiseSymbolNotFound(first)
+            resolve(rec, first)
         }
-        return ref.evalValue(this)
+        var current = base
+        for (i in 1 until parts.size) {
+            val name = parts[i]
+            val rec = current.readField(this, name)
+            current = resolve(rec, name)
+        }
+        return current
     }
 
     suspend fun resolve(rec: ObjRecord, name: String): Obj {
+        val value = rec.value
+        if (value is FrameSlotRef) {
+            return value.read()
+        }
         val receiver = rec.receiver ?: thisObj
         return receiver.resolveRecord(this, rec, name, rec.declaringClass).value
     }
 
     suspend fun assign(rec: ObjRecord, name: String, newValue: Obj) {
+        val value = rec.value
+        if (value is FrameSlotRef) {
+            if (!rec.isMutable && value.read() !== ObjUnset) raiseIllegalAssignment("can't reassign val $name")
+            value.write(newValue)
+            return
+        }
         if (rec.type == ObjRecord.Type.Delegated) {
             val receiver = rec.receiver ?: thisObj
             val del = rec.delegate ?: run {
@@ -751,5 +891,11 @@ open class Scope(
 
         fun new(): Scope =
             Script.defaultImportManager.copy().newModuleAt(Pos.builtIn)
+    }
+
+    fun requireClass(name: String): net.sergeych.lyng.obj.ObjClass {
+        val rec = get(name) ?: raiseSymbolNotFound(name)
+        return rec.value as? net.sergeych.lyng.obj.ObjClass
+            ?: raiseClassCastError("Expected class $name, got ${rec.value.objClass.className}")
     }
 }

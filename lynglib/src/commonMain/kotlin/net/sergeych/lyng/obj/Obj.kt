@@ -65,7 +65,8 @@ open class Obj {
     fun isInstanceOf(someClass: Obj) = someClass === objClass ||
             objClass.allParentsSet.contains(someClass) ||
             someClass == rootObjectType ||
-            (someClass is ObjClass && objClass.allImplementingNames.contains(someClass.className))
+            (someClass is ObjClass && (objClass.allImplementingNames.contains(someClass.className) ||
+                objClass.className == someClass.className))
 
     fun isInstanceOf(className: String) = 
         objClass.mro.any { it.className == className } ||
@@ -124,17 +125,7 @@ open class Obj {
             }
         }
 
-        // 2. Extensions in scope
-        val extension = scope.findExtension(objClass, name)
-        if (extension != null) {
-            if (extension.type == ObjRecord.Type.Property) {
-                if (args.isEmpty()) return (extension.value as ObjProperty).callGetter(scope, this, extension.declaringClass)
-            } else if (extension.type != ObjRecord.Type.Delegated) {
-                return extension.value.invoke(scope, this, args)
-            }
-        }
-
-        // 3. Root object fallback
+        // 2. Root object fallback
         for (cls in objClass.mro) {
             if (cls.className == "Obj") {
                 cls.members[name]?.let { rec ->
@@ -149,6 +140,15 @@ open class Obj {
                         return rec.value.invoke(scope, this, args, decl)
                     }
                 }
+            }
+        }
+        scope.findExtension(objClass, name)?.let { ext ->
+            if (ext.type == ObjRecord.Type.Property) {
+                if (args.isEmpty()) {
+                    return (ext.value as ObjProperty).callGetter(scope, this, ext.declaringClass)
+                }
+            } else if (ext.type != ObjRecord.Type.Delegated) {
+                return ext.value.invoke(scope, this, args, ext.declaringClass)
             }
         }
 
@@ -181,7 +181,7 @@ open class Obj {
 
     open suspend fun equals(scope: Scope, other: Obj): Boolean {
         if (other === this) return true
-        val m = objClass.getInstanceMemberOrNull("equals") ?: scope.findExtension(objClass, "equals")
+        val m = objClass.getInstanceMemberOrNull("equals")
         if (m != null) {
             return invokeInstanceMethod(scope, "equals", Arguments(other)).toBool()
         }
@@ -265,13 +265,35 @@ open class Obj {
     open val objClass: ObjClass get() = rootObjectType
 
     open suspend fun plus(scope: Scope, other: Obj): Obj {
-        return invokeInstanceMethod(scope, "plus", Arguments(other)) {
+        val otherValue = when (other) {
+            is FrameSlotRef -> other.read()
+            is RecordSlotRef -> other.read()
+            else -> other
+        }
+        val self = when (this) {
+            is FrameSlotRef -> this.read()
+            is RecordSlotRef -> this.read()
+            else -> this
+        }
+        if (self !== this) return self.plus(scope, otherValue)
+        return invokeInstanceMethod(scope, "plus", Arguments(otherValue)) {
             scope.raiseNotImplemented("plus for ${objClass.className}")
         }
     }
 
     open suspend fun minus(scope: Scope, other: Obj): Obj {
-        return invokeInstanceMethod(scope, "minus", Arguments(other)) {
+        val otherValue = when (other) {
+            is FrameSlotRef -> other.read()
+            is RecordSlotRef -> other.read()
+            else -> other
+        }
+        val self = when (this) {
+            is FrameSlotRef -> this.read()
+            is RecordSlotRef -> this.read()
+            else -> this
+        }
+        if (self !== this) return self.minus(scope, otherValue)
+        return invokeInstanceMethod(scope, "minus", Arguments(otherValue)) {
             scope.raiseNotImplemented("minus for ${objClass.className}")
         }
     }
@@ -283,19 +305,52 @@ open class Obj {
     }
 
     open suspend fun mul(scope: Scope, other: Obj): Obj {
-        return invokeInstanceMethod(scope, "mul", Arguments(other)) {
+        val otherValue = when (other) {
+            is FrameSlotRef -> other.read()
+            is RecordSlotRef -> other.read()
+            else -> other
+        }
+        val self = when (this) {
+            is FrameSlotRef -> this.read()
+            is RecordSlotRef -> this.read()
+            else -> this
+        }
+        if (self !== this) return self.mul(scope, otherValue)
+        return invokeInstanceMethod(scope, "mul", Arguments(otherValue)) {
             scope.raiseNotImplemented("mul for ${objClass.className}")
         }
     }
 
     open suspend fun div(scope: Scope, other: Obj): Obj {
-        return invokeInstanceMethod(scope, "div", Arguments(other)) {
+        val otherValue = when (other) {
+            is FrameSlotRef -> other.read()
+            is RecordSlotRef -> other.read()
+            else -> other
+        }
+        val self = when (this) {
+            is FrameSlotRef -> this.read()
+            is RecordSlotRef -> this.read()
+            else -> this
+        }
+        if (self !== this) return self.div(scope, otherValue)
+        return invokeInstanceMethod(scope, "div", Arguments(otherValue)) {
             scope.raiseNotImplemented("div for ${objClass.className}")
         }
     }
 
     open suspend fun mod(scope: Scope, other: Obj): Obj {
-        return invokeInstanceMethod(scope, "mod", Arguments(other)) {
+        val otherValue = when (other) {
+            is FrameSlotRef -> other.read()
+            is RecordSlotRef -> other.read()
+            else -> other
+        }
+        val self = when (this) {
+            is FrameSlotRef -> this.read()
+            is RecordSlotRef -> this.read()
+            else -> this
+        }
+        if (self !== this) return self.mod(scope, otherValue)
+        return invokeInstanceMethod(scope, "mod", Arguments(otherValue)) {
             scope.raiseNotImplemented("mod for ${objClass.className}")
         }
     }
@@ -375,7 +430,7 @@ open class Obj {
      * to generate it as 'this = this + other', reassigning its variable
      */
     open suspend fun plusAssign(scope: Scope, other: Obj): Obj? {
-        val m = objClass.getInstanceMemberOrNull("plusAssign") ?: scope.findExtension(objClass, "plusAssign")
+        val m = objClass.getInstanceMemberOrNull("plusAssign")
         return if (m != null) {
             invokeInstanceMethod(scope, "plusAssign", Arguments(other))
         } else null
@@ -385,28 +440,28 @@ open class Obj {
      * `-=` operations, see [plusAssign]
      */
     open suspend fun minusAssign(scope: Scope, other: Obj): Obj? {
-        val m = objClass.getInstanceMemberOrNull("minusAssign") ?: scope.findExtension(objClass, "minusAssign")
+        val m = objClass.getInstanceMemberOrNull("minusAssign")
         return if (m != null) {
             invokeInstanceMethod(scope, "minusAssign", Arguments(other))
         } else null
     }
 
     open suspend fun mulAssign(scope: Scope, other: Obj): Obj? {
-        val m = objClass.getInstanceMemberOrNull("mulAssign") ?: scope.findExtension(objClass, "mulAssign")
+        val m = objClass.getInstanceMemberOrNull("mulAssign")
         return if (m != null) {
             invokeInstanceMethod(scope, "mulAssign", Arguments(other))
         } else null
     }
 
     open suspend fun divAssign(scope: Scope, other: Obj): Obj? {
-        val m = objClass.getInstanceMemberOrNull("divAssign") ?: scope.findExtension(objClass, "divAssign")
+        val m = objClass.getInstanceMemberOrNull("divAssign")
         return if (m != null) {
             invokeInstanceMethod(scope, "divAssign", Arguments(other))
         } else null
     }
 
     open suspend fun modAssign(scope: Scope, other: Obj): Obj? {
-        val m = objClass.getInstanceMemberOrNull("modAssign") ?: scope.findExtension(objClass, "modAssign")
+        val m = objClass.getInstanceMemberOrNull("modAssign")
         return if (m != null) {
             invokeInstanceMethod(scope, "modAssign", Arguments(other))
         } else null
@@ -447,7 +502,7 @@ open class Obj {
             caller.members[name]?.let { rec ->
                 if (rec.visibility == Visibility.Private && !rec.isAbstract) {
                     val resolved = resolveRecord(scope, rec, name, caller)
-                    if (resolved.type == ObjRecord.Type.Fun && resolved.value is Statement)
+                    if (resolved.type == ObjRecord.Type.Fun)
                         return resolved.copy(value = resolved.value.invoke(scope, this, Arguments.EMPTY, caller))
                     return resolved
                 }
@@ -461,22 +516,13 @@ open class Obj {
             if (rec != null && !rec.isAbstract) {
                 val decl = rec.declaringClass ?: cls
                 val resolved = resolveRecord(scope, rec, name, decl)
-                if (resolved.type == ObjRecord.Type.Fun && resolved.value is Statement)
+                if (resolved.type == ObjRecord.Type.Fun)
                     return resolved.copy(value = resolved.value.invoke(scope, this, Arguments.EMPTY, decl))
                 return resolved
             }
         }
 
-        // 2. Extensions
-        val extension = scope.findExtension(objClass, name)
-        if (extension != null) {
-            val resolved = resolveRecord(scope, extension, name, extension.declaringClass)
-            if (resolved.type == ObjRecord.Type.Fun && resolved.value is Statement)
-                return resolved.copy(value = resolved.value.invoke(scope, this, Arguments.EMPTY, extension.declaringClass))
-            return resolved
-        }
-
-        // 3. Root fallback
+        // 2. Root fallback
         for (cls in objClass.mro) {
             if (cls.className == "Obj") {
                 cls.members[name]?.let { rec ->
@@ -485,10 +531,18 @@ open class Obj {
                     if (!canAccessMember(rec.visibility, decl, caller, name))
                         scope.raiseError(ObjIllegalAccessException(scope, "can't access field ${name}: not visible (declared in ${decl.className}, caller ${caller?.className ?: "?"})"))
                     val resolved = resolveRecord(scope, rec, name, decl)
-                    if (resolved.type == ObjRecord.Type.Fun && resolved.value is Statement)
+                    if (resolved.type == ObjRecord.Type.Fun)
                         return resolved.copy(value = resolved.value.invoke(scope, this, Arguments.EMPTY, decl))
                     return resolved
                 }
+            }
+        }
+        scope.findExtension(objClass, name)?.let { ext ->
+            return if (ext.type == ObjRecord.Type.Property) {
+                val prop = ext.value as ObjProperty
+                ObjRecord(prop.callGetter(scope, this, ext.declaringClass), isMutable = false)
+            } else {
+                ext.copy(value = ext.value.invoke(scope, this, Arguments.EMPTY, ext.declaringClass))
             }
         }
 
@@ -501,14 +555,17 @@ open class Obj {
         if (obj.type == ObjRecord.Type.Delegated) {
             val del = obj.delegate ?: scope.raiseError("Internal error: delegated property $name has no delegate")
             val th = if (this === ObjVoid) ObjNull else this
-            if (del.objClass.getInstanceMemberOrNull("getValue") == null) {
-                val wrapper = object : Statement() {
-                    override val pos: Pos = Pos.builtIn
-                    override suspend fun execute(s: Scope): Obj {
-                        val th2 = if (s.thisObj === ObjVoid) ObjNull else s.thisObj
-                        val allArgs = (listOf(th2, ObjString(name)) + s.args.list).toTypedArray()
-                        return del.invokeInstanceMethod(s, "invoke", Arguments(*allArgs))
-                    }
+            val getValueRec = when (del) {
+                is ObjInstance -> del.methodRecordForKey("getValue")
+                    ?: del.instanceScope.objects["getValue"]
+                    ?: del.objClass.getInstanceMemberOrNull("getValue")
+                else -> del.objClass.getInstanceMemberOrNull("getValue")
+            }
+            if (getValueRec == null || getValueRec.declaringClass?.className == "Delegate") {
+                val wrapper = ObjExternCallable.fromBridge {
+                    val th2 = if (thisObj === ObjVoid) ObjNull else thisObj
+                    val allArgs = (listOf(th2, ObjString(name)) + args.list).toTypedArray()
+                    del.invokeInstanceMethod(requireScope(), "invoke", Arguments(*allArgs))
                 }
                 return obj.copy(
                     value = wrapper,
@@ -516,14 +573,11 @@ open class Obj {
                 )
             }
             val res = del.invokeInstanceMethod(scope, "getValue", Arguments(th, ObjString(name)))
-            return obj.copy(
-                value = res,
-                type = ObjRecord.Type.Other
-            )
+            return obj.copy(value = res, type = ObjRecord.Type.Other)
         }
         val value = obj.value
         if (value is ObjProperty || obj.type == ObjRecord.Type.Property) {
-            val prop = if (value is ObjProperty) value else (value as? Statement)?.execute(scope.createChildScope(scope.pos, newThisObj = this)) as? ObjProperty
+            val prop = (value as? ObjProperty)
                 ?: scope.raiseError("Expected ObjProperty for property member $name, got ${value::class}")
             val res = prop.callGetter(scope, this, decl)
             return ObjRecord(res, obj.isMutable)
@@ -558,11 +612,7 @@ open class Obj {
                 }
             }
         }
-        // 2. Extensions
-        if (field == null) {
-            field = scope.findExtension(objClass, name)
-        }
-        // 3. Root fallback
+        // 2. Root fallback
         if (field == null) {
             for (cls in objClass.mro) {
                 if (cls.className == "Obj") {
@@ -609,16 +659,19 @@ open class Obj {
         scope.raiseNotImplemented()
     }
 
-    suspend fun invoke(scope: Scope, thisObj: Obj, args: Arguments, declaringClass: ObjClass? = null): Obj =
-        if (PerfFlags.SCOPE_POOL)
+    suspend fun invoke(scope: Scope, thisObj: Obj, args: Arguments, declaringClass: ObjClass? = null): Obj {
+        val usePool = PerfFlags.SCOPE_POOL && this !is Statement
+        return if (usePool) {
             scope.withChildFrame(args, newThisObj = thisObj) { child ->
                 if (declaringClass != null) child.currentClassCtx = declaringClass
                 callOn(child)
             }
-        else
+        } else {
             callOn(scope.createChildScope(scope.pos, args = args, newThisObj = thisObj).also {
                 if (declaringClass != null) it.currentClassCtx = declaringClass
             })
+        }
+    }
 
     suspend fun invoke(scope: Scope, thisObj: Obj, vararg args: Obj): Obj =
         callOn(
@@ -687,7 +740,7 @@ open class Obj {
                 returns = type("lyng.String"),
                 moduleName = "lyng.stdlib"
             ) {
-                thisObj.toString(this, true)
+                toStringOf(thisObj, true)
             }
             addFnDoc(
                 name = "inspect",
@@ -695,7 +748,7 @@ open class Obj {
                 returns = type("lyng.String"),
                 moduleName = "lyng.stdlib"
             ) {
-                thisObj.inspect(this).toObj()
+                inspect(thisObj).toObj()
             }
             addFnDoc(
                 name = "contains",
@@ -704,7 +757,7 @@ open class Obj {
                 returns = type("lyng.Bool"),
                 moduleName = "lyng.stdlib"
             ) {
-                ObjBool(thisObj.contains(this, args.firstAndOnly()))
+                ObjBool(thisObj.contains(requireScope(), args.firstAndOnly()))
             }
             // utilities
             addFnDoc(
@@ -713,7 +766,7 @@ open class Obj {
                 params = listOf(ParamDoc("block")),
                 moduleName = "lyng.stdlib"
             ) {
-                args.firstAndOnly().callOn(createChildScope(Arguments(thisObj)))
+                call(args.firstAndOnly(), Arguments(thisObj))
             }
             addFnDoc(
                 name = "apply",
@@ -722,10 +775,12 @@ open class Obj {
                 moduleName = "lyng.stdlib"
             ) {
                 val body = args.firstAndOnly()
+                val scope = requireScope()
                 (thisObj as? ObjInstance)?.let {
-                    body.callOn(ApplyScope(this, it.instanceScope))
+                    body.callOn(ApplyScope(scope, it.instanceScope))
                 } ?: run {
-                    body.callOn(this)
+                    val appliedScope = scope.createChildScope(newThisObj = thisObj)
+                    body.callOn(ApplyScope(scope, appliedScope))
                 }
                 thisObj
             }
@@ -735,7 +790,7 @@ open class Obj {
                 params = listOf(ParamDoc("block")),
                 moduleName = "lyng.stdlib"
             ) {
-                args.firstAndOnly().callOn(createChildScope(Arguments(thisObj)))
+                call(args.firstAndOnly(), Arguments(thisObj))
                 thisObj
             }
             addFnDoc(
@@ -744,17 +799,25 @@ open class Obj {
                 params = listOf(ParamDoc("block")),
                 moduleName = "lyng.stdlib"
             ) {
-                args.firstAndOnly().callOn(this)
+                call(args.firstAndOnly())
             }
             addFn("getAt") {
                 requireExactCount(1)
-                thisObj.getAt(this, requiredArg<Obj>(0))
+                thisObj.getAt(requireScope(), requiredArg<Obj>(0))
             }
             addFn("putAt") {
                 requireExactCount(2)
                 val newValue = args[1]
-                thisObj.putAt(this, requiredArg<Obj>(0), newValue)
+                thisObj.putAt(requireScope(), requiredArg<Obj>(0), newValue)
                 newValue
+            }
+            addFnDoc(
+                name = "toJson",
+                doc = "Encodes this object to JSON.",
+                returns = type("lyng.String"),
+                moduleName = "lyng.stdlib"
+            ) {
+                thisObj.toJson(requireScope()).toString().toObj()
             }
             addFnDoc(
                 name = "toJsonString",
@@ -762,7 +825,7 @@ open class Obj {
                 returns = type("lyng.String"),
                 moduleName = "lyng.stdlib"
             ) {
-                thisObj.toJson(this).toString().toObj()
+                thisObj.toJson(requireScope()).toString().toObj()
             }
             addFnDoc(
                 name = "clamp",
@@ -774,12 +837,12 @@ open class Obj {
 
                 var result = thisObj
                 if (range.start != null && !range.start.isNull) {
-                    if (result.compareTo(this, range.start) < 0) {
+                    if (result.compareTo(requireScope(), range.start) < 0) {
                         result = range.start
                     }
                 }
                 if (range.end != null && !range.end.isNull) {
-                    val cmp = range.end.compareTo(this, result)
+                    val cmp = range.end.compareTo(requireScope(), result)
                     if (range.isEndInclusive) {
                         if (cmp < 0) result = range.end
                     } else {
@@ -914,7 +977,14 @@ object ObjNull : Obj() {
 @Serializable
 @SerialName("unset")
 object ObjUnset : Obj() {
-    override suspend fun compareTo(scope: Scope, other: Obj): Int = if (other === this) 0 else -1
+    override suspend fun compareTo(scope: Scope, other: Obj): Int {
+        val resolved = when (other) {
+            is FrameSlotRef -> other.read()
+            is RecordSlotRef -> other.read()
+            else -> other
+        }
+        return if (resolved === this) 0 else -1
+    }
     override fun equals(other: Any?): Boolean = other === this
     override fun toString(): String = "Unset"
 

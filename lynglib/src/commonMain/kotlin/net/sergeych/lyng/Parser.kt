@@ -358,6 +358,7 @@ private class Parser(fromPos: Pos) {
                             "in" -> Token("in", from, Token.Type.IN)
                             "is" -> Token("is", from, Token.Type.IS)
                             "by" -> Token("by", from, Token.Type.BY)
+                            "step" -> Token("step", from, Token.Type.STEP)
                             "object" -> Token("object", from, Token.Type.OBJECT)
                             "as" -> {
                                 // support both `as` and tight `as?` without spaces

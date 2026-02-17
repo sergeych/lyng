@@ -1,0 +1,4672 @@
+/*
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+package net.sergeych.lyng.bytecode
+
+import net.sergeych.lyng.*
+import net.sergeych.lyng.obj.*
+
+class CmdVm {
+    var result: Obj? = null
+
+    suspend fun execute(
+        fn: CmdFunction,
+        scope0: Scope,
+        args: Arguments,
+        binder: (suspend (CmdFrame, Arguments) -> Unit)? = null
+    ): Obj {
+        result = null
+        val frame = CmdFrame(this, fn, scope0, args.list)
+        frame.applyCaptureRecords()
+        binder?.invoke(frame, args)
+        val cmds = fn.cmds
+        try {
+            while (result == null) {
+                try {
+                    while (result == null) {
+                        val cmd = cmds[frame.ip]
+                        frame.ip += 1
+                        if (cmd.isFast) {
+                            cmd.performFast(frame)
+                        } else {
+                            cmd.perform(frame)
+                        }
+                    }
+                } catch (e: Throwable) {
+                    if (!frame.handleException(e)) {
+                        frame.cancelIterators()
+                        throw e
+                    }
+                }
+            }
+        } catch (e: Throwable) {
+            frame.cancelIterators()
+            throw e
+        }
+        frame.cancelIterators()
+        return result ?: ObjVoid
+    }
+
+    suspend fun execute(fn: CmdFunction, scope0: Scope, args: List<Obj>): Obj {
+        return execute(fn, scope0, Arguments.from(args))
+    }
+}
+
+sealed class Cmd {
+    open val isFast: Boolean = false
+    open fun performFast(frame: CmdFrame) {
+        error("fast command not supported: ${this::class.simpleName}")
+    }
+    open suspend fun perform(frame: CmdFrame) {
+        error("slow command not supported: ${this::class.simpleName}")
+    }
+}
+
+class CmdNop : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        return
+    }
+}
+
+class CmdMoveObj(internal val src: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val value = frame.slotToObj(src)
+        if (frame.shouldBypassImmutableWrite(dst)) {
+            frame.setObjUnchecked(dst, value)
+        } else {
+            frame.setObj(dst, value)
+        }
+        return
+    }
+}
+
+class CmdMoveInt(internal val src: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val value = frame.getInt(src)
+        if (frame.shouldBypassImmutableWrite(dst)) {
+            frame.setIntUnchecked(dst, value)
+        } else {
+            frame.setInt(dst, value)
+        }
+        return
+    }
+}
+
+class CmdMoveIntLocal(internal val src: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalInt(dst, frame.getLocalInt(src))
+        return
+    }
+}
+
+class CmdMoveReal(internal val src: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val value = frame.getReal(src)
+        if (frame.shouldBypassImmutableWrite(dst)) {
+            frame.setRealUnchecked(dst, value)
+        } else {
+            frame.setReal(dst, value)
+        }
+        return
+    }
+}
+
+class CmdMoveRealLocal(internal val src: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalReal(dst, frame.getLocalReal(src))
+        return
+    }
+}
+
+class CmdMoveBool(internal val src: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val value = frame.getBool(src)
+        if (frame.shouldBypassImmutableWrite(dst)) {
+            frame.setBoolUnchecked(dst, value)
+        } else {
+            frame.setBool(dst, value)
+        }
+        return
+    }
+}
+
+class CmdMoveBoolLocal(internal val src: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalBool(src))
+        return
+    }
+}
+
+class CmdConstObj(internal val constId: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        when (val c = frame.fn.constants[constId]) {
+            is BytecodeConst.ObjRef -> {
+                val obj = c.value
+                when (obj) {
+                    is ObjInt -> frame.setInt(dst, obj.value)
+                    is ObjReal -> frame.setReal(dst, obj.value)
+                    is ObjBool -> frame.setBool(dst, obj.value)
+                    else -> frame.setObj(dst, obj)
+                }
+            }
+            is BytecodeConst.StringVal -> frame.setObj(dst, ObjString(c.value))
+            else -> error("CONST_OBJ expects ObjRef/StringVal at $constId")
+        }
+        return
+    }
+}
+
+class CmdConstInt(internal val constId: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val c = frame.fn.constants[constId] as? BytecodeConst.IntVal
+            ?: error("CONST_INT expects IntVal at $constId")
+        frame.setInt(dst, c.value)
+        return
+    }
+}
+
+class CmdConstIntLocal(internal val constId: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val c = frame.fn.constants[constId] as? BytecodeConst.IntVal
+            ?: error("CONST_INT expects IntVal at $constId")
+        frame.setLocalInt(dst, c.value)
+        return
+    }
+}
+
+class CmdConstReal(internal val constId: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val c = frame.fn.constants[constId] as? BytecodeConst.RealVal
+            ?: error("CONST_REAL expects RealVal at $constId")
+        frame.setReal(dst, c.value)
+        return
+    }
+}
+
+class CmdConstBool(internal val constId: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val c = frame.fn.constants[constId] as? BytecodeConst.Bool
+            ?: error("CONST_BOOL expects Bool at $constId")
+        frame.setBool(dst, c.value)
+        return
+    }
+}
+
+class CmdLoadThis(internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setObj(dst, frame.ensureScope().thisObj)
+        return
+    }
+}
+
+class CmdLoadThisVariant(
+    internal val typeId: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val typeConst = frame.fn.constants.getOrNull(typeId) as? BytecodeConst.StringVal
+            ?: error("LOAD_THIS_VARIANT expects StringVal at $typeId")
+        val typeName = typeConst.value
+        val receiver = frame.ensureScope().thisVariants.firstOrNull { it.isInstanceOf(typeName) }
+            ?: frame.ensureScope().raiseClassCastError("Cannot cast ${frame.ensureScope().thisObj.objClass.className} to $typeName")
+        frame.setObj(dst, receiver)
+        return
+    }
+}
+
+class CmdMakeRange(
+    internal val startSlot: Int,
+    internal val endSlot: Int,
+    internal val inclusiveSlot: Int,
+    internal val stepSlot: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val start = frame.slotToObj(startSlot)
+        val end = frame.slotToObj(endSlot)
+        val inclusive = frame.slotToObj(inclusiveSlot).toBool()
+        val stepObj = frame.slotToObj(stepSlot)
+        val step = if (stepObj.isNull) null else stepObj
+        frame.storeObjResult(dst, ObjRange(start, end, isEndInclusive = inclusive, step = step))
+        return
+    }
+}
+
+class CmdConstNull(internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setObj(dst, ObjNull)
+        return
+    }
+}
+
+class CmdBoxObj(internal val src: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setObj(dst, frame.slotToObj(src))
+        return
+    }
+}
+
+class CmdUnboxIntObj(internal val src: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val value = frame.slotToObj(src) as ObjInt
+        frame.setInt(dst, value.value)
+        return
+    }
+}
+
+class CmdUnboxIntObjLocal(internal val src: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val value = frame.frame.getRawObj(src) as ObjInt
+        frame.setLocalInt(dst, value.value)
+        return
+    }
+}
+
+class CmdUnboxRealObj(internal val src: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val value = frame.slotToObj(src) as ObjReal
+        frame.setReal(dst, value.value)
+        return
+    }
+}
+
+class CmdUnboxRealObjLocal(internal val src: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val value = frame.frame.getRawObj(src) as ObjReal
+        frame.setLocalReal(dst, value.value)
+        return
+    }
+}
+
+class CmdObjToBool(internal val src: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.slotToObj(src).toBool())
+        return
+    }
+}
+
+class CmdGetObjClass(internal val src: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val cls = frame.slotToObj(src).objClass
+        frame.setObj(dst, cls)
+        return
+    }
+}
+
+class CmdCheckIs(internal val objSlot: Int, internal val typeSlot: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val obj = frame.slotToObj(objSlot)
+        val typeObj = frame.slotToObj(typeSlot)
+        val result = when {
+            (obj is ObjTypeExpr || obj is ObjClass) && (typeObj is ObjTypeExpr || typeObj is ObjClass) -> {
+                val leftDecl = typeDeclFromObj(frame.ensureScope(), obj) ?: return frame.setBool(dst, false)
+                val rightDecl = typeDeclFromObj(frame.ensureScope(), typeObj) ?: return frame.setBool(dst, false)
+                typeDeclIsSubtype(frame.ensureScope(), leftDecl, rightDecl)
+            }
+            typeObj is ObjTypeExpr -> matchesTypeDecl(frame.ensureScope(), obj, typeObj.typeDecl)
+            typeObj is ObjClass -> obj.isInstanceOf(typeObj)
+            else -> false
+        }
+        frame.setBool(dst, result)
+        return
+    }
+}
+
+class CmdAssertIs(internal val objSlot: Int, internal val typeSlot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val obj = frame.slotToObj(objSlot)
+        val typeObj = frame.slotToObj(typeSlot)
+        when (typeObj) {
+            is ObjClass -> {
+                if (!obj.isInstanceOf(typeObj)) {
+                    frame.ensureScope().raiseClassCastError(
+                        "Cannot cast ${obj.objClass.className} to ${typeObj.className}"
+                    )
+                }
+            }
+            is ObjTypeExpr -> {
+                if (!matchesTypeDecl(frame.ensureScope(), obj, typeObj.typeDecl)) {
+                    frame.ensureScope().raiseClassCastError(
+                        "Cannot cast ${obj.objClass.className} to ${typeObj.typeDecl}"
+                    )
+                }
+            }
+            else -> frame.ensureScope().raiseClassCastError(
+                "${typeObj.inspect(frame.ensureScope())} is not the class instance"
+            )
+        }
+        return
+    }
+}
+
+class CmdMakeQualifiedView(
+    internal val objSlot: Int,
+    internal val typeSlot: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val obj0 = frame.slotToObj(objSlot)
+        val typeObj = frame.slotToObj(typeSlot)
+        val base = when (obj0) {
+            is ObjQualifiedView -> obj0.instance
+            else -> obj0
+        }
+        val result = when (typeObj) {
+            is ObjClass -> {
+                if (base is ObjInstance && base.isInstanceOf(typeObj)) {
+                    ObjQualifiedView(base, typeObj)
+                } else {
+                    base
+                }
+            }
+            is ObjTypeExpr -> base
+            else -> frame.ensureScope().raiseClassCastError(
+                "${typeObj.inspect(frame.ensureScope())} is not the class instance"
+            )
+        }
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
+class CmdRangeIntBounds(
+    internal val src: Int,
+    internal val startSlot: Int,
+    internal val endSlot: Int,
+    internal val okSlot: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val obj = frame.slotToObj(src)
+        val range = obj as? ObjRange
+        if (range == null || !range.isIntRange) {
+            frame.setBool(okSlot, false)
+            return
+        }
+        val start = (range.start as ObjInt).value
+        val end = (range.end as ObjInt).value
+        frame.setInt(startSlot, start)
+        frame.setInt(endSlot, if (range.isEndInclusive) end + 1 else end)
+        frame.setBool(okSlot, true)
+        return
+    }
+}
+
+class CmdResolveScopeSlot(internal val scopeSlot: Int, internal val addrSlot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.resolveScopeSlotAddr(scopeSlot, addrSlot)
+        return
+    }
+}
+
+class CmdLoadObjAddr(internal val addrSlot: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val value = frame.getAddrObj(addrSlot)
+        if (frame.shouldBypassImmutableWrite(dst)) {
+            frame.setObjUnchecked(dst, value)
+        } else {
+            frame.setObj(dst, value)
+        }
+        return
+    }
+}
+
+class CmdStoreObjAddr(internal val src: Int, internal val addrSlot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setAddrObj(addrSlot, frame.slotToObj(src))
+        return
+    }
+}
+
+class CmdLoadIntAddr(internal val addrSlot: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val value = frame.getAddrInt(addrSlot)
+        if (frame.shouldBypassImmutableWrite(dst)) {
+            frame.setIntUnchecked(dst, value)
+        } else {
+            frame.setInt(dst, value)
+        }
+        return
+    }
+}
+
+class CmdStoreIntAddr(internal val src: Int, internal val addrSlot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setAddrInt(addrSlot, frame.getInt(src))
+        return
+    }
+}
+
+class CmdLoadRealAddr(internal val addrSlot: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val value = frame.getAddrReal(addrSlot)
+        if (frame.shouldBypassImmutableWrite(dst)) {
+            frame.setRealUnchecked(dst, value)
+        } else {
+            frame.setReal(dst, value)
+        }
+        return
+    }
+}
+
+class CmdStoreRealAddr(internal val src: Int, internal val addrSlot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setAddrReal(addrSlot, frame.getReal(src))
+        return
+    }
+}
+
+class CmdLoadBoolAddr(internal val addrSlot: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val value = frame.getAddrBool(addrSlot)
+        if (frame.shouldBypassImmutableWrite(dst)) {
+            frame.setBoolUnchecked(dst, value)
+        } else {
+            frame.setBool(dst, value)
+        }
+        return
+    }
+}
+
+class CmdStoreBoolAddr(internal val src: Int, internal val addrSlot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setAddrBool(addrSlot, frame.getBool(src))
+        return
+    }
+}
+
+class CmdDelegatedGetLocal(
+    internal val delegateSlot: Int,
+    internal val nameId: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
+            ?: error("DELEGATED_GET_LOCAL expects StringVal at $nameId")
+        val delegate = frame.slotToObj(delegateSlot)
+        val scope = frame.ensureScope()
+        val rec = ObjRecord(ObjNull, isMutable = false, type = ObjRecord.Type.Delegated)
+        rec.delegate = delegate
+        val resolved = ObjVoid.resolveRecord(scope, rec, nameConst.value, null)
+        frame.storeObjResult(dst, resolved.value)
+        return
+    }
+}
+
+class CmdDelegatedSetLocal(
+    internal val delegateSlot: Int,
+    internal val nameId: Int,
+    internal val valueSlot: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
+            ?: error("DELEGATED_SET_LOCAL expects StringVal at $nameId")
+        val delegate = frame.slotToObj(delegateSlot)
+        val scope = frame.ensureScope()
+        val value = frame.slotToObj(valueSlot)
+        delegate.invokeInstanceMethod(scope, "setValue", Arguments(ObjNull, ObjString(nameConst.value), value))
+        return
+    }
+}
+
+class CmdBindDelegateLocal(
+    internal val delegateSlot: Int,
+    internal val nameId: Int,
+    internal val accessId: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
+            ?: error("BIND_DELEGATE_LOCAL expects StringVal at $nameId")
+        val accessConst = frame.fn.constants.getOrNull(accessId) as? BytecodeConst.StringVal
+            ?: error("BIND_DELEGATE_LOCAL expects StringVal at $accessId")
+        val delegate = frame.slotToObj(delegateSlot)
+        val scope = frame.ensureScope()
+        val bound = try {
+            delegate.invokeInstanceMethod(
+                scope,
+                "bind",
+                Arguments(ObjString(nameConst.value), ObjString(accessConst.value), ObjNull)
+            )
+        } catch (_: Exception) {
+            delegate
+        }
+        frame.storeObjResult(dst, bound)
+        return
+    }
+}
+
+class CmdIntToReal(internal val src: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setReal(dst, frame.getReal(src))
+        return
+    }
+}
+
+class CmdIntToRealLocal(internal val src: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val value = frame.getLocalObjRealValue(src)
+        frame.setLocalReal(dst, value)
+        return
+    }
+}
+
+class CmdRealToInt(internal val src: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setInt(dst, frame.getReal(src).toLong())
+        return
+    }
+}
+
+class CmdRealToIntLocal(internal val src: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalInt(dst, frame.getLocalReal(src).toLong())
+        return
+    }
+}
+
+class CmdBoolToInt(internal val src: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setInt(dst, if (frame.getBool(src)) 1L else 0L)
+        return
+    }
+}
+
+class CmdBoolToIntLocal(internal val src: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalInt(dst, if (frame.getLocalBool(src)) 1L else 0L)
+        return
+    }
+}
+
+class CmdIntToBool(internal val src: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getBool(src))
+        return
+    }
+}
+
+class CmdIntToBoolLocal(internal val src: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalInt(src) != 0L)
+        return
+    }
+}
+
+class CmdAddInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setInt(dst, frame.getInt(a) + frame.getInt(b))
+        return
+    }
+}
+
+class CmdAddIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalInt(dst, frame.getLocalInt(a) + frame.getLocalInt(b))
+        return
+    }
+}
+
+class CmdSubInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setInt(dst, frame.getInt(a) - frame.getInt(b))
+        return
+    }
+}
+
+class CmdSubIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalInt(dst, frame.getLocalInt(a) - frame.getLocalInt(b))
+        return
+    }
+}
+
+class CmdMulInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setInt(dst, frame.getInt(a) * frame.getInt(b))
+        return
+    }
+}
+
+class CmdMulIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalInt(dst, frame.getLocalInt(a) * frame.getLocalInt(b))
+        return
+    }
+}
+
+class CmdDivInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setInt(dst, frame.getInt(a) / frame.getInt(b))
+        return
+    }
+}
+
+class CmdDivIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalInt(dst, frame.getLocalInt(a) / frame.getLocalInt(b))
+        return
+    }
+}
+
+class CmdModInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setInt(dst, frame.getInt(a) % frame.getInt(b))
+        return
+    }
+}
+
+class CmdModIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalInt(dst, frame.getLocalInt(a) % frame.getLocalInt(b))
+        return
+    }
+}
+
+class CmdNegInt(internal val src: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setInt(dst, -frame.getInt(src))
+        return
+    }
+}
+
+class CmdNegIntLocal(internal val src: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalInt(dst, -frame.getLocalInt(src))
+        return
+    }
+}
+
+class CmdIncInt(internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setInt(slot, frame.getInt(slot) + 1L)
+        return
+    }
+}
+
+class CmdIncIntLocal(internal val slot: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalInt(slot, frame.getLocalInt(slot) + 1L)
+        return
+    }
+}
+
+class CmdDecInt(internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setInt(slot, frame.getInt(slot) - 1L)
+        return
+    }
+}
+
+class CmdDecIntLocal(internal val slot: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalInt(slot, frame.getLocalInt(slot) - 1L)
+        return
+    }
+}
+
+class CmdAddReal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setReal(dst, frame.getReal(a) + frame.getReal(b))
+        return
+    }
+}
+
+class CmdAddRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalReal(dst, frame.getLocalReal(a) + frame.getLocalReal(b))
+        return
+    }
+}
+
+class CmdSubReal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setReal(dst, frame.getReal(a) - frame.getReal(b))
+        return
+    }
+}
+
+class CmdSubRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalReal(dst, frame.getLocalReal(a) - frame.getLocalReal(b))
+        return
+    }
+}
+
+class CmdMulReal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setReal(dst, frame.getReal(a) * frame.getReal(b))
+        return
+    }
+}
+
+class CmdMulRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalReal(dst, frame.getLocalReal(a) * frame.getLocalReal(b))
+        return
+    }
+}
+
+class CmdDivReal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setReal(dst, frame.getReal(a) / frame.getReal(b))
+        return
+    }
+}
+
+class CmdDivRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalReal(dst, frame.getLocalReal(a) / frame.getLocalReal(b))
+        return
+    }
+}
+
+class CmdNegReal(internal val src: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setReal(dst, -frame.getReal(src))
+        return
+    }
+}
+
+class CmdNegRealLocal(internal val src: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalReal(dst, -frame.getLocalReal(src))
+        return
+    }
+}
+
+class CmdAndInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setInt(dst, frame.getInt(a) and frame.getInt(b))
+        return
+    }
+}
+
+class CmdAndIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalInt(dst, frame.getLocalInt(a) and frame.getLocalInt(b))
+        return
+    }
+}
+
+class CmdOrInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setInt(dst, frame.getInt(a) or frame.getInt(b))
+        return
+    }
+}
+
+class CmdOrIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalInt(dst, frame.getLocalInt(a) or frame.getLocalInt(b))
+        return
+    }
+}
+
+class CmdXorInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setInt(dst, frame.getInt(a) xor frame.getInt(b))
+        return
+    }
+}
+
+class CmdXorIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalInt(dst, frame.getLocalInt(a) xor frame.getLocalInt(b))
+        return
+    }
+}
+
+class CmdShlInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setInt(dst, frame.getInt(a) shl frame.getInt(b).toInt())
+        return
+    }
+}
+
+class CmdShlIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalInt(dst, frame.getLocalInt(a) shl frame.getLocalInt(b).toInt())
+        return
+    }
+}
+
+class CmdShrInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setInt(dst, frame.getInt(a) shr frame.getInt(b).toInt())
+        return
+    }
+}
+
+class CmdShrIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalInt(dst, frame.getLocalInt(a) shr frame.getLocalInt(b).toInt())
+        return
+    }
+}
+
+class CmdUshrInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setInt(dst, frame.getInt(a) ushr frame.getInt(b).toInt())
+        return
+    }
+}
+
+class CmdUshrIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalInt(dst, frame.getLocalInt(a) ushr frame.getLocalInt(b).toInt())
+        return
+    }
+}
+
+class CmdInvInt(internal val src: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setInt(dst, frame.getInt(src).inv())
+        return
+    }
+}
+
+class CmdInvIntLocal(internal val src: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalInt(dst, frame.getLocalInt(src).inv())
+        return
+    }
+}
+class CmdCmpEqInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getInt(a) == frame.getInt(b))
+        return
+    }
+}
+
+class CmdCmpEqIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalInt(a) == frame.getLocalInt(b))
+        return
+    }
+}
+
+class CmdCmpNeqInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getInt(a) != frame.getInt(b))
+        return
+    }
+}
+
+class CmdCmpNeqIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalInt(a) != frame.getLocalInt(b))
+        return
+    }
+}
+
+class CmdCmpLtInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getInt(a) < frame.getInt(b))
+        return
+    }
+}
+
+class CmdCmpLtIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalInt(a) < frame.getLocalInt(b))
+        return
+    }
+}
+
+class CmdCmpLteInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getInt(a) <= frame.getInt(b))
+        return
+    }
+}
+
+class CmdCmpLteIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalInt(a) <= frame.getLocalInt(b))
+        return
+    }
+}
+
+class CmdCmpGtInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getInt(a) > frame.getInt(b))
+        return
+    }
+}
+
+class CmdCmpGtIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalInt(a) > frame.getLocalInt(b))
+        return
+    }
+}
+
+class CmdCmpGteInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getInt(a) >= frame.getInt(b))
+        return
+    }
+}
+
+class CmdCmpGteIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalInt(a) >= frame.getLocalInt(b))
+        return
+    }
+}
+
+class CmdCmpEqReal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getReal(a) == frame.getReal(b))
+        return
+    }
+}
+
+class CmdCmpEqRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalReal(a) == frame.getLocalReal(b))
+        return
+    }
+}
+
+class CmdCmpNeqReal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getReal(a) != frame.getReal(b))
+        return
+    }
+}
+
+class CmdCmpNeqRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalReal(a) != frame.getLocalReal(b))
+        return
+    }
+}
+
+class CmdCmpLtReal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getReal(a) < frame.getReal(b))
+        return
+    }
+}
+
+class CmdCmpLtRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalReal(a) < frame.getLocalReal(b))
+        return
+    }
+}
+
+class CmdCmpLteReal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getReal(a) <= frame.getReal(b))
+        return
+    }
+}
+
+class CmdCmpLteRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalReal(a) <= frame.getLocalReal(b))
+        return
+    }
+}
+
+class CmdCmpGtReal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getReal(a) > frame.getReal(b))
+        return
+    }
+}
+
+class CmdCmpGtRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalReal(a) > frame.getLocalReal(b))
+        return
+    }
+}
+
+class CmdCmpGteReal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getReal(a) >= frame.getReal(b))
+        return
+    }
+}
+
+class CmdCmpGteRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalReal(a) >= frame.getLocalReal(b))
+        return
+    }
+}
+
+class CmdCmpEqBool(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getBool(a) == frame.getBool(b))
+        return
+    }
+}
+
+class CmdCmpEqBoolLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalBool(a) == frame.getLocalBool(b))
+        return
+    }
+}
+
+class CmdCmpNeqBool(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getBool(a) != frame.getBool(b))
+        return
+    }
+}
+
+class CmdCmpNeqBoolLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalBool(a) != frame.getLocalBool(b))
+        return
+    }
+}
+
+class CmdCmpEqIntReal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getInt(a).toDouble() == frame.getReal(b))
+        return
+    }
+}
+
+class CmdCmpEqIntRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalInt(a).toDouble() == frame.getLocalReal(b))
+        return
+    }
+}
+
+class CmdCmpEqRealInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getReal(a) == frame.getInt(b).toDouble())
+        return
+    }
+}
+
+class CmdCmpEqRealIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalReal(a) == frame.getLocalInt(b).toDouble())
+        return
+    }
+}
+
+class CmdCmpLtIntReal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getInt(a).toDouble() < frame.getReal(b))
+        return
+    }
+}
+
+class CmdCmpLtIntRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalInt(a).toDouble() < frame.getLocalReal(b))
+        return
+    }
+}
+
+class CmdCmpLtRealInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getReal(a) < frame.getInt(b).toDouble())
+        return
+    }
+}
+
+class CmdCmpLtRealIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalReal(a) < frame.getLocalInt(b).toDouble())
+        return
+    }
+}
+
+class CmdCmpLteIntReal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getInt(a).toDouble() <= frame.getReal(b))
+        return
+    }
+}
+
+class CmdCmpLteIntRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalInt(a).toDouble() <= frame.getLocalReal(b))
+        return
+    }
+}
+
+class CmdCmpLteRealInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getReal(a) <= frame.getInt(b).toDouble())
+        return
+    }
+}
+
+class CmdCmpLteRealIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalReal(a) <= frame.getLocalInt(b).toDouble())
+        return
+    }
+}
+
+class CmdCmpGtIntReal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getInt(a).toDouble() > frame.getReal(b))
+        return
+    }
+}
+
+class CmdCmpGtIntRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalInt(a).toDouble() > frame.getLocalReal(b))
+        return
+    }
+}
+
+class CmdCmpGtRealInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getReal(a) > frame.getInt(b).toDouble())
+        return
+    }
+}
+
+class CmdCmpGtRealIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalReal(a) > frame.getLocalInt(b).toDouble())
+        return
+    }
+}
+
+class CmdCmpGteIntReal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getInt(a).toDouble() >= frame.getReal(b))
+        return
+    }
+}
+
+class CmdCmpGteIntRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalInt(a).toDouble() >= frame.getLocalReal(b))
+        return
+    }
+}
+
+class CmdCmpGteRealInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getReal(a) >= frame.getInt(b).toDouble())
+        return
+    }
+}
+
+class CmdCmpGteRealIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalReal(a) >= frame.getLocalInt(b).toDouble())
+        return
+    }
+}
+
+class CmdCmpNeqIntReal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getInt(a).toDouble() != frame.getReal(b))
+        return
+    }
+}
+
+class CmdCmpNeqIntRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalInt(a).toDouble() != frame.getLocalReal(b))
+        return
+    }
+}
+
+class CmdCmpNeqRealInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getReal(a) != frame.getInt(b).toDouble())
+        return
+    }
+}
+
+class CmdCmpNeqRealIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalReal(a) != frame.getLocalInt(b).toDouble())
+        return
+    }
+}
+
+class CmdCmpEqObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a)
+        val right = frame.slotToObj(b)
+        frame.setBool(dst, left.equals(frame.ensureScope(), right))
+        return
+    }
+}
+
+class CmdCmpNeqObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a)
+        val right = frame.slotToObj(b)
+        frame.setBool(dst, !left.equals(frame.ensureScope(), right))
+        return
+    }
+}
+
+class CmdCmpRefEqObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.slotToObj(a) === frame.slotToObj(b))
+        return
+    }
+}
+
+class CmdCmpRefNeqObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.slotToObj(a) !== frame.slotToObj(b))
+        return
+    }
+}
+
+class CmdCmpEqStr(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a)
+        val right = frame.slotToObj(b)
+        if (left is ObjString && right is ObjString) {
+            frame.setBool(dst, left.value == right.value)
+            return
+        }
+        frame.setBool(dst, left.equals(frame.ensureScope(), right))
+        return
+    }
+}
+
+class CmdCmpEqStrLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.frame.getRawObj(a) as ObjString
+        val right = frame.frame.getRawObj(b) as ObjString
+        frame.setLocalBool(dst, left.value == right.value)
+        return
+    }
+}
+
+class CmdCmpNeqStr(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a)
+        val right = frame.slotToObj(b)
+        if (left is ObjString && right is ObjString) {
+            frame.setBool(dst, left.value != right.value)
+            return
+        }
+        frame.setBool(dst, !left.equals(frame.ensureScope(), right))
+        return
+    }
+}
+
+class CmdCmpNeqStrLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.frame.getRawObj(a) as ObjString
+        val right = frame.frame.getRawObj(b) as ObjString
+        frame.setLocalBool(dst, left.value != right.value)
+        return
+    }
+}
+
+class CmdCmpLtStr(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a)
+        val right = frame.slotToObj(b)
+        if (left is ObjString && right is ObjString) {
+            frame.setBool(dst, left.value < right.value)
+            return
+        }
+        frame.setBool(dst, left.compareTo(frame.ensureScope(), right) < 0)
+        return
+    }
+}
+
+class CmdCmpLtStrLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.frame.getRawObj(a) as ObjString
+        val right = frame.frame.getRawObj(b) as ObjString
+        frame.setLocalBool(dst, left.value < right.value)
+        return
+    }
+}
+
+class CmdCmpLteStr(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a)
+        val right = frame.slotToObj(b)
+        if (left is ObjString && right is ObjString) {
+            frame.setBool(dst, left.value <= right.value)
+            return
+        }
+        frame.setBool(dst, left.compareTo(frame.ensureScope(), right) <= 0)
+        return
+    }
+}
+
+class CmdCmpLteStrLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.frame.getRawObj(a) as ObjString
+        val right = frame.frame.getRawObj(b) as ObjString
+        frame.setLocalBool(dst, left.value <= right.value)
+        return
+    }
+}
+
+class CmdCmpGtStr(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a)
+        val right = frame.slotToObj(b)
+        if (left is ObjString && right is ObjString) {
+            frame.setBool(dst, left.value > right.value)
+            return
+        }
+        frame.setBool(dst, left.compareTo(frame.ensureScope(), right) > 0)
+        return
+    }
+}
+
+class CmdCmpGtStrLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.frame.getRawObj(a) as ObjString
+        val right = frame.frame.getRawObj(b) as ObjString
+        frame.setLocalBool(dst, left.value > right.value)
+        return
+    }
+}
+
+class CmdCmpGteStr(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a)
+        val right = frame.slotToObj(b)
+        if (left is ObjString && right is ObjString) {
+            frame.setBool(dst, left.value >= right.value)
+            return
+        }
+        frame.setBool(dst, left.compareTo(frame.ensureScope(), right) >= 0)
+        return
+    }
+}
+
+class CmdCmpGteStrLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.frame.getRawObj(a) as ObjString
+        val right = frame.frame.getRawObj(b) as ObjString
+        frame.setLocalBool(dst, left.value >= right.value)
+        return
+    }
+}
+
+class CmdCmpEqIntObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a)
+        val right = frame.slotToObj(b)
+        if (left is ObjInt && right is ObjInt) {
+            frame.setBool(dst, left.value == right.value)
+            return
+        }
+        frame.setBool(dst, left.equals(frame.ensureScope(), right))
+        return
+    }
+}
+
+class CmdCmpEqIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.frame.getRawObj(a) as ObjInt
+        val right = frame.frame.getRawObj(b) as ObjInt
+        frame.setLocalBool(dst, left.value == right.value)
+        return
+    }
+}
+
+class CmdCmpNeqIntObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a)
+        val right = frame.slotToObj(b)
+        if (left is ObjInt && right is ObjInt) {
+            frame.setBool(dst, left.value != right.value)
+            return
+        }
+        frame.setBool(dst, !left.equals(frame.ensureScope(), right))
+        return
+    }
+}
+
+class CmdCmpNeqIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.frame.getRawObj(a) as ObjInt
+        val right = frame.frame.getRawObj(b) as ObjInt
+        frame.setLocalBool(dst, left.value != right.value)
+        return
+    }
+}
+
+class CmdCmpLtIntObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a)
+        val right = frame.slotToObj(b)
+        if (left is ObjInt && right is ObjInt) {
+            frame.setBool(dst, left.value < right.value)
+            return
+        }
+        frame.setBool(dst, left.compareTo(frame.ensureScope(), right) < 0)
+        return
+    }
+}
+
+class CmdCmpLtIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.frame.getRawObj(a) as ObjInt
+        val right = frame.frame.getRawObj(b) as ObjInt
+        frame.setLocalBool(dst, left.value < right.value)
+        return
+    }
+}
+
+class CmdCmpLteIntObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a)
+        val right = frame.slotToObj(b)
+        if (left is ObjInt && right is ObjInt) {
+            frame.setBool(dst, left.value <= right.value)
+            return
+        }
+        frame.setBool(dst, left.compareTo(frame.ensureScope(), right) <= 0)
+        return
+    }
+}
+
+class CmdCmpLteIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.frame.getRawObj(a) as ObjInt
+        val right = frame.frame.getRawObj(b) as ObjInt
+        frame.setLocalBool(dst, left.value <= right.value)
+        return
+    }
+}
+
+class CmdCmpGtIntObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a)
+        val right = frame.slotToObj(b)
+        if (left is ObjInt && right is ObjInt) {
+            frame.setBool(dst, left.value > right.value)
+            return
+        }
+        frame.setBool(dst, left.compareTo(frame.ensureScope(), right) > 0)
+        return
+    }
+}
+
+class CmdCmpGtIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.frame.getRawObj(a) as ObjInt
+        val right = frame.frame.getRawObj(b) as ObjInt
+        frame.setLocalBool(dst, left.value > right.value)
+        return
+    }
+}
+
+class CmdCmpGteIntObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a)
+        val right = frame.slotToObj(b)
+        if (left is ObjInt && right is ObjInt) {
+            frame.setBool(dst, left.value >= right.value)
+            return
+        }
+        frame.setBool(dst, left.compareTo(frame.ensureScope(), right) >= 0)
+        return
+    }
+}
+
+class CmdCmpGteIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.frame.getRawObj(a) as ObjInt
+        val right = frame.frame.getRawObj(b) as ObjInt
+        frame.setLocalBool(dst, left.value >= right.value)
+        return
+    }
+}
+
+class CmdCmpEqRealObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a)
+        val right = frame.slotToObj(b)
+        if (left is ObjReal && right is ObjReal) {
+            frame.setBool(dst, left.value == right.value)
+            return
+        }
+        frame.setBool(dst, left.equals(frame.ensureScope(), right))
+        return
+    }
+}
+
+class CmdCmpEqRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.frame.getRawObj(a) as ObjReal
+        val right = frame.frame.getRawObj(b) as ObjReal
+        frame.setLocalBool(dst, left.value == right.value)
+        return
+    }
+}
+
+class CmdCmpNeqRealObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a)
+        val right = frame.slotToObj(b)
+        if (left is ObjReal && right is ObjReal) {
+            frame.setBool(dst, left.value != right.value)
+            return
+        }
+        frame.setBool(dst, !left.equals(frame.ensureScope(), right))
+        return
+    }
+}
+
+class CmdCmpNeqRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.frame.getRawObj(a) as ObjReal
+        val right = frame.frame.getRawObj(b) as ObjReal
+        frame.setLocalBool(dst, left.value != right.value)
+        return
+    }
+}
+
+class CmdCmpLtRealObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a)
+        val right = frame.slotToObj(b)
+        if (left is ObjReal && right is ObjReal) {
+            frame.setBool(dst, left.value < right.value)
+            return
+        }
+        frame.setBool(dst, left.compareTo(frame.ensureScope(), right) < 0)
+        return
+    }
+}
+
+class CmdCmpLtRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.frame.getRawObj(a) as ObjReal
+        val right = frame.frame.getRawObj(b) as ObjReal
+        frame.setLocalBool(dst, left.value < right.value)
+        return
+    }
+}
+
+class CmdCmpLteRealObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a)
+        val right = frame.slotToObj(b)
+        if (left is ObjReal && right is ObjReal) {
+            frame.setBool(dst, left.value <= right.value)
+            return
+        }
+        frame.setBool(dst, left.compareTo(frame.ensureScope(), right) <= 0)
+        return
+    }
+}
+
+class CmdCmpLteRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.frame.getRawObj(a) as ObjReal
+        val right = frame.frame.getRawObj(b) as ObjReal
+        frame.setLocalBool(dst, left.value <= right.value)
+        return
+    }
+}
+
+class CmdCmpGtRealObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a)
+        val right = frame.slotToObj(b)
+        if (left is ObjReal && right is ObjReal) {
+            frame.setBool(dst, left.value > right.value)
+            return
+        }
+        frame.setBool(dst, left.compareTo(frame.ensureScope(), right) > 0)
+        return
+    }
+}
+
+class CmdCmpGtRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.frame.getRawObj(a) as ObjReal
+        val right = frame.frame.getRawObj(b) as ObjReal
+        frame.setLocalBool(dst, left.value > right.value)
+        return
+    }
+}
+
+class CmdCmpGteRealObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a)
+        val right = frame.slotToObj(b)
+        if (left is ObjReal && right is ObjReal) {
+            frame.setBool(dst, left.value >= right.value)
+            return
+        }
+        frame.setBool(dst, left.compareTo(frame.ensureScope(), right) >= 0)
+        return
+    }
+}
+
+class CmdCmpGteRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.frame.getRawObj(a) as ObjReal
+        val right = frame.frame.getRawObj(b) as ObjReal
+        frame.setLocalBool(dst, left.value >= right.value)
+        return
+    }
+}
+
+class CmdNotBool(internal val src: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, !frame.getBool(src))
+        return
+    }
+}
+
+class CmdNotBoolLocal(internal val src: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, !frame.getLocalBool(src))
+        return
+    }
+}
+
+class CmdAndBool(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getBool(a) && frame.getBool(b))
+        return
+    }
+}
+
+class CmdAndBoolLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalBool(a) && frame.getLocalBool(b))
+        return
+    }
+}
+
+class CmdOrBool(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.getBool(a) || frame.getBool(b))
+        return
+    }
+}
+
+class CmdOrBoolLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.setLocalBool(dst, frame.getLocalBool(a) || frame.getLocalBool(b))
+        return
+    }
+}
+
+class CmdCmpLtObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.slotToObj(a).compareTo(frame.ensureScope(), frame.slotToObj(b)) < 0)
+        return
+    }
+}
+
+class CmdCmpLteObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.slotToObj(a).compareTo(frame.ensureScope(), frame.slotToObj(b)) <= 0)
+        return
+    }
+}
+
+class CmdCmpGtObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.slotToObj(a).compareTo(frame.ensureScope(), frame.slotToObj(b)) > 0)
+        return
+    }
+}
+
+class CmdCmpGteObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.setBool(dst, frame.slotToObj(a).compareTo(frame.ensureScope(), frame.slotToObj(b)) >= 0)
+        return
+    }
+}
+
+class CmdAddObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val result = frame.slotToObj(a).plus(frame.ensureScope(), frame.slotToObj(b))
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
+class CmdSubObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val result = frame.slotToObj(a).minus(frame.ensureScope(), frame.slotToObj(b))
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
+class CmdMulObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val result = frame.slotToObj(a).mul(frame.ensureScope(), frame.slotToObj(b))
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
+class CmdDivObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val result = frame.slotToObj(a).div(frame.ensureScope(), frame.slotToObj(b))
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
+class CmdModObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val result = frame.slotToObj(a).mod(frame.ensureScope(), frame.slotToObj(b))
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
+class CmdAddIntObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a) as ObjInt
+        val right = frame.slotToObj(b) as ObjInt
+        frame.storeObjResult(dst, ObjInt.of(left.value + right.value))
+        return
+    }
+}
+
+class CmdAddIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.getLocalObjIntValue(a)
+        val right = frame.getLocalObjIntValue(b)
+        frame.storeObjResult(dst, ObjInt.of(left + right))
+        return
+    }
+}
+
+class CmdSubIntObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a) as ObjInt
+        val right = frame.slotToObj(b) as ObjInt
+        frame.storeObjResult(dst, ObjInt.of(left.value - right.value))
+        return
+    }
+}
+
+class CmdSubIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.getLocalObjIntValue(a)
+        val right = frame.getLocalObjIntValue(b)
+        frame.storeObjResult(dst, ObjInt.of(left - right))
+        return
+    }
+}
+
+class CmdMulIntObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a) as ObjInt
+        val right = frame.slotToObj(b) as ObjInt
+        frame.storeObjResult(dst, ObjInt.of(left.value * right.value))
+        return
+    }
+}
+
+class CmdMulIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.getLocalObjIntValue(a)
+        val right = frame.getLocalObjIntValue(b)
+        frame.storeObjResult(dst, ObjInt.of(left * right))
+        return
+    }
+}
+
+class CmdDivIntObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a) as ObjInt
+        val right = frame.slotToObj(b) as ObjInt
+        frame.storeObjResult(dst, ObjInt.of(left.value / right.value))
+        return
+    }
+}
+
+class CmdDivIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.getLocalObjIntValue(a)
+        val right = frame.getLocalObjIntValue(b)
+        frame.storeObjResult(dst, ObjInt.of(left / right))
+        return
+    }
+}
+
+class CmdModIntObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a) as ObjInt
+        val right = frame.slotToObj(b) as ObjInt
+        frame.storeObjResult(dst, ObjInt.of(left.value % right.value))
+        return
+    }
+}
+
+class CmdModIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.getLocalObjIntValue(a)
+        val right = frame.getLocalObjIntValue(b)
+        frame.storeObjResult(dst, ObjInt.of(left % right))
+        return
+    }
+}
+
+class CmdAddRealObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a) as ObjReal
+        val right = frame.slotToObj(b) as ObjReal
+        frame.storeObjResult(dst, ObjReal.of(left.value + right.value))
+        return
+    }
+}
+
+class CmdAddRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.getLocalObjRealValue(a)
+        val right = frame.getLocalObjRealValue(b)
+        frame.storeObjResult(dst, ObjReal.of(left + right))
+        return
+    }
+}
+
+class CmdSubRealObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a) as ObjReal
+        val right = frame.slotToObj(b) as ObjReal
+        frame.storeObjResult(dst, ObjReal.of(left.value - right.value))
+        return
+    }
+}
+
+class CmdSubRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.getLocalObjRealValue(a)
+        val right = frame.getLocalObjRealValue(b)
+        frame.storeObjResult(dst, ObjReal.of(left - right))
+        return
+    }
+}
+
+class CmdMulRealObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a) as ObjReal
+        val right = frame.slotToObj(b) as ObjReal
+        frame.storeObjResult(dst, ObjReal.of(left.value * right.value))
+        return
+    }
+}
+
+class CmdMulRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.getLocalObjRealValue(a)
+        val right = frame.getLocalObjRealValue(b)
+        frame.storeObjResult(dst, ObjReal.of(left * right))
+        return
+    }
+}
+
+class CmdDivRealObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a) as ObjReal
+        val right = frame.slotToObj(b) as ObjReal
+        frame.storeObjResult(dst, ObjReal.of(left.value / right.value))
+        return
+    }
+}
+
+class CmdDivRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.getLocalObjRealValue(a)
+        val right = frame.getLocalObjRealValue(b)
+        frame.storeObjResult(dst, ObjReal.of(left / right))
+        return
+    }
+}
+
+class CmdModRealObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val left = frame.slotToObj(a) as ObjReal
+        val right = frame.slotToObj(b) as ObjReal
+        frame.storeObjResult(dst, ObjReal.of(left.value % right.value))
+        return
+    }
+}
+
+class CmdModRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        val left = frame.getLocalObjRealValue(a)
+        val right = frame.getLocalObjRealValue(b)
+        frame.storeObjResult(dst, ObjReal.of(left % right))
+        return
+    }
+}
+
+class CmdContainsObj(internal val target: Int, internal val value: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val targetObj = frame.slotToObj(target)
+        val valueObj = frame.slotToObj(value)
+        val result = if ((targetObj is ObjTypeExpr || targetObj is ObjClass) &&
+            (valueObj is ObjTypeExpr || valueObj is ObjClass)
+        ) {
+            val leftDecl = typeDeclFromObj(frame.ensureScope(), valueObj)
+            val rightDecl = typeDeclFromObj(frame.ensureScope(), targetObj)
+            if (leftDecl != null && rightDecl != null) {
+                typeDeclIsSubtype(frame.ensureScope(), leftDecl, rightDecl)
+            } else {
+                false
+            }
+        } else {
+            targetObj.contains(frame.ensureScope(), valueObj)
+        }
+        frame.setBool(dst, result)
+        return
+    }
+}
+
+class CmdAssignOpObj(
+    internal val opId: Int,
+    internal val targetSlot: Int,
+    internal val valueSlot: Int,
+    internal val dst: Int,
+    internal val nameId: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val target = frame.slotToObj(targetSlot)
+        val value = frame.slotToObj(valueSlot)
+        val result = when (BinOp.values().getOrNull(opId)) {
+            BinOp.PLUS -> target.plusAssign(frame.ensureScope(), value)
+            BinOp.MINUS -> target.minusAssign(frame.ensureScope(), value)
+            BinOp.STAR -> target.mulAssign(frame.ensureScope(), value)
+            BinOp.SLASH -> target.divAssign(frame.ensureScope(), value)
+            BinOp.PERCENT -> target.modAssign(frame.ensureScope(), value)
+            else -> null
+        }
+        if (result == null) {
+            val name = (frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal)?.value
+            if (name != null) frame.ensureScope().raiseIllegalAssignment("symbol is readonly: $name")
+            frame.ensureScope().raiseIllegalAssignment("symbol is readonly")
+        }
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
+class CmdJmp(internal val target: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        frame.ip = target
+        return
+    }
+}
+
+class CmdJmpIfTrue(internal val cond: Int, internal val target: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.getBool(cond)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfTrueLocal(internal val cond: Int, internal val target: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        if (frame.getLocalBool(cond)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfFalse(internal val cond: Int, internal val target: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (!frame.getBool(cond)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfFalseLocal(internal val cond: Int, internal val target: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        if (!frame.getLocalBool(cond)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfEqInt(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.getInt(a) == frame.getInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfEqIntLocal(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        if (frame.getLocalInt(a) == frame.getLocalInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfNeqInt(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.getInt(a) != frame.getInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfNeqIntLocal(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        if (frame.getLocalInt(a) != frame.getLocalInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfLtInt(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.getInt(a) < frame.getInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfLtIntLocal(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        if (frame.getLocalInt(a) < frame.getLocalInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfLteInt(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.getInt(a) <= frame.getInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfLteIntLocal(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        if (frame.getLocalInt(a) <= frame.getLocalInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfGtInt(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.getInt(a) > frame.getInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfGtIntLocal(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        if (frame.getLocalInt(a) > frame.getLocalInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfGteInt(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        if (frame.getInt(a) >= frame.getInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdJmpIfGteIntLocal(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
+    override val isFast: Boolean = true
+    override fun performFast(frame: CmdFrame) {
+        if (frame.getLocalInt(a) >= frame.getLocalInt(b)) {
+            frame.ip = target
+        }
+        return
+    }
+}
+
+class CmdRet(internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.vm.result = frame.slotToObj(slot)
+        return
+    }
+}
+
+class CmdRetLabel(internal val labelId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val labelConst = frame.fn.constants.getOrNull(labelId) as? BytecodeConst.StringVal
+            ?: error("RET_LABEL expects StringVal at $labelId")
+        val value = frame.slotToObj(slot)
+        if (frame.fn.returnLabels.contains(labelConst.value)) {
+            frame.vm.result = value
+        } else {
+            throw ReturnException(value, labelConst.value)
+        }
+        return
+    }
+}
+
+class CmdRetVoid : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.vm.result = ObjVoid
+        return
+    }
+}
+
+class CmdThrow(internal val posId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val posConst = frame.fn.constants.getOrNull(posId) as? BytecodeConst.PosVal
+            ?: error("THROW expects PosVal at $posId")
+        frame.throwObj(posConst.pos, frame.slotToObj(slot))
+        return
+    }
+}
+
+class CmdRethrowPending : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.rethrowPending()
+        return
+    }
+}
+
+class CmdPushScope(internal val planId: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val planConst = frame.fn.constants[planId] as? BytecodeConst.SlotPlan
+            ?: error("PUSH_SCOPE expects SlotPlan at $planId")
+        frame.pushScope(planConst.plan, planConst.captures)
+        return
+    }
+}
+
+class CmdPopScope : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.popScope()
+        return
+    }
+}
+
+class CmdPushSlotPlan(internal val planId: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val planConst = frame.fn.constants[planId] as? BytecodeConst.SlotPlan
+            ?: error("PUSH_SLOT_PLAN expects SlotPlan at $planId")
+        frame.pushSlotPlan(planConst.plan)
+        return
+    }
+}
+
+class CmdPopSlotPlan : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.popSlotPlan()
+        return
+    }
+}
+
+class CmdPushTry(internal val exceptionSlot: Int, internal val catchIp: Int, internal val finallyIp: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.pushTry(exceptionSlot, catchIp, finallyIp)
+        return
+    }
+}
+
+class CmdPopTry : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.popTry()
+        return
+    }
+}
+
+class CmdClearPendingThrowable : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.clearPendingThrowable()
+        return
+    }
+}
+
+class CmdDeclLocal(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.LocalDecl
+            ?: error("DECL_LOCAL expects LocalDecl at $constId")
+        if (slot < frame.fn.scopeSlotCount) {
+            val target = frame.scopeTarget(slot)
+            frame.ensureScopeSlot(target, slot)
+            val value = frame.slotToObj(slot).byValueCopy()
+            target.updateSlotFor(
+                decl.name,
+                ObjRecord(
+                    value,
+                    decl.isMutable,
+                    decl.visibility,
+                    isTransient = decl.isTransient,
+                    type = ObjRecord.Type.Other
+                )
+            )
+            return
+        }
+        val localIndex = slot - frame.fn.scopeSlotCount
+        if (localIndex < 0) return
+        val record = ObjRecord(
+            FrameSlotRef(frame.frame, localIndex),
+            decl.isMutable,
+            decl.visibility,
+            isTransient = decl.isTransient,
+            type = ObjRecord.Type.Other
+        )
+        val moduleScope = frame.scope as? ModuleScope
+        if (moduleScope != null) {
+            moduleScope.updateSlotFor(decl.name, record)
+            moduleScope.objects[decl.name] = record
+            moduleScope.localBindings[decl.name] = record
+        } else if (frame.fn.name == "<script>") {
+            val target = frame.ensureScope()
+            target.updateSlotFor(decl.name, record)
+            target.objects[decl.name] = record
+            target.localBindings[decl.name] = record
+        }
+        return
+    }
+}
+
+class CmdDeclDelegated(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.DelegatedDecl
+            ?: error("DECL_DELEGATED expects DelegatedDecl at $constId")
+        val initValue = frame.slotToObj(slot)
+        val accessType = ObjString(if (decl.isMutable) "Var" else "Val")
+        val finalDelegate = try {
+            initValue.invokeInstanceMethod(
+                frame.ensureScope(),
+                "bind",
+                Arguments(ObjString(decl.name), accessType, ObjNull)
+            )
+        } catch (_: Exception) {
+            initValue
+        }
+        if (slot < frame.fn.scopeSlotCount) {
+            val target = frame.scopeTarget(slot)
+            frame.ensureScopeSlot(target, slot)
+            target.updateSlotFor(
+                decl.name,
+                ObjRecord(
+                    ObjNull,
+                    decl.isMutable,
+                    decl.visibility,
+                    isTransient = decl.isTransient,
+                    type = ObjRecord.Type.Delegated
+                ).also { it.delegate = finalDelegate }
+            )
+        } else {
+            val moduleScope = frame.scope as? ModuleScope
+            if (moduleScope != null) {
+                moduleScope.updateSlotFor(
+                    decl.name,
+                    ObjRecord(
+                        ObjNull,
+                        decl.isMutable,
+                        decl.visibility,
+                        isTransient = decl.isTransient,
+                        type = ObjRecord.Type.Delegated
+                    ).also { it.delegate = finalDelegate }
+                )
+            }
+        }
+        frame.setObjUnchecked(slot, finalDelegate)
+        return
+    }
+}
+
+class CmdDeclEnum(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.EnumDecl
+            ?: error("DECL_ENUM expects EnumDecl at $constId")
+        val scope = frame.ensureScope()
+        val enumClass = ObjEnumClass.createSimpleEnum(decl.qualifiedName, decl.entries)
+        scope.addItem(decl.declaredName, false, enumClass, recordType = ObjRecord.Type.Enum)
+        if (decl.lifted) {
+            for (entry in decl.entries) {
+                val rec = enumClass.getInstanceMemberOrNull(entry, includeAbstract = false, includeStatic = true)
+                if (rec != null) {
+                    scope.addItem(entry, false, rec.value)
+                }
+            }
+        }
+        frame.setObjUnchecked(slot, enumClass)
+        return
+    }
+}
+
+class CmdDeclFunction(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.FunctionDecl
+            ?: error("DECL_FUNCTION expects FunctionDecl at $constId")
+        val captureNames = captureNamesForFunctionDecl(decl.spec)
+        val captureRecords = buildFunctionCaptureRecords(frame, captureNames)
+        val result = executeFunctionDecl(frame.ensureScope(), decl.spec, captureRecords)
+        frame.setObjUnchecked(slot, result)
+        val wrapperName = decl.spec.extensionWrapperName
+        if (wrapperName != null) {
+            val wrapperRecord = frame.ensureScope()[wrapperName]
+            if (wrapperRecord != null) {
+                val localIndex = resolveLocalSlotIndex(frame.fn, wrapperName, preferCapture = false)
+                if (localIndex != null) {
+                    frame.setObjUnchecked(frame.fn.scopeSlotCount + localIndex, wrapperRecord.value)
+                }
+            }
+        }
+        return
+    }
+}
+
+private fun captureNamesForFunctionDecl(spec: net.sergeych.lyng.FunctionDeclSpec): List<String> {
+    if (spec.captureSlots.isNotEmpty()) {
+        return spec.captureSlots.map { it.name }
+    }
+    return captureNamesForStatement(spec.fnBody)
+}
+
+private fun captureNamesForStatement(stmt: Statement?): List<String> {
+    if (stmt == null) return emptyList()
+    val bytecode = when (stmt) {
+        is BytecodeStatement -> stmt.bytecodeFunction()
+        is BytecodeBodyProvider -> stmt.bytecodeBody()?.bytecodeFunction()
+        else -> null
+    } ?: return emptyList()
+    val names = bytecode.localSlotNames
+    val captures = bytecode.localSlotCaptures
+    val ordered = LinkedHashSet<String>()
+    for (i in names.indices) {
+        if (captures.getOrNull(i) != true) continue
+        val name = names[i] ?: continue
+        ordered.add(name)
+    }
+    return ordered.toList()
+}
+
+private fun buildFunctionCaptureRecords(frame: CmdFrame, captureNames: List<String>): List<ObjRecord>? {
+    if (captureNames.isEmpty()) return null
+    val records = ArrayList<ObjRecord>(captureNames.size)
+    for (name in captureNames) {
+        val localIndex = resolveLocalSlotIndex(frame.fn, name, preferCapture = true)
+        if (localIndex != null) {
+            val isMutable = frame.fn.localSlotMutables.getOrNull(localIndex) ?: false
+            val isDelegated = frame.fn.localSlotDelegated.getOrNull(localIndex) ?: false
+            if (isDelegated) {
+                val delegate = frame.frame.getObj(localIndex)
+                records += ObjRecord(ObjNull, isMutable, type = ObjRecord.Type.Delegated).also {
+                    it.delegate = delegate
+                }
+            } else {
+                records += ObjRecord(FrameSlotRef(frame.frame, localIndex), isMutable)
+            }
+            continue
+        }
+        val scopeSlot = frame.fn.scopeSlotNames.indexOfFirst { it == name }
+        if (scopeSlot >= 0) {
+            val target = frame.scopeTarget(scopeSlot)
+            val index = frame.fn.scopeSlotIndices[scopeSlot]
+            records += target.getSlotRecord(index)
+            continue
+        }
+        val scopeCaptures = frame.scope.captureRecords
+        val scopeCaptureNames = frame.scope.captureNames
+        if (scopeCaptures != null && scopeCaptureNames != null) {
+            val idx = scopeCaptureNames.indexOf(name)
+            if (idx >= 0) {
+                val rec = scopeCaptures.getOrNull(idx)
+                if (rec != null) {
+                    records += rec
+                    continue
+                }
+            }
+        }
+        frame.ensureScope().raiseSymbolNotFound("capture $name not found")
+    }
+    return records
+}
+
+class CmdDeclClass(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.ClassDecl
+            ?: error("DECL_CLASS expects ClassDecl at $constId")
+        val bodyCaptureNames = mergeCaptureNames(
+            captureNamesForStatement(decl.spec.bodyInit),
+            captureNamesFromFrame(frame)
+        )
+        val bodyCaptureRecords = buildFunctionCaptureRecords(frame, bodyCaptureNames)
+        val result = executeClassDecl(frame.ensureScope(), decl.spec, bodyCaptureRecords, bodyCaptureNames)
+        frame.setObjUnchecked(slot, result)
+        return
+    }
+}
+
+private fun mergeCaptureNames(primary: List<String>, fallback: List<String>): List<String> {
+    if (fallback.isEmpty()) return primary
+    if (primary.isEmpty()) return fallback
+    val ordered = LinkedHashSet<String>(primary.size + fallback.size)
+    ordered.addAll(primary)
+    ordered.addAll(fallback)
+    return ordered.toList()
+}
+
+private fun captureNamesFromFrame(frame: CmdFrame): List<String> {
+    val ordered = LinkedHashSet<String>()
+    for (name in frame.fn.localSlotNames) {
+        if (name != null) ordered.add(name)
+    }
+    return ordered.toList()
+}
+
+class CmdDeclClassField(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.ClassFieldDecl
+            ?: error("DECL_CLASS_FIELD expects ClassFieldDecl at $constId")
+        val scope = frame.ensureScope()
+        val cls = scope.thisObj as? ObjClass
+            ?: scope.raiseIllegalState("class field init requires class scope")
+        val value = frame.slotToObj(slot).byValueCopy()
+        cls.createClassField(
+            decl.name,
+            value,
+            decl.isMutable,
+            decl.visibility,
+            decl.writeVisibility,
+            Pos.builtIn,
+            isTransient = decl.isTransient
+        )
+        scope.addItem(
+            decl.name,
+            decl.isMutable,
+            value,
+            decl.visibility,
+            decl.writeVisibility,
+            recordType = ObjRecord.Type.Field,
+            isTransient = decl.isTransient
+        )
+        return
+    }
+}
+
+class CmdDeclClassDelegated(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.ClassDelegatedDecl
+            ?: error("DECL_CLASS_DELEGATED expects ClassDelegatedDecl at $constId")
+        val scope = frame.ensureScope()
+        val cls = scope.thisObj as? ObjClass
+            ?: scope.raiseIllegalState("class delegated init requires class scope")
+        val initValue = frame.slotToObj(slot)
+        val accessTypeStr = if (decl.isMutable) "Var" else "Val"
+        val accessType = ObjString(accessTypeStr)
+        val finalDelegate = try {
+            initValue.invokeInstanceMethod(
+                scope,
+                "bind",
+                Arguments(ObjString(decl.name), accessType, scope.thisObj)
+            )
+        } catch (_: Exception) {
+            initValue
+        }
+        cls.createClassField(
+            decl.name,
+            ObjUnset,
+            decl.isMutable,
+            decl.visibility,
+            decl.writeVisibility,
+            Pos.builtIn,
+            isTransient = decl.isTransient,
+            type = ObjRecord.Type.Delegated
+        ).apply {
+            delegate = finalDelegate
+        }
+        scope.addItem(
+            decl.name,
+            decl.isMutable,
+            ObjUnset,
+            decl.visibility,
+            decl.writeVisibility,
+            recordType = ObjRecord.Type.Delegated,
+            isTransient = decl.isTransient
+        ).apply {
+            delegate = finalDelegate
+        }
+        frame.storeObjResult(slot, finalDelegate)
+        return
+    }
+}
+
+class CmdDeclClassInstanceInit(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.ClassInstanceInitDecl
+            ?: error("DECL_CLASS_INSTANCE_INIT expects ClassInstanceInitDecl at $constId")
+        val scope = frame.ensureScope()
+        val cls = scope.thisObj as? ObjClass
+            ?: scope.raiseIllegalState("class instance init requires class scope")
+        cls.instanceInitializers += decl.initStatement
+        frame.storeObjResult(slot, ObjVoid)
+        return
+    }
+}
+
+class CmdDeclClassInstanceField(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.ClassInstanceFieldDecl
+            ?: error("DECL_CLASS_INSTANCE_FIELD expects ClassInstanceFieldDecl at $constId")
+        val scope = frame.ensureScope()
+        val cls = scope.thisObj as? ObjClass
+            ?: scope.raiseIllegalState("class instance field requires class scope")
+        cls.createField(
+            decl.name,
+            ObjNull,
+            isMutable = decl.isMutable,
+            visibility = decl.visibility,
+            writeVisibility = decl.writeVisibility,
+            pos = decl.pos,
+            declaringClass = cls,
+            isAbstract = decl.isAbstract,
+            isClosed = decl.isClosed,
+            isOverride = decl.isOverride,
+            isTransient = decl.isTransient,
+            type = ObjRecord.Type.Field,
+            fieldId = decl.fieldId
+        )
+        if (!decl.isAbstract) {
+            decl.initStatement?.let { cls.instanceInitializers += it }
+        }
+        frame.storeObjResult(slot, ObjVoid)
+        return
+    }
+}
+
+class CmdDeclClassInstanceProperty(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.ClassInstancePropertyDecl
+            ?: error("DECL_CLASS_INSTANCE_PROPERTY expects ClassInstancePropertyDecl at $constId")
+        val scope = frame.ensureScope()
+        val cls = scope.thisObj as? ObjClass
+            ?: scope.raiseIllegalState("class instance property requires class scope")
+        cls.addProperty(
+            name = decl.name,
+            visibility = decl.visibility,
+            writeVisibility = decl.writeVisibility,
+            declaringClass = cls,
+            isAbstract = decl.isAbstract,
+            isClosed = decl.isClosed,
+            isOverride = decl.isOverride,
+            pos = decl.pos,
+            prop = decl.prop,
+            methodId = decl.methodId
+        )
+        if (!decl.isAbstract) {
+            decl.initStatement?.let { cls.instanceInitializers += it }
+        }
+        frame.storeObjResult(slot, ObjVoid)
+        return
+    }
+}
+
+class CmdDeclClassInstanceDelegated(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.ClassInstanceDelegatedDecl
+            ?: error("DECL_CLASS_INSTANCE_DELEGATED expects ClassInstanceDelegatedDecl at $constId")
+        val scope = frame.ensureScope()
+        val cls = scope.thisObj as? ObjClass
+            ?: scope.raiseIllegalState("class instance delegated requires class scope")
+        cls.createField(
+            decl.name,
+            ObjUnset,
+            isMutable = decl.isMutable,
+            visibility = decl.visibility,
+            writeVisibility = decl.writeVisibility,
+            pos = decl.pos,
+            declaringClass = cls,
+            isAbstract = decl.isAbstract,
+            isClosed = decl.isClosed,
+            isOverride = decl.isOverride,
+            isTransient = decl.isTransient,
+            type = ObjRecord.Type.Delegated,
+            methodId = decl.methodId
+        )
+        if (!decl.isAbstract) {
+            decl.initStatement?.let { cls.instanceInitializers += it }
+        }
+        frame.storeObjResult(slot, ObjVoid)
+        return
+    }
+}
+
+class CmdDeclInstanceField(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.InstanceFieldDecl
+            ?: error("DECL_INSTANCE_FIELD expects InstanceFieldDecl at $constId")
+        val scope = frame.ensureScope()
+        val value = frame.slotToObj(slot).byValueCopy()
+        scope.addItem(
+            decl.name,
+            decl.isMutable,
+            value,
+            decl.visibility,
+            decl.writeVisibility,
+            recordType = ObjRecord.Type.Field,
+            isAbstract = decl.isAbstract,
+            isClosed = decl.isClosed,
+            isOverride = decl.isOverride,
+            isTransient = decl.isTransient
+        )
+        if (slot >= frame.fn.scopeSlotCount) {
+            val localIndex = slot - frame.fn.scopeSlotCount
+            val isMutable = frame.fn.localSlotMutables.getOrNull(localIndex) ?: true
+            if (isMutable) {
+                frame.storeObjResult(slot, ObjVoid)
+            }
+        }
+        return
+    }
+}
+
+class CmdDeclInstanceProperty(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.InstancePropertyDecl
+            ?: error("DECL_INSTANCE_PROPERTY expects InstancePropertyDecl at $constId")
+        val scope = frame.ensureScope()
+        val prop = frame.slotToObj(slot)
+        scope.addItem(
+            decl.name,
+            decl.isMutable,
+            prop,
+            decl.visibility,
+            decl.writeVisibility,
+            recordType = ObjRecord.Type.Property,
+            isAbstract = decl.isAbstract,
+            isClosed = decl.isClosed,
+            isOverride = decl.isOverride,
+            isTransient = decl.isTransient
+        )
+        if (slot >= frame.fn.scopeSlotCount) {
+            val localIndex = slot - frame.fn.scopeSlotCount
+            val isMutable = frame.fn.localSlotMutables.getOrNull(localIndex) ?: true
+            if (isMutable) {
+                frame.storeObjResult(slot, ObjVoid)
+            }
+        }
+        return
+    }
+}
+
+class CmdDeclInstanceDelegated(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.InstanceDelegatedDecl
+            ?: error("DECL_INSTANCE_DELEGATED expects InstanceDelegatedDecl at $constId")
+        val scope = frame.ensureScope()
+        var initValue = frame.slotToObj(slot)
+        val debugName = if (slot < frame.fn.scopeSlotCount) {
+            frame.fn.scopeSlotNames.getOrNull(slot)
+        } else {
+            val localIndex = slot - frame.fn.scopeSlotCount
+            frame.fn.localSlotNames.getOrNull(localIndex)
+        }
+        if (initValue === ObjUnset) {
+            if (debugName != null) {
+                val resolved = scope.get(debugName)
+                if (resolved != null && resolved.value !== ObjUnset) {
+                    initValue = resolved.value
+                }
+            }
+        }
+        val accessType = ObjString(decl.accessTypeLabel)
+        val finalDelegate = try {
+            initValue.invokeInstanceMethod(
+                scope,
+                "bind",
+                Arguments(ObjString(decl.memberName), accessType, scope.thisObj)
+            )
+        } catch (_: Exception) {
+            initValue
+        }
+        scope.addItem(
+            decl.storageName,
+            decl.isMutable,
+            ObjUnset,
+            decl.visibility,
+            decl.writeVisibility,
+            recordType = ObjRecord.Type.Delegated,
+            isAbstract = decl.isAbstract,
+            isClosed = decl.isClosed,
+            isOverride = decl.isOverride,
+            isTransient = decl.isTransient
+        ).apply {
+            delegate = finalDelegate
+        }
+        if (slot >= frame.fn.scopeSlotCount) {
+            val localIndex = slot - frame.fn.scopeSlotCount
+            val isMutable = frame.fn.localSlotMutables.getOrNull(localIndex) ?: true
+            if (isMutable) {
+                frame.storeObjResult(slot, ObjVoid)
+            }
+        }
+        return
+    }
+}
+
+class CmdDeclDestructure(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.DestructureDecl
+            ?: error("DECL_DESTRUCTURE expects DestructureDecl at $constId")
+        val value = frame.slotToObj(slot)
+        assignDestructurePattern(frame, decl.pattern, value, decl.pos)
+        return
+    }
+}
+
+class CmdAssignDestructure(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.DestructureAssign
+            ?: error("ASSIGN_DESTRUCTURE expects DestructureAssign at $constId")
+        val value = frame.slotToObj(slot)
+        assignDestructurePattern(frame, decl.pattern, value, decl.pos)
+        frame.storeObjResult(slot, value)
+        return
+    }
+}
+
+private suspend fun assignDestructurePattern(frame: CmdFrame, pattern: ListLiteralRef, value: Obj, pos: Pos) {
+    val sourceList = (value as? ObjList)?.list
+        ?: throw ScriptError(pos, "destructuring assignment requires a list on the right side")
+
+    val entries = pattern.entries()
+    val ellipsisIdx = entries.indexOfFirst { it is ListEntry.Spread }
+    if (entries.count { it is ListEntry.Spread } > 1) {
+        throw ScriptError(pos, "destructuring pattern can have only one splat")
+    }
+
+    if (ellipsisIdx < 0) {
+        if (sourceList.size < entries.size) {
+            throw ScriptError(pos, "too few elements for destructuring")
+        }
+        for (i in entries.indices) {
+            val entry = entries[i]
+            if (entry is ListEntry.Element) {
+                assignDestructureTarget(frame, entry.ref, sourceList[i], pos)
+            }
+        }
+        return
+    }
+
+    val headCount = ellipsisIdx
+    val tailCount = entries.size - ellipsisIdx - 1
+    if (sourceList.size < headCount + tailCount) {
+        throw ScriptError(pos, "too few elements for destructuring")
+    }
+
+    for (i in 0 until headCount) {
+        val entry = entries[i]
+        if (entry is ListEntry.Element) {
+            assignDestructureTarget(frame, entry.ref, sourceList[i], pos)
+        }
+    }
+
+    for (i in 0 until tailCount) {
+        val entry = entries[entries.size - 1 - i]
+        if (entry is ListEntry.Element) {
+            assignDestructureTarget(frame, entry.ref, sourceList[sourceList.size - 1 - i], pos)
+        }
+    }
+
+    val spreadEntry = entries[ellipsisIdx] as ListEntry.Spread
+    val spreadList = sourceList.subList(headCount, sourceList.size - tailCount)
+    assignDestructureTarget(frame, spreadEntry.ref, ObjList(spreadList.toMutableList()), pos)
+}
+
+private suspend fun assignDestructureTarget(frame: CmdFrame, ref: ObjRef, value: Obj, pos: Pos) {
+    when (ref) {
+        is ListLiteralRef -> {
+            assignDestructurePattern(frame, ref, value, pos)
+            return
+        }
+        is LocalSlotRef -> {
+            val index = resolveLocalSlotIndex(frame.fn, ref.name, preferCapture = ref.captureOwnerScopeId != null)
+            if (index != null) {
+                frame.frame.setObj(index, value)
+                return
+            }
+            val scopeSlot = frame.fn.scopeSlotNames.indexOfFirst { it == ref.name }
+            if (scopeSlot >= 0) {
+                val target = frame.scopeTarget(scopeSlot)
+                val slotIndex = frame.ensureScopeSlot(target, scopeSlot)
+                target.setSlotValue(slotIndex, value)
+                return
+            }
+        }
+        is LocalVarRef -> {
+            val index = resolveLocalSlotIndex(frame.fn, ref.name, preferCapture = false)
+            if (index != null) {
+                frame.frame.setObj(index, value)
+                return
+            }
+            val scopeSlot = frame.fn.scopeSlotNames.indexOfFirst { it == ref.name }
+            if (scopeSlot >= 0) {
+                val target = frame.scopeTarget(scopeSlot)
+                val slotIndex = frame.ensureScopeSlot(target, scopeSlot)
+                target.setSlotValue(slotIndex, value)
+                return
+            }
+        }
+        is FastLocalVarRef -> {
+            val index = resolveLocalSlotIndex(frame.fn, ref.name, preferCapture = false)
+            if (index != null) {
+                frame.frame.setObj(index, value)
+                return
+            }
+            val scopeSlot = frame.fn.scopeSlotNames.indexOfFirst { it == ref.name }
+            if (scopeSlot >= 0) {
+                val target = frame.scopeTarget(scopeSlot)
+                val slotIndex = frame.ensureScopeSlot(target, scopeSlot)
+                target.setSlotValue(slotIndex, value)
+                return
+            }
+        }
+        else -> {}
+    }
+    ref.setAt(pos, frame.ensureScope(), value)
+}
+
+private fun resolveLocalSlotIndex(fn: CmdFunction, name: String, preferCapture: Boolean): Int? {
+    val names = fn.localSlotNames
+    if (preferCapture) {
+        for (i in names.indices) {
+            if (names[i] == name && fn.localSlotCaptures.getOrNull(i) == true) return i
+        }
+    } else {
+        for (i in names.indices) {
+            if (names[i] == name && fn.localSlotCaptures.getOrNull(i) != true) return i
+        }
+    }
+    for (i in names.indices) {
+        if (names[i] == name) return i
+    }
+    return null
+}
+
+class CmdDeclExtProperty(internal val constId: Int, internal val slot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val decl = frame.fn.constants[constId] as? BytecodeConst.ExtensionPropertyDecl
+            ?: error("DECL_EXT_PROPERTY expects ExtensionPropertyDecl at $constId")
+        val type = frame.ensureScope()[decl.extTypeName]?.value
+            ?: frame.ensureScope().raiseSymbolNotFound("class ${decl.extTypeName} not found")
+        if (type !is ObjClass) {
+            frame.ensureScope().raiseClassCastError("${decl.extTypeName} is not the class instance")
+        }
+        frame.ensureScope().addExtension(
+            type,
+            decl.property.name,
+            ObjRecord(
+                decl.property,
+                isMutable = false,
+                visibility = decl.visibility,
+                writeVisibility = decl.setterVisibility,
+                declaringClass = null,
+                type = ObjRecord.Type.Property
+            )
+        )
+        val getterName = extensionPropertyGetterName(decl.extTypeName, decl.property.name)
+        val getterWrapper = ObjExtensionPropertyGetterCallable(decl.property.name, decl.property)
+        frame.ensureScope().addItem(getterName, false, getterWrapper, decl.visibility, recordType = ObjRecord.Type.Fun)
+        val getterLocal = resolveLocalSlotIndex(frame.fn, getterName, preferCapture = false)
+        if (getterLocal != null) {
+            frame.setObjUnchecked(frame.fn.scopeSlotCount + getterLocal, getterWrapper)
+        }
+        if (decl.property.setter != null) {
+            val setterName = extensionPropertySetterName(decl.extTypeName, decl.property.name)
+            val setterWrapper = ObjExtensionPropertySetterCallable(decl.property.name, decl.property)
+            frame.ensureScope().addItem(setterName, false, setterWrapper, decl.visibility, recordType = ObjRecord.Type.Fun)
+            val setterLocal = resolveLocalSlotIndex(frame.fn, setterName, preferCapture = false)
+            if (setterLocal != null) {
+                frame.setObjUnchecked(frame.fn.scopeSlotCount + setterLocal, setterWrapper)
+            }
+        }
+        frame.setObj(slot, decl.property)
+        return
+    }
+}
+
+class CmdCallDirect(
+    internal val id: Int,
+    internal val argBase: Int,
+    internal val argCount: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val ref = frame.fn.constants.getOrNull(id) as? BytecodeConst.ObjRef
+            ?: error("CALL_DIRECT expects ObjRef at $id")
+        val callee = ref.value
+        val args = frame.buildArguments(argBase, argCount)
+        if (callee is Statement) {
+            val bytecodeBody = (callee as? BytecodeBodyProvider)?.bytecodeBody()
+            if (callee !is BytecodeStatement && callee !is BytecodeCallable && bytecodeBody == null) {
+                frame.ensureScope().raiseIllegalState("bytecode runtime cannot call non-bytecode Statement")
+            }
+        }
+        val result = if (PerfFlags.SCOPE_POOL) {
+            frame.ensureScope().withChildFrame(args) { child -> callee.callOn(child) }
+        } else {
+            callee.callOn(frame.ensureScope().createChildScope(frame.ensureScope().pos, args = args))
+        }
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
+class CmdCallSlot(
+    internal val calleeSlot: Int,
+    internal val argBase: Int,
+    internal val argCount: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val callee = frame.slotToObj(calleeSlot)
+        if (callee === ObjUnset) {
+            val name = if (calleeSlot < frame.fn.scopeSlotCount) {
+                frame.fn.scopeSlotNames[calleeSlot]
+            } else {
+                val localIndex = calleeSlot - frame.fn.scopeSlotCount
+                frame.fn.localSlotNames.getOrNull(localIndex)
+            }
+            val message = name?.let { "property '$it' is unset (not initialized)" }
+                ?: "property is unset (not initialized) in ${frame.fn.name} at slot $calleeSlot"
+            frame.ensureScope().raiseUnset(message)
+        }
+        val args = frame.buildArguments(argBase, argCount)
+        val canPool = PerfFlags.SCOPE_POOL && callee !is Statement
+        val result = if (canPool) {
+            frame.ensureScope().withChildFrame(args) { child -> callee.callOn(child) }
+        } else {
+            val scope = frame.ensureScope()
+            if (callee is Statement) {
+                val bytecodeBody = (callee as? BytecodeBodyProvider)?.bytecodeBody()
+                if (callee !is BytecodeStatement && callee !is BytecodeCallable && bytecodeBody == null) {
+                    scope.raiseIllegalState("bytecode runtime cannot call non-bytecode Statement")
+                }
+            }
+            callee.callOn(scope.createChildScope(scope.pos, args = args))
+        }
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
+class CmdCallBridgeSlot(
+    internal val calleeSlot: Int,
+    internal val argBase: Int,
+    internal val argCount: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val callee = frame.slotToObj(calleeSlot)
+        if (callee === ObjUnset) {
+            val name = if (calleeSlot < frame.fn.scopeSlotCount) {
+                frame.fn.scopeSlotNames[calleeSlot]
+            } else {
+                val localIndex = calleeSlot - frame.fn.scopeSlotCount
+                frame.fn.localSlotNames.getOrNull(localIndex)
+            }
+            val message = name?.let { "property '$it' is unset (not initialized)" }
+                ?: "property is unset (not initialized) in ${frame.fn.name} at slot $calleeSlot"
+            frame.ensureScope().raiseUnset(message)
+        }
+        if (callee !is net.sergeych.lyng.obj.ObjExternCallable) {
+            frame.ensureScope().raiseIllegalState("CALL_BRIDGE_SLOT expects extern callable")
+        }
+        val args = frame.buildArguments(argBase, argCount)
+        val result = if (PerfFlags.SCOPE_POOL) {
+            frame.ensureScope().withChildFrame(args) { child -> callee.callOn(child) }
+        } else {
+            val scope = frame.ensureScope()
+            callee.callOn(scope.createChildScope(scope.pos, args = args))
+        }
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
+class CmdListLiteral(
+    internal val planId: Int,
+    internal val baseSlot: Int,
+    internal val count: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val plan = frame.fn.constants.getOrNull(planId) as? BytecodeConst.ListLiteralPlan
+            ?: error("LIST_LITERAL expects ListLiteralPlan at $planId")
+        val list = ArrayList<Obj>(count)
+        for (i in 0 until count) {
+            val value = frame.slotToObj(baseSlot + i)
+            if (plan.spreads.getOrNull(i) == true) {
+                when (value) {
+                    is ObjList -> {
+                        list.ensureCapacity(list.size + value.list.size)
+                        list.addAll(value.list)
+                    }
+                    else -> frame.ensureScope().raiseError("Spread element must be list")
+                }
+            } else {
+                list.add(value)
+            }
+        }
+        frame.storeObjResult(dst, ObjList(list))
+        return
+    }
+}
+
+private fun decodeMemberId(id: Int): Pair<Int, Boolean> {
+    return if (id <= -2) {
+        Pair(-id - 2, true)
+    } else {
+        Pair(id, false)
+    }
+}
+
+private suspend fun resolveDynamicFieldValue(scope: Scope, receiver: Obj, name: String, rec: ObjRecord): Obj {
+    if (rec.type == ObjRecord.Type.Delegated || rec.value is ObjProperty || rec.type == ObjRecord.Type.Property) {
+        val recv = rec.receiver ?: receiver
+        return recv.resolveRecord(scope, rec, name, rec.declaringClass).value
+    }
+    if (rec.receiver != null && rec.declaringClass != null) {
+        return rec.receiver!!.resolveRecord(scope, rec, name, rec.declaringClass).value
+    }
+    if (rec.type == ObjRecord.Type.Fun && !rec.isAbstract) {
+        val recv = rec.receiver ?: receiver
+        return rec.value.invoke(scope, recv, Arguments.EMPTY, rec.declaringClass)
+    }
+    return rec.value
+}
+
+class CmdGetMemberSlot(
+    internal val recvSlot: Int,
+    internal val fieldId: Int,
+    internal val methodId: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val receiver = frame.slotToObj(recvSlot)
+        val inst = receiver as? ObjInstance
+        val cls = receiver as? ObjClass
+        val (fieldIdResolved, fieldOnObjClass) = decodeMemberId(fieldId)
+        val (methodIdResolved, methodOnObjClass) = decodeMemberId(methodId)
+        val fieldRec = if (fieldIdResolved >= 0) {
+            when {
+                inst != null -> inst.fieldRecordForId(fieldIdResolved) ?: inst.objClass.fieldRecordForId(fieldIdResolved)
+                cls != null && fieldOnObjClass -> cls.objClass.fieldRecordForId(fieldIdResolved)
+                cls != null -> cls.fieldRecordForId(fieldIdResolved)
+                else -> receiver.objClass.fieldRecordForId(fieldIdResolved)
+            }
+        } else null
+        val rec = fieldRec ?: run {
+            if (methodIdResolved >= 0) {
+                when {
+                    inst != null -> inst.methodRecordForId(methodIdResolved) ?: inst.objClass.methodRecordForId(methodIdResolved)
+                    cls != null && methodOnObjClass -> cls.objClass.methodRecordForId(methodIdResolved)
+                    cls != null -> cls.methodRecordForId(methodIdResolved)
+                    else -> receiver.objClass.methodRecordForId(methodIdResolved)
+                }
+            } else null
+        } ?: frame.ensureScope().raiseSymbolNotFound("member")
+        val rawName = rec.memberName ?: "<member>"
+        val name = if (receiver is ObjInstance && rawName.contains("::")) {
+            rawName.substringAfterLast("::")
+        } else {
+            rawName
+        }
+        suspend fun autoCallIfMethod(resolved: ObjRecord, recv: Obj): Obj {
+            return if (resolved.type == ObjRecord.Type.Fun && !resolved.isAbstract) {
+                resolved.value.invoke(frame.ensureScope(), resolved.receiver ?: recv, Arguments.EMPTY, resolved.declaringClass)
+            } else {
+                resolved.value
+            }
+        }
+        if (receiver is ObjQualifiedView) {
+            val resolved = receiver.readField(frame.ensureScope(), name)
+            frame.storeObjResult(dst, autoCallIfMethod(resolved, receiver))
+            return
+        }
+        val resolved = receiver.resolveRecord(frame.ensureScope(), rec, name, rec.declaringClass)
+        frame.storeObjResult(dst, autoCallIfMethod(resolved, receiver))
+        return
+    }
+}
+
+class CmdSetMemberSlot(
+    internal val recvSlot: Int,
+    internal val fieldId: Int,
+    internal val methodId: Int,
+    internal val valueSlot: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val receiver = frame.slotToObj(recvSlot)
+        val inst = receiver as? ObjInstance
+        val cls = receiver as? ObjClass
+        val (fieldIdResolved, fieldOnObjClass) = decodeMemberId(fieldId)
+        val (methodIdResolved, methodOnObjClass) = decodeMemberId(methodId)
+        val fieldRec = if (fieldIdResolved >= 0) {
+            when {
+                inst != null -> inst.fieldRecordForId(fieldIdResolved) ?: inst.objClass.fieldRecordForId(fieldIdResolved)
+                cls != null && fieldOnObjClass -> cls.objClass.fieldRecordForId(fieldIdResolved)
+                cls != null -> cls.fieldRecordForId(fieldIdResolved)
+                else -> receiver.objClass.fieldRecordForId(fieldIdResolved)
+            }
+        } else null
+        val rec = fieldRec ?: run {
+            if (methodIdResolved >= 0) {
+                when {
+                    inst != null -> inst.methodRecordForId(methodIdResolved) ?: inst.objClass.methodRecordForId(methodIdResolved)
+                    cls != null && methodOnObjClass -> cls.objClass.methodRecordForId(methodIdResolved)
+                    cls != null -> cls.methodRecordForId(methodIdResolved)
+                    else -> receiver.objClass.methodRecordForId(methodIdResolved)
+                }
+            } else null
+        } ?: frame.ensureScope().raiseSymbolNotFound("member")
+        val rawName = rec.memberName ?: "<member>"
+        val name = if (receiver is ObjInstance && rawName.contains("::")) {
+            rawName.substringAfterLast("::")
+        } else {
+            rawName
+        }
+        if (receiver is ObjQualifiedView) {
+            receiver.writeField(frame.ensureScope(), name, frame.slotToObj(valueSlot))
+            return
+        }
+        receiver.writeField(frame.ensureScope(), name, frame.slotToObj(valueSlot))
+        return
+    }
+}
+
+class CmdGetClassScope(
+    internal val classSlot: Int,
+    internal val nameId: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
+            ?: error("GET_CLASS_SCOPE expects StringVal at $nameId")
+        val scope = frame.ensureScope()
+        val cls = frame.slotToObj(classSlot) as? ObjClass
+            ?: scope.raiseSymbolNotFound(nameConst.value)
+        val name = nameConst.value
+        var rec: ObjRecord? = null
+        var decl: ObjClass? = null
+        for (c in cls.mro) {
+            if (c.className == "Obj") break
+            val candidate = c.classScope?.objects?.get(name) ?: c.members[name]
+            if (candidate == null || candidate.isAbstract) continue
+            val declared = candidate.declaringClass ?: c
+            if (!canAccessMember(candidate.visibility, declared, scope.currentClassCtx, name)) {
+                scope.raiseError(
+                    ObjIllegalAccessException(
+                        scope,
+                        "can't access field ${name}: not visible (declared in ${declared.className}, caller ${scope.currentClassCtx?.className ?: "?"})"
+                    )
+                )
+            }
+            rec = candidate
+            decl = declared
+            break
+        }
+        val resolved = rec ?: scope.raiseSymbolNotFound(name)
+        val declClass = decl ?: cls
+        val resolvedRec = cls.resolveRecord(scope, resolved, name, declClass)
+        val value = resolvedRec.value
+        frame.storeObjResult(dst, value)
+        return
+    }
+}
+
+class CmdSetClassScope(
+    internal val classSlot: Int,
+    internal val nameId: Int,
+    internal val valueSlot: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
+            ?: error("SET_CLASS_SCOPE expects StringVal at $nameId")
+        val scope = frame.ensureScope()
+        val cls = frame.slotToObj(classSlot) as? ObjClass
+            ?: scope.raiseSymbolNotFound(nameConst.value)
+        cls.writeField(scope, nameConst.value, frame.slotToObj(valueSlot))
+        return
+    }
+}
+
+class CmdGetDynamicMember(
+    internal val recvSlot: Int,
+    internal val nameId: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
+            ?: error("GET_DYNAMIC_MEMBER expects StringVal at $nameId")
+        val scope = frame.ensureScope()
+        val receiver = frame.slotToObj(recvSlot)
+        val rec = receiver.readField(scope, nameConst.value)
+        val value = resolveDynamicFieldValue(scope, receiver, nameConst.value, rec)
+        frame.storeObjResult(dst, value)
+        return
+    }
+}
+
+class CmdSetDynamicMember(
+    internal val recvSlot: Int,
+    internal val nameId: Int,
+    internal val valueSlot: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
+            ?: error("SET_DYNAMIC_MEMBER expects StringVal at $nameId")
+        val scope = frame.ensureScope()
+        val receiver = frame.slotToObj(recvSlot)
+        receiver.writeField(scope, nameConst.value, frame.slotToObj(valueSlot))
+        return
+    }
+}
+
+class CmdCallDynamicMember(
+    internal val recvSlot: Int,
+    internal val nameId: Int,
+    internal val argBase: Int,
+    internal val argCount: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val nameConst = frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal
+            ?: error("CALL_DYNAMIC_MEMBER expects StringVal at $nameId")
+        val scope = frame.ensureScope()
+        val receiver = frame.slotToObj(recvSlot)
+        val callArgs = frame.buildArguments(argBase, argCount)
+        val result = receiver.invokeInstanceMethod(scope, nameConst.value, callArgs)
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
+class CmdCallMemberSlot(
+    internal val recvSlot: Int,
+    internal val methodId: Int,
+    internal val argBase: Int,
+    internal val argCount: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val receiver = frame.slotToObj(recvSlot)
+        val inst = receiver as? ObjInstance
+        val cls = receiver as? ObjClass
+        val (methodIdResolved, methodOnObjClass) = decodeMemberId(methodId)
+        val rec = inst?.methodRecordForId(methodIdResolved)
+            ?: when {
+                cls != null && methodOnObjClass -> cls.objClass.methodRecordForId(methodIdResolved)
+                cls != null -> cls.methodRecordForId(methodIdResolved)
+                else -> receiver.objClass.methodRecordForId(methodIdResolved)
+            }
+            ?: frame.ensureScope().raiseError("member id $methodId not found on ${receiver.objClass.className}")
+        val callArgs = frame.buildArguments(argBase, argCount)
+        val rawName = rec.memberName ?: "<member>"
+        val name = if (receiver is ObjInstance && rawName.contains("::")) {
+            rawName.substringAfterLast("::")
+        } else {
+            rawName
+        }
+        if (receiver is ObjQualifiedView) {
+            val result = receiver.invokeInstanceMethod(frame.ensureScope(), name, callArgs)
+            frame.storeObjResult(dst, result)
+            return
+        }
+        val scope = frame.ensureScope()
+        val decl = rec.declaringClass ?: receiver.objClass
+        if (!canAccessMember(rec.visibility, decl, scope.currentClassCtx, name)) {
+            scope.raiseError(
+                ObjIllegalAccessException(
+                    scope,
+                    "can't invoke ${name}: not visible (declared in ${decl.className}, caller ${scope.currentClassCtx?.className ?: "?"})"
+                )
+            )
+        }
+        val result = when (rec.type) {
+            ObjRecord.Type.Property -> {
+                if (callArgs.isEmpty()) (rec.value as ObjProperty).callGetter(scope, receiver, decl)
+                else scope.raiseError("property $name cannot be called with arguments")
+            }
+            ObjRecord.Type.Fun -> {
+                val callScope = inst?.instanceScope ?: scope
+                rec.value.invoke(callScope, receiver, callArgs, decl)
+            }
+            ObjRecord.Type.Delegated -> {
+                val delegate = when (receiver) {
+                    is ObjInstance -> {
+                        val storageName = decl.mangledName(name)
+                        var del = receiver.instanceScope[storageName]?.delegate ?: rec.delegate
+                        if (del == null) {
+                            for (c in receiver.objClass.mro) {
+                                del = receiver.instanceScope[c.mangledName(name)]?.delegate
+                                if (del != null) break
+                            }
+                        }
+                        del ?: scope.raiseError("Internal error: delegated member $name has no delegate (tried $storageName)")
+                    }
+                    is ObjClass -> rec.delegate ?: scope.raiseError("Internal error: delegated member $name has no delegate")
+                    else -> rec.delegate ?: scope.raiseError("Internal error: delegated member $name has no delegate")
+                }
+                val allArgs = (listOf(receiver, ObjString(name)) + callArgs.list).toTypedArray()
+                delegate.invokeInstanceMethod(scope, "invoke", Arguments(*allArgs), onNotFoundResult = {
+                    val propVal = delegate.invokeInstanceMethod(scope, "getValue", Arguments(receiver, ObjString(name)))
+                    propVal.invoke(scope, receiver, callArgs, decl)
+                })
+            }
+            else -> frame.ensureScope().raiseError("member $name is not callable")
+        }
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
+class CmdGetIndex(
+    internal val targetSlot: Int,
+    internal val indexSlot: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val result = frame.slotToObj(targetSlot).getAt(frame.ensureScope(), frame.slotToObj(indexSlot))
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
+class CmdSetIndex(
+    internal val targetSlot: Int,
+    internal val indexSlot: Int,
+    internal val valueSlot: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.slotToObj(targetSlot).putAt(frame.ensureScope(), frame.slotToObj(indexSlot), frame.slotToObj(valueSlot))
+        return
+    }
+}
+
+class CmdMakeLambda(internal val id: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val lambdaConst = frame.fn.constants.getOrNull(id) as? BytecodeConst.LambdaFn
+            ?: error("MAKE_LAMBDA_FN expects LambdaFn at $id")
+        val scope = frame.ensureScope()
+        val captureRecords = lambdaConst.captureTableId?.let { frame.buildCaptureRecords(it, lambdaConst.captureNames) }
+        val stmt = BytecodeLambdaCallable(
+            fn = lambdaConst.fn,
+            closureScope = scope,
+            captureRecords = captureRecords,
+            captureNames = lambdaConst.captureNames,
+            paramSlotPlan = lambdaConst.paramSlotPlan,
+            argsDeclaration = lambdaConst.argsDeclaration,
+            preferredThisType = lambdaConst.preferredThisType,
+            returnLabels = lambdaConst.returnLabels,
+            pos = lambdaConst.pos
+        )
+        val callable: Obj = if (lambdaConst.wrapAsExtensionCallable) {
+            ObjExtensionMethodCallable("<lambda>", stmt)
+        } else {
+            stmt
+        }
+        frame.storeObjResult(dst, callable.asReadonly.value)
+        return
+    }
+}
+
+class BytecodeLambdaCallable(
+    private val fn: CmdFunction,
+    private val closureScope: Scope,
+    private val captureRecords: List<ObjRecord>?,
+    private val captureNames: List<String>,
+    private val paramSlotPlan: Map<String, Int>,
+    private val argsDeclaration: ArgsDeclaration?,
+    private val preferredThisType: String?,
+    private val returnLabels: Set<String>,
+    override val pos: Pos,
+) : Statement(), BytecodeCallable {
+    override suspend fun execute(scope: Scope): Obj {
+        val context = scope.applyClosureForBytecode(closureScope, preferredThisType).also {
+            it.args = scope.args
+        }
+        if (captureRecords != null) {
+            context.captureRecords = captureRecords
+            context.captureNames = captureNames
+        } else if (captureNames.isNotEmpty()) {
+            closureScope.raiseIllegalState("bytecode lambda capture records missing")
+        }
+        if (argsDeclaration == null) {
+            // Bound in the bytecode entry binder.
+        } else {
+            // args bound into frame slots in the bytecode entry binder
+        }
+        return try {
+            val declaredNames = fn.constants
+                .mapNotNull { it as? BytecodeConst.LocalDecl }
+                .mapTo(mutableSetOf()) { it.name }
+            val binder: suspend (CmdFrame, Arguments) -> Unit = { frame, arguments ->
+                val slotPlan = fn.localSlotPlanByName()
+                if (argsDeclaration == null) {
+                    val l = arguments.list
+                    val itValue: Obj = when (l.size) {
+                        0 -> ObjVoid
+                        1 -> l[0]
+                        else -> ObjList(l.toMutableList())
+                    }
+                    val itSlot = slotPlan["it"]
+                    if (itSlot != null) {
+                        frame.frame.setObj(itSlot, itValue)
+                    }
+                } else {
+                    argsDeclaration.assignToFrame(
+                        context,
+                        arguments,
+                        slotPlan,
+                        frame.frame
+                    )
+                }
+                val localNames = frame.fn.localSlotNames
+                for (i in localNames.indices) {
+                    val name = localNames[i] ?: continue
+                    if (declaredNames.contains(name)) continue
+                    val slotType = frame.getLocalSlotTypeCode(i)
+                    if (slotType != SlotType.UNKNOWN.code && slotType != SlotType.OBJ.code) {
+                        continue
+                    }
+                    if (slotType == SlotType.OBJ.code && frame.frame.getRawObj(i) != null) {
+                        continue
+                    }
+                    val record = context.getLocalRecordDirect(name)
+                        ?: context.parent?.get(name)
+                        ?: context.get(name)
+                        ?: continue
+                    val value = if (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property) {
+                        context.resolve(record, name)
+                    } else {
+                        record.value
+                    }
+                    frame.frame.setObj(i, value)
+                }
+            }
+            CmdVm().execute(fn, context, scope.args, binder)
+        } catch (e: ReturnException) {
+            if (e.label == null || returnLabels.contains(e.label)) e.result else throw e
+        }
+    }
+}
+
+class CmdIterPush(internal val iterSlot: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.pushIterator(frame.slotToObj(iterSlot))
+        return
+    }
+}
+
+class CmdIterPop : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.popIterator()
+        return
+    }
+}
+
+class CmdIterCancel : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        frame.cancelTopIterator()
+        return
+    }
+}
+
+class CmdFrame(
+    val vm: CmdVm,
+    val fn: CmdFunction,
+    scope0: Scope,
+    args: List<Obj>,
+) {
+    companion object {
+        private const val ARG_PLAN_FLAG = 0x8000
+        private const val ARG_PLAN_MASK = 0x7FFF
+    }
+
+    var ip: Int = 0
+    var scope: Scope = scope0
+    private val moduleScope: Scope = resolveModuleScope(scope0)
+    private val scopeSlotNames: Set<String> = fn.scopeSlotNames.filterNotNull().toSet()
+    private var lastScopePosIp = -1
+
+    internal val scopeStack = ArrayDeque<Scope>()
+    internal val scopeVirtualStack = ArrayDeque<Boolean>()
+    internal val slotPlanStack = ArrayDeque<Map<String, Int?>>()
+    internal val slotPlanScopeStack = ArrayDeque<Boolean>()
+    private val captureStack = ArrayDeque<List<String>>()
+    private var scopeDepth = 0
+    private var virtualDepth = 0
+    private val iterStack = ArrayDeque<Obj>()
+    internal data class TryHandler(
+        val exceptionSlot: Int,
+        val catchIp: Int,
+        val finallyIp: Int,
+        var inCatch: Boolean = false
+    )
+    internal val tryStack = ArrayDeque<TryHandler>()
+    private var pendingThrowable: Throwable? = null
+
+    internal val frame: BytecodeFrame
+    private val addrScopes: Array<Scope?> = arrayOfNulls(fn.addrCount)
+    private val addrIndices: IntArray = IntArray(fn.addrCount)
+    private val addrScopeSlots: IntArray = IntArray(fn.addrCount)
+
+    init {
+        frame = resolveFrame(scope0, fn, args)
+        for (i in args.indices) {
+            if (i >= frame.slotCount - frame.argBase) break
+            frame.setObj(frame.argBase + i, args[i])
+        }
+    }
+
+    private fun resolveFrame(scope: Scope, fn: CmdFunction, args: List<Obj>): BytecodeFrame {
+        val moduleScope = scope as? ModuleScope
+        if (moduleScope != null && args.isEmpty()) {
+            return moduleScope.ensureModuleFrame(fn)
+        }
+        return BytecodeFrame(fn.localCount, args.size)
+    }
+
+    internal fun getLocalSlotTypeCode(localIndex: Int): Byte = frame.getSlotTypeCode(localIndex)
+    internal fun isFastLocalSlot(slot: Int): Boolean {
+        if (slot < fn.scopeSlotCount) return false
+        val localIndex = slot - fn.scopeSlotCount
+        return fn.localSlotCaptures.getOrNull(localIndex) != true
+    }
+
+    internal fun getLocalObjIntValue(localIndex: Int): Long {
+        return when (frame.getSlotTypeCode(localIndex)) {
+            SlotType.INT.code -> frame.getInt(localIndex)
+            SlotType.OBJ.code -> (frame.getObj(localIndex) as ObjInt).value
+            else -> error("expected ObjInt/INT in local slot $localIndex")
+        }
+    }
+
+    internal fun getLocalObjRealValue(localIndex: Int): Double {
+        return when (frame.getSlotTypeCode(localIndex)) {
+            SlotType.REAL.code -> frame.getReal(localIndex)
+            SlotType.INT.code -> frame.getInt(localIndex).toDouble()
+            SlotType.OBJ.code -> (frame.getObj(localIndex) as ObjReal).value
+            else -> error("expected ObjReal/REAL in local slot $localIndex")
+        }
+    }
+
+    internal fun applyCaptureRecords() {
+        val captureRecords = scope.captureRecords ?: return
+        val captureNames = scope.captureNames ?: return
+        val localNames = fn.localSlotNames
+        if (localNames.isEmpty()) return
+        for (i in captureNames.indices) {
+            val name = captureNames[i]
+            val record = captureRecords.getOrNull(i) ?: continue
+            var localIndex = -1
+            for (idx in localNames.indices) {
+                if (localNames[idx] != name) continue
+                if (fn.localSlotCaptures.getOrNull(idx) != true) continue
+                localIndex = idx
+                break
+            }
+            if (localIndex < 0) {
+                for (idx in localNames.indices) {
+                    if (localNames[idx] != name) continue
+                    localIndex = idx
+                    break
+                }
+            }
+            if (localIndex < 0) continue
+            if (record.type == ObjRecord.Type.Delegated) {
+                frame.setObj(localIndex, record.delegate ?: ObjNull)
+            } else {
+                val value = record.value
+                if (value is FrameSlotRef) {
+                    if (value.refersTo(frame, localIndex)) continue
+                    frame.setObj(localIndex, value)
+                } else {
+                    frame.setObj(localIndex, RecordSlotRef(record))
+                }
+            }
+            for (idx in localNames.indices) {
+                if (idx == localIndex) continue
+                if (localNames[idx] != name) continue
+                if (fn.localSlotCaptures.getOrNull(idx) == true) continue
+                if (record.type == ObjRecord.Type.Delegated) {
+                    frame.setObj(idx, record.delegate ?: ObjNull)
+                } else {
+                    val value = record.value
+                    if (value is FrameSlotRef) {
+                        frame.setObj(idx, value)
+                    } else {
+                        frame.setObj(idx, RecordSlotRef(record))
+                    }
+                }
+            }
+        }
+    }
+
+    internal fun buildCaptureRecords(captureTableId: Int, captureNames: List<String>? = null): List<ObjRecord> {
+        val table = fn.constants.getOrNull(captureTableId) as? BytecodeConst.CaptureTable
+            ?: error("Capture table $captureTableId missing")
+        return table.entries.mapIndexed { index, entry ->
+            when (entry.ownerKind) {
+                CaptureOwnerFrameKind.LOCAL -> {
+                    val localIndex = entry.slotIndex - fn.scopeSlotCount
+                    if (localIndex < 0) {
+                        error("Invalid local capture slot ${entry.slotIndex}")
+                    }
+                    val name = captureNames?.getOrNull(index)
+                    if (name != null) {
+                        val inheritedNames = scope.captureNames
+                        val inheritedRecords = scope.captureRecords
+                        if (inheritedNames != null && inheritedRecords != null) {
+                            val inheritedIndex = inheritedNames.indexOf(name)
+                            if (inheritedIndex >= 0) {
+                                val inherited = inheritedRecords.getOrNull(inheritedIndex)
+                                if (inherited != null) {
+                                    val copied = ObjRecord(
+                                        value = inherited.value,
+                                        isMutable = inherited.isMutable,
+                                        visibility = inherited.visibility,
+                                        isTransient = inherited.isTransient,
+                                        type = inherited.type
+                                    )
+                                    copied.delegate = inherited.delegate
+                                    return@mapIndexed copied
+                                }
+                            }
+                        }
+                    }
+                    val isMutable = fn.localSlotMutables.getOrNull(localIndex) ?: false
+                    val isDelegated = fn.localSlotDelegated.getOrNull(localIndex) ?: false
+                    if (isDelegated) {
+                        val delegate = frame.getObj(localIndex)
+                        ObjRecord(ObjNull, isMutable, type = ObjRecord.Type.Delegated).also {
+                            it.delegate = delegate
+                        }
+                    } else {
+                        val raw = frame.getRawObj(localIndex)
+                        if (raw == null && name != null) {
+                            val record = scope.get(name)
+                            if (record != null) {
+                                val value = record.value
+                                return@mapIndexed when (value) {
+                                    is FrameSlotRef -> ObjRecord(value, isMutable)
+                                    is RecordSlotRef -> ObjRecord(value, isMutable)
+                                    else -> ObjRecord(value, isMutable)
+                                }
+                            }
+                        }
+                        when (raw) {
+                            is FrameSlotRef -> ObjRecord(raw, isMutable)
+                            is RecordSlotRef -> ObjRecord(raw, isMutable)
+                            else -> ObjRecord(FrameSlotRef(frame, localIndex), isMutable)
+                        }
+                    }
+                }
+                CaptureOwnerFrameKind.MODULE -> {
+                    val slot = entry.slotIndex
+                    val target = scopeTarget(slot)
+                    val index = fn.scopeSlotIndices[slot]
+                    target.getSlotRecord(index)
+                }
+            }
+        }
+    }
+
+    private fun shouldSyncLocalCaptures(captures: List<String>): Boolean {
+        if (captures.isEmpty()) return false
+        val localNames = fn.localSlotNames
+        if (localNames.isEmpty()) return false
+        for (capture in captures) {
+            for (local in localNames) {
+                if (local == null) continue
+                if (local == capture) return true
+            }
+        }
+        return false
+    }
+
+    private fun resolveModuleScope(scope: Scope): Scope {
+        val moduleSlotName = fn.scopeSlotNames.indices
+            .firstOrNull { fn.scopeSlotIsModule.getOrNull(it) == true }
+            ?.let { fn.scopeSlotNames[it] }
+        if (moduleSlotName != null) {
+            val bySlot = findScopeWithSlot(scope, moduleSlotName)
+            bySlot?.let { return it }
+            val byRecord = findScopeWithRecord(scope, moduleSlotName)
+            byRecord?.let { return it }
+            return scope
+        }
+        findModuleScope(scope)?.let { return it }
+        return scope
+    }
+
+    private fun findScopeWithSlot(scope: Scope, slotName: String): Scope? {
+        val visited = HashSet<Scope>(16)
+        val queue = ArrayDeque<Scope>()
+        queue.add(scope)
+        while (queue.isNotEmpty()) {
+            val current = queue.removeFirst()
+            if (!visited.add(current)) continue
+            if (current.getSlotIndexOf(slotName) != null) return current
+            current.parent?.let { queue.add(it) }
+            if (current is BytecodeClosureScope) {
+                queue.add(current.closureScope)
+            } else if (current is ApplyScope) {
+                queue.add(current.applied)
+            }
+        }
+        return null
+    }
+
+    private fun findScopeWithRecord(scope: Scope, name: String): Scope? {
+        val visited = HashSet<Scope>(16)
+        val queue = ArrayDeque<Scope>()
+        queue.add(scope)
+        while (queue.isNotEmpty()) {
+            val current = queue.removeFirst()
+            if (!visited.add(current)) continue
+            if (current.getLocalRecordDirect(name) != null) return current
+            current.parent?.let { queue.add(it) }
+            if (current is BytecodeClosureScope) {
+                queue.add(current.closureScope)
+            } else if (current is ApplyScope) {
+                queue.add(current.applied)
+            }
+        }
+        return null
+    }
+
+    private fun findModuleScope(scope: Scope): Scope? {
+        val visited = HashSet<Scope>(16)
+        val queue = ArrayDeque<Scope>()
+        queue.add(scope)
+        while (queue.isNotEmpty()) {
+            val current = queue.removeFirst()
+            if (!visited.add(current)) continue
+            if (current is ModuleScope) return current
+            if (current.parent is ModuleScope) return current
+            current.parent?.let { queue.add(it) }
+            if (current is BytecodeClosureScope) {
+                queue.add(current.closureScope)
+            } else if (current is ApplyScope) {
+                queue.add(current.applied)
+            }
+        }
+        return null
+    }
+
+    fun ensureScope(): Scope {
+        val pos = posForIp(ip - 1)
+        if (pos != null && lastScopePosIp != ip) {
+            scope.pos = pos
+            lastScopePosIp = ip
+        }
+        return scope
+    }
+
+    fun handleException(t: Throwable): Boolean {
+        val handler = tryStack.lastOrNull() ?: return false
+        val finallyIp = handler.finallyIp
+        if (t is ReturnException || t is LoopBreakContinueException) {
+            if (finallyIp >= 0) {
+                pendingThrowable = t
+                ip = finallyIp
+                return true
+            }
+            return false
+        }
+        if (handler.inCatch) {
+            if (finallyIp >= 0) {
+                pendingThrowable = t
+                ip = finallyIp
+                return true
+            }
+            return false
+        }
+        handler.inCatch = true
+        pendingThrowable = t
+        if (handler.catchIp >= 0) {
+            val caughtObj = when (t) {
+                is ExecutionError -> t.errorObject
+                else -> ObjUnknownException(ensureScope(), t.message ?: t.toString())
+            }
+            storeObjResult(handler.exceptionSlot, caughtObj)
+            ip = handler.catchIp
+            return true
+        }
+        if (finallyIp >= 0) {
+            ip = finallyIp
+            return true
+        }
+        return false
+    }
+
+    fun pushTry(exceptionSlot: Int, catchIp: Int, finallyIp: Int) {
+        tryStack.addLast(TryHandler(exceptionSlot, catchIp, finallyIp))
+    }
+
+    fun popTry() {
+        if (tryStack.isNotEmpty()) {
+            tryStack.removeLast()
+        }
+    }
+
+    fun clearPendingThrowable() {
+        pendingThrowable = null
+    }
+
+    fun rethrowPending() {
+        val t = pendingThrowable ?: return
+        pendingThrowable = null
+        throw t
+    }
+
+    private fun posForIp(ip: Int): Pos? {
+        if (ip < 0) return null
+        return fn.posByIp.getOrNull(ip)
+    }
+
+    fun pushScope(plan: Map<String, Int>, captures: List<String>) {
+        if (scope.skipScopeCreation) {
+            val snapshot = emptyMap<String, Int?>()
+            slotPlanStack.addLast(snapshot)
+            virtualDepth += 1
+            scopeStack.addLast(scope)
+            scopeVirtualStack.addLast(true)
+        } else {
+            scopeStack.addLast(scope)
+            scopeVirtualStack.addLast(false)
+            scope = scope.createChildScope()
+        }
+        captureStack.addLast(captures)
+        scopeDepth += 1
+    }
+
+    fun popScope() {
+        val isVirtual = scopeVirtualStack.removeLastOrNull()
+            ?: error("Scope stack underflow in POP_SCOPE")
+        if (isVirtual) {
+            val snapshot = slotPlanStack.removeLastOrNull()
+                ?: error("Slot plan stack underflow in POP_SCOPE")
+            scope.restoreSlotPlan(snapshot)
+            virtualDepth -= 1
+        }
+        scope = scopeStack.removeLastOrNull()
+            ?: error("Scope stack underflow in POP_SCOPE")
+        val captures = captureStack.removeLastOrNull() ?: emptyList()
+        scopeDepth -= 1
+    }
+
+    fun pushIterator(iter: Obj) {
+        iterStack.addLast(iter)
+    }
+
+    fun popIterator() {
+        iterStack.removeLastOrNull()
+    }
+
+    suspend fun cancelTopIterator() {
+        val iter = iterStack.removeLastOrNull() ?: return
+        iter.invokeInstanceMethod(ensureScope(), "cancelIteration") { ObjVoid }
+    }
+
+    suspend fun cancelIterators() {
+        while (iterStack.isNotEmpty()) {
+            val iter = iterStack.removeLast()
+            iter.invokeInstanceMethod(ensureScope(), "cancelIteration") { ObjVoid }
+        }
+    }
+
+    fun pushSlotPlan(plan: Map<String, Int>) {
+        if (scope.hasSlotPlanConflict(plan)) {
+            scopeStack.addLast(scope)
+            slotPlanScopeStack.addLast(true)
+            scope = scope.createChildScope()
+        } else {
+            val snapshot = emptyMap<String, Int?>()
+            slotPlanStack.addLast(snapshot)
+            slotPlanScopeStack.addLast(false)
+            virtualDepth += 1
+        }
+        scopeDepth += 1
+    }
+
+    fun popSlotPlan() {
+        val pushedScope = slotPlanScopeStack.removeLastOrNull()
+            ?: error("Slot plan stack underflow in POP_SLOT_PLAN")
+        if (pushedScope) {
+            scope = scopeStack.removeLastOrNull()
+                ?: error("Scope stack underflow in POP_SLOT_PLAN")
+        } else {
+            val snapshot = slotPlanStack.removeLastOrNull()
+                ?: error("Slot plan stack underflow in POP_SLOT_PLAN")
+            scope.restoreSlotPlan(snapshot)
+            virtualDepth -= 1
+        }
+        scopeDepth -= 1
+    }
+
+    suspend fun getObj(slot: Int): Obj {
+        return if (slot < fn.scopeSlotCount) {
+            getScopeSlotValue(slot)
+        } else {
+            localSlotToObj(slot - fn.scopeSlotCount)
+        }
+    }
+
+    fun setObj(slot: Int, value: Obj) {
+        if (slot < fn.scopeSlotCount) {
+            val target = scopeTarget(slot)
+            val index = ensureScopeSlot(target, slot)
+            val record = target.getSlotRecord(index)
+            if (!record.isMutable) {
+                val name = fn.scopeSlotNames[slot] ?: "slot#$index"
+                ensureScope().raiseError("can't assign to read-only variable: $name")
+            }
+            target.setSlotValue(index, value)
+        } else {
+            val localIndex = slot - fn.scopeSlotCount
+            ensureLocalMutable(localIndex)
+            when (val existing = frame.getRawObj(localIndex)) {
+                is FrameSlotRef -> {
+                    existing.write(value)
+                    return
+                }
+                is RecordSlotRef -> {
+                    existing.write(value)
+                    return
+                }
+                else -> {}
+            }
+            frame.setObj(localIndex, value)
+        }
+    }
+
+    fun shouldBypassImmutableWrite(slot: Int): Boolean {
+        val next = fn.cmds.getOrNull(ip) ?: return false
+        return when (next) {
+            is CmdDeclLocal -> next.slot == slot
+            is CmdDeclDelegated -> next.slot == slot
+            else -> false
+        }
+    }
+
+    suspend fun getInt(slot: Int): Long {
+        return if (slot < fn.scopeSlotCount) {
+            getScopeSlotValue(slot).toLong()
+        } else {
+            val local = slot - fn.scopeSlotCount
+            when (frame.getSlotTypeCode(local)) {
+                SlotType.INT.code -> frame.getInt(local)
+                SlotType.REAL.code -> frame.getReal(local).toLong()
+                SlotType.BOOL.code -> if (frame.getBool(local)) 1L else 0L
+                SlotType.OBJ.code -> {
+                    val obj = frame.getObj(local)
+                    when (obj) {
+                        is FrameSlotRef -> obj.read().toLong()
+                        is RecordSlotRef -> obj.read().toLong()
+                        else -> obj.toLong()
+                    }
+                }
+                else -> 0L
+            }
+        }
+    }
+
+    fun getLocalInt(local: Int): Long = frame.getInt(local)
+    fun getLocalReal(local: Int): Double = frame.getReal(local)
+
+    fun setIntUnchecked(slot: Int, value: Long) {
+        if (slot < fn.scopeSlotCount) {
+            val target = scopeTarget(slot)
+            val index = ensureScopeSlot(target, slot)
+            target.setSlotValue(index, ObjInt.of(value))
+        } else {
+            val localIndex = slot - fn.scopeSlotCount
+            when (val existing = frame.getRawObj(localIndex)) {
+                is FrameSlotRef -> {
+                    existing.write(ObjInt.of(value))
+                    return
+                }
+                is RecordSlotRef -> {
+                    existing.write(ObjInt.of(value))
+                    return
+                }
+                else -> {}
+            }
+            frame.setInt(localIndex, value)
+        }
+    }
+
+    fun setInt(slot: Int, value: Long) {
+        if (slot < fn.scopeSlotCount) {
+            val target = scopeTarget(slot)
+            val index = ensureScopeSlot(target, slot)
+            val record = target.getSlotRecord(index)
+            if (!record.isMutable) {
+                val name = fn.scopeSlotNames[slot] ?: "slot#$index"
+                ensureScope().raiseError("can't assign to read-only variable: $name")
+            }
+            target.setSlotValue(index, ObjInt.of(value))
+        } else {
+            val localIndex = slot - fn.scopeSlotCount
+            ensureLocalMutable(localIndex)
+            when (val existing = frame.getRawObj(localIndex)) {
+                is FrameSlotRef -> {
+                    existing.write(ObjInt.of(value))
+                    return
+                }
+                is RecordSlotRef -> {
+                    existing.write(ObjInt.of(value))
+                    return
+                }
+                else -> {}
+            }
+            frame.setInt(localIndex, value)
+        }
+    }
+
+    fun setLocalInt(local: Int, value: Long) {
+        frame.setInt(local, value)
+    }
+
+    fun setLocalReal(local: Int, value: Double) {
+        frame.setReal(local, value)
+    }
+
+    suspend fun getReal(slot: Int): Double {
+        return if (slot < fn.scopeSlotCount) {
+            getScopeSlotValue(slot).toDouble()
+        } else {
+            val local = slot - fn.scopeSlotCount
+            when (frame.getSlotTypeCode(local)) {
+                SlotType.REAL.code -> frame.getReal(local)
+                SlotType.INT.code -> frame.getInt(local).toDouble()
+                SlotType.BOOL.code -> if (frame.getBool(local)) 1.0 else 0.0
+                SlotType.OBJ.code -> {
+                    val obj = frame.getObj(local)
+                    when (obj) {
+                        is FrameSlotRef -> obj.read().toDouble()
+                        is RecordSlotRef -> obj.read().toDouble()
+                        else -> obj.toDouble()
+                    }
+                }
+                else -> 0.0
+            }
+        }
+    }
+
+    fun setReal(slot: Int, value: Double) {
+        if (slot < fn.scopeSlotCount) {
+            val target = scopeTarget(slot)
+            val index = ensureScopeSlot(target, slot)
+            val record = target.getSlotRecord(index)
+            if (!record.isMutable) {
+                val name = fn.scopeSlotNames[slot] ?: "slot#$index"
+                ensureScope().raiseError("can't assign to read-only variable: $name")
+            }
+            target.setSlotValue(index, ObjReal.of(value))
+        } else {
+            val localIndex = slot - fn.scopeSlotCount
+            ensureLocalMutable(localIndex)
+            when (val existing = frame.getRawObj(localIndex)) {
+                is FrameSlotRef -> {
+                    existing.write(ObjReal.of(value))
+                    return
+                }
+                is RecordSlotRef -> {
+                    existing.write(ObjReal.of(value))
+                    return
+                }
+                else -> {}
+            }
+            frame.setReal(localIndex, value)
+        }
+    }
+
+    fun setRealUnchecked(slot: Int, value: Double) {
+        if (slot < fn.scopeSlotCount) {
+            val target = scopeTarget(slot)
+            val index = ensureScopeSlot(target, slot)
+            target.setSlotValue(index, ObjReal.of(value))
+        } else {
+            val localIndex = slot - fn.scopeSlotCount
+            when (val existing = frame.getRawObj(localIndex)) {
+                is FrameSlotRef -> {
+                    existing.write(ObjReal.of(value))
+                    return
+                }
+                is RecordSlotRef -> {
+                    existing.write(ObjReal.of(value))
+                    return
+                }
+                else -> {}
+            }
+            frame.setReal(localIndex, value)
+        }
+    }
+
+    suspend fun getBool(slot: Int): Boolean {
+        return if (slot < fn.scopeSlotCount) {
+            getScopeSlotValue(slot).toBool()
+        } else {
+            val local = slot - fn.scopeSlotCount
+            when (frame.getSlotTypeCode(local)) {
+                SlotType.BOOL.code -> frame.getBool(local)
+                SlotType.INT.code -> frame.getInt(local) != 0L
+                SlotType.REAL.code -> frame.getReal(local) != 0.0
+                SlotType.OBJ.code -> {
+                    val obj = frame.getObj(local)
+                    when (obj) {
+                        is FrameSlotRef -> obj.read().toBool()
+                        is RecordSlotRef -> obj.read().toBool()
+                        else -> obj.toBool()
+                    }
+                }
+                else -> false
+            }
+        }
+    }
+
+    fun getLocalBool(local: Int): Boolean = frame.getBool(local)
+
+    fun setBool(slot: Int, value: Boolean) {
+        if (slot < fn.scopeSlotCount) {
+            val target = scopeTarget(slot)
+            val index = ensureScopeSlot(target, slot)
+            val record = target.getSlotRecord(index)
+            if (!record.isMutable) {
+                val name = fn.scopeSlotNames[slot] ?: "slot#$index"
+                ensureScope().raiseError("can't assign to read-only variable: $name")
+            }
+            target.setSlotValue(index, if (value) ObjTrue else ObjFalse)
+        } else {
+            val localIndex = slot - fn.scopeSlotCount
+            ensureLocalMutable(localIndex)
+            when (val existing = frame.getRawObj(localIndex)) {
+                is FrameSlotRef -> {
+                    existing.write(if (value) ObjTrue else ObjFalse)
+                    return
+                }
+                is RecordSlotRef -> {
+                    existing.write(if (value) ObjTrue else ObjFalse)
+                    return
+                }
+                else -> {}
+            }
+            frame.setBool(localIndex, value)
+        }
+    }
+
+    fun setBoolUnchecked(slot: Int, value: Boolean) {
+        if (slot < fn.scopeSlotCount) {
+            val target = scopeTarget(slot)
+            val index = ensureScopeSlot(target, slot)
+            target.setSlotValue(index, if (value) ObjTrue else ObjFalse)
+        } else {
+            val localIndex = slot - fn.scopeSlotCount
+            when (val existing = frame.getRawObj(localIndex)) {
+                is FrameSlotRef -> {
+                    existing.write(if (value) ObjTrue else ObjFalse)
+                    return
+                }
+                is RecordSlotRef -> {
+                    existing.write(if (value) ObjTrue else ObjFalse)
+                    return
+                }
+                else -> {}
+            }
+            frame.setBool(localIndex, value)
+        }
+    }
+
+    fun setLocalBool(local: Int, value: Boolean) {
+        frame.setBool(local, value)
+    }
+
+    fun resolveScopeSlotAddr(scopeSlot: Int, addrSlot: Int) {
+        val target = scopeTarget(scopeSlot)
+        val index = ensureScopeSlot(target, scopeSlot)
+        addrScopes[addrSlot] = target
+        addrIndices[addrSlot] = index
+        addrScopeSlots[addrSlot] = scopeSlot
+    }
+
+    suspend fun getAddrObj(addrSlot: Int): Obj {
+        return getScopeSlotValueAtAddr(addrSlot)
+    }
+
+    fun setAddrObj(addrSlot: Int, value: Obj) {
+        setScopeSlotValueAtAddr(addrSlot, value)
+    }
+
+    suspend fun getAddrInt(addrSlot: Int): Long {
+        return getScopeSlotValueAtAddr(addrSlot).toLong()
+    }
+
+    fun setAddrInt(addrSlot: Int, value: Long) {
+        setScopeSlotValueAtAddr(addrSlot, ObjInt.of(value))
+    }
+
+    suspend fun getAddrReal(addrSlot: Int): Double {
+        return getScopeSlotValueAtAddr(addrSlot).toDouble()
+    }
+
+    fun setAddrReal(addrSlot: Int, value: Double) {
+        setScopeSlotValueAtAddr(addrSlot, ObjReal.of(value))
+    }
+
+    suspend fun getAddrBool(addrSlot: Int): Boolean {
+        return getScopeSlotValueAtAddr(addrSlot).toBool()
+    }
+
+    fun setAddrBool(addrSlot: Int, value: Boolean) {
+        setScopeSlotValueAtAddr(addrSlot, if (value) ObjTrue else ObjFalse)
+    }
+
+    suspend fun slotToObj(slot: Int): Obj {
+        if (slot < fn.scopeSlotCount) {
+            return getScopeSlotValue(slot)
+        }
+        val local = slot - fn.scopeSlotCount
+        if (fn.localSlotCaptures.getOrNull(local) == true) {
+            return localSlotToObj(local)
+        }
+        return when (frame.getSlotTypeCode(local)) {
+            SlotType.INT.code -> ObjInt.of(frame.getInt(local))
+            SlotType.REAL.code -> ObjReal.of(frame.getReal(local))
+            SlotType.BOOL.code -> if (frame.getBool(local)) ObjTrue else ObjFalse
+            SlotType.OBJ.code -> {
+                val obj = frame.getObj(local)
+                when (obj) {
+                    is FrameSlotRef -> obj.read()
+                    is RecordSlotRef -> obj.read()
+                    else -> obj
+                }
+            }
+            else -> localSlotToObj(local)
+        }
+    }
+
+    fun storeObjResult(dst: Int, result: Obj) {
+        when (result) {
+            is ObjInt -> setInt(dst, result.value)
+            is ObjReal -> setReal(dst, result.value)
+            is ObjBool -> setBool(dst, result.value)
+            else -> setObj(dst, result)
+        }
+    }
+
+    fun setObjUnchecked(slot: Int, value: Obj) {
+        if (slot < fn.scopeSlotCount) {
+            val target = scopeTarget(slot)
+            val index = ensureScopeSlot(target, slot)
+            target.setSlotValue(index, value)
+        } else {
+            frame.setObj(slot - fn.scopeSlotCount, value)
+        }
+    }
+
+    suspend fun throwObj(pos: Pos, value: Obj) {
+        var errorObject = value
+        val throwScope = ensureScope().createChildScope(pos = pos)
+        if (errorObject is ObjString) {
+            errorObject = ObjException(throwScope, errorObject.value).apply { getStackTrace() }
+        }
+        if (!errorObject.isInstanceOf(ObjException.Root)) {
+            throwScope.raiseError("this is not an exception object: $errorObject")
+        }
+        if (errorObject is ObjException) {
+            errorObject = ObjException(
+                errorObject.exceptionClass,
+                throwScope,
+                errorObject.message,
+                errorObject.extraData,
+                errorObject.useStackTrace
+            ).apply { getStackTrace() }
+            throwScope.raiseError(errorObject)
+        } else {
+            val msg = errorObject.invokeInstanceMethod(scope, "message").toString(scope).value
+            throwScope.raiseError(errorObject, pos, msg)
+        }
+    }
+
+    suspend fun buildArguments(argBase: Int, argCount: Int): Arguments {
+        if (argCount == 0) return Arguments.EMPTY
+        if ((argCount and ARG_PLAN_FLAG) != 0) {
+            val planId = argCount and ARG_PLAN_MASK
+            val plan = fn.constants.getOrNull(planId) as? BytecodeConst.CallArgsPlan
+                ?: error("CALL args plan not found: $planId")
+            return buildArgumentsFromPlan(argBase, plan)
+        }
+        val list = ArrayList<Obj>(argCount)
+        for (i in 0 until argCount) {
+            list.add(slotToObj(argBase + i))
+        }
+        return Arguments(list)
+    }
+
+    private suspend fun buildArgumentsFromPlan(
+        argBase: Int,
+        plan: BytecodeConst.CallArgsPlan,
+    ): Arguments {
+        val scope = ensureScope()
+        val positional = ArrayList<Obj>(plan.specs.size)
+        var named: LinkedHashMap<String, Obj>? = null
+        var namedSeen = false
+        for ((idx, spec) in plan.specs.withIndex()) {
+            val value = slotToObj(argBase + idx)
+            val name = spec.name
+            if (name != null) {
+                if (named == null) named = linkedMapOf()
+                if (named.containsKey(name)) scope.raiseIllegalArgument("argument '$name' is already set")
+                named[name] = value
+                namedSeen = true
+                continue
+            }
+            if (spec.isSplat) {
+                when {
+                    value is ObjMap -> {
+                        if (named == null) named = linkedMapOf()
+                        for ((k, v) in value.map) {
+                            if (k !is ObjString) scope.raiseIllegalArgument("named splat expects a Map with string keys")
+                            val key = k.value
+                            if (named.containsKey(key)) scope.raiseIllegalArgument("argument '$key' is already set")
+                            named[key] = v
+                        }
+                        namedSeen = true
+                    }
+                    value is ObjList -> {
+                        if (namedSeen) scope.raiseIllegalArgument("positional splat cannot follow named arguments")
+                        positional.addAll(value.list)
+                    }
+                    value.isInstanceOf(ObjIterable) -> {
+                        if (namedSeen) scope.raiseIllegalArgument("positional splat cannot follow named arguments")
+                        val list = (value.invokeInstanceMethod(scope, "toList") as ObjList).list
+                        positional.addAll(list)
+                    }
+                    else -> scope.raiseClassCastError("expected list of objects for splat argument")
+                }
+            } else {
+                if (namedSeen) {
+                    val isLast = idx == plan.specs.lastIndex
+                    if (!(isLast && plan.tailBlock)) {
+                        scope.raiseIllegalArgument("positional argument cannot follow named arguments")
+                    }
+                }
+                positional.add(value)
+            }
+        }
+        return Arguments(positional, plan.tailBlock, named ?: emptyMap())
+    }
+
+    private fun resolveLocalScope(localIndex: Int): Scope? {
+        return scope
+    }
+
+    internal fun scopeTarget(slot: Int): Scope {
+        return if (slot < fn.scopeSlotCount && fn.scopeSlotIsModule.getOrNull(slot) == true) {
+            moduleScope
+        } else {
+            scope
+        }
+    }
+
+    private fun localSlotToObj(localIndex: Int): Obj {
+        return when (frame.getSlotTypeCode(localIndex)) {
+            SlotType.INT.code -> ObjInt.of(frame.getInt(localIndex))
+            SlotType.REAL.code -> ObjReal.of(frame.getReal(localIndex))
+            SlotType.BOOL.code -> if (frame.getBool(localIndex)) ObjTrue else ObjFalse
+            SlotType.OBJ.code -> {
+                val obj = frame.getObj(localIndex)
+                when (obj) {
+                    is FrameSlotRef -> obj.read()
+                    is RecordSlotRef -> obj.read()
+                    else -> obj
+                }
+            }
+            else -> {
+                val obj = frame.getObj(localIndex)
+                when (obj) {
+                    is FrameSlotRef -> obj.read()
+                    is RecordSlotRef -> obj.read()
+                    else -> obj
+                }
+            }
+        }
+    }
+
+    private suspend fun getScopeSlotValue(slot: Int): Obj {
+        val target = scopeTarget(slot)
+        val index = ensureScopeSlot(target, slot)
+        val record = target.getSlotRecord(index)
+        val direct = record.value
+        if (direct is FrameSlotRef) return direct.read()
+        if (direct is RecordSlotRef) return direct.read()
+        val name = fn.scopeSlotNames[slot]
+        if (name != null && (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || direct is ObjProperty)) {
+            return target.resolve(record, name)
+        }
+        if (direct !== ObjUnset) {
+            return direct
+        }
+        if (name == null) return record.value
+        val resolved = target.get(name) ?: return record.value
+        if (resolved.value !== ObjUnset) {
+            target.updateSlotFor(name, resolved)
+        }
+        return resolved.value
+    }
+
+    private suspend fun getScopeSlotValueAtAddr(addrSlot: Int): Obj {
+        val target = addrScopes[addrSlot] ?: error("Address slot $addrSlot is not resolved")
+        val index = addrIndices[addrSlot]
+        val record = target.getSlotRecord(index)
+        val direct = record.value
+        if (direct is FrameSlotRef) return direct.read()
+        if (direct is RecordSlotRef) return direct.read()
+        val slotId = addrScopeSlots[addrSlot]
+        val name = fn.scopeSlotNames.getOrNull(slotId)
+        if (name != null && (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || direct is ObjProperty)) {
+            return target.resolve(record, name)
+        }
+        if (direct !== ObjUnset) {
+            return direct
+        }
+        if (name == null) return record.value
+        val resolved = target.get(name) ?: return record.value
+        if (resolved.value !== ObjUnset) {
+            target.updateSlotFor(name, resolved)
+        }
+        return resolved.value
+    }
+
+    private fun setScopeSlotValueAtAddr(addrSlot: Int, value: Obj) {
+        val target = addrScopes[addrSlot] ?: error("Address slot $addrSlot is not resolved")
+        val index = addrIndices[addrSlot]
+        target.setSlotValue(index, value)
+    }
+
+    internal fun ensureScopeSlot(target: Scope, slot: Int): Int {
+        val name = fn.scopeSlotNames[slot]
+        if (name != null) {
+            val existing = target.getSlotIndexOf(name)
+            if (existing != null) return existing
+        }
+        val index = fn.scopeSlotIndices[slot]
+        if (name == null) {
+            if (index < target.slotCount) return index
+            return index
+        }
+        target.applySlotPlan(mapOf(name to index))
+        val existing = target.getLocalRecordDirect(name) ?: target.localBindings[name]
+        if (existing != null) {
+            target.updateSlotFor(name, existing)
+            return index
+        }
+        val resolved = target.parent?.get(name) ?: target.get(name)
+        if (resolved != null) {
+            target.updateSlotFor(name, resolved)
+        }
+        return index
+    }
+
+    private fun ensureLocalMutable(localIndex: Int) {
+        val name = fn.localSlotNames.getOrNull(localIndex) ?: return
+        val isMutable = fn.localSlotMutables.getOrNull(localIndex) ?: true
+        if (!isMutable) {
+            val typeCode = frame.getSlotTypeCode(localIndex)
+            if (typeCode == SlotType.UNKNOWN.code) return
+            val rawObj = frame.getRawObj(localIndex)
+            if (rawObj === ObjUnset) return
+            ensureScope().raiseError("can't assign to read-only variable: $name")
+        }
+    }
+
+    // Scope depth resolution is no longer used; all scope slots are resolved against the current frame.
+}

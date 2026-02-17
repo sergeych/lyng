@@ -92,40 +92,54 @@ open class ObjException(
 
 
     companion object {
+        private var stackTraceCaptureDepth = 0
 
         suspend fun captureStackTrace(scope: Scope): ObjList {
             val result = ObjList()
-            val maybeCls = scope.get("StackTraceEntry")?.value as? ObjClass
+            val nestedCapture = stackTraceCaptureDepth > 0
+            stackTraceCaptureDepth += 1
+            val maybeCls = if (nestedCapture) null else scope.get("StackTraceEntry")?.value as? ObjClass
             var s: Scope? = scope
             var lastPos: Pos? = null
-            while (s != null) {
-                val pos = s.pos
-                if (pos != lastPos && !pos.currentLine.isEmpty()) {
-                    if( (lastPos == null || (lastPos.source != pos.source || lastPos.line != pos.line)) ) {
-                        if (maybeCls != null) {
-                            result.list += maybeCls.callWithArgs(
-                                scope,
-                                pos.source.objSourceName,
-                                ObjInt(pos.line.toLong()),
-                                ObjInt(pos.column.toLong()),
-                                ObjString(pos.currentLine)
-                            )
-                        } else {
-                            // Fallback textual entry if StackTraceEntry class is not available in this scope
-                            result.list += ObjString("#${pos.source.objSourceName}:${pos.line+1}:${pos.column+1}: ${pos.currentLine}")
+            try {
+                while (s != null) {
+                    val pos = s.pos
+                    if (pos != lastPos && !pos.currentLine.isEmpty()) {
+                        if (lastPos == null || (lastPos.source != pos.source || lastPos.line != pos.line)) {
+                            val fallback =
+                                ObjString("#${pos.source.objSourceName}:${pos.line+1}:${pos.column+1}: ${pos.currentLine}")
+                            if (maybeCls != null) {
+                                try {
+                                    result.list += maybeCls.callWithArgs(
+                                        scope,
+                                        pos.source.objSourceName,
+                                        ObjInt(pos.line.toLong()),
+                                        ObjInt(pos.column.toLong()),
+                                        ObjString(pos.currentLine)
+                                    )
+                                } catch (e: Throwable) {
+                                    // Fallback textual entry if StackTraceEntry fails to instantiate
+                                    result.list += fallback
+                                }
+                            } else {
+                                // Fallback textual entry if StackTraceEntry class is not available in this scope
+                                result.list += fallback
+                            }
+                            lastPos = pos
                         }
-                        lastPos = pos
                     }
+                    s = s.parent
                 }
-                s = s.parent
+                return result
+            } finally {
+                stackTraceCaptureDepth -= 1
             }
-            return result
         }
 
         class ExceptionClass(val name: String, vararg parents: ObjClass) : ObjClass(name, *parents) {
             init {
                 constructorMeta = ArgsDeclaration(
-                    listOf(ArgsDeclaration.Item("message", defaultValue = statement { ObjString(name) })),
+                    listOf(ArgsDeclaration.Item("message", defaultValue = ObjExternCallable.fromBridge { ObjString(name) })),
                     Token.Type.RPAREN
                 )
             }
@@ -163,17 +177,17 @@ open class ObjException(
         }
 
         val Root = ExceptionClass("Exception").apply {
-            instanceInitializers.add(statement {
+            instanceInitializers.add(ObjExternCallable.fromBridge {
                 if (thisObj is ObjInstance) {
                     val msg = get("message")?.value ?: ObjString("Exception")
                     (thisObj as ObjInstance).instanceScope.addItem("Exception::message", false, msg)
 
-                    val stack = captureStackTrace(this)
+                    val stack = captureStackTrace(requireScope())
                     (thisObj as ObjInstance).instanceScope.addItem("Exception::stackTrace", false, stack)
                 }
                 ObjVoid
             })
-            instanceConstructor = statement { ObjVoid }
+            instanceConstructor = ObjExternCallable.fromBridge { ObjVoid }
             addPropertyDoc(
                 name = "message",
                 doc = "Human‑readable error message.",
@@ -230,7 +244,7 @@ open class ObjException(
                     is ObjInstance -> t.instanceScope.get("Exception::stackTrace")?.value as? ObjList ?: ObjList()
                     else -> ObjList()
                 }
-                val at = stack.list.firstOrNull()?.toString(this) ?: ObjString("(unknown)")
+                val at = stack.list.firstOrNull()?.let { toStringOf(it) } ?: ObjString("(unknown)")
                 ObjString("${thisObj.objClass.className}: $msg at $at")
             }
         }
@@ -344,7 +358,11 @@ fun Obj.isLyngException(): Boolean = isInstanceOf("Exception")
  */
 suspend fun Obj.getLyngExceptionMessage(scope: Scope? = null): String {
     require(this.isLyngException())
-    val s = scope ?: Script.newScope()
+    val s = scope ?: when (this) {
+        is ObjException -> this.scope
+        is ObjInstance -> this.instanceScope
+        else -> Script.newScope()
+    }
     return invokeInstanceMethod(s, "message").toString(s).value
 }
 
@@ -361,16 +379,25 @@ suspend fun Obj.getLyngExceptionMessage(scope: Scope? = null): String {
  */
 suspend fun Obj.getLyngExceptionMessageWithStackTrace(scope: Scope? = null,showDetails:Boolean=true): String {
     require(this.isLyngException())
-    val s = scope ?: Script.newScope()
+    val s = scope ?: when (this) {
+        is ObjException -> this.scope
+        is ObjInstance -> this.instanceScope
+        else -> Script.newScope()
+    }
     val msg = getLyngExceptionMessage(s)
     val trace = getLyngExceptionStackTrace(s)
     var at = "unknown"
-//    var firstLine = true
     val stack = if (!trace.list.isEmpty()) {
         val first = trace.list[0]
         at = (first.readField(s, "at").value as ObjString).value
         "\n" + trace.list.map { "    at " + it.toString(s).value }.joinToString("\n")
-    } else ""
+    } else {
+        val pos = s.pos
+        if (pos.source.fileName.isNotEmpty() && pos.currentLine.isNotEmpty()) {
+            at = "${pos.source.fileName}:${pos.line + 1}:${pos.column + 1}"
+        }
+        ""
+    }
     return "$at: $msg$stack"
 }
 
@@ -396,9 +423,16 @@ suspend fun Obj.getLyngExceptionString(scope: Scope): String =
  * Rethrow this object as a Kotlin [ExecutionError] if it's an exception.
  */
 suspend fun Obj.raiseAsExecutionError(scope: Scope? = null): Nothing {
-    if (this is ObjException) raise()
-    val sc = scope ?: Script.newScope()
-    val msg = getLyngExceptionMessage(sc)
-    val pos = (this as? ObjInstance)?.instanceScope?.pos ?: Pos.builtIn
+    val sc = scope ?: when (this) {
+        is ObjException -> this.scope
+        is ObjInstance -> this.instanceScope
+        else -> Script.newScope()
+    }
+    val msg = getLyngExceptionMessageWithStackTrace(sc)
+    val pos = when (this) {
+        is ObjException -> this.scope.pos
+        is ObjInstance -> this.instanceScope.pos
+        else -> Pos.builtIn
+    }
     throw ExecutionError(this, pos, msg)
 }

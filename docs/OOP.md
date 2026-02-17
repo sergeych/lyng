@@ -113,6 +113,48 @@ val handler = object {
 - **Serialization**: Anonymous objects are **not serializable**. Attempting to encode an anonymous object via `Lynon` will throw a `SerializationException`. This is because their class definition is transient and cannot be safely restored in a different session or process.
 - **Type Identity**: Every object expression creates a unique anonymous class. Two identical object expressions will result in two different classes with distinct type identities.
 
+## Nested Declarations
+
+Lyng allows classes, objects, enums, and type aliases to be declared inside another class. These declarations live in the **class namespace** (not the instance), so they do not capture an outer instance and are accessed with a qualifier.
+
+```lyng
+class A {
+    class B(x?)
+    object Inner { val foo = "bar" }
+    type Alias = B
+    enum E { One, Two }
+}
+
+val ab = A.B()
+assertEquals(ab.x, null)
+assertEquals(A.Inner.foo, "bar")
+```
+
+Rules:
+- **Qualified access**: use `Outer.Inner` for nested classes/objects/enums/aliases. Inside `Outer` you can refer to them by unqualified name unless shadowed.
+- **No inner semantics**: nested declarations do not capture an instance of the outer class. They are resolved at compile time.
+- **Visibility**: `private` restricts a nested declaration to the declaring class body (not visible from outside or subclasses).
+- **Reflection name**: a nested class reports `Outer.Inner` (e.g., `A.B::class.name` is `"A.B"`).
+- **Type aliases**: behave as aliases of the qualified nested type and are expanded by the type system.
+
+### Lifted Enum Entries
+
+Enums can optionally lift their entries into the surrounding class namespace using `*`:
+
+```lyng
+class A {
+    enum E* { One, Two }
+}
+
+assertEquals(A.One, A.E.One)
+assertEquals(A.Two, A.E.Two)
+```
+
+Notes:
+- `E*` exposes entries in `A` as if they were direct members (`A.One`).
+- If a name would conflict with an existing class member, compilation fails (no implicit fallback).
+- Without `*`, use the normal `A.E.One` form.
+
 ## Properties
 
 Properties allow you to define member accessors that look like fields but execute code when read or written. Unlike regular fields, properties in Lyng do **not** have automatic backing fields; they are pure accessors.

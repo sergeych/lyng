@@ -175,7 +175,7 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
                 returns = type("lyng.Set"),
                 moduleName = "lyng.stdlib"
             ) {
-                thisAs<ObjSet>().mul(this, args.firstAndOnly())
+                thisAs<ObjSet>().mul(requireScope(), args.firstAndOnly())
             }
             addFnDoc(
                 name = "iterator",
@@ -192,7 +192,7 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
                 returns = type("lyng.Set"),
                 moduleName = "lyng.stdlib"
             ) {
-                thisAs<ObjSet>().plus(this, args.firstAndOnly())
+                thisAs<ObjSet>().plus(requireScope(), args.firstAndOnly())
             }
             addFnDoc(
                 name = "subtract",
@@ -201,7 +201,7 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
                 returns = type("lyng.Set"),
                 moduleName = "lyng.stdlib"
             ) {
-                thisAs<ObjSet>().minus(this, args.firstAndOnly())
+                thisAs<ObjSet>().minus(requireScope(), args.firstAndOnly())
             }
             addFnDoc(
                 name = "remove",

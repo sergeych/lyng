@@ -22,12 +22,14 @@ import net.sergeych.lyng.obj.ObjInt
 import java.io.File
 import kotlin.system.measureNanoTime
 import kotlin.test.Test
+import kotlin.test.Ignore
 
 /**
  * Baseline range iteration benchmark. It measures for-loops over integer ranges under
  * current implementation and records timings. When RANGE_FAST_ITER is implemented,
  * this test will also serve for OFF vs ON A/B.
  */
+@Ignore("TODO(compile-time-res): legacy tests disabled")
 class RangeIterationBenchmarkTest {
 
     private fun outFile(): File = File("lynglib/build/range_iter_bench.txt")

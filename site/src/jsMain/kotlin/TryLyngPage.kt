@@ -20,7 +20,16 @@ import kotlinx.coroutines.launch
 import net.sergeych.lyng.LyngVersion
 import net.sergeych.lyng.Script
 import net.sergeych.lyng.ScriptError
+import net.sergeych.lyng.highlight.TextRange
+import net.sergeych.lyng.miniast.CompletionItem
+import net.sergeych.lyng.requireScope
+import net.sergeych.lyng.tools.LyngDiagnostic
+import net.sergeych.lyng.tools.LyngDiagnosticSeverity
+import net.sergeych.lyng.tools.LyngSymbolInfo
+import net.sergeych.lyng.tools.LyngSymbolTarget
 import net.sergeych.lyngweb.EditorWithOverlay
+import net.sergeych.lyngweb.LyngWebTools
+import org.jetbrains.compose.web.attributes.InputType
 import org.jetbrains.compose.web.dom.*
 
 @Composable
@@ -40,11 +49,18 @@ fun TryLyngPage(route: String) {
     var code by remember(initialCode) {
         mutableStateOf(
             initialCode ?: """
-            // Welcome to Lyng! Edit and run.
-            // Try changing the data and press Ctrl+Enter or click Run.
-            
-            val data = 1..5 // or [1, 2, 3, 4, 5]
-            data.filter { it % 2 == 0 }.map { it * it }
+            // Welcome to Lyng! Modern scripting with strict types and generics.
+
+            type Numeric = Int | Real
+
+            fun process<T: Numeric>(items: List<T>): List<T> {
+                items.filter { it > 0 }.map { it * it }
+            }
+
+            val data = [-2, -1, 0, 1, 2]
+            println("Processed: " + process(data))
+
+            // Try changing data or adding Real numbers!
             """.trimIndent()
         )
     }
@@ -52,6 +68,15 @@ fun TryLyngPage(route: String) {
     var output by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var extendedError by remember { mutableStateOf<String?>(null) }
+    var diagnostics by remember { mutableStateOf<List<LyngDiagnostic>>(emptyList()) }
+    var completionItems by remember { mutableStateOf<List<CompletionItem>>(emptyList()) }
+    var completionOffset by remember { mutableStateOf<Int?>(null) }
+    var docInfo by remember { mutableStateOf<LyngSymbolInfo?>(null) }
+    var definitionTarget by remember { mutableStateOf<LyngSymbolTarget?>(null) }
+    var usageRanges by remember { mutableStateOf<List<TextRange>>(emptyList()) }
+    var disasmSymbol by remember { mutableStateOf<String>("") }
+    var disasmOutput by remember { mutableStateOf<String?>(null) }
+    var disasmError by remember { mutableStateOf<String?>(null) }
 
     fun runCode() {
         if (running) return
@@ -59,6 +84,14 @@ fun TryLyngPage(route: String) {
         output = null
         error = null
         extendedError = null
+        completionItems = emptyList()
+        completionOffset = null
+        docInfo = null
+        definitionTarget = null
+        usageRanges = emptyList()
+        diagnostics = emptyList()
+        disasmOutput = null
+        disasmError = null
         scope.launch {
             // keep this outside try so we can show partial prints if evaluation fails
             val printed = StringBuilder()
@@ -69,13 +102,13 @@ fun TryLyngPage(route: String) {
                 s.addVoidFn("print") {
                     for ((i, a) in this.args.withIndex()) {
                         if (i > 0) printed.append(' ')
-                        printed.append(a.toString(this).value)
+                        printed.append(a.toString(this.requireScope()).value)
                     }
                 }
                 s.addVoidFn("println") {
                     for ((i, a) in this.args.withIndex()) {
                         if (i > 0) printed.append(' ')
-                        printed.append(a.toString(this).value)
+                        printed.append(a.toString(this.requireScope()).value)
                     }
                     printed.append('\n')
                 }
@@ -129,8 +162,8 @@ fun TryLyngPage(route: String) {
 
     fun resetCode() {
         code = initialCode ?: """
-            // Welcome to Lyng! Edit and run.
-            [1,2,3].map { it * 10 }
+            // Welcome to Lyng! Modern scripting with strict types and generics.
+            [1, 2, 3].map { it * 10 }
         """.trimIndent()
         output = null
         error = null
@@ -155,6 +188,22 @@ fun TryLyngPage(route: String) {
                         ev.preventDefault()
                         runCode()
                     }
+                },
+                onAnalysisReady = { analysis ->
+                    diagnostics = analysis.diagnostics
+                },
+                onCompletionRequested = { offset, items ->
+                    completionOffset = offset
+                    completionItems = items
+                },
+                onDefinitionResolved = { _, target ->
+                    definitionTarget = target
+                },
+                onUsagesResolved = { _, ranges ->
+                    usageRanges = ranges
+                },
+                onDocRequested = { _, info ->
+                    docInfo = info
                 },
                 // Keep current initial size but allow the editor to grow with content
                 autoGrow = true
@@ -218,10 +267,150 @@ fun TryLyngPage(route: String) {
             }
         }
 
+        // Language tools quick view
+        Div({ classes("card", "mb-3") }) {
+            Div({ classes("card-header", "d-flex", "align-items-center", "gap-2") }) {
+                I({ classes("bi", "bi-diagram-3") })
+                Span({ classes("fw-semibold") }) { Text("Language tools") }
+            }
+            Div({ classes("card-body") }) {
+                Div({ classes("mb-3") }) {
+                    Span({ classes("fw-semibold", "me-2") }) { Text("Diagnostics") }
+                    if (diagnostics.isEmpty()) {
+                        Span({ classes("text-muted") }) { Text("No errors or warnings.") }
+                    } else {
+                        Ul({ classes("mb-0") }) {
+                            diagnostics.forEach { d ->
+                                Li {
+                                    val sev = when (d.severity) {
+                                        LyngDiagnosticSeverity.Error -> "Error"
+                                        LyngDiagnosticSeverity.Warning -> "Warning"
+                                    }
+                                    val range = d.range?.let { " @${it.start}-${it.endExclusive}" } ?: ""
+                                    Text("$sev: ${d.message}$range")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Div({ classes("mb-3") }) {
+                    Span({ classes("fw-semibold", "me-2") }) { Text("Quick docs") }
+                    if (docInfo == null) {
+                        Span({ classes("text-muted") }) { Text("Press Ctrl+Q (or ⌘+Q) on a symbol.") }
+                    } else {
+                        val info = docInfo!!
+                        Div({ classes("small") }) {
+                            Text("${info.target.kind} ${info.target.name}")
+                            info.signature?.let { sig ->
+                                Br()
+                                Code { Text(sig) }
+                            }
+                            info.doc?.summary?.let { doc ->
+                                Br()
+                                Text(doc)
+                            }
+                        }
+                    }
+                }
+
+                Div({ classes("mb-3") }) {
+                    Span({ classes("fw-semibold", "me-2") }) { Text("Definition") }
+                    if (definitionTarget == null) {
+                        Span({ classes("text-muted") }) { Text("Press Ctrl+B (or ⌘+B) on a symbol.") }
+                    } else {
+                        val def = definitionTarget!!
+                        Span({ classes("small") }) {
+                            Text("${def.kind} ${def.name} @${def.range.start}-${def.range.endExclusive}")
+                        }
+                    }
+                }
+
+                Div({ classes("mb-3") }) {
+                    Span({ classes("fw-semibold", "me-2") }) { Text("Usages") }
+                    if (usageRanges.isEmpty()) {
+                        Span({ classes("text-muted") }) { Text("Press Ctrl+Shift+U (or ⌘+Shift+U) on a symbol.") }
+                    } else {
+                        Span({ classes("small") }) { Text("${usageRanges.size} usage(s) found.") }
+                    }
+                }
+
+                Div({ classes("mb-0") }) {
+                    Span({ classes("fw-semibold", "me-2") }) { Text("Completions") }
+                    if (completionItems.isEmpty()) {
+                        Span({ classes("text-muted") }) { Text("Press Ctrl+Space (or ⌘+Space).") }
+                    } else {
+                        val shown = completionItems.take(8)
+                        Span({ classes("text-muted", "small", "ms-1") }) {
+                            completionOffset?.let { Text("@$it") }
+                        }
+                        Ul({ classes("mb-0") }) {
+                            shown.forEach { item ->
+                                Li { Text("${item.name} (${item.kind})") }
+                            }
+                        }
+                        if (completionItems.size > shown.size) {
+                            Span({ classes("text-muted", "small") }) {
+                                Text("…and ${completionItems.size - shown.size} more")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Disassembly
+        Div({ classes("card", "mb-3") }) {
+            Div({ classes("card-header", "d-flex", "align-items-center", "gap-2") }) {
+                I({ classes("bi", "bi-braces") })
+                Span({ classes("fw-semibold") }) { Text("Disassembly") }
+            }
+            Div({ classes("card-body") }) {
+                Div({ classes("d-flex", "gap-2", "align-items-center", "mb-2") }) {
+                    Input(type = InputType.Text, attrs = {
+                        classes("form-control")
+                        attr("placeholder", "Symbol (e.g., MyClass.method or topLevelFun)")
+                        value(disasmSymbol)
+                        onInput { ev ->
+                            disasmSymbol = ev.value
+                        }
+                    })
+                    Button(attrs = {
+                        classes("btn", "btn-outline-primary")
+                        if (disasmSymbol.isBlank()) attr("disabled", "disabled")
+                        onClick {
+                            it.preventDefault()
+                            val symbol = disasmSymbol.trim()
+                            if (symbol.isEmpty()) return@onClick
+                            disasmOutput = null
+                            disasmError = null
+                            scope.launch {
+                                try {
+                                    disasmOutput = LyngWebTools.disassembleSymbol(code, symbol)
+                                } catch (t: Throwable) {
+                                    disasmError = t.message ?: t.toString()
+                                }
+                            }
+                        }
+                    }) { Text("Disassemble") }
+                }
+                if (disasmError != null) {
+                    Div({ classes("alert", "alert-danger", "py-2", "mb-2") }) { Text(disasmError!!) }
+                }
+                if (disasmOutput != null) {
+                    Pre({ classes("mb-0") }) { Code { Text(disasmOutput!!) } }
+                } else if (disasmError == null) {
+                    Span({ classes("text-muted", "small") }) {
+                        Text("Uses the bytecode compiler; not a dry run.")
+                    }
+                }
+            }
+        }
+
         // Tips
         P({ classes("text-muted", "small") }) {
             I({ classes("bi", "bi-info-circle", "me-1") })
-            Text("Tip: press Ctrl+Enter (or ⌘+Enter on Mac) to run.")
+            Text("Tip: Ctrl+Enter runs, Ctrl+Space completes, Ctrl+B jumps to definition, Ctrl+Shift+U finds usages, Ctrl+Q shows docs.")
         }
     }
 }

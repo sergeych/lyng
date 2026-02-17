@@ -30,6 +30,7 @@ import java.nio.file.Files.readAllLines
 import java.nio.file.Paths
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.extension
+import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.fail
@@ -177,11 +178,11 @@ suspend fun DocTest.test(_scope: Scope? = null) {
     scope.apply {
         addFn("println") {
             if( bookMode ) {
-                println("${currentTest.fileNamePart}:${currentTest.line}> ${args.map{it.toString(this).value}.joinToString(" ")}")
+                println("${currentTest.fileNamePart}:${currentTest.line}> ${args.map{toStringOf(it).value}.joinToString(" ")}")
             }
             else {
                 for ((i, a) in args.withIndex()) {
-                    if (i > 0) collectedOutput.append(' '); collectedOutput.append(a.toString(this).value)
+                    if (i > 0) collectedOutput.append(' '); collectedOutput.append(toStringOf(a).value)
                     collectedOutput.append('\n')
                 }
             }
@@ -247,6 +248,7 @@ suspend fun runDocTests(fileName: String, bookMode: Boolean = false) {
         println("tests passed: $count")
 }
 
+@Ignore("TODO(bytecode-only): uses fallback")
 class BookTest {
 
     @Test

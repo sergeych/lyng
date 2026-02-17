@@ -182,6 +182,77 @@ instance.value = 42
 println(instance.value) // -> 42
 ```
 
+### 6.5) Preferred: bind Kotlin implementations to declared Lyng classes
+
+For extensions and libraries, the **preferred** workflow is Lyng‑first: declare the class and its members in Lyng, then bind the Kotlin implementations using the bridge.
+
+This keeps Lyng semantics (visibility, overrides, type checks) in Lyng, while Kotlin supplies the behavior.
+
+```lyng
+// Lyng side (in a module)
+class Counter {
+    extern var value: Int
+    extern fun inc(by: Int): Int
+}
+```
+
+Note: members must be marked `extern` so the compiler emits the ABI slots that Kotlin bindings attach to. This applies to functions and properties bound via `addFun` / `addVal` / `addVar`.
+
+```kotlin
+// Kotlin side (binding)
+val moduleScope = Script.newScope() // or an existing module scope
+moduleScope.eval("class Counter { extern var value: Int; extern fun inc(by: Int): Int }")
+
+moduleScope.bind("Counter") {
+    addVar(
+        name = "value",
+        get = { _, self -> self.readField(this, "value").value },
+        set = { _, self, v -> self.writeField(this, "value", v) }
+    )
+    addFun("inc") { _, self, args ->
+        val by = args.requiredArg<ObjInt>(0).value
+        val current = self.readField(this, "value").value as ObjInt
+        val next = ObjInt(current.value + by)
+        self.writeField(this, "value", next)
+        next
+    }
+}
+```
+
+Notes:
+
+- Binding must happen **before** the first instance is created.
+- Use [LyngClassBridge] to bind by name/module, or by an already resolved `ObjClass`.
+- Use `ObjInstance.data` / `ObjClass.classData` to attach Kotlin‑side state when needed.
+
+### 6.6) Preferred: Kotlin reflection bridge for call‑by‑name
+
+For Kotlin code that needs dynamic access to Lyng variables, functions, or members, use the bridge resolver.
+It provides explicit, cached handles and predictable lookup rules.
+
+```kotlin
+val scope = Script.newScope()
+scope.eval("""
+    val x = 40
+    fun add(a, b) = a + b
+    class Box { var value = 1 }
+""")
+
+val resolver = scope.resolver()
+
+// Read a top‑level value
+val x = resolver.resolveVal("x").get(scope)
+
+// Call a function by name (cached inside the resolver)
+val sum = (resolver as BridgeCallByName).callByName(scope, "add", Arguments(ObjInt(1), ObjInt(2)))
+
+// Member access
+val box = scope.eval("Box()")
+val valueHandle = resolver.resolveMemberVar(box, "value")
+valueHandle.set(scope, ObjInt(10))
+val value = valueHandle.get(scope)
+```
+
 ### 7) Read variable values back in Kotlin
 
 The simplest approach: evaluate an expression that yields the value and convert it.

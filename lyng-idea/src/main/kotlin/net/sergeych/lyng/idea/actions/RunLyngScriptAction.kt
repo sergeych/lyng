@@ -38,6 +38,7 @@ import kotlinx.coroutines.launch
 import net.sergeych.lyng.ExecutionError
 import net.sergeych.lyng.Script
 import net.sergeych.lyng.Source
+import net.sergeych.lyng.requireScope
 import net.sergeych.lyng.idea.LyngIcons
 import net.sergeych.lyng.obj.ObjVoid
 import net.sergeych.lyng.obj.getLyngExceptionMessageWithStackTrace
@@ -81,7 +82,7 @@ class RunLyngScriptAction : AnAction(LyngIcons.FILE) {
                         val sb = StringBuilder()
                         for ((i, arg) in args.list.withIndex()) {
                             if (i > 0) sb.append(" ")
-                            sb.append(arg.toString(this).value)
+                            sb.append(arg.toString(requireScope()).value)
                         }
                         console.print(sb.toString(), ConsoleViewContentType.NORMAL_OUTPUT)
                         ObjVoid
@@ -90,7 +91,7 @@ class RunLyngScriptAction : AnAction(LyngIcons.FILE) {
                         val sb = StringBuilder()
                         for ((i, arg) in args.list.withIndex()) {
                             if (i > 0) sb.append(" ")
-                            sb.append(arg.toString(this).value)
+                            sb.append(arg.toString(requireScope()).value)
                         }
                         console.print(sb.toString() + "\n", ConsoleViewContentType.NORMAL_OUTPUT)
                         ObjVoid

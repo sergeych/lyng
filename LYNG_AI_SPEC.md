@@ -1,4 +1,4 @@
-# Lyng Language AI Specification (V1.3)
+# Lyng Language AI Specification (V1.5.0-SNAPSHOT)
 
 High-density specification for LLMs. Reference this for all Lyng code generation.
 
@@ -19,6 +19,7 @@ High-density specification for LLMs. Reference this for all Lyng code generation
 - **Equality**: `==` (equals), `!=` (not equals), `===` (ref identity), `!==` (ref not identity).
 - **Comparison**: `<`, `>`, `<=`, `>=`, `<=>` (shuttle/spaceship, returns -1, 0, 1).
 - **Destructuring**: `val [a, b, rest...] = list`. Supports nested `[a, [b, c]]` and splats.
+- **Compile-Time Resolution Only**: All names/members must resolve at compile time. No runtime name lookup or fallback opcodes.
 
 ## 2. Object-Oriented Programming (OOP)
 - **Multiple Inheritance**: Supported with **C3 MRO** (Python-style). Diamond-safe.
@@ -37,6 +38,15 @@ High-density specification for LLMs. Reference this for all Lyng code generation
 - **Disambiguation**: `this@Base.member()` or `(obj as Base).member()`. `as` returns a qualified view.
 - **Abstract/Interface**: `interface` is a synonym for `abstract class`. Both support state and constructors.
 - **Extensions**: `fun Class.ext()` or `val Class.ext get = ...`. Scope-isolated.
+- **Member Access**: Object members (`toString`, `toInspectString`, `let`, `also`, `apply`, `run`) are allowed on unknown types; all other members require a statically known receiver type or explicit cast.
+
+## 2.1 Type System (2026)
+- **Root Type**: Everything is an `Object` (root of the hierarchy).
+- **Nullability**: Non-null by default (`T`), nullable with `T?`, `!!` asserts non-null.
+- **Untyped params**: `fun foo(x)` -> `x: Object`, `fun foo(x?)` -> `x: Object?`.
+- **Untyped vars**: `var x` is `Unset` until first assignment locks the type.
+- **Inference**: List/map literals infer union element types; empty list is `List<Object>`, empty map is `{:}`.
+- **Generics**: Bounds with `T: A & B` or `T: A | B`; variance uses `out`/`in`.
 
 ## 3. Delegation (`by`)
 Unified model for `val`, `var`, and `fun`.
@@ -63,11 +73,11 @@ Delegate Methods:
 - **Collections**: `List` ( `[a, b]` ), `Map` ( `Map(k => v)` ), `Set` ( `Set(a, b)` ). `MapEntry` ( `k => v` ).
 
 ## 5. Patterns & Shorthands
-- **Map Literals**: `{ key: value, identifier: }` (identifier shorthand `x:` is `x: x`). Empty map is `Map()`.
+- **Map Literals**: `{ key: value, identifier: }` (identifier shorthand `x:` is `x: x`). Empty map is `{:}`.
 - **Named Arguments**: `fun(y: 10, x: 5)`. Shorthand: `Point(x:, y:)`.
 - **Varargs & Splats**: `fun f(args...)`, `f(...otherList)`.
 - **Labels**: `loop@ for(x in list) { if(x == 0) break@loop }`.
-- **Dynamic**: `val d = dynamic { get { name -> ... } }` allows `d.anyName`.
+- **Dynamic**: `val d = dynamic { get { name -> ... } }` allows `d.anyName` via explicit dynamic handler (not implicit fallback).
 
 ## 6. Operators & Methods to Overload
 | Op | Method | Op | Method |

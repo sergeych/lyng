@@ -19,7 +19,6 @@ package net.sergeych.lyng
 
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjClass
-import net.sergeych.lyng.obj.ObjVoid
 
 fun String.toSource(name: String = "eval"): Source = Source(name, this)
 
@@ -61,13 +60,112 @@ abstract class Statement(
 
     suspend fun call(scope: Scope, vararg args: Obj) = execute(scope.createChildScope(args =  Arguments(*args)))
 
+    protected fun bytecodeOnly(scope: Scope, label: String): Nothing {
+        return scope.raiseIllegalState("bytecode-only execution is required; $label needs compiled bytecode")
+    }
+
+}
+
+class IfStatement(
+    val condition: Statement,
+    val ifBody: Statement,
+    val elseBody: Statement?,
+    override val pos: Pos,
+) : Statement() {
+    override suspend fun execute(scope: Scope): Obj {
+        return bytecodeOnly(scope, "if statement")
+    }
+}
+
+data class ConstIntRange(val start: Long, val endExclusive: Long)
+
+class ForInStatement(
+    val loopVarName: String,
+    val source: Statement,
+    val constRange: ConstIntRange?,
+    val body: Statement,
+    val elseStatement: Statement?,
+    val label: String?,
+    val canBreak: Boolean,
+    val loopSlotPlan: Map<String, Int>,
+    val loopScopeId: Int,
+    override val pos: Pos,
+) : Statement() {
+    override suspend fun execute(scope: Scope): Obj {
+        return bytecodeOnly(scope, "for-in statement")
+    }
+}
+
+class WhileStatement(
+    val condition: Statement,
+    val body: Statement,
+    val elseStatement: Statement?,
+    val label: String?,
+    val canBreak: Boolean,
+    val loopSlotPlan: Map<String, Int>,
+    override val pos: Pos,
+) : Statement() {
+    override suspend fun execute(scope: Scope): Obj {
+        return bytecodeOnly(scope, "while statement")
+    }
+}
+
+class DoWhileStatement(
+    val body: Statement,
+    val condition: Statement,
+    val elseStatement: Statement?,
+    val label: String?,
+    val loopSlotPlan: Map<String, Int>,
+    override val pos: Pos,
+) : Statement() {
+    override suspend fun execute(scope: Scope): Obj {
+        return bytecodeOnly(scope, "do-while statement")
+    }
+}
+
+class BreakStatement(
+    val label: String?,
+    val resultExpr: Statement?,
+    override val pos: Pos,
+) : Statement() {
+    override suspend fun execute(scope: Scope): Obj {
+        return bytecodeOnly(scope, "break statement")
+    }
+}
+
+class ContinueStatement(
+    val label: String?,
+    override val pos: Pos,
+) : Statement() {
+    override suspend fun execute(scope: Scope): Obj {
+        return bytecodeOnly(scope, "continue statement")
+    }
+}
+
+class ReturnStatement(
+    val label: String?,
+    val resultExpr: Statement?,
+    override val pos: Pos,
+) : Statement() {
+    override suspend fun execute(scope: Scope): Obj {
+        return bytecodeOnly(scope, "return statement")
+    }
+}
+
+class ThrowStatement(
+    val throwExpr: Statement,
+    override val pos: Pos,
+) : Statement() {
+    override suspend fun execute(scope: Scope): Obj {
+        return bytecodeOnly(scope, "throw statement")
+    }
 }
 
 class ExpressionStatement(
     val ref: net.sergeych.lyng.obj.ObjRef,
     override val pos: Pos
 ) : Statement() {
-    override suspend fun execute(scope: Scope): Obj = ref.evalValue(scope)
+    override suspend fun execute(scope: Scope): Obj = bytecodeOnly(scope, "expression statement")
 }
 
 fun Statement.raise(text: String): Nothing {
@@ -79,20 +177,8 @@ fun Statement.require(cond: Boolean, message: () -> String) {
     if (!cond) raise(message())
 }
 
-fun statement(pos: Pos, isStaticConst: Boolean = false, isConst: Boolean = false, f: suspend (Scope) -> Obj): Statement =
-    object : Statement(isStaticConst, isConst) {
-        override val pos: Pos = pos
-        override suspend fun execute(scope: Scope): Obj = f(scope)
-    }
-
-fun statement(isStaticConst: Boolean = false, isConst: Boolean = false, f: suspend Scope.() -> Obj): Statement =
-    object : Statement(isStaticConst, isConst) {
-        override val pos: Pos = Pos.builtIn
-        override suspend fun execute(scope: Scope): Obj = f(scope)
-    }
-
 object NopStatement: Statement(true, true, ObjType.Void) {
     override val pos: Pos = Pos.builtIn
 
-    override suspend fun execute(scope: Scope): Obj = ObjVoid
+    override suspend fun execute(scope: Scope): Obj = bytecodeOnly(scope, "nop statement")
 }

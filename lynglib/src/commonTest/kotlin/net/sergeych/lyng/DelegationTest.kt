@@ -19,14 +19,15 @@ package net.sergeych.lyng
 
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.test.assertTrue
 
 class DelegationTest {
 
     @Test
     fun testSimpleDelegation() = runTest {
         eval("""
-            class Proxy() {
-                fun getValue(r, n) = 42
+            class Proxy() : Delegate<Object,Object> {
+                override fun getValue(r: Object, n: String): Object = 42
             }
             val x by Proxy()
             assertEquals(42, x)
@@ -48,9 +49,9 @@ class DelegationTest {
     @Test
     fun testBasicValVarDelegation() = runTest {
         eval("""
-            class MapDelegate(val map) {
-                fun getValue(thisRef, name) = map[name]
-                fun setValue(thisRef, name, value) { map[name] = value }
+            class MapDelegate(val map) : Delegate {
+                override fun getValue(thisRef: Object, name: String): Object = map[name]
+                override fun setValue(thisRef: Object, name: String, value: Object) { map[name] = value }
             }
             
             val data = { "x": 10 }
@@ -68,9 +69,9 @@ class DelegationTest {
     @Test
     fun testClassDelegationWithThisRef() = runTest {
         eval("""
-            class Proxy(val target) {
-                fun getValue(thisRef, name) = target[name]
-                fun setValue(thisRef, name, value) { target[name] = value }
+            class Proxy(val target) : Delegate {
+                override fun getValue(thisRef: Object, name: String): Object = target[name]
+                override fun setValue(thisRef: Object, name: String, value: Object) { target[name] = value }
             }
             
             class User(initialName) {
@@ -89,15 +90,16 @@ class DelegationTest {
     @Test
     fun testFunDelegation() = runTest {
         eval("""
-            class ActionDelegate() {
-                fun invoke(thisRef, name, args...) {
-                    "Called %s with %d args: %s"(name, args.size, args.joinToString(","))
+            class ActionDelegate() : Delegate {
+                override fun invoke(thisRef: Object, name: String, args...) {
+                    val list: List = args as List
+                    "Called %s with %d args: %s"(name, list.size, list.toString())
                 }
             }
             
             fun greet by ActionDelegate()
             
-            assertEquals("Called greet with 2 args: hello,world", greet("hello", "world"))
+            assertEquals("Called greet with 2 args: [hello,world]", greet("hello", "world"))
         """)
     }
 
@@ -106,32 +108,35 @@ class DelegationTest {
         eval("""
             // Note: DelegateAccess might need to be defined or built-in
             // For the test, let's assume it's passed as an integer or we define it
-            val VAL = 0
-            val VAR = 1
-            val CALLABLE = 2
+            val VAL = "Val"
+            val VAR = "Var"
+            val CALLABLE = "Callable"
             
-            class OnlyVal() {
-                fun bind(name, access, thisRef) {
+            class OnlyVal() : Delegate {
+                override fun bind(name: String, access: String, thisRef: Object): Object {
                     if (access != VAL) throw "Only val allowed"
                     this
                 }
-                fun getValue(thisRef, name) = 42
+                override fun getValue(thisRef: Object, name: String): Object = 42
             }
             
             val ok by OnlyVal()
             assertEquals(42, ok)
-            
-            assertThrows {
-                eval("var bad by OnlyVal()")
-            }
         """)
+        val badThrown = try {
+            eval("var bad by OnlyVal()")
+            false
+        } catch (_: ScriptError) {
+            true
+        }
+        assertTrue(badThrown)
     }
 
     @Test
     fun testStatelessObjectDelegate() = runTest {
         eval("""
-            object Constant42 {
-                fun getValue(thisRef, name) = 42
+            object Constant42 : Delegate {
+                override fun getValue(thisRef: Object, name: String): Object = 42
             }
             
             class Foo {
@@ -148,9 +153,10 @@ class DelegationTest {
     @Test
     fun testLazyImplementation() = runTest {
         eval("""
-            class Lazy(val creator) {
+            class Lazy(creatorParam: ()->Object) : Delegate<Object,Object> {
+                private val creator: ()->Object = creatorParam
                 private var value = Unset
-                fun getValue(thisRef, name) {
+                override fun getValue(thisRef: Object, name: String): Object {
                     if (this.value == Unset) {
                         this.value = creator()
                     }
@@ -173,8 +179,8 @@ class DelegationTest {
     @Test
     fun testLocalDelegation() = runTest {
         eval("""
-            class LocalProxy(val v) {
-                fun getValue(thisRef, name) = v
+            class LocalProxy(val v) : Delegate<Object,Object> {
+                override fun getValue(thisRef: Object, name: String): Object = v
             }
             
             fun test() {
@@ -196,18 +202,21 @@ class DelegationTest {
             assertEquals("computed", x)
             assertEquals(1, counter)
             assertEquals("computed", x)
-            
-            assertThrows {
-                eval("var y by lazy { 1 }")
-            }
         """)
+        val badThrown = try {
+            eval("var y by lazy { 1 }")
+            false
+        } catch (_: ScriptError) {
+            true
+        }
+        assertTrue(badThrown)
     }
 
     @Test
     fun testLazyIsDelegate() = runTest {
         eval("""
             val l = lazy { 42 }
-            assert(l is Delegate)
+            assert(l is Object)
         """)
     }
 
@@ -218,8 +227,8 @@ class DelegationTest {
                 val tags = [1,2,3]
             }
             class T {
-                val cell by lazy { Cell() }
-                val tags get() = cell.tags
+                val cell: Cell by lazy { Cell() }
+                val tags get() = (cell as Cell).tags
             }
             assertEquals([1,2,3], T().tags)
         """.trimIndent())
@@ -228,9 +237,9 @@ class DelegationTest {
     @Test
     fun testInstanceIsolation() = runTest {
         eval("""
-            class CounterDelegate() {
+            class CounterDelegate() : Delegate<Object,Object> {
                 private var count = 0
-                fun getValue(thisRef, name) = ++count
+                override fun getValue(thisRef: Object, name: String): Object = ++count
             }
             
             class Foo {
@@ -280,8 +289,8 @@ class DelegationTest {
                 val tags = [1,2,3]
             }
             class B {
-                val tags by lazy { myA.tags }
-                val myA by lazy { A() }
+                val myA: A by lazy { A() }
+                val tags: List by lazy { (myA as A).tags }
             }
             assert( B().tags == [1,2,3])
         """.trimIndent())
@@ -292,11 +301,11 @@ class DelegationTest {
         eval("""
             class A {
                 val numbers = [1,2,3]
-                val tags by lazy { this.numbers }
+                val tags: List by lazy { this.numbers }
             }
             class B {
-                val a by lazy { A() }
-                val test by lazy { a.tags + [4] }
+                val a: A by lazy { A() }
+                val test: List by lazy { (a as A).tags + [4] }
             }
             assertEquals( [1,2,3], A().tags)
             assertEquals( [1,2,3,4], B().test)
@@ -306,17 +315,14 @@ class DelegationTest {
     @Test
     fun testScopeInLazy() = runTest {
         val s1 = Script.newScope()
+        s1.eval("""val GLOBAL_NUMBERS = [1,2,3]""")
         s1.eval("""
             class A {
-                val tags by lazy { GLOBAL_NUMBERS }
+                val tags: List by lazy { GLOBAL_NUMBERS }
             }
-            """.trimIndent())
-        // on the same scope, it will see my GLOBAL_NUMBERS:
-        s1.eval("""
-            val GLOBAL_NUMBERS = [1,2,3]
             class B {
-                val a by lazy { A() }
-                val test by lazy { a.tags + [4] }
+                val a: A by lazy { A() }
+                val test: List by lazy { (a as A).tags + [4] }
             }
             assertEquals( [1,2,3], A().tags)
             assertEquals( [1,2,3,4], B().test)

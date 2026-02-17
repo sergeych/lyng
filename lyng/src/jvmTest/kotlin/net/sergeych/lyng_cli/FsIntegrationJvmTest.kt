@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -56,7 +56,7 @@ class FsIntegrationJvmTest {
                 """
                     import lyng.io.fs
                     // list current folder files
-                    println( Path(".").list().toList() )
+                    println( Path(".").list() )
                     """.trimIndent()
             )
         }

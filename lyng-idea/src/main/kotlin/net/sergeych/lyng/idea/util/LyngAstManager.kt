@@ -22,55 +22,22 @@ import com.intellij.openapi.util.Key
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiManager
 import kotlinx.coroutines.runBlocking
-import net.sergeych.lyng.Compiler
-import net.sergeych.lyng.Source
-import net.sergeych.lyng.binding.Binder
 import net.sergeych.lyng.binding.BindingSnapshot
-import net.sergeych.lyng.miniast.MiniAstBuilder
+import net.sergeych.lyng.miniast.DocLookupUtils
 import net.sergeych.lyng.miniast.MiniScript
+import net.sergeych.lyng.tools.IdeLenientImportProvider
+import net.sergeych.lyng.tools.LyngAnalysisRequest
+import net.sergeych.lyng.tools.LyngAnalysisResult
+import net.sergeych.lyng.tools.LyngLanguageTools
 
 object LyngAstManager {
     private val MINI_KEY = Key.create<MiniScript>("lyng.mini.cache")
     private val BINDING_KEY = Key.create<BindingSnapshot>("lyng.binding.cache")
     private val STAMP_KEY = Key.create<Long>("lyng.mini.cache.stamp")
+    private val ANALYSIS_KEY = Key.create<LyngAnalysisResult>("lyng.analysis.cache")
 
     fun getMiniAst(file: PsiFile): MiniScript? = runReadAction {
-        val vFile = file.virtualFile ?: return@runReadAction null
-        val combinedStamp = getCombinedStamp(file)
-
-        val prevStamp = file.getUserData(STAMP_KEY)
-        val cached = file.getUserData(MINI_KEY)
-        if (cached != null && prevStamp != null && prevStamp == combinedStamp) return@runReadAction cached
-
-        val text = file.viewProvider.contents.toString()
-        val sink = MiniAstBuilder()
-        val built = try {
-            val provider = IdeLenientImportProvider.create()
-            val src = Source(file.name, text)
-            runBlocking { Compiler.compileWithMini(src, provider, sink) }
-            val script = sink.build()
-            if (script != null && !file.name.endsWith(".lyng.d")) {
-                val dFiles = collectDeclarationFiles(file)
-                for (df in dFiles) {
-                    val scriptD = getMiniAst(df)
-                    if (scriptD != null) {
-                        script.declarations.addAll(scriptD.declarations)
-                        script.imports.addAll(scriptD.imports)
-                    }
-                }
-            }
-            script
-        } catch (_: Throwable) {
-            sink.build()
-        }
-
-        if (built != null) {
-            file.putUserData(MINI_KEY, built)
-            file.putUserData(STAMP_KEY, combinedStamp)
-            // Invalidate binding too
-            file.putUserData(BINDING_KEY, null)
-        }
-        built
+        getAnalysis(file)?.mini
     }
 
     fun getCombinedStamp(file: PsiFile): Long = runReadAction {
@@ -102,32 +69,53 @@ object LyngAstManager {
     }
 
     fun getBinding(file: PsiFile): BindingSnapshot? = runReadAction {
+        getAnalysis(file)?.binding
+    }
+
+    fun getAnalysis(file: PsiFile): LyngAnalysisResult? = runReadAction {
         val vFile = file.virtualFile ?: return@runReadAction null
-        var combinedStamp = file.viewProvider.modificationStamp
-
-        val dFiles = if (!file.name.endsWith(".lyng.d")) collectDeclarationFiles(file) else emptyList()
-        for (df in dFiles) {
-            combinedStamp += df.viewProvider.modificationStamp
-        }
-
+        val combinedStamp = getCombinedStamp(file)
         val prevStamp = file.getUserData(STAMP_KEY)
-        val cached = file.getUserData(BINDING_KEY)
-
+        val cached = file.getUserData(ANALYSIS_KEY)
         if (cached != null && prevStamp != null && prevStamp == combinedStamp) return@runReadAction cached
 
-        val mini = getMiniAst(file) ?: return@runReadAction null
         val text = file.viewProvider.contents.toString()
-        val binding = try {
-            Binder.bind(text, mini)
+        val built = try {
+            val provider = IdeLenientImportProvider.create()
+            runBlocking {
+                LyngLanguageTools.analyze(
+                    LyngAnalysisRequest(text = text, fileName = file.name, importProvider = provider)
+                )
+            }
         } catch (_: Throwable) {
             null
         }
 
-        if (binding != null) {
-            file.putUserData(BINDING_KEY, binding)
-            // stamp is already set by getMiniAst or we set it here if getMiniAst was cached
+        if (built != null) {
+            val merged = built.mini
+            if (merged != null && !file.name.endsWith(".lyng.d")) {
+                val dFiles = collectDeclarationFiles(file)
+                for (df in dFiles) {
+                    val dAnalysis = getAnalysis(df)
+                    val dMini = dAnalysis?.mini ?: continue
+                    merged.declarations.addAll(dMini.declarations)
+                    merged.imports.addAll(dMini.imports)
+                }
+            }
+            val finalAnalysis = if (merged != null) {
+                built.copy(
+                    mini = merged,
+                    importedModules = DocLookupUtils.canonicalImportedModules(merged, text)
+                )
+            } else {
+                built
+            }
+            file.putUserData(ANALYSIS_KEY, finalAnalysis)
+            file.putUserData(MINI_KEY, finalAnalysis.mini)
+            file.putUserData(BINDING_KEY, finalAnalysis.binding)
             file.putUserData(STAMP_KEY, combinedStamp)
+            return@runReadAction finalAnalysis
         }
-        binding
+        null
     }
 }

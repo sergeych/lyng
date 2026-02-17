@@ -69,13 +69,12 @@ val ObjIterator by lazy {
         ) {
             val out = mutableListOf<Obj>()
             while (true) {
-                val has = thisObj.invokeInstanceMethod(this, "hasNext").toBool()
+                val has = thisObj.invokeInstanceMethod(requireScope(), "hasNext").toBool()
                 if (!has) break
-                val v = thisObj.invokeInstanceMethod(this, "next")
+                val v = thisObj.invokeInstanceMethod(requireScope(), "next")
                 out += v
             }
             ObjList(out.toMutableList())
         }
     }
 }
-

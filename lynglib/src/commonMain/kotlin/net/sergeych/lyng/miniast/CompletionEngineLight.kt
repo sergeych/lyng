@@ -36,7 +36,7 @@ data class CompletionItem(
     val priority: Double = 0.0,
 )
 
-enum class Kind { Function, Class_, Enum, Value, Method, Field }
+enum class Kind { Function, Class_, Enum, TypeAlias, Value, Method, Field }
 
 /**
  * Platform-free, lenient import provider that never fails on unknown packages.
@@ -74,29 +74,30 @@ object CompletionEngineLight {
         val word = DocLookupUtils.wordRangeAt(text, caret)
         val memberDot = DocLookupUtils.findDotLeft(text, word?.first ?: caret)
         if (memberDot != null) {
+            val staticOnly = DocLookupUtils.isStaticReceiver(mini, text, memberDot, imported, binding)
             val inferredCls = (DocLookupUtils.guessReturnClassFromMemberCallBeforeMini(mini, text, memberDot, imported, binding) ?: DocLookupUtils.guessReceiverClass(text, memberDot, imported, mini))
             // 0) Try chained member call return type inference
             DocLookupUtils.guessReturnClassFromMemberCallBeforeMini(mini, text, memberDot, imported, binding)?.let { cls ->
-                offerMembersAdd(out, prefix, imported, cls, mini)
+                offerMembersAdd(out, prefix, imported, cls, mini, staticOnly)
                 return out
             }
             DocLookupUtils.guessReturnClassFromMemberCallBefore(text, memberDot, imported, mini)?.let { cls ->
-                offerMembersAdd(out, prefix, imported, cls, mini)
+                offerMembersAdd(out, prefix, imported, cls, mini, staticOnly)
                 return out
             }
             // 0a) Top-level call before dot
             DocLookupUtils.guessReturnClassFromTopLevelCallBefore(text, memberDot, imported, mini)?.let { cls ->
-                offerMembersAdd(out, prefix, imported, cls, mini)
+                offerMembersAdd(out, prefix, imported, cls, mini, staticOnly)
                 return out
             }
             // 0b) Across-known-callees (Iterable/Iterator/List preference)
             DocLookupUtils.guessReturnClassAcrossKnownCallees(text, memberDot, imported, mini)?.let { cls ->
-                offerMembersAdd(out, prefix, imported, cls, mini)
+                offerMembersAdd(out, prefix, imported, cls, mini, staticOnly)
                 return out
             }
             // 1) Receiver inference fallback
             (DocLookupUtils.guessReceiverClassViaMini(mini, text, memberDot, imported, binding) ?: DocLookupUtils.guessReceiverClass(text, memberDot, imported, mini))?.let { cls ->
-                offerMembersAdd(out, prefix, imported, cls, mini)
+                offerMembersAdd(out, prefix, imported, cls, mini, staticOnly)
                 return out
             }
             // In member context and unknown receiver/return type: show nothing (no globals after dot)
@@ -106,10 +107,20 @@ object CompletionEngineLight {
         // Global identifiers: params > local decls > imported > stdlib; Functions > Classes > Values; alphabetical
         offerParamsInScope(out, prefix, mini, text, caret)
 
-        val locals = DocLookupUtils.extractLocalsAt(text, caret)
-        for (name in locals) {
-            if (name.startsWith(prefix, true)) {
-                out.add(CompletionItem(name, Kind.Value, priority = 150.0))
+        val localsFromBinding = DocLookupUtils.collectLocalsFromBinding(mini, binding, caret)
+        if (localsFromBinding.isNotEmpty()) {
+            for (sym in localsFromBinding) {
+                if (sym.name.startsWith(prefix, true)) {
+                    val t = sym.type?.let { ": $it" }
+                    out.add(CompletionItem(sym.name, Kind.Value, typeText = t, priority = 150.0))
+                }
+            }
+        } else {
+            val locals = DocLookupUtils.extractLocalsAt(text, caret)
+            for (name in locals) {
+                if (name.startsWith(prefix, true)) {
+                    out.add(CompletionItem(name, Kind.Value, priority = 150.0))
+                }
             }
         }
 
@@ -118,9 +129,11 @@ object CompletionEngineLight {
         val classes = decls.filterIsInstance<MiniClassDecl>().sortedBy { it.name.lowercase() }
         val enums = decls.filterIsInstance<MiniEnumDecl>().sortedBy { it.name.lowercase() }
         val vals = decls.filterIsInstance<MiniValDecl>().sortedBy { it.name.lowercase() }
+        val aliases = decls.filterIsInstance<MiniTypeAliasDecl>().sortedBy { it.name.lowercase() }
         funs.forEach { offerDeclAdd(out, prefix, it) }
         classes.forEach { offerDeclAdd(out, prefix, it) }
         enums.forEach { offerDeclAdd(out, prefix, it) }
+        aliases.forEach { offerDeclAdd(out, prefix, it) }
         vals.forEach { offerDeclAdd(out, prefix, it) }
 
         // Imported and builtin
@@ -135,9 +148,11 @@ object CompletionEngineLight {
             val classes = decls.filterIsInstance<MiniClassDecl>().sortedBy { it.name.lowercase() }
             val enums = decls.filterIsInstance<MiniEnumDecl>().sortedBy { it.name.lowercase() }
             val vals = decls.filterIsInstance<MiniValDecl>().sortedBy { it.name.lowercase() }
+            val aliases = decls.filterIsInstance<MiniTypeAliasDecl>().sortedBy { it.name.lowercase() }
             funs.forEach { if (externalAdded < budget) { offerDeclAdd(out, prefix, it); externalAdded++ } }
             classes.forEach { if (externalAdded < budget) { offerDeclAdd(out, prefix, it); externalAdded++ } }
             enums.forEach { if (externalAdded < budget) { offerDeclAdd(out, prefix, it); externalAdded++ } }
+            aliases.forEach { if (externalAdded < budget) { offerDeclAdd(out, prefix, it); externalAdded++ } }
             vals.forEach { if (externalAdded < budget) { offerDeclAdd(out, prefix, it); externalAdded++ } }
             if (out.size >= cap || externalAdded >= budget) break
         }
@@ -196,6 +211,9 @@ object CompletionEngineLight {
                                 is MiniMemberValDecl -> {
                                     add(CompletionItem(m.name, if (m.mutable) Kind.Value else Kind.Field, typeText = typeOf(m.type), priority = 100.0))
                                 }
+                                is MiniMemberTypeAliasDecl -> {
+                                    add(CompletionItem(m.name, Kind.TypeAlias, typeText = typeOf(m.target), priority = 100.0))
+                                }
                                 is MiniInitDecl -> {}
                             }
                         }
@@ -225,12 +243,13 @@ object CompletionEngineLight {
             }
             is MiniClassDecl -> add(CompletionItem(d.name, Kind.Class_))
             is MiniEnumDecl -> add(CompletionItem(d.name, Kind.Enum))
+            is MiniTypeAliasDecl -> add(CompletionItem(d.name, Kind.TypeAlias, typeText = typeOf(d.target)))
             is MiniValDecl -> add(CompletionItem(d.name, Kind.Value, typeText = typeOf(d.type)))
 //            else -> add(CompletionItem(d.name, Kind.Value))
         }
     }
 
-    private fun offerMembersAdd(out: MutableList<CompletionItem>, prefix: String, imported: List<String>, className: String, mini: MiniScript? = null) {
+    private fun offerMembersAdd(out: MutableList<CompletionItem>, prefix: String, imported: List<String>, className: String, mini: MiniScript? = null, staticOnly: Boolean = false) {
         val classes = DocLookupUtils.aggregateClasses(imported, mini)
         val visited = mutableSetOf<String>()
         val directMap = LinkedHashMap<String, MutableList<MiniMemberDecl>>()
@@ -239,10 +258,15 @@ object CompletionEngineLight {
         fun addMembersOf(name: String, direct: Boolean) {
             val cls = classes[name] ?: return
             val target = if (direct) directMap else inheritedMap
-            for (cf in cls.ctorFields + cls.classFields) {
-                target.getOrPut(cf.name) { mutableListOf() }.add(DocLookupUtils.toMemberVal(cf))
+            if (!staticOnly) {
+                for (cf in cls.ctorFields + cls.classFields) {
+                    target.getOrPut(cf.name) { mutableListOf() }.add(DocLookupUtils.toMemberVal(cf))
+                }
             }
-            for (m in cls.members) target.getOrPut(m.name) { mutableListOf() }.add(m)
+            for (m in cls.members) {
+                if (staticOnly && !m.isStatic) continue
+                target.getOrPut(m.name) { mutableListOf() }.add(m)
+            }
             for (b in cls.bases) if (visited.add(b)) addMembersOf(b, false)
         }
 
@@ -289,6 +313,10 @@ object CompletionEngineLight {
                         val ci = CompletionItem(name, Kind.Field, typeText = typeOf(chosen.type), priority = groupPriority)
                         if (ci.name.startsWith(prefix, true)) out += ci
                     }
+                    is MiniMemberTypeAliasDecl -> {
+                        val ci = CompletionItem(name, Kind.TypeAlias, typeText = typeOf(rep.target), priority = groupPriority)
+                        if (ci.name.startsWith(prefix, true)) out += ci
+                    }
                     is MiniInitDecl -> {}
                 }
             }
@@ -298,7 +326,7 @@ object CompletionEngineLight {
         emitGroup(inheritedMap, 0.0)
 
         // Supplement with extension members (both stdlib and local)
-        run {
+        if (!staticOnly) run {
             val already = (directMap.keys + inheritedMap.keys).toMutableSet()
             val extensions = DocLookupUtils.collectExtensionMemberNames(imported, className, mini)
             for (name in extensions) {
@@ -317,6 +345,8 @@ object CompletionEngineLight {
                         }
                         is MiniMemberValDecl -> CompletionItem(name, Kind.Field, typeText = typeOf(m.type), priority = 50.0)
                         is MiniValDecl -> CompletionItem(name, Kind.Field, typeText = typeOf(m.type), priority = 50.0)
+                        is MiniMemberTypeAliasDecl -> CompletionItem(name, Kind.TypeAlias, typeText = typeOf(m.target), priority = 50.0)
+                        is MiniTypeAliasDecl -> CompletionItem(name, Kind.TypeAlias, typeText = typeOf(m.target), priority = 50.0)
                         else -> CompletionItem(name, Kind.Method, tailText = "()", typeText = null, priority = 50.0)
                     }
                     if (ci.name.startsWith(prefix, true)) {

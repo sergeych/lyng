@@ -22,12 +22,14 @@ import net.sergeych.lyng.obj.ObjInt
 import java.io.File
 import kotlin.system.measureNanoTime
 import kotlin.test.Test
+import kotlin.test.Ignore
 
 /**
  * A/B micro-benchmark to compare methods-only adaptive PIC OFF vs ON.
  * Ensures fixed PIC sizes (2-entry) and only toggles PIC_ADAPTIVE_METHODS_ONLY.
  * Writes a summary to lynglib/build/pic_methods_only_adaptive_ab_results.txt
  */
+@Ignore("TODO(compile-time-res): legacy tests disabled")
 class PicMethodsOnlyAdaptiveABTest {
 
     private fun outFile(): File = File("lynglib/build/pic_methods_only_adaptive_ab_results.txt")

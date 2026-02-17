@@ -19,10 +19,7 @@ package net.sergeych.lyng.obj
 
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import net.sergeych.lyng.Arguments
-import net.sergeych.lyng.Scope
-import net.sergeych.lyng.Visibility
-import net.sergeych.lyng.canAccessMember
+import net.sergeych.lyng.*
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
@@ -32,6 +29,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
     internal lateinit var instanceScope: Scope
     internal var fieldSlots: Array<ObjRecord?> = emptyArray()
     internal var methodSlots: Array<ObjRecord?> = emptyArray()
+    internal var kotlinInstanceData: Any? = null
 
     internal fun initFieldSlots(size: Int) {
         fieldSlots = arrayOfNulls(size)
@@ -59,6 +57,14 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         val slot = objClass.methodSlotForKey(key) ?: return null
         val idx = slot.slot
         return if (idx >= 0 && idx < methodSlots.size) methodSlots[idx] else null
+    }
+
+    internal fun fieldRecordForId(fieldId: Int): ObjRecord? {
+        return if (fieldId >= 0 && fieldId < fieldSlots.size) fieldSlots[fieldId] else null
+    }
+
+    internal fun methodRecordForId(methodId: Int): ObjRecord? {
+        return if (methodId >= 0 && methodId < methodSlots.size) methodSlots[methodId] else null
     }
 
     override suspend fun readField(scope: Scope, name: String): ObjRecord {
@@ -165,9 +171,22 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 }
             }
             del = del ?: scope.raiseError("Internal error: delegated property $name has no delegate")
+            val getValueRec = when (del) {
+                is ObjInstance -> del.methodRecordForKey("getValue")
+                    ?: del.instanceScope.objects["getValue"]
+                    ?: del.objClass.getInstanceMemberOrNull("getValue")
+                else -> del.objClass.getInstanceMemberOrNull("getValue")
+            }
+            if (getValueRec == null || getValueRec.declaringClass?.className == "Delegate") {
+                val wrapper = ObjExternCallable.fromBridge {
+                    val th2 = if (thisObj === ObjVoid) ObjNull else thisObj
+                    val allArgs = (listOf(th2, ObjString(name)) + args.list).toTypedArray()
+                    del.invokeInstanceMethod(requireScope(), "invoke", Arguments(*allArgs))
+                }
+                return obj.copy(value = wrapper, type = ObjRecord.Type.Other)
+            }
             val res = del.invokeInstanceMethod(scope, "getValue", Arguments(this, ObjString(name)))
-            obj.value = res
-            return obj
+            return obj.copy(value = res, type = ObjRecord.Type.Other)
         }
 
         // Map member template to instance storage if applicable
@@ -175,12 +194,12 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         val d = decl ?: obj.declaringClass
         if (d != null) {
             val mangled = d.mangledName(name)
-            fieldRecordForKey(mangled)?.let {
-                targetRec = it
-            }
-            if (targetRec === obj) {
-                instanceScope.objects[mangled]?.let { 
-                    targetRec = it 
+            val scoped = instanceScope.objects[mangled]
+            if (scoped != null) {
+                targetRec = scoped
+            } else {
+                fieldRecordForKey(mangled)?.let {
+                    targetRec = it
                 }
             }
         }
@@ -348,6 +367,16 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         
         // Fast path for public members when outside any class context
         if (caller == null) {
+            objClass.members[name]?.let { rec ->
+                if (rec.visibility == Visibility.Public && !rec.isAbstract) {
+                    val decl = rec.declaringClass
+                    if (rec.type == ObjRecord.Type.Property) {
+                        if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, decl)
+                    } else if (rec.type == ObjRecord.Type.Fun) {
+                        return rec.value.invoke(instanceScope, this, args, decl)
+                    }
+                }
+            }
             objClass.publicMemberResolution[name]?.let { key ->
                 methodRecordForKey(key)?.let { rec ->
                     if (rec.visibility == Visibility.Public && !rec.isAbstract) {
@@ -582,7 +611,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
     override suspend fun readField(scope: Scope, name: String): ObjRecord {
         // Qualified field access: prefer mangled storage for the qualified ancestor
         val mangled = "${startClass.className}::$name"
-        instance.fieldRecordForKey(mangled)?.let { rec ->
+        instance.instanceScope.objects[mangled]?.let { rec ->
             // Visibility: declaring class is the qualified ancestor for mangled storage
             val decl = rec.declaringClass ?: startClass
             val caller = scope.currentClassCtx
@@ -590,7 +619,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
                 scope.raiseError(ObjIllegalAccessException(scope, "can't access field $name (declared in ${decl.className})"))
             return instance.resolveRecord(scope, rec, name, decl)
         }
-        instance.instanceScope.objects[mangled]?.let { rec ->
+        instance.fieldRecordForKey(mangled)?.let { rec ->
             // Visibility: declaring class is the qualified ancestor for mangled storage
             val decl = rec.declaringClass ?: startClass
             val caller = scope.currentClassCtx
@@ -626,7 +655,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
     override suspend fun writeField(scope: Scope, name: String, newValue: Obj) {
         // Qualified write: target mangled storage for the ancestor
         val mangled = "${startClass.className}::$name"
-        instance.fieldRecordForKey(mangled)?.let { f ->
+        instance.instanceScope.objects[mangled]?.let { f ->
             val decl = f.declaringClass ?: startClass
             val caller = scope.currentClassCtx
             if (!canAccessMember(f.effectiveWriteVisibility, decl, caller, name))
@@ -638,7 +667,7 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
             if (f.value.assign(scope, newValue) == null) f.value = newValue
             return
         }
-        instance.instanceScope.objects[mangled]?.let { f ->
+        instance.fieldRecordForKey(mangled)?.let { f ->
             val decl = f.declaringClass ?: startClass
             val caller = scope.currentClassCtx
             if (!canAccessMember(f.effectiveWriteVisibility, decl, caller, name))
@@ -689,7 +718,15 @@ class ObjQualifiedView(val instance: ObjInstance, private val startClass: ObjCla
             val saved = instance.instanceScope.currentClassCtx
             instance.instanceScope.currentClassCtx = decl
             try {
-                return rec.value.invoke(instance.instanceScope, instance, args)
+                return when (rec.type) {
+                    ObjRecord.Type.Property -> {
+                        if (args.isEmpty()) (rec.value as ObjProperty).callGetter(scope, instance, decl)
+                        else scope.raiseError("property $name cannot be called with arguments")
+                    }
+                    ObjRecord.Type.Fun, ObjRecord.Type.Delegated ->
+                        rec.value.invoke(instance.instanceScope, instance, args)
+                    else -> scope.raiseError("member $name is not callable")
+                }
             } finally {
                 instance.instanceScope.currentClassCtx = saved
             }

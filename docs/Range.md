@@ -45,10 +45,11 @@ are equal or within another, taking into account the end-inclusiveness:
     assert( (1..<3) in (1..3) )
     >>> void
 
-## Finite Ranges are iterable
+## Ranges are iterable
 
-So given a range with both ends, you can assume it is [Iterable]. This automatically let
-use finite ranges in loops and convert it to lists:
+Finite ranges are [Iterable] and can be used in loops and list conversions.
+Open-ended ranges are iterable only with an explicit `step`, and open-start
+ranges are never iterable.
 
     assert( [-2, -1, 0, 1] == (-2..1).toList() )
     >>> void
@@ -62,6 +63,8 @@ In spite of this you can use ranges in for loops:
     >>> 3
     >>> void
 
+The loop variable is read-only inside the loop body (behaves like a `val`).
+
 but
 
     for( i in 1..<3 ) 
@@ -69,6 +72,26 @@ but
     >>> 1
     >>> 2
     >>> void
+
+### Stepped ranges
+
+Use `step` to change the iteration increment. The range bounds still define membership,
+so iteration ends when the next value is no longer in the range.
+
+    assert( [1,3,5] == (1..5 step 2).toList() )
+    assert( [1,3] == (1..<5 step 2).toList() )
+    assert( ['a','c','e'] == ('a'..'e' step 2).toList() )
+    >>> void
+
+Real ranges require an explicit step:
+
+    assert( [0,0.25,0.5,0.75,1.0] == (0.0..1.0 step 0.25).toList() )
+    >>> void
+
+Open-ended ranges require an explicit step to iterate:
+
+    (0.. step 1).take(3).toList()
+    >>> [0,1,2]
 
 ## Character ranges
 
@@ -98,6 +121,7 @@ Exclusive end char ranges are supported too:
 | isEndInclusive  | true for '..'                | Bool          |
 | isOpen          | at any end                   | Bool          |
 | isIntRange      | both start and end are Int   | Bool          |
+| step            | explicit iteration step      | Any?          |
 | start           |                              | Any?          |
 | end             |                              | Any?          |
 | size            | for finite ranges, see above | Long          |

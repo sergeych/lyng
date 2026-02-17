@@ -1,0 +1,181 @@
+/*
+ * Copyright 2026 Sergey S. Chernov
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package net.sergeych.lyng.bytecode
+
+import net.sergeych.lyng.ArgsDeclaration
+import net.sergeych.lyng.Pos
+import net.sergeych.lyng.Visibility
+import net.sergeych.lyng.obj.ListLiteralRef
+import net.sergeych.lyng.obj.Obj
+import net.sergeych.lyng.obj.ObjProperty
+
+sealed class BytecodeConst {
+    object Null : BytecodeConst()
+    data class Bool(val value: Boolean) : BytecodeConst()
+    data class IntVal(val value: Long) : BytecodeConst()
+    data class RealVal(val value: Double) : BytecodeConst()
+    data class StringVal(val value: String) : BytecodeConst()
+    data class PosVal(val pos: Pos) : BytecodeConst()
+    data class ObjRef(val value: Obj) : BytecodeConst()
+    data class ListLiteralPlan(val spreads: List<Boolean>) : BytecodeConst()
+    data class LambdaFn(
+        val fn: CmdFunction,
+        val captureTableId: Int?,
+        val captureNames: List<String>,
+        val paramSlotPlan: Map<String, Int>,
+        val argsDeclaration: ArgsDeclaration?,
+        val preferredThisType: String?,
+        val wrapAsExtensionCallable: Boolean,
+        val returnLabels: Set<String>,
+        val pos: Pos,
+    ) : BytecodeConst()
+    data class EnumDecl(
+        val declaredName: String,
+        val qualifiedName: String,
+        val entries: List<String>,
+        val lifted: Boolean,
+    ) : BytecodeConst()
+    data class FunctionDecl(
+        val spec: net.sergeych.lyng.FunctionDeclSpec,
+    ) : BytecodeConst()
+    data class ClassDecl(
+        val spec: net.sergeych.lyng.ClassDeclSpec,
+    ) : BytecodeConst()
+    data class SlotPlan(val plan: Map<String, Int>, val captures: List<String> = emptyList()) : BytecodeConst()
+    data class CaptureTable(val entries: List<BytecodeCaptureEntry>) : BytecodeConst()
+    data class ExtensionPropertyDecl(
+        val extTypeName: String,
+        val property: ObjProperty,
+        val visibility: Visibility,
+        val setterVisibility: Visibility?,
+    ) : BytecodeConst()
+    data class LocalDecl(
+        val name: String,
+        val isMutable: Boolean,
+        val visibility: Visibility,
+        val isTransient: Boolean,
+    ) : BytecodeConst()
+    data class DelegatedDecl(
+        val name: String,
+        val isMutable: Boolean,
+        val visibility: Visibility,
+        val isTransient: Boolean,
+    ) : BytecodeConst()
+    data class ClassFieldDecl(
+        val name: String,
+        val isMutable: Boolean,
+        val visibility: Visibility,
+        val writeVisibility: Visibility?,
+        val isTransient: Boolean,
+    ) : BytecodeConst()
+    data class ClassDelegatedDecl(
+        val name: String,
+        val isMutable: Boolean,
+        val visibility: Visibility,
+        val writeVisibility: Visibility?,
+        val isTransient: Boolean,
+    ) : BytecodeConst()
+    data class ClassInstanceInitDecl(
+        val initStatement: Obj,
+    ) : BytecodeConst()
+    data class ClassInstanceFieldDecl(
+        val name: String,
+        val isMutable: Boolean,
+        val visibility: Visibility,
+        val writeVisibility: Visibility?,
+        val isTransient: Boolean,
+        val isAbstract: Boolean,
+        val isClosed: Boolean,
+        val isOverride: Boolean,
+        val fieldId: Int?,
+        val initStatement: Obj?,
+        val pos: Pos,
+    ) : BytecodeConst()
+    data class ClassInstancePropertyDecl(
+        val name: String,
+        val isMutable: Boolean,
+        val visibility: Visibility,
+        val writeVisibility: Visibility?,
+        val isTransient: Boolean,
+        val isAbstract: Boolean,
+        val isClosed: Boolean,
+        val isOverride: Boolean,
+        val prop: ObjProperty,
+        val methodId: Int?,
+        val initStatement: Obj?,
+        val pos: Pos,
+    ) : BytecodeConst()
+    data class ClassInstanceDelegatedDecl(
+        val name: String,
+        val isMutable: Boolean,
+        val visibility: Visibility,
+        val writeVisibility: Visibility?,
+        val isTransient: Boolean,
+        val isAbstract: Boolean,
+        val isClosed: Boolean,
+        val isOverride: Boolean,
+        val methodId: Int?,
+        val initStatement: Obj?,
+        val pos: Pos,
+    ) : BytecodeConst()
+    data class InstanceFieldDecl(
+        val name: String,
+        val isMutable: Boolean,
+        val visibility: Visibility,
+        val writeVisibility: Visibility?,
+        val isTransient: Boolean,
+        val isAbstract: Boolean,
+        val isClosed: Boolean,
+        val isOverride: Boolean,
+    ) : BytecodeConst()
+    data class InstancePropertyDecl(
+        val name: String,
+        val isMutable: Boolean,
+        val visibility: Visibility,
+        val writeVisibility: Visibility?,
+        val isTransient: Boolean,
+        val isAbstract: Boolean,
+        val isClosed: Boolean,
+        val isOverride: Boolean,
+    ) : BytecodeConst()
+    data class InstanceDelegatedDecl(
+        val storageName: String,
+        val memberName: String,
+        val isMutable: Boolean,
+        val visibility: Visibility,
+        val writeVisibility: Visibility?,
+        val isTransient: Boolean,
+        val isAbstract: Boolean,
+        val isClosed: Boolean,
+        val isOverride: Boolean,
+        val accessTypeLabel: String,
+    ) : BytecodeConst()
+    data class DestructureDecl(
+        val pattern: ListLiteralRef,
+        val names: List<String>,
+        val isMutable: Boolean,
+        val visibility: Visibility,
+        val isTransient: Boolean,
+        val pos: Pos,
+    ) : BytecodeConst()
+    data class DestructureAssign(
+        val pattern: ListLiteralRef,
+        val pos: Pos,
+    ) : BytecodeConst()
+    data class CallArgsPlan(val tailBlock: Boolean, val specs: List<CallArgSpec>) : BytecodeConst()
+    data class CallArgSpec(val name: String?, val isSplat: Boolean)
+}

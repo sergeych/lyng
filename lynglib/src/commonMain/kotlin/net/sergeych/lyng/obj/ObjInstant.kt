@@ -21,9 +21,7 @@ import kotlinx.datetime.*
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.Scope
-import net.sergeych.lyng.miniast.addFnDoc
-import net.sergeych.lyng.miniast.addPropertyDoc
-import net.sergeych.lyng.miniast.type
+import net.sergeych.lyng.miniast.*
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonSettings
@@ -274,17 +272,29 @@ class ObjInstant(val instant: Instant,val truncateMode: LynonSettings.InstantTru
 
             // class members
 
-            addClassConst("distantFuture", distantFuture)
-            addClassConst("distantPast", distantPast)
-            addClassFn("now") {
+            addClassConstDoc(
+                name = "distantFuture",
+                value = distantFuture,
+                doc = "An instant in the distant future.",
+                type = type("lyng.Instant"),
+                moduleName = "lyng.time"
+            )
+            addClassConstDoc(
+                name = "distantPast",
+                value = distantPast,
+                doc = "An instant in the distant past.",
+                type = type("lyng.Instant"),
+                moduleName = "lyng.time"
+            )
+            addClassFnDoc(
+                name = "now",
+                doc = "Return the current instant from the system clock.",
+                returns = type("lyng.Instant"),
+                moduleName = "lyng.time"
+            ) {
                 ObjInstant(Clock.System.now())
             }
-//            addFn("epochMilliseconds") {
-//                ObjInt(instant.toEpochMilliseconds())
-//            }
         }
 
     }
 }
-
-

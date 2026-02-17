@@ -22,8 +22,23 @@ package net.sergeych.lyng
 // this is highly experimental and subject to complete redesign
 // very soon
 sealed class TypeDecl(val isNullable:Boolean = false) {
+    enum class Variance { In, Out, Invariant }
     // ??
-//    data class Fn(val argTypes: List<ArgsDeclaration.Item>, val retType: TypeDecl) : TypeDecl()
+    data class Function(
+        val receiver: TypeDecl?,
+        val params: List<TypeDecl>,
+        val returnType: TypeDecl,
+        val nullable: Boolean = false
+    ) : TypeDecl(nullable)
+    data class TypeVar(val name: String, val nullable: Boolean = false) : TypeDecl(nullable)
+    data class Union(val options: List<TypeDecl>, val nullable: Boolean = false) : TypeDecl(nullable)
+    data class Intersection(val options: List<TypeDecl>, val nullable: Boolean = false) : TypeDecl(nullable)
+    data class TypeParam(
+        val name: String,
+        val variance: Variance = Variance.Invariant,
+        val bound: TypeDecl? = null,
+        val defaultType: TypeDecl? = null
+    )
     object TypeAny : TypeDecl()
     object TypeNullableAny : TypeDecl(true)
 

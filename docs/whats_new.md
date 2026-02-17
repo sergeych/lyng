@@ -1,6 +1,7 @@
 # What's New in Lyng
 
 This document highlights the latest additions and improvements to the Lyng language and its ecosystem.
+For a programmer-focused migration summary, see `docs/whats_new_1_5.md`.
 
 ## Language Features
 
@@ -101,12 +102,30 @@ Singleton objects are declared using the `object` keyword. They provide a conven
 
 ```lyng
 object Config {
-    val version = "1.2.3"
+    val version = "1.5.0-SNAPSHOT"
     fun show() = println("Config version: " + version)
 }
 
 Config.show()
 ```
+
+### Nested Declarations and Lifted Enums
+You can now declare classes, objects, enums, and type aliases inside another class. These nested declarations live in the class namespace (no outer instance capture) and are accessed with a qualifier.
+
+```lyng
+class A {
+    class B(x?)
+    object Inner { val foo = "bar" }
+    enum E* { One, Two }
+}
+
+val ab = A.B()
+assertEquals(ab.x, null)
+assertEquals(A.Inner.foo, "bar")
+assertEquals(A.One, A.E.One)
+```
+
+The `*` on `enum E*` lifts entries into the enclosing class namespace (compile-time error on ambiguity).
 
 ### Object Expressions
 You can now create anonymous objects that inherit from classes or interfaces using the `object : Base { ... }` syntax. These expressions capture their lexical scope and support multiple inheritance.
@@ -224,3 +243,11 @@ You can enable it in **Settings | Lyng Formatter | Enable Lyng autocompletion**.
 
 ### Kotlin API: Exception Handling
 The `Obj.getLyngExceptionMessageWithStackTrace()` extension method has been added to simplify retrieving detailed error information from Lyng exception objects in Kotlin. Additionally, `getLyngExceptionMessage()` and `raiseAsExecutionError()` now accept an optional `Scope`, making it easier to use them when a scope is not immediately available.
+
+### Kotlin API: Bridge Reflection and Class Binding (Preferred Extensions)
+Lyng now provides a public Kotlin reflection bridge and a Lyng‑first class binding workflow. This is the **preferred** way to write Kotlin extensions and library integrations:
+
+- **Bridge resolver**: explicit handles for values, vars, and callables with predictable lookup rules.
+- **Class bridge binding**: declare classes/members in Lyng (marked `extern`) and bind the implementations in Kotlin before the first instance is created.
+
+See **Embedding Lyng** for full samples and usage details.

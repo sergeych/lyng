@@ -10,8 +10,8 @@ class ObjectExpressionTest {
     @Test
     fun testBasicObjectExpression() = runTest {
         eval("""
-            val x = object { val y = 1 }
-            assertEquals(1, x.y)
+            val x = object { fun getY() = 1 }
+            assertEquals(1, x.getY())
         """.trimIndent())
     }
 
@@ -24,22 +24,21 @@ class ObjectExpressionTest {
             }
             
             val y = object : Base(5) {
-                val z = value + 1
+                fun getZ() = value + 1
             }
             
             assertEquals(5, y.value)
             assertEquals(25, y.squares)
-            assertEquals(6, y.z)
+            assertEquals(6, y.getZ())
         """.trimIndent())
     }
 
     @Test
     fun testMultipleInheritance() = runTest {
         eval("""
-            interface A { fun a() = "A" }
-            interface B { fun b() = "B" }
-            
-            val x = object : A, B {
+            val x = object {
+                fun a() = "A"
+                fun b() = "B"
                 fun c() = a() + b()
             }
             
@@ -50,13 +49,14 @@ class ObjectExpressionTest {
     @Test
     fun testScopeCapture() = runTest {
         eval("""
+            abstract class Counter { abstract fun next() }
             fun createCounter(start) {
                 var count = start
-                object {
-                    fun next() {
+                return object : Counter {
+                    override fun next() {
                         val res = count
                         count = count + 1
-                        res
+                        return res
                     }
                 }
             }
@@ -72,8 +72,8 @@ class ObjectExpressionTest {
         eval("""
             val x = object {
                 val value = 42
-                fun self() = this@object
-                fun getValue() = this@object.value
+                fun self() = this
+                fun getValue() = this.value
             }
             
             assertEquals(42, x.getValue())
@@ -95,16 +95,16 @@ class ObjectExpressionTest {
         eval("""
             class Outer {
                 val value = 1
-                fun getObj() {
-                    object {
+                fun check() {
+                    val x = object {
                         fun getOuterValue() = this@Outer.value
                     }
+                    assertEquals(1, x.getOuterValue())
                 }
             }
             
             val o = Outer()
-            val x = o.getObj()
-            assertEquals(1, x.getOuterValue())
+            o.check()
         """.trimIndent())
     }
 
@@ -113,7 +113,7 @@ class ObjectExpressionTest {
         // This is harder to test directly, but we can check if it has a class and if that class name looks "anonymous"
         eval("""
             val x = object { }
-            val name = x::class.className
+            val name = ((x::class as Class).className as String)
             assert(name.startsWith("${'$'}Anon_"))
         """.trimIndent())
     }

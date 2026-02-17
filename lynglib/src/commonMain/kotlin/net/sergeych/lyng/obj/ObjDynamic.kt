@@ -18,9 +18,7 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Arguments
-import net.sergeych.lyng.ClosureScope
 import net.sergeych.lyng.Scope
-import net.sergeych.lyng.Statement
 
 class ObjDynamicContext(val delegate: ObjDynamic) : Obj() {
     override val objClass: ObjClass get() = type
@@ -52,7 +50,7 @@ class ObjDynamicContext(val delegate: ObjDynamic) : Obj() {
  * Object that delegates all its field access/invocation operations to a callback. It is used to implement dynamic
  * objects using "dynamic" keyword.
  */
-open class ObjDynamic(var readCallback: Statement? = null, var writeCallback: Statement? = null) : Obj() {
+open class ObjDynamic(var readCallback: Obj? = null, var writeCallback: Obj? = null) : Obj() {
 
     override val objClass: ObjClass get() = type
     // Capture the lexical scope used to build this dynamic so callbacks can see outer locals
@@ -63,8 +61,8 @@ open class ObjDynamic(var readCallback: Statement? = null, var writeCallback: St
      * with method invocation which is implemented separately in [invokeInstanceMethod] below.
      */
     override suspend fun readField(scope: Scope, name: String): ObjRecord {
-        val execBase = builderScope?.let { ClosureScope(scope, it) } ?: scope
-        return readCallback?.execute(execBase.createChildScope(Arguments(ObjString(name))))?.let {
+        val execBase = builderScope?.let { scope.applyClosure(it) } ?: scope
+        return readCallback?.callOn(execBase.createChildScope(Arguments(ObjString(name))))?.let {
             if (writeCallback != null)
                 it.asMutable
             else
@@ -83,33 +81,33 @@ open class ObjDynamic(var readCallback: Statement? = null, var writeCallback: St
         args: Arguments,
         onNotFoundResult: (suspend () -> Obj?)?
     ): Obj {
-        val execBase = builderScope?.let { ClosureScope(scope, it) } ?: scope
-        val over = readCallback?.execute(execBase.createChildScope(Arguments(ObjString(name))))
+        val execBase = builderScope?.let { scope.applyClosure(it) } ?: scope
+        val over = readCallback?.callOn(execBase.createChildScope(Arguments(ObjString(name))))
         return over?.invoke(scope, scope.thisObj, args)
             ?: super.invokeInstanceMethod(scope, name, args, onNotFoundResult)
     }
 
     override suspend fun writeField(scope: Scope, name: String, newValue: Obj) {
-        val execBase = builderScope?.let { ClosureScope(scope, it) } ?: scope
-        writeCallback?.execute(execBase.createChildScope(Arguments(ObjString(name), newValue)))
+        val execBase = builderScope?.let { scope.applyClosure(it) } ?: scope
+        writeCallback?.callOn(execBase.createChildScope(Arguments(ObjString(name), newValue)))
             ?: super.writeField(scope, name, newValue)
     }
 
     override suspend fun getAt(scope: Scope, index: Obj): Obj {
-        val execBase = builderScope?.let { ClosureScope(scope, it) } ?: scope
-        return readCallback?.execute(execBase.createChildScope(Arguments(index)))
+        val execBase = builderScope?.let { scope.applyClosure(it) } ?: scope
+        return readCallback?.callOn(execBase.createChildScope(Arguments(index)))
             ?: super.getAt(scope, index)
     }
 
     override suspend fun putAt(scope: Scope, index: Obj, newValue: Obj) {
-        val execBase = builderScope?.let { ClosureScope(scope, it) } ?: scope
-        writeCallback?.execute(execBase.createChildScope(Arguments(index, newValue)))
+        val execBase = builderScope?.let { scope.applyClosure(it) } ?: scope
+        writeCallback?.callOn(execBase.createChildScope(Arguments(index, newValue)))
             ?: super.putAt(scope, index, newValue)
     }
 
     companion object {
 
-        suspend fun create(scope: Scope, builder: Statement): ObjDynamic {
+        suspend fun create(scope: Scope, builder: Obj): ObjDynamic {
             val delegate = ObjDynamic()
             val context = ObjDynamicContext(delegate)
             // Capture the function's lexical scope (scope) so callbacks can see outer locals like parameters.
@@ -117,11 +115,15 @@ open class ObjDynamic(var readCallback: Statement? = null, var writeCallback: St
             val buildScope = scope.createChildScope(newThisObj = context)
             // Snapshot the caller scope to capture locals/args even if the runtime pools/reuses frames
             delegate.builderScope = scope.snapshotForClosure()
-            builder.execute(buildScope)
+            builder.callOn(buildScope)
             return delegate
         }
 
         val type = object : ObjClass("Delegate") {}.apply {
+            addFn("getValue") { raiseError("Delegate.getValue is not implemented") }
+            addFn("setValue") { raiseError("Delegate.setValue is not implemented") }
+            addFn("invoke") { raiseError("Delegate.invoke is not implemented") }
+            addFn("bind") { raiseError("Delegate.bind is not implemented") }
 //            addClassConst("IndexGetName", operatorGetName)
         }
     }

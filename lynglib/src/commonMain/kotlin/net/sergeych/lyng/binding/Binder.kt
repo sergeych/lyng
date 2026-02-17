@@ -27,7 +27,7 @@ import net.sergeych.lyng.highlight.SimpleLyngHighlighter
 import net.sergeych.lyng.highlight.offsetOf
 import net.sergeych.lyng.miniast.*
 
-enum class SymbolKind { Class, Enum, Function, Value, Variable, Parameter }
+enum class SymbolKind { Class, Enum, TypeAlias, Function, Value, Variable, Parameter }
 
 data class Symbol(
     val id: Int,
@@ -126,13 +126,22 @@ object Binder {
             }
             // Members (including fields and methods)
             for (m in d.members) {
-                if (m is MiniMemberValDecl) {
-                    val fs = source.offsetOf(m.nameStart)
-                    val fe = fs + m.name.length
-                    val kind = if (m.mutable) SymbolKind.Variable else SymbolKind.Value
-                    val fieldSym = Symbol(nextId++, m.name, kind, fs, fe, containerId = sym.id, type = DocLookupUtils.typeOf(m.type))
-                    symbols += fieldSym
-                    classScope.fields += fieldSym.id
+                when (m) {
+                    is MiniMemberValDecl -> {
+                        val fs = source.offsetOf(m.nameStart)
+                        val fe = fs + m.name.length
+                        val kind = if (m.mutable) SymbolKind.Variable else SymbolKind.Value
+                        val fieldSym = Symbol(nextId++, m.name, kind, fs, fe, containerId = sym.id, type = DocLookupUtils.typeOf(m.type))
+                        symbols += fieldSym
+                        classScope.fields += fieldSym.id
+                    }
+                    is MiniMemberTypeAliasDecl -> {
+                        val fs = source.offsetOf(m.nameStart)
+                        val fe = fs + m.name.length
+                        val aliasSym = Symbol(nextId++, m.name, SymbolKind.TypeAlias, fs, fe, containerId = sym.id, type = DocLookupUtils.typeOf(m.target))
+                        symbols += aliasSym
+                    }
+                    else -> {}
                 }
             }
         }
@@ -194,6 +203,12 @@ object Binder {
                 is MiniEnumDecl -> {
                     val (s, e) = nameOffsets(d.nameStart, d.name)
                     val sym = Symbol(nextId++, d.name, SymbolKind.Enum, s, e, containerId = null, type = d.name)
+                    symbols += sym
+                    topLevelByName.getOrPut(d.name) { mutableListOf() }.add(sym.id)
+                }
+                is MiniTypeAliasDecl -> {
+                    val (s, e) = nameOffsets(d.nameStart, d.name)
+                    val sym = Symbol(nextId++, d.name, SymbolKind.TypeAlias, s, e, containerId = null, type = DocLookupUtils.typeOf(d.target))
                     symbols += sym
                     topLevelByName.getOrPut(d.name) { mutableListOf() }.add(sym.id)
                 }

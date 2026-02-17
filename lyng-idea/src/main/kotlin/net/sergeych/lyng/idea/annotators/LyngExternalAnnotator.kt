@@ -25,15 +25,13 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiFile
-import net.sergeych.lyng.Source
-import net.sergeych.lyng.binding.Binder
-import net.sergeych.lyng.binding.SymbolKind
 import net.sergeych.lyng.highlight.HighlightKind
-import net.sergeych.lyng.highlight.SimpleLyngHighlighter
 import net.sergeych.lyng.highlight.offsetOf
 import net.sergeych.lyng.idea.highlight.LyngHighlighterColors
 import net.sergeych.lyng.idea.util.LyngAstManager
-import net.sergeych.lyng.miniast.*
+import net.sergeych.lyng.tools.LyngDiagnosticSeverity
+import net.sergeych.lyng.tools.LyngLanguageTools
+import net.sergeych.lyng.tools.LyngSemanticKind
 
 /**
  * ExternalAnnotator that runs Lyng MiniAst on the document text in background
@@ -43,8 +41,8 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
     data class Input(val text: String, val modStamp: Long, val previousSpans: List<Span>?, val file: PsiFile)
 
     data class Span(val start: Int, val end: Int, val key: com.intellij.openapi.editor.colors.TextAttributesKey)
-    data class Error(val start: Int, val end: Int, val message: String)
-    data class Result(val modStamp: Long, val spans: List<Span>, val error: Error? = null)
+    data class Diag(val start: Int, val end: Int, val message: String, val severity: HighlightSeverity)
+    data class Result(val modStamp: Long, val spans: List<Span>, val diagnostics: List<Diag> = emptyList())
 
     override fun collectInformation(file: PsiFile): Input? {
         val doc: Document = file.viewProvider.document ?: return null
@@ -59,224 +57,46 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
         if (collectedInfo == null) return null
         ProgressManager.checkCanceled()
         val text = collectedInfo.text
-        val tokens = try { SimpleLyngHighlighter().highlight(text) } catch (_: Throwable) { emptyList() }
-        
-        // Use LyngAstManager to get the (potentially merged) Mini-AST
-        val mini = LyngAstManager.getMiniAst(collectedInfo.file) 
+        val analysis = LyngAstManager.getAnalysis(collectedInfo.file)
             ?: return Result(collectedInfo.modStamp, collectedInfo.previousSpans ?: emptyList())
-        
-        ProgressManager.checkCanceled()
-        val source = Source(collectedInfo.file.name, text)
-        
-        val out = ArrayList<Span>(256)
+        val mini = analysis.mini
 
-        fun isFollowedByParenOrBlock(rangeEnd: Int): Boolean {
-            var i = rangeEnd
-            while (i < text.length) {
-                val ch = text[i]
-                if (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') { i++; continue }
-                return ch == '(' || ch == '{'
-            }
-            return false
-        }
+        ProgressManager.checkCanceled()
+
+        val out = ArrayList<Span>(256)
+        val diags = ArrayList<Diag>()
 
         fun putRange(start: Int, end: Int, key: com.intellij.openapi.editor.colors.TextAttributesKey) {
             if (start in 0..end && end <= text.length && start < end) out += Span(start, end, key)
         }
-        fun putName(startPos: net.sergeych.lyng.Pos, name: String, key: com.intellij.openapi.editor.colors.TextAttributesKey) {
-            val s = source.offsetOf(startPos)
-            putRange(s, (s + name.length).coerceAtMost(text.length), key)
-        }
-        fun putMiniRange(r: MiniRange, key: com.intellij.openapi.editor.colors.TextAttributesKey) {
-            val s = source.offsetOf(r.start)
-            val e = source.offsetOf(r.end)
-            putRange(s, e, key)
+
+        fun keyForKind(kind: LyngSemanticKind): com.intellij.openapi.editor.colors.TextAttributesKey? = when (kind) {
+            LyngSemanticKind.Function -> LyngHighlighterColors.FUNCTION
+            LyngSemanticKind.Class, LyngSemanticKind.Enum, LyngSemanticKind.TypeAlias -> LyngHighlighterColors.TYPE
+            LyngSemanticKind.Value -> LyngHighlighterColors.VALUE
+            LyngSemanticKind.Variable -> LyngHighlighterColors.VARIABLE
+            LyngSemanticKind.Parameter -> LyngHighlighterColors.PARAMETER
+            LyngSemanticKind.TypeRef -> LyngHighlighterColors.TYPE
+            LyngSemanticKind.EnumConstant -> LyngHighlighterColors.ENUM_CONSTANT
         }
 
-        // Declarations
-        mini.declarations.forEach { d ->
-            if (d.nameStart.source != source) return@forEach
-            when (d) {
-                is MiniFunDecl -> putName(d.nameStart, d.name, LyngHighlighterColors.FUNCTION_DECLARATION)
-                is MiniClassDecl -> putName(d.nameStart, d.name, LyngHighlighterColors.TYPE)
-                is MiniValDecl -> putName(
-                    d.nameStart,
-                    d.name,
-                    if (d.mutable) LyngHighlighterColors.VARIABLE else LyngHighlighterColors.VALUE
-                )
-                is MiniEnumDecl -> putName(d.nameStart, d.name, LyngHighlighterColors.TYPE)
-            }
+        // Semantic highlights from shared tooling
+        LyngLanguageTools.semanticHighlights(analysis).forEach { span ->
+            keyForKind(span.kind)?.let { putRange(span.range.start, span.range.endExclusive, it) }
         }
 
         // Imports: each segment as namespace/path
-        mini.imports.forEach { imp ->
-            if (imp.range.start.source != source) return@forEach
-            imp.segments.forEach { seg -> putMiniRange(seg.range, LyngHighlighterColors.NAMESPACE) }
-        }
-
-        // Parameters
-        fun addParams(params: List<MiniParam>) {
-            params.forEach { p ->
-                if (p.nameStart.source == source)
-                    putName(p.nameStart, p.name, LyngHighlighterColors.PARAMETER)
+        mini?.imports?.forEach { imp ->
+            imp.segments.forEach { seg ->
+                val start = analysis.source.offsetOf(seg.range.start)
+                val end = analysis.source.offsetOf(seg.range.end)
+                putRange(start, end, LyngHighlighterColors.NAMESPACE)
             }
-        }
-        mini.declarations.forEach { d ->
-            when (d) {
-                is MiniFunDecl -> addParams(d.params)
-                is MiniClassDecl -> d.members.filterIsInstance<MiniMemberFunDecl>().forEach { addParams(it.params) }
-                else -> {}
-            }
-        }
-
-        // Type name segments (including generics base & args)
-        fun addTypeSegments(t: MiniTypeRef?) {
-            when (t) {
-                is MiniTypeName -> t.segments.forEach { seg ->
-                    if (seg.range.start.source != source) return@forEach
-                    val s = source.offsetOf(seg.range.start)
-                    putRange(s, (s + seg.name.length).coerceAtMost(text.length), LyngHighlighterColors.TYPE)
-                }
-                is MiniGenericType -> {
-                    addTypeSegments(t.base)
-                    t.args.forEach { addTypeSegments(it) }
-                }
-                is MiniFunctionType -> {
-                    t.receiver?.let { addTypeSegments(it) }
-                    t.params.forEach { addTypeSegments(it) }
-                    addTypeSegments(t.returnType)
-                }
-                is MiniTypeVar -> { /* name is in range; could be highlighted as TYPE as well */
-                    if (t.range.start.source == source)
-                        putMiniRange(t.range, LyngHighlighterColors.TYPE)
-                }
-                null -> {}
-            }
-        }
-        fun addDeclTypeSegments(d: MiniDecl) {
-            if (d.nameStart.source != source) return
-            when (d) {
-                is MiniFunDecl -> {
-                    addTypeSegments(d.returnType)
-                    d.params.forEach { addTypeSegments(it.type) }
-                    addTypeSegments(d.receiver)
-                }
-                is MiniValDecl -> {
-                    addTypeSegments(d.type)
-                    addTypeSegments(d.receiver)
-                }
-                is MiniClassDecl -> {
-                    d.ctorFields.forEach { addTypeSegments(it.type) }
-                    d.classFields.forEach { addTypeSegments(it.type) }
-                    for (m in d.members) {
-                        when (m) {
-                            is MiniMemberFunDecl -> {
-                                addTypeSegments(m.returnType)
-                                m.params.forEach { addTypeSegments(it.type) }
-                            }
-                            is MiniMemberValDecl -> {
-                                addTypeSegments(m.type)
-                            }
-                            else -> {}
-                        }
-                    }
-                }
-                is MiniEnumDecl -> {}
-            }
-        }
-        mini.declarations.forEach { d -> addDeclTypeSegments(d) }
-
-        ProgressManager.checkCanceled()
-
-        // Semantic usages via Binder (best-effort)
-        try {
-            val binding = Binder.bind(text, mini)
-
-            // Map declaration ranges to avoid duplicating them as usages
-            val declKeys = HashSet<Pair<Int, Int>>(binding.symbols.size * 2)
-            binding.symbols.forEach { sym -> declKeys += (sym.declStart to sym.declEnd) }
-
-            fun keyForKind(k: SymbolKind) = when (k) {
-                SymbolKind.Function -> LyngHighlighterColors.FUNCTION
-                SymbolKind.Class, SymbolKind.Enum -> LyngHighlighterColors.TYPE
-                SymbolKind.Parameter -> LyngHighlighterColors.PARAMETER
-                SymbolKind.Value -> LyngHighlighterColors.VALUE
-                SymbolKind.Variable -> LyngHighlighterColors.VARIABLE
-            }
-
-            // Track covered ranges to not override later heuristics
-            val covered = HashSet<Pair<Int, Int>>()
-
-            binding.references.forEach { ref ->
-                val key = ref.start to ref.end
-                if (!declKeys.contains(key)) {
-                    val sym = binding.symbols.firstOrNull { it.id == ref.symbolId }
-                    if (sym != null) {
-                        val color = keyForKind(sym.kind)
-                        putRange(ref.start, ref.end, color)
-                        covered += key
-                    }
-                }
-            }
-
-            // Heuristics on top of binder: function call-sites and simple name-based roles
-            ProgressManager.checkCanceled()
-
-            // Build simple name -> role map for top-level vals/vars and parameters
-            val nameRole = HashMap<String, com.intellij.openapi.editor.colors.TextAttributesKey>(8)
-            mini.declarations.forEach { d ->
-                when (d) {
-                    is MiniValDecl -> nameRole[d.name] =
-                        if (d.mutable) LyngHighlighterColors.VARIABLE else LyngHighlighterColors.VALUE
-
-                    is MiniFunDecl -> d.params.forEach { p -> nameRole[p.name] = LyngHighlighterColors.PARAMETER }
-                    is MiniClassDecl -> {
-                        d.members.forEach { m ->
-                            if (m is MiniMemberFunDecl) {
-                                m.params.forEach { p -> nameRole[p.name] = LyngHighlighterColors.PARAMETER }
-                            }
-                        }
-                    }
-                    else -> {}
-                }
-            }
-
-            tokens.forEach { s ->
-                if (s.kind == HighlightKind.Identifier) {
-                    val start = s.range.start
-                    val end = s.range.endExclusive
-                    val key = start to end
-                    if (key !in covered && key !in declKeys) {
-                        // Call-site detection first so it wins over var/param role
-                        if (isFollowedByParenOrBlock(end)) {
-                            putRange(start, end, LyngHighlighterColors.FUNCTION)
-                            covered += key
-                        } else {
-                            // Simple role by known names
-                            val ident = try {
-                                text.substring(start, end)
-                            } catch (_: Throwable) {
-                                null
-                            }
-                            if (ident != null) {
-                                val roleKey = nameRole[ident]
-                                if (roleKey != null) {
-                                    putRange(start, end, roleKey)
-                                    covered += key
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (e: Throwable) {
-            // Must rethrow cancellation; otherwise ignore binder failures (best-effort)
-            if (e is com.intellij.openapi.progress.ProcessCanceledException) throw e
         }
 
         // Add annotation/label coloring using token highlighter
         run {
-            tokens.forEach { s ->
+            analysis.lexicalHighlights.forEach { s ->
                 if (s.kind == HighlightKind.Label) {
                     val start = s.range.start
                     val end = s.range.endExclusive
@@ -302,7 +122,7 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
                                         text.substring(wStart, wEnd)
                                     } else null
 
-                                    if (prevWord in setOf("return", "break", "continue") || isFollowedByParenOrBlock(end)) {
+                                    if (prevWord in setOf("return", "break", "continue")) {
                                         putRange(start, end, LyngHighlighterColors.LABEL)
                                     } else {
                                         putRange(start, end, LyngHighlighterColors.ANNOTATION)
@@ -315,17 +135,13 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
             }
         }
 
-        tokens.forEach { s ->
-            if (s.kind == HighlightKind.EnumConstant) {
-                val start = s.range.start
-                val end = s.range.endExclusive
-                if (start in 0..end && end <= text.length && start < end) {
-                    putRange(start, end, LyngHighlighterColors.ENUM_CONSTANT)
-                }
-            }
+        analysis.diagnostics.forEach { d ->
+            val range = d.range ?: return@forEach
+            val severity = if (d.severity == LyngDiagnosticSeverity.Warning) HighlightSeverity.WARNING else HighlightSeverity.ERROR
+            diags += Diag(range.start, range.endExclusive, d.message, severity)
         }
 
-        return Result(collectedInfo.modStamp, out, null)
+        return Result(collectedInfo.modStamp, out, diags)
     }
 
 
@@ -346,13 +162,12 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
                 .create()
         }
 
-        // Show syntax error if present
-        val err = result.error
-        if (err != null) {
-            val start = err.start.coerceIn(0, (doc?.textLength ?: 0))
-            val end = err.end.coerceIn(start, (doc?.textLength ?: start))
+        // Show errors and warnings
+        result.diagnostics.forEach { d ->
+            val start = d.start.coerceIn(0, (doc?.textLength ?: 0))
+            val end = d.end.coerceIn(start, (doc?.textLength ?: start))
             if (end > start) {
-                holder.newAnnotation(HighlightSeverity.ERROR, err.message)
+                holder.newAnnotation(d.severity, d.message)
                     .range(TextRange(start, end))
                     .create()
             }
@@ -373,30 +188,5 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
         return -1
     }
 
-    /**
-     * Make the error highlight a bit wider than a single character so it is easier to see and click.
-     * Strategy:
-     *  - If the offset points inside an identifier-like token (letters/digits/underscore), expand to the full token.
-     *  - Otherwise select a small range starting at the offset with a minimum width, but not crossing the line end.
-     */
-    private fun expandErrorRange(text: String, rawStart: Int): Pair<Int, Int> {
-        if (text.isEmpty()) return 0 to 0
-        val len = text.length
-        val start = rawStart.coerceIn(0, len)
-        fun isWord(ch: Char) = ch == '_' || ch.isLetterOrDigit()
-
-        if (start < len && isWord(text[start])) {
-            var s = start
-            var e = start
-            while (s > 0 && isWord(text[s - 1])) s--
-            while (e < len && isWord(text[e])) e++
-            return s to e
-        }
-
-        // Not inside a word: select a short, visible range up to EOL
-        val lineEnd = text.indexOf('\n', start).let { if (it == -1) len else it }
-        val minWidth = 4
-        val end = (start + minWidth).coerceAtMost(lineEnd).coerceAtLeast((start + 1).coerceAtMost(lineEnd))
-        return start to end
-    }
+    
 }

@@ -96,9 +96,10 @@ class LyngCompletionContributor : CompletionContributor() {
                 log.info("[LYNG_DEBUG] Completion: caret=$caret prefix='${prefix}' memberDotPos=${memberDotPos} file='${file.name}'")
             }
 
-            // Build MiniAst (cached) for both global and member contexts to enable local class/val inference
-            val mini = LyngAstManager.getMiniAst(file)
-            val binding = LyngAstManager.getBinding(file)
+            // Build analysis (cached) for both global and member contexts to enable local class/val inference
+            val analysis = LyngAstManager.getAnalysis(file)
+            val mini = analysis?.mini
+            val binding = analysis?.binding
 
             // Delegate computation to the shared engine to keep behavior in sync with tests
             val engineItems = try {
@@ -121,6 +122,7 @@ class LyngCompletionContributor : CompletionContributor() {
                     fromText.forEach { add(it) }
                     add("lyng.stdlib")
                 }.toList()
+                val staticOnly = DocLookupUtils.isStaticReceiver(mini, text, memberDotPos, imported, binding)
 
                 // Try inferring return/receiver class around the dot
                 val inferred =
@@ -135,7 +137,7 @@ class LyngCompletionContributor : CompletionContributor() {
 
                 if (inferred != null) {
                     if (DEBUG_COMPLETION) log.info("[LYNG_DEBUG] Fallback inferred receiver/return class='$inferred' — offering its members")
-                    offerMembers(emit, imported, inferred, sourceText = text, mini = mini)
+                    offerMembers(emit, imported, inferred, staticOnly = staticOnly, sourceText = text, mini = mini)
                     return
                 } else {
                     if (DEBUG_COMPLETION) log.info("[LYNG_DEBUG] Fallback could not infer class; keeping list empty (no globals after dot)")
@@ -160,6 +162,8 @@ class LyngCompletionContributor : CompletionContributor() {
                         .withIcon(AllIcons.Nodes.Class)
                     Kind.Enum -> LookupElementBuilder.create(ci.name)
                         .withIcon(AllIcons.Nodes.Enum)
+                    Kind.TypeAlias -> LookupElementBuilder.create(ci.name)
+                        .withIcon(AllIcons.Nodes.Class)
                     Kind.Value -> LookupElementBuilder.create(ci.name)
                         .withIcon(AllIcons.Nodes.Variable)
                         .let { b -> if (!ci.typeText.isNullOrBlank()) b.withTypeText(ci.typeText, true) else b }
@@ -292,6 +296,9 @@ class LyngCompletionContributor : CompletionContributor() {
                 }
                 is MiniEnumDecl -> LookupElementBuilder.create(name)
                     .withIcon(AllIcons.Nodes.Enum)
+                is MiniTypeAliasDecl -> LookupElementBuilder.create(name)
+                    .withIcon(AllIcons.Nodes.Class)
+                    .withTypeText(typeOf(d.target), true)
             }
             emit(builder)
         }
@@ -369,6 +376,7 @@ class LyngCompletionContributor : CompletionContributor() {
                         when (m) {
                             is MiniMemberFunDecl -> if (!m.isStatic) continue
                             is MiniMemberValDecl -> if (!m.isStatic) continue
+                            is MiniMemberTypeAliasDecl -> if (!m.isStatic) continue
                             is MiniInitDecl -> continue
                         }
                     }
@@ -452,6 +460,16 @@ class LyngCompletionContributor : CompletionContributor() {
                             val builder = LookupElementBuilder.create(name)
                                 .withIcon(icon)
                                 .withTypeText(typeOf(chosen.type), true)
+                            if (groupPriority != 0.0) {
+                                emit(PrioritizedLookupElement.withPriority(builder, groupPriority))
+                            } else {
+                                emit(builder)
+                            }
+                        }
+                        is MiniMemberTypeAliasDecl -> {
+                            val builder = LookupElementBuilder.create(name)
+                                .withIcon(AllIcons.Nodes.Class)
+                                .withTypeText(typeOf(rep.target), true)
                             if (groupPriority != 0.0) {
                                 emit(PrioritizedLookupElement.withPriority(builder, groupPriority))
                             } else {

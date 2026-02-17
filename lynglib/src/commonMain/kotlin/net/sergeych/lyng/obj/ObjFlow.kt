@@ -71,25 +71,25 @@ class ObjFlowBuilder(val output: SendChannel<Obj>) : Obj() {
     }
 }
 
-private fun createLyngFlowInput(scope: Scope, producer: Statement): ReceiveChannel<Obj> {
+private fun createLyngFlowInput(scope: Scope, producer: Obj): ReceiveChannel<Obj> {
     val channel = Channel<Obj>(Channel.RENDEZVOUS)
     val builder = ObjFlowBuilder(channel)
     val builderScope = scope.createChildScope(newThisObj = builder)
     globalLaunch {
         try {
-            producer.execute(builderScope)
+            producer.callOn(builderScope)
         } catch (x: ScriptFlowIsNoMoreCollected) {
             // premature flow closing, OK
         } catch (x: Exception) {
-            // Suppress stack traces in background producer to avoid noisy stderr during tests.
-            // If needed, consider routing to a logger in the future.
+            channel.close(x)
+            return@globalLaunch
         }
         channel.close()
     }
     return channel
 }
 
-class ObjFlow(val producer: Statement, val scope: Scope) : Obj() {
+class ObjFlow(val producer: Obj, val scope: Scope) : Obj() {
 
     override val objClass get() = type
 
@@ -106,10 +106,8 @@ class ObjFlow(val producer: Statement, val scope: Scope) : Obj() {
                 moduleName = "lyng.stdlib"
             ) {
                 val objFlow = thisAs<ObjFlow>()
-                ObjFlowIterator(statement {
-                    objFlow.producer.execute(
-                        ClosureScope(this, objFlow.scope)
-                    )
+                ObjFlowIterator(ObjExternCallable.fromBridge {
+                    call(objFlow.producer)
                 })
             }
         }
@@ -117,7 +115,7 @@ class ObjFlow(val producer: Statement, val scope: Scope) : Obj() {
 }
 
 
-class ObjFlowIterator(val producer: Statement) : Obj() {
+class ObjFlowIterator(val producer: Obj) : Obj() {
 
     override val objClass: ObjClass get() = type
 
@@ -137,6 +135,7 @@ class ObjFlowIterator(val producer: Statement) : Obj() {
         // cold start:
         if (channel == null) channel = createLyngFlowInput(scope, producer)
         if (nextItem == null) nextItem = channel!!.receiveCatching()
+        nextItem?.exceptionOrNull()?.let { throw it }
         return ObjBool(nextItem!!.isSuccess)
     }
 
@@ -165,7 +164,7 @@ class ObjFlowIterator(val producer: Statement) : Obj() {
                 doc = "Whether another element is available from the flow.",
                 returns = type("lyng.Bool"),
                 moduleName = "lyng.stdlib"
-            ) { thisAs<ObjFlowIterator>().hasNext(this).toObj() }
+            ) { thisAs<ObjFlowIterator>().hasNext(requireScope()).toObj() }
             addFnDoc(
                 name = "next",
                 doc = "Receive the next element from the flow or throw if completed.",
@@ -173,7 +172,7 @@ class ObjFlowIterator(val producer: Statement) : Obj() {
                 moduleName = "lyng.stdlib"
             ) {
                 val x = thisAs<ObjFlowIterator>()
-                x.next(this)
+                x.next(requireScope())
             }
             addFnDoc(
                 name = "cancelIteration",

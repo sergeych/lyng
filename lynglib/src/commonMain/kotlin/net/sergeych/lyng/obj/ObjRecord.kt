@@ -38,6 +38,10 @@ data class ObjRecord(
     var delegate: Obj? = null,
     /** The receiver object to resolve this member against (for instance fields/methods). */
     var receiver: Obj? = null,
+    val callSignature: net.sergeych.lyng.CallSignature? = null,
+    val memberName: String? = null,
+    val fieldId: Int? = null,
+    val methodId: Int? = null,
 ) {
     val effectiveWriteVisibility: Visibility get() = writeVisibility ?: visibility
     enum class Type(val comparable: Boolean = false,val serializable: Boolean = false) {

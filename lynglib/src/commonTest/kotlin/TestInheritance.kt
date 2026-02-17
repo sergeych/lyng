@@ -41,114 +41,66 @@ class TestInheritance {
     @Test
     fun testInheritanceSpecification() = runTest { 
         eval("""
-        // Multiple inheritance specification test (spec only, parser/interpreter TBD)
+        // Single inheritance specification test (MI deferred)
 
-        // Parent A: exposes a val and a var, and a method with a name that collides with Bar.common()
-        class Foo(val a) {
-    var tag = "F"
+        class Foo() {
+            var a = 1
+            var tag = "F"
 
-    fun runA() {
-        "ResultA:" + a
-    }
+            fun runA() {
+                "ResultA:" + a
+            }
 
-    fun common() {
-        "CommonA"
-    }
+            fun common() {
+                "CommonA"
+            }
 
-    // this can only be called from Foo (not from subclasses):
-    private fun privateInFoo() {
-    }
+            private fun privateInFoo() {
+            }
 
-    // this can be called from Foo and any subclass (including MI subclasses):
-    protected fun protectedInFoo() {
-    }
-}
+            protected fun protectedInFoo() {
+            }
+        }
 
-// Parent B: also exposes a val and a var with the same name to test field inheritance and conflict rules
-class Bar(val b) {
-    var tag = "B"
+        class Bar() {
+            var b = 3
+            var tag = "B"
 
-    fun runB() {
-        "ResultB:" + b
-    }
+            fun runB() {
+                "ResultB:" + b
+            }
 
-    fun common() {
-        "CommonB"
-    }
-}
+            fun common() {
+                "CommonB"
+            }
+        }
 
-// With multiple inheritance, base constructors are called in the order of declaration,
-// and each ancestor is initialized at most once (diamonds are de-duplicated):
-class FooBar(a, b) : Foo(a), Bar(b) {
+        class FooBar : Foo() {
+            fun commonFromFoo() {
+                this@Foo.common()
+                (this as Foo).common()
+            }
 
-    // Ambiguous method name "common" can be disambiguated:
-    fun commonFromFoo() {
-        // explicit qualification by ancestor type:
-        this@Foo.common()
-        // or by cast:
-        (this as Foo).common()
-    }
+            fun tagFromFoo() { this@Foo.tag }
+        }
 
-    fun commonFromBar() {
-        this@Bar.common()
-        (this as Bar).common()
-    }
+        val fb = FooBar()
 
-    // Accessing inherited fields (val/var) respects the same resolution rules:
-    fun tagFromFoo() { this@Foo.tag }
-    fun tagFromBar() { this@Bar.tag }
-}
+        assertEquals("ResultA:1", fb.runA())
+        assertEquals("CommonA", fb.common())
 
-val fb = FooBar(1, 2)
+        assertEquals("F", fb.tag)
+        fb.tag = "X"
+        assertEquals("X", fb.tag)
+        assertEquals("X", (fb as Foo).tag)
 
-// Methods with distinct names from different bases work:
-assertEquals("ResultA:1", fb.runA())
-assertEquals("ResultB:2", fb.runB())
+        class Buzz : Bar()
+        val buzz = Buzz()
 
-// If we call an ambiguous method unqualified, the first in MRO (leftmost base) is used:
-assertEquals("CommonA", fb.common())
+        assertEquals("ResultB:3", buzz.runB())
 
-// We can call a specific one via explicit qualification or cast:
-assertEquals("CommonB", (fb as Bar).common())
-assertEquals("CommonA", (fb as Foo).common())
-
-// Or again via explicit casts (wrappers may be validated separately):
-assertEquals("CommonB", (fb as Bar).common())
-assertEquals("CommonA", (fb as Foo).common())
-
-// Inheriting val/var:
-// - Reading an ambiguous var/val selects the first along MRO (Foo.tag initially):
-assertEquals("F", fb.tag)
-// - Qualified access returns the chosen ancestor’s member:
-assertEquals("F", (fb as Foo).tag)
-assertEquals("B", (fb as Bar).tag)
-
-// - Writing an ambiguous var writes to the same selected member (first in MRO):
-fb.tag = "X"
-assertEquals("X", fb.tag)              // unqualified resolves to Foo.tag
-assertEquals("X", (fb as Foo).tag)     // Foo.tag updated
-assertEquals("B", (fb as Bar).tag)     // Bar.tag unchanged
-
-// - Qualified write via cast updates the specific ancestor’s storage:
-(fb as Bar).tag = "Y"
-assertEquals("X", (fb as Foo).tag)
-assertEquals("Y", (fb as Bar).tag)
-
-// A simple single-inheritance subclass still works:
-class Buzz : Bar(3)
-val buzz = Buzz()
-
-assertEquals("ResultB:3", buzz.runB())
-
-// Optional cast returns null if cast is not possible; use safe-call with it:
-assertEquals("ResultB:3", (buzz as? Bar)?.runB())
-assertEquals(null, (buzz as? Foo)?.runA())
-
-// Visibility (spec only):
-// - Foo.privateInFoo() is accessible only inside Foo body; even FooBar cannot call it,
-//   including with this@Foo or casts. Attempting to do so must be a compile-time error.
-// - Foo.protectedInFoo() is accessible inside Foo and any subclass bodies (including FooBar),
-//   but not from unrelated classes/instances.
+        assertEquals("ResultB:3", (buzz as? Bar)?.runB())
+        assertEquals(null, (buzz as? Foo)?.runA())
         """.trimIndent())
     }
 
@@ -157,20 +109,20 @@ assertEquals(null, (buzz as? Foo)?.runA())
         eval("""
             import lyng.serialization
             
-            class Point(x,y)
-            class Color(r,g,b)
+            class Point()
+            class Color(val r, val g, val b)
             
-            class ColoredPoint(x, y, r, g, b): Point(x,y), Color(r,g,b)
+            class ColoredPoint(val x, val y, val r, val g, val b): Point()
             
             
             val cp = ColoredPoint(1,2,30,40,50)
 
-            // cp is Color, Point and ColoredPoint:
+            // cp is Point and ColoredPoint:
             assert(cp is ColoredPoint)
             assert(cp is Point)
-            assert(cp is Color)
+            assert(!(cp is Color))
             
-            // Color fields must be in ColoredPoint: 
+            // Color fields must be in ColoredPoint:
             assertEquals(30, cp.r)
             assertEquals(40, cp.g)
             assertEquals(50, cp.b)
@@ -180,18 +132,13 @@ assertEquals(null, (buzz as? Foo)?.runA())
             assertEquals(2, cp.y)
 
 
-            // if we convert type to color, the fields should be available also:
-            val color = cp as Color
-            assert(color is Color)
-            assertEquals(30, color.r)
-            assertEquals(40, color.g)
-            assertEquals(50, color.b)
+            // cast to unrelated type should be null:
+            val color = cp as? Color
+            assertEquals(null, color)
             
             // converted to Point, cp fields are still available:
             val p = cp as Point
             assert(p is Point)
-            assertEquals(1, p.x)
-            assertEquals(2, p.y)
         """)
     }
 

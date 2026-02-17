@@ -41,9 +41,9 @@ private val fallbackKeywordIds = setOf(
     // boolean operators
     "and", "or", "not",
     // declarations & modifiers
-    "fun", "fn", "class", "interface", "enum", "val", "var", "import", "package",
+    "fun", "fn", "class", "interface", "enum", "val", "var", "type", "import", "package",
     "abstract", "closed", "override", "public", "lazy", "dynamic",
-    "private", "protected", "static", "open", "extern", "init", "get", "set", "by",
+    "private", "protected", "static", "open", "extern", "init", "get", "set", "by", "step",
     // control flow and misc
     "if", "else", "when", "while", "do", "for", "try", "catch", "finally",
     "throw", "return", "break", "continue", "this", "null", "true", "false", "unset"
@@ -74,7 +74,7 @@ private fun kindOf(type: Type, value: String): HighlightKind? = when (type) {
     Type.COMMA, Type.SEMICOLON, Type.COLON -> HighlightKind.Punctuation
 
     // textual control keywords
-    Type.IN, Type.NOTIN, Type.IS, Type.NOTIS, Type.AS, Type.ASNULL, Type.BY, Type.OBJECT,
+    Type.IN, Type.NOTIN, Type.IS, Type.NOTIS, Type.AS, Type.ASNULL, Type.BY, Type.STEP, Type.OBJECT,
     Type.AND, Type.OR, Type.NOT -> HighlightKind.Keyword
 
     // labels / annotations
@@ -242,6 +242,7 @@ private fun applyEnumConstantHeuristics(
             var j = i + 1
             // skip optional whitespace/newlines tokens are separate types, so we just check IDs and braces
             if (j < tokens.size && tokens[j].type == Type.ID) j++ else { i++; continue }
+            if (j < tokens.size && tokens[j].type == Type.STAR) j++
             if (j < tokens.size && tokens[j].type == Type.LBRACE) {
                 j++
                 while (j < tokens.size) {

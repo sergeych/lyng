@@ -10,6 +10,7 @@ __Other documents to read__ maybe after this one:
 - [OOP notes](OOP.md), [exception handling](exceptions_handling.md)
 - [math in Lyng](math.md), [the `when` statement](when.md), [return statement](return_statement.md)
 - [Testing and Assertions](Testing.md)
+- [Generics and type expressions](generics.md)
 - [time](time.md) and [parallelism](parallelism.md)
 - [parallelism] - multithreaded code, coroutines, etc.
 - Some class
@@ -105,6 +106,23 @@ Singleton objects are declared using the `object` keyword. They define a class a
     }
     
     Logger.log("Hello singleton!")
+
+## Nested Declarations (short)
+
+Classes, objects, and enums can be declared inside another class. They live in the class namespace (no outer instance capture), so you access them with a qualifier:
+
+    class A {
+        class B(x?)
+        object Inner { val foo = "bar" }
+        enum E* { One, Two }
+    }
+
+    val ab = A.B()
+    assertEquals(ab.x, null)
+    assertEquals(A.Inner.foo, "bar")
+    assertEquals(A.One, A.E.One)
+
+See [OOP notes](OOP.md#nested-declarations) for rules, visibility, and enum lifting details.
 
 ## Delegation (briefly)
 
@@ -224,6 +242,9 @@ This also prevents chain assignments so use parentheses:
 
 ## Nullability
 
+Nullability is part of the type. `String` is non-null, `String?` is nullable. Use `!!` to assert non-null and throw
+`NullReferenceException` if the value is `null`.
+
 When the value is `null`, it might throws `NullReferenceException`, the name is somewhat a tradition. To avoid it
 one can check it against null or use _null coalescing_. The null coalescing means, if the operand (left) is null,
 the operation won't be performed and the result will be null. Here is the difference:
@@ -241,6 +262,9 @@ the operation won't be performed and the result will be null. Here is the differ
     assert( ref?[1] == null )
     assert( ref?() == null )
     >>> void
+
+Note: `?.` is still a typed operation. The receiver must have a compile-time type that declares the member; if the
+receiver is `Object`, cast it first or declare a more specific type.
 
 There is also "elvis operator", null-coalesce infix operator '?:' that returns rvalue if lvalue is `null`:
 
@@ -425,14 +449,150 @@ Almost the same, using `val`:
     val foo = 1
     foo += 1 // this will throw exception
 
-# Constants
-
 Same as in kotlin:
 
     val HalfPi = π / 2
 
 Note using greek characters in identifiers! All letters allowed, but remember who might try to read your script, most
 likely will know some English, the rest is the pure uncertainty.
+
+# Types and inference
+
+Lyng uses Kotlin-style static types with inference. You can always write explicit types, but in most places the compiler
+can infer them from literals, defaults, and flow analysis.
+
+## Type annotations
+
+Use `:` to specify a type:
+
+    var x: Int = 10
+    val label: String = "count"
+    fun clamp(x: Int, min: Int, max: Int): Int { ... }
+
+`Object` is the top type. If you omit a type and there is no default value, the parameter is `Object` by default:
+
+    fun show(x) { println(x) }   // x is Object
+
+For nullable types, add `?`:
+
+    fun showMaybe(x: Object?) { ... }
+    fun parseInt(s: String?): Int? { ... }
+
+There is also a nullable shorthand for untyped parameters and constructor args: `x?` means `x: Object?`.
+It cannot be combined with an explicit type annotation.
+
+    class A(x?) { ... }     // x: Object?
+    fun f(x?) { x == null } // x: Object?
+
+Type aliases name type expressions and can be generic:
+
+    type Num = Int | Real
+    type Maybe<T> = T?
+
+Aliases expand to their underlying type expressions. See `docs/generics.md` for details.
+
+`void` is a singleton value of the class `Void`. `Void` can be used as an explicit return type:
+
+    fun log(msg): Void { println(msg); void }
+
+`Null` is the class of `null`. It is a singleton type and mostly useful for type inference results.
+
+## Type inference
+
+The compiler infers types from:
+
+- literals: `1` is `Int`, `1.0` is `Real`, `"s"` is `String`, `'c'` is `Char`
+- defaults: `fun f(x=1, name="n")` infers `x: Int`, `name: String`
+- assignments: `val x = call()` uses the return type of `call`
+- returns and branches: the result type of a block is the last expression, and if any branch is nullable,
+  the inferred type becomes nullable
+- numeric ops: `Int` and `Real` stay `Int` when both sides are `Int`, and promote to `Real` on mixed arithmetic
+
+Examples:
+
+    fun inc(x=0) = x + 1        // (Int)->Int
+    fun maybe(flag) { if(flag) 1 else null } // ()->Int?
+
+Untyped locals are allowed, but their type is fixed on the first assignment:
+
+    var x
+    x = 1       // x becomes Int
+    x = "one"   // compile-time error
+
+    var y = null  // y is Object?
+    val z = null  // z is Null
+
+Empty list/map literals default to `List<Object>` and `Map<Object,Object>` until a more specific type is known:
+
+    val xs = []             // List<Object>
+    val ys: List<Int> = []  // List<Int>
+
+Map literals infer key/value types from entries; named keys are `String`. See `docs/generics.md` for details.
+
+## Flow analysis
+
+Lyng uses flow analysis to narrow types inside branches:
+
+    fun len(x: String?): Int {
+        if( x == null ) return 0
+        // x is String (non-null) in this branch
+        return x.length
+    }
+
+`is` checks and `when` branches also narrow types:
+
+    fun kind(x: Object) {
+        if( x is Int ) return "int"
+        if( x is String ) return "string"
+        return "other"
+    }
+
+Narrowing is local to the branch; after the branch, the original type is restored.
+
+## Casts and unknown types
+
+Use `as` for explicit casts. The compiler inserts casts only when it can be valid and necessary. If a cast fails at
+runtime, it throws `ClassCastException`. If the value is nullable, `as T` implies a non-null assertion.
+
+Member access is resolved at compile time. Only members of `Object` are available on unknown types; non-Object members
+require an explicit cast:
+
+    fun f(x) {             // x is Object
+        x.toString()       // ok (Object member)
+        x.size()           // compile-time error
+        (x as List).size() // ok
+    }
+
+This avoids runtime name-resolution fallbacks; all symbols must be known at compile time.
+
+## Generics and bounds
+
+Generic parameters are declared with `<...>`:
+
+    fun id<T>(x: T): T = x
+    class Box<T>(val value: T)
+
+Bounds use `:` and can combine with `&` (intersection) and `|` (union):
+
+    fun sum<T: Int | Real>(x: T, y: T) = x + y
+    class Named<T: Iterable & Comparable>(val data: T)
+
+Type arguments are usually inferred from call sites:
+
+    val b = Box(10)     // Box<Int>
+    val s = id("ok")    // T is String
+
+See [Generics and type expressions](generics.md) for bounds, unions/intersections, and type-checking rules.
+
+## Variance
+
+Generic types are invariant by default, so `List<Int>` is not a `List<Object>`.
+Use declaration-site variance when you need it:
+
+    class Source<out T>(val value: T)
+    class Sink<in T> { fun accept(x: T) { ... } }
+
+`out` makes the type covariant (only produced), `in` makes it contravariant (only consumed).
 
 # Defining functions
 
@@ -579,6 +739,7 @@ See also: [Testing and Assertions](Testing.md)
         var result = []
         for( x in iterable ) result += transform(x)
     }
+    // loop variables are read-only inside the loop body
     assert( [11, 21, 31] == mapValues( [1,2,3], { it*10+1 }))
     >>> void
 
@@ -1330,7 +1491,7 @@ than enum arrays, until `Lynon.encodeTyped` will be implemented.
     var result = null // here we will store the result
     >>> null
 
-# Integral data types
+# Built-in types
 
 | type   | description                     | literal samples     |
 |--------|---------------------------------|---------------------|
@@ -1340,6 +1501,7 @@ than enum arrays, until `Lynon.encodeTyped` will be implemented.
 | Char   | single unicode character        | `'S'`, `'\n'`       |
 | String | unicode string, no limits       | "hello" (see below) |
 | List   | mutable list                    | [1, "two", 3]       |
+| Object | top type for all values         |                     |
 | Void   | no value could exist, singleton | void                |
 | Null   | missing value, singleton        | null                |
 | Fn     | callable type                   |                     |
