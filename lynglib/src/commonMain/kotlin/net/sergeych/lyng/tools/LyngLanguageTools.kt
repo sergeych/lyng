@@ -39,7 +39,8 @@ data class LyngAnalysisRequest(
     val text: String,
     val fileName: String = "<snippet>",
     val importProvider: ImportProvider = Script.defaultImportManager,
-    val seedScope: Scope? = null
+    val seedScope: Scope? = null,
+    val allowUnresolvedRefs: Boolean = true
 )
 
 enum class LyngDiagnosticSeverity { Error, Warning }
@@ -95,6 +96,10 @@ data class LyngSemanticSpan(
 object LyngLanguageTools {
 
     suspend fun analyze(request: LyngAnalysisRequest): LyngAnalysisResult {
+        // Ensure stdlib/Obj* docs are initialized and stdlib docs are available before anything else
+        StdlibDocsBootstrap.ensure()
+        BuiltinDocRegistry.docsForModule("lyng.stdlib")
+
         val source = Source(request.fileName, request.text)
         val miniSink = MiniAstBuilder()
         val resolutionCollector = ResolutionCollector(source.fileName)
@@ -107,7 +112,7 @@ object LyngLanguageTools {
                 miniSink = miniSink,
                 resolutionSink = resolutionCollector,
                 compileBytecode = false,
-                allowUnresolvedRefs = true,
+                allowUnresolvedRefs = request.allowUnresolvedRefs,
                 seedScope = request.seedScope
             )
         } catch (t: Throwable) {

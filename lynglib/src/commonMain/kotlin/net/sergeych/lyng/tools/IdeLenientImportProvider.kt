@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  *
  */
-package net.sergeych.lyng.idea.util
+package net.sergeych.lyng.tools
 
 import net.sergeych.lyng.ModuleScope
 import net.sergeych.lyng.Pos
@@ -28,7 +28,13 @@ import net.sergeych.lyng.pacman.ImportProvider
  * the compiler can still build MiniAst for Quick Docs / highlighting.
  */
 class IdeLenientImportProvider private constructor(root: Scope) : ImportProvider(root) {
-    override suspend fun createModuleScope(pos: Pos, packageName: String): ModuleScope = ModuleScope(this, pos, packageName)
+    override suspend fun createModuleScope(pos: Pos, packageName: String): ModuleScope {
+        return try {
+            Script.defaultImportManager.createModuleScope(pos, packageName)
+        } catch (_: Throwable) {
+            ModuleScope(this, pos, packageName)
+        }
+    }
 
     companion object {
         /** Create a provider based on the default manager's root scope. */

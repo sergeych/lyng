@@ -25,6 +25,7 @@ import kotlinx.coroutines.runBlocking
 import net.sergeych.lyng.binding.BindingSnapshot
 import net.sergeych.lyng.miniast.DocLookupUtils
 import net.sergeych.lyng.miniast.MiniScript
+import net.sergeych.lyng.tools.IdeLenientImportProvider
 import net.sergeych.lyng.tools.LyngAnalysisRequest
 import net.sergeych.lyng.tools.LyngAnalysisResult
 import net.sergeych.lyng.tools.LyngLanguageTools
