@@ -1,5 +1,10 @@
 # Lyng: ideal scripting for kotlin multiplatform
 
+## Important: this is an obsolete, no-JIT version for security patches, etc. The mainline is in master branch.
+
+-------------
+
+
 __Please visit the project homepage: [https://lynglang.com](https://lynglang.com) and a [telegram channel](https://t.me/lynglang).__
 
 __Main development site:__ [https://gitea.sergeych.net/SergeychWorks/lyng](https://gitea.sergeych.net/SergeychWorks/lyng)
