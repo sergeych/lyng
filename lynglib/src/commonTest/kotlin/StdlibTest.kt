@@ -167,7 +167,7 @@ class StdlibTest {
                 items.filter { it > 0 }.map { it * it }
             }
 
-            val data: List<Int> = [-2, -1, 0, 1, 2]
+            val data = [-2, -1, 0, 1, 2]
             println("Processed: " + process(data))
 
         """.trimIndent())
