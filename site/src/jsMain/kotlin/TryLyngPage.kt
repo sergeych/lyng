@@ -51,7 +51,7 @@ fun TryLyngPage(route: String) {
             initialCode ?: """
             // Welcome to Lyng! Modern scripting with strict types and generics.
 
-            typealias Numeric = Int | Real
+            type Numeric = Int | Real
 
             fun process<T: Numeric>(items: List<T>): List<T> {
                 items.filter { it > 0 }.map { it * it }

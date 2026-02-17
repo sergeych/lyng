@@ -7063,9 +7063,24 @@ class BytecodeCompiler(
 
     private fun isKnownClassReceiver(ref: ObjRef): Boolean {
         return when (ref) {
-            is LocalVarRef -> knownClassNames.contains(ref.name) && !knownObjectNames.contains(ref.name)
-            is LocalSlotRef -> knownClassNames.contains(ref.name) && !knownObjectNames.contains(ref.name)
-            is FastLocalVarRef -> knownClassNames.contains(ref.name) && !knownObjectNames.contains(ref.name)
+            is LocalVarRef -> {
+                val name = ref.name
+                if (localSlotIndexByName.containsKey(name)) return false
+                if (localSlotInfoMap.values.any { it.name == name }) return false
+                knownClassNames.contains(name) && !knownObjectNames.contains(name)
+            }
+            is LocalSlotRef -> {
+                val name = ref.name
+                if (localSlotIndexByName.containsKey(name)) return false
+                if (localSlotInfoMap.values.any { it.name == name }) return false
+                knownClassNames.contains(name) && !knownObjectNames.contains(name)
+            }
+            is FastLocalVarRef -> {
+                val name = ref.name
+                if (localSlotIndexByName.containsKey(name)) return false
+                if (localSlotInfoMap.values.any { it.name == name }) return false
+                knownClassNames.contains(name) && !knownObjectNames.contains(name)
+            }
             else -> false
         }
     }

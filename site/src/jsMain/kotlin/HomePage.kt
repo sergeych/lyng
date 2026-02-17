@@ -50,7 +50,7 @@ fun HomePage() {
             """.trimIndent(),
             """
             // Generics and type aliases
-            typealias Num = Int | Real
+            type Num = Int | Real
             
             class Box<out T: Num>(val value: T) {
                 fun get(): T = value
@@ -188,9 +188,9 @@ fun HomePage() {
         Div({ classes("text-center") }) {
             H1({ classes("display-5", "fw-bold", "mb-3") }) { Text("Welcome to Lyng") }
             P({ classes("lead", "text-muted", "mb-4") }) {
-                Text("A lightweight, expressive scripting language with strict static typing and functional power. ")
+                Text("A lightweight but extremely powerful and expressive scripting language with strict static typing and functional power. ")
                 Br()
-                Text("Run it anywhere Kotlin runs — share logic across JS, JVM, and more.")
+                Text("Run it anywhere Kotlin runs — share logic across JS, JVM, Native and more.")
             }
             Div({ classes("d-flex", "justify-content-center", "gap-2", "flex-wrap", "mb-4") }) {
                 // Benefits pills

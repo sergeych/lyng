@@ -157,4 +157,19 @@ class StdlibTest {
         """
         )
     }
+
+    @Test
+    fun testFilter3() = runTest {
+        eval("""
+            type Numeric = Int | Real
+
+            fun process<T: Numeric>(items: List<T>): List<T> {
+                items.filter { it > 0 }.map { it * it }
+            }
+
+            val data: List<Int> = [-2, -1, 0, 1, 2]
+            println("Processed: " + process(data))
+
+        """.trimIndent())
+    }
 }
