@@ -17,7 +17,16 @@
 
 package net.sergeych.lyng.obj
 
-import kotlinx.datetime.*
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.UtcOffset
+import kotlinx.datetime.asTimeZone
+import kotlinx.datetime.isoDayNumber
+import kotlinx.datetime.number
+import kotlinx.datetime.plus
+import kotlinx.datetime.toInstant
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.Scope
@@ -28,12 +37,13 @@ import net.sergeych.lyng.miniast.type
 import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
+import kotlin.time.Instant
 
 class ObjDateTime(val instant: Instant, val timeZone: TimeZone) : Obj() {
     override val objClass: ObjClass get() = type
 
     val localDateTime: LocalDateTime by lazy {
-        instant.toLocalDateTime(timeZone)
+        with(timeZone) { instant.toLocalDateTime() }
     }
 
     override fun toString(): String {
@@ -177,11 +187,11 @@ class ObjDateTime(val instant: Instant, val timeZone: TimeZone) : Obj() {
             addPropertyDoc("year", "The year component.", type("lyng.Int"), moduleName = "lyng.time",
                 getter = { thisAs<ObjDateTime>().localDateTime.year.toObj() })
             addPropertyDoc("month", "The month component (1..12).", type("lyng.Int"), moduleName = "lyng.time",
-                getter = { thisAs<ObjDateTime>().localDateTime.monthNumber.toObj() })
+                getter = { thisAs<ObjDateTime>().localDateTime.month.number.toObj() })
             addPropertyDoc("dayOfMonth", "The day of month component.", type("lyng.Int"), moduleName = "lyng.time",
-                getter = { thisAs<ObjDateTime>().localDateTime.dayOfMonth.toObj() })
+                getter = { thisAs<ObjDateTime>().localDateTime.day.toObj() })
             addPropertyDoc("day", "Alias to dayOfMonth.", type("lyng.Int"), moduleName = "lyng.time",
-                getter = { thisAs<ObjDateTime>().localDateTime.dayOfMonth.toObj() })
+                getter = { thisAs<ObjDateTime>().localDateTime.day.toObj() })
             addPropertyDoc("hour", "The hour component (0..23).", type("lyng.Int"), moduleName = "lyng.time",
                 getter = { thisAs<ObjDateTime>().localDateTime.hour.toObj() })
             addPropertyDoc("minute", "The minute component (0..59).", type("lyng.Int"), moduleName = "lyng.time",
@@ -257,7 +267,7 @@ class ObjDateTime(val instant: Instant, val timeZone: TimeZone) : Obj() {
                 returns = type("lyng.DateTime"),
                 moduleName = "lyng.time") {
                 val s = (args.firstAndOnly() as ObjString).value
-                // kotlinx-datetime's Instant.parse handles RFC3339
+                // kotlin.time's Instant.parse handles RFC3339
                 // But we want to preserve the offset if present for DateTime.
                 // However, Instant.parse("...") always gives an Instant.
                 // If we want the specific offset from the string, we might need a more complex parse.

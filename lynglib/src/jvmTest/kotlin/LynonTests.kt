@@ -25,6 +25,7 @@ import net.sergeych.lyng.obj.*
 import net.sergeych.lynon.*
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.time.Instant
 import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -368,11 +369,11 @@ class LynonTests {
         roundTrip(ObjReal(1.22345))
         roundTrip(ObjReal(-Math.PI))
 
-        val now = kotlinx.datetime.Instant.fromEpochMilliseconds(System.currentTimeMillis())
-        roundTrip(ObjInstant(kotlinx.datetime.Instant.fromEpochSeconds(now.epochSeconds), LynonSettings.InstantTruncateMode.Second))
+        val now = Instant.fromEpochMilliseconds(System.currentTimeMillis())
+        roundTrip(ObjInstant(Instant.fromEpochSeconds(now.epochSeconds), LynonSettings.InstantTruncateMode.Second))
         roundTrip(
             ObjInstant(
-                kotlinx.datetime.Instant.fromEpochSeconds(
+                Instant.fromEpochSeconds(
                     now.epochSeconds,
                     now.nanosecondsOfSecond / 1_000_000 * 1_000_000
                 ),
@@ -381,7 +382,7 @@ class LynonTests {
         )
         roundTrip(
             ObjInstant(
-                kotlinx.datetime.Instant.fromEpochSeconds(
+                Instant.fromEpochSeconds(
                     now.epochSeconds,
                     now.nanosecondsOfSecond / 1_000 * 1_000
                 ),

@@ -191,7 +191,7 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
             fsGuard {
                 val self = this.thisObj as ObjPath
                 val m = self.ensureMetadata()
-                m.modifiedAtMillis?.let { ObjInstant(kotlinx.datetime.Instant.fromEpochMilliseconds(it)) } ?: ObjNull
+                m.modifiedAtMillis?.let { ObjInstant(kotlin.time.Instant.fromEpochMilliseconds(it)) } ?: ObjNull
             }
         }
         // modifiedAtMillis(): Int? — milliseconds since epoch or null

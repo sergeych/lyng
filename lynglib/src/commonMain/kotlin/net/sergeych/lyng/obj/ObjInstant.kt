@@ -17,7 +17,13 @@
 
 package net.sergeych.lyng.obj
 
-import kotlinx.datetime.*
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.UtcOffset
+import kotlinx.datetime.asTimeZone
+import kotlinx.datetime.number
+import kotlinx.datetime.toInstant
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import net.sergeych.lyng.Scope
@@ -27,6 +33,7 @@ import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonSettings
 import net.sergeych.lynon.LynonType
 import kotlin.time.Clock
+import kotlin.time.Instant
 import kotlin.time.isDistantFuture
 import kotlin.time.isDistantPast
 
@@ -196,8 +203,8 @@ class ObjInstant(val instant: Instant,val truncateMode: LynonSettings.InstantTru
             ) {
                 val t = thisAs<ObjInstant>().instant
                 val tz = TimeZone.UTC
-                val dt = t.toLocalDateTime(tz)
-                val truncated = LocalDateTime(dt.year, dt.month, dt.dayOfMonth, dt.hour, dt.minute, 0, 0)
+                val dt = with(tz) { t.toLocalDateTime() }
+                val truncated = LocalDateTime(dt.year, dt.month.number, dt.day, dt.hour, dt.minute, 0, 0)
                 ObjInstant(truncated.toInstant(tz), LynonSettings.InstantTruncateMode.Second)
             }
             addFnDoc(
