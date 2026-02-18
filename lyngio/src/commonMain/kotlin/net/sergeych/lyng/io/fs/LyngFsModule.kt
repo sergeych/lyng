@@ -314,9 +314,9 @@ private suspend fun buildFsModule(module: ModuleScope, policy: FsAccessPolicy) {
                 ObjMap(mutableMapOf(
                     ObjString("isFile") to ObjBool(m.isRegularFile),
                     ObjString("isDirectory") to ObjBool(m.isDirectory),
-                    ObjString("size") to (m.size?.toLong() ?: 0L).toObj(),
-                    ObjString("createdAtMillis") to ((m.createdAtMillis ?: 0L)).toObj(),
-                    ObjString("modifiedAtMillis") to ((m.modifiedAtMillis ?: 0L)).toObj(),
+                    ObjString("size") to (m.size ?: 0L).toObj(),
+                    ObjString("createdAtMillis") to (m.createdAtMillis ?: 0L).toObj(),
+                    ObjString("modifiedAtMillis") to (m.modifiedAtMillis ?: 0L).toObj(),
                     ObjString("isSymlink") to ObjBool(m.isSymlink),
                 ))
             }

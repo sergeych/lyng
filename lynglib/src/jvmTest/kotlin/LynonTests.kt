@@ -729,7 +729,6 @@ class Wallet( id, ownerKey, balance=0, createdAt=Instant.now().truncateToSecond(
         val decoded = ObjLynonClass.decodeAny(scope, ObjLynonClass.encodeAny(scope, cp))
         val decodedInstance = decoded as ObjInstance
         assertEquals(cp.objClass.className, decodedInstance.objClass.className)
-        assertTrue(decoded is ObjInstance)
     }
 
     @Test
