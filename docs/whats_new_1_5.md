@@ -22,7 +22,7 @@ The API is fixed and will be kept with further Lyng core changes. It is now the 
 
 - **Deep inference**: The compiler analyzes types of symbols along the execution path and in many cases eliminates unnecessary casts or type specifications.
 - **Union and intersection types**: `A & B`, `A | B`.
-- **Generics**: Generic types are first-class citizens with support for [bounds and variance](generics.md). No type erasure: in a generic function you can, for example, check `A in T`, where T is the generic type.
+- **Generics**: Generic types are first-class citizens with support for [bounds and variance](generics.md). Type params are erased by default and are reified only when needed (e.g., `T::class`, `T is ...`, `as T`, or in extern-facing APIs), which enables checks like `A in T` when `T` is reified.
 - **Inner classes and enums**: Full support for nested declarations, including [Enums with lifting](OOP.md#lifted-enum-entries).
 
 ## Other highlights

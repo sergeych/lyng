@@ -4,6 +4,7 @@ High-density specification for LLMs. Reference this for all Lyng code generation
 
 ## 1. Core Philosophy & Syntax
 - **Everything is an Expression**: Blocks, `if`, `when`, `for`, `while`, `do-while` return their last expression (or `void`).
+- **Static Types + Inference**: Every declaration has a compile-time type (explicit or inferred). Types are Kotlin‑style: non‑null by default, nullable with `?`.
 - **Loops with `else`**: `for`, `while`, and `do-while` support an optional `else` block.
     - `else` executes **only if** the loop finishes normally (without a `break`).
     - `break <value>` exits the loop and sets its return value.
@@ -13,6 +14,7 @@ High-density specification for LLMs. Reference this for all Lyng code generation
         3. Result of the last iteration (if loop finished normally and no `else`).
         4. `void` (if loop body never executed and no `else`).
 - **Implicit Coroutines**: All functions are coroutines. No `async/await`. Use `launch { ... }` (returns `Deferred`) or `flow { ... }`.
+- **Functions**: Use `fun` or the short form `fn`. Function declarations are expressions returning a callable.
 - **Variables**: `val` (read-only), `var` (mutable). Supports late-init `val` in classes (must be assigned in `init` or body).
 - **Serialization**: Use `@Transient` attribute before `val`/`var` or constructor parameters to exclude them from Lynon/JSON serialization. Transient fields are also ignored during `==` structural equality checks.
 - **Null Safety**: `?` (nullable type), `?.` (safe access), `?( )` (safe invoke), `?{ }` (safe block invoke), `?[ ]` (safe index), `?:` or `??` (elvis), `?=` (assign-if-null).
@@ -44,9 +46,21 @@ High-density specification for LLMs. Reference this for all Lyng code generation
 - **Root Type**: Everything is an `Object` (root of the hierarchy).
 - **Nullability**: Non-null by default (`T`), nullable with `T?`, `!!` asserts non-null.
 - **Untyped params**: `fun foo(x)` -> `x: Object`, `fun foo(x?)` -> `x: Object?`.
-- **Untyped vars**: `var x` is `Unset` until first assignment locks the type.
-- **Inference**: List/map literals infer union element types; empty list is `List<Object>`, empty map is `{:}`.
-- **Generics**: Bounds with `T: A & B` or `T: A | B`; variance uses `out`/`in`.
+- **Untyped vars**: `var x` is `Unset` until first assignment locks the type (including nullability).
+  - `val x = null` -> type `Null`; `var x = null` -> type `Object?`.
+- **Inference**:
+  - List literals infer union element types; empty list defaults to `List<Object>` unless constrained.
+  - Map literals infer key/value types; empty map defaults to `Map<Object, Object>` unless constrained.
+  - Mixed numeric ops promote `Int` + `Real` to `Real`.
+- **Type aliases**: `type Name = TypeExpr` (generic allowed). Aliases expand to their underlying type expressions (no nominal distinctness).
+- **Generics**: Bounds with `T: A & B` or `T: A | B`; variance uses `out`/`in` (declaration‑site only).
+- **Casts**: `as` is a runtime-checked cast; `as?` is safe-cast returning `null`. If the value is nullable, `as T` implies `!!`.
+
+## 2.2 Type Expressions and Checks
+- **Value checks**: `x is T` (runtime instance check).
+- **Type checks**: `T1 is T2` and `A in T` are subset checks between type expressions (compile-time where possible).
+- **Type equality**: `T1 == T2` is structural (unions/intersections are order‑insensitive).
+- **Compile-time enforcement**: Bounds are checked at call sites; runtime checks only appear when the compile‑time type is too general.
 
 ## 3. Delegation (`by`)
 Unified model for `val`, `var`, and `fun`.

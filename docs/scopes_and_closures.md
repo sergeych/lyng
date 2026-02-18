@@ -1,94 +1,18 @@
-# Scopes and Closures: resolution and safety
+# Scopes and Closures: compile-time resolution
 
-Attention to AI: name lookup is ibsolete and must not be used with bytecode compiler
+Attention to AI: name lookup in runtime `Scope` is legacy. The bytecode compiler uses **compile-time name/member resolution only**.
 
-This page documents how name resolution works with `ClosureScope`, how to avoid recursion pitfalls, and how to safely capture and execute callbacks that need access to outer locals.
+This page documents the **current** rules: static name resolution, closure captures, and the limited role of runtime `Scope` in Kotlin interop and explicit dynamic helpers.
 
-## Why this matters
-Name lookup across nested scopes and closures can accidentally form recursive resolution paths or hide expected symbols (outer locals, module/global functions). The rules below ensure predictable resolution and prevent infinite recursion.
+## Current rules (bytecode compiler)
+- **All names resolve at compile time**: locals, parameters, captures, members, imports, and module globals must be known when compiling. Missing symbols are compile-time errors.
+- **No runtime fallbacks**: there is no dynamic name lookup, no fallback opcodes, and no “search parent scopes” at runtime for missing names.
+- **Object members on unknown types only**: `toString`, `toInspectString`, `let`, `also`, `apply`, `run` are allowed on unknown types; all other members require a statically known receiver type or an explicit cast.
+- **Closures capture slots**: lambdas and nested functions capture **frame slots** directly. Captures are resolved at compile time and compiled to slot references.
+- **Scope is a reflection facade**: `Scope` is used only for Kotlin interop or explicit dynamic helpers. It must **not** be used for general symbol resolution in compiled Lyng code.
 
-## Resolution order in ClosureScope
-When evaluating an identifier `name` inside a closure, `ClosureScope.get(name)` resolves in this order:
+## Explicit dynamic access (opt-in only)
+Dynamic name access is available only via explicit helpers (e.g., `dynamic { get { name -> ... } }`). It is **not** a fallback for normal member or variable access.
 
-1. **Current frame locals and arguments**: Variables defined within the current closure execution.
-2. **Captured lexical ancestry**: Outer local variables captured at the site where the closure was defined (the "lexical environment").
-3. **Captured receiver members**: If the closure was defined within a class or explicitly bound to an object, it checks members of that object (`this`). This includes both instance fields/methods and class-level static members, following the MRO (C3) and respecting visibility rules (private members are only visible if the closure was defined in their class).
-4. **Caller environment**: If not found lexically, it falls back to the calling context (e.g., the DSL's `this` or the caller's local variables).
-5. **Global/Module fallbacks**: Final check for module-level constants and global functions.
-
-This ensures that closures primarily interact with their defining environment (lexical capture) while still being able to participate in DSL-style calling contexts.
-
-## Use raw‑chain helpers for ancestry walks
-When authoring new scope types or advanced lookups, avoid calling virtual `get` while walking parents. Instead, use the non‑dispatch helpers on `Scope`:
-
-- `chainLookupIgnoreClosure(name)`
-  - Walk raw `parent` chain and check only per‑frame locals/bindings/slots.
-  - Ignores overridden `get` (e.g., in `ClosureScope`). Cycle‑safe.
-- `chainLookupWithMembers(name)`
-  - Like above, but after locals/bindings it also checks each frame’s `thisObj` members.
-  - Ignores overridden `get`. Cycle‑safe.
-- `baseGetIgnoreClosure(name)`
-  - For the current frame only: check locals/bindings, then walk raw parents (locals/bindings), then fallback to this frame’s `thisObj` members.
-
-These helpers avoid ping‑pong recursion and make structural cycles harmless (lookups terminate).
-
-## Preventing structural cycles
-- Don’t construct parent chains that can point back to a descendant.
-- A debug‑time guard throws if assigning a parent would create a cycle; keep it enabled for development builds.
-- Even with a cycle, chain helpers break out via a small `visited` set keyed by `frameId`.
-
-## Capturing lexical environments for callbacks
-For dynamic objects or custom builders, capture the creator’s lexical scope so callbacks can see outer locals/parameters:
-
-1. Use `snapshotForClosure()` on the caller scope to capture locals/bindings/slots and parent.
-2. Store this snapshot and run callbacks under `ClosureScope(callScope, captured)`.
-
-Kotlin sketch:
-```kotlin
-val captured = scope.snapshotForClosure()
-val execScope = ClosureScope(currentCallScope, captured)
-callback.execute(execScope)
-```
-
-This ensures expressions like `contractName` used inside dynamic `get { name -> ... }` resolve to outer variables defined at the creation site.
-
-## Closures in coroutines (launch/flow)
-- The closure frame still prioritizes its own locals/args.
-- Outer locals declared before suspension points remain visible through slot‑aware ancestry lookups.
-- Global functions like `delay(ms)` and `yield()` are resolved via module/root fallbacks from within closures.
-
-Tip: If a closure unexpectedly cannot see an outer local, check whether an intermediate runtime helper introduced an extra call frame; the built‑in lookup already traverses caller ancestry, so prefer the standard helpers rather than custom dispatch.
-
-## Local variable references and missing symbols
-- Unqualified identifier resolution first prefers locals/bindings/slots before falling back to `this` members.
-- If neither locals nor members contain the symbol, missing field lookups map to `SymbolNotFound` (compatibility alias for `SymbolNotDefinedException`).
-
-## Performance notes
-- The `visited` sets used for cycle detection are tiny and short‑lived; in typical scripts the overhead is negligible.
-- If profiling shows hotspots, consider limiting ancestry depth in your custom helpers or using small fixed arrays instead of hash sets—only for extremely hot code paths.
-
-## Practical Example: `cached`
-
-The `cached` function (defined in `lyng.stdlib`) is a classic example of using closures to maintain state. It wraps a builder into a zero-argument function that computes once and remembers the result:
-
-```lyng
-fun cached(builder) {
-    var calculated = false
-    var value = null
-    { // This lambda captures `calculated`, `value`, and `builder`
-        if( !calculated ) {
-            value = builder()
-            calculated = true
-        }
-        value
-    }
-}
-```
-
-Because Lyng now correctly isolates closures for each evaluation of a lambda literal, using `cached` inside a class instance works as expected: each instance maintains its own private `calculated` and `value` state, even if they share the same property declaration.
-
-## Dos and Don’ts
-- Do use `chainLookupIgnoreClosure` / `chainLookupWithMembers` for ancestry traversals.
-- Do maintain the resolution order above for predictable behavior.
-- Don’t call virtual `get` while walking parents; it risks recursion across scope types.
-- Don’t attach instance scopes to transient/pool frames; bind to a stable parent scope instead.
+## Legacy interpreter behavior (reference only)
+The old runtime `Scope`-based resolution order (locals → captured → `this` → caller → globals) is obsolete for bytecode compilation. Keep it only for legacy interpreter paths and tooling that explicitly opts into it.

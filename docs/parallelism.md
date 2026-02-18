@@ -223,17 +223,14 @@ Future work: introduce thread‑safe pooling (e.g., per‑thread pools or confin
 
 ### Closures inside coroutine helpers (launch/flow)
 
-Closures executed by `launch { ... }` and `flow { ... }` resolve names using the `ClosureScope` rules:
+Closures executed by `launch { ... }` and `flow { ... }` use **compile‑time resolution** just like any other Lyng code:
 
-1. **Current frame locals and arguments**: Variables defined within the current closure execution.
-2. **Captured lexical ancestry**: Outer local variables captured at the site where the closure was defined (the "lexical environment").
-3. **Captured receiver members**: If the closure was defined within a class or explicitly bound to an object, it checks members of that object (`this`), following MRO and respecting visibility.
-4. **Caller environment**: Falls back to the calling context (e.g., the caller's `this` or local variables).
-5. **Global/Module fallbacks**: Final check for module-level constants and global functions.
+- **Captured locals are slots**: outer locals are resolved at compile time and captured as frame‑slot references, so they remain visible across suspension points.
+- **Members are statically resolved**: member access requires a statically known receiver type or an explicit cast (except `Object` members).
+- **No runtime fallbacks**: there is no dynamic name lookup or “search parent scopes” at runtime for missing symbols.
 
 Implications:
-- Outer locals (e.g., `counter`) stay visible across suspension points.
-- Global helpers like `delay(ms)` and `yield()` are available from inside closures.
-- If you write your own async helpers, execute user lambdas under `ClosureScope(callScope, capturedCreatorScope)` and avoid manual ancestry walking.
+- Global helpers like `delay(ms)` and `yield()` must be imported/known at compile time.
+- If you need dynamic access, use explicit helpers (e.g., `dynamic { ... }`) rather than relying on scope resolution.
 
-See also: [Scopes and Closures: resolution and safety](scopes_and_closures.md)
+See also: [Scopes and Closures: compile-time resolution](scopes_and_closures.md)

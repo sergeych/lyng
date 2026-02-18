@@ -32,9 +32,9 @@ class A {
     enum E* { One, Two }
 }
 val ab = A.B()
-assertEquals(ab.x, null)
-assertEquals(A.Inner.foo, "bar")
-assertEquals(A.One, A.E.One)
+assertEquals(null, ab.x)
+assertEquals("bar", A.Inner.foo)
+assertEquals(A.E.One, A.One)
 ```
 
 - extremely simple Kotlin integration on any platform (JVM, JS, WasmJS, Lunux, MacOS, iOS, Windows)
