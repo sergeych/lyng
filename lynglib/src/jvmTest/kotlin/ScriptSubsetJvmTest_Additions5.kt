@@ -28,7 +28,6 @@ import kotlin.test.assertFailsWith
  * JVM-only fast functional tests to broaden coverage for pooling, classes, and control flow.
  * Keep each test fast (<1s) and deterministic.
  */
-@Ignore("TODO(compile-time-res): legacy tests disabled")
 class ScriptSubsetJvmTest_Additions5 {
     private suspend fun evalInt(code: String): Long = (Scope().eval(code) as ObjInt).value
 

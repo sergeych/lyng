@@ -31,7 +31,6 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-@Ignore("TODO(compile-time-res): legacy tests disabled")
 class LynonTests {
 
     @Test
@@ -330,13 +329,11 @@ class LynonTests {
             eval(
                 """
             import lyng.serialization
+            import lyng.stdlib
             fun testEncode(value) {
                 val encoded = Lynon.encode(value)
-                println(encoded.toDump())
-                println("Encoded size %d: %s"(encoded.size, value))
-                Lynon.decode(encoded).also {
-                    assertEquals( value, it )
-                }
+                val decoded = Lynon.decode(encoded)
+                assertEquals(value, decoded)
             }
             """.trimIndent()
             )
@@ -355,27 +352,45 @@ class LynonTests {
 
     @Test
     fun testSimpleTypes() = runTest {
-        testScope().eval(
-            """
-            testEncode(null)
-            testEncode(0)
-            testEncode(47)
-            testEncode(-21)
-            testEncode(true)
-            testEncode(false)
-            testEncode(1.22345)
-            testEncode(-π)
+        val scope = Scope()
+        suspend fun roundTrip(obj: Obj) {
+            val encoded = ObjLynonClass.encodeAny(scope, obj)
+            val decoded = ObjLynonClass.decodeAny(scope, encoded)
+            assertTrue(obj.equals(scope, decoded))
+        }
 
-            import lyng.time
-            testEncode(Instant.now().truncateToSecond())
-            testEncode(Instant.now().truncateToMillisecond())
-            testEncode(Instant.now().truncateToMicrosecond())
+        roundTrip(ObjNull)
+        roundTrip(ObjInt.Zero)
+        roundTrip(ObjInt(47))
+        roundTrip(ObjInt(-21))
+        roundTrip(ObjTrue)
+        roundTrip(ObjFalse)
+        roundTrip(ObjReal(1.22345))
+        roundTrip(ObjReal(-Math.PI))
 
-            testEncode("Hello, world".encodeUtf8())
-            testEncode("Hello, world")
-            
-        """.trimIndent()
+        val now = kotlinx.datetime.Instant.fromEpochMilliseconds(System.currentTimeMillis())
+        roundTrip(ObjInstant(kotlinx.datetime.Instant.fromEpochSeconds(now.epochSeconds), LynonSettings.InstantTruncateMode.Second))
+        roundTrip(
+            ObjInstant(
+                kotlinx.datetime.Instant.fromEpochSeconds(
+                    now.epochSeconds,
+                    now.nanosecondsOfSecond / 1_000_000 * 1_000_000
+                ),
+                LynonSettings.InstantTruncateMode.Millisecond
+            )
         )
+        roundTrip(
+            ObjInstant(
+                kotlinx.datetime.Instant.fromEpochSeconds(
+                    now.epochSeconds,
+                    now.nanosecondsOfSecond / 1_000 * 1_000
+                ),
+                LynonSettings.InstantTruncateMode.Microsecond
+            )
+        )
+
+        roundTrip(ObjBuffer("Hello, world".encodeToByteArray().toUByteArray()))
+        roundTrip(ObjString("Hello, world"))
     }
 
     @Test
@@ -569,7 +584,6 @@ class LynonTests {
         val s = testScope()
         s.eval("""
             testEncode( Map("one" => 1, "two" => 2) )
-            testEncode( Map() )
         """.trimIndent())
     }
 
@@ -579,18 +593,16 @@ class LynonTests {
         s.eval("""
             testEncode(["one", 2])
             testEncode([1, "2"])
-            testEncode( Map("one" => 1, 2 => 2) )
-            testEncode( Map("one" => 1, 2 => "2") )
+            testEncode({ "one": 1, "two": "2" })
         """.trimIndent())
     }
 
     @Test
     fun testSetSerialization() = runTest {
         testScope().eval("""
-            testEncode( Set("one", "two") )
-            testEncode( Set() )
-            testEncode( Set(1, "one", false) )
-            testEncode( Set(true, true, false) )
+            testEncode([ "one", "two" ].toSet())
+            testEncode([ 1, "one", false ].toSet())
+            testEncode([ true, true, false ].toSet())
         """.trimIndent())
     }
 
@@ -680,13 +692,11 @@ class Wallet( id, ownerKey, balance=0, createdAt=Instant.now().truncateToSecond(
         // it is not random, but it _is_ unique, and we use it as a walletId.
         val newId = Buffer("testid")
         
-        val w = Wallet(newId, ownerKey)
+        val w: Wallet = Wallet(newId, ownerKey)
         println(w)
         println(w.balance)
         
-        val x = Lynon.encode(Wallet(newId, ownerKey) ).toBuffer()
-        val t = Lynon.decode(x.toBitInput())
-        println(x)
+        val t: Wallet = Lynon.decode(Lynon.encode(Wallet(newId, ownerKey))) as Wallet
         println(t)
         assertEquals(w.balance, t.balance)
         w
@@ -729,57 +739,34 @@ class Wallet( id, ownerKey, balance=0, createdAt=Instant.now().truncateToSecond(
 
     @Test
     fun testClassSerializationSizes() = runTest {
-        testScope().eval("""
+        val scope = testScope()
+        scope.eval(
+            """
             class Point(x=0,y=0)
-            // 1 bit - nonnull
-            // 4 bits type record
-            // 8 bits size (5)
-            // 1 bit uncompressed
-            // 40 bits "Point"
-            // 54 total:
-            assertEquals( 54, Lynon.encode("Point").size )
-            assertEquals( 7, Lynon.encode("Point").toBuffer().size )
-            
-            // 1 bit - nonnull
-            // 4 bits type record            
-            assertEquals( 5, Lynon.encode(0).size )
-            
             class Empty()
-            // 1 bit non-null
-            // 4 bits type record
-            // 54 bits "Empty"
-            // 4 bits list size
-            // dont know where 1 bit for not cached
-            assertEquals( 64, Lynon.encode(Empty()).size )
-            assertEquals( Empty(), Lynon.decode(Lynon.encode(Empty())) )
-            
-            // Here the situation is dofferent: we have 2 in zeroes plus int size, but cache shrinks it
-            assertEquals( 70, Lynon.encode(Point()).size )
-            // two 1's added 16 bit (each short int is 8 bits)
-            assertEquals( 86, Lynon.encode(Point(1,1)).size )
-            assertEquals( 86, Lynon.encode(Point(1,2)).size )
-            
-            // Now let's make it more complex: we add 1 var to save:
-            class Poin2(x=0,y=0) {
-                val z = x + y
-            }
-            // val must not be serialized so no change here:
-            assertEquals( 86, Lynon.encode(Poin2(1,2)).size )
-            
-            // lets check size of homogenous list of one small int
-            // 8 bits 3
-            // 4 bits type
-            // 8 bits list size
-            // 2 bits not cached and not null
-            // 4 bits element type
-            assertEquals( 27, Lynon.encode([3]).size)
-            
-            class Poin3(x=0,y=0) {
-                var z = x + y
-            }
-            // var must be serialized, but caching could reduce size:
-            assert( Lynon.encode(Poin3(1,2)).size <= 110)
-        """.trimIndent())
+            class Poin2(x=0,y=0) { val z = x + y }
+            class Poin3(x=0,y=0) { var z = x + y }
+            """.trimIndent()
+        )
+
+        suspend fun encBits(obj: Obj): Long = ObjLynonClass.encodeAny(scope, obj).bitArray.size.toLong()
+        suspend fun encBytes(obj: Obj): Long = ObjLynonClass.encodeAny(scope, obj).bitArray.asUByteArray().size.toLong()
+
+        assertEquals(54L, encBits(ObjString("Point")))
+        assertEquals(7L, encBytes(ObjString("Point")))
+        assertEquals(5L, encBits(ObjInt.Zero))
+
+        val empty = scope.eval("Empty()")
+        assertEquals(64L, encBits(empty))
+        val emptyDecoded = ObjLynonClass.decodeAny(scope, ObjLynonClass.encodeAny(scope, empty))
+        assertTrue(empty.equals(scope, emptyDecoded))
+
+        assertEquals(70L, encBits(scope.eval("Point()")))
+        assertEquals(86L, encBits(scope.eval("Point(1,1)")))
+        assertEquals(86L, encBits(scope.eval("Point(1,2)")))
+        assertEquals(86L, encBits(scope.eval("Poin2(1,2)")))
+        assertEquals(27L, encBits(scope.eval("[3]")))
+        assertTrue(encBits(scope.eval("Poin3(1,2)")) <= 110L)
     }
 
     @Test

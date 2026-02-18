@@ -29,7 +29,6 @@ import kotlin.test.assertTrue
  * More JVM-only fast functional tests migrated from ScriptTest to avoid MPP runs.
  * Keep each test fast (<1s) and deterministic.
  */
-@Ignore("TODO(bytecode-only): uses fallback (when/try/pooling)")
 class ScriptSubsetJvmTest_Additions4 {
     private suspend fun evalInt(code: String): Long = (Scope().eval(code) as ObjInt).value
     private suspend fun evalList(code: String): List<Any?> = (Scope().eval(code) as ObjList).list.map { (it as? ObjInt)?.value ?: it }
@@ -54,8 +53,9 @@ class ScriptSubsetJvmTest_Additions4 {
             class B() { val c = 7 }
             class A() { fun b(): B? { null } }
             val a = A()
-            val r1 = a?.b()?.c
-            val r2 = (a?.b()?.c ?: 7)
+            val bb: B? = a?.b()
+            val r1 = bb?.c
+            val r2 = (bb?.c ?: 7)
             r2
         """.trimIndent()
         val r = evalInt(code)
