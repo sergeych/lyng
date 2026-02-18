@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,11 +18,11 @@
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import net.sergeych.lyng.Scope
+import net.sergeych.lyng.Script
+import net.sergeych.lyng.toSource
 import java.nio.file.Files
 import java.nio.file.Paths
 import kotlin.io.path.extension
-import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.time.Clock
 
@@ -31,9 +31,9 @@ suspend fun executeSampleTests(fileName: String) {
         Files.readString(Paths.get(fileName))
     }
     runBlocking {
-        val c = Scope()
+        val c = Script.newScope()
             val start = Clock.System.now()
-            c.eval(sample)
+            c.eval(sample.toSource(fileName))
             val time = Clock.System.now() - start
             println("$time: $fileName")
 //            delay(100)
@@ -41,7 +41,6 @@ suspend fun executeSampleTests(fileName: String) {
     }
 }
 
-@Ignore("TODO(compile-time-res): legacy tests disabled")
 class SamplesTest {
 
     @Test

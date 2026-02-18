@@ -6797,6 +6797,118 @@ class Compiler(
         return t.pos
     }
 
+    private data class SmartCastTarget(
+        val name: String? = null,
+        val scopeId: Int? = null,
+        val slot: Int? = null,
+        val typeDecl: TypeDecl,
+    )
+
+    private data class SmartCastRestore(
+        val name: String?,
+        val nameHad: Boolean,
+        val namePrev: TypeDecl?,
+        val scopeId: Int?,
+        val slot: Int?,
+        val slotHad: Boolean,
+        val slotPrev: TypeDecl?,
+        val slotMapCreated: Boolean,
+    )
+
+    private fun smartCastTargetFromRef(ref: ObjRef, typeDecl: TypeDecl): SmartCastTarget? = when (ref) {
+        is LocalSlotRef -> {
+            val ownerScopeId = ref.captureOwnerScopeId ?: ref.scopeId
+            val ownerSlot = ref.captureOwnerSlot ?: ref.slot
+            SmartCastTarget(scopeId = ownerScopeId, slot = ownerSlot, typeDecl = typeDecl)
+        }
+        is LocalVarRef -> SmartCastTarget(name = ref.name, typeDecl = typeDecl)
+        is FastLocalVarRef -> SmartCastTarget(name = ref.name, typeDecl = typeDecl)
+        else -> null
+    }
+
+    private fun extractSmartCasts(condition: Statement): Pair<List<SmartCastTarget>, List<SmartCastTarget>> {
+        val ref = unwrapDirectRef(condition) ?: return emptyList<SmartCastTarget>() to emptyList()
+        if (ref !is BinaryOpRef) return emptyList<SmartCastTarget>() to emptyList()
+        if (ref.op != BinOp.IS && ref.op != BinOp.NOTIS) return emptyList<SmartCastTarget>() to emptyList()
+        val typeRef = ref.right as? net.sergeych.lyng.obj.TypeDeclRef ?: return emptyList<SmartCastTarget>() to emptyList()
+        val typeDecl = expandTypeAliases(typeRef.decl(), typeRef.pos())
+        val target = smartCastTargetFromRef(ref.left, typeDecl) ?: return emptyList<SmartCastTarget>() to emptyList()
+        return if (ref.op == BinOp.IS) {
+            listOf(target) to emptyList()
+        } else {
+            emptyList<SmartCastTarget>() to listOf(target)
+        }
+    }
+
+    private fun applySmartCasts(overrides: List<SmartCastTarget>): List<SmartCastRestore> {
+        if (overrides.isEmpty()) return emptyList()
+        val restores = ArrayList<SmartCastRestore>(overrides.size)
+        for (override in overrides) {
+            if (override.name != null) {
+                val had = nameTypeDecl.containsKey(override.name)
+                val prev = nameTypeDecl[override.name]
+                nameTypeDecl[override.name] = override.typeDecl
+                restores.add(
+                    SmartCastRestore(
+                        name = override.name,
+                        nameHad = had,
+                        namePrev = prev,
+                        scopeId = null,
+                        slot = null,
+                        slotHad = false,
+                        slotPrev = null,
+                        slotMapCreated = false,
+                    )
+                )
+            } else if (override.scopeId != null && override.slot != null) {
+                val map = slotTypeDeclByScopeId[override.scopeId]
+                val mapCreated = map == null
+                val targetMap = map ?: mutableMapOf<Int, TypeDecl>().also { slotTypeDeclByScopeId[override.scopeId] = it }
+                val had = targetMap.containsKey(override.slot)
+                val prev = targetMap[override.slot]
+                targetMap[override.slot] = override.typeDecl
+                restores.add(
+                    SmartCastRestore(
+                        name = null,
+                        nameHad = false,
+                        namePrev = null,
+                        scopeId = override.scopeId,
+                        slot = override.slot,
+                        slotHad = had,
+                        slotPrev = prev,
+                        slotMapCreated = mapCreated,
+                    )
+                )
+            }
+        }
+        return restores
+    }
+
+    private fun restoreSmartCasts(restores: List<SmartCastRestore>) {
+        if (restores.isEmpty()) return
+        for (restore in restores.asReversed()) {
+            if (restore.name != null) {
+                if (restore.nameHad) {
+                    nameTypeDecl[restore.name] = restore.namePrev!!
+                } else {
+                    nameTypeDecl.remove(restore.name)
+                }
+            } else if (restore.scopeId != null && restore.slot != null) {
+                val map = slotTypeDeclByScopeId[restore.scopeId]
+                if (map != null) {
+                    if (restore.slotHad) {
+                        map[restore.slot] = restore.slotPrev!!
+                    } else {
+                        map.remove(restore.slot)
+                    }
+                    if (restore.slotMapCreated && map.isEmpty()) {
+                        slotTypeDeclByScopeId.remove(restore.scopeId)
+                    }
+                }
+            }
+        }
+    }
+
     private suspend fun parseIfStatement(): Statement {
         val start = ensureLparen()
 
@@ -6805,7 +6917,13 @@ class Compiler(
 
         val pos = ensureRparen()
 
-        val ifBody = parseStatement() ?: throw ScriptError(pos, "Bad if statement: expected statement")
+        val (trueCasts, falseCasts) = extractSmartCasts(condition)
+        val ifRestores = applySmartCasts(trueCasts)
+        val ifBody = try {
+            parseStatement() ?: throw ScriptError(pos, "Bad if statement: expected statement")
+        } finally {
+            restoreSmartCasts(ifRestores)
+        }
 
         cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
         // could be else block:
@@ -6813,8 +6931,12 @@ class Compiler(
 
         // we generate different statements: optimization
         val stmt = if (t2.type == Token.Type.ID && t2.value == "else") {
-            val elseBody =
+            val elseRestores = applySmartCasts(falseCasts)
+            val elseBody = try {
                 parseStatement() ?: throw ScriptError(pos, "Bad else statement: expected statement")
+            } finally {
+                restoreSmartCasts(elseRestores)
+            }
             IfStatement(condition, ifBody, elseBody, start)
         } else {
             cc.previous()

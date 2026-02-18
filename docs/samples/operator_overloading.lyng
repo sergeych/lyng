@@ -1,23 +1,23 @@
 // Sample: Operator Overloading in Lyng
 
-class Vector(val x, val y) {
+class Vector<T>(val x: T, val y: T) {
     // Overload +
-    fun plus(other) = Vector(x + other.x, y + other.y)
+    fun plus(other: Vector<U>) = Vector(x + other.x, y + other.y)
     
     // Overload -
-    fun minus(other) = Vector(x - other.x, y - other.y)
+    fun minus(other: Vector<U>) = Vector(x - other.x, y - other.y)
     
     // Overload unary -
     fun negate() = Vector(-x, -y)
     
     // Overload ==
     fun equals(other) {
-        if (other is Vector) x == other.x && y == other.y
+        if (other is Vector<U>) x == other.x && y == other.y
         else false
     }
     
     // Overload * (scalar multiplication)
-    fun mul(scalar) = Vector(x * scalar, y * scalar)
+    fun mul(scalar: Int | Real) = Vector(x * scalar, y * scalar)
     
     override fun toString() = "Vector(${x}, ${y})"
 }
