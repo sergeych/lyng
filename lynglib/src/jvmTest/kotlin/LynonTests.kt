@@ -714,7 +714,7 @@ class Wallet( id, ownerKey, balance=0, createdAt=Instant.now().truncateToSecond(
 
 
     @Test
-    @Ignore("TODO(bytecode-only): MI serialization fallback")
+    @Ignore("TODO(bytecode-only): MI serialization does not preserve ColoredPoint type yet")
     fun testMISerialization() = runTest {
         val s = testScope()
         s.eval("""
@@ -723,7 +723,7 @@ class Wallet( id, ownerKey, balance=0, createdAt=Instant.now().truncateToSecond(
             class Point(x,y)
             class Color(r,g,b)
             
-            class ColoredPoint(x, y, r, g, b): Point(x,y), Color(r,g,b)
+            class ColoredPoint(px, py, cr, cg, cb): Point(px,py), Color(cr,cg,cb)
             
             val cp = ColoredPoint(1,2,30,40,50)
             val d = testEncode( cp )

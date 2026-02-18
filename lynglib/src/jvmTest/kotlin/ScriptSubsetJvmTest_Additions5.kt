@@ -75,7 +75,6 @@ class ScriptSubsetJvmTest_Additions5 {
         assertEquals(3L, r)
     }
 
-    @Ignore("TODO(bytecode+closure): pooled lambda calls duplicate side effects; re-enable after fixing call semantics")
     @Test
     fun pooled_frames_closure_this_capture_jvm_only() = runBlocking {
         val code = """
