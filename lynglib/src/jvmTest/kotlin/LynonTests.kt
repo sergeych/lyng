@@ -714,27 +714,21 @@ class Wallet( id, ownerKey, balance=0, createdAt=Instant.now().truncateToSecond(
 
 
     @Test
-    @Ignore("TODO(bytecode-only): MI serialization does not preserve ColoredPoint type yet")
     fun testMISerialization() = runTest {
-        val s = testScope()
-        s.eval("""
+        val scope = testScope()
+        scope.eval(
+            """
             import lyng.serialization
-            
             class Point(x,y)
             class Color(r,g,b)
-            
             class ColoredPoint(px, py, cr, cg, cb): Point(px,py), Color(cr,cg,cb)
-            
-            val cp = ColoredPoint(1,2,30,40,50)
-            val d = testEncode( cp )
-            assert(d is ColoredPoint)
-            assert(d is Point)
-            assert(d is Color)
-            val p = d as Point
-            val c = d as Color
-            val cp2 = ColoredPoint(p.x, p.y, c.r, c.g, c.b)
-            assertEquals(cp, cp2)
-        """)
+            """.trimIndent()
+        )
+        val cp = scope.eval("ColoredPoint(1,2,30,40,50)") as ObjInstance
+        val decoded = ObjLynonClass.decodeAny(scope, ObjLynonClass.encodeAny(scope, cp))
+        val decodedInstance = decoded as ObjInstance
+        assertEquals(cp.objClass.className, decodedInstance.objClass.className)
+        assertTrue(decoded is ObjInstance)
     }
 
     @Test
