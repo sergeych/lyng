@@ -17,7 +17,7 @@ It is as simple as:
     assertEquals( text, Lynon.decode(encodedBits) )
     
     // compression was used automatically
-    assert( text.length > encodedBits.toBuffer().size )
+    assert( text.length > (encodedBits.toBuffer() as Buffer).size )
     >>> void
 
 Any class you create is serializable by default; lynon serializes first constructor fields, then any `var` member fields.

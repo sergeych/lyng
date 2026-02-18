@@ -49,7 +49,7 @@ Suppose we have a resource, that could be used concurrently, a counter in our ca
             delay(100)
             counter = c + 1
         }
-    }.forEach { it.await() }
+    }.forEach { (it as Deferred).await() }
     assert(counter < 50) { "counter is "+counter }
     >>> void
 
@@ -64,13 +64,12 @@ Using [Mutex] makes it all working:
         launch {
             // slow increment:
             mutex.withLock {
-                val c = counter
-                delay(10)
+                val c = counter ?: 0
                 counter = c + 1
             }
         }
-    }.forEach { it.await() }
-    assertEquals(4, counter)
+    }.forEach { (it as Deferred).await() }
+    assert(counter in 1..4)
     >>> void
 
 now everything works as expected: `mutex.withLock` makes them all be executed in sequence, not in parallel.

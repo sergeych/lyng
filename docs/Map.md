@@ -94,7 +94,8 @@ Or iterate its key-value pairs that are instances of [MapEntry] class:
 
     val map = Map( ["foo", 1], ["bar", "buzz"], [42, "answer"] )
     for( entry in map ) {
-        println("map[%s] = %s"(entry.key, entry.value))
+        val e: MapEntry = entry as MapEntry
+        println("map[%s] = %s"(e.key, e.value))
     }
     void
     >>> map[foo] = 1

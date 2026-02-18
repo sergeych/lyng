@@ -154,9 +154,10 @@ Function annotation can have more args specified at call time. There arguments m
     @Registered("bar") 
     fun foo2() { "called foo2" }
 
-    assertEquals(registered["foo"](), "called foo")
-    assertEquals(registered["bar"](), "called foo2")
-    >>> void
+    val fooFn: Callable = registered["foo"] as Callable
+    val barFn: Callable = registered["bar"] as Callable
+    assertEquals(fooFn(), "called foo")
+    assertEquals(barFn(), "called foo2")
 
 [parallelism]: parallelism.md
 

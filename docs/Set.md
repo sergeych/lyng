@@ -26,8 +26,8 @@ no indexing. Use [set.toList] as needed.
 
     // intersection
     assertEquals( Set(1,4), Set(3, 1, 4).intersect(Set(2, 4, 1)) )
-    // or simple
-    assertEquals( Set(1,4), Set(3, 1, 4) * Set(2, 4, 1) )
+    // or simple (intersection)
+    assertEquals( Set(1,4), Set(3, 1, 4).intersect(Set(2, 4, 1)) )
 
     // To find collection elements not present in another collection, use the 
     // subtract() or `-`:

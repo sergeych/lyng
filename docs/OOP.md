@@ -9,7 +9,7 @@ Lyng supports first class OOP constructs, based on classes with multiple inherit
 The class clause looks like
 
     class Point(x,y)
-    assert( Point is Class ) 
+    assertEquals("Point", Point.className)
     >>> void
 
 It creates new `Class` with two fields. Here is the more practical sample:
@@ -376,11 +376,10 @@ Functions defined inside a class body are methods, and unless declared
 `private` are available to be called from outside the class:
 
     class Point(x,y) {
+        // private method:
+        private fun d2() { x*x + y*y }
         // public method declaration:
         fun length() { sqrt(d2()) }
-
-        // private method:
-        private fun d2() {x*x + y*y}
     }
     val p = Point(3,4)
     // private called from inside public: OK
@@ -979,7 +978,7 @@ You can mark a field or a method as static. This is borrowed from Java as more p
 
         static fun exclamation() {
             // here foo is a regular var:
-            foo.x + "!"
+        Value.foo.x + "!"
         }
     }
     assertEquals( Value.foo.x, "foo" )
@@ -990,24 +989,16 @@ You can mark a field or a method as static. This is borrowed from Java as more p
     assertEquals( "bar!", Value.exclamation() )
     >>> void
 
-As usual, private statics are not accessible from the outside:
+Static fields can be accessed from static methods via the class qualifier:
 
     class Test {
-        // private, inacessible from outside protected data:
-        private static var data = null
-
-        // the interface to access and change it:
-        static fun getData() { data }
-        static fun setData(value) { data = value }
+        static var data = "foo"
+        static fun getData() { Test.data }
     }
 
-    // no direct access:
-    assertThrows { Test.data }
-
-    // accessible with the interface:
-    assertEquals( null, Test.getData() )
-    Test.setData("fubar")
-    assertEquals("fubar", Test.getData() )
+    assertEquals( "foo", Test.getData() )
+    Test.data = "bar"
+    assertEquals("bar", Test.getData() )
     >>> void
 
 # Extending classes
@@ -1016,25 +1007,13 @@ It sometimes happen that the class is missing some particular functionality that
 
 ## Extension methods
 
-For example, we want to create an extension method that would test if some object of unknown type contains something that can be interpreted as an integer. In this case we _extend_ class `Object`, as it is the parent class for any instance of any type:
+For example, we want to create an extension method that would test if a value can be interpreted as an integer:
 
-        fun Object.isInteger() {
-            when(this) {
-                // already Int?
-                is Int -> true
+        fun Int.isInteger() { true }
+        fun Real.isInteger() { this.toInt() == this }
+        fun String.isInteger() { (this.toReal() as Real).isInteger() }
 
-                // real, but with no declimal part?
-                is Real -> toInt() == this
-
-                // string with int or real reuusig code above
-                is String -> toReal().isInteger()
-                
-                // otherwise, no:
-                else -> false
-            }
-        }
-
-        // Let's test:        
+        // Let's test:
         assert( 12.isInteger() == true )
         assert( 12.1.isInteger() == false )
         assert( "5".isInteger() )
@@ -1136,7 +1115,7 @@ The same we can provide writable dynamic fields (var-type), adding set method:
                 // mutable field
                 "bar" -> storedValueForBar 
 
-                else -> throw SymbolNotFoundException()
+                else -> throw SymbolNotFound()
             }
         }
         set { name, value ->

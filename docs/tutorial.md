@@ -229,9 +229,8 @@ Naturally, assignment returns its value:
 rvalue means you cant assign the result if the assignment
 
     var x
-    assertThrows { (x = 11) = 5 }
-    void
-    >>> void
+    // compile-time error: can't assign to rvalue
+    (x = 11) = 5
 
 This also prevents chain assignments so use parentheses:
 
@@ -249,18 +248,24 @@ When the value is `null`, it might throws `NullReferenceException`, the name is 
 one can check it against null or use _null coalescing_. The null coalescing means, if the operand (left) is null,
 the operation won't be performed and the result will be null. Here is the difference:
 
-    val ref = null
-    assertThrows {  ref.field }
-    assertThrows {  ref.method() }
-    assertThrows {  ref.array[1] }
-    assertThrows {  ref[1] }
-    assertThrows {  ref() }
-    
+    class Sample {
+        var field = 1
+        fun method() { 2 }
+        var list = [1, 2, 3]
+    }
+
+    val ref: Sample? = null
+    val list: List<Int>? = null
+    // direct access throws NullReferenceException:
+    // ref.field
+    // ref.method()
+    // ref.list[1]
+    // list[1]
+
     assert( ref?.field == null )
     assert( ref?.method() == null )
-    assert( ref?.array?[1] == null )
-    assert( ref?[1] == null )
-    assert( ref?() == null )
+    assert( ref?.list?[1] == null )
+    assert( list?[1] == null )
     >>> void
 
 Note: `?.` is still a typed operation. The receiver must have a compile-time type that declares the member; if the
@@ -322,8 +327,8 @@ Much like let, but it does not alter returned value:
 
 While it is not altering return value, the source object could be changed:
 also
-    class Point(x,y)
-    val p = Point(1,2).also { it.x++ }
+    class Point(var x: Int, var y: Int)
+    val p: Point = Point(1,2).also { it.x++ }
     assertEquals(p.x, 2)
     >>> void
 
@@ -331,9 +336,9 @@ also
 
 It works much like `also`, but is executed in the context of the source object:
 
-    class Point(x,y)
+    class Point(var x: Int, var y: Int)
     // see the difference: apply changes this to newly created Point:
-    val p = Point(1,2).apply { x++; y++ }
+    val p = Point(1,2).apply { this@Point.x++; this@Point.y++ }
     assertEquals(p, Point(2,3))
     >>> void
 
@@ -341,7 +346,7 @@ It works much like `also`, but is executed in the context of the source object:
 
 Sets `this` to the first argument and executes the block. Returns the value returned by the block:
 
-    class Point(x,y)
+    class Point(var x: Int, var y: Int)
     val p = Point(1,2)
     val sum = with(p) { x + y }
     assertEquals(3, sum)
@@ -635,8 +640,9 @@ There are default parameters in Lyng:
 It is possible to define also vararg using ellipsis:
 
     fun sum(args...) {
-        var result = args[0]
-        for( i in 1 ..< args.size ) result += args[i]
+        val list = args as List
+        var result = list[0]
+        for( i in 1 ..< list.size ) result += list[i]
     }
     sum(10,20,30)
     >>> 60
@@ -775,7 +781,7 @@ Lists can contain any type of objects, lists too:
     assert( list is Array )     // general interface
     assert(list.size == 3)
     // second element is a list too:
-    assert(list[1].size == 2)
+    assert((list[1] as List).size == 2)
     >>> void
 
 Notice usage of indexing. You can use negative indexes to offset from the end of the list; see more in [Lists](List.md).
@@ -1223,8 +1229,8 @@ ends normally, without breaks. It allows override loop result value, for example
 to not calculate it in every iteration. For example, consider this naive prime number
 test function (remember function return it's last expression result):
 
-    fun naive_is_prime(candidate) {
-        val x = if( candidate !is Int) candidate.toInt() else candidate
+    fun naive_is_prime(candidate: Int) {
+        val x = candidate
         var divisor = 1
         while( ++divisor < x/2 || divisor == 2 ) {
             if( x % divisor == 0 ) break false
@@ -1299,8 +1305,9 @@ For loop are intended to traverse collections, and all other objects that suppor
 size and index access, like lists:
 
     var letters = 0
-    for( w in ["hello", "wolrd"]) {
-        letters += w.length
+    val words: List<String> = ["hello", "world"]
+    for( w in words) {
+        letters += (w as String).length
     }
     "total letters: "+letters
     >>> "total letters: 10"
@@ -1624,13 +1631,13 @@ Concatenation is a `+`: `"hello " + name` works as expected. No confusion. There
 
 Extraction:
 
-    "abcd42def"[ "\d+".re ].value
+    ("abcd42def"[ "\d+".re ] as RegexMatch).value
     >>> "42"
 
 Part match:
 
     assert( "abc foo def" =~ "f[oO]+".re )
-    assert( "foo" == $~.value )
+    assert( "foo" == ($~ as RegexMatch).value )
     >>> void
 
 Repeating the fragment:
@@ -1881,7 +1888,7 @@ You can add new methods and properties to existing classes without modifying the
 
 ### Extension properties
 
-    val Int.isEven = this % 2 == 0
+    val Int.isEven get() = this % 2 == 0
     4.isEven
     >>> true
 

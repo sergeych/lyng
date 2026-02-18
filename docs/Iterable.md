@@ -108,8 +108,8 @@ You can also use flow variations that return a cold `Flow` instead of a `List`, 
 Find the minimum or maximum value of a function applied to each element:
 
     val source = ["abc", "de", "fghi"]
-    assertEquals(2, source.minOf { it.length })
-    assertEquals(4, source.maxOf { it.length })
+    assertEquals(2, source.minOf { (it as String).length })
+    assertEquals(4, source.maxOf { (it as String).length })
     >>> void
 
 ## flatten and flatMap

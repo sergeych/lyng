@@ -30,7 +30,6 @@ import java.nio.file.Files.readAllLines
 import java.nio.file.Paths
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.extension
-import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.fail
@@ -248,7 +247,6 @@ suspend fun runDocTests(fileName: String, bookMode: Boolean = false) {
         println("tests passed: $count")
 }
 
-@Ignore("TODO(bytecode-only): uses fallback")
 class BookTest {
 
     @Test

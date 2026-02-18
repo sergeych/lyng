@@ -40,7 +40,7 @@ Ellipsis could be a first argument:
 
     fun testCountArgs(data...,size) {
         assert(size is Int)
-        assertEquals(size, data.size)
+        assertEquals(size, (data as List).size)
     }
     testCountArgs( 1, 2, "three", 3)
     >>> void
@@ -49,7 +49,7 @@ Ellipsis could also be a last one:
 
     fun testCountArgs(size, data...) {
         assert(size is Int)
-        assertEquals(size, data.size)
+        assertEquals(size, (data as List).size)
     }
     testCountArgs( 3, 10, 2, "three")
     >>> void
@@ -58,7 +58,7 @@ Or in the middle:
 
     fun testCountArgs(size, data..., textToReturn) {
         assert(size is Int)
-        assertEquals(size, data.size)
+        assertEquals(size, (data as List).size)
         textToReturn
     }
     testCountArgs( 3, 10, 2, "three", "All OK")

@@ -24,13 +24,14 @@ counterpart, _not match_ operator `!~`:
 
 When you need to find groups, and more detailed match information, use `Regex.find`:
 
-    val result = Regex("abc(\d)(\d)(\d)").find( "bad456 good abc123")
+    val result: RegexMatch? = Regex("abc(\d)(\d)(\d)").find( "bad456 good abc123")
     assert( result  != null )
-    assertEquals( 12 .. 17, result.range )
-    assertEquals( "abc123", result[0] )
-    assertEquals( "1", result[1] )
-    assertEquals( "2", result[2] )
-    assertEquals( "3", result[3] )
+    val match: RegexMatch = result as RegexMatch
+    assertEquals( 12 ..< 17, match.range )
+    assertEquals( "abc123", match[0] )
+    assertEquals( "1", match[1] )
+    assertEquals( "2", match[2] )
+    assertEquals( "3", match[3] )
     >>> void
 
 Note that the object `RegexMatch`, returned by [Regex.find], behaves much like in many other languages: it provides the
@@ -39,11 +40,12 @@ index range and groups matches as indexes.
 Match operator actually also provides `RegexMatch` in `$~` reserved variable (borrowed from Ruby too):
 
     assert( "bad456 good abc123" =~ "abc(\d)(\d)(\d)".re )
-    assertEquals( 12 .. 17, $~.range )
-    assertEquals( "abc123", $~[0] )
-    assertEquals( "1", $~[1] )
-    assertEquals( "2", $~[2] )
-    assertEquals( "3", $~[3] )
+    val match2: RegexMatch = $~ as RegexMatch
+    assertEquals( 12 ..< 17, match2.range )
+    assertEquals( "abc123", match2[0] )
+    assertEquals( "1", match2[1] )
+    assertEquals( "2", match2[2] )
+    assertEquals( "3", match2[3] )
     >>> void
 
 This is often more readable than calling `find`.
@@ -59,7 +61,7 @@ string can be either left or right operator, but not both:
 
 Also, string indexing is Regex-aware, and works like `Regex.find` (_not findall!_):
 
-    assert( "cd" == "abcdef"[ "c.".re ].value )
+    assert( "cd" == ("abcdef"[ "c.".re ] as RegexMatch).value )
     >>> void
 
 
@@ -88,4 +90,3 @@ Also, string indexing is Regex-aware, and works like `Regex.find` (_not findall!
 [List]: List.md
 
 [Range]: Range.md
-
