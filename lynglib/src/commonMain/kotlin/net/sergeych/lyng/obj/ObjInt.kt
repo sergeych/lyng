@@ -166,7 +166,7 @@ class ObjInt(val value: Long, override val isConst: Boolean = false) : Obj(), Nu
         internal const val CACHE_LOW: Long = -1024L
         internal const val CACHE_HIGH: Long = 1023L
         private val cache = Array((CACHE_HIGH - CACHE_LOW + 1).toInt()) {
-            ObjInt((it + CACHE_LOW).toLong(), true)
+            ObjInt(it + CACHE_LOW, true)
         }
 
         fun of(value: Long): ObjInt {

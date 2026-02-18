@@ -32,7 +32,7 @@ class VarDeclStatement(
 ) : Statement() {
     override val pos: Pos = startPos
 
-    override suspend fun execute(context: Scope): Obj {
-        return bytecodeOnly(context, "var declaration")
+    override suspend fun execute(scope: Scope): Obj {
+        return bytecodeOnly(scope, "var declaration")
     }
 }

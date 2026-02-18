@@ -55,7 +55,7 @@ class WebsiteSamplesTest {
             squares
         """.trimIndent())
         assertTrue(result is ObjList)
-        val list = (result as ObjList).list.map { (it as ObjInt).value }
+        val list = result.list.map { (it as ObjInt).value }
         assertEquals(listOf(4L, 16L, 36L, 64L, 100L), list)
     }
 
@@ -75,7 +75,7 @@ class WebsiteSamplesTest {
             [intBox.get(), realBox.get()]
         """.trimIndent())
         assertTrue(result is ObjList)
-        val l = (result as ObjList).list
+        val l = result.list
         assertEquals(42L, (l[0] as ObjInt).value)
         assertEquals(3.14, (l[1] as ObjReal).value)
     }
@@ -108,7 +108,7 @@ class WebsiteSamplesTest {
             full
         """.trimIndent())
         assertTrue(result is ObjMap)
-        val m = (result as ObjMap).map
+        val m = result.map
         assertEquals(101L, (m[ObjString("id")] as ObjInt).value)
         assertEquals("Lyng", (m[ObjString("name")] as ObjString).value)
         assertEquals("1.5.0-SNAPSHOT", (m[ObjString("version")] as ObjString).value)
@@ -138,7 +138,7 @@ class WebsiteSamplesTest {
             [first, middle, last]
         """.trimIndent())
         assertTrue(result is ObjList)
-        val rl = (result as ObjList).list
+        val rl = result.list
         assertEquals(1L, (rl[0] as ObjInt).value)
         val middle = rl[1] as ObjList
         assertEquals(listOf(2L, 3L, 4L, 5L), middle.list.map { (it as ObjInt).value })
@@ -178,7 +178,7 @@ class WebsiteSamplesTest {
             ["hello".shout(), [10, 20, 30].second]
         """.trimIndent())
         assertTrue(result is ObjList)
-        val el = (result as ObjList).list
+        val el = result.list
         assertEquals("HELLO!!!", (el[0] as ObjString).value)
         assertEquals(20L, (el[1] as ObjInt).value)
     }
@@ -253,7 +253,7 @@ class WebsiteSamplesTest {
             [d1.await(), d2.await()]
         """.trimIndent())
         assertTrue(result is ObjList)
-        val dl = (result as ObjList).list
+        val dl = result.list
         assertEquals("Task A finished", (dl[0] as ObjString).value)
         assertEquals("Task B finished", (dl[1] as ObjString).value)
     }

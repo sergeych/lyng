@@ -502,7 +502,6 @@ object CmdDisassembler {
             is CmdIterPush -> Opcode.ITER_PUSH to intArrayOf(cmd.iterSlot)
             is CmdIterPop -> Opcode.ITER_POP to intArrayOf()
             is CmdIterCancel -> Opcode.ITER_CANCEL to intArrayOf()
-            else -> error("Unsupported cmd in disassembler: ${cmd::class.simpleName}")
         }
     }
 

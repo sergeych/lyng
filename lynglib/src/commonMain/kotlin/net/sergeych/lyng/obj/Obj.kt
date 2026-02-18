@@ -880,7 +880,7 @@ open class Obj {
                 is Enum<*> -> ObjString(obj.name)
                 Unit -> ObjVoid
                 null -> ObjNull
-                is Iterator<*> -> ObjKotlinIterator(obj as Iterator<Any?>)
+                is Iterator<*> -> ObjKotlinIterator(obj)
                 else -> throw IllegalArgumentException("cannot convert to Obj: $obj")
             }
         }

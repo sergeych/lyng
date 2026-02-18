@@ -1014,7 +1014,7 @@ class Compiler(
                         declareSlotNameAt(
                             modulePlan,
                             name,
-                            seedSlotIndex!!,
+                            seedSlotIndex,
                             sourceRecord.isMutable,
                             sourceRecord.type == ObjRecord.Type.Delegated
                         )
@@ -1490,9 +1490,10 @@ class Compiler(
     private suspend fun parseScript(): Script {
         val statements = mutableListOf<Statement>()
         val start = cc.currentPos()
-        val atTopLevel = resolutionSink != null && resolutionScriptDepth == 0
+        val topLevelSink = if (resolutionScriptDepth == 0) resolutionSink else null
+        val atTopLevel = topLevelSink != null
         if (atTopLevel) {
-            resolutionSink?.enterScope(ScopeKind.MODULE, start, null)
+            topLevelSink.enterScope(ScopeKind.MODULE, start, null)
             seedScope?.let { seedResolutionFromScope(it, start) }
             seedResolutionFromScope(importManager.rootScope, start)
         }
@@ -1537,7 +1538,6 @@ class Compiler(
                             // A standalone newline not immediately following a comment resets doc buffer
                             if (!prevWasComment) clearPendingDoc() else prevWasComment = false
                         }
-                        else -> {}
                     }
                     cc.next()
                     continue
@@ -1672,7 +1672,7 @@ class Compiler(
         } finally {
             resolutionScriptDepth--
             if (atTopLevel) {
-                resolutionSink?.exitScope(cc.currentPos())
+                topLevelSink.exitScope(cc.currentPos())
             }
             if (needsSlotPlan) {
                 slotPlanStack.removeLast()
@@ -1843,9 +1843,7 @@ class Compiler(
     private fun captureLocalRef(name: String, slotLoc: SlotLocation, pos: Pos): LocalSlotRef? {
         if (capturePlanStack.isEmpty() || slotLoc.depth == 0) return null
         val functionPlan = capturePlanStack.asReversed().firstOrNull { it.isFunction } ?: return null
-        val functionIndex = functionPlan?.let { plan ->
-            slotPlanStack.indexOfLast { it.id == plan.slotPlan.id }
-        } ?: -1
+        val functionIndex = slotPlanStack.indexOfLast { it.id == functionPlan.slotPlan.id }
         val scopeIndex = slotPlanStack.indexOfLast { it.id == slotLoc.scopeId }
         if (functionIndex >= 0 && scopeIndex >= functionIndex) return null
         val modulePlan = moduleSlotPlan()
@@ -2127,7 +2125,6 @@ class Compiler(
                                 is WhenEqualsCondition -> containsDelegatedRefs(cond.expr)
                                 is WhenInCondition -> containsDelegatedRefs(cond.expr)
                                 is WhenIsCondition -> false
-                                else -> true
                             }
                         } || containsDelegatedRefs(case.block)
                     } ||
@@ -2161,21 +2158,16 @@ class Compiler(
             is IndexRef -> containsDelegatedRefs(ref.targetRef) || containsDelegatedRefs(ref.indexRef)
             is ListLiteralRef -> ref.entries().any {
                 when (it) {
-                    is ListEntry.Element -> containsDelegatedRefs(it.ref as net.sergeych.lyng.obj.ObjRef)
-                    is ListEntry.Spread -> containsDelegatedRefs(it.ref as net.sergeych.lyng.obj.ObjRef)
+                    is ListEntry.Element -> containsDelegatedRefs(it.ref)
+                    is ListEntry.Spread -> containsDelegatedRefs(it.ref)
                 }
             }
             is MapLiteralRef -> ref.entries().any {
                 when (it) {
                     is net.sergeych.lyng.obj.MapLiteralEntry.Named -> {
-                        val v = it.value
-                        when (v) {
-                            is Statement -> containsDelegatedRefs(stmt = v)
-                            is net.sergeych.lyng.obj.ObjRef -> containsDelegatedRefs(ref = v)
-                            else -> false
-                        }
+                        containsDelegatedRefs(it.value)
                     }
-                    is net.sergeych.lyng.obj.MapLiteralEntry.Spread -> containsDelegatedRefs(it.ref as net.sergeych.lyng.obj.ObjRef)
+                    is net.sergeych.lyng.obj.MapLiteralEntry.Spread -> containsDelegatedRefs(it.ref)
                 }
             }
             is CallRef -> containsDelegatedRefs(ref.target) || ref.args.any {
@@ -3037,8 +3029,7 @@ class Compiler(
                     }
                     if (captureSlots.isNotEmpty()) {
                         if (captureRecords != null) {
-                            val records = captureRecords as List<ObjRecord>
-                            context.captureRecords = records
+                            context.captureRecords = captureRecords
                             context.captureNames = captureSlots.map { it.name }
                         } else {
                             val resolvedRecords = ArrayList<ObjRecord>(captureSlots.size)
@@ -3725,8 +3716,8 @@ class Compiler(
         var first = true
         val typeStart = cc.currentPos()
         var lastEnd = typeStart
-        var lastName: String? = null
-        var lastPos: Pos? = null
+        var lastName = ""
+        var lastPos = typeStart
         while (true) {
             val idTok =
                 if (first) cc.requireToken(Token.Type.ID, "type name or type expression required") else cc.requireToken(
@@ -3767,11 +3758,9 @@ class Compiler(
             return TypeDecl.TypeVar(qualified, isNullable) to miniRef
         }
         if (segments.size > 1) {
-            lastPos?.let { pos -> resolutionSink?.reference(qualified, pos) }
+            resolutionSink?.reference(qualified, lastPos)
         } else {
-            lastName?.let { name ->
-                lastPos?.let { pos -> resolutionSink?.reference(name, pos) }
-            }
+            resolutionSink?.reference(lastName, lastPos)
         }
         // Helper to build MiniTypeRef (base or generic)
         fun buildBaseRef(rangeEnd: Pos, args: List<MiniTypeRef>?, nullable: Boolean): MiniTypeRef {
@@ -3833,8 +3822,8 @@ class Compiler(
         var first = true
         val typeStart = cc.currentPos()
         var lastEnd = typeStart
-        var lastName: String? = null
-        var lastPos: Pos? = null
+        var lastName = ""
+        var lastPos = typeStart
         while (true) {
             val idTok =
                 if (first) cc.requireToken(Token.Type.ID, "type name or type expression required") else cc.requireToken(
@@ -3889,11 +3878,9 @@ class Compiler(
             return TypeDecl.TypeVar(qualified, isNullable) to miniRef
         }
         if (segments.size > 1) {
-            lastPos?.let { pos -> resolutionSink?.reference(qualified, pos) }
+            resolutionSink?.reference(qualified, lastPos)
         } else {
-            lastName?.let { name ->
-                lastPos?.let { pos -> resolutionSink?.reference(name, pos) }
-            }
+            resolutionSink?.reference(lastName, lastPos)
         }
         fun buildBaseRef(rangeEnd: Pos, args: List<MiniTypeRef>?, nullable: Boolean): MiniTypeRef {
             val base = MiniTypeName(MiniRange(typeStart, rangeEnd), segments.toList(), nullable = false)
@@ -4164,7 +4151,7 @@ class Compiler(
     }
 
     private fun inferObjClassFromRef(ref: ObjRef): ObjClass? = when (ref) {
-        is ConstRef -> ref.constValue as? ObjClass ?: (ref.constValue as? Obj)?.objClass
+        is ConstRef -> ref.constValue as? ObjClass ?: ref.constValue.objClass
         is LocalVarRef -> nameObjClass[ref.name] ?: resolveClassByName(ref.name)
         is FastLocalVarRef -> nameObjClass[ref.name] ?: resolveClassByName(ref.name)
         is LocalSlotRef -> {
@@ -4234,7 +4221,7 @@ class Compiler(
                 val targetClass = resolveClassByName(ref.receiverTypeName())
                 inferFieldReturnClass(targetClass, ref.name)
             }
-            is ConstRef -> ref.constValue as? ObjClass ?: (ref.constValue as? Obj)?.objClass
+            is ConstRef -> ref.constValue as? ObjClass ?: ref.constValue.objClass
             is ListLiteralRef -> ObjList.type
             is MapLiteralRef -> ObjMap.type
             is RangeRef -> ObjRange.type
@@ -4780,9 +4767,7 @@ class Compiler(
                 is RecordSlotRef -> direct.read()
                 else -> direct
             }
-            if (value is Obj) {
-                collectRuntimeTypeVarBindings(param.type, value, inferred)
-            }
+            collectRuntimeTypeVarBindings(param.type, value, inferred)
         }
         val boundValues = LinkedHashMap<String, Obj>(typeParams.size)
         for (tp in typeParams) {
@@ -5987,7 +5972,8 @@ class Compiler(
         val baseName = declaredName ?: generateAnonName(startPos)
         val className = if (declaredName != null && outerClassName != null) "$outerClassName.$declaredName" else baseName
         if (declaredName != null) {
-            resolutionSink?.declareSymbol(declaredName, SymbolKind.CLASS, isMutable = false, pos = nameToken!!.pos)
+            val namePos = nameToken.pos
+            resolutionSink?.declareSymbol(declaredName, SymbolKind.CLASS, isMutable = false, pos = namePos)
             declareLocalName(declaredName, isMutable = false)
             if (codeContexts.lastOrNull() is CodeContext.Module) {
                 objectDeclNames.add(declaredName)
@@ -6207,13 +6193,14 @@ class Compiler(
             }
             val ctorForcedLocalSlots = LinkedHashMap<String, Int>()
             if (constructorArgsDeclaration != null) {
+                val ctorDecl = constructorArgsDeclaration
                 val snapshot = slotPlanIndices(classSlotPlan)
-                for (param in constructorArgsDeclaration!!.params) {
+                for (param in ctorDecl.params) {
                     val idx = snapshot[param.name] ?: continue
                     ctorForcedLocalSlots[param.name] = idx
                 }
                 constructorArgsDeclaration =
-                    wrapDefaultArgsBytecode(constructorArgsDeclaration!!, ctorForcedLocalSlots, classSlotPlan.id)
+                    wrapDefaultArgsBytecode(ctorDecl, ctorForcedLocalSlots, classSlotPlan.id)
             }
             constructorArgsDeclaration?.params?.forEach { param ->
                 if (param.accessType != null) {
@@ -7078,7 +7065,7 @@ class Compiler(
             isDelegated = true
             delegateExpression = parseExpression() ?: throw ScriptError(cc.current().pos, "Expected delegate expression")
             if (compileBytecode) {
-                delegateExpression = wrapFunctionBytecode(delegateExpression!!, "delegate@$name")
+                delegateExpression = wrapFunctionBytecode(delegateExpression, "delegate@$name")
             }
         }
         if (isDelegated && declKind != SymbolKind.MEMBER) {
@@ -7259,17 +7246,17 @@ class Compiler(
             val fnBody = object : Statement(), BytecodeBodyProvider {
                 override val pos: Pos = start
                 override fun bytecodeBody(): BytecodeStatement? = fnStatements as? BytecodeStatement
-                override suspend fun execute(callerContext: Scope): Obj {
-                    callerContext.pos = start
+                override suspend fun execute(scope: Scope): Obj {
+                    scope.pos = start
 
                     // restore closure where the function was defined, and making a copy of it
                     // for local space. If there is no closure, we are in, say, class context where
                     // the closure is in the class initialization and we needn't more:
                     val context = closureBox.closure?.let { closure ->
-                        callerContext.applyClosureForBytecode(closure).also {
-                            it.args = callerContext.args
+                        scope.applyClosureForBytecode(closure).also {
+                            it.args = scope.args
                         }
-                    } ?: callerContext
+                    } ?: scope
 
                     // Capacity hint: parameters + declared locals + small overhead
                     val capacityHint = paramNames.size + fnLocalDecls + 4
@@ -7325,11 +7312,11 @@ class Compiler(
                             }
                         }
                         if (extTypeName != null) {
-                            context.thisObj = callerContext.thisObj
+                            context.thisObj = scope.thisObj
                         }
                     }
                     return try {
-                        net.sergeych.lyng.bytecode.CmdVm().execute(bytecodeFn, context, callerContext.args, binder)
+                        net.sergeych.lyng.bytecode.CmdVm().execute(bytecodeFn, context, scope.args, binder)
                     } catch (e: ReturnException) {
                         if (e.label == null || e.label == name || e.label == outerLabel) e.result
                         else throw e
@@ -7551,6 +7538,11 @@ class Compiler(
                 is ObjBool -> ObjBool.type
                 is ObjString -> ObjString.type
                 is ObjRange -> ObjRange.type
+                is ObjList -> ObjList.type
+                is ObjMap -> ObjMap.type
+                is ObjChar -> ObjChar.type
+                is ObjNull -> Obj.rootObjectType
+                is ObjVoid -> ObjVoid.objClass
                 else -> null
             }
             is ListLiteralRef -> ObjList.type
@@ -7624,19 +7616,6 @@ class Compiler(
                     }
                     else -> null
                 }
-            }
-            is ConstRef -> when (directRef.constValue) {
-                is ObjList -> ObjList.type
-                is ObjMap -> ObjMap.type
-                is ObjRange -> ObjRange.type
-                is ObjString -> ObjString.type
-                is ObjInt -> ObjInt.type
-                is ObjReal -> ObjReal.type
-                is ObjBool -> ObjBool.type
-                is ObjChar -> ObjChar.type
-                is ObjNull -> Obj.rootObjectType
-                is ObjVoid -> ObjVoid.objClass
-                else -> null
             }
             else -> null
         }

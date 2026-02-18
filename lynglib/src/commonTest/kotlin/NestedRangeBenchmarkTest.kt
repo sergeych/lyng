@@ -77,7 +77,7 @@ class NestedRangeBenchmarkTest {
         }
         var depth = 1
         while (current is BytecodeStatement && current.original is ForInStatement) {
-            val original = current.original as ForInStatement
+            val original = current.original
             println(
                 "[DEBUG_LOG] [BENCH] nested-happy loop depth=$depth " +
                     "constRange=${original.constRange} canBreak=${original.canBreak} " +

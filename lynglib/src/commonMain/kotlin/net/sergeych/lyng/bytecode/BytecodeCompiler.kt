@@ -5090,9 +5090,7 @@ class BytecodeCompiler(
                 lifted = stmt.lifted
             )
         )
-        val dst = stmt.declaredName?.let { name ->
-            resolveDirectNameSlot(name)?.slot
-        } ?: allocSlot()
+        val dst = resolveDirectNameSlot(stmt.declaredName)?.slot ?: allocSlot()
         builder.emit(Opcode.DECL_ENUM, constId, dst)
         updateSlotType(dst, SlotType.OBJ)
         return CompiledValue(dst, SlotType.OBJ)
@@ -5357,7 +5355,6 @@ class BytecodeCompiler(
                 is net.sergeych.lyng.ContinueStatement -> compileContinue(target)
                 is net.sergeych.lyng.ReturnStatement -> compileReturn(target)
                 is net.sergeych.lyng.ThrowStatement -> compileThrow(target)
-                is net.sergeych.lyng.TryStatement -> emitTry(target, false)
                 is net.sergeych.lyng.NopStatement -> {
                     val slot = allocSlot()
                     val voidId = builder.addConst(BytecodeConst.ObjRef(ObjVoid))
@@ -6947,7 +6944,6 @@ class BytecodeCompiler(
                 is LocalVarRef -> ref.name
                 is FastLocalVarRef -> ref.name
                 is LocalSlotRef -> ref.name
-                else -> "unknown"
             }
             val refKind = ref::class.simpleName ?: "LocalRef"
             val loopKeys = loopSlotOverrides.keys.sorted().joinToString(prefix = "[", postfix = "]")
@@ -8444,9 +8440,6 @@ class BytecodeCompiler(
             }
             is StatementRef -> {
                 collectScopeSlots(ref.statement)
-            }
-            is ImplicitThisMethodCallRef -> {
-                collectScopeSlotsArgs(ref.arguments())
             }
             is ThisMethodSlotCallRef -> {
                 collectScopeSlotsArgs(ref.arguments())

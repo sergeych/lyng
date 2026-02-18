@@ -28,7 +28,7 @@ class DestructuringVarDeclStatement(
     val isTransient: Boolean,
     override val pos: Pos,
 ) : Statement() {
-    override suspend fun execute(context: Scope): Obj {
-        return bytecodeOnly(context, "destructuring declaration")
+    override suspend fun execute(scope: Scope): Obj {
+        return bytecodeOnly(scope, "destructuring declaration")
     }
 }

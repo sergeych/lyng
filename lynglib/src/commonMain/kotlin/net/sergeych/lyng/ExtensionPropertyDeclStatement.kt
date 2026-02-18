@@ -28,7 +28,7 @@ class ExtensionPropertyDeclStatement(
 ) : Statement() {
     override val pos: Pos = startPos
 
-    override suspend fun execute(context: Scope): Obj {
-        return bytecodeOnly(context, "extension property declaration")
+    override suspend fun execute(scope: Scope): Obj {
+        return bytecodeOnly(scope, "extension property declaration")
     }
 }

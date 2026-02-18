@@ -864,7 +864,7 @@ open class Scope(
             val receiver = rec.receiver ?: thisObj
             val del = rec.delegate ?: run {
                 if (receiver is ObjInstance) {
-                    (receiver as ObjInstance).writeField(this, name, newValue)
+                    receiver.writeField(this, name, newValue)
                     return
                 }
                 raiseError("Internal error: delegated property $name has no delegate")

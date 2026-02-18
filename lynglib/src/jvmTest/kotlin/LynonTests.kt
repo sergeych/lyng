@@ -743,7 +743,7 @@ class Wallet( id, ownerKey, balance=0, createdAt=Instant.now().truncateToSecond(
             """.trimIndent()
         )
 
-        suspend fun encBits(obj: Obj): Long = ObjLynonClass.encodeAny(scope, obj).bitArray.size.toLong()
+        suspend fun encBits(obj: Obj): Long = ObjLynonClass.encodeAny(scope, obj).bitArray.size
         suspend fun encBytes(obj: Obj): Long = ObjLynonClass.encodeAny(scope, obj).bitArray.asUByteArray().size.toLong()
 
         assertEquals(54L, encBits(ObjString("Point")))

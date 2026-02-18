@@ -323,7 +323,7 @@ class Script(
             addVoidFn("assert") {
                 val cond = requiredArg<ObjBool>(0)
                 val message = if (args.size > 1)
-                    ": " + toStringOf(call(args[1] as Obj)).value
+                    ": " + toStringOf(call(args[1])).value
                 else ""
                 if (!cond.value == true)
                     raiseError(ObjAssertionFailedException(requireScope(), "Assertion failed$message"))
