@@ -1,13 +1,30 @@
+/*
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
 package net.sergeych.lyng
 
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.bridge.LyngClassBridge
+import net.sergeych.lyng.bridge.bindObject
 import net.sergeych.lyng.bridge.data
 import net.sergeych.lyng.obj.ObjInt
 import net.sergeych.lyng.obj.ObjString
+import kotlin.test.Test
+import kotlin.test.assertTrue
 
 class BridgeBindingTest {
     private data class CounterState(var count: Long)
@@ -144,5 +161,56 @@ class BridgeBindingTest {
             true
         }
         assertTrue(bindFailed)
+    }
+
+    @Test
+    fun testExternObjectBinding() = runTest {
+        val im = Script.defaultImportManager.copy()
+        im.addPackage("bridge.obj") { scope ->
+            scope.eval(
+                """
+                extern object HostObject {
+                    extern fun add(a: Int, b: Int): Int
+                    extern val status: String
+                    extern var count: Int
+                }
+                """.trimIndent()
+            )
+            scope.bindObject("HostObject") {
+                classData = "OK"
+                init { _ ->
+                    data = CounterState(5)
+                }
+                addFun("add") { _, _, args ->
+                    val a = (args.list[0] as ObjInt).value
+                    val b = (args.list[1] as ObjInt).value
+                    ObjInt.of(a + b)
+                }
+                addVal("status") { _, _ -> ObjString(classData as String) }
+                addVar(
+                    "count",
+                    get = { _, instance ->
+                        val st = (instance as net.sergeych.lyng.obj.ObjInstance).data as CounterState
+                        ObjInt.of(st.count)
+                    },
+                    set = { _, instance, value ->
+                        val st = (instance as net.sergeych.lyng.obj.ObjInstance).data as CounterState
+                        st.count = (value as ObjInt).value
+                    }
+                )
+            }
+        }
+
+        val scope = im.newStdScope()
+        scope.eval(
+            """
+            import bridge.obj
+            assertEquals(42, HostObject.add(10, 32))
+            assertEquals("OK", HostObject.status)
+            assertEquals(5, HostObject.count)
+            HostObject.count = HostObject.count + 1
+            assertEquals(6, HostObject.count)
+            """.trimIndent()
+        )
     }
 }

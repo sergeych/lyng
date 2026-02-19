@@ -123,6 +123,51 @@ object LyngClassBridge {
 }
 
 /**
+ * Entry point for Kotlin bindings to declared Lyng objects (singleton instances).
+ *
+ * Works similarly to [LyngClassBridge], but targets an already created object instance.
+ */
+object LyngObjectBridge {
+    /**
+     * Resolve a Lyng object by [objectName] and bind Kotlin implementations.
+     *
+     * @param module module name used for resolution (required when [module] scope is not provided)
+     * @param importManager import manager used to resolve the module
+     */
+    suspend fun bind(
+        objectName: String,
+        module: String? = null,
+        importManager: ImportManager = Script.defaultImportManager,
+        block: ClassBridgeBinder.() -> Unit
+    ): ObjInstance {
+        val obj = resolveObject(objectName, module, null, importManager)
+        return bind(obj, block)
+    }
+
+    /**
+     * Resolve a Lyng object within an existing [moduleScope] and bind Kotlin implementations.
+     */
+    suspend fun bind(
+        moduleScope: ModuleScope,
+        objectName: String,
+        block: ClassBridgeBinder.() -> Unit
+    ): ObjInstance {
+        val obj = resolveObject(objectName, null, moduleScope, Script.defaultImportManager)
+        return bind(obj, block)
+    }
+
+    /**
+     * Bind Kotlin implementations directly to an already resolved object [instance].
+     */
+    suspend fun bind(instance: ObjInstance, block: ClassBridgeBinder.() -> Unit): ObjInstance {
+        val binder = ObjectBridgeBinderImpl(instance)
+        binder.block()
+        binder.commit()
+        return instance
+    }
+}
+
+/**
  * Sugar for [LyngClassBridge.bind] on a module scope.
  *
  * Bound members must be declared as `extern` in Lyng.
@@ -131,6 +176,16 @@ suspend fun ModuleScope.bind(
     className: String,
     block: ClassBridgeBinder.() -> Unit
 ): ObjClass = LyngClassBridge.bind(this, className, block)
+
+/**
+ * Sugar for [LyngObjectBridge.bind] on a module scope.
+ *
+ * Bound members must be declared as `extern` in Lyng.
+ */
+suspend fun ModuleScope.bindObject(
+    objectName: String,
+    block: ClassBridgeBinder.() -> Unit
+): ObjInstance = LyngObjectBridge.bind(this, objectName, block)
 
 /** Kotlin-side data slot attached to a Lyng instance. */
 var ObjInstance.data: Any?
@@ -327,6 +382,214 @@ private class ClassBridgeBinderImpl(
     }
 }
 
+private class ObjectBridgeBinderImpl(
+    private val instance: ObjInstance
+) : ClassBridgeBinder {
+    private val cls: ObjClass = instance.objClass
+    private val initHooks = mutableListOf<suspend (ScopeFacade, ObjInstance) -> Unit>()
+
+    override var classData: Any?
+        get() = cls.kotlinClassData
+        set(value) { cls.kotlinClassData = value }
+
+    override fun init(block: suspend BridgeInstanceContext.(ScopeFacade) -> Unit) {
+        initHooks.add { scope, inst ->
+            val ctx = BridgeInstanceContextImpl(inst)
+            ctx.block(scope)
+        }
+    }
+
+    override fun initWithInstance(block: suspend (ScopeFacade, Obj) -> Unit) {
+        initHooks.add { scope, inst ->
+            block(scope, inst)
+        }
+    }
+
+    override fun addFun(name: String, impl: suspend (ScopeFacade, Obj, Arguments) -> Obj) {
+        val target = findMember(name)
+        val callable = ObjExternCallable.fromBridge {
+            impl(this, thisObj, args)
+        }
+        val methodId = cls.ensureMethodIdForBridge(name, target.record)
+        val newRecord = target.record.copy(
+            value = callable,
+            type = ObjRecord.Type.Fun,
+            methodId = methodId
+        )
+        replaceMember(target, newRecord)
+        updateInstanceMember(target, newRecord)
+    }
+
+    override fun addVal(name: String, impl: suspend (ScopeFacade, Obj) -> Obj) {
+        val target = findMember(name)
+        if (target.record.isMutable) {
+            throw ScriptError(Pos.builtIn, "extern val $name is mutable in class ${cls.className}")
+        }
+        val getter = ObjExternCallable.fromBridge {
+            impl(this, thisObj)
+        }
+        val prop = ObjProperty(name, getter, null)
+        val isFieldLike = target.record.type == ObjRecord.Type.Field ||
+            target.record.type == ObjRecord.Type.ConstructorField
+        val newRecord = if (isFieldLike) {
+            removeFieldInitializersFor(name)
+            target.record.copy(
+                value = prop,
+                type = target.record.type,
+                fieldId = target.record.fieldId,
+                methodId = target.record.methodId
+            )
+        } else {
+            val methodId = cls.ensureMethodIdForBridge(name, target.record)
+            target.record.copy(
+                value = prop,
+                type = ObjRecord.Type.Property,
+                methodId = methodId,
+                fieldId = null
+            )
+        }
+        replaceMember(target, newRecord)
+        updateInstanceMember(target, newRecord)
+    }
+
+    override fun addVar(
+        name: String,
+        get: suspend (ScopeFacade, Obj) -> Obj,
+        set: suspend (ScopeFacade, Obj, Obj) -> Unit
+    ) {
+        val target = findMember(name)
+        if (!target.record.isMutable) {
+            throw ScriptError(Pos.builtIn, "extern var $name is readonly in class ${cls.className}")
+        }
+        val getter = ObjExternCallable.fromBridge {
+            get(this, thisObj)
+        }
+        val setter = ObjExternCallable.fromBridge {
+            val value = requiredArg<Obj>(0)
+            set(this, thisObj, value)
+            ObjVoid
+        }
+        val prop = ObjProperty(name, getter, setter)
+        val isFieldLike = target.record.type == ObjRecord.Type.Field ||
+            target.record.type == ObjRecord.Type.ConstructorField
+        val newRecord = if (isFieldLike) {
+            removeFieldInitializersFor(name)
+            target.record.copy(
+                value = prop,
+                type = target.record.type,
+                fieldId = target.record.fieldId,
+                methodId = target.record.methodId
+            )
+        } else {
+            val methodId = cls.ensureMethodIdForBridge(name, target.record)
+            target.record.copy(
+                value = prop,
+                type = ObjRecord.Type.Property,
+                methodId = methodId,
+                fieldId = null
+            )
+        }
+        replaceMember(target, newRecord)
+        updateInstanceMember(target, newRecord)
+    }
+
+    suspend fun commit() {
+        if (initHooks.isNotEmpty()) {
+            val target = cls.bridgeInitHooks ?: mutableListOf<suspend (ScopeFacade, ObjInstance) -> Unit>().also {
+                cls.bridgeInitHooks = it
+            }
+            target.addAll(initHooks)
+            val facade = instance.instanceScope.asFacade()
+            for (hook in initHooks) {
+                hook(facade, instance)
+            }
+        }
+    }
+
+    private fun replaceMember(target: MemberTarget, newRecord: ObjRecord) {
+        when (target.kind) {
+            MemberKind.Instance -> {
+                cls.replaceMemberForBridge(target.name, newRecord)
+                if (target.mirrorClassScope && cls.classScope?.objects?.containsKey(target.name) == true) {
+                    cls.replaceClassScopeMemberForBridge(target.name, newRecord)
+                }
+            }
+            MemberKind.Static -> cls.replaceClassScopeMemberForBridge(target.name, newRecord)
+        }
+    }
+
+    private fun updateInstanceMember(target: MemberTarget, newRecord: ObjRecord) {
+        val key = instanceStorageKey(target, newRecord) ?: return
+        ensureInstanceSlotCapacity()
+        instance.instanceScope.objects[key] = newRecord
+        cls.fieldSlotForKey(key)?.let { slot ->
+            instance.setFieldSlotRecord(slot.slot, newRecord)
+        }
+        cls.methodSlotForKey(key)?.let { slot ->
+            instance.setMethodSlotRecord(slot.slot, newRecord)
+        }
+    }
+
+    private fun instanceStorageKey(target: MemberTarget, rec: ObjRecord): String? = when (target.kind) {
+        MemberKind.Instance -> {
+            if (rec.visibility == Visibility.Private ||
+                rec.type == ObjRecord.Type.Field ||
+                rec.type == ObjRecord.Type.ConstructorField ||
+                rec.type == ObjRecord.Type.Delegated) {
+                cls.mangledName(target.name)
+            } else {
+                target.name
+            }
+        }
+        MemberKind.Static -> {
+            if (rec.type != ObjRecord.Type.Fun &&
+                rec.type != ObjRecord.Type.Property &&
+                rec.type != ObjRecord.Type.Delegated) {
+                null
+            } else if (rec.visibility == Visibility.Private || rec.type == ObjRecord.Type.Delegated) {
+                cls.mangledName(target.name)
+            } else {
+                target.name
+            }
+        }
+    }
+
+    private fun ensureInstanceSlotCapacity() {
+        val fieldCount = cls.fieldSlotCount()
+        if (instance.fieldSlots.size < fieldCount) {
+            val newSlots = arrayOfNulls<ObjRecord>(fieldCount)
+            instance.fieldSlots.copyInto(newSlots, 0, 0, instance.fieldSlots.size)
+            instance.fieldSlots = newSlots
+        }
+        val methodCount = cls.methodSlotCount()
+        if (instance.methodSlots.size < methodCount) {
+            val newSlots = arrayOfNulls<ObjRecord>(methodCount)
+            instance.methodSlots.copyInto(newSlots, 0, 0, instance.methodSlots.size)
+            instance.methodSlots = newSlots
+        }
+    }
+
+    private fun findMember(name: String): MemberTarget {
+        val inst = cls.members[name]
+        val stat = cls.classScope?.objects?.get(name)
+        if (inst != null) {
+            return MemberTarget(name, inst, MemberKind.Instance, mirrorClassScope = stat != null)
+        }
+        if (stat != null) return MemberTarget(name, stat, MemberKind.Static)
+        throw ScriptError(Pos.builtIn, "extern member $name not found in class ${cls.className}")
+    }
+
+    private fun removeFieldInitializersFor(name: String) {
+        if (cls.instanceInitializers.isEmpty()) return
+        val storageName = cls.mangledName(name)
+        cls.instanceInitializers.removeAll { init ->
+            val stmt = init as? Statement ?: return@removeAll false
+            val original = (stmt as? BytecodeStatement)?.original ?: stmt
+            original is InstanceFieldInitStatement && original.storageName == storageName
+        }
+    }
+}
+
 private suspend fun resolveClass(
     className: String,
     module: String?,
@@ -348,4 +611,27 @@ private suspend fun resolveClass(
         if (cls != null) return cls
     }
     throw ScriptError(Pos.builtIn, "class $className not found in module ${scope.packageName}")
+}
+
+private suspend fun resolveObject(
+    objectName: String,
+    module: String?,
+    moduleScope: ModuleScope?,
+    importManager: ImportManager
+): ObjInstance {
+    val scope = moduleScope ?: run {
+        if (module == null) {
+            throw ScriptError(Pos.builtIn, "module is required to resolve $objectName")
+        }
+        importManager.createModuleScope(Pos.builtIn, module)
+    }
+    val rec = scope.get(objectName)
+    val direct = rec?.value as? ObjInstance
+    if (direct != null) return direct
+    if (objectName.contains('.')) {
+        val resolved = scope.resolveQualifiedIdentifier(objectName)
+        val inst = resolved as? ObjInstance
+        if (inst != null) return inst
+    }
+    throw ScriptError(Pos.builtIn, "object $objectName not found in module ${scope.packageName}")
 }
