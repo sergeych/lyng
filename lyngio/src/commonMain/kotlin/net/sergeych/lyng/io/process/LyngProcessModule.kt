@@ -21,10 +21,10 @@ import kotlinx.coroutines.flow.Flow
 import net.sergeych.lyng.ModuleScope
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.ScopeFacade
-import net.sergeych.lyng.requireScope
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
+import net.sergeych.lyng.requireScope
 import net.sergeych.lyngio.process.*
 import net.sergeych.lyngio.process.security.ProcessAccessDeniedException
 import net.sergeych.lyngio.process.security.ProcessAccessPolicy
@@ -210,9 +210,9 @@ private suspend inline fun ScopeFacade.processGuard(crossinline block: suspend (
     return try {
         block()
     } catch (e: ProcessAccessDeniedException) {
-        raiseError(ObjIllegalOperationException(requireScope(), e.reasonDetail ?: "process access denied"))
+        raiseIllegalOperation(e.reasonDetail ?: "process access denied")
     } catch (e: Exception) {
-        raiseError(ObjIllegalOperationException(requireScope(), e.message ?: "process error"))
+        raiseIllegalOperation(e.message ?: "process error")
     }
 }
 

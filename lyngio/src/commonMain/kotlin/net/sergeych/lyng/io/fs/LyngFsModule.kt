@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,10 +24,10 @@ package net.sergeych.lyng.io.fs
 import net.sergeych.lyng.ModuleScope
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.ScopeFacade
-import net.sergeych.lyng.requireScope
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
+import net.sergeych.lyng.requireScope
 import net.sergeych.lyngio.fs.LyngFS
 import net.sergeych.lyngio.fs.LyngFs
 import net.sergeych.lyngio.fs.LyngPath
@@ -478,7 +478,7 @@ private suspend inline fun ScopeFacade.fsGuard(crossinline block: suspend () -> 
     return try {
         block()
     } catch (e: AccessDeniedException) {
-        raiseError(ObjIllegalOperationException(requireScope(), e.reasonDetail ?: "access denied"))
+        raiseIllegalOperation(e.reasonDetail ?: "access denied")
     }
 }
 

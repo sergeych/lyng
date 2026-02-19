@@ -26,7 +26,6 @@ import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.stdlib_included.rootLyng
-import net.sergeych.lyng.bridge.LyngClassBridge
 import net.sergeych.lynon.ObjLynonClass
 import net.sergeych.mp_tools.globalDefer
 import kotlin.math.*
@@ -326,7 +325,7 @@ class Script(
                     ": " + toStringOf(call(args[1])).value
                 else ""
                 if (!cond.value == true)
-                    raiseError(ObjAssertionFailedException(requireScope(), "Assertion failed$message"))
+                    raiseAssertionFailed("Assertion failed$message")
             }
 
             fun unwrapCompareArg(value: Obj): Obj {
@@ -342,12 +341,7 @@ class Script(
                 val a = unwrapCompareArg(requiredArg(0))
                 val b = unwrapCompareArg(requiredArg(1))
                 if (a.compareTo(requireScope(), b) != 0) {
-                    raiseError(
-                        ObjAssertionFailedException(
-                            requireScope(),
-                            "Assertion failed: ${inspect(a)} == ${inspect(b)}"
-                        )
-                    )
+                    raiseAssertionFailed("Assertion failed: ${inspect(a)} == ${inspect(b)}")
                 }
             }
             // alias used in tests
@@ -355,23 +349,13 @@ class Script(
                 val a = unwrapCompareArg(requiredArg(0))
                 val b = unwrapCompareArg(requiredArg(1))
                 if (a.compareTo(requireScope(), b) != 0)
-                    raiseError(
-                        ObjAssertionFailedException(
-                            requireScope(),
-                            "Assertion failed: ${inspect(a)} == ${inspect(b)}"
-                        )
-                    )
+                    raiseAssertionFailed("Assertion failed: ${inspect(a)} == ${inspect(b)}")
             }
             addVoidFn("assertNotEquals") {
                 val a = unwrapCompareArg(requiredArg(0))
                 val b = unwrapCompareArg(requiredArg(1))
                 if (a.compareTo(requireScope(), b) == 0)
-                    raiseError(
-                        ObjAssertionFailedException(
-                            requireScope(),
-                            "Assertion failed: ${inspect(a)} != ${inspect(b)}"
-                        )
-                    )
+                    raiseAssertionFailed("Assertion failed: ${inspect(a)} != ${inspect(b)}")
             }
             addFnDoc(
                 "assertThrows",
@@ -409,12 +393,7 @@ class Script(
                 } catch (_: ScriptError) {
                     ObjNull
                 }
-                if (result == null) raiseError(
-                    ObjAssertionFailedException(
-                        requireScope(),
-                        "Expected exception but nothing was thrown"
-                    )
-                )
+                if (result == null) raiseAssertionFailed("Expected exception but nothing was thrown")
                 expectedClass?.let {
                     if (!result.isInstanceOf(it)) {
                         val actual = if (result is ObjException) result.exceptionClass else result.objClass

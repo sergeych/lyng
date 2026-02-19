@@ -114,6 +114,17 @@ scope.eval("val y = inc(41); log('Answer:', y)")
 
 You can register multiple names (aliases) at once: `addFn<ObjInt>("inc", "increment") { ... }`.
 
+Scope-backed Kotlin lambdas receive a `ScopeFacade` (not a full `Scope`). For migration and convenience, these utilities are available on the facade:
+
+- Access: `args`, `pos`, `thisObj`, `get(name)`
+- Invocation: `call(...)`, `resolve(...)`, `assign(...)`, `toStringOf(...)`, `inspect(...)`, `trace(...)`
+- Args helpers: `requiredArg<T>()`, `requireOnlyArg<T>()`, `requireExactCount(...)`, `requireNoArgs()`, `thisAs<T>()`
+- Errors: `raiseError(...)`, `raiseClassCastError(...)`, `raiseIllegalArgument(...)`, `raiseIllegalState(...)`, `raiseNoSuchElement(...)`,
+  `raiseSymbolNotFound(...)`, `raiseNotImplemented(...)`, `raiseNPE()`, `raiseIndexOutOfBounds(...)`, `raiseIllegalAssignment(...)`,
+  `raiseUnset(...)`, `raiseNotFound(...)`, `raiseAssertionFailed(...)`, `raiseIllegalOperation(...)`, `raiseIterationFinished()`
+
+If you truly need the full `Scope` (e.g., for low-level interop), use `requireScope()` explicitly.
+
 ### 5) Add Kotlin‑backed fields
 
 If you need a simple field (with a value) instead of a computed property, use `createField`. This adds a field to the class that will be present in all its instances.

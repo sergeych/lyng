@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,7 +39,7 @@ class ObjArrayIterator(val array: Obj) : Obj() {
                     val self = thisAs<ObjArrayIterator>()
                     if (self.nextIndex < self.lastIndex) {
                         self.array.invokeInstanceMethod(requireScope(), "getAt", (self.nextIndex++).toObj())
-                    } else raiseError(ObjIterationFinishedException(requireScope()))
+                    } else raiseIterationFinished()
                 }
                 addFn("hasNext") {
                     val self = thisAs<ObjArrayIterator>()

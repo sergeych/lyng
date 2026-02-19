@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Sergey S. Chernov
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,13 +12,12 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 package net.sergeych.lyng
 
-import net.sergeych.lyng.obj.Obj
-import net.sergeych.lyng.obj.ObjRecord
-import net.sergeych.lyng.obj.ObjString
+import net.sergeych.lyng.obj.*
 
 /**
  * Limited facade for Kotlin bridge callables.
@@ -108,3 +107,29 @@ inline fun <reified T : Obj> ScopeFacade.thisAs(): T {
 
 fun ScopeFacade.requireScope(): Scope =
     (this as? ScopeBridge)?.scope ?: raiseIllegalState("ScopeFacade requires ScopeBridge")
+
+fun ScopeFacade.raiseNPE(): Nothing = requireScope().raiseNPE()
+
+fun ScopeFacade.raiseIndexOutOfBounds(message: String = "Index out of bounds"): Nothing =
+    requireScope().raiseIndexOutOfBounds(message)
+
+fun ScopeFacade.raiseIllegalAssignment(message: String): Nothing =
+    requireScope().raiseIllegalAssignment(message)
+
+fun ScopeFacade.raiseUnset(message: String = "property is unset (not initialized)"): Nothing =
+    requireScope().raiseUnset(message)
+
+fun ScopeFacade.raiseNotFound(message: String = "not found"): Nothing =
+    requireScope().raiseNotFound(message)
+
+fun ScopeFacade.raiseError(obj: Obj, pos: Pos = this.pos, message: String): Nothing =
+    requireScope().raiseError(obj, pos, message)
+
+fun ScopeFacade.raiseAssertionFailed(message: String): Nothing =
+    raiseError(ObjAssertionFailedException(requireScope(), message))
+
+fun ScopeFacade.raiseIllegalOperation(message: String = "Operation is illegal"): Nothing =
+    raiseError(ObjIllegalOperationException(requireScope(), message))
+
+fun ScopeFacade.raiseIterationFinished(): Nothing =
+    raiseError(ObjIterationFinishedException(requireScope()))
