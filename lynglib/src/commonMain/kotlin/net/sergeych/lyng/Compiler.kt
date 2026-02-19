@@ -209,6 +209,9 @@ class Compiler(
                     if (plan.slots.containsKey(name)) continue
                     declareSlotNameIn(plan, name, record.isMutable, record.type == ObjRecord.Type.Delegated)
                     scopeSeedNames.add(name)
+                    if (record.typeDecl != null && nameTypeDecl[name] == null) {
+                        nameTypeDecl[name] = record.typeDecl
+                    }
                     val instance = record.value as? ObjInstance
                     if (instance != null && nameObjClass[name] == null) {
                         nameObjClass[name] = instance.objClass
@@ -285,6 +288,12 @@ class Compiler(
                 record.type == ObjRecord.Type.Delegated
             )
             scopeSeedNames.add(name)
+            if (record.typeDecl != null && nameTypeDecl[name] == null) {
+                nameTypeDecl[name] = record.typeDecl
+            }
+            if (record.typeDecl != null) {
+                slotTypeDeclByScopeId.getOrPut(plan.id) { mutableMapOf() }[slotIndex] = record.typeDecl
+            }
         }
     }
 
@@ -843,6 +852,7 @@ class Compiler(
             visibility = Visibility.Public,
             initializer = initStmt,
             isTransient = false,
+            typeDecl = null,
             slotIndex = slotIndex,
             scopeId = scopeId,
             startPos = nameToken.pos,
@@ -1180,6 +1190,25 @@ class Compiler(
         }
     }
 
+    private fun seedNameTypeDeclFromScope(scope: Scope) {
+        var current: Scope? = scope
+        while (current != null) {
+            for ((name, record) in current.objects) {
+                if (!record.visibility.isPublic) continue
+                if (record.typeDecl != null && nameTypeDecl[name] == null) {
+                    nameTypeDecl[name] = record.typeDecl
+                }
+            }
+            for ((name, slotIndex) in current.slotNameToIndexSnapshot()) {
+                val record = current.getSlotRecord(slotIndex)
+                if (record.typeDecl != null && nameTypeDecl[name] == null) {
+                    nameTypeDecl[name] = record.typeDecl
+                }
+            }
+            current = current.parent
+        }
+    }
+
     private fun resolveImportBinding(name: String, pos: Pos): ImportBindingResolution? {
         val seedRecord = findSeedScopeRecord(name)?.takeIf { it.visibility.isPublic }
         val rootRecord = importManager.rootScope.objects[name]?.takeIf { it.visibility.isPublic }
@@ -1387,6 +1416,7 @@ class Compiler(
                 returnType = transform(decl.returnType),
                 nullable = decl.isNullable
             )
+            is TypeDecl.Ellipsis -> TypeDecl.Ellipsis(transform(decl.elementType), decl.isNullable)
             is TypeDecl.Union -> TypeDecl.Union(decl.options.map { transform(it) }, decl.isNullable)
             is TypeDecl.Intersection -> TypeDecl.Intersection(decl.options.map { transform(it) }, decl.isNullable)
             else -> decl
@@ -1515,6 +1545,7 @@ class Compiler(
                 declareSlotNameIn(plan, "$~", isMutable = true, isDelegated = false)
             }
             seedScope?.let { seedNameObjClassFromScope(it) }
+            seedScope?.let { seedNameTypeDeclFromScope(it) }
             seedNameObjClassFromScope(importManager.rootScope)
             if (shouldSeedDefaultStdlib()) {
                 val stdlib = importManager.prepareImport(start, "lyng.stdlib", null)
@@ -2211,6 +2242,7 @@ class Compiler(
                     stmt.visibility,
                     init,
                     stmt.isTransient,
+                    stmt.typeDecl,
                     stmt.slotIndex,
                     stmt.scopeId,
                     stmt.pos,
@@ -3475,6 +3507,10 @@ class Compiler(
                 val ret = expandTypeAliases(type.returnType, pos, seen)
                 TypeDecl.Function(receiver, params, ret, type.nullable)
             }
+            is TypeDecl.Ellipsis -> {
+                val elem = expandTypeAliases(type.elementType, pos, seen)
+                TypeDecl.Ellipsis(elem, type.nullable)
+            }
             is TypeDecl.Union -> {
                 val options = type.options.map { expandTypeAliases(it, pos, seen) }
                 TypeDecl.Union(options, type.isNullable)
@@ -3560,6 +3596,10 @@ class Compiler(
                 val ret = substituteTypeAliasTypeVars(type.returnType, bindings)
                 TypeDecl.Function(receiver, params, ret, type.nullable)
             }
+            is TypeDecl.Ellipsis -> {
+                val elem = substituteTypeAliasTypeVars(type.elementType, bindings)
+                TypeDecl.Ellipsis(elem, type.nullable)
+            }
             is TypeDecl.Union -> {
                 val options = type.options.map { substituteTypeAliasTypeVars(it, bindings) }
                 TypeDecl.Union(options, type.isNullable)
@@ -3578,6 +3618,7 @@ class Compiler(
             TypeDecl.TypeAny -> TypeDecl.TypeNullableAny
             TypeDecl.TypeNullableAny -> type
             is TypeDecl.Function -> type.copy(nullable = true)
+            is TypeDecl.Ellipsis -> type.copy(nullable = true)
             is TypeDecl.TypeVar -> type.copy(nullable = true)
             is TypeDecl.Union -> type.copy(nullable = true)
             is TypeDecl.Intersection -> type.copy(nullable = true)
@@ -3634,14 +3675,41 @@ class Compiler(
 
         fun parseParamTypes(): List<Pair<TypeDecl, MiniTypeRef>> {
             val params = mutableListOf<Pair<TypeDecl, MiniTypeRef>>()
+            var seenEllipsis = false
             cc.skipWsTokens()
             if (cc.peekNextNonWhitespace().type == Token.Type.RPAREN) {
                 cc.nextNonWhitespace()
                 return params
             }
             while (true) {
-                val (paramDecl, paramMini) = parseTypeExpressionWithMini()
-                params += paramDecl to paramMini
+                cc.skipWsTokens()
+                val next = cc.peekNextNonWhitespace()
+                if (next.type == Token.Type.ELLIPSIS) {
+                    val ell = cc.nextNonWhitespace()
+                    if (seenEllipsis) {
+                        ell.raiseSyntax("function type can contain only one ellipsis")
+                    }
+                    seenEllipsis = true
+                    val paramDecl = TypeDecl.Ellipsis(TypeDecl.TypeAny)
+                    val mini = MiniTypeName(
+                        MiniRange(ell.pos, ell.pos),
+                        listOf(MiniTypeName.Segment("Object", MiniRange(ell.pos, ell.pos))),
+                        nullable = false
+                    )
+                    params += paramDecl to mini
+                } else {
+                    val (paramDecl, paramMini) = parseTypeExpressionWithMini()
+                    val finalDecl = if (cc.skipTokenOfType(Token.Type.ELLIPSIS, isOptional = true)) {
+                        if (seenEllipsis) {
+                            cc.current().raiseSyntax("function type can contain only one ellipsis")
+                        }
+                        seenEllipsis = true
+                        TypeDecl.Ellipsis(paramDecl)
+                    } else {
+                        paramDecl
+                    }
+                    params += finalDecl to paramMini
+                }
                 val sep = cc.nextNonWhitespace()
                 when (sep.type) {
                     Token.Type.COMMA -> continue
@@ -3952,6 +4020,7 @@ class Compiler(
         is TypeDecl.Simple -> typeDecl.name
         is TypeDecl.Generic -> typeDecl.name
         is TypeDecl.Function -> "Callable"
+        is TypeDecl.Ellipsis -> "${typeDeclName(typeDecl.elementType)}..."
         is TypeDecl.TypeVar -> typeDecl.name
         is TypeDecl.Union -> typeDecl.options.joinToString(" | ") { typeDeclName(it) }
         is TypeDecl.Intersection -> typeDecl.options.joinToString(" & ") { typeDeclName(it) }
@@ -4129,6 +4198,7 @@ class Compiler(
         val nullable = type.isNullable
         val base = if (!nullable) type else when (type) {
             is TypeDecl.Function -> type.copy(nullable = false)
+            is TypeDecl.Ellipsis -> type.copy(nullable = false)
             is TypeDecl.TypeVar -> type.copy(nullable = false)
             is TypeDecl.Union -> type.copy(nullable = false)
             is TypeDecl.Intersection -> type.copy(nullable = false)
@@ -4145,6 +4215,7 @@ class Compiler(
         is TypeDecl.Simple -> "S:${type.name}"
         is TypeDecl.Generic -> "G:${type.name}<${type.args.joinToString(",") { typeDeclKey(it) }}>"
         is TypeDecl.Function -> "F:(${type.params.joinToString(",") { typeDeclKey(it) }})->${typeDeclKey(type.returnType)}"
+        is TypeDecl.Ellipsis -> "E:${typeDeclKey(type.elementType)}"
         is TypeDecl.TypeVar -> "V:${type.name}"
         is TypeDecl.Union -> "U:${type.options.joinToString("|") { typeDeclKey(it) }}"
         is TypeDecl.Intersection -> "I:${type.options.joinToString("&") { typeDeclKey(it) }}"
@@ -4671,6 +4742,144 @@ class Compiler(
         }
     }
 
+    private fun checkFunctionTypeCallArity(
+        target: ObjRef,
+        args: List<ParsedArgument>,
+        pos: Pos
+    ) {
+        val decl = (resolveReceiverTypeDecl(target) as? TypeDecl.Function)
+            ?: seedTypeDeclFromRef(target) as? TypeDecl.Function
+            ?: return
+        if (args.any { it.isSplat }) return
+        val actual = args.size
+        val receiverCount = if (decl.receiver != null) 1 else 0
+        val paramList = mutableListOf<TypeDecl>()
+        decl.receiver?.let { paramList += it }
+        paramList += decl.params
+        val ellipsisIndex = paramList.indexOfFirst { it is TypeDecl.Ellipsis }
+        if (ellipsisIndex < 0) {
+            val expected = paramList.size
+            if (actual != expected) {
+                throw ScriptError(pos, "expected $expected arguments, got $actual")
+            }
+            return
+        }
+        val headCount = ellipsisIndex
+        val tailCount = paramList.size - ellipsisIndex - 1
+        val minArgs = headCount + tailCount
+        if (actual < minArgs) {
+            throw ScriptError(pos, "expected at least $minArgs arguments, got $actual")
+        }
+    }
+
+    private fun seedTypeDeclFromRef(ref: ObjRef): TypeDecl? {
+        val name = when (ref) {
+            is LocalVarRef -> ref.name
+            is LocalSlotRef -> ref.name
+            is FastLocalVarRef -> ref.name
+            else -> null
+        } ?: return null
+        seedScope?.getLocalRecordDirect(name)?.typeDecl?.let { return it }
+        return seedScope?.get(name)?.typeDecl
+    }
+
+    private fun checkFunctionTypeCallTypes(
+        target: ObjRef,
+        args: List<ParsedArgument>,
+        pos: Pos
+    ) {
+        val decl = (resolveReceiverTypeDecl(target) as? TypeDecl.Function)
+            ?: seedTypeDeclFromRef(target) as? TypeDecl.Function
+            ?: return
+        val paramList = mutableListOf<TypeDecl>()
+        decl.receiver?.let { paramList += it }
+        paramList += decl.params
+        if (paramList.isEmpty()) return
+        val ellipsisIndex = paramList.indexOfFirst { it is TypeDecl.Ellipsis }
+        fun argTypeDecl(arg: ParsedArgument): TypeDecl? {
+            val stmt = arg.value as? ExpressionStatement ?: return null
+            val ref = stmt.ref
+            return inferTypeDeclFromRef(ref)
+                ?: inferObjClassFromRef(ref)?.let { TypeDecl.Simple(it.className, false) }
+        }
+        fun typeDeclSubtypeOf(arg: TypeDecl, param: TypeDecl): Boolean {
+            if (param == TypeDecl.TypeAny || param == TypeDecl.TypeNullableAny) return true
+            val (argBase, argNullable) = stripNullable(arg)
+            val (paramBase, paramNullable) = stripNullable(param)
+            if (argNullable && !paramNullable) return false
+            if (paramBase == TypeDecl.TypeAny) return true
+            if (paramBase is TypeDecl.TypeVar) return true
+            if (argBase is TypeDecl.TypeVar) return true
+            if (paramBase is TypeDecl.Simple && (paramBase.name == "Object" || paramBase.name == "Obj")) return true
+            if (argBase is TypeDecl.Ellipsis) return typeDeclSubtypeOf(argBase.elementType, paramBase)
+            if (paramBase is TypeDecl.Ellipsis) return typeDeclSubtypeOf(argBase, paramBase.elementType)
+            return when (argBase) {
+                is TypeDecl.Union -> argBase.options.all { typeDeclSubtypeOf(it, paramBase) }
+                is TypeDecl.Intersection -> argBase.options.any { typeDeclSubtypeOf(it, paramBase) }
+                else -> when (paramBase) {
+                    is TypeDecl.Union -> paramBase.options.any { typeDeclSubtypeOf(argBase, it) }
+                    is TypeDecl.Intersection -> paramBase.options.all { typeDeclSubtypeOf(argBase, it) }
+                    else -> {
+                        val argClass = resolveTypeDeclObjClass(argBase) ?: return false
+                        val paramClass = resolveTypeDeclObjClass(paramBase) ?: return false
+                        argClass == paramClass || argClass.allParentsSet.contains(paramClass)
+                    }
+                }
+            }
+        }
+        fun fail(argPos: Pos, expected: TypeDecl, got: TypeDecl) {
+            throw ScriptError(argPos, "argument type ${typeDeclName(got)} does not match ${typeDeclName(expected)}")
+        }
+        if (ellipsisIndex < 0) {
+            val limit = minOf(paramList.size, args.size)
+            for (i in 0 until limit) {
+                val arg = args[i]
+                val argType = argTypeDecl(arg) ?: continue
+                val paramType = paramList[i]
+                if (!typeDeclSubtypeOf(argType, paramType)) {
+                    fail(arg.pos, paramType, argType)
+                }
+            }
+            return
+        }
+        val headCount = ellipsisIndex
+        val tailCount = paramList.size - ellipsisIndex - 1
+        val ellipsisType = paramList[ellipsisIndex] as TypeDecl.Ellipsis
+        val argCount = args.size
+        val headLimit = minOf(headCount, argCount)
+        for (i in 0 until headLimit) {
+            val arg = args[i]
+            val argType = argTypeDecl(arg) ?: continue
+            val paramType = paramList[i]
+            if (!typeDeclSubtypeOf(argType, paramType)) {
+                fail(arg.pos, paramType, argType)
+            }
+        }
+        val tailStartArg = maxOf(headCount, argCount - tailCount)
+        for (i in tailStartArg until argCount) {
+            val arg = args[i]
+            val paramType = paramList[paramList.size - (argCount - i)]
+            val argType = argTypeDecl(arg) ?: continue
+            if (!typeDeclSubtypeOf(argType, paramType)) {
+                fail(arg.pos, paramType, argType)
+            }
+        }
+        val ellipsisArgEnd = argCount - tailCount
+        for (i in headCount until ellipsisArgEnd) {
+            val arg = args[i]
+            val argType = if (arg.isSplat) {
+                val stmt = arg.value as? ExpressionStatement
+                val ref = stmt?.ref
+                ref?.let { inferElementTypeFromSpread(it) }
+            } else {
+                argTypeDecl(arg)
+            } ?: continue
+            if (!typeDeclSubtypeOf(argType, ellipsisType.elementType)) {
+                fail(arg.pos, ellipsisType.elementType, argType)
+            }
+        }
+    }
+
     private fun collectTypeVarBindings(
         paramType: TypeDecl,
         argType: TypeDecl,
@@ -4739,10 +4948,11 @@ class Compiler(
             TypeDecl.TypeAny, TypeDecl.TypeNullableAny -> true
             is TypeDecl.Union -> argType.options.all { typeDeclSatisfiesBound(it, bound) }
             is TypeDecl.Intersection -> argType.options.all { typeDeclSatisfiesBound(it, bound) }
+            is TypeDecl.Ellipsis -> typeDeclSatisfiesBound(argType.elementType, bound)
             else -> when (bound) {
                 is TypeDecl.Union -> bound.options.any { typeDeclSatisfiesBound(argType, it) }
                 is TypeDecl.Intersection -> bound.options.all { typeDeclSatisfiesBound(argType, it) }
-                is TypeDecl.Simple, is TypeDecl.Generic, is TypeDecl.Function -> {
+                is TypeDecl.Simple, is TypeDecl.Generic, is TypeDecl.Function, is TypeDecl.Ellipsis -> {
                     val argClass = resolveTypeDeclObjClass(argType) ?: return false
                     val boundClass = resolveTypeDeclObjClass(bound) ?: return false
                     argClass == boundClass || argClass.allParentsSet.contains(boundClass)
@@ -5122,6 +5332,8 @@ class Compiler(
                         receiverTypeName
                     )
                 } else {
+                    checkFunctionTypeCallArity(left, args, left.pos())
+                    checkFunctionTypeCallTypes(left, args, left.pos())
                     checkGenericBoundsAtCall(left.name, args, left.pos())
                     CallRef(left, args, detectedBlockArgument, isOptional)
                 }
@@ -5144,6 +5356,8 @@ class Compiler(
                         receiverTypeName
                     )
                 } else {
+                    checkFunctionTypeCallArity(left, args, left.pos())
+                    checkFunctionTypeCallTypes(left, args, left.pos())
                     checkGenericBoundsAtCall(left.name, args, left.pos())
                     CallRef(left, args, detectedBlockArgument, isOptional)
                 }
@@ -7643,6 +7857,7 @@ class Compiler(
             is TypeDecl.Simple -> type.name
             is TypeDecl.Generic -> type.name
             is TypeDecl.Function -> "Callable"
+            is TypeDecl.Ellipsis -> return resolveTypeDeclObjClass(type.elementType)
             is TypeDecl.TypeVar -> return null
             is TypeDecl.Union -> return null
             is TypeDecl.Intersection -> return null
@@ -8206,12 +8421,18 @@ class Compiler(
                 }
                 nameObjClass[name] = initObjClass
             }
+            val declaredType = if (varTypeDecl == TypeDecl.TypeAny || varTypeDecl == TypeDecl.TypeNullableAny) {
+                null
+            } else {
+                varTypeDecl
+            }
             return VarDeclStatement(
                 name,
                 isMutable,
                 visibility,
                 initialExpression,
                 isTransient,
+                declaredType,
                 slotIndex,
                 scopeId,
                 start,

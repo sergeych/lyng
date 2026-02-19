@@ -2380,7 +2380,8 @@ class CmdDeclLocal(internal val constId: Int, internal val slot: Int) : Cmd() {
                     decl.isMutable,
                     decl.visibility,
                     isTransient = decl.isTransient,
-                    type = ObjRecord.Type.Other
+                    type = ObjRecord.Type.Other,
+                    typeDecl = decl.typeDecl
                 )
             )
             return
@@ -2392,7 +2393,8 @@ class CmdDeclLocal(internal val constId: Int, internal val slot: Int) : Cmd() {
             decl.isMutable,
             decl.visibility,
             isTransient = decl.isTransient,
-            type = ObjRecord.Type.Other
+            type = ObjRecord.Type.Other,
+            typeDecl = decl.typeDecl
         )
         val moduleScope = frame.scope as? ModuleScope
         if (moduleScope != null) {

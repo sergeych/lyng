@@ -34,6 +34,11 @@ Valid examples:
 
 Ellipsis are used to declare variadic arguments. It basically means "all the arguments available here". It means, ellipsis argument could be in any part of the list, being, end or middle, but there could be only one ellipsis argument and it must not have default value, its default value is always `[]`, en empty list.
 
+Ellipsis can also appear in **function types** to denote a variadic position:
+
+    var f: (Int, Object..., String)->Real
+    var anyArgs: (...)->Int   // shorthand for (Object...)->Int
+
 Ellipsis argument receives what is left from arguments after processing regular one that could be before or after.
 
 Ellipsis could be a first argument:

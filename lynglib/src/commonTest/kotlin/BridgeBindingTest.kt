@@ -213,4 +213,18 @@ class BridgeBindingTest {
             """.trimIndent()
         )
     }
+
+//    @Test
+//    fun testGlobalBindingsProperty() = runTest {
+//        eval("""
+//            val D: ()->Void = dynamic {
+//                get { name ->
+//                    {
+//                        args -> "name: "+name+" args="+args
+//                    }
+//                }
+//            }
+//            assertEquals("name: foo args=[42,bar]", D.foo(42, "bar"))
+//        """.trimIndent())
+//    }
 }

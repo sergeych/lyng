@@ -208,6 +208,7 @@ class BytecodeStatement private constructor(
                         stmt.visibility,
                         stmt.initializer?.let { unwrapDeep(it) },
                         stmt.isTransient,
+                        stmt.typeDecl,
                         stmt.slotIndex,
                         stmt.scopeId,
                         stmt.pos,

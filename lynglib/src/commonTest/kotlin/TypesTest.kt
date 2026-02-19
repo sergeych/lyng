@@ -16,6 +16,8 @@
  */
 
 import kotlinx.coroutines.test.runTest
+import net.sergeych.lyng.Script
+import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.eval
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
@@ -301,5 +303,62 @@ class TypesTest {
                 }
             }
         """)
+    }
+
+    @Test
+    fun testLambdaTypes1() = runTest {
+        val scope = Script.newScope()
+        // declare: ok
+        scope.eval("""
+            var l1: (Int,String)->String
+        """.trimIndent())
+        // this should be Lyng compile time exception
+        assertFailsWith<ScriptError> {
+            scope.eval("""
+            fun test() {
+                // compiler should detect that l1 us called with arguments that does not match
+                // declare type (Int,String)->String:
+                l1()
+            }
+            """.trimIndent())
+        }
+    }
+
+    @Test
+    fun testLambdaTypesEllipsis() = runTest {
+        val scope = Script.newScope()
+        scope.eval("""
+            var l2: (Int,Object...,String)->Real
+            var l4: (Int,String...,String)->Real
+            var l3: (...)->Int
+        """.trimIndent())
+        assertFailsWith<ScriptError> {
+            scope.eval("""
+            fun testTooFew() {
+                l2(1)
+            }
+            """.trimIndent())
+        }
+        assertFailsWith<ScriptError> {
+            scope.eval("""
+            fun testWrongHead() {
+                l2("x", "y")
+            }
+            """.trimIndent())
+        }
+        assertFailsWith<ScriptError> {
+            scope.eval("""
+            fun testWrongEllipsis() {
+                l4(1, 2, "x")
+            }
+            """.trimIndent())
+        }
+        scope.eval("""
+            fun testOk1() { l2(1, "x") }
+            fun testOk2() { l2(1, 2, 3, "x") }
+            fun testOk3() { l3() }
+            fun testOk4() { l3(1, true, "x") }
+            fun testOk5() { l4(1, "a", "b", "x") }
+        """.trimIndent())
     }
 }

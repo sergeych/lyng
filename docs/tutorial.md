@@ -518,6 +518,13 @@ Examples:
     fun inc(x=0) = x + 1        // (Int)->Int
     fun maybe(flag) { if(flag) 1 else null } // ()->Int?
 
+Function types are written as `(T1, T2, ...)->R`. You can include ellipsis in function *types* to
+express a variadic position:
+
+    var fmt: (String, Object...)->String
+    var f: (Int, Object..., String)->Real
+    var anyArgs: (...)->Int   // shorthand for (Object...)->Int
+
 Untyped locals are allowed, but their type is fixed on the first assignment:
 
     var x
@@ -734,6 +741,11 @@ one could be with ellipsis that means "the rest pf arguments as List":
     // ellipsis-caught arguments back:
     assert( { a, b...-> [a,...b] }(100, 1, 2, 3) == [100, 1, 2, 3]) 
     void
+
+Type-annotated lambdas can use variadic *function types* as well:
+
+    val f: (Int, Object..., String)->Real = { a, rest..., b -> 0.0 }
+    val anyArgs: (...)->Int = { -> 0 }
 
 ### Using lambda as the parameter
 

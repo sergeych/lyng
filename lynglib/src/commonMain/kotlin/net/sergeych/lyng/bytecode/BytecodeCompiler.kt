@@ -5730,7 +5730,8 @@ class BytecodeCompiler(
                         stmt.name,
                         stmt.isMutable,
                         stmt.visibility,
-                        stmt.isTransient
+                        stmt.isTransient,
+                        stmt.typeDecl
                     )
                 )
                 builder.emit(Opcode.DECL_LOCAL, declId, localSlot)
@@ -5757,7 +5758,8 @@ class BytecodeCompiler(
                     stmt.name,
                     stmt.isMutable,
                     stmt.visibility,
-                    stmt.isTransient
+                    stmt.isTransient,
+                    stmt.typeDecl
                 )
             )
             builder.emit(Opcode.DECL_LOCAL, declId, scopeSlot)
@@ -5775,7 +5777,8 @@ class BytecodeCompiler(
                 stmt.name,
                 stmt.isMutable,
                 stmt.visibility,
-                stmt.isTransient
+                stmt.isTransient,
+                stmt.typeDecl
             )
         )
         builder.emit(Opcode.DECL_LOCAL, declId, value.slot)

@@ -225,6 +225,45 @@ Notes:
 - Use [LyngClassBridge] to bind by name/module, or by an already resolved `ObjClass`.
 - Use `ObjInstance.data` / `ObjClass.classData` to attach Kotlin‑side state when needed.
 
+### 6.5a) Bind Kotlin implementations to declared Lyng objects
+
+For `extern object` declarations, bind implementations to the singleton instance using `ModuleScope.bindObject`.
+This mirrors class binding but targets an already created object instance.
+
+```lyng
+// Lyng side (in a module)
+extern object HostObject {
+    extern fun add(a: Int, b: Int): Int
+    extern val status: String
+    extern var count: Int
+}
+```
+
+```kotlin
+// Kotlin side (binding)
+val moduleScope = importManager.createModuleScope(Pos.builtIn, "bridge.obj")
+moduleScope.bindObject("HostObject") {
+    classData = "OK"
+    init { _ -> data = 0L }
+    addFun("add") { _, _, args ->
+        val a = args.requiredArg<ObjInt>(0).value
+        val b = args.requiredArg<ObjInt>(1).value
+        ObjInt.of(a + b)
+    }
+    addVal("status") { _, _ -> ObjString(classData as String) }
+    addVar(
+        "count",
+        get = { _, inst -> ObjInt.of((inst as ObjInstance).data as Long) },
+        set = { _, inst, value -> (inst as ObjInstance).data = (value as ObjInt).value }
+    )
+}
+```
+
+Notes:
+
+- Members must be marked `extern` so the compiler emits ABI slots for Kotlin bindings.
+- You can also bind by name/module via `LyngObjectBridge.bind(...)`.
+
 ### 6.6) Preferred: Kotlin reflection bridge for call‑by‑name
 
 For Kotlin code that needs dynamic access to Lyng variables, functions, or members, use the bridge resolver.

@@ -655,6 +655,7 @@ open class Scope(
         isOverride: Boolean = false,
         isTransient: Boolean = false,
         callSignature: CallSignature? = null,
+        typeDecl: TypeDecl? = null,
         fieldId: Int? = null,
         methodId: Int? = null
     ): ObjRecord {
@@ -667,6 +668,7 @@ open class Scope(
             isOverride = isOverride,
             isTransient = isTransient,
             callSignature = callSignature,
+            typeDecl = typeDecl,
             memberName = name,
             fieldId = fieldId,
             methodId = methodId

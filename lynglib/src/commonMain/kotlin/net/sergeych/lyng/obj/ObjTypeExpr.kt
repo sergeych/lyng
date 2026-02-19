@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Sergey S. Chernov
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 package net.sergeych.lyng.obj
@@ -63,6 +64,7 @@ internal fun matchesTypeDecl(scope: Scope, value: Obj, typeDecl: TypeDecl): Bool
             if (cls != null) value.isInstanceOf(cls) else value.isInstanceOf(typeDecl.name.substringAfterLast('.'))
         }
         is TypeDecl.Function -> value.isInstanceOf("Callable")
+        is TypeDecl.Ellipsis -> matchesTypeDecl(scope, value, typeDecl.elementType)
         is TypeDecl.Union -> typeDecl.options.any { matchesTypeDecl(scope, value, it) }
         is TypeDecl.Intersection -> typeDecl.options.all { matchesTypeDecl(scope, value, it) }
     }
@@ -90,10 +92,11 @@ internal fun typeDeclIsSubtype(scope: Scope, left: TypeDecl, right: TypeDecl): B
     return when (l) {
         is TypeDecl.Union -> l.options.all { typeDeclIsSubtype(scope, it, r) }
         is TypeDecl.Intersection -> l.options.any { typeDeclIsSubtype(scope, it, r) }
+        is TypeDecl.Ellipsis -> typeDeclIsSubtype(scope, l.elementType, r)
         else -> when (r) {
             is TypeDecl.Union -> r.options.any { typeDeclIsSubtype(scope, l, it) }
             is TypeDecl.Intersection -> r.options.all { typeDeclIsSubtype(scope, l, it) }
-            is TypeDecl.Simple, is TypeDecl.Generic, is TypeDecl.Function -> {
+            is TypeDecl.Simple, is TypeDecl.Generic, is TypeDecl.Function, is TypeDecl.Ellipsis -> {
                 val leftClass = resolveTypeDeclClass(scope, l) ?: return false
                 val rightClass = resolveTypeDeclClass(scope, r) ?: return false
                 leftClass == rightClass || leftClass.allParentsSet.contains(rightClass)
@@ -171,6 +174,7 @@ private fun stripNullable(type: TypeDecl): TypeDecl {
     } else {
         when (type) {
             is TypeDecl.Function -> type.copy(nullable = false)
+            is TypeDecl.Ellipsis -> type.copy(nullable = false)
             is TypeDecl.TypeVar -> type.copy(nullable = false)
             is TypeDecl.Union -> type.copy(nullable = false)
             is TypeDecl.Intersection -> type.copy(nullable = false)
@@ -186,6 +190,7 @@ private fun makeNullable(type: TypeDecl): TypeDecl {
         TypeDecl.TypeAny -> TypeDecl.TypeNullableAny
         TypeDecl.TypeNullableAny -> type
         is TypeDecl.Function -> type.copy(nullable = true)
+        is TypeDecl.Ellipsis -> type.copy(nullable = true)
         is TypeDecl.TypeVar -> type.copy(nullable = true)
         is TypeDecl.Union -> type.copy(nullable = true)
         is TypeDecl.Intersection -> type.copy(nullable = true)
@@ -200,6 +205,7 @@ private fun typeDeclKey(type: TypeDecl): String = when (type) {
     is TypeDecl.Simple -> "S:${type.name}"
     is TypeDecl.Generic -> "G:${type.name}<${type.args.joinToString(",") { typeDeclKey(it) }}>"
     is TypeDecl.Function -> "F:(${type.params.joinToString(",") { typeDeclKey(it) }})->${typeDeclKey(type.returnType)}"
+    is TypeDecl.Ellipsis -> "E:${typeDeclKey(type.elementType)}"
     is TypeDecl.TypeVar -> "V:${type.name}"
     is TypeDecl.Union -> "U:${type.options.joinToString("|") { typeDeclKey(it) }}"
     is TypeDecl.Intersection -> "I:${type.options.joinToString("&") { typeDeclKey(it) }}"
@@ -216,6 +222,7 @@ private fun resolveTypeDeclClass(scope: Scope, type: TypeDecl): ObjClass? {
             direct ?: scope[type.name.substringAfterLast('.')]?.value as? ObjClass
         }
         is TypeDecl.Function -> scope["Callable"]?.value as? ObjClass
+        is TypeDecl.Ellipsis -> resolveTypeDeclClass(scope, type.elementType)
         is TypeDecl.TypeVar -> {
             val bound = scope[type.name]?.value
             when (bound) {

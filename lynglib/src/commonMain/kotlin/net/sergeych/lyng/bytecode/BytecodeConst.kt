@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Sergey S. Chernov
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,12 +12,14 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 package net.sergeych.lyng.bytecode
 
 import net.sergeych.lyng.ArgsDeclaration
 import net.sergeych.lyng.Pos
+import net.sergeych.lyng.TypeDecl
 import net.sergeych.lyng.Visibility
 import net.sergeych.lyng.obj.ListLiteralRef
 import net.sergeych.lyng.obj.Obj
@@ -68,6 +70,7 @@ sealed class BytecodeConst {
         val isMutable: Boolean,
         val visibility: Visibility,
         val isTransient: Boolean,
+        val typeDecl: TypeDecl?,
     ) : BytecodeConst()
     data class DelegatedDecl(
         val name: String,

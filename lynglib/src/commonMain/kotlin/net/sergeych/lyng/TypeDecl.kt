@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,10 @@ sealed class TypeDecl(val isNullable:Boolean = false) {
         val receiver: TypeDecl?,
         val params: List<TypeDecl>,
         val returnType: TypeDecl,
+        val nullable: Boolean = false
+    ) : TypeDecl(nullable)
+    data class Ellipsis(
+        val elementType: TypeDecl,
         val nullable: Boolean = false
     ) : TypeDecl(nullable)
     data class TypeVar(val name: String, val nullable: Boolean = false) : TypeDecl(nullable)

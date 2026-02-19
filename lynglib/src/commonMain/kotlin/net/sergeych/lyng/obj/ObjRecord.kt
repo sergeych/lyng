@@ -39,6 +39,7 @@ data class ObjRecord(
     /** The receiver object to resolve this member against (for instance fields/methods). */
     var receiver: Obj? = null,
     val callSignature: net.sergeych.lyng.CallSignature? = null,
+    val typeDecl: net.sergeych.lyng.TypeDecl? = null,
     val memberName: String? = null,
     val fieldId: Int? = null,
     val methodId: Int? = null,
