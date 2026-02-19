@@ -60,6 +60,17 @@ class FrameSlotRef(
         return this.frame === frame && this.slot == slot
     }
 
+    internal fun peekValue(): Obj? {
+        val bytecodeFrame = frame as? net.sergeych.lyng.bytecode.BytecodeFrame ?: return read()
+        val raw = bytecodeFrame.getRawObj(slot) ?: return null
+        if (raw is FrameSlotRef && raw.refersTo(bytecodeFrame, slot)) return null
+        return when (raw) {
+            is FrameSlotRef -> raw.peekValue()
+            is RecordSlotRef -> raw.peekValue()
+            else -> raw
+        }
+    }
+
     fun write(value: Obj) {
         when (value) {
             is ObjInt -> frame.setInt(slot, value.value)
@@ -85,6 +96,15 @@ class RecordSlotRef(
     fun read(): Obj {
         val direct = record.value
         return if (direct is FrameSlotRef) direct.read() else direct
+    }
+
+    internal fun peekValue(): Obj? {
+        val direct = record.value
+        return when (direct) {
+            is FrameSlotRef -> direct.peekValue()
+            is RecordSlotRef -> direct.peekValue()
+            else -> direct
+        }
     }
 
     fun write(value: Obj) {

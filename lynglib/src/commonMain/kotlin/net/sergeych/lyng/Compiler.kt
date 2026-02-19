@@ -1182,10 +1182,10 @@ class Compiler(
                 if (!record.visibility.isPublic) continue
                 if (nameObjClass.containsKey(name)) continue
                 val resolved = when (val raw = record.value) {
-                    is FrameSlotRef -> raw.read()
-                    is RecordSlotRef -> raw.read()
+                    is FrameSlotRef -> raw.peekValue()
+                    is RecordSlotRef -> raw.peekValue()
                     else -> raw
-                }
+                } ?: continue
                 when (resolved) {
                     is ObjClass -> nameObjClass[name] = resolved
                     is ObjInstance -> nameObjClass[name] = resolved.objClass
