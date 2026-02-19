@@ -164,8 +164,8 @@ class Script(
     companion object {
 
         /**
-         * Create new scope using standard safe set of modules, using [defaultImportManager]. It is
-         * suspended as first time calls requires compilation of standard library or other
+         * Create new scope using a standard safe set of modules, using [defaultImportManager]. It is
+         * suspended as first time invocation requires compilation of standard library or other
          * asynchronous initialization.
          */
         suspend fun newScope(pos: Pos = Pos.builtIn) = defaultImportManager.newStdScope(pos)

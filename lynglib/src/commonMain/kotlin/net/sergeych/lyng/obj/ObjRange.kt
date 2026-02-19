@@ -22,6 +22,7 @@ import net.sergeych.lyng.miniast.TypeGenericDoc
 import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lyng.miniast.addPropertyDoc
 import net.sergeych.lyng.miniast.type
+import net.sergeych.lyng.requireScope
 
 class ObjRange(
     val start: Obj?,

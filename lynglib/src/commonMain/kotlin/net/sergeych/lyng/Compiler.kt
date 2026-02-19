@@ -1181,9 +1181,15 @@ class Compiler(
             for ((name, record) in current.objects) {
                 if (!record.visibility.isPublic) continue
                 if (nameObjClass.containsKey(name)) continue
-                when (val value = record.value) {
-                    is ObjClass -> nameObjClass[name] = value
-                    is ObjInstance -> nameObjClass[name] = value.objClass
+                val resolved = when (val raw = record.value) {
+                    is FrameSlotRef -> raw.read()
+                    is RecordSlotRef -> raw.read()
+                    else -> raw
+                }
+                when (resolved) {
+                    is ObjClass -> nameObjClass[name] = resolved
+                    is ObjInstance -> nameObjClass[name] = resolved.objClass
+                    is ObjDynamic -> nameObjClass[name] = resolved.objClass
                 }
             }
             current = current.parent

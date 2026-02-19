@@ -70,9 +70,10 @@ class OOTest {
 
     @Test
     fun testDynamicGet() = runTest {
-        eval(
+        val ms = Script.newScope()
+        ms.eval(
             """
-            val accessor: Delegate = dynamic {
+            val accessor: String = dynamic {
                 get { name ->
                     if( name == "foo" ) "bar" else null
                 }
@@ -84,6 +85,10 @@ class OOTest {
             
         """.trimIndent()
         )
+        ms.eval("""
+            assertEquals("bar", accessor.foo)
+            assertEquals(null, accessor.bad)
+        """.trimIndent())
     }
 
     @Test

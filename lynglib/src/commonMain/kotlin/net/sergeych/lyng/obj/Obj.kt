@@ -256,6 +256,13 @@ open class Obj {
         }
     }
 
+    /**
+     * Sugar to use it with [ScopeFacade]
+     */
+    suspend fun toString(facade: ScopeFacade) = toString(facade.requireScope())
+
+
+
     open suspend fun defaultToString(scope: Scope): ObjString = ObjString(this.toString())
 
     /**

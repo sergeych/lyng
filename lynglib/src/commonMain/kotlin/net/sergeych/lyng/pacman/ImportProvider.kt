@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -69,10 +69,10 @@ abstract class ImportProvider(
         val plan: Map<String, Int>
     )
 
-    private var cachedStdScope = CachedExpression<StdScopeSeed>()
+    private var cachedStdScopeSeed = CachedExpression<StdScopeSeed>()
 
-    suspend fun newStdScope(pos: Pos = Pos.builtIn): Scope {
-        val seed = cachedStdScope.get {
+    suspend fun newStdScope(pos: Pos = Pos.builtIn): ModuleScope {
+        val seed = cachedStdScopeSeed.get {
             val stdlib = prepareImport(pos, "lyng.stdlib", null)
             val plan = LinkedHashMap<String, Int>()
             for ((name, record) in stdlib.objects) {
