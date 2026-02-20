@@ -294,6 +294,25 @@ class Compiler(
             if (record.typeDecl != null) {
                 slotTypeDeclByScopeId.getOrPut(plan.id) { mutableMapOf() }[slotIndex] = record.typeDecl
             }
+            val resolved = when (val raw = record.value) {
+                is FrameSlotRef -> raw.peekValue() ?: raw.read()
+                is RecordSlotRef -> raw.peekValue() ?: raw.read()
+                else -> raw
+            }
+            when (resolved) {
+                is ObjClass -> {
+                    slotTypeByScopeId.getOrPut(plan.id) { mutableMapOf() }[slotIndex] = resolved
+                    if (nameObjClass[name] == null) nameObjClass[name] = resolved
+                }
+                is ObjInstance -> {
+                    slotTypeByScopeId.getOrPut(plan.id) { mutableMapOf() }[slotIndex] = resolved.objClass
+                    if (nameObjClass[name] == null) nameObjClass[name] = resolved.objClass
+                }
+                is ObjDynamic -> {
+                    slotTypeByScopeId.getOrPut(plan.id) { mutableMapOf() }[slotIndex] = resolved.objClass
+                    if (nameObjClass[name] == null) nameObjClass[name] = resolved.objClass
+                }
+            }
         }
     }
 
@@ -334,10 +353,12 @@ class Compiler(
                                         extensionNames.add(actual.value)
                                         registerExtensionName(nameToken.value, actual.value)
                                         declareSlotNameIn(plan, extensionCallableName(nameToken.value, actual.value), isMutable = false, isDelegated = false)
+                                        moduleDeclaredNames.add(extensionCallableName(nameToken.value, actual.value))
                                     }
                                     continue
                                 }
                                 declareSlotNameIn(plan, nameToken.value, isMutable = false, isDelegated = false)
+                                moduleDeclaredNames.add(nameToken.value)
                             }
                             "val", "var" -> {
                                 val nameToken = nextNonWs()
@@ -350,19 +371,23 @@ class Compiler(
                                         extensionNames.add(actual.value)
                                         registerExtensionName(nameToken.value, actual.value)
                                         declareSlotNameIn(plan, extensionPropertyGetterName(nameToken.value, actual.value), isMutable = false, isDelegated = false)
+                                        moduleDeclaredNames.add(extensionPropertyGetterName(nameToken.value, actual.value))
                                         if (t.value == "var") {
                                             declareSlotNameIn(plan, extensionPropertySetterName(nameToken.value, actual.value), isMutable = false, isDelegated = false)
+                                            moduleDeclaredNames.add(extensionPropertySetterName(nameToken.value, actual.value))
                                         }
                                     }
                                     continue
                                 }
                                 declareSlotNameIn(plan, nameToken.value, isMutable = t.value == "var", isDelegated = false)
+                                moduleDeclaredNames.add(nameToken.value)
                             }
                             "class", "object" -> {
                                 val nameToken = nextNonWs()
                                 if (nameToken.type == Token.Type.ID) {
                                     declareSlotNameIn(plan, nameToken.value, isMutable = false, isDelegated = false)
                                     scopeSeedNames.add(nameToken.value)
+                                    moduleDeclaredNames.add(nameToken.value)
                                 }
                             }
                             "enum" -> {
@@ -371,6 +396,7 @@ class Compiler(
                                 if (nameToken.type == Token.Type.ID) {
                                     declareSlotNameIn(plan, nameToken.value, isMutable = false, isDelegated = false)
                                     scopeSeedNames.add(nameToken.value)
+                                    moduleDeclaredNames.add(nameToken.value)
                                 }
                             }
                         }
@@ -984,7 +1010,7 @@ class Compiler(
                     resolutionSink?.reference(name, pos)
                     return ref
                 }
-                val ref = if (capturePlanStack.isEmpty() && moduleLoc.depth > 0) {
+                val ref = if (!useScopeSlots && capturePlanStack.isEmpty() && moduleLoc.depth > 0) {
                     LocalSlotRef(
                         name,
                         moduleLoc.slot,
@@ -1044,7 +1070,7 @@ class Compiler(
                         resolutionSink?.reference(name, pos)
                         return ref
                     }
-                    val ref = if (capturePlanStack.isEmpty() && slot.depth > 0) {
+                    val ref = if (!useScopeSlots && capturePlanStack.isEmpty() && slot.depth > 0) {
                         LocalSlotRef(
                             name,
                             slot.slot,
@@ -1182,8 +1208,8 @@ class Compiler(
                 if (!record.visibility.isPublic) continue
                 if (nameObjClass.containsKey(name)) continue
                 val resolved = when (val raw = record.value) {
-                    is FrameSlotRef -> raw.peekValue()
-                    is RecordSlotRef -> raw.peekValue()
+                    is FrameSlotRef -> raw.peekValue() ?: raw.read()
+                    is RecordSlotRef -> raw.peekValue() ?: raw.read()
                     else -> raw
                 } ?: continue
                 when (resolved) {
@@ -1250,6 +1276,25 @@ class Compiler(
         }
         if (moduleMatches.isEmpty()) return null
         if (moduleMatches.size > 1) {
+            val byOrigin = LinkedHashMap<String, MutableList<Pair<ImportedModule, ObjRecord>>>()
+            for ((_, pair) in moduleMatches) {
+                val origin = pair.second.importedFrom?.packageName ?: pair.first.scope.packageName
+                byOrigin.getOrPut(origin) { mutableListOf() }.add(pair)
+            }
+            if (byOrigin.size == 1) {
+                val origin = byOrigin.keys.first()
+                val candidates = byOrigin[origin] ?: mutableListOf()
+                val preferred = candidates.firstOrNull { it.first.scope.packageName == origin } ?: candidates.first()
+                val binding = ImportBinding(name, ImportBindingSource.Module(origin, preferred.first.pos))
+                val value = preferred.second.value
+                if (!nameObjClass.containsKey(name)) {
+                    when (value) {
+                        is ObjClass -> nameObjClass[name] = value
+                        is ObjInstance -> nameObjClass[name] = value.objClass
+                    }
+                }
+                return ImportBindingResolution(binding, preferred.second)
+            }
             val moduleNames = moduleMatches.keys.toList()
             throw ScriptError(pos, "symbol $name is ambiguous between imports: ${moduleNames.joinToString(", ")}")
         }
@@ -1539,16 +1584,14 @@ class Compiler(
         if (needsSlotPlan) {
             slotPlanStack.add(SlotPlan(mutableMapOf(), 0, nextScopeId++))
             seedScope?.let { scope ->
-                if (scope !is ModuleScope) {
-                    seedSlotPlanFromSeedScope(scope)
-                }
+                seedSlotPlanFromSeedScope(scope)
             }
             val plan = slotPlanStack.last()
-            if (!plan.slots.containsKey("__PACKAGE__")) {
-                declareSlotNameIn(plan, "__PACKAGE__", isMutable = false, isDelegated = false)
+            seedScope?.getSlotIndexOf("__PACKAGE__")?.let { slotIndex ->
+                declareSlotNameAt(plan, "__PACKAGE__", slotIndex, isMutable = false, isDelegated = false)
             }
-            if (!plan.slots.containsKey("$~")) {
-                declareSlotNameIn(plan, "$~", isMutable = true, isDelegated = false)
+            seedScope?.getSlotIndexOf("$~")?.let { slotIndex ->
+                declareSlotNameAt(plan, "$~", slotIndex, isMutable = true, isDelegated = false)
             }
             seedScope?.let { seedNameObjClassFromScope(it) }
             seedScope?.let { seedNameTypeDeclFromScope(it) }
@@ -1557,6 +1600,7 @@ class Compiler(
                 val stdlib = importManager.prepareImport(start, "lyng.stdlib", null)
                 seedResolutionFromScope(stdlib, start)
                 seedNameObjClassFromScope(stdlib)
+                seedSlotPlanFromScope(stdlib)
                 importedModules.add(ImportedModule(stdlib, start))
             }
             predeclareTopLevelSymbols()
@@ -1660,7 +1704,7 @@ class Compiler(
                 val forcedLocalScopeId = if (useScopeSlots) null else moduleSlotPlan()?.id
                 val allowedScopeNames = if (useScopeSlots) modulePlan.keys else null
                 val scopeSlotNameSet = if (useScopeSlots) scopeSeedNames else null
-                val moduleScopeId = if (useScopeSlots) null else moduleSlotPlan()?.id
+                val moduleScopeId = moduleSlotPlan()?.id
                 val isModuleScript = codeContexts.lastOrNull() is CodeContext.Module && resolutionScriptDepth == 1
                 val wrapScriptBytecode = compileBytecode && isModuleScript
                 val (finalStatements, moduleBytecode) = if (wrapScriptBytecode) {
@@ -1678,6 +1722,7 @@ class Compiler(
                         slotTypeByScopeId = slotTypeByScopeId,
                         slotTypeDeclByScopeId = slotTypeDeclByScopeId,
                         knownNameObjClass = knownClassMapForBytecode(),
+                        knownClassNames = knownClassNamesForBytecode(),
                         knownObjectNames = objectDeclNames,
                         classFieldTypesByName = classFieldTypesByName,
                         enumEntriesByName = enumEntriesByName,
@@ -1690,11 +1735,16 @@ class Compiler(
                     statements to null
                 }
                 val moduleRefs = importedModules.map { ImportBindingSource.Module(it.scope.packageName, it.pos) }
+                val declaredNames = if (importBindings.isEmpty()) {
+                    moduleDeclaredNames.toSet()
+                } else {
+                    moduleDeclaredNames.subtract(importBindings.keys)
+                }
                 Script(
                     start,
                     finalStatements,
                     modulePlan,
-                    moduleDeclaredNames.toSet(),
+                    declaredNames,
                     importBindings.toMap(),
                     moduleRefs,
                     moduleBytecode
@@ -1741,7 +1791,7 @@ class Compiler(
     private val rangeParamNamesStack = mutableListOf<Set<String>>()
     private val extensionNames = mutableSetOf<String>()
     private val extensionNamesByType = mutableMapOf<String, MutableSet<String>>()
-    private val useScopeSlots: Boolean = seedScope != null && seedScope !is ModuleScope
+    private val useScopeSlots: Boolean = seedScope == null
 
     private fun registerExtensionName(typeName: String, memberName: String) {
         extensionNamesByType.getOrPut(typeName) { mutableSetOf() }.add(memberName)
@@ -1884,6 +1934,9 @@ class Compiler(
         val scopeIndex = slotPlanStack.indexOfLast { it.id == slotLoc.scopeId }
         if (functionIndex >= 0 && scopeIndex >= functionIndex) return null
         val modulePlan = moduleSlotPlan()
+        if (useScopeSlots && modulePlan != null && slotLoc.scopeId == modulePlan.id) {
+            return null
+        }
         if (scopeSeedNames.contains(name)) {
             val isModuleSlot = modulePlan != null && slotLoc.scopeId == modulePlan.id
             if (!isModuleSlot || useScopeSlots) return null
@@ -1949,6 +2002,23 @@ class Compiler(
         return result
     }
 
+    private fun knownClassNamesForBytecode(): Set<String> {
+        val result = LinkedHashSet<String>()
+        fun addScope(scope: Scope?) {
+            if (scope == null) return
+            for ((name, rec) in scope.objects) {
+                if (rec.value is ObjClass) result.add(name)
+            }
+        }
+        addScope(seedScope)
+        addScope(importManager.rootScope)
+        for (module in importedModules) {
+            addScope(module.scope)
+        }
+        result.addAll(compileClassInfos.keys)
+        return result
+    }
+
     private fun wrapBytecode(stmt: Statement): Statement {
         if (codeContexts.lastOrNull() is CodeContext.Module) return stmt
         if (codeContexts.lastOrNull() is CodeContext.ClassBody) return stmt
@@ -1975,6 +2045,7 @@ class Compiler(
             slotTypeByScopeId = slotTypeByScopeId,
             slotTypeDeclByScopeId = slotTypeDeclByScopeId,
             knownNameObjClass = knownClassMapForBytecode(),
+            knownClassNames = knownClassNamesForBytecode(),
             knownObjectNames = objectDeclNames,
             classFieldTypesByName = classFieldTypesByName,
             enumEntriesByName = enumEntriesByName,
@@ -2004,6 +2075,7 @@ class Compiler(
             slotTypeByScopeId = slotTypeByScopeId,
             slotTypeDeclByScopeId = slotTypeDeclByScopeId,
             knownNameObjClass = knownClassMapForBytecode(),
+            knownClassNames = knownClassNamesForBytecode(),
             knownObjectNames = objectDeclNames,
             classFieldTypesByName = classFieldTypesByName,
             enumEntriesByName = enumEntriesByName,
@@ -2058,6 +2130,7 @@ class Compiler(
             slotTypeByScopeId = slotTypeByScopeId,
             slotTypeDeclByScopeId = slotTypeDeclByScopeId,
             knownNameObjClass = knownNames,
+            knownClassNames = knownClassNamesForBytecode(),
             knownObjectNames = objectDeclNames,
             classFieldTypesByName = classFieldTypesByName,
             enumEntriesByName = enumEntriesByName,
@@ -3000,11 +3073,18 @@ class Compiler(
         val paramSlotPlanSnapshot = slotPlanIndices(paramSlotPlan)
         val captureSlots = capturePlan.captures.toList()
         val captureEntries = if (captureSlots.isNotEmpty()) {
+            val modulePlan = moduleSlotPlan()
             captureSlots.map { capture ->
                 val owner = capturePlan.captureOwners[capture.name]
                     ?: error("Missing capture owner for ${capture.name}")
+                val isModuleSlot = modulePlan != null && owner.scopeId == modulePlan.id
+                val ownerKind = if (isModuleSlot) {
+                    net.sergeych.lyng.bytecode.CaptureOwnerFrameKind.MODULE
+                } else {
+                    net.sergeych.lyng.bytecode.CaptureOwnerFrameKind.LOCAL
+                }
                 net.sergeych.lyng.bytecode.LambdaCaptureEntry(
-                    ownerKind = net.sergeych.lyng.bytecode.CaptureOwnerFrameKind.LOCAL,
+                    ownerKind = ownerKind,
                     ownerScopeId = owner.scopeId,
                     ownerSlotId = owner.slot,
                     ownerName = capture.name,
@@ -4269,15 +4349,24 @@ class Compiler(
             is LocalSlotRef -> {
                 val ownerScopeId = ref.captureOwnerScopeId ?: ref.scopeId
                 val ownerSlot = ref.captureOwnerSlot ?: ref.slot
-                slotTypeByScopeId[ownerScopeId]?.get(ownerSlot)
-                    ?: slotTypeDeclByScopeId[ownerScopeId]?.get(ownerSlot)?.let { resolveTypeDeclObjClass(it) }
-                    ?: nameObjClass[ref.name]
+                val knownClass = nameObjClass[ref.name]
+                if (knownClass == ObjDynamic.type) {
+                    knownClass
+                } else {
+                    slotTypeByScopeId[ownerScopeId]?.get(ownerSlot)
+                        ?: slotTypeDeclByScopeId[ownerScopeId]?.get(ownerSlot)?.let { resolveTypeDeclObjClass(it) }
+                        ?: knownClass
+                }
                     ?: resolveClassByName(ref.name)
             }
             is LocalVarRef -> nameObjClass[ref.name]
+                ?.takeIf { it == ObjDynamic.type }
+                ?: nameObjClass[ref.name]
                 ?: nameTypeDecl[ref.name]?.let { resolveTypeDeclObjClass(it) }
                 ?: resolveClassByName(ref.name)
             is FastLocalVarRef -> nameObjClass[ref.name]
+                ?.takeIf { it == ObjDynamic.type }
+                ?: nameObjClass[ref.name]
                 ?: nameTypeDecl[ref.name]?.let { resolveTypeDeclObjClass(it) }
                 ?: resolveClassByName(ref.name)
             is ClassScopeMemberRef -> {
@@ -7485,6 +7574,9 @@ class Compiler(
                     val bytecodeBody = (fnStatements as? BytecodeStatement)
                         ?: context.raiseIllegalState("non-bytecode function body encountered")
                     val bytecodeFn = bytecodeBody.bytecodeFunction()
+                    val declaredNames = bytecodeFn.constants
+                        .mapNotNull { it as? BytecodeConst.LocalDecl }
+                        .mapTo(mutableSetOf()) { it.name }
                     val captureNames = if (captureSlots.isNotEmpty()) {
                         captureSlots.map { it.name }
                     } else {
@@ -7533,6 +7625,28 @@ class Compiler(
                         }
                         if (extTypeName != null) {
                             context.thisObj = scope.thisObj
+                        }
+                        val localNames = frame.fn.localSlotNames
+                        for (i in localNames.indices) {
+                            val localName = localNames[i] ?: continue
+                            if (declaredNames.contains(localName)) continue
+                            val slotType = frame.getLocalSlotTypeCode(i)
+                            if (slotType != SlotType.UNKNOWN.code && slotType != SlotType.OBJ.code) {
+                                continue
+                            }
+                            if (slotType == SlotType.OBJ.code && frame.frame.getRawObj(i) != null) {
+                                continue
+                            }
+                            val record = context.getLocalRecordDirect(localName)
+                                ?: context.parent?.get(localName)
+                                ?: context.get(localName)
+                                ?: continue
+                            val value = if (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property) {
+                                context.resolve(record, localName)
+                            } else {
+                                record.value
+                            }
+                            frame.frame.setObj(i, value)
                         }
                     }
                     return try {
@@ -8795,7 +8909,8 @@ class Compiler(
     companion object {
 
         suspend fun compile(source: Source, importManager: ImportProvider): Script {
-            return Compiler(CompilerContext(parseLyng(source)), importManager).parseScript()
+            val script = Compiler(CompilerContext(parseLyng(source)), importManager).parseScript()
+            return script
         }
 
         suspend fun dryRun(source: Source, importManager: ImportProvider): ResolutionReport {

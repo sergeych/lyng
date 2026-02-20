@@ -1196,7 +1196,22 @@ open class ObjClass(
         return JsonObject(result)
     }
 
-    open suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj =
-        scope.raiseNotImplemented()
+    open suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj {
+        val meta = constructorMeta
+            ?: scope.raiseError("can't deserialize non-serializable object (no constructor meta)")
+        val params = meta.params.filter { !it.isTransient }
+        val values = decoder.decodeAnyList(scope)
+        if (values.size > params.size) {
+            scope.raiseIllegalArgument(
+                "serialized params has bigger size ${values.size} than constructor params (${params.size}): " +
+                    values.joinToString(",")
+            )
+        }
+        val instance = callWithArgs(scope, *values.toTypedArray())
+        if (instance is ObjInstance) {
+            instance.deserializeStateVars(scope, decoder)
+        }
+        return instance
+    }
 
 }

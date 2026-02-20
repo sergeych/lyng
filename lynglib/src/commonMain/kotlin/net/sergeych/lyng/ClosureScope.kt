@@ -36,10 +36,19 @@ class BytecodeClosureScope(
         val desired = preferredThisType?.let { typeName ->
             callScope.thisVariants.firstOrNull { it.objClass.className == typeName }
         }
-        val primaryThis = closureScope.thisObj
-        val merged = ArrayList<Obj>(callScope.thisVariants.size + closureScope.thisVariants.size + 1)
+        val primaryThis = when {
+            callScope is ApplyScope -> callScope.thisObj
+            desired != null -> desired
+            else -> closureScope.thisObj
+        }
+        val merged = ArrayList<Obj>(callScope.thisVariants.size + closureScope.thisVariants.size + 3)
         desired?.let { merged.add(it) }
+        merged.add(callScope.thisObj)
         merged.addAll(callScope.thisVariants)
+        if (callScope is ApplyScope) {
+            merged.add(callScope.applied.thisObj)
+            merged.addAll(callScope.applied.thisVariants)
+        }
         merged.addAll(closureScope.thisVariants)
         setThisVariants(primaryThis, merged)
         this.currentClassCtx = closureScope.currentClassCtx ?: callScope.currentClassCtx
@@ -47,10 +56,20 @@ class BytecodeClosureScope(
 }
 
 class ApplyScope(val callScope: Scope, val applied: Scope) :
-    Scope(callScope, thisObj = applied.thisObj) {
+    Scope(applied, callScope.args, callScope.pos, callScope.thisObj) {
+
+    init {
+        // Merge applied receiver variants with the caller variants so qualified this@Type
+        // can see both the applied receiver and outer receivers.
+        val merged = ArrayList<Obj>(applied.thisVariants.size + callScope.thisVariants.size + 1)
+        merged.addAll(applied.thisVariants)
+        merged.addAll(callScope.thisVariants)
+        setThisVariants(callScope.thisObj, merged)
+        this.currentClassCtx = applied.currentClassCtx ?: callScope.currentClassCtx
+    }
 
     override fun get(name: String): ObjRecord? {
-        return applied.get(name) ?: super.get(name)
+        return applied.get(name) ?: callScope.get(name)
     }
 
     override fun applyClosure(closure: Scope, preferredThisType: String?): Scope {

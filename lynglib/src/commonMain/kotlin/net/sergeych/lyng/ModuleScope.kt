@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,11 +44,28 @@ class ModuleScope(
 
     internal fun ensureModuleFrame(fn: CmdFunction): BytecodeFrame {
         val current = moduleFrame
-        val frame = if (current == null || moduleFrameLocalCount != fn.localCount) {
+        val frame = if (current == null) {
             BytecodeFrame(fn.localCount, 0).also {
                 moduleFrame = it
                 moduleFrameLocalCount = fn.localCount
             }
+        } else if (fn.localCount > moduleFrameLocalCount) {
+            val next = BytecodeFrame(fn.localCount, 0)
+            current.copyTo(next)
+            moduleFrame = next
+            moduleFrameLocalCount = fn.localCount
+            // Retarget frame-based locals to the new frame instance.
+            val localNames = fn.localSlotNames
+            for (i in localNames.indices) {
+                val name = localNames[i] ?: continue
+                val record = objects[name] ?: localBindings[name] ?: continue
+                val value = record.value
+                if (value is FrameSlotRef && value.refersTo(current, i)) {
+                    record.value = FrameSlotRef(next, i)
+                    updateSlotFor(name, record)
+                }
+            }
+            next
         } else {
             current
         }

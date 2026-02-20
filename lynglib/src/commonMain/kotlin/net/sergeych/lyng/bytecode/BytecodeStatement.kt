@@ -20,6 +20,7 @@ package net.sergeych.lyng.bytecode
 import net.sergeych.lyng.*
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjClass
+import net.sergeych.lyng.obj.ObjRecord
 import net.sergeych.lyng.obj.ValueFnRef
 
 class BytecodeStatement private constructor(
@@ -30,7 +31,34 @@ class BytecodeStatement private constructor(
 
     override suspend fun execute(scope: Scope): Obj {
         scope.pos = pos
-        return CmdVm().execute(function, scope, scope.args)
+        val declaredNames = function.constants
+            .mapNotNull { it as? BytecodeConst.LocalDecl }
+            .mapTo(mutableSetOf()) { it.name }
+        val binder: suspend (CmdFrame, Arguments) -> Unit = { frame, _ ->
+            val localNames = frame.fn.localSlotNames
+            for (i in localNames.indices) {
+                val name = localNames[i] ?: continue
+                if (declaredNames.contains(name)) continue
+                val slotType = frame.getLocalSlotTypeCode(i)
+                if (slotType != SlotType.UNKNOWN.code && slotType != SlotType.OBJ.code) {
+                    continue
+                }
+                if (slotType == SlotType.OBJ.code && frame.frame.getRawObj(i) != null) {
+                    continue
+                }
+                val record = scope.getLocalRecordDirect(name)
+                    ?: scope.parent?.get(name)
+                    ?: scope.get(name)
+                    ?: continue
+                val value = if (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property) {
+                    scope.resolve(record, name)
+                } else {
+                    record.value
+                }
+                frame.frame.setObj(i, value)
+            }
+        }
+        return CmdVm().execute(function, scope, scope.args, binder)
     }
 
     internal fun bytecodeFunction(): CmdFunction = function
@@ -52,6 +80,7 @@ class BytecodeStatement private constructor(
             globalSlotScopeId: Int? = null,
             slotTypeByScopeId: Map<Int, Map<Int, ObjClass>> = emptyMap(),
             knownNameObjClass: Map<String, ObjClass> = emptyMap(),
+            knownClassNames: Set<String> = emptySet(),
             knownObjectNames: Set<String> = emptySet(),
             classFieldTypesByName: Map<String, Map<String, ObjClass>> = emptyMap(),
             enumEntriesByName: Map<String, List<String>> = emptyMap(),
@@ -86,6 +115,7 @@ class BytecodeStatement private constructor(
                 slotTypeByScopeId = slotTypeByScopeId,
                 slotTypeDeclByScopeId = slotTypeDeclByScopeId,
                 knownNameObjClass = knownNameObjClass,
+                knownClassNames = knownClassNames,
                 knownObjectNames = knownObjectNames,
                 classFieldTypesByName = classFieldTypesByName,
                 enumEntriesByName = enumEntriesByName,

@@ -34,6 +34,17 @@ class BytecodeFrame(
     private val realSlots: DoubleArray = DoubleArray(slotCount)
     private val boolSlots: BooleanArray = BooleanArray(slotCount)
 
+    internal fun copyTo(target: BytecodeFrame) {
+        val limit = minOf(slotCount, target.slotCount)
+        for (i in 0 until limit) {
+            target.slotTypes[i] = slotTypes[i]
+            target.objSlots[i] = objSlots[i]
+            target.intSlots[i] = intSlots[i]
+            target.realSlots[i] = realSlots[i]
+            target.boolSlots[i] = boolSlots[i]
+        }
+    }
+
     fun getSlotType(slot: Int): SlotType = SlotType.values().first { it.code == slotTypes[slot] }
     override fun getSlotTypeCode(slot: Int): Byte = slotTypes[slot]
     fun setSlotType(slot: Int, type: SlotType) {

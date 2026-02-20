@@ -121,8 +121,9 @@ open class ObjDynamic(var readCallback: Obj? = null, var writeCallback: Obj? = n
             // Capture the function's lexical scope (scope) so callbacks can see outer locals like parameters.
             // Build the dynamic in a child scope purely to set `this` to context, but keep captured closure at parent.
             val buildScope = scope.createChildScope(newThisObj = context)
-            // Snapshot the caller scope to capture locals/args even if the runtime pools/reuses frames
-            delegate.builderScope = scope.snapshotForClosure()
+            // Snapshot the caller scope to capture locals/args even if the runtime pools/reuses frames.
+            // Module scope should stay late-bound to allow extern class rebinding and similar updates.
+            delegate.builderScope = if (scope is net.sergeych.lyng.ModuleScope) null else scope.snapshotForClosure()
             builder.callOn(buildScope)
             return delegate
         }

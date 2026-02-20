@@ -229,8 +229,29 @@ class CmdLoadThisVariant(
         val typeConst = frame.fn.constants.getOrNull(typeId) as? BytecodeConst.StringVal
             ?: error("LOAD_THIS_VARIANT expects StringVal at $typeId")
         val typeName = typeConst.value
-        val receiver = frame.ensureScope().thisVariants.firstOrNull { it.isInstanceOf(typeName) }
-            ?: frame.ensureScope().raiseClassCastError("Cannot cast ${frame.ensureScope().thisObj.objClass.className} to $typeName")
+        val scope = frame.ensureScope()
+        if (scope.thisVariants.isEmpty() || scope.thisVariants.firstOrNull() !== scope.thisObj) {
+            scope.setThisVariants(scope.thisObj, scope.thisVariants)
+        }
+        val receiver = scope.thisVariants.firstOrNull { it.isInstanceOf(typeName) }
+            ?: run {
+                if (scope.thisObj.isInstanceOf(typeName)) return@run scope.thisObj
+                val typeClass = scope[typeName]?.value as? net.sergeych.lyng.obj.ObjClass
+                var s: Scope? = scope
+                while (s != null) {
+                    val candidate = s.thisObj
+                    if (candidate.isInstanceOf(typeName)) return@run candidate
+                    if (typeClass != null) {
+                        val inst = candidate as? net.sergeych.lyng.obj.ObjInstance
+                        if (inst != null && (inst.objClass === typeClass || inst.objClass.allParentsSet.contains(typeClass))) {
+                            return@run inst
+                        }
+                    }
+                    s = s.parent
+                }
+                val variants = scope.thisVariants.joinToString { it.objClass.className }
+                scope.raiseClassCastError("Cannot cast ${scope.thisObj.objClass.className} to $typeName (variants: $variants)")
+            }
         frame.setObj(dst, receiver)
         return
     }
@@ -2398,12 +2419,10 @@ class CmdDeclLocal(internal val constId: Int, internal val slot: Int) : Cmd() {
         )
         val moduleScope = frame.scope as? ModuleScope
         if (moduleScope != null) {
-            moduleScope.updateSlotFor(decl.name, record)
             moduleScope.objects[decl.name] = record
             moduleScope.localBindings[decl.name] = record
         } else if (frame.fn.name == "<script>") {
             val target = frame.ensureScope()
-            target.updateSlotFor(decl.name, record)
             target.objects[decl.name] = record
             target.localBindings[decl.name] = record
         }
@@ -2540,6 +2559,12 @@ private fun buildFunctionCaptureRecords(frame: CmdFrame, captureNames: List<Stri
                     it.delegate = delegate
                 }
             } else {
+                val raw = frame.frame.getRawObj(localIndex)
+                val scoped = frame.scope.chainLookupIgnoreClosure(name, followClosure = true) ?: frame.scope.get(name)
+                if (scoped != null && scoped.value !== ObjUnset) {
+                    records += scoped
+                    continue
+                }
                 records += ObjRecord(FrameSlotRef(frame.frame, localIndex), isMutable)
             }
             continue
@@ -2563,6 +2588,11 @@ private fun buildFunctionCaptureRecords(frame: CmdFrame, captureNames: List<Stri
                 }
             }
         }
+        val scoped = frame.scope.chainLookupIgnoreClosure(name, followClosure = true) ?: frame.scope.get(name)
+        if (scoped != null) {
+            records += ObjRecord(RecordSlotRef(scoped), isMutable = scoped.isMutable)
+            continue
+        }
         frame.ensureScope().raiseSymbolNotFound("capture $name not found")
     }
     return records
@@ -2579,6 +2609,17 @@ class CmdDeclClass(internal val constId: Int, internal val slot: Int) : Cmd() {
         val bodyCaptureRecords = buildFunctionCaptureRecords(frame, bodyCaptureNames)
         val result = executeClassDecl(frame.ensureScope(), decl.spec, bodyCaptureRecords, bodyCaptureNames)
         frame.setObjUnchecked(slot, result)
+        val name = decl.spec.declaredName ?: return
+        val moduleScope = frame.scope as? ModuleScope ?: return
+        val record = ObjRecord(
+            result,
+            isMutable = false,
+            visibility = net.sergeych.lyng.Visibility.Public,
+            type = ObjRecord.Type.Other
+        )
+        moduleScope.updateSlotFor(name, record)
+        moduleScope.objects[name] = record
+        moduleScope.localBindings[name] = record
         return
     }
 }
@@ -3769,6 +3810,7 @@ class CmdFrame(
     }
 
     internal fun getLocalSlotTypeCode(localIndex: Int): Byte = frame.getSlotTypeCode(localIndex)
+    internal fun readLocalObj(localIndex: Int): Obj = localSlotToObj(localIndex)
     internal fun isFastLocalSlot(slot: Int): Boolean {
         if (slot < fn.scopeSlotCount) return false
         val localIndex = slot - fn.scopeSlotCount
@@ -3904,10 +3946,26 @@ class CmdFrame(
                     }
                 }
                 CaptureOwnerFrameKind.MODULE -> {
-                    val slot = entry.slotIndex
-                    val target = scopeTarget(slot)
-                    val index = fn.scopeSlotIndices[slot]
-                    target.getSlotRecord(index)
+                    val slotId = entry.slotIndex
+                    val target = moduleScope
+                    val name = captureNames?.getOrNull(index)
+                    if (name != null) {
+                        target.tryGetLocalRecord(target, name, target.currentClassCtx)?.let { return@mapIndexed it }
+                        target.getSlotIndexOf(name)?.let { return@mapIndexed target.getSlotRecord(it) }
+                        target.get(name)?.let { return@mapIndexed it }
+                        // Fallback to current scope in case the module scope isn't in the parent chain
+                        // or doesn't carry the imported symbol yet.
+                        scope.tryGetLocalRecord(scope, name, scope.currentClassCtx)?.let { return@mapIndexed it }
+                        scope.get(name)?.let { return@mapIndexed it }
+                    }
+                    if (slotId < target.slotCount) {
+                        return@mapIndexed target.getSlotRecord(slotId)
+                    }
+                    if (name != null) {
+                        target.applySlotPlan(mapOf(name to slotId))
+                        return@mapIndexed target.getSlotRecord(slotId)
+                    }
+                    error("Missing module capture slot $slotId")
                 }
             }
         }
@@ -3931,10 +3989,15 @@ class CmdFrame(
             .firstOrNull { fn.scopeSlotIsModule.getOrNull(it) == true }
             ?.let { fn.scopeSlotNames[it] }
         if (moduleSlotName != null) {
+            findModuleScope(scope)?.let { return it }
             val bySlot = findScopeWithSlot(scope, moduleSlotName)
-            bySlot?.let { return it }
+            if (bySlot is ModuleScope) return bySlot
+            val bySlotParent = bySlot?.parent
+            if (bySlotParent is ModuleScope) return bySlotParent
             val byRecord = findScopeWithRecord(scope, moduleSlotName)
-            byRecord?.let { return it }
+            if (byRecord is ModuleScope) return byRecord
+            val byRecordParent = byRecord?.parent
+            if (byRecordParent is ModuleScope) return byRecordParent
             return scope
         }
         findModuleScope(scope)?.let { return it }
@@ -3985,7 +4048,7 @@ class CmdFrame(
             val current = queue.removeFirst()
             if (!visited.add(current)) continue
             if (current is ModuleScope) return current
-            if (current.parent is ModuleScope) return current
+            if (current.parent is ModuleScope) return current.parent
             current.parent?.let { queue.add(it) }
             if (current is BytecodeClosureScope) {
                 queue.add(current.closureScope)
@@ -4168,16 +4231,18 @@ class CmdFrame(
         } else {
             val localIndex = slot - fn.scopeSlotCount
             ensureLocalMutable(localIndex)
-            when (val existing = frame.getRawObj(localIndex)) {
-                is FrameSlotRef -> {
-                    existing.write(value)
-                    return
+            if (shouldWriteThroughLocal(localIndex)) {
+                when (val existing = frame.getRawObj(localIndex)) {
+                    is FrameSlotRef -> {
+                        existing.write(value)
+                        return
+                    }
+                    is RecordSlotRef -> {
+                        existing.write(value)
+                        return
+                    }
+                    else -> {}
                 }
-                is RecordSlotRef -> {
-                    existing.write(value)
-                    return
-                }
-                else -> {}
             }
             frame.setObj(localIndex, value)
         }
@@ -4224,16 +4289,18 @@ class CmdFrame(
             target.setSlotValue(index, ObjInt.of(value))
         } else {
             val localIndex = slot - fn.scopeSlotCount
-            when (val existing = frame.getRawObj(localIndex)) {
-                is FrameSlotRef -> {
-                    existing.write(ObjInt.of(value))
-                    return
+            if (shouldWriteThroughLocal(localIndex)) {
+                when (val existing = frame.getRawObj(localIndex)) {
+                    is FrameSlotRef -> {
+                        existing.write(ObjInt.of(value))
+                        return
+                    }
+                    is RecordSlotRef -> {
+                        existing.write(ObjInt.of(value))
+                        return
+                    }
+                    else -> {}
                 }
-                is RecordSlotRef -> {
-                    existing.write(ObjInt.of(value))
-                    return
-                }
-                else -> {}
             }
             frame.setInt(localIndex, value)
         }
@@ -4252,16 +4319,18 @@ class CmdFrame(
         } else {
             val localIndex = slot - fn.scopeSlotCount
             ensureLocalMutable(localIndex)
-            when (val existing = frame.getRawObj(localIndex)) {
-                is FrameSlotRef -> {
-                    existing.write(ObjInt.of(value))
-                    return
+            if (shouldWriteThroughLocal(localIndex)) {
+                when (val existing = frame.getRawObj(localIndex)) {
+                    is FrameSlotRef -> {
+                        existing.write(ObjInt.of(value))
+                        return
+                    }
+                    is RecordSlotRef -> {
+                        existing.write(ObjInt.of(value))
+                        return
+                    }
+                    else -> {}
                 }
-                is RecordSlotRef -> {
-                    existing.write(ObjInt.of(value))
-                    return
-                }
-                else -> {}
             }
             frame.setInt(localIndex, value)
         }
@@ -4310,16 +4379,18 @@ class CmdFrame(
         } else {
             val localIndex = slot - fn.scopeSlotCount
             ensureLocalMutable(localIndex)
-            when (val existing = frame.getRawObj(localIndex)) {
-                is FrameSlotRef -> {
-                    existing.write(ObjReal.of(value))
-                    return
+            if (shouldWriteThroughLocal(localIndex)) {
+                when (val existing = frame.getRawObj(localIndex)) {
+                    is FrameSlotRef -> {
+                        existing.write(ObjReal.of(value))
+                        return
+                    }
+                    is RecordSlotRef -> {
+                        existing.write(ObjReal.of(value))
+                        return
+                    }
+                    else -> {}
                 }
-                is RecordSlotRef -> {
-                    existing.write(ObjReal.of(value))
-                    return
-                }
-                else -> {}
             }
             frame.setReal(localIndex, value)
         }
@@ -4332,16 +4403,18 @@ class CmdFrame(
             target.setSlotValue(index, ObjReal.of(value))
         } else {
             val localIndex = slot - fn.scopeSlotCount
-            when (val existing = frame.getRawObj(localIndex)) {
-                is FrameSlotRef -> {
-                    existing.write(ObjReal.of(value))
-                    return
+            if (shouldWriteThroughLocal(localIndex)) {
+                when (val existing = frame.getRawObj(localIndex)) {
+                    is FrameSlotRef -> {
+                        existing.write(ObjReal.of(value))
+                        return
+                    }
+                    is RecordSlotRef -> {
+                        existing.write(ObjReal.of(value))
+                        return
+                    }
+                    else -> {}
                 }
-                is RecordSlotRef -> {
-                    existing.write(ObjReal.of(value))
-                    return
-                }
-                else -> {}
             }
             frame.setReal(localIndex, value)
         }
@@ -4384,16 +4457,18 @@ class CmdFrame(
         } else {
             val localIndex = slot - fn.scopeSlotCount
             ensureLocalMutable(localIndex)
-            when (val existing = frame.getRawObj(localIndex)) {
-                is FrameSlotRef -> {
-                    existing.write(if (value) ObjTrue else ObjFalse)
-                    return
+            if (shouldWriteThroughLocal(localIndex)) {
+                when (val existing = frame.getRawObj(localIndex)) {
+                    is FrameSlotRef -> {
+                        existing.write(if (value) ObjTrue else ObjFalse)
+                        return
+                    }
+                    is RecordSlotRef -> {
+                        existing.write(if (value) ObjTrue else ObjFalse)
+                        return
+                    }
+                    else -> {}
                 }
-                is RecordSlotRef -> {
-                    existing.write(if (value) ObjTrue else ObjFalse)
-                    return
-                }
-                else -> {}
             }
             frame.setBool(localIndex, value)
         }
@@ -4406,16 +4481,18 @@ class CmdFrame(
             target.setSlotValue(index, if (value) ObjTrue else ObjFalse)
         } else {
             val localIndex = slot - fn.scopeSlotCount
-            when (val existing = frame.getRawObj(localIndex)) {
-                is FrameSlotRef -> {
-                    existing.write(if (value) ObjTrue else ObjFalse)
-                    return
+            if (shouldWriteThroughLocal(localIndex)) {
+                when (val existing = frame.getRawObj(localIndex)) {
+                    is FrameSlotRef -> {
+                        existing.write(if (value) ObjTrue else ObjFalse)
+                        return
+                    }
+                    is RecordSlotRef -> {
+                        existing.write(if (value) ObjTrue else ObjFalse)
+                        return
+                    }
+                    else -> {}
                 }
-                is RecordSlotRef -> {
-                    existing.write(if (value) ObjTrue else ObjFalse)
-                    return
-                }
-                else -> {}
             }
             frame.setBool(localIndex, value)
         }
@@ -4504,7 +4581,30 @@ class CmdFrame(
             val index = ensureScopeSlot(target, slot)
             target.setSlotValue(index, value)
         } else {
-            frame.setObj(slot - fn.scopeSlotCount, value)
+            val localIndex = slot - fn.scopeSlotCount
+            if (shouldWriteThroughLocal(localIndex)) {
+                when (val existing = frame.getRawObj(localIndex)) {
+                    is FrameSlotRef -> {
+                        existing.write(value)
+                        return
+                    }
+                    is RecordSlotRef -> {
+                        existing.write(value)
+                        return
+                    }
+                    else -> {}
+                }
+            }
+            frame.setObj(localIndex, value)
+        }
+    }
+
+    private fun shouldWriteThroughLocal(localIndex: Int): Boolean {
+        if (localIndex < fn.localSlotCaptures.size && fn.localSlotCaptures[localIndex]) return true
+        if (localIndex < fn.localSlotDelegated.size && fn.localSlotDelegated[localIndex]) return true
+        return when (frame.getRawObj(localIndex)) {
+            is FrameSlotRef, is RecordSlotRef -> true
+            else -> false
         }
     }
 
@@ -4645,6 +4745,19 @@ class CmdFrame(
         if (direct is FrameSlotRef) return direct.read()
         if (direct is RecordSlotRef) return direct.read()
         val name = fn.scopeSlotNames[slot]
+        if (name != null && record.memberName != null && record.memberName != name) {
+            val resolved = target.get(name)
+            if (resolved != null) {
+                val resolvedValue = resolved.value
+                if (resolved.type == ObjRecord.Type.Delegated || resolved.type == ObjRecord.Type.Property || resolvedValue is ObjProperty) {
+                    return target.resolve(resolved, name)
+                }
+                if (resolvedValue !== ObjUnset) {
+                    target.updateSlotFor(name, resolved)
+                }
+                return resolvedValue
+            }
+        }
         if (name != null && (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || direct is ObjProperty)) {
             return target.resolve(record, name)
         }
@@ -4668,6 +4781,19 @@ class CmdFrame(
         if (direct is RecordSlotRef) return direct.read()
         val slotId = addrScopeSlots[addrSlot]
         val name = fn.scopeSlotNames.getOrNull(slotId)
+        if (name != null && record.memberName != null && record.memberName != name) {
+            val resolved = target.get(name)
+            if (resolved != null) {
+                val resolvedValue = resolved.value
+                if (resolved.type == ObjRecord.Type.Delegated || resolved.type == ObjRecord.Type.Property || resolvedValue is ObjProperty) {
+                    return target.resolve(resolved, name)
+                }
+                if (resolvedValue !== ObjUnset) {
+                    target.updateSlotFor(name, resolved)
+                }
+                return resolvedValue
+            }
+        }
         if (name != null && (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || direct is ObjProperty)) {
             return target.resolve(record, name)
         }

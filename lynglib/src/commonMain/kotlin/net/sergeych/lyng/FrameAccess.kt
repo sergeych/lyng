@@ -56,6 +56,14 @@ class FrameSlotRef(
         }
     }
 
+    override suspend fun callOn(scope: Scope): Obj {
+        val resolved = read()
+        if (resolved === this) {
+            scope.raiseNotImplemented("call on unresolved frame slot")
+        }
+        return resolved.callOn(scope)
+    }
+
     internal fun refersTo(frame: FrameAccess, slot: Int): Boolean {
         return this.frame === frame && this.slot == slot
     }
@@ -81,6 +89,62 @@ class FrameSlotRef(
     }
 }
 
+class ScopeSlotRef(
+    private val scope: Scope,
+    private val slot: Int,
+    private val name: String? = null,
+) : net.sergeych.lyng.obj.Obj() {
+    override suspend fun compareTo(scope: Scope, other: Obj): Int {
+        val resolvedOther = when (other) {
+            is FrameSlotRef -> other.read()
+            is RecordSlotRef -> other.read()
+            is ScopeSlotRef -> other.read()
+            else -> other
+        }
+        return read().compareTo(scope, resolvedOther)
+    }
+
+    fun read(): Obj {
+        val record = scope.getSlotRecord(slot)
+        val direct = record.value
+        if (direct is FrameSlotRef) return direct.read()
+        if (direct is RecordSlotRef) return direct.read()
+        if (direct is ScopeSlotRef) return direct.read()
+        if (direct !== ObjUnset) {
+            return direct
+        }
+        if (name == null) return record.value
+        val resolved = scope.get(name) ?: return record.value
+        if (resolved.value !== ObjUnset) {
+            scope.updateSlotFor(name, resolved)
+        }
+        return resolved.value
+    }
+
+    internal fun peekValue(): Obj? {
+        val record = scope.getSlotRecord(slot)
+        val direct = record.value
+        return when (direct) {
+            is FrameSlotRef -> direct.peekValue()
+            is RecordSlotRef -> direct.peekValue()
+            is ScopeSlotRef -> direct.peekValue()
+            else -> direct
+        }
+    }
+
+    fun write(value: Obj) {
+        scope.setSlotValue(slot, value)
+    }
+
+    override suspend fun callOn(scope: Scope): Obj {
+        val resolved = read()
+        if (resolved === this) {
+            scope.raiseNotImplemented("call on unresolved scope slot")
+        }
+        return resolved.callOn(scope)
+    }
+}
+
 class RecordSlotRef(
     private val record: ObjRecord,
 ) : net.sergeych.lyng.obj.Obj() {
@@ -88,6 +152,7 @@ class RecordSlotRef(
         val resolvedOther = when (other) {
             is FrameSlotRef -> other.read()
             is RecordSlotRef -> other.read()
+            is ScopeSlotRef -> other.read()
             else -> other
         }
         return read().compareTo(scope, resolvedOther)
@@ -95,7 +160,19 @@ class RecordSlotRef(
 
     fun read(): Obj {
         val direct = record.value
-        return if (direct is FrameSlotRef) direct.read() else direct
+        return when (direct) {
+            is FrameSlotRef -> direct.read()
+            is ScopeSlotRef -> direct.read()
+            else -> direct
+        }
+    }
+
+    override suspend fun callOn(scope: Scope): Obj {
+        val resolved = read()
+        if (resolved === this) {
+            scope.raiseNotImplemented("call on unresolved record slot")
+        }
+        return resolved.callOn(scope)
     }
 
     internal fun peekValue(): Obj? {
@@ -103,11 +180,17 @@ class RecordSlotRef(
         return when (direct) {
             is FrameSlotRef -> direct.peekValue()
             is RecordSlotRef -> direct.peekValue()
+            is ScopeSlotRef -> direct.peekValue()
             else -> direct
         }
     }
 
     fun write(value: Obj) {
-        record.value = value
+        val direct = record.value
+        if (direct is ScopeSlotRef) {
+            direct.write(value)
+        } else {
+            record.value = value
+        }
     }
 }

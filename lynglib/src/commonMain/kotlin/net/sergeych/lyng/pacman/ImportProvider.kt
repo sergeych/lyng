@@ -84,7 +84,8 @@ abstract class ImportProvider(
         val module = newModuleAt(pos)
         if (seed.plan.isNotEmpty()) module.applySlotPlan(seed.plan)
         seed.stdlib.importInto(module, null)
+        // Predeclare regex match result slot ($~) in every module scope.
+        module.addOrUpdateItem("$~", net.sergeych.lyng.obj.ObjNull)
         return module
     }
 }
-

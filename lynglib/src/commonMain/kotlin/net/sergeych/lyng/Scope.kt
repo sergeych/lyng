@@ -635,10 +635,16 @@ open class Scope(
         objects[name]?.let {
             if( !it.isMutable )
                 raiseIllegalAssignment("symbol is readonly: $name")
-            it.value = value
+            when (val current = it.value) {
+                is FrameSlotRef -> current.write(value)
+                is RecordSlotRef -> current.write(value)
+                else -> it.value = value
+            }
             // keep local binding index consistent within the frame
             localBindings[name] = it
             bumpClassLayoutIfNeeded(name, value, recordType)
+            updateSlotFor(name, it)
+            syncModuleFrameSlot(name, value)
             it
         } ?: addItem(name, true, value, visibility, writeVisibility, recordType, isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride)
 
@@ -705,6 +711,7 @@ open class Scope(
                 slots[idx] = rec
             }
         }
+        syncModuleFrameSlot(name, value)
         return rec
     }
 
@@ -752,7 +759,48 @@ open class Scope(
 
     // --- removed doc-aware overloads to keep runtime lean ---
 
-    fun addConst(name: String, value: Obj) = addItem(name, false, value)
+    fun addConst(name: String, value: Obj): ObjRecord {
+        val existing = objects[name]
+        if (existing != null) {
+            when (val current = existing.value) {
+                is FrameSlotRef -> current.write(value)
+                is RecordSlotRef -> current.write(value)
+                else -> existing.value = value
+            }
+            bumpClassLayoutIfNeeded(name, value, existing.type)
+            updateSlotFor(name, existing)
+            syncModuleFrameSlot(name, value)
+            return existing
+        }
+        val slotIndex = getSlotIndexOf(name)
+        if (slotIndex != null) {
+            val record = getSlotRecord(slotIndex)
+            when (val current = record.value) {
+                is FrameSlotRef -> current.write(value)
+                is RecordSlotRef -> current.write(value)
+                else -> record.value = value
+            }
+            bumpClassLayoutIfNeeded(name, value, record.type)
+            updateSlotFor(name, record)
+            syncModuleFrameSlot(name, value)
+            return record
+        }
+        val record = addItem(name, false, value)
+        syncModuleFrameSlot(name, value)
+        return record
+    }
+
+    private fun syncModuleFrameSlot(name: String, value: Obj) {
+        val module = this as? ModuleScope ?: return
+        val frame = module.moduleFrame ?: return
+        val localNames = module.moduleFrameLocalSlotNames
+        if (localNames.isEmpty()) return
+        for (i in localNames.indices) {
+            if (localNames[i] == name) {
+                frame.setObj(i, value)
+            }
+        }
+    }
 
 
     suspend fun eval(code: String): Obj =

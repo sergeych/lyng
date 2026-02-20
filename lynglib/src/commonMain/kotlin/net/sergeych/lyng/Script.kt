@@ -42,13 +42,12 @@ class Script(
 //    private val catchReturn: Boolean = false,
 ) : Statement() {
     fun statements(): List<Statement> = statements
-
     override suspend fun execute(scope: Scope): Obj {
         scope.pos = pos
         val execScope = resolveModuleScope(scope) ?: scope
         val isModuleScope = execScope is ModuleScope
         val shouldSeedModule = isModuleScope || execScope.thisObj === ObjVoid
-        val moduleTarget = execScope
+        val moduleTarget = (execScope as? ModuleScope) ?: execScope.parent as? ModuleScope ?: execScope
         if (shouldSeedModule) {
             seedModuleSlots(moduleTarget, scope)
         }
@@ -56,9 +55,15 @@ class Script(
             if (execScope is ModuleScope) {
                 execScope.ensureModuleFrame(fn)
             }
-            return CmdVm().execute(fn, execScope, scope.args) { frame, _ ->
+            var execFrame: net.sergeych.lyng.bytecode.CmdFrame? = null
+            val result = CmdVm().execute(fn, execScope, scope.args) { frame, _ ->
+                execFrame = frame
                 seedModuleLocals(frame, moduleTarget, scope)
             }
+            if (execScope !is ModuleScope) {
+                execFrame?.let { syncFrameLocalsToScope(it, execScope) }
+            }
+            return result
         }
         if (statements.isNotEmpty()) {
             scope.raiseIllegalState("bytecode-only execution is required; missing module bytecode")
@@ -69,6 +74,13 @@ class Script(
     private suspend fun seedModuleSlots(scope: Scope, seedScope: Scope) {
         if (importBindings.isEmpty() && importedModules.isEmpty()) return
         seedImportBindings(scope, seedScope)
+        if (moduleSlotPlan.isNotEmpty()) {
+            scope.applySlotPlan(moduleSlotPlan)
+            for (name in moduleSlotPlan.keys) {
+                val record = scope.objects[name] ?: scope.localBindings[name] ?: continue
+                scope.updateSlotFor(name, record)
+            }
+        }
     }
 
     private suspend fun seedModuleLocals(
@@ -87,9 +99,40 @@ class Script(
             val value = if (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property) {
                 scope.resolve(record, name)
             } else {
-                record.value
+                val raw = record.value
+                when (raw) {
+                    is FrameSlotRef -> {
+                        if (raw.refersTo(frame.frame, i)) {
+                            raw.peekValue() ?: continue
+                        } else if (seedScope !is ModuleScope) {
+                            raw
+                        } else {
+                            raw.read()
+                        }
+                    }
+                    is RecordSlotRef -> {
+                        if (seedScope !is ModuleScope) raw else raw.read()
+                    }
+                    else -> raw
+                }
             }
             frame.setObjUnchecked(base + i, value)
+        }
+    }
+
+    private fun syncFrameLocalsToScope(frame: net.sergeych.lyng.bytecode.CmdFrame, scope: Scope) {
+        val localNames = frame.fn.localSlotNames
+        if (localNames.isEmpty()) return
+        for (i in localNames.indices) {
+            val name = localNames[i] ?: continue
+            val record = scope.getLocalRecordDirect(name) ?: scope.localBindings[name] ?: scope.objects[name] ?: continue
+            val value = frame.readLocalObj(i)
+            when (val current = record.value) {
+                is FrameSlotRef -> current.write(value)
+                is RecordSlotRef -> current.write(value)
+                else -> record.value = value
+            }
+            scope.updateSlotFor(name, record)
         }
     }
 
@@ -101,6 +144,9 @@ class Script(
         }
         if (scope is ModuleScope) {
             scope.importedModules = importedModules.toList()
+        }
+        for (module in importedModules) {
+            module.importInto(scope, null)
         }
         for ((name, binding) in importBindings) {
             val record = when (val source = binding.source) {

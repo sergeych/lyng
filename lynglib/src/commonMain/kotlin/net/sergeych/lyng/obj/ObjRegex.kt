@@ -17,14 +17,12 @@
 
 package net.sergeych.lyng.obj
 
-import net.sergeych.lyng.FrameSlotRef
 import net.sergeych.lyng.PerfFlags
 import net.sergeych.lyng.Pos
-import net.sergeych.lyng.RecordSlotRef
 import net.sergeych.lyng.RegexCache
 import net.sergeych.lyng.Scope
-import net.sergeych.lyng.requireScope
 import net.sergeych.lyng.miniast.*
+import net.sergeych.lyng.requireScope
 
 class ObjRegex(val regex: Regex) : Obj() {
     override val objClass get() = type
@@ -33,18 +31,10 @@ class ObjRegex(val regex: Regex) : Obj() {
         return regex.find(other.cast<ObjString>(scope).value)?.let {
             val match = ObjRegexMatch(it)
             val record = scope.chainLookupIgnoreClosure("$~", followClosure = true)
-            if (record != null) {
-                if (!record.isMutable) {
-                    scope.raiseIllegalAssignment("symbol is readonly: $~")
-                }
-                when (val value = record.value) {
-                    is FrameSlotRef -> value.write(match)
-                    is RecordSlotRef -> value.write(match)
-                    else -> record.value = match
-                }
-            } else {
-                scope.addOrUpdateItem("$~", match)
+            if (record != null && !record.isMutable) {
+                scope.raiseIllegalAssignment("symbol is readonly: $~")
             }
+            scope.addOrUpdateItem("$~", match)
             ObjTrue
         } ?: ObjFalse
     }

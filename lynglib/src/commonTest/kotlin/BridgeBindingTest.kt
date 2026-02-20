@@ -21,6 +21,8 @@ import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.bridge.LyngClassBridge
 import net.sergeych.lyng.bridge.bindObject
 import net.sergeych.lyng.bridge.data
+import net.sergeych.lyng.obj.Obj
+import net.sergeych.lyng.obj.ObjClass
 import net.sergeych.lyng.obj.ObjInt
 import net.sergeych.lyng.obj.ObjString
 import kotlin.test.Test
@@ -214,17 +216,35 @@ class BridgeBindingTest {
         )
     }
 
-//    @Test
-//    fun testGlobalBindingsProperty() = runTest {
-//        eval("""
-//            val D: ()->Void = dynamic {
-//                get { name ->
-//                    {
-//                        args -> "name: "+name+" args="+args
-//                    }
-//                }
-//            }
-//            assertEquals("name: foo args=[42,bar]", D.foo(42, "bar"))
-//        """.trimIndent())
-//    }
+    class ObjA: Obj() {
+        companion object {
+            val type = ObjClass("A").apply {
+                addProperty("field",{
+                    ObjInt.of(42)
+                })
+            }
+        }
+    }
+
+    @Test
+    fun testBindExternClass() = runTest {
+        val ms = Script.newScope()
+        ms.eval("""
+            extern class A {
+                val field: Int
+            }
+            
+            fun test(a: A) = a.field
+            
+            val prop = dynamic {
+                get { name ->
+                    name + "=" + A().field
+                }
+            }
+            
+        """.trimIndent())
+        ms.addConst("A", ObjA.type)
+        ms.eval("assertEquals(42, test(A()))")
+        ms.eval("assertEquals(\"test=42\", prop.test)")
+    }
 }

@@ -35,6 +35,7 @@ class BytecodeCompiler(
     private val slotTypeByScopeId: Map<Int, Map<Int, ObjClass>> = emptyMap(),
     private val slotTypeDeclByScopeId: Map<Int, Map<Int, TypeDecl>> = emptyMap(),
     private val knownNameObjClass: Map<String, ObjClass> = emptyMap(),
+    private val knownClassNames: Set<String> = emptySet(),
     private val knownObjectNames: Set<String> = emptySet(),
     private val classFieldTypesByName: Map<String, Map<String, ObjClass>> = emptyMap(),
     private val enumEntriesByName: Map<String, List<String>> = emptyMap(),
@@ -78,7 +79,6 @@ class BytecodeCompiler(
     private val stableObjSlots = mutableSetOf<Int>()
     private val nameObjClass = knownNameObjClass.toMutableMap()
     private val listElementClassBySlot = mutableMapOf<Int, ObjClass>()
-    private val knownClassNames = knownNameObjClass.keys.toSet()
     private val slotInitClassByKey = mutableMapOf<ScopeSlotKey, ObjClass>()
     private val intLoopVarNames = LinkedHashSet<String>()
     private val valueFnRefs = LinkedHashSet<ValueFnRef>()
@@ -522,7 +522,7 @@ class BytecodeCompiler(
                     }
                 }
                 if (resolved == SlotType.UNKNOWN) {
-                    val inferred = slotTypeFromClass(nameObjClass[ref.name])
+                    val inferred = if (knownClassNames.contains(ref.name)) null else slotTypeFromClass(nameObjClass[ref.name])
                     if (inferred != null) {
                         updateSlotType(mapped, inferred)
                         resolved = inferred
@@ -7695,14 +7695,28 @@ class BytecodeCompiler(
             for (ref in valueFnRefs) {
                 val entries = lambdaCaptureEntriesByRef[ref] ?: continue
                 for (entry in entries) {
-                    if (entry.ownerKind != CaptureOwnerFrameKind.LOCAL) continue
-                    val key = ScopeSlotKey(entry.ownerScopeId, entry.ownerSlotId)
-                    if (!localSlotInfoMap.containsKey(key)) {
-                        localSlotInfoMap[key] = LocalSlotInfo(
-                            entry.ownerName,
-                            entry.ownerIsMutable,
-                            entry.ownerIsDelegated
-                        )
+                    if (entry.ownerKind == CaptureOwnerFrameKind.LOCAL) {
+                        val key = ScopeSlotKey(entry.ownerScopeId, entry.ownerSlotId)
+                        if (!localSlotInfoMap.containsKey(key)) {
+                            localSlotInfoMap[key] = LocalSlotInfo(
+                                entry.ownerName,
+                                entry.ownerIsMutable,
+                                entry.ownerIsDelegated
+                            )
+                        }
+                        continue
+                    }
+                    if (entry.ownerKind == CaptureOwnerFrameKind.MODULE) {
+                        val key = ScopeSlotKey(entry.ownerScopeId, entry.ownerSlotId)
+                        if (!scopeSlotMap.containsKey(key)) {
+                            scopeSlotMap[key] = scopeSlotMap.size
+                        }
+                        if (!scopeSlotNameMap.containsKey(key)) {
+                            scopeSlotNameMap[key] = entry.ownerName
+                        }
+                        if (!scopeSlotMutableMap.containsKey(key)) {
+                            scopeSlotMutableMap[key] = entry.ownerIsMutable
+                        }
                     }
                 }
             }
@@ -8171,7 +8185,8 @@ class BytecodeCompiler(
     }
 
     private fun isModuleSlot(scopeId: Int, name: String?): Boolean {
-        val scopeNames = scopeSlotNameSet ?: allowedScopeNames
+        if (moduleScopeId != null && scopeId != moduleScopeId) return false
+        val scopeNames = allowedScopeNames ?: scopeSlotNameSet
         if (scopeNames == null || name == null) return false
         return scopeNames.contains(name)
     }
