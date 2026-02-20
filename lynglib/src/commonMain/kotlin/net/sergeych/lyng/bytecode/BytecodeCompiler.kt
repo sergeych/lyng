@@ -3268,9 +3268,10 @@ class BytecodeCompiler(
         if (ref.name.isBlank()) {
             return compileRefWithFallback(ref.target, null, Pos.builtIn)
         }
+        val pos = callSitePos()
         val receiverClass = resolveReceiverClass(ref.target) ?: ObjDynamic.type
         if (receiverClass == ObjDynamic.type) {
-            val receiver = compileRefWithFallback(ref.target, null, Pos.builtIn) ?: return null
+            val receiver = compileRefWithFallback(ref.target, null, pos) ?: return null
             val dst = allocSlot()
             val nameId = builder.addConst(BytecodeConst.StringVal(ref.name))
             if (!ref.isOptional) {
@@ -3296,7 +3297,7 @@ class BytecodeCompiler(
             return CompiledValue(dst, SlotType.OBJ)
         }
         if (receiverClass is ObjInstanceClass && !isThisReceiver(ref.target)) {
-            val receiver = compileRefWithFallback(ref.target, null, Pos.builtIn) ?: return null
+            val receiver = compileRefWithFallback(ref.target, null, pos) ?: return null
             val dst = allocSlot()
             val nameId = builder.addConst(BytecodeConst.StringVal(ref.name))
             if (!ref.isOptional) {
@@ -3323,7 +3324,7 @@ class BytecodeCompiler(
         }
         val resolvedMember = receiverClass.resolveInstanceMember(ref.name)
         if (resolvedMember?.declaringClass?.className == "Obj") {
-            val receiver = compileRefWithFallback(ref.target, null, Pos.builtIn) ?: return null
+            val receiver = compileRefWithFallback(ref.target, null, pos) ?: return null
             val dst = allocSlot()
             val nameId = builder.addConst(BytecodeConst.StringVal(ref.name))
             if (!ref.isOptional) {
@@ -3352,7 +3353,7 @@ class BytecodeCompiler(
         val methodId = if (resolvedMember != null) receiverClass.instanceMethodIdMap(includeAbstract = true)[ref.name] else null
         val encodedFieldId = encodeMemberId(receiverClass, fieldId)
         val encodedMethodId = encodeMemberId(receiverClass, methodId)
-        val receiver = compileRefWithFallback(ref.target, null, Pos.builtIn) ?: return null
+        val receiver = compileRefWithFallback(ref.target, null, pos) ?: return null
         val dst = allocSlot()
         if (fieldId == null && methodId == null && (isKnownClassReceiver(ref.target) || isClassNameRef(ref.target, receiverClass)) &&
             (isClassSlot(receiver.slot) || receiverClass == ObjClassType)

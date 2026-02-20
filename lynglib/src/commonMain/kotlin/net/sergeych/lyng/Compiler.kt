@@ -890,7 +890,7 @@ class Compiler(
                 val methodId = classCtx.memberMethodIds[name]
                 if (fieldId != null || methodId != null) {
                     resolutionSink?.referenceMember(name, pos)
-                    return ImplicitThisMemberRef(name, pos, fieldId, methodId, currentImplicitThisTypeName())
+                    return ImplicitThisMemberRef(name, pos, fieldId, methodId, classCtx.name)
                 }
             }
             captureLocalRef(name, slotLoc, pos)?.let { ref ->

@@ -3229,6 +3229,7 @@ class CmdGetMemberSlot(
     internal val dst: Int,
 ) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
+        val scope = frame.ensureScope()
         val receiver = frame.slotToObj(recvSlot)
         val inst = receiver as? ObjInstance
         val cls = receiver as? ObjClass
@@ -3251,7 +3252,26 @@ class CmdGetMemberSlot(
                     else -> receiver.objClass.methodRecordForId(methodIdResolved)
                 }
             } else null
-        } ?: frame.ensureScope().raiseSymbolNotFound("member")
+        } ?: run {
+            val receiverClass = when {
+                cls != null && fieldOnObjClass -> cls.objClass
+                cls != null -> cls
+                else -> receiver.objClass
+            }
+            val fieldName = if (fieldIdResolved >= 0) {
+                receiverClass.fieldSlotMap().entries.firstOrNull { it.value.slot == fieldIdResolved }?.key
+            } else null
+            val methodName = if (methodIdResolved >= 0) {
+                receiverClass.methodSlotMap().entries.firstOrNull { it.value.slot == methodIdResolved }?.key
+            } else null
+            val memberName = fieldName ?: methodName
+            val message = if (memberName != null) {
+                "no such member: $memberName on ${receiverClass.className}"
+            } else {
+                "no such member slot (fieldId=$fieldIdResolved, methodId=$methodIdResolved) on ${receiverClass.className}"
+            }
+            scope.raiseError(message)
+        }
         val rawName = rec.memberName ?: "<member>"
         val name = if (receiver is ObjInstance && rawName.contains("::")) {
             rawName.substringAfterLast("::")
@@ -3283,6 +3303,7 @@ class CmdSetMemberSlot(
     internal val valueSlot: Int,
 ) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
+        val scope = frame.ensureScope()
         val receiver = frame.slotToObj(recvSlot)
         val inst = receiver as? ObjInstance
         val cls = receiver as? ObjClass
@@ -3305,7 +3326,26 @@ class CmdSetMemberSlot(
                     else -> receiver.objClass.methodRecordForId(methodIdResolved)
                 }
             } else null
-        } ?: frame.ensureScope().raiseSymbolNotFound("member")
+        } ?: run {
+            val receiverClass = when {
+                cls != null && fieldOnObjClass -> cls.objClass
+                cls != null -> cls
+                else -> receiver.objClass
+            }
+            val fieldName = if (fieldIdResolved >= 0) {
+                receiverClass.fieldSlotMap().entries.firstOrNull { it.value.slot == fieldIdResolved }?.key
+            } else null
+            val methodName = if (methodIdResolved >= 0) {
+                receiverClass.methodSlotMap().entries.firstOrNull { it.value.slot == methodIdResolved }?.key
+            } else null
+            val memberName = fieldName ?: methodName
+            val message = if (memberName != null) {
+                "no such member: $memberName on ${receiverClass.className}"
+            } else {
+                "no such member slot (fieldId=$fieldIdResolved, methodId=$methodIdResolved) on ${receiverClass.className}"
+            }
+            scope.raiseError(message)
+        }
         val rawName = rec.memberName ?: "<member>"
         val name = if (receiver is ObjInstance && rawName.contains("::")) {
             rawName.substringAfterLast("::")
@@ -3568,6 +3608,20 @@ class BytecodeLambdaCallable(
     private val returnLabels: Set<String>,
     override val pos: Pos,
 ) : Statement(), BytecodeCallable {
+    fun rebindClosure(newClosureScope: Scope): BytecodeLambdaCallable {
+        return BytecodeLambdaCallable(
+            fn = fn,
+            closureScope = newClosureScope,
+            captureRecords = captureRecords,
+            captureNames = captureNames,
+            paramSlotPlan = paramSlotPlan,
+            argsDeclaration = argsDeclaration,
+            preferredThisType = preferredThisType,
+            returnLabels = returnLabels,
+            pos = pos
+        )
+    }
+
     override suspend fun execute(scope: Scope): Obj {
         val context = scope.applyClosureForBytecode(closureScope, preferredThisType).also {
             it.args = scope.args

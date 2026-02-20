@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,8 @@ package net.sergeych.lyng
 
 data class Pos(val source: Source, val line: Int, val column: Int) {
     override fun toString(): String {
-        return "${source.fileName}:${line+1}:${column}"
+        val col = if (column >= 0) column + 1 else column
+        return "${source.fileName}:${line+1}:$col"
     }
 
     @Suppress("unused")

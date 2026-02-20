@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Arguments
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.bytecode.BytecodeLambdaCallable
 
 class ObjDynamicContext(val delegate: ObjDynamic) : Obj() {
     override val objClass: ObjClass get() = type
@@ -29,7 +30,8 @@ class ObjDynamicContext(val delegate: ObjDynamic) : Obj() {
                 val d = thisAs<ObjDynamicContext>().delegate
                 if (d.readCallback != null)
                     raiseIllegalState("get already defined")
-                d.readCallback = requireOnlyArg()
+                val callback = requireOnlyArg<Obj>()
+                d.readCallback = d.rebindCallback(requireScope(), callback)
                 ObjVoid
             }
 
@@ -37,7 +39,8 @@ class ObjDynamicContext(val delegate: ObjDynamic) : Obj() {
                 val d = thisAs<ObjDynamicContext>().delegate
                 if (d.writeCallback != null)
                     raiseIllegalState("set already defined")
-                d.writeCallback = requireOnlyArg()
+                val callback = requireOnlyArg<Obj>()
+                d.writeCallback = d.rebindCallback(requireScope(), callback)
                 ObjVoid
             }
 
@@ -55,6 +58,11 @@ open class ObjDynamic(var readCallback: Obj? = null, var writeCallback: Obj? = n
     override val objClass: ObjClass get() = type
     // Capture the lexical scope used to build this dynamic so callbacks can see outer locals
     internal var builderScope: Scope? = null
+    internal fun rebindCallback(contextScope: Scope, callback: Obj): Obj {
+        val snapshot = builderScope ?: return callback
+        val context = Scope(snapshot, contextScope.args, contextScope.pos, contextScope.thisObj)
+        return (callback as? BytecodeLambdaCallable)?.rebindClosure(context) ?: callback
+    }
 
     /**
      * Use read callback to dynamically resolve the field name. Note that it does not work

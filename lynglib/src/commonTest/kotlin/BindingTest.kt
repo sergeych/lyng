@@ -23,6 +23,9 @@ package net.sergeych.lyng
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.binding.Binder
 import net.sergeych.lyng.miniast.MiniAstBuilder
+import net.sergeych.lyng.obj.Obj
+import net.sergeych.lyng.obj.ObjClass
+import net.sergeych.lyng.obj.ObjString
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -129,4 +132,83 @@ class BindingTest {
         val refs = snap.references.count { it.symbolId == xField.id }
         assertEquals(1, refs)
     }
+
+    class ObjA: Obj() {
+        override val objClass = type
+
+        companion object {
+            val type = ObjClass("ObjA").apply {
+                addFn("get1") {
+                    ObjString("get1")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun testShortFormMethod() = runTest {
+        eval("""
+            class A {
+                fun get1() = "1"
+                fun get2() = get1() + "-2"
+                fun get3(): String = get2() + "-3"
+                override fun toString() = "!"+get3()+"!"
+            }
+            assert(A().get3() == "1-2-3")
+            assert(A().toString() == "!1-2-3!")
+        """.trimIndent())
+    }
+
+    @Test
+    fun testLateGlobalBinding() = runTest {
+        val ms = Script.newScope()
+        ms.eval("""
+            extern class A {
+                fun get1(): String
+            }
+            
+            extern fun getA(): A
+            
+            fun getB(a: A) = a.get1() + "-2"
+        """.trimIndent())
+
+        ms.addFn("getA") {
+            ObjA()
+        }
+        ms.addConst("A", ObjA.type)
+        ms.eval("""
+            assert(A() is A)
+            assert(getA() is A)
+            assertEquals(getB(getA()), "get1-2")
+        """.trimIndent())
+    }
+
+    @Test
+    fun testDynamicToDynamic() = runTest {
+        val ms = Script.newScope()
+        ms.eval("""
+  
+            class A(prefix) {
+                val da = dynamic {
+                    get { name -> "a:"+prefix+":"+name }
+                }
+            }
+            
+            val B: A = dynamic {
+                get { p -> A(p) }
+            }
+            assertEquals(A("bar").da.foo, "a:bar:foo")
+            assertEquals( B.buzz.da.foo, "a:buzz:foo" )
+        
+            val C = dynamic {
+                get { p -> A(p).da }
+            }
+            
+            assertEquals(C.buzz.foo, "a:buzz:foo")
+        """.trimIndent())
+        ms.eval("""
+        """)
+    }
 }
+
+
