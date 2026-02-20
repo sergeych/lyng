@@ -209,6 +209,32 @@ class BindingTest {
         ms.eval("""
         """)
     }
+    @Test
+    fun testDynamicToDynamicFun() = runTest {
+        val ms = Script.newScope()
+        ms.eval("""
+  
+            class A(prefix) {
+                val da = dynamic {
+                    get { name -> { x -> "a:"+prefix+":"+name+"/"+x } }
+                }
+            }
+            
+            val B: A = dynamic {
+                get { p -> A(p) }
+            }
+            assertEquals(A("bar").da.foo("buzz"), "a:bar:foo/buzz")
+            assertEquals( B.buzz.da.foo("42"), "a:buzz:foo/42" )
+
+            val C = dynamic {
+                get { p -> A(p).da }
+            }
+
+            assertEquals(C.buzz.foo("one"), "a:buzz:foo/one")
+        """.trimIndent())
+        ms.eval("""
+        """)
+    }
 }
 
 
