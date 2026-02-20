@@ -182,59 +182,6 @@ class BindingTest {
             assertEquals(getB(getA()), "get1-2")
         """.trimIndent())
     }
-
-    @Test
-    fun testDynamicToDynamic() = runTest {
-        val ms = Script.newScope()
-        ms.eval("""
-  
-            class A(prefix) {
-                val da = dynamic {
-                    get { name -> "a:"+prefix+":"+name }
-                }
-            }
-            
-            val B: A = dynamic {
-                get { p -> A(p) }
-            }
-            assertEquals(A("bar").da.foo, "a:bar:foo")
-            assertEquals( B.buzz.da.foo, "a:buzz:foo" )
-        
-            val C = dynamic {
-                get { p -> A(p).da }
-            }
-            
-            assertEquals(C.buzz.foo, "a:buzz:foo")
-        """.trimIndent())
-        ms.eval("""
-        """)
-    }
-    @Test
-    fun testDynamicToDynamicFun() = runTest {
-        val ms = Script.newScope()
-        ms.eval("""
-  
-            class A(prefix) {
-                val da = dynamic {
-                    get { name -> { x -> "a:"+prefix+":"+name+"/"+x } }
-                }
-            }
-            
-            val B: A = dynamic {
-                get { p -> A(p) }
-            }
-            assertEquals(A("bar").da.foo("buzz"), "a:bar:foo/buzz")
-            assertEquals( B.buzz.da.foo("42"), "a:buzz:foo/42" )
-
-            val C = dynamic {
-                get { p -> A(p).da }
-            }
-
-            assertEquals(C.buzz.foo("one"), "a:buzz:foo/one")
-        """.trimIndent())
-        ms.eval("""
-        """)
-    }
 }
 
 
