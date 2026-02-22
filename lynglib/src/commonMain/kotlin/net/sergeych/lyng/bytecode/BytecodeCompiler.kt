@@ -1638,7 +1638,7 @@ class BytecodeCompiler(
                     else -> null
                 }
             }
-            else -> null
+            //else -> null
         }
     }
 

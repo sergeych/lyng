@@ -1211,7 +1211,7 @@ class Compiler(
                     is FrameSlotRef -> raw.peekValue() ?: raw.read()
                     is RecordSlotRef -> raw.peekValue() ?: raw.read()
                     else -> raw
-                } ?: continue
+                }
                 when (resolved) {
                     is ObjClass -> nameObjClass[name] = resolved
                     is ObjInstance -> nameObjClass[name] = resolved.objClass
