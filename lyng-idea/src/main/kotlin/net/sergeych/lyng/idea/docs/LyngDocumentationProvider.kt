@@ -24,6 +24,7 @@ import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
+import kotlinx.coroutines.runBlocking
 import net.sergeych.lyng.highlight.offsetOf
 import net.sergeych.lyng.idea.LyngLanguage
 import net.sergeych.lyng.idea.util.LyngAstManager
@@ -75,7 +76,51 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
 
         // Single-source quick doc lookup
         LyngLanguageTools.docAt(analysis, offset)?.let { info ->
-            renderDocFromInfo(info)?.let { return it }
+            val enriched = if (info.doc == null) {
+                findDocInDeclarationFiles(file, info.target.containerName, info.target.name)
+                    ?.let { info.copy(doc = it) } ?: info
+            } else {
+                info
+            }
+            renderDocFromInfo(enriched)?.let { return it }
+        }
+
+        // Fallback: resolve references against merged MiniAst (including .lyng.d) when binder cannot
+        run {
+            val dotPos = DocLookupUtils.findDotLeft(text, idRange.startOffset)
+            if (dotPos != null) {
+                val receiverClass = DocLookupUtils.guessReceiverClassViaMini(mini, text, dotPos, imported, analysis.binding)
+                    ?: DocLookupUtils.guessReceiverClass(text, dotPos, imported, mini)
+                if (receiverClass != null) {
+                    val resolved = DocLookupUtils.resolveMemberWithInheritance(imported, receiverClass, ident, mini)
+                    if (resolved != null) {
+                        val owner = resolved.first
+                        val member = resolved.second
+                        val withDoc = if (member.doc == null) {
+                            findDocInDeclarationFiles(file, owner, member.name)?.let { doc ->
+                                when (member) {
+                                    is MiniMemberFunDecl -> member.copy(doc = doc)
+                                    is MiniMemberValDecl -> member.copy(doc = doc)
+                                    is MiniMemberTypeAliasDecl -> member.copy(doc = doc)
+                                    else -> member
+                                }
+                            } ?: member
+                        } else {
+                            member
+                        }
+                        return when (withDoc) {
+                            is MiniMemberFunDecl -> renderMemberFunDoc(owner, withDoc)
+                            is MiniMemberValDecl -> renderMemberValDoc(owner, withDoc)
+                            is MiniMemberTypeAliasDecl -> renderMemberTypeAliasDoc(owner, withDoc)
+                            else -> null
+                        }
+                    }
+                }
+            } else {
+                mini.declarations.firstOrNull { it.name == ident }?.let { decl ->
+                    return renderDeclDoc(decl, text, mini, imported)
+                }
+            }
         }
 
         // Try resolve to: function param at position, function/class/val declaration at position
@@ -568,6 +613,55 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
         sb.append(renderTitle(title))
         sb.append(renderDocBody(info.doc))
         return sb.toString()
+    }
+
+    private fun findDocInDeclarationFiles(file: PsiFile, container: String?, name: String): MiniDoc? {
+        val declFiles = LyngAstManager.getDeclarationFiles(file)
+        if (declFiles.isEmpty()) return null
+
+        fun findInMini(mini: MiniScript): MiniDoc? {
+            if (container == null) {
+                mini.declarations.firstOrNull { it.name == name }?.let { return it.doc }
+                return null
+            }
+            val cls = mini.declarations.filterIsInstance<MiniClassDecl>().firstOrNull { it.name == container } ?: return null
+            cls.members.firstOrNull { it.name == name }?.let { return it.doc }
+            cls.ctorFields.firstOrNull { it.name == name }?.let { return null }
+            cls.classFields.firstOrNull { it.name == name }?.let { return null }
+            return null
+        }
+
+        for (df in declFiles) {
+            val mini = LyngAstManager.getMiniAst(df)
+                ?: run {
+                    try {
+                        val res = runBlocking {
+                            LyngLanguageTools.analyze(df.text, df.name)
+                        }
+                        res.mini
+                    } catch (_: Throwable) {
+                        null
+                    }
+                }
+            if (mini != null) {
+                val doc = findInMini(mini)
+                if (doc != null) return doc
+            }
+            // Text fallback: parse preceding doc comment for the symbol
+            val parsed = parseDocFromText(df.text, name)
+            if (parsed != null) return parsed
+        }
+        return null
+    }
+
+    private fun parseDocFromText(text: String, name: String): MiniDoc? {
+        if (text.isBlank()) return null
+        val pattern = Regex("/\\*\\*([\\s\\S]*?)\\*/\\s*(?:public|private|protected|static|abstract|extern|open|closed|override\\s+)*\\s*(?:fun|val|var|class|interface|enum|type)\\s+$name\\b")
+        val m = pattern.find(text) ?: return null
+        val raw = m.groupValues.getOrNull(1)?.trim() ?: return null
+        if (raw.isBlank()) return null
+        val src = net.sergeych.lyng.Source("<doc>", raw)
+        return MiniDoc.parse(MiniRange(src.startPos, src.startPos), raw.lines())
     }
 
     private fun renderParamDoc(fn: MiniFunDecl, p: MiniParam): String {

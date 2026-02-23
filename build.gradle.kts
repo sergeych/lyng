@@ -35,3 +35,27 @@ tasks.register<Exec>("generateDocs") {
     description = "Generates a single-file documentation HTML using bin/generate_docs.sh"
     commandLine("./bin/generate_docs.sh")
 }
+
+// Sample generator task for .lyng.d definition files (not wired into build).
+// Usage: ./gradlew generateLyngDefsSample
+tasks.register("generateLyngDefsSample") {
+    group = "lyng"
+    description = "Generate a sample .lyng.d file under build/generated/lyng/defs"
+    outputs.dir(layout.buildDirectory.dir("generated/lyng/defs"))
+    doLast {
+        val outDir = layout.buildDirectory.dir("generated/lyng/defs").get().asFile
+        outDir.mkdirs()
+        val outFile = outDir.resolve("sample.lyng.d")
+        outFile.writeText(
+            """
+            /** Generated API */
+            extern fun ping(): Int
+
+            /** Generated class */
+            class Generated(val name: String) {
+                fun greet(): String = "hi " + name
+            }
+            """.trimIndent()
+        )
+    }
+}

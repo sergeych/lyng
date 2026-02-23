@@ -1163,6 +1163,7 @@ object DocLookupUtils {
     }
 
     fun findDotLeft(text: String, offset: Int): Int? {
+        if (text.isEmpty()) return null
         var i = (offset - 1).coerceAtLeast(0)
         while (i >= 0 && text[i].isWhitespace()) i--
         return if (i >= 0 && text[i] == '.') i else null

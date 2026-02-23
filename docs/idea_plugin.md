@@ -9,8 +9,11 @@ should be compatible with other IDEA flavors, notably [OpenIDE](https://openide.
 - reformat code (indents, spaces)
 - reformat on paste
 - smart enter key
+- `.lyng.d` definition files (merged into analysis for completion, navigation, Quick Docs, and error checking)
 
 Features are configurable via the plugin settings page, in system settings.
+
+See `docs/lyng_d_files.md` for `.lyng.d` syntax and examples.
 
 > Recommended for IntelliJ-based IDEs: While IntelliJ can import TextMate bundles
 > (Settings/Preferences → Editor → TextMate Bundles), the native Lyng plugin provides

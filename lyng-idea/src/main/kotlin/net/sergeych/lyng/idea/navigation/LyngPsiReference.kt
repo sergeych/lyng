@@ -20,12 +20,18 @@ package net.sergeych.lyng.idea.navigation
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.*
+import com.intellij.psi.search.FileTypeIndex
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
+import kotlinx.coroutines.runBlocking
 import net.sergeych.lyng.highlight.offsetOf
+import net.sergeych.lyng.idea.LyngFileType
 import net.sergeych.lyng.idea.util.LyngAstManager
 import net.sergeych.lyng.idea.util.TextCtx
 import net.sergeych.lyng.miniast.*
+import net.sergeych.lyng.tools.IdeLenientImportProvider
+import net.sergeych.lyng.tools.LyngAnalysisRequest
+import net.sergeych.lyng.tools.LyngLanguageTools
 
 class LyngPsiReference(element: PsiElement) : PsiPolyVariantReferenceBase<PsiElement>(element, TextRange(0, element.textLength)) {
 
@@ -58,7 +64,7 @@ class LyngPsiReference(element: PsiElement) : PsiPolyVariantReferenceBase<PsiEle
                     
                     // We need to find the actual PSI element for this member
                     val targetFile = findFileForClass(file.project, owner) ?: file
-                    val targetMini = LyngAstManager.getMiniAst(targetFile)
+                    val targetMini = loadMini(targetFile)
                     if (targetMini != null) {
                         val targetSrc = targetMini.range.start.source
                         val off = targetSrc.offsetOf(member.nameStart)
@@ -123,24 +129,37 @@ class LyngPsiReference(element: PsiElement) : PsiPolyVariantReferenceBase<PsiEle
     }
 
     private fun findFileForClass(project: Project, className: String): PsiFile? {
-        val psiManager = PsiManager.getInstance(project)
-        
         // 1. Try file with matching name first (optimization)
-        val matchingFiles = FilenameIndex.getFilesByName(project, "$className.lyng", GlobalSearchScope.projectScope(project))
+        val scope = GlobalSearchScope.projectScope(project)
+        val psiManager = PsiManager.getInstance(project)
+        val matchingFiles = FileTypeIndex.getFiles(LyngFileType, scope)
+            .asSequence()
+            .filter { it.name == "$className.lyng" }
+            .mapNotNull { psiManager.findFile(it) }
+            .toList()
+        val matchingDeclFiles = FileTypeIndex.getFiles(LyngFileType, scope)
+            .asSequence()
+            .filter { it.name == "$className.lyng.d" }
+            .mapNotNull { psiManager.findFile(it) }
+            .toList()
         for (file in matchingFiles) {
-            val mini = LyngAstManager.getMiniAst(file) ?: continue
-            if (mini.declarations.any { (it is MiniClassDecl && it.name == className) || (it is MiniEnumDecl && it.name == className) }) {
+            val mini = loadMini(file) ?: continue
+            if (mini.declarations.any { isLocalDecl(mini, it) && ((it is MiniClassDecl && it.name == className) || (it is MiniEnumDecl && it.name == className)) }) {
+                return file
+            }
+        }
+        for (file in matchingDeclFiles) {
+            val mini = loadMini(file) ?: continue
+            if (mini.declarations.any { isLocalDecl(mini, it) && ((it is MiniClassDecl && it.name == className) || (it is MiniEnumDecl && it.name == className)) }) {
                 return file
             }
         }
 
         // 2. Fallback to full project scan
-        val allFiles = FilenameIndex.getAllFilesByExt(project, "lyng", GlobalSearchScope.projectScope(project))
-        for (vFile in allFiles) {
-            val file = psiManager.findFile(vFile) ?: continue
-            if (matchingFiles.contains(file)) continue // already checked
-            val mini = LyngAstManager.getMiniAst(file) ?: continue
-            if (mini.declarations.any { (it is MiniClassDecl && it.name == className) || (it is MiniEnumDecl && it.name == className) }) {
+        for (file in collectLyngFiles(project)) {
+            if (matchingFiles.contains(file) || matchingDeclFiles.contains(file)) continue // already checked
+            val mini = loadMini(file) ?: continue
+            if (mini.declarations.any { isLocalDecl(mini, it) && ((it is MiniClassDecl && it.name == className) || (it is MiniEnumDecl && it.name == className)) }) {
                 return file
             }
         }
@@ -148,7 +167,7 @@ class LyngPsiReference(element: PsiElement) : PsiPolyVariantReferenceBase<PsiEle
     }
 
     private fun getPackageName(file: PsiFile): String? {
-        val mini = LyngAstManager.getMiniAst(file) ?: return null
+        val mini = loadMini(file) ?: return null
         return try {
             val pkg = mini.range.start.source.extractPackageName()
             if (pkg.startsWith("lyng.")) pkg else "lyng.$pkg"
@@ -172,19 +191,19 @@ class LyngPsiReference(element: PsiElement) : PsiPolyVariantReferenceBase<PsiEle
 
     private fun resolveGlobally(project: Project, name: String, membersOnly: Boolean = false, allowedPackages: Set<String>? = null): List<ResolveResult> {
         val results = mutableListOf<ResolveResult>()
-        val files = FilenameIndex.getAllFilesByExt(project, "lyng", GlobalSearchScope.projectScope(project))
         val psiManager = PsiManager.getInstance(project)
 
-        for (vFile in files) {
-            val file = psiManager.findFile(vFile) ?: continue
+        for (file in collectLyngFiles(project)) {
             
             // Filter by package if requested
             if (allowedPackages != null) {
                 val pkg = getPackageName(file)
-                if (pkg == null || pkg !in allowedPackages) continue
+                if (pkg == null) {
+                    if (!file.name.endsWith(".lyng.d")) continue
+                } else if (pkg !in allowedPackages) continue
             }
 
-            val mini = LyngAstManager.getMiniAst(file) ?: continue
+            val mini = loadMini(file) ?: continue
             val src = mini.range.start.source
 
             fun addIfMatch(dName: String, nameStart: net.sergeych.lyng.Pos, dKind: String) {
@@ -197,6 +216,7 @@ class LyngPsiReference(element: PsiElement) : PsiPolyVariantReferenceBase<PsiEle
             }
 
             for (d in mini.declarations) {
+                if (!isLocalDecl(mini, d)) continue
                 if (!membersOnly) {
                     val dKind = when(d) {
                         is net.sergeych.lyng.miniast.MiniFunDecl -> "Function"
@@ -216,6 +236,7 @@ class LyngPsiReference(element: PsiElement) : PsiPolyVariantReferenceBase<PsiEle
                 }
                 
                 for (m in members) {
+                    if (m.range.start.source != src) continue
                     val mKind = when(m) {
                         is net.sergeych.lyng.miniast.MiniMemberFunDecl -> "Function"
                         is net.sergeych.lyng.miniast.MiniMemberValDecl -> if (m.mutable) "Variable" else "Value"
@@ -228,6 +249,43 @@ class LyngPsiReference(element: PsiElement) : PsiPolyVariantReferenceBase<PsiEle
         }
         return results
     }
+
+    private fun collectLyngFiles(project: Project): List<PsiFile> {
+        val scope = GlobalSearchScope.projectScope(project)
+        val psiManager = PsiManager.getInstance(project)
+        val out = LinkedHashSet<PsiFile>()
+
+        val lyngFiles = FilenameIndex.getAllFilesByExt(project, "lyng", scope)
+        for (vFile in lyngFiles) {
+            psiManager.findFile(vFile)?.let { out.add(it) }
+        }
+
+        // Include declaration files (*.lyng.d) which are indexed as extension "d".
+        val dFiles = FilenameIndex.getAllFilesByExt(project, "d", scope)
+        for (vFile in dFiles) {
+            if (!vFile.name.endsWith(".lyng.d")) continue
+            psiManager.findFile(vFile)?.let { out.add(it) }
+        }
+
+        return out.toList()
+    }
+
+    private fun loadMini(file: PsiFile): MiniScript? {
+        LyngAstManager.getMiniAst(file)?.let { return it }
+        return try {
+            val provider = IdeLenientImportProvider.create()
+            runBlocking {
+                LyngLanguageTools.analyze(
+                    LyngAnalysisRequest(text = file.text, fileName = file.name, importProvider = provider)
+                )
+            }.mini
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun isLocalDecl(mini: MiniScript, decl: MiniDecl): Boolean =
+        decl.range.start.source == mini.range.start.source
 
     override fun getVariants(): Array<Any> = emptyArray()
 }

@@ -35,13 +35,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import net.sergeych.lyng.ExecutionError
-import net.sergeych.lyng.Script
-import net.sergeych.lyng.Source
-import net.sergeych.lyng.requireScope
 import net.sergeych.lyng.idea.LyngIcons
-import net.sergeych.lyng.obj.ObjVoid
-import net.sergeych.lyng.obj.getLyngExceptionMessageWithStackTrace
 
 class RunLyngScriptAction : AnAction(LyngIcons.FILE) {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -59,7 +53,9 @@ class RunLyngScriptAction : AnAction(LyngIcons.FILE) {
         val isLyng = psiFile?.name?.endsWith(".lyng") == true
         e.presentation.isEnabledAndVisible = isLyng
         if (isLyng) {
-            e.presentation.text = "Run '${psiFile.name}'"
+            e.presentation.isEnabled = false
+            e.presentation.text = "Run '${psiFile.name}' (disabled)"
+            e.presentation.description = "Running scripts from the IDE is disabled; use the CLI."
         } else {
             e.presentation.text = "Run Lyng Script"
         }
@@ -68,7 +64,6 @@ class RunLyngScriptAction : AnAction(LyngIcons.FILE) {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val psiFile = getPsiFile(e) ?: return
-        val text = psiFile.text
         val fileName = psiFile.name
 
         val (console, toolWindow) = getConsoleAndToolWindow(project)
@@ -76,40 +71,9 @@ class RunLyngScriptAction : AnAction(LyngIcons.FILE) {
 
         toolWindow.show {
             scope.launch {
-                try {
-                    val lyngScope = Script.newScope()
-                    lyngScope.addFn("print") {
-                        val sb = StringBuilder()
-                        for ((i, arg) in args.list.withIndex()) {
-                            if (i > 0) sb.append(" ")
-                            sb.append(arg.toString(requireScope()).value)
-                        }
-                        console.print(sb.toString(), ConsoleViewContentType.NORMAL_OUTPUT)
-                        ObjVoid
-                    }
-                    lyngScope.addFn("println") {
-                        val sb = StringBuilder()
-                        for ((i, arg) in args.list.withIndex()) {
-                            if (i > 0) sb.append(" ")
-                            sb.append(arg.toString(requireScope()).value)
-                        }
-                        console.print(sb.toString() + "\n", ConsoleViewContentType.NORMAL_OUTPUT)
-                        ObjVoid
-                    }
-
-                    console.print("--- Running $fileName ---\n", ConsoleViewContentType.SYSTEM_OUTPUT)
-                    val result = lyngScope.eval(Source(fileName, text))
-                    console.print("\n--- Finished with result: ${result.inspect(lyngScope)} ---\n", ConsoleViewContentType.SYSTEM_OUTPUT)
-                } catch (t: Throwable) {
-                    console.print("\n--- Error ---\n", ConsoleViewContentType.ERROR_OUTPUT)
-                    if( t is ExecutionError ) {
-                        val m = t.errorObject.getLyngExceptionMessageWithStackTrace()
-                        console.print(m, ConsoleViewContentType.ERROR_OUTPUT)
-                    }
-                    else
-                        console.print(t.message ?: t.toString(), ConsoleViewContentType.ERROR_OUTPUT)
-                    console.print("\n", ConsoleViewContentType.ERROR_OUTPUT)
-                }
+                console.print("--- Run is disabled ---\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+                console.print("Lyng now runs in bytecode-only mode; the IDE no longer evaluates scripts.\n", ConsoleViewContentType.NORMAL_OUTPUT)
+                console.print("Use the CLI to run scripts, e.g. `lyng run $fileName`.\n", ConsoleViewContentType.NORMAL_OUTPUT)
             }
         }
     }

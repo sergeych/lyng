@@ -178,6 +178,7 @@ object CompletionEngineLight {
                 is MiniMemberDecl -> node.range
                 else -> return
             }
+            if (range.start.source != src || range.end.source != src) return
             val start = src.offsetOf(range.start)
             val end = src.offsetOf(range.end).coerceAtMost(text.length)
 
@@ -372,9 +373,12 @@ object CompletionEngineLight {
             val src = Source("<engine>", text)
             val provider = LenientImportProvider.create()
             Compiler.compileWithMini(src, provider, sink)
-            sink.build()
+            sink.build() ?: MiniScript(MiniRange(src.startPos, src.startPos))
         } catch (_: Throwable) {
-            sink.build()
+            sink.build() ?: run {
+                val src = Source("<engine>", text)
+                MiniScript(MiniRange(src.startPos, src.startPos))
+            }
         }
     }
 
@@ -387,6 +391,7 @@ object CompletionEngineLight {
 
     // Text helpers
     private fun prefixAt(text: String, offset: Int): String {
+        if (text.isEmpty()) return ""
         val off = offset.coerceIn(0, text.length)
         var i = (off - 1).coerceAtLeast(0)
         while (i >= 0 && DocLookupUtils.isIdentChar(text[i])) i--
