@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -777,12 +777,19 @@ private fun applyTheme(isDark: Boolean) {
     // Toggle GitHub Markdown CSS light/dark
     val light = document.getElementById("md-light") as? HTMLLinkElement
     val dark = document.getElementById("md-dark") as? HTMLLinkElement
+    // Toggle highlight.js CSS for Kotlin fenced blocks
+    val hljsLight = document.getElementById("hljs-light") as? HTMLLinkElement
+    val hljsDark = document.getElementById("hljs-dark") as? HTMLLinkElement
     if (isDark) {
         light?.setAttribute("disabled", "")
         dark?.removeAttribute("disabled")
+        hljsLight?.setAttribute("disabled", "")
+        hljsDark?.removeAttribute("disabled")
     } else {
         dark?.setAttribute("disabled", "")
         light?.removeAttribute("disabled")
+        hljsDark?.setAttribute("disabled", "")
+        hljsLight?.removeAttribute("disabled")
     }
 }
 
