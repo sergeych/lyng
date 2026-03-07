@@ -4,7 +4,7 @@ Lyng is a tiny, embeddable, Kotlin‑first scripting language. This page shows, 
 
 - add Lyng to your build
 - create a runtime and execute scripts
-- define functions and variables from Kotlin
+- declare extern globals in Lyng and bind them from Kotlin
 - read variable values back in Kotlin
 - call Lyng functions from Kotlin
 - create your own packages and import them in Lyng
@@ -65,30 +65,74 @@ val run2 = script.execute(scope)
 
 `Scope.eval("...")` is a shortcut that compiles and executes on the given scope.
 
-### 3) Define variables from Kotlin
+### 3) Preferred: bind extern globals from Kotlin
 
-To expose data to Lyng, add constants (read‑only) or mutable variables to the scope. All values in Lyng are `Obj` instances; the core types live in `net.sergeych.lyng.obj`.
+For module-level APIs, the default workflow is:
 
-```kotlin
-// Read‑only constant
-scope.addConst("pi", ObjReal(3.14159))
-
-// Mutable variable: create or update
-scope.addOrUpdateItem("counter", ObjInt(0))
-
-// Use it from Lyng
-scope.eval("counter = counter + 1")
-```
-
-Tip: Lyng values can be converted back to Kotlin with `toKotlin(scope)`:
+1. declare globals in Lyng using `extern fun` / `extern val` / `extern var`;
+2. bind Kotlin implementation via `ModuleScope.globalBinder()`.
 
 ```kotlin
-val current = (scope.eval("counter")).toKotlin(scope) // Any? (e.g., Int/Double/String/List)
+import net.sergeych.lyng.bridge.*
+import net.sergeych.lyng.obj.ObjInt
+import net.sergeych.lyng.obj.ObjString
+
+val im = Script.defaultImportManager.copy()
+im.addPackage("my.api") { module ->
+    module.eval("""
+        extern fun globalFun(v: Int): Int
+        extern var globalProp: String
+        extern val globalVersion: String
+    """.trimIndent())
+
+    val binder = module.globalBinder()
+
+    binder.bindGlobalFun1<Int>("globalFun") { v ->
+        ObjInt.of((v + 1).toLong())
+    }
+
+    var prop = "initial"
+    binder.bindGlobalVar(
+        name = "globalProp",
+        get = { prop },
+        set = { prop = it }
+    )
+
+    binder.bindGlobalVar(
+        name = "globalVersion",
+        get = { "1.0.0" } // readonly: setter omitted
+    )
+}
 ```
 
-### 4) Add Kotlin‑backed functions
+Usage from Lyng:
 
-Use `Scope.addFn`/`addVoidFn` to register functions implemented in Kotlin. Inside the lambda, use `this.args` to access arguments and return an `Obj`.
+```lyng
+import my.api
+
+assertEquals(42, globalFun(41))
+assertEquals("initial", globalProp)
+globalProp = "changed"
+assertEquals("changed", globalProp)
+assertEquals("1.0.0", globalVersion)
+```
+
+For custom argument handling and full runtime access:
+
+```kotlin
+binder.bindGlobalFun("sum3") {
+    requireExactCount(3)
+    ObjInt.of((int(0) + int(1) + int(2)).toLong())
+}
+
+binder.bindGlobalFunRaw("echoRaw") { _, args ->
+    args.firstAndOnly()
+}
+```
+
+### 4) Low-level: direct functions/variables from Kotlin
+
+Use this when you intentionally want raw `Scope` APIs. For most module APIs, prefer section 3.
 
 ```kotlin
 // A function returning value
@@ -280,6 +324,22 @@ Notes:
 - Members must be marked `extern` so the compiler emits ABI slots for Kotlin bindings.
 - You can also bind by name/module via `LyngObjectBridge.bind(...)`.
 
+Minimal `extern fun` example:
+
+```kotlin
+val moduleScope = importManager.createModuleScope(Pos.builtIn, "bridge.ping")
+
+moduleScope.eval("""
+    extern object HostObject {
+        extern fun ping(): Int
+    }
+""".trimIndent())
+
+moduleScope.bindObject("HostObject") {
+    addFun("ping") { _, _, _ -> ObjInt.of(7) }
+}
+```
+
 ### 6.6) Preferred: Kotlin reflection bridge for call‑by‑name
 
 For Kotlin code that needs dynamic access to Lyng variables, functions, or members, use the bridge resolver.
@@ -368,6 +428,9 @@ Key concepts:
 Register a Kotlin‑built package:
 
 ```kotlin
+import net.sergeych.lyng.bridge.*
+import net.sergeych.lyng.obj.ObjInt
+
 val scope = Script.newScope()
 
 // Access the import manager behind this scope
@@ -375,11 +438,19 @@ val im: ImportManager = scope.importManager
 
 // Register a package "my.tools"
 im.addPackage("my.tools") { module: ModuleScope ->
-    // Expose symbols inside the module scope
-    module.addConst("version", ObjString("1.0"))
-    module.addFn<ObjInt>("triple") {
-        val x = args.firstAndOnly() as ObjInt
-        ObjInt(x.value * 3)
+    module.eval(
+        """
+        extern val version: String
+        extern fun triple(x: Int): Int
+        """.trimIndent()
+    )
+    val binder = module.globalBinder()
+    binder.bindGlobalVar(
+        name = "version",
+        get = { "1.0" }
+    )
+    binder.bindGlobalFun1<Int>("triple") { x ->
+        ObjInt.of((x * 3).toLong())
     }
 }
 
