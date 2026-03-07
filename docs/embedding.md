@@ -240,19 +240,22 @@ Notes:
 
 For `extern object` declarations, bind implementations to the singleton instance using `ModuleScope.bindObject`.
 This mirrors class binding but targets an already created object instance.
-
-```lyng
-// Lyng side (in a module)
-extern object HostObject {
-    extern fun add(a: Int, b: Int): Int
-    extern val status: String
-    extern var count: Int
-}
-```
+As with class binding, you must first add/evaluate the Lyng declaration into that module scope, then bind Kotlin handlers.
 
 ```kotlin
 // Kotlin side (binding)
 val moduleScope = importManager.createModuleScope(Pos.builtIn, "bridge.obj")
+
+// 1) Seed the module with the Lyng declaration first
+moduleScope.eval("""
+    extern object HostObject {
+        extern fun add(a: Int, b: Int): Int
+        extern val status: String
+        extern var count: Int
+    }
+""".trimIndent())
+
+// 2) Then bind Kotlin implementations to that declared object
 moduleScope.bindObject("HostObject") {
     classData = "OK"
     init { _ -> data = 0L }
@@ -272,6 +275,8 @@ moduleScope.bindObject("HostObject") {
 
 Notes:
 
+- Required order: declare/eval Lyng object in the module first, then call `bindObject(...)`.
+  This is the pattern covered by `BridgeBindingTest.testExternObjectBinding`.
 - Members must be marked `extern` so the compiler emits ABI slots for Kotlin bindings.
 - You can also bind by name/module via `LyngObjectBridge.bind(...)`.
 
