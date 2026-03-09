@@ -4335,15 +4335,39 @@ class Compiler(
         else -> null
     }
 
+    private fun seedTypeDeclByName(name: String): TypeDecl? {
+        seedScope?.getLocalRecordDirect(name)?.typeDecl?.let { return it }
+        seedScope?.get(name)?.typeDecl?.let { return it }
+        importManager.rootScope.getLocalRecordDirect(name)?.typeDecl?.let { return it }
+        importManager.rootScope.get(name)?.typeDecl?.let { return it }
+        for (module in importedModules.asReversed()) {
+            module.scope.get(name)?.typeDecl?.let { return it }
+        }
+        return null
+    }
+
     private fun resolveReceiverTypeDecl(ref: ObjRef): TypeDecl? {
         return when (ref) {
             is LocalSlotRef -> {
                 val ownerScopeId = ref.captureOwnerScopeId ?: ref.scopeId
                 val ownerSlot = ref.captureOwnerSlot ?: ref.slot
                 slotTypeDeclByScopeId[ownerScopeId]?.get(ownerSlot)
+                    ?: nameTypeDecl[ref.name]
+                    ?: seedTypeDeclByName(ref.name)
             }
-            is LocalVarRef -> nameTypeDecl[ref.name]
-            is FastLocalVarRef -> nameTypeDecl[ref.name]
+            is LocalVarRef -> nameTypeDecl[ref.name] ?: seedTypeDeclByName(ref.name)
+            is FastLocalVarRef -> nameTypeDecl[ref.name] ?: seedTypeDeclByName(ref.name)
+            is FieldRef -> {
+                val targetDecl = resolveReceiverTypeDecl(ref.target) ?: return null
+                val targetClass = resolveTypeDeclObjClass(targetDecl)
+                targetClass?.getInstanceMemberOrNull(ref.name, includeAbstract = true)?.typeDecl?.let { return it }
+                classFieldTypesByName[targetClass?.className]?.get(ref.name)
+                    ?.let { return TypeDecl.Simple(it.className, false) }
+                when (targetDecl) {
+                    TypeDecl.TypeAny, TypeDecl.TypeNullableAny -> null
+                    else -> TypeDecl.TypeVar("${typeDeclName(targetDecl)}.${ref.name}", false)
+                }
+            }
             is MethodCallRef -> methodReturnTypeDeclByRef[ref]
             is StatementRef -> (ref.statement as? ExpressionStatement)?.let { resolveReceiverTypeDecl(it.ref) }
             else -> null
@@ -4361,6 +4385,8 @@ class Compiler(
                 } else {
                     slotTypeByScopeId[ownerScopeId]?.get(ownerSlot)
                         ?: slotTypeDeclByScopeId[ownerScopeId]?.get(ownerSlot)?.let { resolveTypeDeclObjClass(it) }
+                        ?: nameTypeDecl[ref.name]?.let { resolveTypeDeclObjClass(it) }
+                        ?: seedTypeDeclByName(ref.name)?.let { resolveTypeDeclObjClass(it) }
                         ?: knownClass
                 }
                     ?: resolveClassByName(ref.name)
@@ -4567,6 +4593,18 @@ class Compiler(
         if (targetClass == null) return null
         if (targetClass == ObjDynamic.type) return ObjDynamic.type
         classFieldTypesByName[targetClass.className]?.get(name)?.let { return it }
+        var hasUntypedMember = false
+        targetClass.getInstanceMemberOrNull(name, includeAbstract = true)?.let { member ->
+            member.typeDecl?.let { declaredType ->
+                when (declaredType) {
+                    TypeDecl.TypeAny, TypeDecl.TypeNullableAny -> return Obj.rootObjectType
+                    else -> {
+                        resolveTypeDeclObjClass(declaredType)?.let { return it }
+                    }
+                }
+            }
+            hasUntypedMember = true
+        }
         enumEntriesByName[targetClass.className]?.let { entries ->
             return when {
                 name == "entries" -> ObjList.type
@@ -4653,6 +4691,9 @@ class Compiler(
         if (targetClass == ObjRegex.type && name == "pattern") {
             return ObjString.type
         }
+        if (hasUntypedMember) {
+            return ObjDynamic.type
+        }
         return null
     }
 
@@ -4666,6 +4707,10 @@ class Compiler(
         if (left is LocalSlotRef && left.name == "scope") return
         val receiverClass = resolveReceiverClassForMember(left)
         if (receiverClass == null) {
+            val receiverDecl = resolveReceiverTypeDecl(left)
+            if (receiverDecl != null && receiverDecl != TypeDecl.TypeAny && receiverDecl != TypeDecl.TypeNullableAny) {
+                return
+            }
             if (isAllowedObjectMember(memberName)) return
             throw ScriptError(pos, "member access requires compile-time receiver type: $memberName")
         }

@@ -187,10 +187,12 @@ class TypesTest {
         eval(
             """
             class Ctx {
+                val contract = null
                 fun println(msg: String) = msg
             }
             fun use(callContext) {
                 assert(callContext is Ctx)
+                assert(callContext.contract == null)
                 callContext.println("hello")
             }
             assertEquals("hello", use(Ctx()))
