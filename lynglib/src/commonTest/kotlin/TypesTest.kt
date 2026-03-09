@@ -21,6 +21,7 @@ import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.eval
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class TypesTest {
 
@@ -179,6 +180,41 @@ class TypesTest {
             assert( v is Int | String | Real )
             assert( !(v is String | Bool) )
         """.trimIndent())
+    }
+
+    @Test
+    fun testAssertIsSmartCastEnablesMemberCall() = runTest {
+        eval(
+            """
+            class Ctx {
+                fun println(msg: String) = msg
+            }
+            fun use(callContext) {
+                assert(callContext is Ctx)
+                callContext.println("hello")
+            }
+            assertEquals("hello", use(Ctx()))
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testBareIsExpressionDoesNotSmartCastForMemberCall() = runTest {
+        val ex = assertFailsWith<ScriptError> {
+            eval(
+                """
+                class Ctx {
+                    fun println(msg: String) = msg
+                }
+                fun use(callContext) {
+                    callContext is Ctx
+                    callContext.println("hello")
+                }
+                use(Ctx())
+                """.trimIndent()
+            )
+        }
+        assertTrue(ex.message?.contains("member access requires compile-time receiver type: println") == true)
     }
 
     @Test

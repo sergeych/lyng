@@ -2403,13 +2403,13 @@ class Compiler(
                     parseKeywordStatement(t)?.let { wrapBytecode(it) }
                         ?: run {
                             cc.previous()
-                            parseExpression()?.let { wrapBytecode(it) }
+                            parseExpressionWithContracts()
                         }
                 }
 
                 Token.Type.PLUS2, Token.Type.MINUS2 -> {
                     cc.previous()
-                    parseExpression()?.let { wrapBytecode(it) }
+                    parseExpressionWithContracts()
                 }
 
                 Token.Type.ATLABEL -> {
@@ -2441,7 +2441,7 @@ class Compiler(
                 Token.Type.LBRACE -> {
                     cc.previous()
                     if (braceMeansLambda)
-                        parseExpression()?.let { wrapBytecode(it) }
+                        parseExpressionWithContracts()
                     else
                         wrapBytecode(parseBlock())
                 }
@@ -2456,10 +2456,16 @@ class Compiler(
                 else -> {
                     // could be expression
                     cc.previous()
-                    parseExpression()?.let { wrapBytecode(it) }
+                    parseExpressionWithContracts()
                 }
             }
         }
+    }
+
+    private suspend fun parseExpressionWithContracts(): Statement? {
+        val expression = parseExpression() ?: return null
+        applyAssertSmartCasts(expression)
+        return wrapBytecode(expression)
     }
 
     private suspend fun parseExpression(): Statement? {
@@ -7203,6 +7209,27 @@ class Compiler(
                 }
             }
         }
+    }
+
+    private fun applyAssertSmartCasts(statement: Statement) {
+        val ref = unwrapDirectRef(statement) as? CallRef ?: return
+        val targetName = when (val target = ref.target) {
+            is LocalVarRef -> target.name
+            is FastLocalVarRef -> target.name
+            is LocalSlotRef -> target.name
+            else -> null
+        } ?: return
+        if (targetName != "assert") return
+        val conditionArg = ref.args.firstOrNull { !it.isSplat && it.name == null }
+            ?: ref.args.firstOrNull { !it.isSplat && it.name == "condition" }
+            ?: return
+        val conditionStatement = when (val argValue = conditionArg.value) {
+            is Statement -> argValue
+            is ObjRef -> ExpressionStatement(argValue, conditionArg.pos)
+            else -> return
+        }
+        val (trueCasts, _) = extractSmartCasts(conditionStatement)
+        applySmartCasts(trueCasts)
     }
 
     private suspend fun parseIfStatement(): Statement {
