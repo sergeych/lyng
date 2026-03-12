@@ -562,6 +562,14 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 }
                 ObjInt((-1).toLong())
             }
+            addFnDoc(
+                name = "toImmutable",
+                doc = "Create an immutable snapshot of this list.",
+                returns = type("lyng.ImmutableList"),
+                moduleName = "lyng.stdlib"
+            ) {
+                ObjImmutableList(thisAs<ObjList>().list)
+            }
         }
     }
 }

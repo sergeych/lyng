@@ -3,6 +3,7 @@
 Map is a mutable collection of key-value pairs, where keys are unique. You can create maps in two ways:
 - with the constructor `Map(...)` or `.toMap()` helpers; and
 - with map literals using braces: `{ "key": value, id: expr, id: }`.
+For immutable map values, see [ImmutableMap].
 
 When constructing from a list, each list item must be a [Collection] with exactly 2 elements, for example, a [List].
 
@@ -177,3 +178,4 @@ Notes:
 - When you need computed or non-string keys, use the constructor form `Map(...)`, map literals with computed keys (if supported), or build entries with `=>` and then merge.
 
 [Collection](Collection.md)
+[ImmutableMap]: ImmutableMap.md

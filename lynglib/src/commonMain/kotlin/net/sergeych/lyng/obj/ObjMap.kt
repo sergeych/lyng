@@ -107,8 +107,12 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
 
     override suspend fun equals(scope: Scope, other: Obj): Boolean {
         if (this === other) return true
-        if (other !is ObjMap) return false
-        if (map.size != other.map.size) return false
+        val otherSize = when (other) {
+            is ObjMap -> other.map.size
+            is ObjImmutableMap -> other.map.size
+            else -> return false
+        }
+        if (map.size != otherSize) return false
         for ((k, v) in map) {
             val otherV = other.getAt(scope, k)
             if (otherV === ObjNull && !other.contains(scope, k)) return false
@@ -131,14 +135,16 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
     }
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
-        if (other is ObjMap) {
-            if (map == other.map) return 0
-            if (map.size != other.map.size) return map.size.compareTo(other.map.size)
-            // for same size, if they are not equal, we don't have a stable order
-            // but let's try to be consistent
-            return map.toString().compareTo(other.map.toString())
+        val otherMap = when (other) {
+            is ObjMap -> other.map
+            is ObjImmutableMap -> other.map
+            else -> return -1
         }
-        return -1
+        if (map == otherMap) return 0
+        if (map.size != otherMap.size) return map.size.compareTo(otherMap.size)
+        // for same size, if they are not equal, we don't have a stable order
+        // but let's try to be consistent
+        return map.toString().compareTo(otherMap.toString())
     }
 
     override suspend fun defaultToString(scope: Scope): ObjString {
@@ -311,6 +317,14 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
             ) {
                 ObjKotlinIterator(thisAs<ObjMap>().map.entries.iterator())
             }
+            addFnDoc(
+                name = "toImmutable",
+                doc = "Create an immutable snapshot of this map.",
+                returns = type("lyng.ImmutableMap"),
+                moduleName = "lyng.stdlib"
+            ) {
+                ObjImmutableMap(thisAs<ObjMap>().map)
+            }
         }
     }
 
@@ -330,6 +344,11 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
         when (other) {
             is ObjMap -> {
                 // Rightmost wins: copy all entries from `other` over existing ones
+                for ((k, v) in other.map) {
+                    map[k] = v
+                }
+            }
+            is ObjImmutableMap -> {
                 for ((k, v) in other.map) {
                     map[k] = v
                 }

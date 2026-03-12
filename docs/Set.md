@@ -1,7 +1,8 @@
-# List built-in class
+# Set built-in class
 
 Mutable set of any objects: a group of different objects, no repetitions.
 Sets are not ordered, order of appearance does not matter.
+For immutable set values, see [ImmutableSet].
 
     val set = Set(1,2,3, "foo")
     assert( 1 in set )
@@ -92,3 +93,4 @@ Also, it inherits methods from [Iterable].
 
 
 [Range]: Range.md
+[ImmutableSet]: ImmutableSet.md

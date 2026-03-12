@@ -50,6 +50,21 @@ val ObjIterable by lazy {
             ObjList(result)
         }
 
+        addFnDoc(
+            name = "toImmutableList",
+            doc = "Collect elements of this iterable into a new immutable list.",
+            returns = type("lyng.ImmutableList"),
+            moduleName = "lyng.stdlib"
+        ) {
+            val scope = requireScope()
+            val result = mutableListOf<Obj>()
+            val it = thisObj.invokeInstanceMethod(scope, "iterator")
+            while (it.invokeInstanceMethod(scope, "hasNext").toBool()) {
+                result.add(it.invokeInstanceMethod(scope, "next"))
+            }
+            ObjImmutableList(result)
+        }
+
         // it is not effective, but it is open:
         addFnDoc(
             name = "contains",
@@ -110,6 +125,28 @@ val ObjIterable by lazy {
         )
 
         addPropertyDoc(
+            name = "toImmutableSet",
+            doc = "Collect elements of this iterable into a new immutable set.",
+            type = type("lyng.ImmutableSet"),
+            moduleName = "lyng.stdlib",
+            getter = {
+                when (val self = this.thisObj) {
+                    is ObjImmutableSet -> self
+                    is ObjSet -> ObjImmutableSet(self.set)
+                    else -> {
+                        val result = mutableSetOf<Obj>()
+                        val scope = requireScope()
+                        val it = self.invokeInstanceMethod(scope, "iterator")
+                        while (it.invokeInstanceMethod(scope, "hasNext").toBool()) {
+                            result.add(it.invokeInstanceMethod(scope, "next"))
+                        }
+                        ObjImmutableSet(result)
+                    }
+                }
+            }
+        )
+
+        addPropertyDoc(
             name = "toMap",
             doc = "Collect pairs into a map using [0] as key and [1] as value for each element.",
             type = type("lyng.Map"),
@@ -125,6 +162,25 @@ val ObjIterable by lazy {
                     true
                 }
                 ObjMap(result)
+            }
+        )
+
+        addPropertyDoc(
+            name = "toImmutableMap",
+            doc = "Collect pairs into an immutable map using [0] as key and [1] as value for each element.",
+            type = type("lyng.ImmutableMap"),
+            moduleName = "lyng.stdlib",
+            getter = {
+                val result = linkedMapOf<Obj, Obj>()
+                val scope = requireScope()
+                this.thisObj.enumerate(scope) { pair ->
+                    when (pair) {
+                        is ObjMapEntry -> result[pair.key] = pair.value
+                        else -> result[pair.getAt(scope, 0)] = pair.getAt(scope, 1)
+                    }
+                    true
+                }
+                ObjImmutableMap(result)
             }
         )
 

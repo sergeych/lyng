@@ -37,7 +37,15 @@ object StdlibDocsBootstrap {
             @Suppress("UNUSED_VARIABLE")
             val _list = net.sergeych.lyng.obj.ObjList.type
             @Suppress("UNUSED_VARIABLE")
+            val _immutableList = net.sergeych.lyng.obj.ObjImmutableList.type
+            @Suppress("UNUSED_VARIABLE")
             val _map = net.sergeych.lyng.obj.ObjMap.type
+            @Suppress("UNUSED_VARIABLE")
+            val _immutableMap = net.sergeych.lyng.obj.ObjImmutableMap.type
+            @Suppress("UNUSED_VARIABLE")
+            val _set = net.sergeych.lyng.obj.ObjSet.type
+            @Suppress("UNUSED_VARIABLE")
+            val _immutableSet = net.sergeych.lyng.obj.ObjImmutableSet.type
             @Suppress("UNUSED_VARIABLE")
             val _int = net.sergeych.lyng.obj.ObjInt.type
             @Suppress("UNUSED_VARIABLE")

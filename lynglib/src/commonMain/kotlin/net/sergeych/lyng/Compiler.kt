@@ -4339,7 +4339,7 @@ class Compiler(
                     val mapType = inferTypeDeclFromRef(entry.ref) ?: return TypeDecl.TypeAny to TypeDecl.TypeAny
                     if (mapType is TypeDecl.Generic) {
                         val base = mapType.name.substringAfterLast('.')
-                        if (base == "Map") {
+                        if (base == "Map" || base == "ImmutableMap") {
                             val k = mapType.args.getOrNull(0) ?: TypeDecl.TypeAny
                             val v = mapType.args.getOrNull(1) ?: TypeDecl.TypeAny
                             addKey(k)
@@ -4374,7 +4374,7 @@ class Compiler(
         if (listType == TypeDecl.TypeAny || listType == TypeDecl.TypeNullableAny) return listType
         if (listType is TypeDecl.Generic) {
             val base = listType.name.substringAfterLast('.')
-            if (base == "List" || base == "Array" || base == "Iterable") {
+            if (base == "List" || base == "ImmutableList" || base == "Array" || base == "Iterable") {
                 return listType.args.firstOrNull() ?: TypeDecl.TypeAny
             }
         }
@@ -4385,7 +4385,7 @@ class Compiler(
         val generic = typeDecl as? TypeDecl.Generic ?: return null
         val base = generic.name.substringAfterLast('.')
         return when (base) {
-            "Set", "List", "Iterable", "Collection", "Array" -> generic.args.firstOrNull()
+            "Set", "ImmutableSet", "List", "ImmutableList", "Iterable", "Collection", "Array" -> generic.args.firstOrNull()
             else -> null
         }
     }
@@ -4669,6 +4669,58 @@ class Compiler(
             name == "next" && receiver is TypeDecl.Generic && base == "Iterator" -> {
                 receiver.args.firstOrNull()
             }
+            name == "toImmutableList" && receiver is TypeDecl.Generic && (base == "Iterable" || base == "Collection" || base == "Array" || base == "List" || base == "ImmutableList") -> {
+                val arg = receiver.args.firstOrNull() ?: TypeDecl.TypeAny
+                TypeDecl.Generic("ImmutableList", listOf(arg), false)
+            }
+            name == "toList" && receiver is TypeDecl.Generic && (base == "ImmutableList" || base == "List") -> {
+                val arg = receiver.args.firstOrNull() ?: TypeDecl.TypeAny
+                TypeDecl.Generic("List", listOf(arg), false)
+            }
+            name == "toMutable" && receiver is TypeDecl.Generic && base == "ImmutableList" -> {
+                val arg = receiver.args.firstOrNull() ?: TypeDecl.TypeAny
+                TypeDecl.Generic("List", listOf(arg), false)
+            }
+            name == "toImmutable" && receiver is TypeDecl.Generic && base == "List" -> {
+                val arg = receiver.args.firstOrNull() ?: TypeDecl.TypeAny
+                TypeDecl.Generic("ImmutableList", listOf(arg), false)
+            }
+            name == "toImmutableSet" && receiver is TypeDecl.Generic && (base == "Iterable" || base == "Collection" || base == "Set" || base == "ImmutableSet") -> {
+                val arg = receiver.args.firstOrNull() ?: TypeDecl.TypeAny
+                TypeDecl.Generic("ImmutableSet", listOf(arg), false)
+            }
+            name == "toSet" && receiver is TypeDecl.Generic && (base == "Iterable" || base == "Collection" || base == "Set" || base == "ImmutableSet") -> {
+                val arg = receiver.args.firstOrNull() ?: TypeDecl.TypeAny
+                TypeDecl.Generic("Set", listOf(arg), false)
+            }
+            name == "toMutable" && receiver is TypeDecl.Generic && base == "ImmutableSet" -> {
+                val arg = receiver.args.firstOrNull() ?: TypeDecl.TypeAny
+                TypeDecl.Generic("Set", listOf(arg), false)
+            }
+            name == "toImmutable" && receiver is TypeDecl.Generic && base == "Set" -> {
+                val arg = receiver.args.firstOrNull() ?: TypeDecl.TypeAny
+                TypeDecl.Generic("ImmutableSet", listOf(arg), false)
+            }
+            name == "toImmutableMap" && receiver is TypeDecl.Generic && base == "Iterable" -> {
+                TypeDecl.Generic("ImmutableMap", listOf(TypeDecl.TypeAny, TypeDecl.TypeAny), false)
+            }
+            name == "toMap" && receiver is TypeDecl.Generic && base == "Iterable" -> {
+                TypeDecl.Generic("Map", listOf(TypeDecl.TypeAny, TypeDecl.TypeAny), false)
+            }
+            name == "toMutable" && receiver is TypeDecl.Generic && base == "ImmutableMap" -> {
+                val args = receiver.args.ifEmpty { listOf(TypeDecl.TypeAny, TypeDecl.TypeAny) }
+                TypeDecl.Generic("Map", args, false)
+            }
+            name == "toImmutable" && receiver is TypeDecl.Generic && base == "Map" -> {
+                val args = receiver.args.ifEmpty { listOf(TypeDecl.TypeAny, TypeDecl.TypeAny) }
+                TypeDecl.Generic("ImmutableMap", args, false)
+            }
+            name == "toImmutable" && base == "List" -> TypeDecl.Simple("ImmutableList", false)
+            name == "toMutable" && base == "ImmutableList" -> TypeDecl.Simple("List", false)
+            name == "toImmutable" && base == "Set" -> TypeDecl.Simple("ImmutableSet", false)
+            name == "toMutable" && base == "ImmutableSet" -> TypeDecl.Simple("Set", false)
+            name == "toImmutable" && base == "Map" -> TypeDecl.Simple("ImmutableMap", false)
+            name == "toMutable" && base == "ImmutableMap" -> TypeDecl.Simple("Map", false)
             else -> null
         }
     }
@@ -4739,6 +4791,10 @@ class Compiler(
         "matches" -> ObjBool.type
         "toInt",
         "toEpochSeconds" -> ObjInt.type
+        "toImmutableList" -> ObjImmutableList.type
+        "toImmutableSet" -> ObjImmutableSet.type
+        "toImmutableMap" -> ObjImmutableMap.type
+        "toImmutable" -> Obj.rootObjectType
         "toMutable" -> ObjMutableBuffer.type
         "seq" -> ObjFlow.type
         "encode" -> ObjBitBuffer.type
@@ -8248,8 +8304,11 @@ class Compiler(
             "Bool" -> ObjBool.type
             "Char" -> ObjChar.type
             "List" -> ObjList.type
+            "ImmutableList" -> ObjImmutableList.type
             "Map" -> ObjMap.type
+            "ImmutableMap" -> ObjImmutableMap.type
             "Set" -> ObjSet.type
+            "ImmutableSet" -> ObjImmutableSet.type
             "Range", "IntRange" -> ObjRange.type
             "Iterator" -> ObjIterator
             "Iterable" -> ObjIterable

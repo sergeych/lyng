@@ -147,12 +147,15 @@ Search for the first element that satisfies the given predicate:
 | fun/method             | description                                                                     |
 |------------------------|---------------------------------------------------------------------------------|
 | toList()               | create a list from iterable                                                     |
+| toImmutableList()      | create an immutable list from iterable                                          |
 | toSet()                | create a set from iterable                                                      |
+| toImmutableSet         | create an immutable set from iterable                                           |
 | contains(i)            | check that iterable contains `i`                                                |
 | `i in iterable`        | same as `contains(i)`                                                           |
 | isEmpty()              | check iterable is empty                                                         |
 | forEach(f)             | call f for each element                                                         |
 | toMap()                | create a map from list of key-value pairs (arrays of 2 items or like)           |
+| toImmutableMap         | create an immutable map from list of key-value pairs                             |
 | any(p)                 | true if any element matches predicate `p`                        |
 | all(p)                 | true if all elements match predicate `p`                         |
 | map(f)                 | create a list of values returned by `f` called for each element of the iterable |
@@ -206,16 +209,20 @@ For high-performance Kotlin-side interop and custom iterable implementation deta
 
 ## Implemented in classes:
 
-- [List], [Range], [Buffer](Buffer.md), [BitBuffer], [Buffer], [Set], [RingBuffer]
+- [List], [ImmutableList], [Range], [Buffer](Buffer.md), [BitBuffer], [Buffer], [Set], [ImmutableSet], [Map], [ImmutableMap], [RingBuffer]
 
 [Collection]: Collection.md
 
 [List]: List.md
+[ImmutableList]: ImmutableList.md
 
 [Flow]: parallelism.md#flow
 
 [Range]: Range.md
 
 [Set]: Set.md
+[ImmutableSet]: ImmutableSet.md
+[Map]: Map.md
+[ImmutableMap]: ImmutableMap.md
 
 [RingBuffer]: RingBuffer.md

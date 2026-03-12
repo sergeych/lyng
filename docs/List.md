@@ -1,6 +1,7 @@
 # List built-in class
 
 Mutable list of any objects.
+For immutable list values, see [ImmutableList].
 
 It's class in Lyng is `List`:
 
@@ -197,3 +198,4 @@ It inherits from [Iterable] too and thus all iterable methods are applicable to 
 [Range]: Range.md
 
 [Iterable]: Iterable.md
+[ImmutableList]: ImmutableList.md

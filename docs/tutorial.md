@@ -14,7 +14,7 @@ __Other documents to read__ maybe after this one:
 - [time](time.md) and [parallelism](parallelism.md)
 - [parallelism] - multithreaded code, coroutines, etc.
 - Some class
-  references: [List], [Set], [Map], [Real], [Range], [Iterable], [Iterator], [time manipulation](time.md), [Array], [RingBuffer], [Buffer].
+  references: [List], [ImmutableList], [Set], [ImmutableSet], [Map], [ImmutableMap], [Real], [Range], [Iterable], [Iterator], [time manipulation](time.md), [Array], [RingBuffer], [Buffer].
 - Some samples: [combinatorics](samples/combinatorics.lyng.md), national vars and
   loops: [сумма ряда](samples/сумма_ряда.lyng.md). More at [samples folder](samples)
 
@@ -785,6 +785,7 @@ Lyng has built-in mutable array class `List` with simple literals:
 
 [List] is an implementation of the type `Array`, and through it `Collection` and [Iterable]. Please read [Iterable],
 many collection based methods are implemented there.
+For immutable list values, use `list.toImmutable()` and [ImmutableList].
 
 Lists can contain any type of objects, lists too:
 
@@ -967,6 +968,7 @@ Set are unordered collection of unique elements, see [Set]. Sets are [Iterable] 
     >>> void
 
 Please see [Set] for detailed description.
+For immutable set values, use `set.toImmutable()` and [ImmutableSet].
 
 # Maps
 
@@ -1027,6 +1029,7 @@ Notes:
 - When you need computed (expression) keys or non-string keys, use `Map(...)` constructor with entries, e.g. `Map( ("a" + "b") => 1 )`, then merge with a literal if needed: `{ base: } + (computedKey => 42)`.
 
 Please see the [Map] reference for a deeper guide.
+For immutable map values, use `map.toImmutable()` and [ImmutableMap].
 
 # Flow control operators
 
@@ -1750,6 +1753,7 @@ Lambda avoid unnecessary execution if assertion is not failed. for example:
 | π                                   | See [math](math.md)          |
 
 [List]: List.md
+[ImmutableList]: ImmutableList.md
 
 [Testing]: Testing.md
 
@@ -1766,8 +1770,10 @@ Lambda avoid unnecessary execution if assertion is not failed. for example:
 [string formatting]: https://github.com/sergeych/mp_stools?tab=readme-ov-file#sprintf-syntax-summary
 
 [Set]: Set.md
+[ImmutableSet]: ImmutableSet.md
 
 [Map]: Map.md
+[ImmutableMap]: ImmutableMap.md
 
 [Buffer]: Buffer.md
 

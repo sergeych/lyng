@@ -4439,7 +4439,11 @@ class BytecodeCompiler(
         }
         val initClass = when (localTarget?.name) {
             "List" -> ObjList.type
+            "ImmutableList" -> ObjImmutableList.type
             "Map" -> ObjMap.type
+            "ImmutableMap" -> ObjImmutableMap.type
+            "Set" -> ObjSet.type
+            "ImmutableSet" -> ObjImmutableSet.type
             else -> null
         }
         val callee = compileRefWithFallback(ref.target, null, refPosOrCurrent(ref.target)) ?: return null
@@ -7304,8 +7308,11 @@ class BytecodeCompiler(
             "Bool" -> ObjBool.type
             "Char" -> ObjChar.type
             "List" -> ObjList.type
+            "ImmutableList" -> ObjImmutableList.type
             "Map" -> ObjMap.type
+            "ImmutableMap" -> ObjImmutableMap.type
             "Set" -> ObjSet.type
+            "ImmutableSet" -> ObjImmutableSet.type
             "Range", "IntRange" -> ObjRange.type
             "Iterator" -> ObjIterator
             "Iterable" -> ObjIterable
@@ -7379,7 +7386,9 @@ class BytecodeCompiler(
         "iterator" -> ObjIterator
         "count" -> ObjInt.type
         "toSet" -> ObjSet.type
+        "toImmutableSet" -> ObjImmutableSet.type
         "toMap" -> ObjMap.type
+        "toImmutableMap" -> ObjImmutableMap.type
         "joinToString" -> ObjString.type
         "now",
         "truncateToSecond",
@@ -7406,6 +7415,8 @@ class BytecodeCompiler(
         "matches" -> ObjBool.type
         "toInt",
         "toEpochSeconds" -> ObjInt.type
+        "toImmutableList" -> ObjImmutableList.type
+        "toImmutable" -> Obj.rootObjectType
         "toMutable" -> ObjMutableBuffer.type
         "seq" -> ObjFlow.type
         "encode" -> ObjBitBuffer.type

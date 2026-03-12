@@ -40,8 +40,12 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
 
     override suspend fun equals(scope: Scope, other: Obj): Boolean {
         if (this === other) return true
-        if (other !is ObjSet) return false
-        if (set.size != other.set.size) return false
+        val otherSet = when (other) {
+            is ObjSet -> other.set
+            is ObjImmutableSet -> other.toMutableSet()
+            else -> return false
+        }
+        if (set.size != otherSet.size) return false
         // Sets are equal if all my elements are in other and vice versa
         // contains() in ObjSet uses equals(scope, ...), so we need to be careful
         for (e in set) {
@@ -115,10 +119,11 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
     }
 
     override suspend fun mul(scope: Scope, other: Obj): Obj {
-        return if (other is ObjSet) {
-            ObjSet(set.intersect(other.set).toMutableSet())
-        } else
-            scope.raiseIllegalArgument("set operator * requires another set")
+        return when (other) {
+            is ObjSet -> ObjSet(set.intersect(other.set).toMutableSet())
+            is ObjImmutableSet -> ObjSet(set.intersect(other.toMutableSet()).toMutableSet())
+            else -> scope.raiseIllegalArgument("set operator * requires another set")
+        }
     }
 
     override suspend fun minus(scope: Scope, other: Obj): Obj {
@@ -144,12 +149,14 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
     }
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
-        if (other is ObjSet) {
-            if (set == other.set) return 0
-            if (set.size != other.set.size) return set.size.compareTo(other.set.size)
-            return set.toString().compareTo(other.set.toString())
+        val otherSet = when (other) {
+            is ObjSet -> other.set
+            is ObjImmutableSet -> other.toMutableSet()
+            else -> return -2
         }
-        return -2
+        if (set == otherSet) return 0
+        if (set.size != otherSet.size) return set.size.compareTo(otherSet.size)
+        return set.toString().compareTo(otherSet.toString())
     }
 
     override fun hashCode(): Int {
@@ -232,6 +239,14 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
                 val n = set.size
                 for( x in args.list ) set -= x
                 if( n == set.size ) ObjFalse else ObjTrue
+            }
+            addFnDoc(
+                name = "toImmutable",
+                doc = "Create an immutable snapshot of this set.",
+                returns = type("lyng.ImmutableSet"),
+                moduleName = "lyng.stdlib"
+            ) {
+                ObjImmutableSet(thisAs<ObjSet>().set)
             }
         }
     }

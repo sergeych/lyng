@@ -12,6 +12,11 @@ extern class Iterable<T> {
     fun forEach(action: (T)->Void): Void
     fun map<R>(transform: (T)->R): List<R>
     fun toList(): List<T>
+    fun toImmutableList(): ImmutableList<T>
+    val toSet: Set<T>
+    val toImmutableSet: ImmutableSet<T>
+    val toMap: Map<Object,Object>
+    val toImmutableMap: ImmutableMap<Object,Object>
 }
 
 extern class Iterator<T> {
@@ -28,13 +33,19 @@ class KotlinIterator<T> : Iterator<T> {
 }
 
 extern class Collection<T> : Iterable<T> {
+    val size: Int
 }
 
 extern class Array<T> : Collection<T> {
 }
 
+extern class ImmutableList<T> : Array<T> {
+    fun toMutable(): List<T>
+}
+
 extern class List<T> : Array<T> {
     fun add(value: T, more...): Void
+    fun toImmutable(): ImmutableList<T>
 }
 
 extern class RingBuffer<T> : Iterable<T> {
@@ -44,12 +55,26 @@ extern class RingBuffer<T> : Iterable<T> {
 }
 
 extern class Set<T> : Collection<T> {
+    fun toImmutable(): ImmutableSet<T>
 }
 
-extern class Map<K,V> {
+extern class ImmutableSet<T> : Collection<T> {
+    fun toMutable(): Set<T>
 }
 
-extern class MapEntry<K,V>
+extern class Map<K,V> : Collection<MapEntry<K,V>> {
+    fun toImmutable(): ImmutableMap<K,V>
+}
+
+extern class ImmutableMap<K,V> : Collection<MapEntry<K,V>> {
+    fun getOrNull(key: K): V?
+    fun toMutable(): Map<K,V>
+}
+
+extern class MapEntry<K,V> : Array<Object> {
+    val key: K
+    val value: V
+}
 
 // Built-in math helpers (implemented in host runtime).
 extern fun abs(x: Object): Real

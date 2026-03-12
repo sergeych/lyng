@@ -1,8 +1,8 @@
 # Array
 
 It's an interface if the [Collection] that provides indexing access, like `array[3] = 0`.
-Array therefore implements [Iterable] too. The well known implementatino of the `Array` is
-[List].
+Array therefore implements [Iterable] too. Well known implementations of `Array` are
+[List] and [ImmutableList].
 
 Array adds the following methods:
 
@@ -35,3 +35,4 @@ To pre-sort and array use `Iterable.sorted*` or in-place `List.sort*` families, 
 [Collection]: Collection.md
 [Iterable]: Iterable.md
 [List]: List.md
+[ImmutableList]: ImmutableList.md
