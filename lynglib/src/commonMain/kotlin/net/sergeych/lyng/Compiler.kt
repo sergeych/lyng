@@ -212,6 +212,9 @@ class Compiler(
                     scopeSeedNames.add(name)
                     if (record.typeDecl != null && nameTypeDecl[name] == null) {
                         nameTypeDecl[name] = record.typeDecl
+                        if (nameObjClass[name] == null) {
+                            resolveTypeDeclObjClass(record.typeDecl)?.let { nameObjClass[name] = it }
+                        }
                     }
                     val instance = record.value as? ObjInstance
                     if (instance != null && nameObjClass[name] == null) {
@@ -291,6 +294,9 @@ class Compiler(
             scopeSeedNames.add(name)
             if (record.typeDecl != null && nameTypeDecl[name] == null) {
                 nameTypeDecl[name] = record.typeDecl
+                if (nameObjClass[name] == null) {
+                    resolveTypeDeclObjClass(record.typeDecl)?.let { nameObjClass[name] = it }
+                }
             }
             if (record.typeDecl != null) {
                 slotTypeDeclByScopeId.getOrPut(plan.id) { mutableMapOf() }[slotIndex] = record.typeDecl
@@ -1208,6 +1214,11 @@ class Compiler(
             for ((name, record) in current.objects) {
                 if (!record.visibility.isPublic) continue
                 if (nameObjClass.containsKey(name)) continue
+                val declaredClass = record.typeDecl?.let { resolveTypeDeclObjClass(it) }
+                if (declaredClass != null) {
+                    nameObjClass[name] = declaredClass
+                    continue
+                }
                 val resolved = when (val raw = record.value) {
                     is FrameSlotRef -> raw.peekValue() ?: raw.read()
                     is RecordSlotRef -> raw.peekValue() ?: raw.read()
@@ -2519,6 +2530,9 @@ class Compiler(
             } else {
                 val rvalue = parseExpressionLevel(level + 1)
                     ?: throw ScriptError(opToken.pos, "Expecting expression")
+                if (opToken.type == Token.Type.PLUSASSIGN) {
+                    checkCollectionPlusAssignTypes(lvalue!!, rvalue, opToken.pos)
+                }
                 op.generate(opToken.pos, lvalue!!, rvalue)
             }
             if (opToken.type == Token.Type.ASSIGN) {
@@ -4197,6 +4211,22 @@ class Compiler(
             is ListLiteralRef -> inferListLiteralTypeDecl(ref)
             is MapLiteralRef -> inferMapLiteralTypeDecl(ref)
             is ConstRef -> inferTypeDeclFromConst(ref.constValue)
+            is CallRef -> {
+                inferCallReturnClass(ref)?.let { TypeDecl.Simple(it.className, false) }
+                    ?: run {
+                        val targetName = when (val target = ref.target) {
+                            is LocalVarRef -> target.name
+                            is FastLocalVarRef -> target.name
+                            is LocalSlotRef -> target.name
+                            else -> null
+                        }
+                        if (targetName != null && targetName.firstOrNull()?.isUpperCase() == true) {
+                            TypeDecl.Simple(targetName, false)
+                        } else {
+                            null
+                        }
+                    }
+            }
             else -> null
         }
     }
@@ -4351,6 +4381,66 @@ class Compiler(
         return TypeDecl.TypeAny
     }
 
+    private fun inferCollectionElementType(typeDecl: TypeDecl): TypeDecl? {
+        val generic = typeDecl as? TypeDecl.Generic ?: return null
+        val base = generic.name.substringAfterLast('.')
+        return when (base) {
+            "Set", "List", "Iterable", "Collection", "Array" -> generic.args.firstOrNull()
+            else -> null
+        }
+    }
+
+    private fun typeDeclSubtypeOf(arg: TypeDecl, param: TypeDecl): Boolean {
+        if (param == TypeDecl.TypeAny || param == TypeDecl.TypeNullableAny) return true
+        val (argBase, argNullable) = stripNullable(arg)
+        val (paramBase, paramNullable) = stripNullable(param)
+        if (argNullable && !paramNullable) return false
+        if (paramBase == TypeDecl.TypeAny) return true
+        if (paramBase is TypeDecl.TypeVar) return true
+        if (argBase is TypeDecl.TypeVar) return true
+        if (paramBase is TypeDecl.Simple && (paramBase.name == "Object" || paramBase.name == "Obj")) return true
+        if (argBase is TypeDecl.Ellipsis) return typeDeclSubtypeOf(argBase.elementType, paramBase)
+        if (paramBase is TypeDecl.Ellipsis) return typeDeclSubtypeOf(argBase, paramBase.elementType)
+        return when (argBase) {
+            is TypeDecl.Union -> argBase.options.all { typeDeclSubtypeOf(it, paramBase) }
+            is TypeDecl.Intersection -> argBase.options.any { typeDeclSubtypeOf(it, paramBase) }
+            else -> when (paramBase) {
+                is TypeDecl.Union -> paramBase.options.any { typeDeclSubtypeOf(argBase, it) }
+                is TypeDecl.Intersection -> paramBase.options.all { typeDeclSubtypeOf(argBase, it) }
+                else -> {
+                    val argClass = resolveTypeDeclObjClass(argBase) ?: return false
+                    val paramClass = resolveTypeDeclObjClass(paramBase) ?: return false
+                    argClass == paramClass || argClass.allParentsSet.contains(paramClass)
+                }
+            }
+        }
+    }
+
+    private fun checkCollectionPlusAssignTypes(targetRef: ObjRef, valueRef: ObjRef, pos: Pos) {
+        // Enforce strict compile-time element checks for declared members.
+        // Local vars can be inferred from literals and are allowed to widen dynamically.
+        if (targetRef !is FieldRef) return
+        val targetDeclRaw = resolveReceiverTypeDecl(targetRef) ?: return
+        val targetDecl = expandTypeAliases(targetDeclRaw, pos)
+        val targetGeneric = targetDecl as? TypeDecl.Generic ?: return
+        val targetBase = targetGeneric.name.substringAfterLast('.')
+        if (targetBase != "Set" && targetBase != "List") return
+        val elementRaw = targetGeneric.args.firstOrNull() ?: return
+        val elementDecl = expandTypeAliases(elementRaw, pos)
+        val valueDeclRaw = inferTypeDeclFromRef(valueRef) ?: return
+        val valueDecl = expandTypeAliases(valueDeclRaw, pos)
+
+        if (typeDeclSubtypeOf(valueDecl, elementDecl)) return
+
+        val sourceElementDecl = inferCollectionElementType(valueDecl)?.let { expandTypeAliases(it, pos) }
+        if (sourceElementDecl != null && typeDeclSubtypeOf(sourceElementDecl, elementDecl)) return
+
+        throw ScriptError(
+            pos,
+            "argument type ${typeDeclName(valueDecl)} does not match ${typeDeclName(elementDecl)} for '+='"
+        )
+    }
+
     private fun stripNullable(type: TypeDecl): Pair<TypeDecl, Boolean> {
         if (type is TypeDecl.TypeNullableAny) return TypeDecl.TypeAny to true
         val nullable = type.isNullable
@@ -4425,7 +4515,7 @@ class Compiler(
             is FastLocalVarRef -> nameTypeDecl[ref.name] ?: seedTypeDeclByName(ref.name)
             is FieldRef -> {
                 val targetDecl = resolveReceiverTypeDecl(ref.target) ?: return null
-                val targetClass = resolveTypeDeclObjClass(targetDecl)
+                val targetClass = resolveTypeDeclObjClass(targetDecl) ?: resolveReceiverClassForMember(ref.target)
                 targetClass?.getInstanceMemberOrNull(ref.name, includeAbstract = true)?.typeDecl?.let { return it }
                 classFieldTypesByName[targetClass?.className]?.get(ref.name)
                     ?.let { return TypeDecl.Simple(it.className, false) }
@@ -9039,6 +9129,7 @@ class Compiler(
                 isMutable = isMutable,
                 visibility = visibility,
                 writeVisibility = setterVisibility,
+                typeDecl = if (varTypeDecl == TypeDecl.TypeAny || varTypeDecl == TypeDecl.TypeNullableAny) null else varTypeDecl,
                 isAbstract = isAbstract,
                 isClosed = isClosed,
                 isOverride = isOverride,

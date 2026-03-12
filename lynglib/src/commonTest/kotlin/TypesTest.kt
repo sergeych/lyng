@@ -20,6 +20,7 @@ import net.sergeych.lyng.Script
 import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.eval
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
@@ -433,35 +434,80 @@ class TypesTest {
         """.trimIndent())
     }
 
-//    @Test
-//    fun testAliasesInGenerics1() = runTest {
-//        val scope = Script.newScope()
-//        scope.eval("""
-//            type IntList<T: Int> = List<T>
-//            type IntMap<K,V> = Map<K,V>
-//            type IntSet<T: Int> = Set<T>
-//            type IntPair<T: Int> = Pair<T,T>
-//            type IntTriple<T: Int> = Triple<T,T,T>
-//            type IntQuad<T: Int> = Quad<T,T,T,T>
-//
-//            import lyng.buffer
-//            type Tag = String | Buffer
-//
-//            class X {
-//                var tags: Set<Tag> = Set()
-//            }
-//            val x = X()
-//            x.tags += "tag1"
-//            assertEquals(Set("tag1"), x.tags)
-//            x.tags += "tag2"
-//            assertEquals(Set("tag1", "tag2"), x.tags)
-//            x.tags += Buffer("tag3")
-//            assertEquals(Set("tag1", "tag2", Buffer("tag3")), x.tags)
-//            x.tags += Buffer("tag4")
-//            assertEquals(Set("tag1", "tag2", Buffer("tag3"), Buffer("tag4")), x.tags)
-//            x.tags += "tag3"
-//            x.tags += "tag4"
-//            assertEquals(Set("tag1", "tag2", Buffer("tag3"), Buffer("tag4")), x.tags)
-//        """)
-//    }
+    @Test
+    fun testAliasesInGenerics1() = runTest {
+        val scope = Script.newScope()
+        scope.eval("""
+            type IntList<T: Int> = List<T>
+            type IntMap<K,V> = Map<K,V>
+            type IntSet<T: Int> = Set<T>
+            type IntPair<T: Int> = Pair<T,T>
+            type IntTriple<T: Int> = Triple<T,T,T>
+            type IntQuad<T: Int> = Quad<T,T,T,T>
+
+            import lyng.buffer
+            type Tag = String | Buffer
+
+            class X {
+                var tags: Set<Tag> = Set()
+            }
+            val x = X()
+            x.tags += "tag1"
+            assertEquals(Set("tag1"), x.tags)
+            x.tags += "tag2"
+            assertEquals(Set("tag1", "tag2"), x.tags)
+            x.tags += Buffer("tag3")
+            assertEquals(Set("tag1", "tag2", Buffer("tag3")), x.tags)
+            x.tags += Buffer("tag4")
+            assertEquals(Set("tag1", "tag2", Buffer("tag3"), Buffer("tag4")), x.tags)
+        """)
+        scope.eval("""
+            assert(x is X)
+            x.tags += "42"
+            assertEquals(Set("tag1", "tag2", Buffer("tag3"), Buffer("tag4"), "42"), x.tags)
+            
+        """.trimIndent())
+        // now this must fail becaise element type does not match the declared:
+        assertFailsWith<ScriptError> {
+            scope.eval(
+                """
+            x.tags += 42
+        """.trimIndent()
+            )
+        }
+    }
+
+    @Test
+    fun testAliasesInGenericsList1() = runTest {
+        val scope = Script.newScope()
+        scope.eval("""
+            import lyng.buffer
+            type Tag = String | Buffer
+
+            class X {
+                var tags: List<Tag> = List()
+            }
+            val x = X()
+            x.tags += "tag1"
+            assertEquals(List("tag1"), x.tags)
+            x.tags += "tag2"
+            assertEquals(List("tag1", "tag2"), x.tags)
+            x.tags += Buffer("tag3")
+            assertEquals(List("tag1", "tag2", Buffer("tag3")), x.tags)
+            x.tags += ["tag4", Buffer("tag5")]
+            assertEquals(List("tag1", "tag2", Buffer("tag3"), "tag4", Buffer("tag5")), x.tags)
+        """)
+        scope.eval("""
+            assert(x is X)
+            x.tags += "42"
+            assertEquals(List("tag1", "tag2", Buffer("tag3"), "tag4", Buffer("tag5"), "42"), x.tags)
+        """.trimIndent())
+        assertFailsWith<ScriptError> {
+            scope.eval(
+                """
+            x.tags += 42
+        """.trimIndent()
+            )
+        }
+    }
 }

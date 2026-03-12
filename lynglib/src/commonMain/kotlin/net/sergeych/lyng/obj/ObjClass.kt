@@ -826,6 +826,7 @@ open class ObjClass(
         type: ObjRecord.Type = ObjRecord.Type.Field,
         fieldId: Int? = null,
         methodId: Int? = null,
+        typeDecl: net.sergeych.lyng.TypeDecl? = null,
     ): ObjRecord {
         // Validation of override rules: only for non-system declarations
         var existing: ObjRecord? = null
@@ -921,6 +922,7 @@ open class ObjClass(
             isOverride = isOverride,
             isTransient = isTransient,
             type = type,
+            typeDecl = typeDecl,
             memberName = name,
             fieldId = effectiveFieldId,
             methodId = effectiveMethodId

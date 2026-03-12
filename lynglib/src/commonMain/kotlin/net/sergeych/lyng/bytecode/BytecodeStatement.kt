@@ -348,6 +348,7 @@ class BytecodeStatement private constructor(
                         stmt.isMutable,
                         stmt.visibility,
                         stmt.writeVisibility,
+                        stmt.typeDecl,
                         stmt.isAbstract,
                         stmt.isClosed,
                         stmt.isOverride,

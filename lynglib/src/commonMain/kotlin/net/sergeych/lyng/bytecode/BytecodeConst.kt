@@ -100,6 +100,7 @@ sealed class BytecodeConst {
         val isMutable: Boolean,
         val visibility: Visibility,
         val writeVisibility: Visibility?,
+        val typeDecl: TypeDecl?,
         val isTransient: Boolean,
         val isAbstract: Boolean,
         val isClosed: Boolean,

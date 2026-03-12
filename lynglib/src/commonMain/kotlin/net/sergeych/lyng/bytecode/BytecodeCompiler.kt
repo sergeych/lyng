@@ -5174,6 +5174,7 @@ class BytecodeCompiler(
                 isMutable = stmt.isMutable,
                 visibility = stmt.visibility,
                 writeVisibility = stmt.writeVisibility,
+                typeDecl = stmt.typeDecl,
                 isTransient = stmt.isTransient,
                 isAbstract = stmt.isAbstract,
                 isClosed = stmt.isClosed,
@@ -6998,7 +6999,9 @@ class BytecodeCompiler(
                 val slot = resolveSlot(ref)
                 val fromSlot = slot?.let { slotObjClass[it] }
                 fromSlot
+                    ?: slot?.let { typeDeclForSlot(it) }?.let { resolveClassFromTypeDecl(it) }
                     ?: slotTypeByScopeId[ownerScopeId]?.get(ownerSlot)
+                    ?: slotTypeDeclByScopeId[ownerScopeId]?.get(ownerSlot)?.let { resolveClassFromTypeDecl(it) }
                     ?: nameObjClass[ref.name]
                     ?: resolveTypeNameClass(ref.name)
                     ?: slotInitClassByKey[ScopeSlotKey(ownerScopeId, ownerSlot)]
@@ -7016,9 +7019,14 @@ class BytecodeCompiler(
                 }
                 val fromSlot = resolveDirectNameSlot(ref.name)?.let { slotObjClass[it.slot] }
                 if (fromSlot != null) return fromSlot
+                val fromDirectTypeDecl = resolveDirectNameSlot(ref.name)
+                    ?.let { typeDeclForSlot(it.slot) }
+                    ?.let { resolveClassFromTypeDecl(it) }
+                if (fromDirectTypeDecl != null) return fromDirectTypeDecl
                 val key = localSlotInfoMap.entries.firstOrNull { it.value.name == ref.name }?.key
                 key?.let {
                     slotTypeByScopeId[it.scopeId]?.get(it.slot)
+                        ?: slotTypeDeclByScopeId[it.scopeId]?.get(it.slot)?.let { decl -> resolveClassFromTypeDecl(decl) }
                         ?: slotInitClassByKey[it]
                 } ?: nameObjClass[ref.name]
                     ?: resolveTypeNameClass(ref.name)
@@ -7029,9 +7037,14 @@ class BytecodeCompiler(
                 }
                 val fromSlot = resolveDirectNameSlot(ref.name)?.let { slotObjClass[it.slot] }
                 if (fromSlot != null) return fromSlot
+                val fromDirectTypeDecl = resolveDirectNameSlot(ref.name)
+                    ?.let { typeDeclForSlot(it.slot) }
+                    ?.let { resolveClassFromTypeDecl(it) }
+                if (fromDirectTypeDecl != null) return fromDirectTypeDecl
                 val key = localSlotInfoMap.entries.firstOrNull { it.value.name == ref.name }?.key
                 key?.let {
                     slotTypeByScopeId[it.scopeId]?.get(it.slot)
+                        ?: slotTypeDeclByScopeId[it.scopeId]?.get(it.slot)?.let { decl -> resolveClassFromTypeDecl(decl) }
                         ?: slotInitClassByKey[it]
                 } ?: nameObjClass[ref.name]
                     ?: resolveTypeNameClass(ref.name)
@@ -7069,6 +7082,23 @@ class BytecodeCompiler(
                 }
             }
             is CallRef -> inferCallReturnClass(ref)
+            else -> null
+        }
+    }
+
+    private fun resolveClassFromTypeDecl(typeDecl: TypeDecl): ObjClass? {
+        return when (typeDecl) {
+            is TypeDecl.Simple -> {
+                resolveTypeNameClass(typeDecl.name) ?: nameObjClass[typeDecl.name]?.let { cls ->
+                    if (cls == ObjClassType) ObjDynamic.type else cls
+                }
+            }
+            is TypeDecl.Generic -> {
+                resolveTypeNameClass(typeDecl.name) ?: nameObjClass[typeDecl.name]?.let { cls ->
+                    if (cls == ObjClassType) ObjDynamic.type else cls
+                }
+            }
+            is TypeDecl.Ellipsis -> resolveClassFromTypeDecl(typeDecl.elementType)
             else -> null
         }
     }

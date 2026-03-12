@@ -2750,6 +2750,7 @@ class CmdDeclClassInstanceField(internal val constId: Int, internal val slot: In
             isClosed = decl.isClosed,
             isOverride = decl.isOverride,
             isTransient = decl.isTransient,
+            typeDecl = decl.typeDecl,
             type = ObjRecord.Type.Field,
             fieldId = decl.fieldId
         )

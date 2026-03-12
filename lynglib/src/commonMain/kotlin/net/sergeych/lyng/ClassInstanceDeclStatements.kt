@@ -33,6 +33,7 @@ class ClassInstanceFieldDeclStatement(
     val isMutable: Boolean,
     val visibility: Visibility,
     val writeVisibility: Visibility?,
+    val typeDecl: TypeDecl?,
     val isAbstract: Boolean,
     val isClosed: Boolean,
     val isOverride: Boolean,
