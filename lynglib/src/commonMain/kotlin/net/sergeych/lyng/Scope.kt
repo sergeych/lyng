@@ -500,22 +500,32 @@ open class Scope(
         return null
     }
 
-    /**
-     * Best-effort lookup of the declared Set element type for a runtime set instance.
-     * Returns null when type info is unavailable.
-     */
-    fun declaredSetElementTypeForValue(value: Obj): TypeDecl? {
+    private fun declaredCollectionElementTypeForValue(value: Obj, rawName: String): TypeDecl? {
         var s: Scope? = this
         var hops = 0
         while (s != null && hops++ < 1024) {
             val decl = s.declaredTypeForValueInThisScope(value)
-            if (decl is TypeDecl.Generic && decl.name.substringAfterLast('.') == "Set") {
+            if (decl is TypeDecl.Generic && decl.name.substringAfterLast('.') == rawName) {
                 return decl.args.firstOrNull()
             }
             s = s.parent
         }
         return null
     }
+
+    /**
+     * Best-effort lookup of the declared Set element type for a runtime set instance.
+     * Returns null when type info is unavailable.
+     */
+    fun declaredSetElementTypeForValue(value: Obj): TypeDecl? =
+        declaredCollectionElementTypeForValue(value, "Set")
+
+    /**
+     * Best-effort lookup of the declared List element type for a runtime list instance.
+     * Returns null when type info is unavailable.
+     */
+    fun declaredListElementTypeForValue(value: Obj): TypeDecl? =
+        declaredCollectionElementTypeForValue(value, "List")
 
     internal fun applySlotPlanReset(plan: Map<String, Int>, records: Map<String, ObjRecord>) {
         if (plan.isEmpty()) return

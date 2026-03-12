@@ -416,6 +416,23 @@ class TypesTest {
         """.trimIndent())
     }
 
+    @Test
+    fun testListTyped() = runTest {
+        eval("""
+            var l = List<String>()
+            val typed: List<String> = l
+            assertEquals(List(), typed)
+
+            l += "foo"
+            assertEquals(List("foo"), l)
+            l -= "foo"
+            assertEquals(List(), l)
+
+            l += ["foo", "bar"]
+            assertEquals(List("foo", "bar"), l)
+        """.trimIndent())
+    }
+
 //    @Test
 //    fun testAliasesInGenerics1() = runTest {
 //        val scope = Script.newScope()

@@ -30,6 +30,15 @@ import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
 
 class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
+    private fun shouldTreatAsSingleElement(scope: Scope, other: Obj): Boolean {
+        if (!other.isInstanceOf(ObjIterable)) return true
+        val declaredElementType = scope.declaredListElementTypeForValue(this)
+        if (declaredElementType != null && matchesTypeDecl(scope, other, declaredElementType)) {
+            return true
+        }
+        if (other is ObjString || other is ObjBuffer) return true
+        return false
+    }
 
     override suspend fun equals(scope: Scope, other: Obj): Boolean {
         if (this === other) return true
@@ -127,7 +136,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
             other is ObjList ->
                 ObjList((list + other.list).toMutableList())
 
-            other.isInstanceOf(ObjIterable) && other !is ObjString && other !is ObjBuffer -> {
+            !shouldTreatAsSingleElement(scope, other) && other.isInstanceOf(ObjIterable) -> {
                 val l = other.callMethod<ObjList>(scope, "toList")
                 ObjList((list + l.list).toMutableList())
             }
@@ -143,12 +152,49 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
     override suspend fun plusAssign(scope: Scope, other: Obj): Obj {
         if (other is ObjList) {
             list.addAll(other.list)
-        } else if (other.isInstanceOf(ObjIterable) && other !is ObjString && other !is ObjBuffer) {
+        } else if (!shouldTreatAsSingleElement(scope, other) && other.isInstanceOf(ObjIterable)) {
             val otherList = (other.invokeInstanceMethod(scope, "toList") as ObjList).list
             list.addAll(otherList)
         } else {
             list.add(other)
         }
+        return this
+    }
+
+    override suspend fun minus(scope: Scope, other: Obj): Obj {
+        val out = list.toMutableList()
+        if (shouldTreatAsSingleElement(scope, other)) {
+            out.remove(other)
+            return ObjList(out)
+        }
+        if (other.isInstanceOf(ObjIterable)) {
+            val toRemove = mutableSetOf<Obj>()
+            other.enumerate(scope) {
+                toRemove += it
+                true
+            }
+            out.removeAll { toRemove.contains(it) }
+            return ObjList(out)
+        }
+        out.remove(other)
+        return ObjList(out)
+    }
+
+    override suspend fun minusAssign(scope: Scope, other: Obj): Obj {
+        if (shouldTreatAsSingleElement(scope, other)) {
+            list.remove(other)
+            return this
+        }
+        if (other.isInstanceOf(ObjIterable)) {
+            val toRemove = mutableSetOf<Obj>()
+            other.enumerate(scope) {
+                toRemove += it
+                true
+            }
+            list.removeAll { toRemove.contains(it) }
+            return this
+        }
+        list.remove(other)
         return this
     }
 
