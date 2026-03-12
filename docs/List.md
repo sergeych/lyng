@@ -2,6 +2,7 @@
 
 Mutable list of any objects.
 For immutable list values, see [ImmutableList].
+For observable mutable lists and change hooks, see [ObservableList].
 
 It's class in Lyng is `List`:
 
@@ -180,6 +181,50 @@ for `sort()` will be `sort { a, b -> a <=> b }
 
 It inherits from [Iterable] too and thus all iterable methods are applicable to any list.
 
+## Observable list hooks
+
+Observable hooks are provided by module `lyng.observable` and are opt-in:
+
+    import lyng.observable
+
+    val src = [1,2,3]
+    val xs = src.observable()
+    assert(xs is ObservableList<Int>)
+
+    var before = 0
+    var after = 0
+    xs.beforeChange { before++ }
+    xs.onChange { after++ }
+
+    xs += 4
+    xs[0] = 100
+    assertEquals([100,2,3,4], xs)
+    assertEquals(2, before)
+    assertEquals(2, after)
+    >>> void
+
+`beforeChange` runs before mutation commit and may reject it by throwing exception (typically `ChangeRejectionException` from the same module):
+
+    import lyng.observable
+    val xs = [1,2].observable()
+    xs.beforeChange { throw ChangeRejectionException("read only") }
+    assertThrows(ChangeRejectionException) { xs += 3 }
+    assertEquals([1,2], xs)
+    >>> void
+
+`changes()` returns `Flow<ListChange<T>>` of committed events:
+
+    import lyng.observable
+    val xs = [10,20].observable()
+    val it = xs.changes().iterator()
+    xs += 30
+    assert(it.hasNext())
+    val e = it.next()
+    assert(e is ListInsert<Int>)
+    assertEquals([30], (e as ListInsert<Int>).values)
+    it.cancelIteration()
+    >>> void
+
 ## Member inherited from Array
 
 | name             | meaning                        | type  |
@@ -199,3 +244,4 @@ It inherits from [Iterable] too and thus all iterable methods are applicable to 
 
 [Iterable]: Iterable.md
 [ImmutableList]: ImmutableList.md
+[ObservableList]: ObservableList.md

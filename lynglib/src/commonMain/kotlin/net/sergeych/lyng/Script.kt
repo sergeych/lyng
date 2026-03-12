@@ -25,6 +25,7 @@ import net.sergeych.lyng.bytecode.CmdVm
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
+import net.sergeych.lyng.stdlib_included.observableLyng
 import net.sergeych.lyng.stdlib_included.rootLyng
 import net.sergeych.lynon.ObjLynonClass
 import net.sergeych.mp_tools.globalDefer
@@ -592,6 +593,19 @@ class Script(
                 addPackage("lyng.stdlib") { module ->
                     module.eval(Source("lyng.stdlib", rootLyng))
                     ObjKotlinIterator.bindTo(module.requireClass("KotlinIterator"))
+                }
+                addPackage("lyng.observable") { module ->
+                    module.addConst("Observable", ObjObservable)
+                    module.addConst("Subscription", ObjSubscription.type)
+                    module.addConst("ListChange", ObjListChange.type)
+                    module.addConst("ListSet", ObjListSetChange.type)
+                    module.addConst("ListInsert", ObjListInsertChange.type)
+                    module.addConst("ListRemove", ObjListRemoveChange.type)
+                    module.addConst("ListClear", ObjListClearChange.type)
+                    module.addConst("ListReorder", ObjListReorderChange.type)
+                    module.addConst("ObservableList", ObjObservableList.type)
+                    module.addConst("ChangeRejectionException", ObjChangeRejectionExceptionClass)
+                    module.eval(Source("lyng.observable", observableLyng))
                 }
                 addPackage("lyng.buffer") {
                     it.addConstDoc(

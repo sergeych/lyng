@@ -47,6 +47,10 @@ object StdlibDocsBootstrap {
             @Suppress("UNUSED_VARIABLE")
             val _immutableSet = net.sergeych.lyng.obj.ObjImmutableSet.type
             @Suppress("UNUSED_VARIABLE")
+            val _observableList = net.sergeych.lyng.obj.ObjObservableList.type
+            @Suppress("UNUSED_VARIABLE")
+            val _subscription = net.sergeych.lyng.obj.ObjSubscription.type
+            @Suppress("UNUSED_VARIABLE")
             val _int = net.sergeych.lyng.obj.ObjInt.type
             @Suppress("UNUSED_VARIABLE")
             val _real = net.sergeych.lyng.obj.ObjReal.type

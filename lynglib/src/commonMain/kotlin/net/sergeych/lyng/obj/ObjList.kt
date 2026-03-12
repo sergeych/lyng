@@ -29,8 +29,8 @@ import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
 
-class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
-    private fun shouldTreatAsSingleElement(scope: Scope, other: Obj): Boolean {
+open class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
+    protected open fun shouldTreatAsSingleElement(scope: Scope, other: Obj): Boolean {
         if (!other.isInstanceOf(ObjIterable)) return true
         val declaredElementType = scope.declaredListElementTypeForValue(this)
         if (declaredElementType != null && matchesTypeDecl(scope, other, declaredElementType)) {
@@ -95,7 +95,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
         }
     }
 
-    override suspend fun putAt(scope: Scope, index: Obj, newValue: Obj) {
+    open override suspend fun putAt(scope: Scope, index: Obj, newValue: Obj) {
         list[index.toInt()] = newValue
     }
 
@@ -149,7 +149,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
         }
 
 
-    override suspend fun plusAssign(scope: Scope, other: Obj): Obj {
+    open override suspend fun plusAssign(scope: Scope, other: Obj): Obj {
         if (other is ObjList) {
             list.addAll(other.list)
         } else if (!shouldTreatAsSingleElement(scope, other) && other.isInstanceOf(ObjIterable)) {
@@ -180,7 +180,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
         return ObjList(out)
     }
 
-    override suspend fun minusAssign(scope: Scope, other: Obj): Obj {
+    open override suspend fun minusAssign(scope: Scope, other: Obj): Obj {
         if (shouldTreatAsSingleElement(scope, other)) {
             list.remove(other)
             return this
@@ -221,7 +221,7 @@ class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
         }
     }
 
-    override val objClass: ObjClass
+    open override val objClass: ObjClass
         get() = type
 
     override suspend fun toKotlin(scope: Scope): Any {

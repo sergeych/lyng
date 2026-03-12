@@ -11,6 +11,7 @@ Concrete collection classes:
 
 - Mutable: [List], [Set], [Map]
 - Immutable: [ImmutableList], [ImmutableSet], [ImmutableMap]
+- Observable mutable lists (opt-in module): [ObservableList]
 
 | name                   | description                                          |
 |------------------------|------------------------------------------------------|
@@ -27,3 +28,4 @@ See [List], [Set], [Iterable] and [Efficient Iterables in Kotlin Interop](Effici
 [ImmutableList]: ImmutableList.md
 [ImmutableSet]: ImmutableSet.md
 [ImmutableMap]: ImmutableMap.md
+[ObservableList]: ObservableList.md

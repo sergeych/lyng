@@ -4704,6 +4704,22 @@ class Compiler(
             name == "toImmutableMap" && receiver is TypeDecl.Generic && base == "Iterable" -> {
                 TypeDecl.Generic("ImmutableMap", listOf(TypeDecl.TypeAny, TypeDecl.TypeAny), false)
             }
+            name == "observable" && receiver is TypeDecl.Generic && (base == "List" || base == "ObservableList") -> {
+                val arg = receiver.args.firstOrNull() ?: TypeDecl.TypeAny
+                TypeDecl.Generic("ObservableList", listOf(arg), false)
+            }
+            name == "changes" && receiver is TypeDecl.Generic && base == "ObservableList" -> {
+                val arg = receiver.args.firstOrNull() ?: TypeDecl.TypeAny
+                TypeDecl.Generic("Flow", listOf(TypeDecl.Generic("ListChange", listOf(arg), false)), false)
+            }
+            name == "changes" && receiver is TypeDecl.Generic && base == "Observable" -> {
+                val arg = receiver.args.firstOrNull() ?: TypeDecl.TypeAny
+                TypeDecl.Generic("Flow", listOf(arg), false)
+            }
+            (name == "beforeChange" || name == "onChange") && receiver is TypeDecl.Generic &&
+                (base == "Observable" || base == "ObservableList") -> {
+                TypeDecl.Simple("Subscription", false)
+            }
             name == "toMap" && receiver is TypeDecl.Generic && base == "Iterable" -> {
                 TypeDecl.Generic("Map", listOf(TypeDecl.TypeAny, TypeDecl.TypeAny), false)
             }
@@ -4794,6 +4810,9 @@ class Compiler(
         "toImmutableList" -> ObjImmutableList.type
         "toImmutableSet" -> ObjImmutableSet.type
         "toImmutableMap" -> ObjImmutableMap.type
+        "observable" -> ObjObservableList.type
+        "beforeChange", "onChange" -> ObjSubscription.type
+        "changes" -> ObjFlow.type
         "toImmutable" -> Obj.rootObjectType
         "toMutable" -> ObjMutableBuffer.type
         "seq" -> ObjFlow.type
@@ -8322,6 +8341,16 @@ class Compiler(
             "Regex" -> ObjRegex.type
             "RegexMatch" -> ObjRegexMatch.type
             "MapEntry" -> ObjMapEntry.type
+            "Observable" -> ObjObservable
+            "Subscription" -> ObjSubscription.type
+            "ListChange" -> ObjListChange.type
+            "ListSet" -> ObjListSetChange.type
+            "ListInsert" -> ObjListInsertChange.type
+            "ListRemove" -> ObjListRemoveChange.type
+            "ListClear" -> ObjListClearChange.type
+            "ListReorder" -> ObjListReorderChange.type
+            "ObservableList" -> ObjObservableList.type
+            "ChangeRejectionException" -> ObjChangeRejectionExceptionClass
             "Exception" -> ObjException.Root
             "Instant" -> ObjInstant.type
             "DateTime" -> ObjDateTime.type

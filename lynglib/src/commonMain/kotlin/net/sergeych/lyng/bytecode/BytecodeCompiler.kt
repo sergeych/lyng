@@ -4440,6 +4440,7 @@ class BytecodeCompiler(
         val initClass = when (localTarget?.name) {
             "List" -> ObjList.type
             "ImmutableList" -> ObjImmutableList.type
+            "ObservableList" -> ObjObservableList.type
             "Map" -> ObjMap.type
             "ImmutableMap" -> ObjImmutableMap.type
             "Set" -> ObjSet.type
@@ -7326,6 +7327,16 @@ class BytecodeCompiler(
             "Regex" -> ObjRegex.type
             "RegexMatch" -> ObjRegexMatch.type
             "MapEntry" -> ObjMapEntry.type
+            "Observable" -> ObjObservable
+            "Subscription" -> ObjSubscription.type
+            "ListChange" -> ObjListChange.type
+            "ListSet" -> ObjListSetChange.type
+            "ListInsert" -> ObjListInsertChange.type
+            "ListRemove" -> ObjListRemoveChange.type
+            "ListClear" -> ObjListClearChange.type
+            "ListReorder" -> ObjListReorderChange.type
+            "ObservableList" -> ObjObservableList.type
+            "ChangeRejectionException" -> ObjChangeRejectionExceptionClass
             "Instant" -> ObjInstant.type
             "DateTime" -> ObjDateTime.type
             "Duration" -> ObjDuration.type
@@ -7389,6 +7400,9 @@ class BytecodeCompiler(
         "toImmutableSet" -> ObjImmutableSet.type
         "toMap" -> ObjMap.type
         "toImmutableMap" -> ObjImmutableMap.type
+        "observable" -> ObjObservableList.type
+        "beforeChange", "onChange" -> ObjSubscription.type
+        "changes" -> ObjFlow.type
         "joinToString" -> ObjString.type
         "now",
         "truncateToSecond",
