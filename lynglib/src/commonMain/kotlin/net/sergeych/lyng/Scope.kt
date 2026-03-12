@@ -471,6 +471,52 @@ open class Scope(
         }
     }
 
+    private fun resolvedRecordValueOrNull(record: ObjRecord): Obj? {
+        return when (val raw = record.value) {
+            is FrameSlotRef -> raw.read()
+            is RecordSlotRef -> raw.read()
+            else -> raw
+        }
+    }
+
+    private fun declaredTypeForValueInThisScope(value: Obj): TypeDecl? {
+        // Prefer direct bindings first.
+        for (record in objects.values) {
+            val decl = record.typeDecl ?: continue
+            if (resolvedRecordValueOrNull(record) === value) return decl
+        }
+        for ((_, record) in localBindings) {
+            val decl = record.typeDecl ?: continue
+            if (resolvedRecordValueOrNull(record) === value) return decl
+        }
+        // Then slots (for frame-first locals).
+        var i = 0
+        while (i < slots.size) {
+            val record = slots[i]
+            val decl = record.typeDecl
+            if (decl != null && resolvedRecordValueOrNull(record) === value) return decl
+            i++
+        }
+        return null
+    }
+
+    /**
+     * Best-effort lookup of the declared Set element type for a runtime set instance.
+     * Returns null when type info is unavailable.
+     */
+    fun declaredSetElementTypeForValue(value: Obj): TypeDecl? {
+        var s: Scope? = this
+        var hops = 0
+        while (s != null && hops++ < 1024) {
+            val decl = s.declaredTypeForValueInThisScope(value)
+            if (decl is TypeDecl.Generic && decl.name.substringAfterLast('.') == "Set") {
+                return decl.args.firstOrNull()
+            }
+            s = s.parent
+        }
+        return null
+    }
+
     internal fun applySlotPlanReset(plan: Map<String, Int>, records: Map<String, ObjRecord>) {
         if (plan.isEmpty()) return
         slots.clear()

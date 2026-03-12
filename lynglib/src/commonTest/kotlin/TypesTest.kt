@@ -399,4 +399,52 @@ class TypesTest {
             fun testOk5() { l4(1, "a", "b", "x") }
         """.trimIndent())
     }
+
+    @Test
+    fun testSetTyped() = runTest {
+        eval("""
+            var s = Set<String>()
+            val typed: Set<String> = s
+            assertEquals(Set(), typed)
+            
+            s += "foo"
+            assertEquals(Set("foo"), s)
+            s -= "foo"
+            assertEquals(Set(), s)
+            s += ["foo", "bar"]
+            assertEquals(Set("foo", "bar"), s)
+        """.trimIndent())
+    }
+
+//    @Test
+//    fun testAliasesInGenerics1() = runTest {
+//        val scope = Script.newScope()
+//        scope.eval("""
+//            type IntList<T: Int> = List<T>
+//            type IntMap<K,V> = Map<K,V>
+//            type IntSet<T: Int> = Set<T>
+//            type IntPair<T: Int> = Pair<T,T>
+//            type IntTriple<T: Int> = Triple<T,T,T>
+//            type IntQuad<T: Int> = Quad<T,T,T,T>
+//
+//            import lyng.buffer
+//            type Tag = String | Buffer
+//
+//            class X {
+//                var tags: Set<Tag> = Set()
+//            }
+//            val x = X()
+//            x.tags += "tag1"
+//            assertEquals(Set("tag1"), x.tags)
+//            x.tags += "tag2"
+//            assertEquals(Set("tag1", "tag2"), x.tags)
+//            x.tags += Buffer("tag3")
+//            assertEquals(Set("tag1", "tag2", Buffer("tag3")), x.tags)
+//            x.tags += Buffer("tag4")
+//            assertEquals(Set("tag1", "tag2", Buffer("tag3"), Buffer("tag4")), x.tags)
+//            x.tags += "tag3"
+//            x.tags += "tag4"
+//            assertEquals(Set("tag1", "tag2", Buffer("tag3"), Buffer("tag4")), x.tags)
+//        """)
+//    }
 }

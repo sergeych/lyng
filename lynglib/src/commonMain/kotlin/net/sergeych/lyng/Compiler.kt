@@ -169,6 +169,7 @@ class Compiler(
     )
     private val typeAliases: MutableMap<String, TypeAliasDecl> = mutableMapOf()
     private val methodReturnTypeDeclByRef: MutableMap<ObjRef, TypeDecl> = mutableMapOf()
+    private val callReturnTypeDeclByRef: MutableMap<CallRef, TypeDecl> = mutableMapOf()
     private val callableReturnTypeByScopeId: MutableMap<Int, MutableMap<Int, ObjClass>> = mutableMapOf()
     private val callableReturnTypeByName: MutableMap<String, ObjClass> = mutableMapOf()
     private val lambdaReturnTypeByRef: MutableMap<ObjRef, ObjClass> = mutableMapOf()
@@ -2544,6 +2545,7 @@ class Compiler(
 
     private suspend fun parseTerm(): ObjRef? {
         var operand: ObjRef? = null
+        var pendingCallTypeArgs: List<TypeDecl>? = null
 
         // newlines _before_
         cc.skipWsTokens()
@@ -2791,20 +2793,35 @@ class Compiler(
                     operand = parseScopeOperator(operand)
                 }
 
+                Token.Type.LT -> {
+                    val parsedTypeArgs = operand
+                        ?.takeIf { isGenericCallCalleeCandidate(it) }
+                        ?.let { tryParseCallTypeArgsAfterLt() }
+                    if (parsedTypeArgs != null) {
+                        pendingCallTypeArgs = parsedTypeArgs
+                        continue
+                    }
+                    cc.previous()
+                    return operand
+                }
+
                 Token.Type.LPAREN, Token.Type.NULL_COALESCE_INVOKE -> {
                     operand?.let { left ->
                         // this is function call from <left>
                         operand = parseFunctionCall(
                             left,
                             false,
-                            t.type == Token.Type.NULL_COALESCE_INVOKE
+                            t.type == Token.Type.NULL_COALESCE_INVOKE,
+                            pendingCallTypeArgs
                         )
+                        pendingCallTypeArgs = null
                     } ?: run {
                         // Expression in parentheses
                         val statement = parseStatement() ?: throw ScriptError(t.pos, "Expecting expression")
                         operand = StatementRef(statement)
                         cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
                         cc.skipTokenOfType(Token.Type.RPAREN, "missing ')'")
+                        pendingCallTypeArgs = null
                     }
                 }
 
@@ -2984,7 +3001,8 @@ class Compiler(
                         parseFunctionCall(
                             left,
                             blockArgument = true,
-                            isOptional = t.type == Token.Type.NULL_COALESCE_BLOCKINVOKE
+                            isOptional = t.type == Token.Type.NULL_COALESCE_BLOCKINVOKE,
+                            explicitTypeArgs = pendingCallTypeArgs
                         )
                     } ?: run {
                         // Disambiguate between lambda and map literal.
@@ -3009,6 +3027,54 @@ class Compiler(
                 }
             }
         }
+    }
+
+    private suspend fun tryParseCallTypeArgsAfterLt(): List<TypeDecl>? {
+        val savedAfterLt = cc.savePos()
+        return try {
+            val args = mutableListOf<TypeDecl>()
+            do {
+                val (argSem, _) = parseTypeExpressionWithMini()
+                args += argSem
+                val sep = cc.next()
+                when (sep.type) {
+                    Token.Type.COMMA -> continue
+                    Token.Type.GT -> break
+                    Token.Type.SHR -> {
+                        cc.pushPendingGT()
+                        break
+                    }
+                    else -> {
+                        cc.restorePos(savedAfterLt)
+                        return null
+                    }
+                }
+            } while (true)
+            val nextType = cc.peekNextNonWhitespace().type
+            if (nextType != Token.Type.LPAREN && nextType != Token.Type.NULL_COALESCE_INVOKE) {
+                cc.restorePos(savedAfterLt)
+                return null
+            }
+            args
+        } catch (_: ScriptError) {
+            cc.restorePos(savedAfterLt)
+            null
+        }
+    }
+
+    private fun isGenericCallCalleeCandidate(ref: ObjRef): Boolean {
+        val name = when (ref) {
+            is LocalVarRef -> ref.name
+            is FastLocalVarRef -> ref.name
+            is LocalSlotRef -> ref.name
+            else -> null
+        }
+        if (name != null) {
+            if (lookupGenericFunctionDecl(name) != null) return true
+            if (name.firstOrNull()?.isUpperCase() == true) return true
+            return false
+        }
+        return ref is ConstRef && ref.constValue is ObjClass
     }
 
     /**
@@ -4369,6 +4435,7 @@ class Compiler(
                 }
             }
             is MethodCallRef -> methodReturnTypeDeclByRef[ref]
+            is CallRef -> callReturnTypeDeclByRef[ref]
             is StatementRef -> (ref.statement as? ExpressionStatement)?.let { resolveReceiverTypeDecl(it.ref) }
             else -> null
         }
@@ -5407,7 +5474,8 @@ class Compiler(
     private suspend fun parseFunctionCall(
         left: ObjRef,
         blockArgument: Boolean,
-        isOptional: Boolean
+        isOptional: Boolean,
+        explicitTypeArgs: List<TypeDecl>? = null
     ): ObjRef {
         var detectedBlockArgument = blockArgument
         val expectedReceiver = tailBlockReceiverType(left)
@@ -5448,7 +5516,9 @@ class Compiler(
         val result = when (left) {
             is ImplicitThisMemberRef ->
                 if (left.methodId == null && left.fieldId != null) {
-                    CallRef(left, args, detectedBlockArgument, isOptional)
+                    CallRef(left, args, detectedBlockArgument, isOptional).also { callRef ->
+                        applyExplicitCallTypeArgs(callRef, explicitTypeArgs)
+                    }
                 } else {
                     ImplicitThisMethodCallRef(
                         left.name,
@@ -5481,7 +5551,9 @@ class Compiler(
                     checkFunctionTypeCallArity(left, args, left.pos())
                     checkFunctionTypeCallTypes(left, args, left.pos())
                     checkGenericBoundsAtCall(left.name, args, left.pos())
-                    CallRef(left, args, detectedBlockArgument, isOptional)
+                    CallRef(left, args, detectedBlockArgument, isOptional).also { callRef ->
+                        applyExplicitCallTypeArgs(callRef, explicitTypeArgs)
+                    }
                 }
             }
             is LocalSlotRef -> {
@@ -5505,12 +5577,28 @@ class Compiler(
                     checkFunctionTypeCallArity(left, args, left.pos())
                     checkFunctionTypeCallTypes(left, args, left.pos())
                     checkGenericBoundsAtCall(left.name, args, left.pos())
-                    CallRef(left, args, detectedBlockArgument, isOptional)
+                    CallRef(left, args, detectedBlockArgument, isOptional).also { callRef ->
+                        applyExplicitCallTypeArgs(callRef, explicitTypeArgs)
+                    }
                 }
             }
-            else -> CallRef(left, args, detectedBlockArgument, isOptional)
+            else -> CallRef(left, args, detectedBlockArgument, isOptional).also { callRef ->
+                applyExplicitCallTypeArgs(callRef, explicitTypeArgs)
+            }
         }
         return result
+    }
+
+    private fun applyExplicitCallTypeArgs(callRef: CallRef, explicitTypeArgs: List<TypeDecl>?) {
+        if (explicitTypeArgs.isNullOrEmpty()) return
+        val baseName = when (val target = callRef.target) {
+            is LocalVarRef -> target.name
+            is FastLocalVarRef -> target.name
+            is LocalSlotRef -> target.name
+            is ConstRef -> (target.constValue as? ObjClass)?.className
+            else -> null
+        } ?: return
+        callReturnTypeDeclByRef[callRef] = TypeDecl.Generic(baseName, explicitTypeArgs, isNullable = false)
     }
 
     private fun inferReceiverTypeFromArgs(args: List<ParsedArgument>): String? {

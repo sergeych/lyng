@@ -27,6 +27,16 @@ import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
 
 class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
+    private fun shouldTreatAsSingleElement(scope: Scope, other: Obj): Boolean {
+        if (!other.isInstanceOf(ObjIterable)) return true
+        val declaredElementType = scope.declaredSetElementTypeForValue(this)
+        if (declaredElementType != null && matchesTypeDecl(scope, other, declaredElementType)) {
+            return true
+        }
+        // Strings and buffers are iterable but usually expected to be atomic values for set +/- operators.
+        if (other is ObjString || other is ObjBuffer) return true
+        return false
+    }
 
     override suspend fun equals(scope: Scope, other: Obj): Boolean {
         if (this === other) return true
@@ -53,6 +63,9 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
     }
 
     override suspend fun plus(scope: Scope, other: Obj): Obj {
+        if (shouldTreatAsSingleElement(scope, other)) {
+            return ObjSet((set + other).toMutableSet())
+        }
         return ObjSet(
             if (other is ObjSet)
                 (set + other.set).toMutableSet()
@@ -73,6 +86,10 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
     }
 
     override suspend fun plusAssign(scope: Scope, other: Obj): Obj {
+        if (shouldTreatAsSingleElement(scope, other)) {
+            set += other
+            return this
+        }
         when (other) {
             is ObjSet -> {
                 set += other.set
@@ -105,6 +122,9 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
     }
 
     override suspend fun minus(scope: Scope, other: Obj): Obj {
+        if (shouldTreatAsSingleElement(scope, other)) {
+            return ObjSet((set - other).toMutableSet())
+        }
         return when {
             other is ObjSet -> ObjSet(set.minus(other.set).toMutableSet())
             other.isInstanceOf(ObjIterable) -> {
@@ -115,8 +135,7 @@ class ObjSet(val set: MutableSet<Obj> = mutableSetOf()) : Obj() {
                 }
                 ObjSet((set - otherSet).toMutableSet())
             }
-            else ->
-                scope.raiseIllegalArgument("set operator - requires another set or Iterable")
+            else -> ObjSet((set - other).toMutableSet())
         }
     }
 
