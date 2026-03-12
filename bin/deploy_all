@@ -20,13 +20,12 @@
 set -e
 echo "publishing all artifacts"
 echo
-./gradlew publishToMavenLocal
-./gradlew publish
+./gradlew publishToMavenLocal publish buildInstallablePlugin
 
-echo
-echo "Creating plugin"
-echo
-./gradlew buildInstallablePlugin
+#echo
+#echo "Creating plugin"
+#echo
+#./gradlew buildInstallablePlugin
 
 echo
 echo "building CLI tools"
