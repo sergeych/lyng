@@ -20,7 +20,7 @@
 set -e
 echo "publishing all artifacts"
 echo
-./gradlew publishToMavenLocal site:jsBrowserDistribution publish buildInstallablePlugin
+./gradlew publishToMavenLocal site:jsBrowserDistribution publish buildInstallablePlugin :lyng:linkReleaseExecutableLinuxX64 :lyng:installJvmDist --parallel
 
 #echo
 #echo "Creating plugin"
