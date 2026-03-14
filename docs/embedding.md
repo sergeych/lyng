@@ -261,14 +261,14 @@ moduleScope.eval("class Counter { extern var value: Int; extern fun inc(by: Int)
 moduleScope.bind("Counter") {
     addVar(
         name = "value",
-        get = { _, self -> self.readField(this, "value").value },
-        set = { _, self, v -> self.writeField(this, "value", v) }
+        get = { thisObj.readField(this, "value").value },
+        set = { v -> thisObj.writeField(this, "value", v) }
     )
-    addFun("inc") { _, self, args ->
+    addFun("inc") {
         val by = args.requiredArg<ObjInt>(0).value
-        val current = self.readField(this, "value").value as ObjInt
+        val current = thisObj.readField(this, "value").value as ObjInt
         val next = ObjInt(current.value + by)
-        self.writeField(this, "value", next)
+        thisObj.writeField(this, "value", next)
         next
     }
 }
@@ -303,16 +303,16 @@ moduleScope.eval("""
 moduleScope.bindObject("HostObject") {
     classData = "OK"
     init { _ -> data = 0L }
-    addFun("add") { _, _, args ->
+    addFun("add") {
         val a = args.requiredArg<ObjInt>(0).value
         val b = args.requiredArg<ObjInt>(1).value
         ObjInt.of(a + b)
     }
-    addVal("status") { _, _ -> ObjString(classData as String) }
+    addVal("status") { ObjString(classData as String) }
     addVar(
         "count",
-        get = { _, inst -> ObjInt.of((inst as ObjInstance).data as Long) },
-        set = { _, inst, value -> (inst as ObjInstance).data = (value as ObjInt).value }
+        get = { ObjInt.of((thisObj as ObjInstance).data as Long) },
+        set = { value -> (thisObj as ObjInstance).data = (value as ObjInt).value }
     )
 }
 ```
@@ -336,7 +336,7 @@ moduleScope.eval("""
 """.trimIndent())
 
 moduleScope.bindObject("HostObject") {
-    addFun("ping") { _, _, _ -> ObjInt.of(7) }
+    addFun("ping") { ObjInt.of(7) }
 }
 ```
 

@@ -60,12 +60,54 @@ interface ClassBridgeBinder {
     /** Register an initialization hook that runs for each instance. */
     fun init(block: suspend BridgeInstanceContext.(ScopeFacade) -> Unit)
     /** Register an initialization hook with direct access to the instance. */
+    fun initWithInstance(block: suspend ScopeFacade.() -> Unit)
+    /**
+     * Legacy initWithInstance form.
+     * Prefer [initWithInstance] with [ScopeFacade] receiver and use [ScopeFacade.thisObj].
+     */
+    @Deprecated(
+        message = "Use initWithInstance { ... } with ScopeFacade receiver; use thisObj from scope",
+        replaceWith = ReplaceWith("initWithInstance { block(this, thisObj) }")
+    )
     fun initWithInstance(block: suspend (ScopeFacade, Obj) -> Unit)
     /** Bind a Lyng function/member to a Kotlin implementation (requires `extern` in Lyng). */
+    fun addFun(name: String, impl: suspend ScopeFacade.() -> Obj)
+    /**
+     * Legacy addFun form.
+     * Prefer [addFun] with [ScopeFacade] receiver and use [ScopeFacade.thisObj]/[ScopeFacade.args].
+     */
+    @Deprecated(
+        message = "Use addFun(name) { ... } with ScopeFacade receiver; use thisObj/args from scope",
+        replaceWith = ReplaceWith("addFun(name) { impl(this, thisObj, args) }")
+    )
     fun addFun(name: String, impl: suspend (ScopeFacade, Obj, Arguments) -> Obj)
     /** Bind a read-only member (val/property getter) declared as `extern`. */
+    fun addVal(name: String, impl: suspend ScopeFacade.() -> Obj)
+    /**
+     * Legacy addVal form.
+     * Prefer [addVal] with [ScopeFacade] receiver and use [ScopeFacade.thisObj].
+     */
+    @Deprecated(
+        message = "Use addVal(name) { ... } with ScopeFacade receiver; use thisObj from scope",
+        replaceWith = ReplaceWith("addVal(name) { impl(this, thisObj) }")
+    )
     fun addVal(name: String, impl: suspend (ScopeFacade, Obj) -> Obj)
     /** Bind a mutable member (var/property getter/setter) declared as `extern`. */
+    fun addVar(
+        name: String,
+        get: suspend ScopeFacade.() -> Obj,
+        set: suspend ScopeFacade.(Obj) -> Unit
+    )
+    /**
+     * Legacy addVar form.
+     * Prefer [addVar] with [ScopeFacade] receiver and use [ScopeFacade.thisObj].
+     */
+    @Deprecated(
+        message = "Use addVar(name, get, set) with ScopeFacade receiver; use thisObj from scope",
+        replaceWith = ReplaceWith(
+            "addVar(name, get = { get(this, thisObj) }, set = { value -> set(this, thisObj, value) })"
+        )
+    )
     fun addVar(
         name: String,
         get: suspend (ScopeFacade, Obj) -> Obj,
@@ -234,17 +276,27 @@ private class ClassBridgeBinderImpl(
         }
     }
 
+    override fun initWithInstance(block: suspend ScopeFacade.() -> Unit) {
+        initHooks.add { scope, _ ->
+            scope.block()
+        }
+    }
+
+    @Deprecated(
+        message = "Use initWithInstance { ... } with ScopeFacade receiver; use thisObj from scope",
+        replaceWith = ReplaceWith("initWithInstance { block(this, thisObj) }")
+    )
     override fun initWithInstance(block: suspend (ScopeFacade, Obj) -> Unit) {
         initHooks.add { scope, inst ->
             block(scope, inst)
         }
     }
 
-    override fun addFun(name: String, impl: suspend (ScopeFacade, Obj, Arguments) -> Obj) {
+    override fun addFun(name: String, impl: suspend ScopeFacade.() -> Obj) {
         ensureTemplateNotBuilt()
         val target = findMember(name)
         val callable = ObjExternCallable.fromBridge {
-            impl(this, thisObj, args)
+            impl()
         }
         val methodId = cls.ensureMethodIdForBridge(name, target.record)
         val newRecord = target.record.copy(
@@ -255,14 +307,24 @@ private class ClassBridgeBinderImpl(
         replaceMember(target, newRecord)
     }
 
-    override fun addVal(name: String, impl: suspend (ScopeFacade, Obj) -> Obj) {
+    @Deprecated(
+        message = "Use addFun(name) { ... } with ScopeFacade receiver; use thisObj/args from scope",
+        replaceWith = ReplaceWith("addFun(name) { impl(this, thisObj, args) }")
+    )
+    override fun addFun(name: String, impl: suspend (ScopeFacade, Obj, Arguments) -> Obj) {
+        addFun(name) {
+            impl(this, thisObj, args)
+        }
+    }
+
+    override fun addVal(name: String, impl: suspend ScopeFacade.() -> Obj) {
         ensureTemplateNotBuilt()
         val target = findMember(name)
         if (target.record.isMutable) {
             throw ScriptError(Pos.builtIn, "extern val $name is mutable in class ${cls.className}")
         }
         val getter = ObjExternCallable.fromBridge {
-            impl(this, thisObj)
+            impl()
         }
         val prop = ObjProperty(name, getter, null)
         val isFieldLike = target.record.type == ObjRecord.Type.Field ||
@@ -287,10 +349,20 @@ private class ClassBridgeBinderImpl(
         replaceMember(target, newRecord)
     }
 
+    @Deprecated(
+        message = "Use addVal(name) { ... } with ScopeFacade receiver; use thisObj from scope",
+        replaceWith = ReplaceWith("addVal(name) { impl(this, thisObj) }")
+    )
+    override fun addVal(name: String, impl: suspend (ScopeFacade, Obj) -> Obj) {
+        addVal(name) {
+            impl(this, thisObj)
+        }
+    }
+
     override fun addVar(
         name: String,
-        get: suspend (ScopeFacade, Obj) -> Obj,
-        set: suspend (ScopeFacade, Obj, Obj) -> Unit
+        get: suspend ScopeFacade.() -> Obj,
+        set: suspend ScopeFacade.(Obj) -> Unit
     ) {
         ensureTemplateNotBuilt()
         val target = findMember(name)
@@ -298,11 +370,11 @@ private class ClassBridgeBinderImpl(
             throw ScriptError(Pos.builtIn, "extern var $name is readonly in class ${cls.className}")
         }
         val getter = ObjExternCallable.fromBridge {
-            get(this, thisObj)
+            get()
         }
         val setter = ObjExternCallable.fromBridge {
             val value = requiredArg<Obj>(0)
-            set(this, thisObj, value)
+            set(value)
             ObjVoid
         }
         val prop = ObjProperty(name, getter, setter)
@@ -326,6 +398,24 @@ private class ClassBridgeBinderImpl(
             )
         }
         replaceMember(target, newRecord)
+    }
+
+    @Deprecated(
+        message = "Use addVar(name, get, set) with ScopeFacade receiver; use thisObj from scope",
+        replaceWith = ReplaceWith(
+            "addVar(name, get = { get(this, thisObj) }, set = { value -> set(this, thisObj, value) })"
+        )
+    )
+    override fun addVar(
+        name: String,
+        get: suspend (ScopeFacade, Obj) -> Obj,
+        set: suspend (ScopeFacade, Obj, Obj) -> Unit
+    ) {
+        addVar(
+            name,
+            get = { get(this, thisObj) },
+            set = { value -> set(this, thisObj, value) }
+        )
     }
 
     fun commit() {
@@ -399,16 +489,26 @@ private class ObjectBridgeBinderImpl(
         }
     }
 
+    override fun initWithInstance(block: suspend ScopeFacade.() -> Unit) {
+        initHooks.add { scope, _ ->
+            scope.block()
+        }
+    }
+
+    @Deprecated(
+        message = "Use initWithInstance { ... } with ScopeFacade receiver; use thisObj from scope",
+        replaceWith = ReplaceWith("initWithInstance { block(this, thisObj) }")
+    )
     override fun initWithInstance(block: suspend (ScopeFacade, Obj) -> Unit) {
         initHooks.add { scope, inst ->
             block(scope, inst)
         }
     }
 
-    override fun addFun(name: String, impl: suspend (ScopeFacade, Obj, Arguments) -> Obj) {
+    override fun addFun(name: String, impl: suspend ScopeFacade.() -> Obj) {
         val target = findMember(name)
         val callable = ObjExternCallable.fromBridge {
-            impl(this, thisObj, args)
+            impl()
         }
         val methodId = cls.ensureMethodIdForBridge(name, target.record)
         val newRecord = target.record.copy(
@@ -420,13 +520,23 @@ private class ObjectBridgeBinderImpl(
         updateInstanceMember(target, newRecord)
     }
 
-    override fun addVal(name: String, impl: suspend (ScopeFacade, Obj) -> Obj) {
+    @Deprecated(
+        message = "Use addFun(name) { ... } with ScopeFacade receiver; use thisObj/args from scope",
+        replaceWith = ReplaceWith("addFun(name) { impl(this, thisObj, args) }")
+    )
+    override fun addFun(name: String, impl: suspend (ScopeFacade, Obj, Arguments) -> Obj) {
+        addFun(name) {
+            impl(this, thisObj, args)
+        }
+    }
+
+    override fun addVal(name: String, impl: suspend ScopeFacade.() -> Obj) {
         val target = findMember(name)
         if (target.record.isMutable) {
             throw ScriptError(Pos.builtIn, "extern val $name is mutable in class ${cls.className}")
         }
         val getter = ObjExternCallable.fromBridge {
-            impl(this, thisObj)
+            impl()
         }
         val prop = ObjProperty(name, getter, null)
         val isFieldLike = target.record.type == ObjRecord.Type.Field ||
@@ -452,21 +562,31 @@ private class ObjectBridgeBinderImpl(
         updateInstanceMember(target, newRecord)
     }
 
+    @Deprecated(
+        message = "Use addVal(name) { ... } with ScopeFacade receiver; use thisObj from scope",
+        replaceWith = ReplaceWith("addVal(name) { impl(this, thisObj) }")
+    )
+    override fun addVal(name: String, impl: suspend (ScopeFacade, Obj) -> Obj) {
+        addVal(name) {
+            impl(this, thisObj)
+        }
+    }
+
     override fun addVar(
         name: String,
-        get: suspend (ScopeFacade, Obj) -> Obj,
-        set: suspend (ScopeFacade, Obj, Obj) -> Unit
+        get: suspend ScopeFacade.() -> Obj,
+        set: suspend ScopeFacade.(Obj) -> Unit
     ) {
         val target = findMember(name)
         if (!target.record.isMutable) {
             throw ScriptError(Pos.builtIn, "extern var $name is readonly in class ${cls.className}")
         }
         val getter = ObjExternCallable.fromBridge {
-            get(this, thisObj)
+            get()
         }
         val setter = ObjExternCallable.fromBridge {
             val value = requiredArg<Obj>(0)
-            set(this, thisObj, value)
+            set(value)
             ObjVoid
         }
         val prop = ObjProperty(name, getter, setter)
@@ -491,6 +611,24 @@ private class ObjectBridgeBinderImpl(
         }
         replaceMember(target, newRecord)
         updateInstanceMember(target, newRecord)
+    }
+
+    @Deprecated(
+        message = "Use addVar(name, get, set) with ScopeFacade receiver; use thisObj from scope",
+        replaceWith = ReplaceWith(
+            "addVar(name, get = { get(this, thisObj) }, set = { value -> set(this, thisObj, value) })"
+        )
+    )
+    override fun addVar(
+        name: String,
+        get: suspend (ScopeFacade, Obj) -> Obj,
+        set: suspend (ScopeFacade, Obj, Obj) -> Unit
+    ) {
+        addVar(
+            name,
+            get = { get(this, thisObj) },
+            set = { value -> set(this, thisObj, value) }
+        )
     }
 
     suspend fun commit() {

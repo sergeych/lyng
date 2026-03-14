@@ -146,10 +146,22 @@ interface ClassBridgeBinder {
     var classData: Any?
 
     fun init(block: suspend BridgeInstanceContext.(ScopeFacade) -> Unit)
+    fun initWithInstance(block: suspend ScopeFacade.() -> Unit)
+    @Deprecated("Use receiver-form initWithInstance and read thisObj from ScopeFacade")
     fun initWithInstance(block: suspend (ScopeFacade, Obj) -> Unit)
 
+    fun addFun(name: String, impl: suspend ScopeFacade.() -> Obj)
+    @Deprecated("Use receiver-form addFun and read thisObj/args from ScopeFacade")
     fun addFun(name: String, impl: suspend (ScopeFacade, Obj, Arguments) -> Obj)
+    fun addVal(name: String, impl: suspend ScopeFacade.() -> Obj)
+    @Deprecated("Use receiver-form addVal and read thisObj from ScopeFacade")
     fun addVal(name: String, impl: suspend (ScopeFacade, Obj) -> Obj)
+    fun addVar(
+        name: String,
+        get: suspend ScopeFacade.() -> Obj,
+        set: suspend ScopeFacade.(Obj) -> Unit
+    )
+    @Deprecated("Use receiver-form addVar and read thisObj from ScopeFacade")
     fun addVar(
         name: String,
         get: suspend (ScopeFacade, Obj) -> Obj,

@@ -45,18 +45,18 @@ class ObjKotlinIterator(val iterator: Iterator<Any?>) : Obj() {
             }
             boundType = cls
             LyngClassBridge.bind(cls) {
-                addFun("next") { scope, self, _ ->
-                    when (self) {
+                addFun("next") {
+                    when (val self = thisObj) {
                         is ObjKotlinIterator -> self.iterator.next().toObj()
                         is ObjKotlinObjIterator -> self.iterator.next()
-                        else -> scope.raiseClassCastError("Expected KotlinIterator, got ${self.objClass.className}")
+                        else -> raiseClassCastError("Expected KotlinIterator, got ${self.objClass.className}")
                     }
                 }
-                addFun("hasNext") { scope, self, _ ->
-                    when (self) {
+                addFun("hasNext") {
+                    when (val self = thisObj) {
                         is ObjKotlinIterator -> self.iterator.hasNext().toObj()
                         is ObjKotlinObjIterator -> self.iterator.hasNext().toObj()
-                        else -> scope.raiseClassCastError("Expected KotlinIterator, got ${self.objClass.className}")
+                        else -> raiseClassCastError("Expected KotlinIterator, got ${self.objClass.className}")
                     }
                 }
             }

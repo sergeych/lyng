@@ -39,34 +39,34 @@ LyngClassBridge.bind(className = "Foo", module = "bridge.mod", importManager = i
         data = CounterState(0)
     }
 
-    addFun("add") { _, _, args ->
+    addFun("add") {
         val a = (args.list[0] as ObjInt).value
         val b = (args.list[1] as ObjInt).value
         ObjInt.of(a + b)
     }
 
-    addVal("status") { _, _ -> ObjString(classData as String) }
+    addVal("status") { ObjString(classData as String) }
 
     addVar(
         "count",
-        get = { _, instance ->
-            val st = (instance as ObjInstance).data as CounterState
+        get = {
+            val st = (thisObj as ObjInstance).data as CounterState
             ObjInt.of(st.count)
         },
-        set = { _, instance, value ->
-            val st = (instance as ObjInstance).data as CounterState
+        set = { value ->
+            val st = (thisObj as ObjInstance).data as CounterState
             st.count = (value as ObjInt).value
         }
     )
 
-    addFun("secret") { _, _, _ -> ObjInt.of(42) }
-    addFun("ping") { _, _, _ -> ObjInt.of(7) }
+    addFun("secret") { ObjInt.of(42) }
+    addFun("ping") { ObjInt.of(7) }
 }
 ```
 
 ## Notes
 
 - Visibility is respected by usual Lyng access rules; private extern members can be used only within class code.
-- Use `init { scope -> ... }` for receiver-style init, or `initWithInstance { scope, instance -> ... }` for explicit instance access.
+- Use `init { ... }` / `initWithInstance { ... }` with `ScopeFacade` receiver; access instance via `thisObj`.
 - `classData` and `instance.data` are Kotlin-only payloads and do not appear in Lyng reflection.
 - Binding after the first instance of a class is created throws a `ScriptError`.

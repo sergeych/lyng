@@ -61,39 +61,39 @@ class BridgeBindingTest {
             init { _ ->
                 data = CounterState(0)
             }
-            addFun("add") { _, _, args ->
+            addFun("add") {
                 val a = (args.list[0] as ObjInt).value
                 val b = (args.list[1] as ObjInt).value
                 ObjInt.of(a + b)
             }
-            addVal("status") { _, _ -> ObjString(classData as String) }
+            addVal("status") { ObjString(classData as String) }
             addVar(
                 "count",
-                get = { _, instance ->
-                    val st = (instance as net.sergeych.lyng.obj.ObjInstance).data as CounterState
+                get = {
+                    val st = (thisObj as net.sergeych.lyng.obj.ObjInstance).data as CounterState
                     ObjInt.of(st.count)
                 },
-                set = { _, instance, value ->
-                    val st = (instance as net.sergeych.lyng.obj.ObjInstance).data as CounterState
+                set = { value ->
+                    val st = (thisObj as net.sergeych.lyng.obj.ObjInstance).data as CounterState
                     st.count = (value as ObjInt).value
                 }
             )
-            addFun("secret") { _, _, _ -> ObjInt.of(42) }
-            addFun("ping") { _, _, _ -> ObjInt.of(7) }
+            addFun("secret") { ObjInt.of(42) }
+            addFun("ping") { ObjInt.of(7) }
         }
 
         LyngClassBridge.bind(className = "Bar", module = "bridge.mod", importManager = im) {
-            initWithInstance { _, instance ->
-                (instance as net.sergeych.lyng.obj.ObjInstance).data = CounterState(10)
+            initWithInstance {
+                (thisObj as net.sergeych.lyng.obj.ObjInstance).data = CounterState(10)
             }
             addVar(
                 "count",
-                get = { _, instance ->
-                    val st = (instance as net.sergeych.lyng.obj.ObjInstance).data as CounterState
+                get = {
+                    val st = (thisObj as net.sergeych.lyng.obj.ObjInstance).data as CounterState
                     ObjInt.of(st.count)
                 },
-                set = { _, instance, value ->
-                    val st = (instance as net.sergeych.lyng.obj.ObjInstance).data as CounterState
+                set = { value ->
+                    val st = (thisObj as net.sergeych.lyng.obj.ObjInstance).data as CounterState
                     st.count = (value as ObjInt).value
                 }
             )
@@ -156,7 +156,7 @@ class BridgeBindingTest {
 
         val bindFailed = try {
             LyngClassBridge.bind(className = "Late", module = "bridge.late", importManager = im) {
-                addVal("status") { _, _ -> ObjString("late") }
+                addVal("status") { ObjString("late") }
             }
             false
         } catch (_: ScriptError) {
@@ -183,20 +183,20 @@ class BridgeBindingTest {
                 init { _ ->
                     data = CounterState(5)
                 }
-                addFun("add") { _, _, args ->
+                addFun("add") {
                     val a = (args.list[0] as ObjInt).value
                     val b = (args.list[1] as ObjInt).value
                     ObjInt.of(a + b)
                 }
-                addVal("status") { _, _ -> ObjString(classData as String) }
+                addVal("status") { ObjString(classData as String) }
                 addVar(
                     "count",
-                    get = { _, instance ->
-                        val st = (instance as net.sergeych.lyng.obj.ObjInstance).data as CounterState
+                    get = {
+                        val st = (thisObj as net.sergeych.lyng.obj.ObjInstance).data as CounterState
                         ObjInt.of(st.count)
                     },
-                    set = { _, instance, value ->
-                        val st = (instance as net.sergeych.lyng.obj.ObjInstance).data as CounterState
+                    set = { value ->
+                        val st = (thisObj as net.sergeych.lyng.obj.ObjInstance).data as CounterState
                         st.count = (value as ObjInt).value
                     }
                 )
