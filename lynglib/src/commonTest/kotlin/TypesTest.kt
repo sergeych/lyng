@@ -20,7 +20,6 @@ import net.sergeych.lyng.Script
 import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.eval
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
@@ -536,6 +535,24 @@ class TypesTest {
         """.trimIndent())
     }
 
+    @Test fun testIndexer() = runTest {
+        eval("""
+            class Greeter {
+                override fun getAt(name) = "Hello, %s!"(name)
+            }
+            assertEquals("Hello, Bob!",Greeter()["Bob"])
+            val g = Greeter()
+            assertEquals("Hello, Bob!",g["Bob"])
+            
+            // it should work with objects too:
+            object Polite {
+            override fun getAt(name) = "How do you do, %s?"(name)
+            }
+            
+            assertEquals("How do you do, Bob?",Polite["Bob"])
+            
+        """.trimIndent())
+    }
 //    @Test fun nonTrivialOperatorsTest() = runTest {
 //        val s = Script.newScope()
 //        s.eval("""

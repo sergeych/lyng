@@ -646,6 +646,9 @@ open class Obj {
     }
 
     open suspend fun getAt(scope: Scope, index: Obj): Obj {
+        if (hasNonRootIndexerMember("getAt")) {
+            return invokeInstanceMethod(scope, "getAt", Arguments(index))
+        }
         if (index is ObjString) {
             return readField(scope, index.value).value
         }
@@ -655,11 +658,32 @@ open class Obj {
     suspend fun getAt(scope: Scope, index: Int): Obj = getAt(scope, ObjInt(index.toLong()))
 
     open suspend fun putAt(scope: Scope, index: Obj, newValue: Obj) {
+        when {
+            hasNonRootIndexerMember("putAt") -> {
+                invokeInstanceMethod(scope, "putAt", Arguments(index, newValue))
+                return
+            }
+            hasNonRootIndexerMember("setAt") -> {
+                invokeInstanceMethod(scope, "setAt", Arguments(index, newValue))
+                return
+            }
+        }
         if (index is ObjString) {
             writeField(scope, index.value, newValue)
             return
         }
         scope.raiseNotImplemented("indexing")
+    }
+
+    private fun hasNonRootIndexerMember(name: String): Boolean {
+        for (cls in objClass.mro) {
+            if (cls.className == "Obj") break
+            val rec = cls.members[name] ?: cls.classScope?.objects?.get(name)
+            if (rec != null && !rec.isAbstract && rec.type != ObjRecord.Type.Delegated) {
+                return true
+            }
+        }
+        return false
     }
 
     open suspend fun callOn(scope: Scope): Obj {
