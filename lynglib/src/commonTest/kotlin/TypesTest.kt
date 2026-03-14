@@ -510,4 +510,46 @@ class TypesTest {
             )
         }
     }
+
+    @Test
+    fun testClassName() = runTest {
+        eval("""
+            class X {
+                var x = 1
+            }
+            assert( X::class is Class)
+            assertEquals("Class", X::class.name)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testGenericTypes() = runTest {
+        eval("""
+            fun t<T>(): String =
+                when(T) {
+                    null -> "%s is Null"(T::class.name)
+                    is Object -> "%s is Object"(T::class.name)
+                    else -> throw "It should not happen"
+                }
+            assert( Int is Object)
+            assertEquals( t<Int>(), "Class is Object")
+        """.trimIndent())
+    }
+
+//    @Test fun nonTrivialOperatorsTest() = runTest {
+//        val s = Script.newScope()
+//        s.eval("""
+//            class Matrix<T>(val rows: Int, val cols: Int,initialValue:T?) {
+//                val data
+//                init {
+//                    val v = initalValue?
+//                }
+//                data = List(rows*cols) { initialValue } }
+//                fun getAt(row: Int, col: Int) = data[row*cols+col]
+//                fun setAt(row: Int, col: Int, value: T) { data[row*cols+col] = value }
+//            }
+//            val m = Matrix(1,1)
+//
+//        """.trimIndent())
+//    }
 }

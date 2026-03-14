@@ -4487,6 +4487,7 @@ class Compiler(
         is ListLiteralRef -> ObjList.type
         is MapLiteralRef -> ObjMap.type
         is RangeRef -> ObjRange.type
+        is ClassOperatorRef -> ObjClassType
         is CastRef -> resolveTypeRefClass(ref.castTypeRef())
         else -> null
     }
@@ -4580,6 +4581,7 @@ class Compiler(
             is ListLiteralRef -> ObjList.type
             is MapLiteralRef -> ObjMap.type
             is RangeRef -> ObjRange.type
+            is ClassOperatorRef -> ObjClassType
             is CastRef -> resolveTypeRefClass(ref.castTypeRef())
             is QualifiedThisRef -> resolveClassByName(ref.typeName)
             is StatementRef -> (ref.statement as? ExpressionStatement)?.let { resolveReceiverClassForMember(it.ref) }
@@ -5346,6 +5348,10 @@ class Compiler(
         typeParams: List<TypeDecl.TypeParam>
     ): Map<String, Obj> {
         if (typeParams.isEmpty()) return emptyMap()
+        val explicitTypeArgs = context.args.explicitTypeArgs
+        if (explicitTypeArgs.size > typeParams.size) {
+            context.raiseError("too many type arguments: expected ${typeParams.size}, got ${explicitTypeArgs.size}")
+        }
         val inferred = mutableMapOf<String, TypeDecl>()
         val argValues = context.args.list
         for ((index, param) in argsDeclaration.params.withIndex()) {
@@ -5358,8 +5364,11 @@ class Compiler(
             collectRuntimeTypeVarBindings(param.type, value, inferred)
         }
         val boundValues = LinkedHashMap<String, Obj>(typeParams.size)
-        for (tp in typeParams) {
-            val inferredType = inferred[tp.name] ?: tp.defaultType ?: TypeDecl.TypeAny
+        for ((index, tp) in typeParams.withIndex()) {
+            val inferredType = explicitTypeArgs.getOrNull(index)
+                ?: inferred[tp.name]
+                ?: tp.defaultType
+                ?: TypeDecl.TypeAny
             val normalized = normalizeRuntimeTypeDecl(inferredType)
             val cls = resolveTypeDeclObjClass(normalized)
             val boundValue = if (cls != null &&
@@ -5681,7 +5690,7 @@ class Compiler(
         val result = when (left) {
             is ImplicitThisMemberRef ->
                 if (left.methodId == null && left.fieldId != null) {
-                    CallRef(left, args, detectedBlockArgument, isOptional).also { callRef ->
+                    CallRef(left, args, detectedBlockArgument, isOptional, explicitTypeArgs).also { callRef ->
                         applyExplicitCallTypeArgs(callRef, explicitTypeArgs)
                     }
                 } else {
@@ -5716,7 +5725,7 @@ class Compiler(
                     checkFunctionTypeCallArity(left, args, left.pos())
                     checkFunctionTypeCallTypes(left, args, left.pos())
                     checkGenericBoundsAtCall(left.name, args, left.pos())
-                    CallRef(left, args, detectedBlockArgument, isOptional).also { callRef ->
+                    CallRef(left, args, detectedBlockArgument, isOptional, explicitTypeArgs).also { callRef ->
                         applyExplicitCallTypeArgs(callRef, explicitTypeArgs)
                     }
                 }
@@ -5742,12 +5751,12 @@ class Compiler(
                     checkFunctionTypeCallArity(left, args, left.pos())
                     checkFunctionTypeCallTypes(left, args, left.pos())
                     checkGenericBoundsAtCall(left.name, args, left.pos())
-                    CallRef(left, args, detectedBlockArgument, isOptional).also { callRef ->
+                    CallRef(left, args, detectedBlockArgument, isOptional, explicitTypeArgs).also { callRef ->
                         applyExplicitCallTypeArgs(callRef, explicitTypeArgs)
                     }
                 }
             }
-            else -> CallRef(left, args, detectedBlockArgument, isOptional).also { callRef ->
+            else -> CallRef(left, args, detectedBlockArgument, isOptional, explicitTypeArgs).also { callRef ->
                 applyExplicitCallTypeArgs(callRef, explicitTypeArgs)
             }
         }

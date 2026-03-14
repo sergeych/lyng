@@ -4699,7 +4699,12 @@ class CmdFrame(
                 positional.add(value)
             }
         }
-        return Arguments(positional, plan.tailBlock, named ?: emptyMap())
+        return Arguments(
+            list = positional,
+            tailBlockMode = plan.tailBlock,
+            named = named ?: emptyMap(),
+            explicitTypeArgs = plan.explicitTypeArgs
+        )
     }
 
     private fun resolveLocalScope(localIndex: Int): Scope? {

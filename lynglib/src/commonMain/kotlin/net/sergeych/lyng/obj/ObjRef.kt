@@ -469,6 +469,7 @@ class CallRef(
     internal val args: List<ParsedArgument>,
     internal val tailBlock: Boolean,
     internal val isOptionalInvoke: Boolean,
+    internal val explicitTypeArgs: List<TypeDecl>? = null,
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord = scope.raiseObjRefEvalDisabled()
 }

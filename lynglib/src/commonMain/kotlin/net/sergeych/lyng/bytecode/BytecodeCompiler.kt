@@ -4395,7 +4395,7 @@ class BytecodeCompiler(
                 val dst = allocSlot()
                 val encodedMethodId = encodeMemberId(receiverClass, methodId) ?: methodId
                 if (!ref.isOptionalInvoke) {
-                    val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
+                    val args = compileCallArgs(ref.args, ref.tailBlock, ref.explicitTypeArgs) ?: return null
                     val encodedCount = encodeCallArgCount(args) ?: return null
                     setPos(callPos)
                     builder.emit(Opcode.CALL_MEMBER_SLOT, receiver.slot, encodedMethodId, args.base, encodedCount, dst)
@@ -4410,7 +4410,7 @@ class BytecodeCompiler(
                         Opcode.JMP_IF_TRUE,
                         listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
                     )
-                    val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
+                    val args = compileCallArgs(ref.args, ref.tailBlock, ref.explicitTypeArgs) ?: return null
                     val encodedCount = encodeCallArgCount(args) ?: return null
                     setPos(callPos)
                     builder.emit(Opcode.CALL_MEMBER_SLOT, receiver.slot, encodedMethodId, args.base, encodedCount, dst)
@@ -4450,7 +4450,7 @@ class BytecodeCompiler(
         val callee = compileRefWithFallback(ref.target, null, refPosOrCurrent(ref.target)) ?: return null
         val dst = allocSlot()
         if (!ref.isOptionalInvoke) {
-            val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
+            val args = compileCallArgs(ref.args, ref.tailBlock, ref.explicitTypeArgs) ?: return null
             val encodedCount = encodeCallArgCount(args) ?: return null
             setPos(callPos)
             builder.emit(
@@ -4475,7 +4475,7 @@ class BytecodeCompiler(
             Opcode.JMP_IF_TRUE,
             listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
         )
-        val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
+        val args = compileCallArgs(ref.args, ref.tailBlock, ref.explicitTypeArgs) ?: return null
         val encodedCount = encodeCallArgCount(args) ?: return null
         setPos(callPos)
         builder.emit(
@@ -4876,10 +4876,14 @@ class BytecodeCompiler(
         return CallArgs(base = argSlots[0], count = argSlots.size, planId = planId)
     }
 
-    private fun compileCallArgs(args: List<ParsedArgument>, tailBlock: Boolean): CallArgs? {
-        if (args.isEmpty()) return CallArgs(base = 0, count = 0, planId = null)
+    private fun compileCallArgs(
+        args: List<ParsedArgument>,
+        tailBlock: Boolean,
+        explicitTypeArgs: List<TypeDecl>? = null
+    ): CallArgs? {
+        if (args.isEmpty() && explicitTypeArgs.isNullOrEmpty()) return CallArgs(base = 0, count = 0, planId = null)
         val argSlots = IntArray(args.size) { allocSlot() }
-        val needPlan = tailBlock || args.any { it.isSplat || it.name != null }
+        val needPlan = tailBlock || args.any { it.isSplat || it.name != null } || !explicitTypeArgs.isNullOrEmpty()
         val specs = if (needPlan) ArrayList<BytecodeConst.CallArgSpec>(args.size) else null
         for ((index, arg) in args.withIndex()) {
             val compiled = compileArgValue(arg.value) ?: return null
@@ -4891,11 +4895,17 @@ class BytecodeCompiler(
             specs?.add(BytecodeConst.CallArgSpec(arg.name, arg.isSplat))
         }
         val planId = if (needPlan) {
-            builder.addConst(BytecodeConst.CallArgsPlan(tailBlock, specs ?: emptyList()))
+            builder.addConst(
+                BytecodeConst.CallArgsPlan(
+                    tailBlock = tailBlock,
+                    specs = specs ?: emptyList(),
+                    explicitTypeArgs = explicitTypeArgs ?: emptyList()
+                )
+            )
         } else {
             null
         }
-        return CallArgs(base = argSlots[0], count = argSlots.size, planId = planId)
+        return CallArgs(base = if (argSlots.isEmpty()) 0 else argSlots[0], count = argSlots.size, planId = planId)
     }
 
     private fun compileArgValue(value: Obj): CompiledValue? {
@@ -8463,6 +8473,9 @@ class BytecodeCompiler(
             is IndexRef -> {
                 collectScopeSlotsRef(ref.targetRef)
                 collectScopeSlotsRef(ref.indexRef)
+            }
+            is ClassOperatorRef -> {
+                collectScopeSlotsRef(ref.target)
             }
             is ListLiteralRef -> {
                 for (entry in ref.entries()) {

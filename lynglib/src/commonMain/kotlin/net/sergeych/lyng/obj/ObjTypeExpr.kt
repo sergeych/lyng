@@ -99,7 +99,9 @@ internal fun typeDeclIsSubtype(scope: Scope, left: TypeDecl, right: TypeDecl): B
             is TypeDecl.Simple, is TypeDecl.Generic, is TypeDecl.Function, is TypeDecl.Ellipsis -> {
                 val leftClass = resolveTypeDeclClass(scope, l) ?: return false
                 val rightClass = resolveTypeDeclClass(scope, r) ?: return false
-                leftClass == rightClass || leftClass.allParentsSet.contains(rightClass)
+                leftClass == rightClass ||
+                    rightClass == Obj.rootObjectType ||
+                    leftClass.allParentsSet.contains(rightClass)
             }
             else -> false
         }

@@ -180,6 +180,10 @@ sealed class BytecodeConst {
         val pattern: ListLiteralRef,
         val pos: Pos,
     ) : BytecodeConst()
-    data class CallArgsPlan(val tailBlock: Boolean, val specs: List<CallArgSpec>) : BytecodeConst()
+    data class CallArgsPlan(
+        val tailBlock: Boolean,
+        val specs: List<CallArgSpec>,
+        val explicitTypeArgs: List<TypeDecl> = emptyList()
+    ) : BytecodeConst()
     data class CallArgSpec(val name: String?, val isSplat: Boolean)
 }

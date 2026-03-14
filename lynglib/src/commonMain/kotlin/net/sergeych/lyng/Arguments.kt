@@ -220,6 +220,7 @@ data class ParsedArgument(
      val list: List<Obj>,
      val tailBlockMode: Boolean = false,
      val named: Map<String, Obj> = emptyMap(),
+     val explicitTypeArgs: List<TypeDecl> = emptyList(),
  ) : List<Obj> by list {
  
      constructor(vararg values: Obj) : this(values.toList())
