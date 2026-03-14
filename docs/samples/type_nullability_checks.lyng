@@ -1,0 +1,10 @@
+fun describe<T>(x: T): String = when (T) {
+    nullable -> "nullable"
+    else -> "non-null"
+}
+
+type MaybeInt = Int?
+assert(MaybeInt is nullable)
+assert(!(Int is nullable))
+assertEquals("nullable", describe<Int?>(null))
+assertEquals("non-null", describe<Int>(1))

@@ -4345,6 +4345,22 @@ class BytecodeCompiler(
                     CompiledValue(neg, SlotType.BOOL)
                 }
             }
+            is WhenNullableCondition -> {
+                val nullSlot = allocSlot()
+                builder.emit(Opcode.CONST_NULL, nullSlot)
+                updateSlotType(nullSlot, SlotType.OBJ)
+                val baseDst = allocSlot()
+                builder.emit(Opcode.CHECK_IS, nullSlot, subject.slot, baseDst)
+                updateSlotType(baseDst, SlotType.BOOL)
+                if (!cond.negated) {
+                    CompiledValue(baseDst, SlotType.BOOL)
+                } else {
+                    val neg = allocSlot()
+                    builder.emit(Opcode.NOT_BOOL, baseDst, neg)
+                    updateSlotType(neg, SlotType.BOOL)
+                    CompiledValue(neg, SlotType.BOOL)
+                }
+            }
         }
     }
 

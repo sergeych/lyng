@@ -443,6 +443,7 @@ class BytecodeStatement private constructor(
                 is WhenEqualsCondition -> WhenEqualsCondition(unwrapDeep(cond.expr), cond.pos)
                 is WhenInCondition -> WhenInCondition(unwrapDeep(cond.expr), cond.negated, cond.pos)
                 is WhenIsCondition -> WhenIsCondition(unwrapDeep(cond.expr), cond.negated, cond.pos)
+                is WhenNullableCondition -> WhenNullableCondition(cond.negated, cond.pos)
             }
         }
     }

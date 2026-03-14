@@ -202,6 +202,28 @@ class WebsiteSamplesTest {
     }
 
     @Test
+    fun testNullableTypePredicate() = runTest {
+        val scope = Script.newScope()
+        val result = scope.eval(
+            """
+            // Type nullability checks
+            fun describe<T>(x: T): String = when(T) {
+                nullable -> "nullable"
+                else -> "non-null"
+            }
+            type MaybeInt = Int?
+            [describe<Int?>(null), describe<Int>(1), Int is nullable, MaybeInt is nullable]
+            """.trimIndent()
+        )
+        assertTrue(result is ObjList)
+        val list = result.list
+        assertEquals("nullable", (list[0] as ObjString).value)
+        assertEquals("non-null", (list[1] as ObjString).value)
+        assertEquals(false, (list[2] as ObjBool).value)
+        assertEquals(true, (list[3] as ObjBool).value)
+    }
+
+    @Test
     fun testEasyOperatorOverloading() = runTest {
         val scope = Script.newScope()
         val result = scope.eval("""

@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Sergey S. Chernov
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 package net.sergeych.lyng
@@ -50,6 +51,15 @@ class WhenIsCondition(
     val negated: Boolean,
     override val pos: Pos,
 ) : WhenCondition(expr, pos) {
+    override suspend fun matches(scope: Scope, value: Obj): Boolean {
+        return bytecodeOnly(scope)
+    }
+}
+
+class WhenNullableCondition(
+    val negated: Boolean,
+    override val pos: Pos,
+) : WhenCondition(ExpressionStatement(net.sergeych.lyng.obj.ConstRef(net.sergeych.lyng.obj.ObjVoid.asReadonly), pos), pos) {
     override suspend fun matches(scope: Scope, value: Obj): Boolean {
         return bytecodeOnly(scope)
     }

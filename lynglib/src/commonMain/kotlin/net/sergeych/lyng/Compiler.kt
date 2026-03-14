@@ -2247,6 +2247,7 @@ class Compiler(
                                 is WhenEqualsCondition -> containsDelegatedRefs(cond.expr)
                                 is WhenInCondition -> containsDelegatedRefs(cond.expr)
                                 is WhenIsCondition -> false
+                                is WhenNullableCondition -> false
                             }
                         } || containsDelegatedRefs(case.block)
                     } ||
@@ -2520,12 +2521,22 @@ class Compiler(
                     CastRef(lvalue!!, typeRef, true, opToken.pos)
                 }
             } else if (opToken.type == Token.Type.IS || opToken.type == Token.Type.NOTIS) {
-                val (typeDecl, _) = parseTypeExpressionWithMini()
-                val typeRef = net.sergeych.lyng.obj.TypeDeclRef(typeDecl, opToken.pos)
-                if (opToken.type == Token.Type.IS) {
-                    BinaryOpRef(BinOp.IS, lvalue!!, typeRef)
+                val nullablePredicate = tryConsumeNullablePredicate()
+                if (nullablePredicate) {
+                    val nullRef = ConstRef(ObjNull.asReadonly)
+                    if (opToken.type == Token.Type.IS) {
+                        BinaryOpRef(BinOp.IS, nullRef, lvalue!!)
+                    } else {
+                        BinaryOpRef(BinOp.NOTIS, nullRef, lvalue!!)
+                    }
                 } else {
-                    BinaryOpRef(BinOp.NOTIS, lvalue!!, typeRef)
+                    val (typeDecl, _) = parseTypeExpressionWithMini()
+                    val typeRef = net.sergeych.lyng.obj.TypeDeclRef(typeDecl, opToken.pos)
+                    if (opToken.type == Token.Type.IS) {
+                        BinaryOpRef(BinOp.IS, lvalue!!, typeRef)
+                    } else {
+                        BinaryOpRef(BinOp.NOTIS, lvalue!!, typeRef)
+                    }
                 }
             } else {
                 val rvalue = parseExpressionLevel(level + 1)
@@ -2555,6 +2566,17 @@ class Compiler(
             lvalue = res
         }
         return lvalue
+    }
+
+    private fun tryConsumeNullablePredicate(): Boolean {
+        val save = cc.savePos()
+        val t = cc.nextNonWhitespace()
+        return if (t.type == Token.Type.ID && t.value == "nullable") {
+            true
+        } else {
+            cc.restorePos(save)
+            false
+        }
     }
 
     private suspend fun parseTerm(): ObjRef? {
@@ -6252,10 +6274,14 @@ class Compiler(
                         Token.Type.IS,
                         Token.Type.NOTIS -> {
                             val negated = t.type == Token.Type.NOTIS
-                            val (typeDecl, _) = parseTypeExpressionWithMini()
-                            val typeRef = net.sergeych.lyng.obj.TypeDeclRef(typeDecl, t.pos)
-                            val caseType = ExpressionStatement(typeRef, t.pos)
-                            currentConditions += WhenIsCondition(caseType, negated, t.pos)
+                            if (tryConsumeNullablePredicate()) {
+                                currentConditions += WhenNullableCondition(negated, t.pos)
+                            } else {
+                                val (typeDecl, _) = parseTypeExpressionWithMini()
+                                val typeRef = net.sergeych.lyng.obj.TypeDeclRef(typeDecl, t.pos)
+                                val caseType = ExpressionStatement(typeRef, t.pos)
+                                currentConditions += WhenIsCondition(caseType, negated, t.pos)
+                            }
                         }
 
                         Token.Type.COMMA ->
@@ -6268,7 +6294,9 @@ class Compiler(
                             break@outer
 
                         else -> {
-                            if (t.value == "else") {
+                            if (t.type == Token.Type.ID && t.value == "nullable") {
+                                currentConditions += WhenNullableCondition(negated = false, t.pos)
+                            } else if (t.value == "else") {
                                 cc.skipTokens(Token.Type.ARROW)
                                 if (elseCase != null) throw ScriptError(
                                     cc.currentPos(),

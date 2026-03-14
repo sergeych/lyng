@@ -535,6 +535,49 @@ class TypesTest {
         """.trimIndent())
     }
 
+    @Test
+    fun testGenericNullableTypePredicate() = runTest {
+        eval("""
+            fun isTypeNullable<T>(x: T): Bool = T is nullable
+            type MaybeInt = Int?
+            assert(isTypeNullable<Int?>(null))
+            assert(!isTypeNullable<Int>(1))
+            assert(MaybeInt is nullable)
+            assert(!(Int is nullable))
+        """.trimIndent())
+    }
+
+    @Test
+    fun testWhenNullableTypeCase() = runTest {
+        eval("""
+            fun describe<T>(x: T): String = when(T) {
+                nullable -> "nullable"
+                else -> "non-null"
+            }
+            fun describeIs<T>(x: T): String = when(T) {
+                is nullable -> "nullable"
+                else -> "non-null"
+            }
+            assertEquals("nullable", describe<Int?>(null))
+            assertEquals("non-null", describe<Int>(1))
+            assertEquals("nullable", describeIs<Int?>(null))
+            assertEquals("non-null", describeIs<Int>(1))
+        """.trimIndent())
+    }
+
+//    @Test
+//    fun testNullableGenericTypes() = runTest {
+//        eval("""
+//            fun t<T>(): String =
+//                when(T) {
+//                    is Object -> "%s is Object"(T::class.name)
+//                    else -> throw "It should not happen"
+//                }
+//            assert( Int is Object)
+//            assertEquals( t<Int>(), "Class is Object")
+//        """.trimIndent())
+//    }
+
     @Test fun testIndexer() = runTest {
         eval("""
             class Greeter {

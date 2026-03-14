@@ -109,6 +109,24 @@ Examples (T = A | B):
     B in T            // true
     T is A | B        // true
 
+# Nullability checks for types
+
+Use `is nullable` to check whether a type expression accepts `null`:
+
+    T is nullable
+    T !is nullable
+
+This works with concrete and generic types:
+
+    fun describe<T>(x: T): String = when (T) {
+        nullable -> "nullable"
+        else -> "non-null"
+    }
+
+Equivalent legacy form:
+
+    null is T
+
 # Practical examples
 
     fun acceptInts<T: Int>(xs: List<T>) { }

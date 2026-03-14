@@ -502,6 +502,18 @@ Aliases expand to their underlying type expressions. See `docs/generics.md` for 
 
 `Null` is the class of `null`. It is a singleton type and mostly useful for type inference results.
 
+For type expressions, you can check nullability directly:
+
+    T is nullable
+    T !is nullable
+
+This is especially useful in generic code and in `when` over a type parameter:
+
+    fun describe<T>(x: T): String = when (T) {
+        nullable -> "nullable"
+        else -> "non-null"
+    }
+
 ## Type inference
 
 The compiler infers types from:
