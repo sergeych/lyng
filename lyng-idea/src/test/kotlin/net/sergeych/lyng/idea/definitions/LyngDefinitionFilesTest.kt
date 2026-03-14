@@ -124,4 +124,16 @@ class LyngDefinitionFilesTest : BasePlatformTestCase() {
         assertTrue("Should not report unresolved name for Declared", messages.none { it.contains("unresolved name: Declared") })
         assertTrue("Should not report unresolved member for greet", messages.none { it.contains("unresolved member: greet") })
     }
+
+    fun test_DiagnosticsDoNotReportVoidAsUnresolvedName() {
+        val code = """
+            fun f(): void {
+                return void
+            }
+        """.trimIndent()
+        myFixture.configureByText("main.lyng", code)
+        val analysis = LyngAstManager.getAnalysis(myFixture.file)
+        val messages = analysis?.diagnostics?.map { it.message } ?: emptyList()
+        assertTrue("Should not report unresolved name for void, got=$messages", messages.none { it.contains("unresolved name: void") })
+    }
 }

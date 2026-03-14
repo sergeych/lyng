@@ -179,6 +179,7 @@ object LyngLanguageTools {
         val source = analysis.source
         val out = ArrayList<LyngSemanticSpan>(128)
         val covered = HashSet<Pair<Int, Int>>()
+        fun isCurrentSource(pos: Pos): Boolean = pos.source === source
 
         fun addRange(start: Int, end: Int, kind: LyngSemanticKind) {
             if (start < 0 || end <= start || end > analysis.text.length) return
@@ -187,6 +188,7 @@ object LyngLanguageTools {
         }
 
         fun addName(pos: Pos, name: String, kind: LyngSemanticKind) {
+            if (!isCurrentSource(pos)) return
             val s = source.offsetOf(pos)
             addRange(s, s + name.length, kind)
         }
@@ -206,7 +208,9 @@ object LyngLanguageTools {
                     addTypeSegments(t.returnType)
                 }
                 is MiniTypeVar -> {
-                    addRange(source.offsetOf(t.range.start), source.offsetOf(t.range.end), LyngSemanticKind.TypeRef)
+                    if (isCurrentSource(t.range.start) && isCurrentSource(t.range.end)) {
+                        addRange(source.offsetOf(t.range.start), source.offsetOf(t.range.end), LyngSemanticKind.TypeRef)
+                    }
                 }
                 is MiniTypeUnion -> {
                     t.options.forEach { addTypeSegments(it) }
@@ -262,7 +266,9 @@ object LyngLanguageTools {
 
         mini.imports.forEach { imp ->
             imp.segments.forEach { seg ->
-                addRange(source.offsetOf(seg.range.start), source.offsetOf(seg.range.end), LyngSemanticKind.TypeRef)
+                if (isCurrentSource(seg.range.start) && isCurrentSource(seg.range.end)) {
+                    addRange(source.offsetOf(seg.range.start), source.offsetOf(seg.range.end), LyngSemanticKind.TypeRef)
+                }
             }
         }
 

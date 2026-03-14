@@ -1,6 +1,6 @@
 package lyng.stdlib
 
-extern fun flow(builder: FlowBuilder.()->Void): Flow
+extern fun flow(builder: FlowBuilder.()->void): Flow
 
 /* Built-in exception type. */
 extern class Exception
@@ -9,7 +9,7 @@ extern class NotImplementedException
 extern class Delegate
 extern class Iterable<T> {
     fun iterator(): Iterator<T>
-    fun forEach(action: (T)->Void): Void
+    fun forEach(action: (T)->void): void
     fun map<R>(transform: (T)->R): List<R>
     fun toList(): List<T>
     fun toImmutableList(): ImmutableList<T>
@@ -22,7 +22,7 @@ extern class Iterable<T> {
 extern class Iterator<T> {
     fun hasNext(): Bool
     fun next(): T
-    fun cancelIteration(): Void
+    fun cancelIteration(): void
     fun toList(): List<T>
 }
 
@@ -44,14 +44,14 @@ extern class ImmutableList<T> : Array<T> {
 }
 
 extern class List<T> : Array<T> {
-    fun add(value: T, more...): Void
+    fun add(value: T, more...): void
     fun toImmutable(): ImmutableList<T>
 }
 
 extern class RingBuffer<T> : Iterable<T> {
     val size: Int
     fun first(): T
-    fun add(value: T): Void
+    fun add(value: T): void
 }
 
 extern class Set<T> : Collection<T> {
@@ -337,17 +337,17 @@ override fun List<T>.toString() {
 }
 
 /* Sort list in-place by key selector. */
-fun List<T>.sortBy<R>(predicate: (T)->R): Void {
+fun List<T>.sortBy<R>(predicate: (T)->R): void {
     sortWith { a, b -> predicate(a) <=> predicate(b) }
 }
 
 /* Sort list in-place by natural order. */
-fun List<T>.sort(): Void {
+fun List<T>.sort(): void {
     sortWith { a, b -> a <=> b }
 }
 
 /* Print this exception and its stack trace to standard output. */
-fun Exception.printStackTrace(): Void {
+fun Exception.printStackTrace(): void {
     println(this)
     for( entry in stackTrace ) {
         println("\tat "+entry.toString())
@@ -357,7 +357,7 @@ fun Exception.printStackTrace(): Void {
 /* Compile this string into a regular expression. */
 val String.re: Regex get() = Regex(this)
 
-fun TODO(message: Object?=null): Void {
+fun TODO(message: Object?=null): void {
     throw "not implemented"
 }
 
@@ -376,12 +376,12 @@ enum DelegateAccess {
     Implementing this interface is optional as Lyng uses dynamic dispatch,
     but it is recommended for documentation and clarity.
 */
-interface Delegate<T,ThisRefType=Void> {
+interface Delegate<T,ThisRefType=void> {
     /* Called when a delegated 'val' or 'var' is read. */
     fun getValue(thisRef: ThisRefType, name: String): T = TODO("delegate getter is not implemented")
 
     /* Called when a delegated 'var' is written. */
-    fun setValue(thisRef: ThisRefType, name: String, newValue: T): Void = TODO("delegate setter is not implemented")
+    fun setValue(thisRef: ThisRefType, name: String, newValue: T): void = TODO("delegate setter is not implemented")
 
     /* Called when a delegated function is invoked. */
     fun invoke(thisRef: ThisRefType, name: String, args...): Object = TODO("delegate invoke is not implemented")

@@ -26,23 +26,16 @@ import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
 import kotlinx.coroutines.runBlocking
 import net.sergeych.lyng.binding.BindingSnapshot
-import net.sergeych.lyng.miniast.BuiltinDocRegistry
-import net.sergeych.lyng.miniast.DocLookupUtils
-import net.sergeych.lyng.miniast.MiniEnumDecl
-import net.sergeych.lyng.miniast.MiniRange
-import net.sergeych.lyng.miniast.MiniScript
-import net.sergeych.lyng.tools.IdeLenientImportProvider
-import net.sergeych.lyng.tools.LyngAnalysisRequest
-import net.sergeych.lyng.tools.LyngAnalysisResult
-import net.sergeych.lyng.tools.LyngDiagnostic
-import net.sergeych.lyng.tools.LyngLanguageTools
 import net.sergeych.lyng.idea.LyngFileType
+import net.sergeych.lyng.miniast.*
+import net.sergeych.lyng.tools.*
 
 object LyngAstManager {
     private val MINI_KEY = Key.create<MiniScript>("lyng.mini.cache")
     private val BINDING_KEY = Key.create<BindingSnapshot>("lyng.binding.cache")
     private val STAMP_KEY = Key.create<Long>("lyng.mini.cache.stamp")
     private val ANALYSIS_KEY = Key.create<LyngAnalysisResult>("lyng.analysis.cache")
+    private val implicitBuiltinNames = setOf("void")
 
     fun getMiniAst(file: PsiFile): MiniScript? = runReadAction {
         getAnalysis(file)?.mini
@@ -217,7 +210,7 @@ object LyngAstManager {
             val msg = diag.message
             if (msg.startsWith("unresolved name: ")) {
                 val name = msg.removePrefix("unresolved name: ").trim()
-                name in declaredTopLevel || name in builtinTopLevel
+                name in declaredTopLevel || name in builtinTopLevel || name in implicitBuiltinNames
             } else if (msg.startsWith("unresolved member: ")) {
                 val name = msg.removePrefix("unresolved member: ").trim()
                 val range = diag.range

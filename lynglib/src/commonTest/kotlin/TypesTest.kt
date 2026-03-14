@@ -565,19 +565,6 @@ class TypesTest {
         """.trimIndent())
     }
 
-//    @Test
-//    fun testNullableGenericTypes() = runTest {
-//        eval("""
-//            fun t<T>(): String =
-//                when(T) {
-//                    is Object -> "%s is Object"(T::class.name)
-//                    else -> throw "It should not happen"
-//                }
-//            assert( Int is Object)
-//            assertEquals( t<Int>(), "Class is Object")
-//        """.trimIndent())
-//    }
-
     @Test fun testIndexer() = runTest {
         eval("""
             class Greeter {
@@ -593,6 +580,38 @@ class TypesTest {
             }
             
             assertEquals("How do you do, Bob?",Polite["Bob"])
+            
+        """.trimIndent())
+    }
+
+    @Test fun testIndexer2() = runTest {
+        eval("""
+            class Foo(bar)
+            
+            class Greeter {
+                override fun getAt(name): Foo = Foo("Hello, %s!"(name))
+            }
+            assertEquals("Hello, Bob!",Greeter()["Bob"].bar)
+            val g = Greeter()
+            assertEquals("Hello, Bob!",g["Bob"].bar)
+            
+            // it should work with objects too:
+            object Polite {
+                override fun getAt(name): Foo? = Foo("How do you do, %s?"(name))
+            }
+
+            assertEquals("How do you do, Bob?",Polite["Bob"].bar)
+            assertEquals("How do you do, Bob?",Polite["Bob"]?.bar)
+            assertEquals("How do you do, Bob?",Polite["Bob"]!!.bar)
+            
+            class Greeter2 {
+                override fun getAt(name): Foo? = Foo("How do you do, %s?"(name))
+            }
+            val g2 = Greeter2()
+            assertEquals("How do you do, Bob?",g2["Bob"]?.bar)
+            val g2v: Foo = g2["Bob"]!!
+            assertEquals("How do you do, Bob?",g2v.bar)
+            assertEquals("How do you do, Bob?",Greeter2()["Bob"].bar)
             
         """.trimIndent())
     }

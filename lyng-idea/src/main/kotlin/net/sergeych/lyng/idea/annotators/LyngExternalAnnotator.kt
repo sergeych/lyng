@@ -88,9 +88,11 @@ class LyngExternalAnnotator : ExternalAnnotator<LyngExternalAnnotator.Input, Lyn
         // Imports: each segment as namespace/path
         mini?.imports?.forEach { imp ->
             imp.segments.forEach { seg ->
-                val start = analysis.source.offsetOf(seg.range.start)
-                val end = analysis.source.offsetOf(seg.range.end)
-                putRange(start, end, LyngHighlighterColors.NAMESPACE)
+                if (seg.range.start.source === analysis.source && seg.range.end.source === analysis.source) {
+                    val start = analysis.source.offsetOf(seg.range.start)
+                    val end = analysis.source.offsetOf(seg.range.end)
+                    putRange(start, end, LyngHighlighterColors.NAMESPACE)
+                }
             }
         }
 

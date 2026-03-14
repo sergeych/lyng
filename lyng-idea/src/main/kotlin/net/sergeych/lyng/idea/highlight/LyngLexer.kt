@@ -35,7 +35,7 @@ class LyngLexer : LexerBase() {
         "fun", "val", "var", "class", "interface", "type", "import", "as",
         "abstract", "closed", "override", "static", "extern", "open", "private", "protected",
         "if", "else", "for", "while", "return", "true", "false", "null",
-        "when", "in", "is", "break", "continue", "try", "catch", "finally",
+        "when", "in", "is", "break", "continue", "try", "catch", "finally", "void",
         "get", "set", "object", "enum", "init", "by", "step", "property", "constructor"
     )
 

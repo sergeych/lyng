@@ -18,8 +18,9 @@
 package net.sergeych.lyng.tools
 
 import kotlinx.coroutines.test.runTest
-import net.sergeych.lyng.miniast.MiniClassDecl
-import net.sergeych.lyng.miniast.MiniMemberTypeAliasDecl
+import net.sergeych.lyng.Pos
+import net.sergeych.lyng.Source
+import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.stdlib_included.rootLyng
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -126,5 +127,49 @@ class LyngLanguageToolsTest {
         """.trimIndent()
         val dis = LyngLanguageTools.disassembleSymbol(code, "add")
         assertTrue(!dis.contains("not a compiled body"), "Disassembly should be produced, got: $dis")
+    }
+
+    @Test
+    fun languageTools_semanticHighlights_ignore_foreign_sources() {
+        val localSource = Source("local.lyng", "val x = 1")
+        val foreignSource = Source("defs.lyng.d", "val y = 2")
+        val localStart = Pos(localSource, 0, 0)
+        val foreignStart = Pos(foreignSource, 0, 0)
+
+        val mini = MiniScript(
+            range = MiniRange(localStart, localStart),
+            declarations = mutableListOf(
+                MiniValDecl(
+                    range = MiniRange(foreignStart, foreignStart),
+                    name = "y",
+                    mutable = false,
+                    type = null,
+                    initRange = null,
+                    doc = null,
+                    nameStart = foreignStart
+                )
+            ),
+            imports = mutableListOf(
+                MiniImport(
+                    range = MiniRange(foreignStart, foreignStart),
+                    segments = listOf(
+                        MiniImport.Segment("defs", MiniRange(foreignStart, foreignStart))
+                    )
+                )
+            )
+        )
+        val analysis = LyngAnalysisResult(
+            source = localSource,
+            text = localSource.text,
+            mini = mini,
+            binding = null,
+            resolution = null,
+            importedModules = emptyList(),
+            diagnostics = emptyList(),
+            lexicalHighlights = emptyList()
+        )
+
+        val spans = LyngLanguageTools.semanticHighlights(analysis)
+        assertTrue(spans.isEmpty(), "Semantic spans should ignore positions from foreign sources, got $spans")
     }
 }

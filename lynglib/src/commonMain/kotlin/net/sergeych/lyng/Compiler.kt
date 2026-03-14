@@ -176,6 +176,8 @@ class Compiler(
     private val lambdaCaptureEntriesByRef: MutableMap<ValueFnRef, List<net.sergeych.lyng.bytecode.LambdaCaptureEntry>> =
         mutableMapOf()
     private val classFieldTypesByName: MutableMap<String, MutableMap<String, ObjClass>> = mutableMapOf()
+    private val classMethodReturnTypeByName: MutableMap<String, MutableMap<String, ObjClass>> = mutableMapOf()
+    private val classMethodReturnTypeDeclByName: MutableMap<String, MutableMap<String, TypeDecl>> = mutableMapOf()
     private val classScopeMembersByClassName: MutableMap<String, MutableSet<String>> = mutableMapOf()
     private val classScopeCallableMembersByClassName: MutableMap<String, MutableSet<String>> = mutableMapOf()
     private val encodedPayloadTypeByScopeId: MutableMap<Int, MutableMap<Int, ObjClass>> = mutableMapOf()
@@ -2614,7 +2616,34 @@ class Compiler(
                 }
 
                 Token.Type.NOT -> {
-                    if (operand != null) throw ScriptError(t.pos, "unexpected operator not '!' ")
+                    if (operand != null) {
+                        val save = cc.savePos()
+                        val next = cc.next()
+                        if (next.type == Token.Type.NOT) {
+                            val operandRef = operand
+                            val receiverClass = resolveReceiverClassForMember(operandRef)
+                            val inferredType = resolveReceiverTypeDecl(operandRef)
+                                ?: receiverClass?.let { TypeDecl.Simple(it.className, false) }
+                            if (inferredType == null) {
+                                operand = operandRef
+                                continue
+                            }
+                            if (inferredType == TypeDecl.TypeAny || inferredType == TypeDecl.TypeNullableAny) {
+                                operand = operandRef
+                                continue
+                            }
+                            val nonNullType = makeTypeDeclNonNullable(inferredType)
+                            operand = CastRef(
+                                operandRef,
+                                TypeDeclRef(nonNullType, t.pos),
+                                isNullable = false,
+                                atPos = t.pos
+                            )
+                            continue
+                        }
+                        cc.restorePos(save)
+                        throw ScriptError(t.pos, "unexpected operator not '!' ")
+                    }
                     val op = parseTerm() ?: throw ScriptError(t.pos, "Expecting expression")
                     operand = UnaryOpRef(UnaryOp.NOT, op)
                 }
@@ -3821,6 +3850,21 @@ class Compiler(
         }
     }
 
+    private fun makeTypeDeclNonNullable(type: TypeDecl): TypeDecl {
+        if (!type.isNullable) return type
+        return when (type) {
+            TypeDecl.TypeAny -> type
+            TypeDecl.TypeNullableAny -> TypeDecl.TypeAny
+            is TypeDecl.Function -> type.copy(nullable = false)
+            is TypeDecl.Ellipsis -> type.copy(nullable = false)
+            is TypeDecl.TypeVar -> type.copy(nullable = false)
+            is TypeDecl.Union -> type.copy(nullable = false)
+            is TypeDecl.Intersection -> type.copy(nullable = false)
+            is TypeDecl.Simple -> TypeDecl.Simple(type.name, false)
+            is TypeDecl.Generic -> TypeDecl.Generic(type.name, type.args, false)
+        }
+    }
+
     private fun makeMiniTypeNullable(type: MiniTypeRef): MiniTypeRef {
         return when (type) {
             is MiniTypeName -> type.copy(nullable = true)
@@ -4491,6 +4535,48 @@ class Compiler(
         is TypeDecl.Intersection -> "I:${type.options.joinToString("&") { typeDeclKey(it) }}"
     }
 
+    private fun classMethodReturnTypeDecl(targetClass: ObjClass?, name: String): TypeDecl? {
+        if (targetClass == null) return null
+        if (targetClass == ObjDynamic.type) return TypeDecl.TypeAny
+        val member = targetClass.getInstanceMemberOrNull(name, includeAbstract = true)
+        val declaringName = member?.declaringClass?.className
+        if (declaringName != null) {
+            classMethodReturnTypeDeclByName[declaringName]?.get(name)?.let { return it }
+            classMethodReturnTypeByName[declaringName]?.get(name)?.let {
+                return TypeDecl.Simple(it.className, false)
+            }
+        }
+        classMethodReturnTypeDeclByName[targetClass.className]?.get(name)?.let { return it }
+        classMethodReturnTypeByName[targetClass.className]?.get(name)?.let {
+            return TypeDecl.Simple(it.className, false)
+        }
+        member?.typeDecl?.let { declaredType ->
+            if (declaredType is TypeDecl.Function) return declaredType.returnType
+            return declaredType
+        }
+        return null
+    }
+
+    private fun classMethodReturnClass(targetClass: ObjClass?, name: String): ObjClass? {
+        if (targetClass == null) return null
+        if (targetClass == ObjDynamic.type) return ObjDynamic.type
+        classMethodReturnTypeDecl(targetClass, name)?.let { declared ->
+            resolveTypeDeclObjClass(declared)?.let { return it }
+            if (declared is TypeDecl.TypeVar) return Obj.rootObjectType
+        }
+        val member = targetClass.getInstanceMemberOrNull(name, includeAbstract = true)
+        val declaringName = member?.declaringClass?.className
+        if (declaringName != null) {
+            classMethodReturnTypeByName[declaringName]?.get(name)?.let { return it }
+        }
+        classMethodReturnTypeByName[targetClass.className]?.get(name)?.let { return it }
+        val declaredType = member?.typeDecl
+        if (declaredType is TypeDecl.Function) {
+            resolveTypeDeclObjClass(declaredType.returnType)?.let { return it }
+        }
+        return null
+    }
+
     private fun inferObjClassFromRef(ref: ObjRef): ObjClass? = when (ref) {
         is ConstRef -> ref.constValue as? ObjClass ?: ref.constValue.objClass
         is LocalVarRef -> nameObjClass[ref.name] ?: resolveClassByName(ref.name)
@@ -4511,6 +4597,11 @@ class Compiler(
         is RangeRef -> ObjRange.type
         is ClassOperatorRef -> ObjClassType
         is CastRef -> resolveTypeRefClass(ref.castTypeRef())
+        is IndexRef -> {
+            val targetClass = resolveReceiverClassForMember(ref.targetRef)
+            classMethodReturnClass(targetClass, "getAt")
+                ?: inferFieldReturnClass(targetClass, "getAt")
+        }
         else -> null
     }
 
@@ -4546,6 +4637,12 @@ class Compiler(
                     TypeDecl.TypeAny, TypeDecl.TypeNullableAny -> null
                     else -> TypeDecl.TypeVar("${typeDeclName(targetDecl)}.${ref.name}", false)
                 }
+            }
+            is IndexRef -> {
+                val targetDecl = resolveReceiverTypeDecl(ref.targetRef)
+                inferMethodCallReturnTypeDecl("getAt", targetDecl)?.let { return it }
+                val targetClass = resolveReceiverClassForMember(ref.targetRef)
+                classMethodReturnTypeDecl(targetClass, "getAt")
             }
             is MethodCallRef -> methodReturnTypeDeclByRef[ref]
             is CallRef -> callReturnTypeDeclByRef[ref]
@@ -4615,6 +4712,12 @@ class Compiler(
             is FieldRef -> {
                 val targetClass = resolveReceiverClassForMember(ref.target)
                 inferFieldReturnClass(targetClass, ref.name)
+            }
+            is IndexRef -> {
+                val targetClass = resolveReceiverClassForMember(ref.targetRef)
+                classMethodReturnClass(targetClass, "getAt")
+                    ?: inferFieldReturnClass(targetClass, "getAt")
+                    ?: inferMethodCallReturnClass("getAt")
             }
             else -> null
         }
@@ -5102,6 +5205,7 @@ class Compiler(
     }
 
     private fun resolveTypeRefClass(ref: ObjRef): ObjClass? = when (ref) {
+        is TypeDeclRef -> resolveTypeDeclObjClass(ref.decl())
         is ConstRef -> ref.constValue as? ObjClass
         is LocalSlotRef -> resolveTypeDeclObjClass(TypeDecl.Simple(ref.name, false)) ?: nameObjClass[ref.name]
         is LocalVarRef -> resolveTypeDeclObjClass(TypeDecl.Simple(ref.name, false)) ?: nameObjClass[ref.name]
@@ -7885,6 +7989,23 @@ class Compiler(
             val rawFnStatements = parsedFnStatements?.let { unwrapBytecodeDeep(it) }
             val inferredReturnClass = returnTypeDecl?.let { resolveTypeDeclObjClass(it) }
                 ?: inferReturnClassFromStatement(rawFnStatements)
+            if (declKind == SymbolKind.MEMBER && extTypeName == null) {
+                val ownerClassName = (parentContext as? CodeContext.ClassBody)?.name
+                if (ownerClassName != null) {
+                    val returnDecl = returnTypeDecl
+                        ?: inferredReturnClass?.let { TypeDecl.Simple(it.className, false) }
+                    if (returnDecl != null) {
+                        classMethodReturnTypeDeclByName
+                            .getOrPut(ownerClassName) { mutableMapOf() }[name] = returnDecl
+                        resolveTypeDeclObjClass(returnDecl)?.let { returnClass ->
+                            classMethodReturnTypeByName
+                                .getOrPut(ownerClassName) { mutableMapOf() }[name] = returnClass
+                            classFieldTypesByName
+                                .getOrPut(ownerClassName) { mutableMapOf() }[name] = returnClass
+                        }
+                    }
+                }
+            }
             if (declKind != SymbolKind.MEMBER && inferredReturnClass != null) {
                 callableReturnTypeByName[name] = inferredReturnClass
                 val slotLoc = lookupSlotLocation(name, includeModule = true)

@@ -46,7 +46,7 @@ private val fallbackKeywordIds = setOf(
     "private", "protected", "static", "open", "extern", "init", "get", "set", "by", "step",
     // control flow and misc
     "if", "else", "when", "while", "do", "for", "try", "catch", "finally",
-    "throw", "return", "break", "continue", "this", "null", "true", "false", "unset"
+    "throw", "return", "break", "continue", "this", "null", "true", "false", "unset", "void"
 )
 
 /** Maps lexer token type (and sometimes value) to a [HighlightKind]. */
