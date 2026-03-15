@@ -18,6 +18,11 @@ In particular, it means no slow and flaky runtime lookups. Once compiled, code g
 
 The API is fixed and will be kept with further Lyng core changes. It is now the recommended way to write Lyng extensions in Kotlin. It is much simpler and more elegant than the internal one. See [Kotlin Bridge Binding](../notes/kotlin_bridge_binding.md).
 
+Extern declaration clarification:
+- `extern class` / `extern object` are pure extern surfaces.
+- Members inside them must be explicitly marked `extern`.
+- Lyng method/property bodies for these declarations should be implemented as extensions instead.
+
 ### Smart types system
 
 - **Deep inference**: The compiler analyzes types of symbols along the execution path and in many cases eliminates unnecessary casts or type specifications.

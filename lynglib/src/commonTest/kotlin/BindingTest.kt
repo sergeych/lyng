@@ -164,7 +164,7 @@ class BindingTest {
         val ms = Script.newScope()
         ms.eval("""
             extern class A {
-                fun get1(): String
+                extern fun get1(): String
             }
             
             extern fun getA(): A
@@ -183,5 +183,4 @@ class BindingTest {
         """.trimIndent())
     }
 }
-
 

@@ -276,6 +276,7 @@ Map inference:
 - `{ "a": 1, "b": "x" }` is `Map<String,Int|String>`.
 - Empty map literal uses `{:}` (since `{}` is empty callable).
 - `extern class Map<K=String,V=Object>` so `Map()` is `Map<String,Object>()` unless contextual type overrides.
+- `extern class` / `extern object` are declaration-only; members in their bodies must be explicitly marked `extern`.
 
 Flow typing:
 - Compiler should narrow types based on control-flow (e.g., `if (x != null)` narrows `x` to non-null inside the branch).

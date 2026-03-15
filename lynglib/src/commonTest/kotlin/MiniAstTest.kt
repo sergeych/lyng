@@ -249,13 +249,13 @@ class MiniAstTest {
             // Doc2
             extern class C1 {
                 // Doc3
-                fun m1()
+                extern fun m1()
             }
             
             // Doc4
             extern object O1 {
                 // Doc5
-                val v1: String
+                extern val v1: String
             }
             
             // Doc6

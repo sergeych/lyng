@@ -231,7 +231,7 @@ class BridgeBindingTest {
         val ms = Script.newScope()
         ms.eval("""
             extern class A {
-                val field: Int
+                extern val field: Int
             }
             
             fun test(a: A) = a.field

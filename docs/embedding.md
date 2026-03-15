@@ -243,6 +243,12 @@ For extensions and libraries, the **preferred** workflow is Lyng‑first: declar
 
 This keeps Lyng semantics (visibility, overrides, type checks) in Lyng, while Kotlin supplies the behavior.
 
+Pure extern declarations use the simplified rule set:
+- `extern class` / `extern object` are declaration-only ABI surfaces.
+- Every member in their body must be explicitly marked `extern`.
+- Plain Lyng member implementations inside `extern class` / `extern object` are not allowed.
+- Put Lyng behavior into regular classes or extension methods.
+
 ```lyng
 // Lyng side (in a module)
 class Counter {
@@ -252,6 +258,21 @@ class Counter {
 ```
 
 Note: members must be marked `extern` so the compiler emits the ABI slots that Kotlin bindings attach to. This applies to functions and properties bound via `addFun` / `addVal` / `addVar`.
+
+Example of pure extern class declaration:
+
+```lyng
+extern class HostCounter {
+    extern var value: Int
+    extern fun inc(by: Int): Int
+}
+```
+
+If you need Lyng-side convenience behavior, add it as an extension:
+
+```lyng
+fun HostCounter.bump() = inc(1)
+```
 
 ```kotlin
 // Kotlin side (binding)

@@ -7727,6 +7727,7 @@ class Compiler(
 
         val annotation = lastAnnotation
         val parentContext = codeContexts.last()
+        val parentClassCtx = parentContext as? CodeContext.ClassBody
 
         // Is extension?
         if (looksLikeExtensionReceiver()) {
@@ -7759,6 +7760,9 @@ class Compiler(
             start = t.pos
             name = t.value
             nameStartPos = t.pos
+        }
+        if (parentClassCtx?.isExtern == true && !isExtern) {
+            throw ScriptError(nameStartPos, "members of extern classes/objects must be marked extern")
         }
         val extensionWrapperName = extTypeName?.let { extensionCallableName(it, name) }
         val classCtx = codeContexts.asReversed().firstOrNull { it is CodeContext.ClassBody } as? CodeContext.ClassBody
@@ -8781,6 +8785,10 @@ class Compiler(
                 throw ScriptError(nameToken.pos, "Expected identifier or [ here")
             name = nameToken.value
             nameStartPos = nameToken.pos
+        }
+        val parentClassCtx = codeContexts.lastOrNull() as? CodeContext.ClassBody
+        if (parentClassCtx?.isExtern == true && !isExtern) {
+            throw ScriptError(nameStartPos, "members of extern classes/objects must be marked extern")
         }
 
         val receiverNormalization = normalizeReceiverTypeDecl(receiverTypeDecl, emptySet())

@@ -8,22 +8,22 @@ extern class IllegalArgumentException
 extern class NotImplementedException
 extern class Delegate
 extern class Iterable<T> {
-    fun iterator(): Iterator<T>
-    fun forEach(action: (T)->void): void
-    fun map<R>(transform: (T)->R): List<R>
-    fun toList(): List<T>
-    fun toImmutableList(): ImmutableList<T>
-    val toSet: Set<T>
-    val toImmutableSet: ImmutableSet<T>
-    val toMap: Map<Object,Object>
-    val toImmutableMap: ImmutableMap<Object,Object>
+    extern fun iterator(): Iterator<T>
+    extern fun forEach(action: (T)->void): void
+    extern fun map<R>(transform: (T)->R): List<R>
+    extern fun toList(): List<T>
+    extern fun toImmutableList(): ImmutableList<T>
+    extern val toSet: Set<T>
+    extern val toImmutableSet: ImmutableSet<T>
+    extern val toMap: Map<Object,Object>
+    extern val toImmutableMap: ImmutableMap<Object,Object>
 }
 
 extern class Iterator<T> {
-    fun hasNext(): Bool
-    fun next(): T
-    fun cancelIteration(): void
-    fun toList(): List<T>
+    extern fun hasNext(): Bool
+    extern fun next(): T
+    extern fun cancelIteration(): void
+    extern fun toList(): List<T>
 }
 
 // Host-provided iterator wrapper for Kotlin collections.
@@ -33,47 +33,47 @@ class KotlinIterator<T> : Iterator<T> {
 }
 
 extern class Collection<T> : Iterable<T> {
-    val size: Int
+    extern val size: Int
 }
 
 extern class Array<T> : Collection<T> {
 }
 
 extern class ImmutableList<T> : Array<T> {
-    fun toMutable(): List<T>
+    extern fun toMutable(): List<T>
 }
 
 extern class List<T> : Array<T> {
-    fun add(value: T, more...): void
-    fun toImmutable(): ImmutableList<T>
+    extern fun add(value: T, more...): void
+    extern fun toImmutable(): ImmutableList<T>
 }
 
 extern class RingBuffer<T> : Iterable<T> {
-    val size: Int
-    fun first(): T
-    fun add(value: T): void
+    extern val size: Int
+    extern fun first(): T
+    extern fun add(value: T): void
 }
 
 extern class Set<T> : Collection<T> {
-    fun toImmutable(): ImmutableSet<T>
+    extern fun toImmutable(): ImmutableSet<T>
 }
 
 extern class ImmutableSet<T> : Collection<T> {
-    fun toMutable(): Set<T>
+    extern fun toMutable(): Set<T>
 }
 
 extern class Map<K,V> : Collection<MapEntry<K,V>> {
-    fun toImmutable(): ImmutableMap<K,V>
+    extern fun toImmutable(): ImmutableMap<K,V>
 }
 
 extern class ImmutableMap<K,V> : Collection<MapEntry<K,V>> {
-    fun getOrNull(key: K): V?
-    fun toMutable(): Map<K,V>
+    extern fun getOrNull(key: K): V?
+    extern fun toMutable(): Map<K,V>
 }
 
 extern class MapEntry<K,V> : Array<Object> {
-    val key: K
-    val value: V
+    extern val key: K
+    extern val value: V
 }
 
 // Built-in math helpers (implemented in host runtime).

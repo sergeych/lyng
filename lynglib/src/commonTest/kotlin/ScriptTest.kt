@@ -3080,11 +3080,11 @@ class ScriptTest {
             """
             extern fun hostFunction(a: Int, b: String): String
             extern class HostClass(name: String) {
-                fun doSomething(): Int
-                val status: String
+                extern fun doSomething(): Int
+                extern val status: String
             }
             extern object HostObject {
-                fun getInstance(): HostClass
+                extern fun getInstance(): HostClass
             }
             extern enum HostEnum {
                 VALUE1, VALUE2
@@ -3095,6 +3095,19 @@ class ScriptTest {
             // In this test environment, they might fail at runtime if called, but we just check compilation.
         """.trimIndent()
         )
+    }
+
+    @Test
+    fun testExternClassMembersMustBeExplicitlyExtern() = runTest {
+        assertFailsWith<ScriptError> {
+            eval(
+                """
+                extern class HostClass {
+                    fun doSomething(): Int
+                }
+                """.trimIndent()
+            )
+        }
     }
 
     @Test

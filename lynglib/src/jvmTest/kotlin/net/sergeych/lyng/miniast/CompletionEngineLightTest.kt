@@ -209,7 +209,7 @@ class CompletionEngineLightTest {
     fun inferredTypeFromMemberCall() = runBlocking {
         val code = """
             extern class MyClass {
-                fun getList(): List<String>
+                extern fun getList(): List<String>
             }
             extern val c: MyClass
             val x = c.getList()

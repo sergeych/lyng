@@ -12,6 +12,9 @@ This note describes the Lyng-first workflow where a class is declared in Lyng an
 - Kotlin can store two opaque payloads:
   - `instance.data` (per instance)
   - `classData` (per class)
+- `extern class` / `extern object` are pure extern surfaces:
+  - all members in their bodies must be explicitly `extern`;
+  - Lyng member bodies inside extern classes/objects are not supported.
 
 ## Lyng: declare extern members
 
@@ -70,3 +73,4 @@ LyngClassBridge.bind(className = "Foo", module = "bridge.mod", importManager = i
 - Use `init { ... }` / `initWithInstance { ... }` with `ScopeFacade` receiver; access instance via `thisObj`.
 - `classData` and `instance.data` are Kotlin-only payloads and do not appear in Lyng reflection.
 - Binding after the first instance of a class is created throws a `ScriptError`.
+- If you need Lyng-side helpers for an extern type, add them as extensions, e.g. `fun Foo.helper() = ...`.
