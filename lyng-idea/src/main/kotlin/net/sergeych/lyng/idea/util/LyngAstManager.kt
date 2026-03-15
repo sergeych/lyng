@@ -36,6 +36,7 @@ object LyngAstManager {
     private val STAMP_KEY = Key.create<Long>("lyng.mini.cache.stamp")
     private val ANALYSIS_KEY = Key.create<LyngAnalysisResult>("lyng.analysis.cache")
     private val implicitBuiltinNames = setOf("void")
+    private val includeSymbolsDirective = Regex("""(?im)^\s*//\s*include\s+symbols\s*:\s*(.+?)\s*$""")
 
     fun getMiniAst(file: PsiFile): MiniScript? = runReadAction {
         getAnalysis(file)?.mini
@@ -44,8 +45,8 @@ object LyngAstManager {
     fun getCombinedStamp(file: PsiFile): Long = runReadAction {
         var combinedStamp = file.viewProvider.modificationStamp
         if (!file.name.endsWith(".lyng.d")) {
-            collectDeclarationFiles(file).forEach { df ->
-                combinedStamp += df.viewProvider.modificationStamp
+            collectDeclarationFiles(file).forEach { symbolsFile ->
+                combinedStamp += symbolsFile.viewProvider.modificationStamp
             }
         }
         combinedStamp
@@ -64,6 +65,22 @@ object LyngAstManager {
                 }
             }
             currentDir = currentDir.parentDirectory
+        }
+
+        val includeSpecs = includeSymbolsDirective.findAll(file.viewProvider.contents)
+            .flatMap { it.groupValues[1].split(',').asSequence() }
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toList()
+        val baseDir = file.virtualFile?.parent
+        if (baseDir != null) {
+            for (spec in includeSpecs) {
+                val included = baseDir.findFileByRelativePath(spec) ?: continue
+                if (included.path == file.virtualFile?.path) continue
+                if (seen.add(included.path)) {
+                    psiManager.findFile(included)?.let { result.add(it) }
+                }
+            }
         }
 
         if (result.isNotEmpty()) return@runReadAction result

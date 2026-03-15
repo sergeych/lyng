@@ -50,6 +50,18 @@ class LyngDefinitionFilesTest : BasePlatformTestCase() {
         myFixture.addFileToProject("api.lyng.d", defs)
     }
 
+    private fun addPlainSymbolsFile() {
+        val defs = """
+            /** Symbols exposed via include directive */
+            class PlainDeclared(val name: String) {
+                fun hello(): String = "ok"
+            }
+
+            fun plainTopFun(x: Int): Int = x + 2
+        """.trimIndent()
+        myFixture.addFileToProject("plain_symbols.lyng", defs)
+    }
+
     fun test_CompletionsIncludeDefinitions() {
         addDefinitionsFile()
         enableCompletion()
@@ -135,5 +147,36 @@ class LyngDefinitionFilesTest : BasePlatformTestCase() {
         val analysis = LyngAstManager.getAnalysis(myFixture.file)
         val messages = analysis?.diagnostics?.map { it.message } ?: emptyList()
         assertTrue("Should not report unresolved name for void, got=$messages", messages.none { it.contains("unresolved name: void") })
+    }
+
+    fun test_CompletionsIncludePlainLyngViaDirective() {
+        addPlainSymbolsFile()
+        enableCompletion()
+        val code = """
+            // include symbols: plain_symbols.lyng
+            val v = plainTop<caret>
+        """.trimIndent()
+        myFixture.configureByText("main.lyng", code)
+        val text = myFixture.editor.document.text
+        val caret = myFixture.caretOffset
+        val analysis = LyngAstManager.getAnalysis(myFixture.file)
+        val engine = runBlocking { CompletionEngineLight.completeSuspend(text, caret, analysis?.mini, analysis?.binding).map { it.name } }
+        assertTrue("Expected plainTopFun from included .lyng; got=$engine", engine.contains("plainTopFun"))
+    }
+
+    fun test_DiagnosticsIgnorePlainLyngSymbolsViaDirective() {
+        addPlainSymbolsFile()
+        val code = """
+            // include symbols: plain_symbols.lyng
+            val x = plainTopFun(1)
+            val y = PlainDeclared("x")
+            y.hello()
+        """.trimIndent()
+        myFixture.configureByText("main.lyng", code)
+        val analysis = LyngAstManager.getAnalysis(myFixture.file)
+        val messages = analysis?.diagnostics?.map { it.message } ?: emptyList()
+        assertTrue("Should not report unresolved name for plainTopFun", messages.none { it.contains("unresolved name: plainTopFun") })
+        assertTrue("Should not report unresolved name for PlainDeclared", messages.none { it.contains("unresolved name: PlainDeclared") })
+        assertTrue("Should not report unresolved member for hello", messages.none { it.contains("unresolved member: hello") })
     }
 }
