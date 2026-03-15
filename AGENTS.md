@@ -21,3 +21,7 @@
 - Create closure references only when a capture is detected; use a direct frame+slot reference (foreign slot ref) instead of scope slots.
 - Keep Scope as a lazy reflection facade: resolve name -> slot only on demand for Kotlin interop (no eager name mapping on every call).
 - Avoid PUSH_SCOPE/POP_SCOPE in bytecode for loops/functions unless dynamic name access or Kotlin reflection is requested.
+
+## ABI proposal notes
+- Runtime generic metadata for generic extern classes is tracked in `proposals/extern_generic_runtime_abi.md`.
+- Keep this design `Obj`-centric: do not assume extern-class values are `ObjInstance`; collection must be enabled on `ObjClass`.
