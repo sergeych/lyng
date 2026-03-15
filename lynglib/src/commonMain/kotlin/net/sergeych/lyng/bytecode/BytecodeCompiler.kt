@@ -1067,18 +1067,9 @@ class BytecodeCompiler(
             updateSlotType(dst, SlotType.OBJ)
             return CompiledValue(dst, SlotType.OBJ)
         }
-        if (receiverClass == null && memberName == "negate") {
-            val zeroId = builder.addConst(BytecodeConst.IntVal(0))
-            val zeroSlot = allocSlot()
-            builder.emit(Opcode.CONST_INT, zeroId, zeroSlot)
-            updateSlotType(zeroSlot, SlotType.INT)
-            val obj = ensureObjSlot(value)
-            val dst = allocSlot()
-            builder.emit(Opcode.SUB_OBJ, zeroSlot, obj.slot, dst)
-            updateSlotType(dst, SlotType.OBJ)
-            return CompiledValue(dst, SlotType.OBJ)
-        }
-        if (memberName == "negate" && receiverClass in setOf(ObjInt.type, ObjReal.type)) {
+        if (memberName == "negate" &&
+            (receiverClass == null || isDelegateClass(receiverClass) || receiverClass in setOf(ObjInt.type, ObjReal.type))
+        ) {
             val zeroId = builder.addConst(BytecodeConst.IntVal(0))
             val zeroSlot = allocSlot()
             builder.emit(Opcode.CONST_INT, zeroId, zeroSlot)
@@ -1094,6 +1085,11 @@ class BytecodeCompiler(
             pos
         )
     }
+
+    private fun isDelegateClass(receiverClass: ObjClass): Boolean =
+        receiverClass.className == "Delegate" ||
+            receiverClass.className == "LazyDelegate" ||
+            receiverClass.implementingNames.contains("Delegate")
 
     private fun operatorMemberName(op: BinOp): String? = when (op) {
         BinOp.PLUS -> "plus"
@@ -1142,11 +1138,7 @@ class BytecodeCompiler(
     ): CompiledValue? {
         val memberName = operatorMemberName(op) ?: return null
         val receiverClass = resolveReceiverClass(leftRef)
-        if (receiverClass == null ||
-            receiverClass.className == "Delegate" ||
-            receiverClass.className == "LazyDelegate" ||
-            receiverClass.implementingNames.contains("Delegate")
-        ) {
+        if (receiverClass == null || isDelegateClass(receiverClass)) {
             val objOpcode = when (op) {
                 BinOp.PLUS -> Opcode.ADD_OBJ
                 BinOp.MINUS -> Opcode.SUB_OBJ
@@ -4821,9 +4813,26 @@ class BytecodeCompiler(
 
     private data class CallArgs(val base: Int, val count: Int, val planId: Int?)
 
-    private fun resolveExtensionCallableSlot(receiverClass: ObjClass, memberName: String): CompiledValue? {
+    private fun extensionReceiverTypeNames(receiverClass: ObjClass): Set<String> {
+        val names = LinkedHashSet<String>()
         for (cls in receiverClass.mro) {
-            val candidate = extensionCallableName(cls.className, memberName)
+            names.add(cls.className)
+            for ((knownName, knownClass) in nameObjClass) {
+                if (knownClass !== cls && knownClass.className != cls.className) continue
+                names.add(knownName)
+                names.add(knownName.substringAfterLast('.'))
+            }
+        }
+        return names
+    }
+
+    private fun resolveExtensionSlotByReceiverNames(
+        receiverClass: ObjClass,
+        memberName: String,
+        wrapperName: (String, String) -> String
+    ): CompiledValue? {
+        for (receiverName in extensionReceiverTypeNames(receiverClass)) {
+            val candidate = wrapperName(receiverName, memberName)
             if (allowedScopeNames != null &&
                 !allowedScopeNames.contains(candidate) &&
                 !localSlotIndexByName.containsKey(candidate)
@@ -4833,34 +4842,41 @@ class BytecodeCompiler(
             resolveDirectNameSlot(candidate)?.let { return it }
         }
         return null
+    }
+
+    private fun resolveUniqueExtensionWrapperSlot(
+        memberName: String,
+        wrapperPrefix: String
+    ): CompiledValue? {
+        val suffix = "__$memberName"
+        val candidates = LinkedHashSet<String>()
+        for (name in localSlotIndexByName.keys) {
+            if (name.startsWith(wrapperPrefix) && name.endsWith(suffix)) {
+                candidates.add(name)
+            }
+        }
+        for (name in scopeSlotIndexByName.keys) {
+            if (name.startsWith(wrapperPrefix) && name.endsWith(suffix)) {
+                candidates.add(name)
+            }
+        }
+        if (candidates.size != 1) return null
+        return resolveDirectNameSlot(candidates.first())
+    }
+
+    private fun resolveExtensionCallableSlot(receiverClass: ObjClass, memberName: String): CompiledValue? {
+        return resolveExtensionSlotByReceiverNames(receiverClass, memberName, ::extensionCallableName)
+            ?: resolveUniqueExtensionWrapperSlot(memberName, "__ext__")
     }
 
     private fun resolveExtensionGetterSlot(receiverClass: ObjClass, memberName: String): CompiledValue? {
-        for (cls in receiverClass.mro) {
-            val candidate = extensionPropertyGetterName(cls.className, memberName)
-            if (allowedScopeNames != null &&
-                !allowedScopeNames.contains(candidate) &&
-                !localSlotIndexByName.containsKey(candidate)
-            ) {
-                continue
-            }
-            resolveDirectNameSlot(candidate)?.let { return it }
-        }
-        return null
+        return resolveExtensionSlotByReceiverNames(receiverClass, memberName, ::extensionPropertyGetterName)
+            ?: resolveUniqueExtensionWrapperSlot(memberName, "__ext_get__")
     }
 
     private fun resolveExtensionSetterSlot(receiverClass: ObjClass, memberName: String): CompiledValue? {
-        for (cls in receiverClass.mro) {
-            val candidate = extensionPropertySetterName(cls.className, memberName)
-            if (allowedScopeNames != null &&
-                !allowedScopeNames.contains(candidate) &&
-                !localSlotIndexByName.containsKey(candidate)
-            ) {
-                continue
-            }
-            resolveDirectNameSlot(candidate)?.let { return it }
-        }
-        return null
+        return resolveExtensionSlotByReceiverNames(receiverClass, memberName, ::extensionPropertySetterName)
+            ?: resolveUniqueExtensionWrapperSlot(memberName, "__ext_set__")
     }
 
     private fun compileCallArgsWithReceiver(
@@ -7468,7 +7484,7 @@ class BytecodeCompiler(
         if (targetClass == null) return null
         if (targetClass == ObjDynamic.type) return ObjDynamic.type
         classFieldTypesByName[targetClass.className]?.get(name)?.let { cls ->
-            if (cls.className == "Delegate" || cls.className == "LazyDelegate" || cls.implementingNames.contains("Delegate")) {
+            if (isDelegateClass(cls)) {
                 return null
             }
             return cls
@@ -7555,8 +7571,8 @@ class BytecodeCompiler(
 
     private fun queueExtensionCallableNames(receiverClass: ObjClass, memberName: String) {
         if (!useScopeSlots && globalSlotInfo.isEmpty()) return
-        for (cls in receiverClass.mro) {
-            val name = extensionCallableName(cls.className, memberName)
+        for (receiverName in extensionReceiverTypeNames(receiverClass)) {
+            val name = extensionCallableName(receiverName, memberName)
             if (allowedScopeNames == null || allowedScopeNames.contains(name)) {
                 pendingScopeNameRefs.add(name)
             }
@@ -7565,12 +7581,12 @@ class BytecodeCompiler(
 
     private fun queueExtensionPropertyNames(receiverClass: ObjClass, memberName: String) {
         if (!useScopeSlots && globalSlotInfo.isEmpty()) return
-        for (cls in receiverClass.mro) {
-            val getter = extensionPropertyGetterName(cls.className, memberName)
+        for (receiverName in extensionReceiverTypeNames(receiverClass)) {
+            val getter = extensionPropertyGetterName(receiverName, memberName)
             if (allowedScopeNames == null || allowedScopeNames.contains(getter)) {
                 pendingScopeNameRefs.add(getter)
             }
-            val setter = extensionPropertySetterName(cls.className, memberName)
+            val setter = extensionPropertySetterName(receiverName, memberName)
             if (allowedScopeNames == null || allowedScopeNames.contains(setter)) {
                 pendingScopeNameRefs.add(setter)
             }

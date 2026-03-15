@@ -1120,7 +1120,16 @@ class Compiler(
         if (implicitType != null) {
             resolutionSink?.referenceMember(name, pos, implicitType)
             val ids = resolveImplicitThisMemberIds(name, pos, implicitType)
-            return ImplicitThisMemberRef(name, pos, ids.fieldId, ids.methodId, implicitType)
+            val inClassContext = codeContexts.any { ctx -> ctx is CodeContext.ClassBody }
+            val currentImplicitType = currentImplicitThisTypeName()
+            val preferredType = when {
+                inClassContext -> implicitType
+                // Extension receiver aliases (extern class name -> host runtime class) can fail strict
+                // variant casts; keep current receiver untyped but preserve non-current receivers.
+                implicitType == currentImplicitType -> null
+                else -> implicitType
+            }
+            return ImplicitThisMemberRef(name, pos, ids.fieldId, ids.methodId, preferredType)
         }
         if (classCtx != null && classCtx.classScopeMembers.contains(name)) {
             resolutionSink?.referenceMember(name, pos, classCtx.name)
@@ -4779,6 +4788,11 @@ class Compiler(
             if (payload != null) return payload
         }
         val receiverClass = resolveReceiverClassForMember(ref.receiver)
+        classMethodReturnClass(receiverClass, ref.name)?.let { return it }
+        inferFieldReturnClass(receiverClass, ref.name)?.let { return it }
+        if (receiverClass != null && isClassScopeCallableMember(receiverClass.className, ref.name)) {
+            resolveClassByName("${receiverClass.className}.${ref.name}")?.let { return it }
+        }
         return inferMethodCallReturnClass(ref.name)
     }
 
