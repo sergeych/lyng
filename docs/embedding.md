@@ -245,7 +245,7 @@ This keeps Lyng semantics (visibility, overrides, type checks) in Lyng, while Ko
 
 Pure extern declarations use the simplified rule set:
 - `extern class` / `extern object` are declaration-only ABI surfaces.
-- Every member in their body must be explicitly marked `extern`.
+- Every member in their body is implicitly extern (you may still write `extern`, but it is redundant).
 - Plain Lyng member implementations inside `extern class` / `extern object` are not allowed.
 - Put Lyng behavior into regular classes or extension methods.
 
@@ -257,14 +257,14 @@ class Counter {
 }
 ```
 
-Note: members must be marked `extern` so the compiler emits the ABI slots that Kotlin bindings attach to. This applies to functions and properties bound via `addFun` / `addVal` / `addVar`.
+Note: members of `extern class` / `extern object` are treated as extern by default, so the compiler emits ABI slots that Kotlin bindings attach to. This applies to functions and properties bound via `addFun` / `addVal` / `addVar`.
 
 Example of pure extern class declaration:
 
 ```lyng
 extern class HostCounter {
-    extern var value: Int
-    extern fun inc(by: Int): Int
+    var value: Int
+    fun inc(by: Int): Int
 }
 ```
 
@@ -342,7 +342,7 @@ Notes:
 
 - Required order: declare/eval Lyng object in the module first, then call `bindObject(...)`.
   This is the pattern covered by `BridgeBindingTest.testExternObjectBinding`.
-- Members must be marked `extern` so the compiler emits ABI slots for Kotlin bindings.
+- Members must be extern (explicitly, or implicitly via `extern object`) so the compiler emits ABI slots for Kotlin bindings.
 - You can also bind by name/module via `LyngObjectBridge.bind(...)`.
 
 Minimal `extern fun` example:

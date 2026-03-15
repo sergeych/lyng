@@ -621,24 +621,23 @@ class TypesTest {
         eval("""
             extern fun f<T>(x: T): T 
             extern class Cell<T> {
-                extern var value: T
+                var value: T
             }
         """)
     }
 
     @Test
-    fun testExternClassMemberMustBeExternMessage() = runTest {
+    fun testExternClassMemberInitializerStillFailsWithoutExplicitExtern() = runTest {
         val e = assertFailsWith<ScriptError> {
             eval(
                 """
                 extern class Cell<T> {
-                    var value: T
+                    var value: T = 1
                 }
                 """.trimIndent()
             )
         }
-        assertTrue(e.message?.contains("must be declared extern") == true)
-        assertTrue(e.message?.contains("extern var value") == true)
+        assertTrue(e.message?.contains("extern variable value cannot have an initializer or delegate") == true)
     }
 
 //    @Test fun nonTrivialOperatorsTest() = runTest {

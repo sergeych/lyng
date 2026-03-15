@@ -248,7 +248,7 @@ The `Obj.getLyngExceptionMessageWithStackTrace()` extension method has been adde
 Lyng now provides a public Kotlin reflection bridge and a Lyng‑first class binding workflow. This is the **preferred** way to write Kotlin extensions and library integrations:
 
 - **Bridge resolver**: explicit handles for values, vars, and callables with predictable lookup rules.
-- **Class bridge binding**: declare classes/members in Lyng (marked `extern`) and bind the implementations in Kotlin before the first instance is created.
-- **Extern declaration rule**: `extern class` / `extern object` are declaration-only; all members in their bodies must be explicitly marked `extern`.
+- **Class bridge binding**: declare extern surfaces in Lyng (`extern` members, or members inside `extern class/object`) and bind the implementations in Kotlin before the first instance is created.
+- **Extern declaration rule**: `extern class` / `extern object` are declaration-only; all members in their bodies are implicitly extern.
 
 See **Embedding Lyng** for full samples and usage details.

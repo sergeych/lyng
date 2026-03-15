@@ -7727,7 +7727,6 @@ class Compiler(
 
         val annotation = lastAnnotation
         val parentContext = codeContexts.last()
-        val parentClassCtx = parentContext as? CodeContext.ClassBody
 
         // Is extension?
         if (looksLikeExtensionReceiver()) {
@@ -7760,13 +7759,6 @@ class Compiler(
             start = t.pos
             name = t.value
             nameStartPos = t.pos
-        }
-        if (parentClassCtx?.isExtern == true && !isExtern) {
-            val owner = parentClassCtx.name
-            throw ScriptError(
-                nameStartPos,
-                "member '$name' in extern class/object '$owner' must be declared extern (use `extern fun $name(...)`)"
-            )
         }
         val extensionWrapperName = extTypeName?.let { extensionCallableName(it, name) }
         val classCtx = codeContexts.asReversed().firstOrNull { it is CodeContext.ClassBody } as? CodeContext.ClassBody
@@ -8790,16 +8782,6 @@ class Compiler(
             name = nameToken.value
             nameStartPos = nameToken.pos
         }
-        val parentClassCtx = codeContexts.lastOrNull() as? CodeContext.ClassBody
-        if (parentClassCtx?.isExtern == true && !isExtern) {
-            val owner = parentClassCtx.name
-            val kind = if (isMutable) "var" else "val"
-            throw ScriptError(
-                nameStartPos,
-                "member '$name' in extern class/object '$owner' must be declared extern (use `extern $kind $name: ...`)"
-            )
-        }
-
         val receiverNormalization = normalizeReceiverTypeDecl(receiverTypeDecl, emptySet())
         val implicitTypeParams = receiverNormalization.second
         if (implicitTypeParams.isNotEmpty()) pendingTypeParamStack.add(implicitTypeParams)

@@ -51,8 +51,9 @@ interface BridgeInstanceContext {
  * Use [LyngClassBridge.bind] to obtain a binder and register implementations.
  * Bindings must happen before the first instance of the class is created.
  *
- * Important: members you bind here must be declared as `extern` in Lyng so the
- * compiler emits the ABI slots that Kotlin bindings attach to.
+ * Important: members you bind here must be extern in Lyng (explicitly, or
+ * implicitly by being inside `extern class` / `extern object`) so the compiler
+ * emits the ABI slots that Kotlin bindings attach to.
  */
 interface ClassBridgeBinder {
     /** Arbitrary Kotlin-side data attached to the class. */
@@ -70,7 +71,7 @@ interface ClassBridgeBinder {
         replaceWith = ReplaceWith("initWithInstance { block(this, thisObj) }")
     )
     fun initWithInstance(block: suspend (ScopeFacade, Obj) -> Unit)
-    /** Bind a Lyng function/member to a Kotlin implementation (requires `extern` in Lyng). */
+    /** Bind a Lyng function/member to a Kotlin implementation (requires extern member in Lyng). */
     fun addFun(name: String, impl: suspend ScopeFacade.() -> Obj)
     /**
      * Legacy addFun form.
@@ -81,7 +82,7 @@ interface ClassBridgeBinder {
         replaceWith = ReplaceWith("addFun(name) { impl(this, thisObj, args) }")
     )
     fun addFun(name: String, impl: suspend (ScopeFacade, Obj, Arguments) -> Obj)
-    /** Bind a read-only member (val/property getter) declared as `extern`. */
+    /** Bind a read-only member (val/property getter) declared extern in Lyng. */
     fun addVal(name: String, impl: suspend ScopeFacade.() -> Obj)
     /**
      * Legacy addVal form.
@@ -92,7 +93,7 @@ interface ClassBridgeBinder {
         replaceWith = ReplaceWith("addVal(name) { impl(this, thisObj) }")
     )
     fun addVal(name: String, impl: suspend (ScopeFacade, Obj) -> Obj)
-    /** Bind a mutable member (var/property getter/setter) declared as `extern`. */
+    /** Bind a mutable member (var/property getter/setter) declared extern in Lyng. */
     fun addVar(
         name: String,
         get: suspend ScopeFacade.() -> Obj,
@@ -119,8 +120,9 @@ interface ClassBridgeBinder {
  * Entry point for Kotlin bindings to declared Lyng classes.
  *
  * The workflow is Lyng-first: declare the class and its members in Lyng,
- * then bind the implementations from Kotlin. Bound members must be marked
- * `extern` so the compiler emits the ABI slots for Kotlin to attach to.
+ * then bind the implementations from Kotlin. Bound members must be extern
+ * (explicitly or by enclosing `extern class` / `extern object`) so the compiler
+ * emits the ABI slots for Kotlin to attach to.
  */
 object LyngClassBridge {
     /**
@@ -212,7 +214,7 @@ object LyngObjectBridge {
 /**
  * Sugar for [LyngClassBridge.bind] on a module scope.
  *
- * Bound members must be declared as `extern` in Lyng.
+ * Bound members must be extern in Lyng (explicitly or via enclosing extern class/object).
  */
 suspend fun ModuleScope.bind(
     className: String,
@@ -222,7 +224,7 @@ suspend fun ModuleScope.bind(
 /**
  * Sugar for [LyngObjectBridge.bind] on a module scope.
  *
- * Bound members must be declared as `extern` in Lyng.
+ * Bound members must be extern in Lyng (explicitly or via enclosing extern class/object).
  */
 suspend fun ModuleScope.bindObject(
     objectName: String,

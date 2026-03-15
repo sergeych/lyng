@@ -20,7 +20,7 @@ The API is fixed and will be kept with further Lyng core changes. It is now the 
 
 Extern declaration clarification:
 - `extern class` / `extern object` are pure extern surfaces.
-- Members inside them must be explicitly marked `extern`.
+- Members inside them are implicitly extern (`extern` on a member is optional/redundant).
 - Lyng method/property bodies for these declarations should be implemented as extensions instead.
 
 ### Smart types system

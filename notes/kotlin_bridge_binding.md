@@ -4,7 +4,7 @@ This note describes the Lyng-first workflow where a class is declared in Lyng an
 
 ## Overview
 
-- Lyng code declares a class and marks members as `extern`.
+- Lyng code declares a class and marks members as `extern` (or puts them inside `extern class`/`extern object`, where member `extern` is implicit).
 - Kotlin binds implementations with `LyngClassBridge.bind(...)`.
 - Binding must happen **before the first instance is created**.
 - `bind(className, module, importManager)` requires `module` to resolve class names; use
@@ -13,7 +13,7 @@ This note describes the Lyng-first workflow where a class is declared in Lyng an
   - `instance.data` (per instance)
   - `classData` (per class)
 - `extern class` / `extern object` are pure extern surfaces:
-  - all members in their bodies must be explicitly `extern`;
+  - all members in their bodies are implicitly extern (`extern` is optional/redundant);
   - Lyng member bodies inside extern classes/objects are not supported.
 
 ## Lyng: declare extern members

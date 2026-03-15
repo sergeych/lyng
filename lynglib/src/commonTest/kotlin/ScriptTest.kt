@@ -30,8 +30,8 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.encodeToJsonElement
 import net.sergeych.lyng.*
 import net.sergeych.lyng.obj.*
-import net.sergeych.lyng.thisAs
 import net.sergeych.lyng.pacman.InlineSourcesImportProvider
+import net.sergeych.lyng.thisAs
 import net.sergeych.mp_tools.globalDefer
 import net.sergeych.tools.bm
 import kotlin.test.*
@@ -3095,19 +3095,6 @@ class ScriptTest {
             // In this test environment, they might fail at runtime if called, but we just check compilation.
         """.trimIndent()
         )
-    }
-
-    @Test
-    fun testExternClassMembersMustBeExplicitlyExtern() = runTest {
-        assertFailsWith<ScriptError> {
-            eval(
-                """
-                extern class HostClass {
-                    fun doSomething(): Int
-                }
-                """.trimIndent()
-            )
-        }
     }
 
     @Test
