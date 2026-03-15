@@ -615,6 +615,32 @@ class TypesTest {
             
         """.trimIndent())
     }
+
+    @Test
+    fun testExternGenerics() = runTest {
+        eval("""
+            extern fun f<T>(x: T): T 
+            extern class Cell<T> {
+                extern var value: T
+            }
+        """)
+    }
+
+    @Test
+    fun testExternClassMemberMustBeExternMessage() = runTest {
+        val e = assertFailsWith<ScriptError> {
+            eval(
+                """
+                extern class Cell<T> {
+                    var value: T
+                }
+                """.trimIndent()
+            )
+        }
+        assertTrue(e.message?.contains("must be declared extern") == true)
+        assertTrue(e.message?.contains("extern var value") == true)
+    }
+
 //    @Test fun nonTrivialOperatorsTest() = runTest {
 //        val s = Script.newScope()
 //        s.eval("""

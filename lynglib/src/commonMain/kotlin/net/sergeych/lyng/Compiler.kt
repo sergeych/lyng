@@ -7762,7 +7762,11 @@ class Compiler(
             nameStartPos = t.pos
         }
         if (parentClassCtx?.isExtern == true && !isExtern) {
-            throw ScriptError(nameStartPos, "members of extern classes/objects must be marked extern")
+            val owner = parentClassCtx.name
+            throw ScriptError(
+                nameStartPos,
+                "member '$name' in extern class/object '$owner' must be declared extern (use `extern fun $name(...)`)"
+            )
         }
         val extensionWrapperName = extTypeName?.let { extensionCallableName(it, name) }
         val classCtx = codeContexts.asReversed().firstOrNull { it is CodeContext.ClassBody } as? CodeContext.ClassBody
@@ -8788,7 +8792,12 @@ class Compiler(
         }
         val parentClassCtx = codeContexts.lastOrNull() as? CodeContext.ClassBody
         if (parentClassCtx?.isExtern == true && !isExtern) {
-            throw ScriptError(nameStartPos, "members of extern classes/objects must be marked extern")
+            val owner = parentClassCtx.name
+            val kind = if (isMutable) "var" else "val"
+            throw ScriptError(
+                nameStartPos,
+                "member '$name' in extern class/object '$owner' must be declared extern (use `extern $kind $name: ...`)"
+            )
         }
 
         val receiverNormalization = normalizeReceiverTypeDecl(receiverTypeDecl, emptySet())
