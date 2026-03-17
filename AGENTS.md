@@ -1,5 +1,11 @@
 # AI Agent Notes
 
+## Canonical AI References
+- Use `docs/ai_language_reference.md` as the primary, compiler-verified Lyng language reference for code generation.
+- For generics-heavy code generation, follow `docs/ai_language_reference.md` section `7.1 Generics Runtime Model and Bounds` and `7.2 Differences vs Java / Kotlin / Scala`.
+- Use `docs/ai_stdlib_reference.md` for default runtime/module APIs and stdlib surface.
+- Treat `LYNG_AI_SPEC.md` and older docs as secondary if they conflict with the two files above.
+
 ## Kotlin/Wasm generation guardrails
 - Avoid creating suspend lambdas for compiler runtime statements. Prefer explicit `object : Statement()` with `override suspend fun execute(...)`.
 - Do not use `statement { ... }` or other inline suspend lambdas in compiler hot paths (e.g., parsing/var declarations, initializer thunks).

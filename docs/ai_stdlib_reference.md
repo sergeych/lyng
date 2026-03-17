@@ -1,0 +1,70 @@
+# Lyng Stdlib Reference for AI Agents (Compact)
+
+Purpose: fast overview of what is available by default and what must be imported.
+
+Sources: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Script.kt`, `lynglib/stdlib/lyng/root.lyng`, `lynglib/src/commonMain/kotlin/net/sergeych/lyng/stdlib_included/observable_lyng.kt`.
+
+## 1. Default Availability
+- Normal scripts are auto-seeded with `lyng.stdlib` (default import manager path).
+- Root runtime scope also exposes global constants/functions directly.
+
+## 2. Core Global Functions (Root Scope)
+- IO/debug: `print`, `println`, `traceScope`.
+- Invocation/util: `call`, `run`, `dynamic`, `cached`, `lazy`.
+- Assertions/tests: `assert`, `assertEquals`/`assertEqual`, `assertNotEquals`, `assertThrows`.
+- Preconditions: `require`, `check`.
+- Async/concurrency: `launch`, `yield`, `flow`, `delay`.
+- Math: `floor`, `ceil`, `round`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`, `exp`, `ln`, `log10`, `log2`, `pow`, `sqrt`, `abs`, `clamp`.
+
+## 3. Core Global Constants/Types
+- Values: `Unset`, `π`.
+- Primitive/class symbols: `Object`, `Int`, `Real`, `Bool`, `Char`, `String`, `Class`, `Callable`.
+- Collections/types: `Iterable`, `Iterator`, `Collection`, `Array`, `List`, `ImmutableList`, `Set`, `ImmutableSet`, `Map`, `ImmutableMap`, `MapEntry`, `Range`, `RingBuffer`.
+- Async types: `Deferred`, `CompletableDeferred`, `Mutex`, `Flow`, `FlowBuilder`.
+- Delegation types: `Delegate`, `DelegateContext`.
+- Regex types: `Regex`, `RegexMatch`.
+- Also present: `Math.PI` namespace constant.
+
+## 4. `lyng.stdlib` Module Surface (from `root.lyng`)
+### 4.1 Extern class declarations
+- Exceptions/delegation base: `Exception`, `IllegalArgumentException`, `NotImplementedException`, `Delegate`.
+- Collections and iterables: `Iterable<T>`, `Iterator<T>`, `Collection<T>`, `Array<T>`, `List<T>`, `ImmutableList<T>`, `Set<T>`, `ImmutableSet<T>`, `Map<K,V>`, `ImmutableMap<K,V>`, `MapEntry<K,V>`, `RingBuffer<T>`.
+- Host iterator bridge: `KotlinIterator<T>`.
+
+### 4.2 High-use extension APIs
+- Iteration/filtering: `forEach`, `filter`, `filterFlow`, `filterNotNull`, `filterFlowNotNull`, `drop`, `dropLast`, `takeLast`.
+- Search/predicates: `findFirst`, `findFirstOrNull`, `any`, `all`, `count`, `first`, `last`.
+- Mapping/aggregation: `map`, `flatMap`, `flatten`, `sum`, `sumOf`, `minOf`, `maxOf`.
+- Ordering: `sorted`, `sortedBy`, `shuffled`, `List.sort`, `List.sortBy`.
+- String helper: `joinToString`, `String.re`.
+
+### 4.3 Delegation helpers
+- `enum DelegateAccess { Val, Var, Callable }`
+- `interface Delegate<T,ThisRefType=void>` with `getValue`, `setValue`, `invoke`, `bind`.
+- `class lazy<T,...>` delegate implementation.
+- `fun with(self, block)` helper.
+
+### 4.4 Other module-level symbols
+- `$~` (last regex match object).
+- `TODO(message?)` utility.
+- `StackTraceEntry` class.
+
+## 5. Additional Built-in Modules (import explicitly)
+- `import lyng.observable`
+  - `Observable`, `Subscription`, `ObservableList`, `ListChange` and change subtypes, `ChangeRejectionException`.
+- `import lyng.buffer`
+  - `Buffer`, `MutableBuffer`.
+- `import lyng.serialization`
+  - `Lynon` serialization utilities.
+- `import lyng.time`
+  - `Instant`, `DateTime`, `Duration`, and module `delay`.
+
+## 6. Optional (lyngio) Modules
+Requires installing `lyngio` into the import manager from host code.
+- `import lyng.io.fs` (filesystem `Path` API)
+- `import lyng.io.process` (process execution API)
+
+## 7. AI Generation Tips
+- Assume `lyng.stdlib` APIs exist in regular script contexts.
+- For platform-sensitive code (`fs`, `process`), gate assumptions and mention required module install.
+- Prefer extension-method style (`items.filter { ... }`) and standard scope helpers (`let`/`also`/`apply`/`run`).
