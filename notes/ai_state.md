@@ -12,9 +12,10 @@ Current focus
 
 Key recent changes
 - Updated AI helper docs to reflect static typing, type expressions, and compile-time-only name resolution.
+- Added stdlib random API: `Random` and deterministic `SeededRandom` with `nextInt`, `nextFloat`, and generic `next(range)`.
 
 Known failing tests
-- Not checked in this session.
+- None in :lynglib:jvmTest after Random/SeededRandom integration.
 
 Last test run
-- Not checked in this session.
+- `./gradlew :lynglib:jvmTest` (PASS).

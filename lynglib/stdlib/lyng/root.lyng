@@ -82,6 +82,19 @@ extern fun ln(x: Object): Real
 extern fun pow(x: Object, y: Object): Real
 extern fun sqrt(x: Object): Real
 
+class SeededRandom {
+    extern fun nextInt(): Int
+    extern fun nextFloat(): Real
+    extern fun next<T>(range: Range): T
+}
+
+extern object Random {
+    extern fun nextInt(): Int
+    extern fun nextFloat(): Real
+    extern fun next<T>(range: Range): T
+    extern fun seeded(seed: Int): SeededRandom
+}
+
 // Last regex match result, updated by =~ / !~.
 var $~: Object? = null
 

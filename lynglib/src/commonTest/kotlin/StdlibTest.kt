@@ -172,4 +172,73 @@ class StdlibTest {
 
         """.trimIndent())
     }
+
+    @Test
+    fun testRandomSeededDeterministic() = runTest {
+        eval("""
+            val a = Random.seeded(123456)
+            val b = Random.seeded(123456)
+
+            for( i in 1..20 ) {
+                assertEquals(a.nextInt(), b.nextInt())
+                assertEquals(a.nextFloat(), b.nextFloat())
+                assertEquals(a.next(1..100), b.next(1..100))
+            }
+        """.trimIndent())
+    }
+
+    @Test
+    fun testRandomNextFloatBounds() = runTest {
+        eval("""
+            for( i in 1..400 ) {
+                val x = Random.nextFloat()
+                assert(x >= 0.0)
+                assert(x < 1.0)
+            }
+        """.trimIndent())
+    }
+
+    @Test
+    fun testRandomNextRangeVariants() = runTest {
+        eval("""
+            val rnd = Random.seeded(77)
+
+            for( i in 1..300 ) {
+                val x = rnd.next(10..<20)
+                assert(x in 10..<20)
+            }
+
+            val allowed = [0, 3, 6, 9]
+            for( i in 1..300 ) {
+                val x = rnd.next(0..9 step 3)
+                assert(x in allowed)
+            }
+
+            for( i in 1..300 ) {
+                val ch = rnd.next('a'..<'f')
+                assert(ch in 'a'..<'f')
+            }
+
+            for( i in 1..300 ) {
+                val rf = rnd.next(1.5..<4.5)
+                assert(rf >= 1.5)
+                assert(rf < 4.5)
+            }
+
+            val qAllowed = [0.0, 0.25, 0.5, 0.75, 1.0]
+            for( i in 1..300 ) {
+                val q = rnd.next(0.0..1.0 step 0.25)
+                assert(q in qAllowed)
+            }
+        """.trimIndent())
+    }
+
+    @Test
+    fun testRandomRejectsOpenRange() = runTest {
+        eval("""
+            assertThrows(IllegalArgumentException) { Random.next(1..) }
+            assertThrows(IllegalArgumentException) { Random.next(..10) }
+            assertThrows(IllegalArgumentException) { Random.next(..) }
+        """.trimIndent())
+    }
 }

@@ -110,6 +110,29 @@ For example:
     assert( 5.clamp(0..10) == 5 )
     >>> void
 
+## Random values
+
+Lyng stdlib provides a global random singleton and deterministic seeded generators:
+
+| name                     | meaning |
+|--------------------------|---------|
+| Random.nextInt()         | random `Int` from full platform range |
+| Random.nextFloat()       | random `Real` in `[0,1)` |
+| Random.next(range)       | random value from the given finite range |
+| Random.seeded(seed)      | creates deterministic generator |
+| SeededRandom.nextInt()   | deterministic random `Int` |
+| SeededRandom.nextFloat() | deterministic random `Real` in `[0,1)` |
+| SeededRandom.next(range) | deterministic random value from range |
+
+Examples:
+
+    val rng = Random.seeded(1234)
+    assert( rng.next(1..10) in 1..10 )
+    assert( rng.next('a'..<'f') in 'a'..<'f' )
+    assert( rng.next(0.0..<1.0) >= 0.0 )
+    assert( rng.next(0.0..<1.0) < 1.0 )
+    >>> void
+
 ## Scientific constant
 
 | name                 | meaning      |

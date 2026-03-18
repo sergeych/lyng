@@ -26,9 +26,6 @@ val DROP_FRAMES_BASE = 15
 val DROP_FRAMES_MIN = 3
 val FRAME_DELAY_MS = 35
 val RESIZE_WAIT_MS = 250
-val RNG_A = 1103515245
-val RNG_C = 12345
-val RNG_M = 2147483647
 val ROTATION_KICKS = [0, -1, 1, -2, 2]
 val ANSI_ESC = "\u001b["
 val ANSI_RESET = ANSI_ESC + "0m"
@@ -442,10 +439,8 @@ if (!Console.isSupported()) {
 
     val board: Board = createBoard(boardW, boardH)
 
-    var rng = 1337
     fun nextPieceId() {
-        rng = (rng * RNG_A + RNG_C) % RNG_M
-        (rng % PIECES.size) + 1
+        Random.next(1..7)
     }
 
     val state: GameState = GameState(

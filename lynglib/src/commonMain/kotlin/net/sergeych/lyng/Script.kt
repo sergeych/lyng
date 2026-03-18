@@ -20,6 +20,8 @@ package net.sergeych.lyng
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
 import net.sergeych.lyng.Script.Companion.defaultImportManager
+import net.sergeych.lyng.bridge.bind
+import net.sergeych.lyng.bridge.bindObject
 import net.sergeych.lyng.bytecode.CmdFunction
 import net.sergeych.lyng.bytecode.CmdVm
 import net.sergeych.lyng.miniast.*
@@ -30,6 +32,7 @@ import net.sergeych.lyng.stdlib_included.rootLyng
 import net.sergeych.lynon.ObjLynonClass
 import net.sergeych.mp_tools.globalDefer
 import kotlin.math.*
+import kotlin.random.Random as KRandom
 
 @Suppress("TYPE_INTERSECTION_AS_REIFIED_WARNING")
 class Script(
@@ -588,11 +591,97 @@ class Script(
             }
         }
 
+        private fun seededRandomFromThis(scope: Scope, thisObj: Obj): KRandom {
+            val instance = thisObj as? ObjInstance
+                ?: scope.raiseIllegalState("SeededRandom method requires instance receiver")
+            val stored = instance.kotlinInstanceData
+            if (stored is KRandom) return stored
+            return KRandom.Default.also { instance.kotlinInstanceData = it }
+        }
+
+        private suspend fun sampleRangeValue(scope: Scope, random: KRandom, range: ObjRange): Obj {
+            if (range.start == null || range.start.isNull || range.end == null || range.end.isNull) {
+                scope.raiseIllegalArgument("Random.next(range) requires a finite range")
+            }
+            val start = range.start
+            val end = range.end
+
+            // Real ranges without explicit step are sampled continuously.
+            if (!range.hasExplicitStep &&
+                start is Numeric &&
+                end is Numeric &&
+                (start !is ObjInt || end !is ObjInt)
+            ) {
+                val from = start.doubleValue
+                val to = end.doubleValue
+                if (from > to || (!range.isEndInclusive && from == to)) {
+                    scope.raiseIllegalArgument("Random.next(range) got an empty numeric range")
+                }
+                if (from == to) return ObjReal(from)
+                val upperExclusive = if (range.isEndInclusive) to.nextUp() else to
+                if (upperExclusive <= from) {
+                    scope.raiseIllegalArgument("Random.next(range) got an empty numeric range")
+                }
+                return ObjReal(random.nextDouble(from, upperExclusive))
+            }
+
+            // Discrete sampling for stepped ranges and integer/char ranges.
+            var picked: Obj? = null
+            var count = 0L
+            range.enumerate(scope) { value ->
+                count += 1
+                if (random.nextLong(count) == 0L) {
+                    picked = value
+                }
+                true
+            }
+            if (count <= 0L || picked == null) {
+                scope.raiseIllegalArgument("Random.next(range) got an empty range")
+            }
+            return picked
+        }
+
         val defaultImportManager: ImportManager by lazy {
             ImportManager(rootScope, SecurityManager.allowAll).apply {
                 addPackage("lyng.stdlib") { module ->
                     module.eval(Source("lyng.stdlib", rootLyng))
                     ObjKotlinIterator.bindTo(module.requireClass("KotlinIterator"))
+                    val seededRandomClass = module.requireClass("SeededRandom")
+                    module.bind("SeededRandom") {
+                        init { data = KRandom.Default }
+                        addFun("nextInt") {
+                            val rnd = seededRandomFromThis(requireScope(), thisObj)
+                            ObjInt.of(rnd.nextInt().toLong())
+                        }
+                        addFun("nextFloat") {
+                            val rnd = seededRandomFromThis(requireScope(), thisObj)
+                            ObjReal(rnd.nextDouble())
+                        }
+                        addFun("next") {
+                            val rnd = seededRandomFromThis(requireScope(), thisObj)
+                            val range = requiredArg<ObjRange>(0)
+                            sampleRangeValue(requireScope(), rnd, range)
+                        }
+                    }
+                    module.bindObject("Random") {
+                        addFun("nextInt") {
+                            ObjInt.of(KRandom.Default.nextInt().toLong())
+                        }
+                        addFun("nextFloat") {
+                            ObjReal(KRandom.Default.nextDouble())
+                        }
+                        addFun("next") {
+                            val range = requiredArg<ObjRange>(0)
+                            sampleRangeValue(requireScope(), KRandom.Default, range)
+                        }
+                        addFun("seeded") {
+                            val seed = requiredArg<ObjInt>(0).value.toInt()
+                            val instance = call(seededRandomClass) as? ObjInstance
+                                ?: requireScope().raiseIllegalState("SeededRandom() did not return an object instance")
+                            instance.kotlinInstanceData = KRandom(seed)
+                            instance
+                        }
+                    }
                 }
                 addPackage("lyng.observable") { module ->
                     module.addConst("Observable", ObjObservable)

@@ -20,6 +20,7 @@ Sources: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Script.kt`, `lynglib/s
 - Values: `Unset`, `π`.
 - Primitive/class symbols: `Object`, `Int`, `Real`, `Bool`, `Char`, `String`, `Class`, `Callable`.
 - Collections/types: `Iterable`, `Iterator`, `Collection`, `Array`, `List`, `ImmutableList`, `Set`, `ImmutableSet`, `Map`, `ImmutableMap`, `MapEntry`, `Range`, `RingBuffer`.
+- Random: singleton `Random` and class `SeededRandom`.
 - Async types: `Deferred`, `CompletableDeferred`, `Mutex`, `Flow`, `FlowBuilder`.
 - Delegation types: `Delegate`, `DelegateContext`.
 - Regex types: `Regex`, `RegexMatch`.
@@ -30,6 +31,7 @@ Sources: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Script.kt`, `lynglib/s
 - Exceptions/delegation base: `Exception`, `IllegalArgumentException`, `NotImplementedException`, `Delegate`.
 - Collections and iterables: `Iterable<T>`, `Iterator<T>`, `Collection<T>`, `Array<T>`, `List<T>`, `ImmutableList<T>`, `Set<T>`, `ImmutableSet<T>`, `Map<K,V>`, `ImmutableMap<K,V>`, `MapEntry<K,V>`, `RingBuffer<T>`.
 - Host iterator bridge: `KotlinIterator<T>`.
+- Random APIs: `extern object Random`, `extern class SeededRandom`.
 
 ### 4.2 High-use extension APIs
 - Iteration/filtering: `forEach`, `filter`, `filterFlow`, `filterNotNull`, `filterFlowNotNull`, `drop`, `dropLast`, `takeLast`.
@@ -48,6 +50,8 @@ Sources: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Script.kt`, `lynglib/s
 - `$~` (last regex match object).
 - `TODO(message?)` utility.
 - `StackTraceEntry` class.
+- `Random.nextInt()`, `Random.nextFloat()`, `Random.next(range)`, `Random.seeded(seed)`.
+- `SeededRandom.nextInt()`, `SeededRandom.nextFloat()`, `SeededRandom.next(range)`.
 
 ## 5. Additional Built-in Modules (import explicitly)
 - `import lyng.observable`
