@@ -14,8 +14,13 @@ Primary sources used: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/{Parser,T
 ## 2. Lexical Syntax
 - Comments: `// line`, `/* block */`.
 - Strings: `"..."` (supports escapes). Multiline string content is normalized by indentation logic.
+  - Supported escapes: `\n`, `\r`, `\t`, `\"`, `\\`, `\uXXXX` (4 hex digits).
+  - Unicode escapes use exactly 4 hex digits (for example: `"\u0416"` -> `Ж`).
+  - Unknown `\x` escapes in strings are preserved literally as two characters (`\` and `x`).
 - Numbers: `Int` (`123`, `1_000`), `Real` (`1.2`, `1e3`), hex (`0xFF`).
 - Char: `'a'`, escaped chars supported.
+  - Supported escapes: `\n`, `\r`, `\t`, `\'`, `\\`, `\uXXXX` (4 hex digits).
+  - Backslash character in a char literal must be written as `'\\'` (forms like `'\'` are invalid).
 - Labels:
   - statement label: `loop@ for (...) { ... }`
   - label reference: `break@loop`, `continue@loop`, `return@fnLabel`

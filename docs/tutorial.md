@@ -1555,18 +1555,21 @@ The type for the character objects is `Char`.
 | \t     | 0x07, tabulation      |
 | \\     | \ slash character     |
 | \"     | " double quote        |
+| \uXXXX | unicode code point    |
+
+Unicode escape form is exactly 4 hex digits, e.g. `"\u263A"` -> `☺`.
 
 Other `\c` combinations, where c is any char except mentioned above, are left intact, e.g.:
 
     val s = "\a"
-    assert(s[0] == '\')
+    assert(s[0] == '\\')
     assert(s[1] == 'a')
     >>> void
 
 same as:
 
     val s = "\\a"
-    assert(s[0] == '\')
+    assert(s[0] == '\\')
     assert(s[1] == 'a')
     >>> void
 
@@ -1581,6 +1584,9 @@ Are the same as in string literals with little difference:
 | \t     | 0x07, tabulation      |
 | \\     | \ slash character     |
 | \'     | ' apostrophe          |
+| \uXXXX | unicode code point    |
+
+For char literals, use `'\\'` to represent a single backslash character; `'\'` is invalid.
 
 ### Char instance members
 

@@ -6,12 +6,13 @@
 
 1. **Security:** I/O and process execution are sensitive operations. By keeping them in a separate module, we ensure that the Lyng core remains 100% safe by default. You only enable what you explicitly need.
 2. **Footprint:** Not every script needs filesystem or process access. Keeping these as a separate module helps minimize the dependency footprint for small embedded projects.
-3. **Control:** `lyngio` provides fine-grained security policies (`FsAccessPolicy`, `ProcessAccessPolicy`) that allow you to control exactly what a script can do.
+3. **Control:** `lyngio` provides fine-grained security policies (`FsAccessPolicy`, `ProcessAccessPolicy`, `ConsoleAccessPolicy`) that allow you to control exactly what a script can do.
 
 #### Included Modules
 
 - **[lyng.io.fs](lyng.io.fs.md):** Async filesystem access. Provides the `Path` class for file/directory operations, streaming, and globbing.
 - **[lyng.io.process](lyng.io.process.md):** External process execution and shell commands. Provides `Process`, `RunningProcess`, and `Platform` information.
+- **[lyng.io.console](lyng.io.console.md):** Rich console/TTY access. Provides `Console` capability detection, geometry, output, and iterable events.
 
 ---
 
@@ -39,8 +40,10 @@ To use `lyngio` modules in your scripts, you must install them into your Lyng sc
 import net.sergeych.lyng.Script
 import net.sergeych.lyng.io.fs.createFs
 import net.sergeych.lyng.io.process.createProcessModule
+import net.sergeych.lyng.io.console.createConsoleModule
 import net.sergeych.lyngio.fs.security.PermitAllAccessPolicy
 import net.sergeych.lyngio.process.security.PermitAllProcessAccessPolicy
+import net.sergeych.lyngio.console.security.PermitAllConsoleAccessPolicy
 
 suspend fun runMyScript() {
     val scope = Script.newScope()
@@ -48,14 +51,17 @@ suspend fun runMyScript() {
     // Install modules with policies
     createFs(PermitAllAccessPolicy, scope)
     createProcessModule(PermitAllProcessAccessPolicy, scope)
+    createConsoleModule(PermitAllConsoleAccessPolicy, scope)
     
     // Now scripts can import them
     scope.eval("""
         import lyng.io.fs
         import lyng.io.process
+        import lyng.io.console
         
         println("Working dir: " + Path(".").readUtf8())
         println("OS: " + Platform.details().name)
+        println("TTY: " + Console.isTty())
     """)
 }
 ```
@@ -68,20 +74,22 @@ suspend fun runMyScript() {
 
 - **Filesystem Security:** Implement `FsAccessPolicy` to restrict access to specific paths or operations (e.g., read-only access to a sandbox directory).
 - **Process Security:** Implement `ProcessAccessPolicy` to restrict which executables can be run or to disable shell execution entirely.
+- **Console Security:** Implement `ConsoleAccessPolicy` to control output writes, event reads, and raw mode switching.
 
 For more details, see the specific module documentation:
 - [Filesystem Security Details](lyng.io.fs.md#access-policy-security)
 - [Process Security Details](lyng.io.process.md#security-policy)
+- [Console Module Details](lyng.io.console.md)
 
 ---
 
 #### Platform Support Overview
 
-| Platform | lyng.io.fs | lyng.io.process |
-| :--- | :---: | :---: |
-| **JVM** | ✅ | ✅ |
-| **Native (Linux/macOS)** | ✅ | ✅ |
-| **Native (Windows)** | ✅ | 🚧 (Planned) |
-| **Android** | ✅ | ❌ |
-| **NodeJS** | ✅ | ❌ |
-| **Browser / Wasm** | ✅ (In-memory) | ❌ |
+| Platform | lyng.io.fs | lyng.io.process | lyng.io.console |
+| :--- | :---: | :---: | :---: |
+| **JVM** | ✅ | ✅ | ✅ (baseline) |
+| **Native (Linux/macOS)** | ✅ | ✅ | 🚧 |
+| **Native (Windows)** | ✅ | 🚧 (Planned) | 🚧 |
+| **Android** | ✅ | ❌ | ❌ |
+| **NodeJS** | ✅ | ❌ | ❌ |
+| **Browser / Wasm** | ✅ (In-memory) | ❌ | ❌ |

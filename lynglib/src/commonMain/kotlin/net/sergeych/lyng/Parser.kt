@@ -306,17 +306,41 @@ private class Parser(fromPos: Pos) {
             '\'' -> {
                 val start = pos.toPos()
                 var value = currentChar
-                pos.advance()
                 if (currentChar == '\\') {
-                    value = currentChar
                     pos.advance()
-                    value = when (value) {
-                        'n' -> '\n'
-                        'r' -> '\r'
-                        't' -> '\t'
-                        '\'', '\\' -> value
-                        else -> throw ScriptError(currentPos, "unsupported escape character: $value")
+                    if (pos.end) throw ScriptError(start, "unterminated character literal")
+                    value = when (currentChar) {
+                        'n' -> {
+                            pos.advance()
+                            '\n'
+                        }
+
+                        'r' -> {
+                            pos.advance()
+                            '\r'
+                        }
+
+                        't' -> {
+                            pos.advance()
+                            '\t'
+                        }
+
+                        '\'' -> {
+                            pos.advance()
+                            '\''
+                        }
+
+                        '\\' -> {
+                            pos.advance()
+                            '\\'
+                        }
+
+                        'u' -> loadUnicodeEscape(start)
+
+                        else -> throw ScriptError(currentPos, "unsupported escape character: $currentChar")
                     }
+                } else {
+                    pos.advance()
                 }
                 if (currentChar != '\'') throw ScriptError(currentPos, "expected end of character literal: '")
                 pos.advance()
@@ -494,6 +518,10 @@ private class Parser(fromPos: Pos) {
                             sb.append('\\'); pos.advance()
                         }
 
+                        'u' -> {
+                            sb.append(loadUnicodeEscape(start))
+                        }
+
                         else -> {
                             sb.append('\\').append(currentChar)
                             pos.advance()
@@ -518,6 +546,23 @@ private class Parser(fromPos: Pos) {
         val result = sb.toString().let { if (newlineDetected) fixMultilineStringLiteral(it) else it }
 
         return Token(result, start, Token.Type.STRING)
+    }
+
+    private fun loadUnicodeEscape(start: Pos): Char {
+        // Called when currentChar points to 'u' right after a backslash.
+        if (currentChar != 'u') throw ScriptError(currentPos, "expected unicode escape marker: u")
+        pos.advance() ?: throw ScriptError(start, "unterminated unicode escape")
+
+        var code = 0
+        repeat(4) {
+            val ch = currentChar
+            if (ch !in hexDigits) {
+                throw ScriptError(currentPos, "invalid unicode escape sequence, expected 4 hex digits")
+            }
+            code = (code shl 4) + ch.digitToInt(16)
+            pos.advance()
+        }
+        return code.toChar()
     }
 
     /**

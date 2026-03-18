@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,8 @@ import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import net.sergeych.lyng.*
+import net.sergeych.lyng.Scope
+import net.sergeych.lyng.ScriptFlowIsNoMoreCollected
 import net.sergeych.lyng.miniast.ParamDoc
 import net.sergeych.lyng.miniast.TypeGenericDoc
 import net.sergeych.lyng.miniast.addFnDoc
@@ -55,7 +56,7 @@ class ObjFlowBuilder(val output: SendChannel<Obj>) : Obj() {
                     else
                         // Flow consumer is no longer collecting; signal producer to stop
                         throw ScriptFlowIsNoMoreCollected()
-                } catch (x: Exception) {
+                } catch (x: Throwable) {
                     // Any failure to send (including closed channel) should gracefully stop the producer.
                     if (x is CancellationException) {
                         // Cancellation is a normal control-flow event
@@ -80,7 +81,7 @@ private fun createLyngFlowInput(scope: Scope, producer: Obj): ReceiveChannel<Obj
             producer.callOn(builderScope)
         } catch (x: ScriptFlowIsNoMoreCollected) {
             // premature flow closing, OK
-        } catch (x: Exception) {
+        } catch (x: Throwable) {
             channel.close(x)
             return@globalLaunch
         }

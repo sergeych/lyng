@@ -63,8 +63,9 @@ Sources: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Script.kt`, `lynglib/s
 Requires installing `lyngio` into the import manager from host code.
 - `import lyng.io.fs` (filesystem `Path` API)
 - `import lyng.io.process` (process execution API)
+- `import lyng.io.console` (console capabilities, geometry, ANSI/output, events)
 
 ## 7. AI Generation Tips
 - Assume `lyng.stdlib` APIs exist in regular script contexts.
-- For platform-sensitive code (`fs`, `process`), gate assumptions and mention required module install.
+- For platform-sensitive code (`fs`, `process`, `console`), gate assumptions and mention required module install.
 - Prefer extension-method style (`items.filter { ... }`) and standard scope helpers (`let`/`also`/`apply`/`run`).

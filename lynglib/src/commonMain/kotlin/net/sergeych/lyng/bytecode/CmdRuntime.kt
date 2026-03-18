@@ -3784,6 +3784,7 @@ class CmdFrame(
         val exceptionSlot: Int,
         val catchIp: Int,
         val finallyIp: Int,
+        val iterDepthAtPush: Int,
         var inCatch: Boolean = false
     )
     internal val tryStack = ArrayDeque<TryHandler>()
@@ -4069,11 +4070,15 @@ class CmdFrame(
         return scope
     }
 
-    fun handleException(t: Throwable): Boolean {
+    suspend fun handleException(t: Throwable): Boolean {
         val handler = tryStack.lastOrNull() ?: return false
+        vmIterDebug(
+            "handleException fn=${fn.name} throwable=${t::class.simpleName} message=${t.message} catchIp=${handler.catchIp} finallyIp=${handler.finallyIp} iterDepth=${iterStack.size}"
+        )
         val finallyIp = handler.finallyIp
         if (t is ReturnException || t is LoopBreakContinueException) {
             if (finallyIp >= 0) {
+                cancelIteratorsToDepth(handler.iterDepthAtPush, "handleException:returnOrLoop->finally")
                 pendingThrowable = t
                 ip = finallyIp
                 return true
@@ -4082,6 +4087,7 @@ class CmdFrame(
         }
         if (handler.inCatch) {
             if (finallyIp >= 0) {
+                cancelIteratorsToDepth(handler.iterDepthAtPush, "handleException:inCatch->finally")
                 pendingThrowable = t
                 ip = finallyIp
                 return true
@@ -4091,6 +4097,7 @@ class CmdFrame(
         handler.inCatch = true
         pendingThrowable = t
         if (handler.catchIp >= 0) {
+            cancelIteratorsToDepth(handler.iterDepthAtPush, "handleException:toCatch")
             val caughtObj = when (t) {
                 is ExecutionError -> t.errorObject
                 else -> ObjUnknownException(ensureScope(), t.message ?: t.toString())
@@ -4100,6 +4107,7 @@ class CmdFrame(
             return true
         }
         if (finallyIp >= 0) {
+            cancelIteratorsToDepth(handler.iterDepthAtPush, "handleException:toFinallyNoCatch")
             ip = finallyIp
             return true
         }
@@ -4107,7 +4115,7 @@ class CmdFrame(
     }
 
     fun pushTry(exceptionSlot: Int, catchIp: Int, finallyIp: Int) {
-        tryStack.addLast(TryHandler(exceptionSlot, catchIp, finallyIp))
+        tryStack.addLast(TryHandler(exceptionSlot, catchIp, finallyIp, iterDepthAtPush = iterStack.size))
     }
 
     fun popTry() {
@@ -4164,21 +4172,44 @@ class CmdFrame(
 
     fun pushIterator(iter: Obj) {
         iterStack.addLast(iter)
+        if (iter.objClass.className == "FlowIterator") {
+            vmIterDebug("pushIterator fn=${fn.name} depth=${iterStack.size} iterClass=${iter.objClass.className}")
+        }
     }
 
     fun popIterator() {
+        val iter = iterStack.lastOrNull()
+        if (iter != null && iter.objClass.className == "FlowIterator") {
+            vmIterDebug("popIterator fn=${fn.name} depth=${iterStack.size} iterClass=${iter.objClass.className}")
+        }
         iterStack.removeLastOrNull()
     }
 
     suspend fun cancelTopIterator() {
         val iter = iterStack.removeLastOrNull() ?: return
+        vmIterDebug("cancelTopIterator fn=${fn.name} depthAfter=${iterStack.size} iterClass=${iter.objClass.className}")
         iter.invokeInstanceMethod(ensureScope(), "cancelIteration") { ObjVoid }
     }
 
     suspend fun cancelIterators() {
         while (iterStack.isNotEmpty()) {
             val iter = iterStack.removeLast()
+            vmIterDebug("cancelIterators fn=${fn.name} depthAfter=${iterStack.size} iterClass=${iter.objClass.className}")
             iter.invokeInstanceMethod(ensureScope(), "cancelIteration") { ObjVoid }
+        }
+    }
+
+    private suspend fun cancelIteratorsToDepth(depth: Int, reason: String) {
+        while (iterStack.size > depth) {
+            val iter = iterStack.removeLast()
+            vmIterDebug(
+                "cancelIteratorsToDepth fn=${fn.name} reason=$reason targetDepth=$depth depthAfter=${iterStack.size} iterClass=${iter.objClass.className}"
+            )
+            try {
+                iter.invokeInstanceMethod(ensureScope(), "cancelIteration") { ObjVoid }
+            } catch (e: Throwable) {
+                vmIterDebug("cancelIteratorsToDepth: cancelIteration failed fn=${fn.name} reason=$reason", e)
+            }
         }
     }
 

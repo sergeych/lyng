@@ -78,6 +78,7 @@ kotlin {
                 api(project(":lynglib"))
                 api(libs.okio)
                 api(libs.kotlinx.coroutines.core)
+                api(libs.mordant.core)
             }
         }
         val commonTest by getting {
@@ -92,6 +93,13 @@ kotlin {
                 api(libs.okio)
                 implementation(libs.okio.fakefilesystem)
                 implementation("com.squareup.okio:okio-nodefilesystem:${libs.versions.okioVersion.get()}")
+            }
+        }
+        val jvmMain by getting {
+            dependencies {
+                implementation(libs.mordant.jvm.jna)
+                implementation("org.jline:jline-reader:3.29.0")
+                implementation("org.jline:jline-terminal:3.29.0")
             }
         }
 //        // For Wasm we use in-memory VFS for now

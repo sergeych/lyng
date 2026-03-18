@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,8 +32,10 @@ import net.sergeych.lyng.LyngVersion
 import net.sergeych.lyng.Script
 import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.Source
+import net.sergeych.lyng.io.console.createConsoleModule
 import net.sergeych.lyng.io.fs.createFs
 import net.sergeych.lyng.obj.*
+import net.sergeych.lyngio.console.security.PermitAllConsoleAccessPolicy
 import net.sergeych.lyngio.fs.security.PermitAllAccessPolicy
 import net.sergeych.mp_tools.globalDefer
 import okio.FileSystem
@@ -69,6 +71,9 @@ val baseScopeDefer = globalDefer {
         // Install lyng.io.fs module with full access by default for the CLI tool's Scope.
         // Scripts still need to `import lyng.io.fs` to use Path API.
         createFs(PermitAllAccessPolicy, this)
+        // Install console access by default for interactive CLI scripts.
+        // Scripts still need to `import lyng.io.console` to use it.
+        createConsoleModule(PermitAllConsoleAccessPolicy, this)
     }
 }
 
