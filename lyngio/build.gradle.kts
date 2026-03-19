@@ -159,7 +159,7 @@ val generateLyngioConsoleDecls by tasks.registering(GenerateLyngioConsoleDecls::
 }
 
 kotlin.sourceSets.named("commonMain") {
-    kotlin.srcDir(generatedLyngioDeclsDir)
+    kotlin.srcDir(generateLyngioConsoleDecls)
 }
 
 kotlin.targets.configureEach {
