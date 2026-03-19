@@ -112,6 +112,64 @@ kotlin {
     }
 }
 
+abstract class GenerateLyngioConsoleDecls : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val sourceFile: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun generate() {
+        val targetPkg = "net.sergeych.lyngio.stdlib_included"
+        val pkgPath = targetPkg.replace('.', '/')
+        val targetDir = outputDir.get().asFile.resolve(pkgPath)
+        targetDir.mkdirs()
+
+        val text = sourceFile.get().asFile.readText()
+        fun escapeForQuoted(s: String): String = buildString {
+            for (ch in s) when (ch) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                '\n' -> append("\\n")
+                '\r' -> {}
+                '\t' -> append("\\t")
+                else -> append(ch)
+            }
+        }
+
+        val out = buildString {
+            append("package ").append(targetPkg).append("\n\n")
+            append("@Suppress(\"Unused\", \"MemberVisibilityCanBePrivate\")\n")
+            append("internal val consoleLyng = \"")
+            append(escapeForQuoted(text))
+            append("\"\n")
+        }
+        targetDir.resolve("console_types_lyng.generated.kt").writeText(out)
+    }
+}
+
+val lyngioConsoleDeclsFile = layout.projectDirectory.file("stdlib/lyng/io/console.lyng")
+val generatedLyngioDeclsDir = layout.buildDirectory.dir("generated/source/lyngioDecls/commonMain/kotlin")
+
+val generateLyngioConsoleDecls by tasks.registering(GenerateLyngioConsoleDecls::class) {
+    sourceFile.set(lyngioConsoleDeclsFile)
+    outputDir.set(generatedLyngioDeclsDir)
+}
+
+kotlin.sourceSets.named("commonMain") {
+    kotlin.srcDir(generatedLyngioDeclsDir)
+}
+
+kotlin.targets.configureEach {
+    compilations.configureEach {
+        compileTaskProvider.configure {
+            dependsOn(generateLyngioConsoleDecls)
+        }
+    }
+}
+
 android {
     namespace = "net.sergeych.lyngio"
     compileSdk = libs.versions.android.compileSdk.get().toInt()

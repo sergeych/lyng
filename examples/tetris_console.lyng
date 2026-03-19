@@ -12,11 +12,12 @@
  */
 
 import lyng.io.console
+import lyng.io.fs
 
 val MIN_COLS = 56
 val MIN_ROWS = 24
 val PANEL_WIDTH = 24
-val BOARD_MARGIN_ROWS = 8
+val BOARD_MARGIN_ROWS = 5
 val BOARD_MIN_W = 10
 val BOARD_MAX_W = 16
 val BOARD_MIN_H = 16
@@ -29,6 +30,7 @@ val RESIZE_WAIT_MS = 250
 val ROTATION_KICKS = [0, -1, 1, -2, 2]
 val ANSI_ESC = "\u001b["
 val ANSI_RESET = ANSI_ESC + "0m"
+val ERROR_LOG_PATH = "/tmp/lyng_tetris_errors.log"
 val UNICODE_BLOCK = "██"
 val UNICODE_TOP_LEFT = "┌"
 val UNICODE_TOP_RIGHT = "┐"
@@ -72,44 +74,37 @@ fun clearAndHome() {
     Console.home()
 }
 
+fun logError(message: String, err: Object?): Void {
+    try {
+        val details = if (err == null) "" else ": " + err
+        Path(ERROR_LOG_PATH).appendUtf8(message + details + "\n")
+    } catch (_: Object) {
+        // Never let logging errors affect gameplay.
+    }
+}
+
 fun repeatText(s: String, n: Int): String {
     var out: String = ""
-    var i = 0
-    while (i < n) {
+    for (i in 0..<n) {
         out += s
-        i = i + 1
     }
     out
 }
 
-fun maxInt(a: Int, b: Int): Int {
-    if (a > b) a else b
-}
-
-fun minInt(a: Int, b: Int): Int {
-    if (a < b) a else b
-}
-
-fun clampInt(v: Int, lo: Int, hi: Int): Int {
-    minInt(hi, maxInt(lo, v))
-}
+fun max<T>(a: T, b: T): T = if (a > b) a else b
 
 fun emptyRow(width: Int): Row {
     val r: Row = []
-    var x = 0
-    while (x < width) {
+    for (x in 0..<width) {
         r.add(0)
-        x = x + 1
     }
     r
 }
 
 fun createBoard(width: Int, height: Int): Board {
     val b: Board = []
-    var y = 0
-    while (y < height) {
+    for (y in 0..<height) {
         b.add(emptyRow(width))
-        y = y + 1
     }
     b
 }
@@ -139,7 +134,9 @@ fun emptyCellText(useColor: Bool): String {
 }
 
 fun canPlace(board: Board, boardW: Int, boardH: Int, pieceId: Int, rot: Int, px: Int, py: Int): Bool {
+    if (pieceId < 1 || pieceId > 7) return false
     val piece: Piece = PIECES[pieceId - 1]
+    if (rot < 0 || rot >= piece.rotations.size) return false
     val cells = piece.rotations[rot]
 
     for (cell in cells) {
@@ -180,21 +177,19 @@ fun clearCompletedLines(board: Board, boardW: Int, boardH: Int): Int {
     while (y >= 0) {
         val row = b[y]
         var full = true
-        var x = 0
-        while (x < boardW) {
+        for (x in 0..<boardW) {
             if (row[x] == 0) {
                 full = false
                 break
             }
-            x = x + 1
         }
 
         if (full) {
             b.removeAt(y)
             b.insertAt(0, emptyRow(boardW))
-            cleared = cleared + 1
+            cleared++
         } else {
-            y = y - 1
+            y--
         }
     }
 
@@ -220,7 +215,7 @@ fun tryRotateCw(board: Board, boardW: Int, boardH: Int, pieceId: Int, rot: Int, 
     val nr = (rot + 1) % rotations
     for (kx in ROTATION_KICKS) {
         val nx = px + kx
-        if (canPlace(board, boardW, boardH, pieceId, nr, nx, py)) {
+        if (canPlace(board, boardW, boardH, pieceId, nr, nx, py) == true) {
             return RotateResult(true, nr, nx)
         }
     }
@@ -230,21 +225,18 @@ fun tryRotateCw(board: Board, boardW: Int, boardH: Int, pieceId: Int, rot: Int, 
 fun nextPreviewLines(pieceId: Int, useColor: Bool): List<String> {
     val out: List<String> = []
     if (pieceId <= 0) {
-        out.add("        ")
-        out.add("        ")
-        out.add("        ")
-        out.add("        ")
+        for (i in 0..<4) {
+            out.add("        ")
+        }
         return out
     }
 
     val piece: Piece = PIECES[pieceId - 1]
     val cells = piece.rotations[0]
 
-    var y = 0
-    while (y < 4) {
+    for (y in 0..<4) {
         var line = ""
-        var x = 0
-        while (x < 4) {
+        for (x in 0..<4) {
             var filled = false
             for (cell in cells) {
                 if (cell[0] == x && cell[1] == y) {
@@ -253,10 +245,8 @@ fun nextPreviewLines(pieceId: Int, useColor: Bool): List<String> {
                 }
             }
             line += if (filled) blockText(pieceId, useColor) else "  "
-            x = x + 1
         }
         out.add(line)
-        y = y + 1
     }
     out
 }
@@ -300,44 +290,36 @@ fun render(
 
     val frameLines: List<String> = []
 
-    var y = 0
-    while (y < boardH) {
+    for (y in 0..<boardH) {
         var line = UNICODE_VERTICAL
 
-        var x = 0
-        while (x < boardW) {
+        for (x in 0..<boardW) {
             val a = activeCellId(state.pieceId, state.rot, state.px, state.py, x, y)
             val row = board[y]
             val b = row[x]
             val id = if (a > 0) a else b
             line += if (id > 0) blockText(id, useColor) else emptyCellText(useColor)
-            x = x + 1
         }
 
         line += UNICODE_VERTICAL
 
-        val p = y
-        if (p < panel.size) {
-            line += "   " + panel[p]
+        if (y < panel.size) {
+            line += "   " + panel[y]
         }
 
         frameLines.add(line)
-        y = y + 1
     }
 
     frameLines.add(bottomBorder)
 
-    val prev = prevFrameLines
-    var i = 0
-    while (i < frameLines.size) {
+    for (i in 0..<frameLines.size) {
         val line = frameLines[i]
-        val old = if (i < prev.size) prev[i] else null
+        val old = if (i < prevFrameLines.size) prevFrameLines[i] else null
         if (old != line) {
             Console.moveTo(originRow + i, originCol)
             Console.clearLine()
             Console.write(line)
         }
-        i = i + 1
     }
     frameLines
 }
@@ -351,9 +333,23 @@ fun waitForMinimumSize(minCols: Int, minRows: Int): Object {
         if (cols >= minCols && rows >= minRows) return g
 
         clearAndHome()
-        println("Lyng Tetris needs at least %sx%s terminal size."(minCols, minRows))
-        println("Current: %sx%s"(cols, rows))
-        println("Resize the console window to continue...")
+        val lines: List<String> = []
+        lines.add("Lyng Tetris needs at least %sx%s terminal size."(minCols, minRows))
+        lines.add("Current: %sx%s"(cols, rows))
+        lines.add("Resize the console window to continue.")
+
+        val visibleLines = if (rows < lines.size) rows else lines.size
+        if (visibleLines > 0) {
+            val startRow = max(1, ((rows - visibleLines) / 2) + 1)
+            for (i in 0..<visibleLines) {
+                val line = lines[i]
+                val startCol = max(1, ((cols - line.size) / 2) + 1)
+                Console.moveTo(startRow + i, startCol)
+                Console.clearLine()
+                Console.write(line)
+            }
+            Console.flush()
+        }
         delay(RESIZE_WAIT_MS)
     }
 }
@@ -434,8 +430,8 @@ if (!Console.isSupported()) {
     val cols = g0?.columns ?: MIN_COLS
     val rows = g0?.rows ?: MIN_ROWS
 
-    val boardW = clampInt((cols - PANEL_WIDTH) / 2, BOARD_MIN_W, BOARD_MAX_W)
-    val boardH = clampInt(rows - BOARD_MARGIN_ROWS, BOARD_MIN_H, BOARD_MAX_H)
+    val boardW = clamp((cols - PANEL_WIDTH) / 2, BOARD_MIN_W..BOARD_MAX_W)
+    val boardH = clamp(rows - BOARD_MARGIN_ROWS, BOARD_MIN_H..BOARD_MAX_H)
 
     val board: Board = createBoard(boardW, boardH)
 
@@ -461,39 +457,51 @@ if (!Console.isSupported()) {
         println("Use jlyng in an interactive terminal with raw input support.")
         void
     } else {
-        val useColor = Console.ansiLevel() != "NONE"
+        val useColor = Console.ansiLevel() != ConsoleAnsiLevel.NONE
         Console.enterAltScreen()
         Console.setCursorVisible(false)
         clearAndHome()
 
+        fun resetActivePiece(s: GameState): Void {
+            s.pieceId = nextPieceId()
+            s.rot = 0
+            s.px = (boardW / 2) - 2
+            s.py = -1
+        }
+
         fun applyKeyInput(s: GameState, key: String): Void {
-            if (key == "__CTRL_C__" || key == "q" || key == "Q" || key == "Escape") {
-                s.running = false
-            }
-            else if (key == "ArrowLeft" || key == "a" || key == "A") {
-                if (canPlace(board, boardW, boardH, s.pieceId, s.rot, s.px - 1, s.py)) s.px = s.px - 1
-            }
-            else if (key == "ArrowRight" || key == "d" || key == "D") {
-                if (canPlace(board, boardW, boardH, s.pieceId, s.rot, s.px + 1, s.py)) s.px = s.px + 1
-            }
-            else if (key == "ArrowUp" || key == "w" || key == "W") {
-                val rr: RotateResult = tryRotateCw(board, boardW, boardH, s.pieceId, s.rot, s.px, s.py)
-                if (rr.ok) {
-                    s.rot = rr.rot
-                    s.px = rr.px
+            try {
+                if (key == "__CTRL_C__" || key == "q" || key == "Q" || key == "Escape") {
+                    s.running = false
                 }
-            }
-            else if (key == "ArrowDown" || key == "s" || key == "S") {
-                if (canPlace(board, boardW, boardH, s.pieceId, s.rot, s.px, s.py + 1)) {
-                    s.py = s.py + 1
-                    s.score = s.score + 1
+                else if (key == "ArrowLeft" || key == "a" || key == "A") {
+                    if (canPlace(board, boardW, boardH, s.pieceId, s.rot, s.px - 1, s.py) == true) s.px--
                 }
-            }
-            else if (key == " ") {
-                while (canPlace(board, boardW, boardH, s.pieceId, s.rot, s.px, s.py + 1)) {
-                    s.py = s.py + 1
-                    s.score = s.score + 2
+                else if (key == "ArrowRight" || key == "d" || key == "D") {
+                    if (canPlace(board, boardW, boardH, s.pieceId, s.rot, s.px + 1, s.py) == true) s.px++
                 }
+                else if (key == "ArrowUp" || key == "w" || key == "W") {
+                    val rr: RotateResult = tryRotateCw(board, boardW, boardH, s.pieceId, s.rot, s.px, s.py)
+                    if (rr.ok) {
+                        s.rot = rr.rot
+                        s.px = rr.px
+                    }
+                }
+                else if (key == "ArrowDown" || key == "s" || key == "S") {
+                    if (canPlace(board, boardW, boardH, s.pieceId, s.rot, s.px, s.py + 1) == true) {
+                        s.py++
+                        s.score++
+                    }
+                }
+                else if (key == " ") {
+                    while (canPlace(board, boardW, boardH, s.pieceId, s.rot, s.px, s.py + 1) == true) {
+                        s.py++
+                        s.score += 2
+                    }
+                }
+            } catch (inputErr: Object) {
+                logError("applyKeyInput recovered after error", inputErr)
+                resetActivePiece(s)
             }
         }
 
@@ -503,26 +511,48 @@ if (!Console.isSupported()) {
                 try {
                     for (ev in Console.events()) {
                         if (!inputRunning) break
-                        if (ev is ConsoleKeyEvent) {
-                            val ke = ev as ConsoleKeyEvent
-                            if (ke.type == "keydown") {
-                                val key = ke.key
-                                val ctrl = ke.ctrl
+
+                        // Isolate per-event failures so one bad event does not unwind the stream.
+                        try {
+                            if (ev is ConsoleKeyEvent) {
+                                val ke = ev as ConsoleKeyEvent
+                                if (ke.type == ConsoleEventType.KEY_DOWN) {
+                                    var key = ""
+                                    var ctrl = false
+                                    try {
+                                        key = ke.key
+                                    } catch (keyErr: Object) {
+                                        logError("Input key read error", keyErr)
+                                    }
+                                    try {
+                                        ctrl = ke.ctrl == true
+                                    } catch (_: Object) {
+                                        ctrl = false
+                                    }
+                                    if (key == "") {
+                                        logError("Dropped key event with empty/null key", null)
+                                        continue
+                                    }
+                                    gameMutex.withLock {
+                                        val mapped = if (ctrl && (key == "c" || key == "C")) "__CTRL_C__" else key
+                                        applyKeyInput(state, mapped)
+                                    }
+                                }
+                            } else if (ev is ConsoleResizeEvent) {
                                 gameMutex.withLock {
-                                    val mapped = if (ctrl && (key == "c" || key == "C")) "__CTRL_C__" else key
-                                    applyKeyInput(state, mapped)
+                                    hasResizeEvent = true
+                                    prevFrameLines = []
                                 }
                             }
-                        } else if (ev is ConsoleResizeEvent) {
-                            gameMutex.withLock {
-                                hasResizeEvent = true
-                                prevFrameLines = []
-                            }
+                        } catch (eventErr: Object) {
+                            // Keep the input stream alive; report for diagnostics.
+                            logError("Input event error", eventErr)
                         }
                     }
-                } catch (err: Exception) {
-                    // Keep game alive: transient console-event failures should not force quit.
+                } catch (err: Object) {
+                    // Recover stream-level failures by recreating event stream in next loop turn.
                     if (!inputRunning) break
+                    logError("Input stream recovered after error", err)
                     Console.setRawMode(true)
                     delay(50)
                 }
@@ -548,8 +578,8 @@ if (!Console.isSupported()) {
 
             val contentCols = boardW * 2 + 2 + 3 + PANEL_WIDTH
             val contentRows = boardH + 1
-            val requiredCols = maxInt(MIN_COLS, contentCols)
-            val requiredRows = maxInt(MIN_ROWS, contentRows)
+            val requiredCols = max(MIN_COLS, contentCols)
+            val requiredRows = max(MIN_ROWS, contentRows)
             if (c < requiredCols || r < requiredRows) {
                 waitForMinimumSize(requiredCols, requiredRows)
                 clearAndHome()
@@ -557,21 +587,21 @@ if (!Console.isSupported()) {
                 return null
             }
 
-            val originCol = maxInt(1, ((c - contentCols) / 2) + 1)
-            val originRow = maxInt(1, ((r - contentRows) / 2) + 1)
+            val originCol = max(1, ((c - contentCols) / 2) + 1)
+            val originRow = max(1, ((r - contentRows) / 2) + 1)
             LoopFrame(resized, originRow, originCol)
         }
 
         fun advanceGravity(s: GameState, frame: Int): Int {
             s.level = 1 + (s.totalLines / LEVEL_LINES_STEP)
-            val dropEvery = maxInt(DROP_FRAMES_MIN, DROP_FRAMES_BASE - s.level)
+            val dropEvery = max(DROP_FRAMES_MIN, DROP_FRAMES_BASE - s.level)
 
             var nextFrame = frame + 1
             if (nextFrame < dropEvery) return nextFrame
             nextFrame = 0
 
-            if (canPlace(board, boardW, boardH, s.pieceId, s.rot, s.px, s.py + 1)) {
-                s.py = s.py + 1
+            if (canPlace(board, boardW, boardH, s.pieceId, s.rot, s.px, s.py + 1) == true) {
+                s.py++
                 return nextFrame
             }
 
@@ -579,8 +609,8 @@ if (!Console.isSupported()) {
 
             val cleared = clearCompletedLines(board, boardW, boardH)
             if (cleared > 0) {
-                s.totalLines = s.totalLines + cleared
-                s.score = s.score + scoreForLines(cleared, s.level)
+                s.totalLines += cleared
+                s.score += scoreForLines(cleared, s.level)
             }
 
             s.pieceId = s.nextId

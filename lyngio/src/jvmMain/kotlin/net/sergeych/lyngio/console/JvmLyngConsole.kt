@@ -26,6 +26,7 @@ import org.jline.terminal.Terminal
 import org.jline.terminal.TerminalBuilder
 import org.jline.utils.NonBlockingReader
 import java.io.EOFException
+import java.io.InterruptedIOException
 import java.util.*
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -41,7 +42,7 @@ import kotlin.time.TimeSource
  *   to avoid dual-terminal contention.
  */
 object JvmLyngConsole : LyngConsole {
-    private const val DEBUG_REVISION = "jline-r26-force-rebuild-on-noop-recovery-2026-03-19"
+    private const val DEBUG_REVISION = "jline-r27-no-close-on-vm-iterator-cancel-2026-03-19"
     private val codeSourceLocation: String by lazy {
         runCatching {
             JvmLyngConsole::class.java.protectionDomain?.codeSource?.location?.toString()
@@ -50,6 +51,44 @@ object JvmLyngConsole : LyngConsole {
 
     private val terminalRef = AtomicReference<Terminal?>(null)
     private val terminalInitLock = Any()
+    private val shutdownHook = Thread(
+        {
+            restoreTerminalStateOnShutdown()
+        },
+        "lyng-console-shutdown"
+    ).apply { isDaemon = true }
+
+    init {
+        runCatching { Runtime.getRuntime().addShutdownHook(shutdownHook) }
+            .onFailure { consoleFlowDebug("jline-events: shutdown hook install failed", it) }
+    }
+
+    private fun restoreTerminalStateOnShutdown() {
+        val term = terminalRef.get() ?: return
+        runCatching {
+            term.writer().print("\u001B[?25h")
+            term.writer().print("\u001B[?1049l")
+            term.writer().flush()
+        }.onFailure {
+            consoleFlowDebug("jline-events: shutdown visual restore failed", it)
+        }
+        val saved = if (runCatching { stateMutex.tryLock() }.getOrNull() == true) {
+            try {
+                rawModeRequested = false
+                val s = rawSavedAttributes
+                rawSavedAttributes = null
+                s
+            } finally {
+                stateMutex.unlock()
+            }
+        } else {
+            null
+        }
+        if (saved != null) {
+            runCatching { term.setAttributes(saved) }
+                .onFailure { consoleFlowDebug("jline-events: shutdown raw attrs restore failed", it) }
+        }
+    }
 
     private fun currentTerminal(): Terminal? {
         val existing = terminalRef.get()
@@ -270,13 +309,13 @@ object JvmLyngConsole : LyngConsole {
                             .onFailure { consoleFlowDebug("jline-events: reader shutdown failed during recovery", it) }
 
                         reader = activeTerm.reader()
-                        if (reader.hashCode() == prevReader.hashCode()) {
-                            consoleFlowDebug("jline-events: reader recovery no-op oldReader=${prevReader.hashCode()} newReader=${reader.hashCode()} -> forcing terminal rebuild")
+                        if (reader === prevReader) {
+                            consoleFlowDebug("jline-events: reader recovery no-op oldReader=${System.identityHashCode(prevReader)} newReader=${System.identityHashCode(reader)} -> forcing terminal rebuild")
                             if (!tryRebuildTerminal()) {
                                 consoleFlowDebug("jline-events: forced terminal rebuild did not produce a new reader")
                             }
                         } else {
-                            consoleFlowDebug("jline-events: reader recovered oldReader=${prevReader.hashCode()} newReader=${reader.hashCode()}")
+                            consoleFlowDebug("jline-events: reader recovered oldReader=${System.identityHashCode(prevReader)} newReader=${System.identityHashCode(reader)}")
                         }
 
                         readerRecoveries.incrementAndGet()
@@ -305,18 +344,56 @@ object JvmLyngConsole : LyngConsole {
                     } else {
                         keySendFailures.incrementAndGet()
                     }
-                } catch (_: InterruptedException) {
-                    break
+                } catch (e: InterruptedException) {
+                    // Keep input alive if this is a transient interrupt while still running.
+                    if (!running.get() || !keyLoopRunning.get()) break
+                    recoveryRequested.set(true)
+                    consoleFlowDebug("jline-events: key-reader interrupted; scheduling reader recovery", e)
+                    Thread.interrupted()
+                    continue
+                } catch (e: InterruptedIOException) {
+                    // Common during reader shutdown/rebind. Recover silently and keep input flowing.
+                    if (!running.get() || !keyLoopRunning.get()) break
+                    recoveryRequested.set(true)
+                    consoleFlowDebug("jline-events: read interrupted; scheduling reader recovery", e)
+                    try {
+                        Thread.sleep(10)
+                    } catch (ie: InterruptedException) {
+                        if (!running.get() || !keyLoopRunning.get()) break
+                        recoveryRequested.set(true)
+                        consoleFlowDebug("jline-events: interrupted during recovery backoff; continuing", ie)
+                        Thread.interrupted()
+                    }
+                } catch (e: EOFException) {
+                    // EOF from reader should trigger rebind/rebuild rather than ending input stream.
+                    if (!running.get() || !keyLoopRunning.get()) break
+                    recoveryRequested.set(true)
+                    consoleFlowDebug("jline-events: reader EOF; scheduling reader recovery", e)
+                    try {
+                        Thread.sleep(20)
+                    } catch (ie: InterruptedException) {
+                        if (!running.get() || !keyLoopRunning.get()) break
+                        recoveryRequested.set(true)
+                        consoleFlowDebug("jline-events: interrupted during EOF backoff; continuing", ie)
+                        Thread.interrupted()
+                    }
                 } catch (e: Throwable) {
                     readFailures.incrementAndGet()
+                    recoveryRequested.set(true)
                     consoleFlowDebug("jline-events: blocking read failed", e)
                     try {
                         Thread.sleep(50)
-                    } catch (_: InterruptedException) {
-                        break
+                    } catch (ie: InterruptedException) {
+                        if (!running.get() || !keyLoopRunning.get()) break
+                        recoveryRequested.set(true)
+                        consoleFlowDebug("jline-events: interrupted during error backoff; continuing", ie)
+                        Thread.interrupted()
                     }
                 }
             }
+            consoleFlowDebug(
+                "jline-events: key-reader thread stopped running=${running.get()} keyLoopRunning=${keyLoopRunning.get()} loops=${keyLoopCount.get()} keys=${keyEvents.get()} readFailures=${readFailures.get()}"
+            )
         }
 
         heartbeatThread = thread(start = true, isDaemon = true, name = "lyng-jline-heartbeat") {
@@ -334,11 +411,17 @@ object JvmLyngConsole : LyngConsole {
                     val readBlockedMs = if (readStartNs > 0L && readEndNs < readStartNs) {
                         (System.nanoTime() - readStartNs) / 1_000_000L
                     } else 0L
-                    if (requested && keyCodesRead.get() > 0L && idleMs >= 1400L) {
+                    val streamIdle = requested && keyCodesRead.get() > 0L && idleMs >= 1400L
+                    val readStalled = requested && readBlockedMs >= 1600L
+                    if (streamIdle || readStalled) {
                         val sinceRecoveryMs = (System.nanoTime() - lastRecoveryNs.get()) / 1_000_000L
                         if (sinceRecoveryMs >= 1200L) {
                             recoveryRequested.set(true)
-                            consoleFlowDebug("jline-events: key stream idle ${idleMs}ms; scheduling reader recovery")
+                            if (readStalled) {
+                                consoleFlowDebug("jline-events: key read blocked ${readBlockedMs}ms; scheduling reader recovery")
+                            } else {
+                                consoleFlowDebug("jline-events: key stream idle ${idleMs}ms; scheduling reader recovery")
+                            }
                         }
                     }
                     consoleFlowDebug(
@@ -366,6 +449,7 @@ object JvmLyngConsole : LyngConsole {
             }
 
             override suspend fun close() {
+                consoleFlowDebug("jline-events: collector close requested", Throwable("collector close caller"))
                 cleanup()
                 consoleFlowDebug(
                     "jline-events: collector ended keys=${keyEvents.get()} readFailures=${readFailures.get()}"
@@ -485,12 +569,15 @@ object JvmLyngConsole : LyngConsole {
         ctrl: Boolean = false,
         alt: Boolean = false,
         shift: Boolean = false,
-    ): ConsoleEvent.KeyDown = ConsoleEvent.KeyDown(
-        key = value,
-        code = null,
-        ctrl = ctrl,
-        alt = alt,
-        shift = shift,
-        meta = false
-    )
+    ): ConsoleEvent.KeyDown {
+        require(value.isNotEmpty()) { "ConsoleEvent.KeyDown.key must never be empty" }
+        return ConsoleEvent.KeyDown(
+            key = value,
+            code = null,
+            ctrl = ctrl,
+            alt = alt,
+            shift = shift,
+            meta = false
+        )
+    }
 }

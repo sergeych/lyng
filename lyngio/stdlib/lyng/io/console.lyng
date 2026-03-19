@@ -1,0 +1,157 @@
+package lyng.io.console
+
+/* Console event kinds used by `ConsoleEvent.type`. */
+enum ConsoleEventType {
+    UNKNOWN,
+    RESIZE,
+    KEY_DOWN,
+    KEY_UP
+}
+
+/* Normalized key codes used by `ConsoleKeyEvent.code`. */
+enum ConsoleKeyCode {
+    UNKNOWN,
+    CHARACTER,
+    ARROW_UP,
+    ARROW_DOWN,
+    ARROW_LEFT,
+    ARROW_RIGHT,
+    HOME,
+    END,
+    INSERT,
+    DELETE,
+    PAGE_UP,
+    PAGE_DOWN,
+    ESCAPE,
+    ENTER,
+    TAB,
+    BACKSPACE,
+    SPACE
+}
+
+/* Detected ANSI terminal capability level. */
+enum ConsoleAnsiLevel {
+    NONE,
+    BASIC16,
+    ANSI256,
+    TRUECOLOR
+}
+
+/* Base class for console events. */
+extern class ConsoleEvent {
+    /* Event kind for stable matching/switching. */
+    val type: ConsoleEventType
+}
+
+/* Terminal resize event. */
+extern class ConsoleResizeEvent : ConsoleEvent {
+    /* Current terminal width in character cells. */
+    val columns: Int
+    /* Current terminal height in character cells. */
+    val rows: Int
+}
+
+/* Keyboard event. */
+extern class ConsoleKeyEvent : ConsoleEvent {
+    /*
+        Logical key name normalized for app-level handling, for example:
+        "a", "A", "ArrowLeft", "Escape", "Enter".
+    */
+    val key: String
+    /* Normalized key code enum for robust matching independent of backend specifics. */
+    val code: ConsoleKeyCode
+    /*
+        Optional backend-specific raw identifier (if available).
+        Not guaranteed to be present or stable across platforms.
+    */
+    val codeName: String?
+    /* True when Ctrl was pressed during the key event. */
+    val ctrl: Bool
+    /* True when Alt/Option was pressed during the key event. */
+    val alt: Bool
+    /* True when Shift was pressed during the key event. */
+    val shift: Bool
+    /* True when Meta/Super/Command was pressed during the key event. */
+    val meta: Bool
+}
+
+/* Pull iterator over console events. */
+extern class ConsoleEventIterator : Iterator<ConsoleEvent> {
+    /* Whether another event is currently available from the stream. */
+    override fun hasNext(): Bool
+    /* Returns next event or throws iteration-finished when exhausted/cancelled. */
+    override fun next(): ConsoleEvent
+    /* Stops this iterator. The underlying console service remains managed by runtime. */
+    override fun cancelIteration(): void
+}
+
+/* Endless iterable console event stream. */
+extern class ConsoleEventStream : Iterable<ConsoleEvent> {
+    /* Creates a fresh event iterator bound to the current console input stream. */
+    override fun iterator(): ConsoleEventIterator
+}
+
+/* Terminal geometry in character cells. */
+extern class ConsoleGeometry {
+    val columns: Int
+    val rows: Int
+}
+
+/* Snapshot of console support/capabilities. */
+extern class ConsoleDetails {
+    /* True when current runtime has console control implementation. */
+    val supported: Bool
+    /* True when output/input are attached to an interactive terminal. */
+    val isTty: Bool
+    /* Detected terminal color capability level. */
+    val ansiLevel: ConsoleAnsiLevel
+    /* Current terminal size if available, otherwise null. */
+    val geometry: ConsoleGeometry?
+}
+
+/* Console API singleton object. */
+extern object Console {
+    /* Returns true when console control API is implemented in this runtime. */
+    fun isSupported(): Bool
+    /* Returns true when process is attached to interactive TTY. */
+    fun isTty(): Bool
+    /* Returns detected color capability level. */
+    fun ansiLevel(): ConsoleAnsiLevel
+    /* Returns current terminal geometry, or null when unavailable. */
+    fun geometry(): ConsoleGeometry?
+    /* Returns combined capability snapshot in one call. */
+    fun details(): ConsoleDetails
+
+    /* Writes raw text to console output buffer (no implicit newline). */
+    fun write(text: String): void
+    /* Flushes pending console output. Call after batched writes. */
+    fun flush(): void
+
+    /* Moves cursor to home position (row 1, column 1). */
+    fun home(): void
+    /* Clears visible screen buffer. Cursor position is backend-dependent after clear. */
+    fun clear(): void
+    /* Moves cursor to 1-based row/column. Values outside viewport are backend-defined. */
+    fun moveTo(row: Int, column: Int): void
+    /* Clears current line content. Cursor stays on the same line. */
+    fun clearLine(): void
+
+    /* Switches terminal into alternate screen buffer (useful for TUIs). */
+    fun enterAltScreen(): void
+    /* Returns from alternate screen buffer to the normal terminal screen. */
+    fun leaveAltScreen(): void
+    /* Shows or hides the cursor. Prefer restoring visibility in finally blocks. */
+    fun setCursorVisible(visible: Bool): void
+
+    /*
+        Returns endless event stream (resize + key events).
+        Typical usage is consuming in a launched loop.
+    */
+    fun events(): ConsoleEventStream
+
+    /*
+        Enables/disables raw keyboard mode.
+        Returns true when state was actually changed.
+    */
+    fun setRawMode(enabled: Bool): Bool
+}

@@ -5,6 +5,13 @@
 - For generics-heavy code generation, follow `docs/ai_language_reference.md` section `7.1 Generics Runtime Model and Bounds` and `7.2 Differences vs Java / Kotlin / Scala`.
 - Use `docs/ai_stdlib_reference.md` for default runtime/module APIs and stdlib surface.
 - Treat `LYNG_AI_SPEC.md` and older docs as secondary if they conflict with the two files above.
+- Prefer the shortest clear loop: use `for` for straightforward iteration/ranges; use `while` only when loop state/condition is irregular or changes in ways `for` cannot express cleanly.
+
+## Lyng-First API Declarations
+- Use `.lyng` declarations as the single source of truth for Lyng-facing API docs and types (especially module extern declarations).
+- Prefer defining Lyng entities (enums/classes/type shapes) in `.lyng` files; only define them in Kotlin when there is Kotlin/platform-specific implementation detail that cannot be expressed in Lyng.
+- Avoid hardcoding Lyng API documentation in Kotlin registrars when it can be declared in `.lyng`; Kotlin-side docs should be fallback/bridge only.
+- For mixed pluggable modules (Lyng + Kotlin), embed module `.lyng` sources as generated Kotlin string literals, evaluate them into module scope during registration, then attach Kotlin implementations/bindings.
 
 ## Kotlin/Wasm generation guardrails
 - Avoid creating suspend lambdas for compiler runtime statements. Prefer explicit `object : Statement()` with `override suspend fun execute(...)`.

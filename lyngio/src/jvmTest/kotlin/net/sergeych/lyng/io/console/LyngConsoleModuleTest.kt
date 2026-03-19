@@ -56,7 +56,7 @@ class LyngConsoleModuleTest {
             val d = Console.details()
             assert(d.supported is Bool)
             assert(d.isTty is Bool)
-            assert(d.ansiLevel is String)
+            assert(d.ansiLevel is ConsoleAnsiLevel)
 
             val g = Console.geometry()
             if (g != null) {

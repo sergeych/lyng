@@ -81,6 +81,7 @@ extern fun abs(x: Object): Real
 extern fun ln(x: Object): Real
 extern fun pow(x: Object, y: Object): Real
 extern fun sqrt(x: Object): Real
+extern fun clamp<T>(value: T, range: Range<T>): T
 
 class SeededRandom {
     extern fun nextInt(): Int
