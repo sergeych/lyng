@@ -40,7 +40,18 @@ Console.setCursorVisible(true)
 Console.flush()
 ```
 
-Interactive sample script in this repo:
+#### Tetris sample
+
+The repository includes a full interactive Tetris sample that demonstrates:
+
+- alternate screen rendering
+- raw keyboard input
+- resize handling
+- typed console events
+
+![Lyng Tetris sample](/tetris.png)
+
+Run it from the project root in a real TTY:
 
 ```bash
 lyng examples/tetris_console.lyng
@@ -50,7 +61,7 @@ lyng examples/tetris_console.lyng
 
 - `Console.isSupported(): Bool` — whether console control is available on this platform/runtime.
 - `Console.isTty(): Bool` — whether output is attached to a TTY.
-- `Console.ansiLevel(): String` — `NONE`, `BASIC16`, `ANSI256`, `TRUECOLOR`.
+- `Console.ansiLevel(): ConsoleAnsiLevel` — `NONE`, `BASIC16`, `ANSI256`, `TRUECOLOR`.
 - `Console.geometry(): ConsoleGeometry?` — `{columns, rows}` as typed object or `null`.
 - `Console.details(): ConsoleDetails` — consolidated capability object.
 - `Console.write(text: String)` — writes to console output.
@@ -81,9 +92,9 @@ launch {
 
 #### Event format
 
-`Console.events()` emits `ConsoleEvent` with at least:
+`Console.events()` emits `ConsoleEvent` with:
 
-- `type: String` — `resize`, `keydown`, `keyup`
+- `type: ConsoleEventType` — `UNKNOWN`, `RESIZE`, `KEY_DOWN`, `KEY_UP`
 
 Additional fields:
 
