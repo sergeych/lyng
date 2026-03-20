@@ -6,6 +6,7 @@
 - Use `docs/ai_stdlib_reference.md` for default runtime/module APIs and stdlib surface.
 - Treat `LYNG_AI_SPEC.md` and older docs as secondary if they conflict with the two files above.
 - Prefer the shortest clear loop: use `for` for straightforward iteration/ranges; use `while` only when loop state/condition is irregular or changes in ways `for` cannot express cleanly.
+- In Lyng code, slice strings with range indexing (`text[a..<b]`, `text[..<n]`, `text[n..]`) and avoid Java/Kotlin-style `substring(...)`.
 
 ## Lyng-First API Declarations
 - Use `.lyng` declarations as the single source of truth for Lyng-facing API docs and types (especially module extern declarations).

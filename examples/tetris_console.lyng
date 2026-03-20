@@ -8,7 +8,8 @@
  *  - Up arrow or W: rotate
  *  - Down arrow or S: soft drop
  *  - Space: hard drop
- *  - Q or Escape: quit
+ *  - P or Escape: pause
+ *  - Q: quit
  */
 
 import lyng.io.console
@@ -66,6 +67,7 @@ class GameState(
     var level = 1
     var running = true
     var gameOver = false
+    var paused = false
 }
 class LoopFrame(val resized: Bool, val originRow: Int, val originCol: Int) {}
 
@@ -286,7 +288,8 @@ fun render(
     panel.add("W/Up: rotate")
     panel.add("S/Down: drop")
     panel.add("Space: hard drop")
-    panel.add("Q/Esc: quit")
+    panel.add("P/Esc: pause")
+    panel.add("Q: quit")
 
     val frameLines: List<String> = []
 
@@ -322,6 +325,62 @@ fun render(
         }
     }
     frameLines
+}
+
+fun fitLine(line: String, width: Int): String {
+    val maxLen = if (width > 0) width else 0
+    if (maxLen <= 0) return ""
+    if (line.size >= maxLen) return line[..<maxLen]
+    line + repeatText(" ", maxLen - line.size)
+}
+
+fun renderPauseOverlay(
+    originRow: Int,
+    originCol: Int,
+    boardW: Int,
+    boardH: Int,
+): Void {
+    val contentWidth = boardW * 2 + 2 + 3 + PANEL_WIDTH
+    val contentHeight = boardH + 1
+
+    val lines: List<String> = []
+    lines.add("PAUSED")
+    lines.add("")
+    lines.add("Any key: continue game")
+    lines.add("Esc: exit game")
+    lines.add("")
+    lines.add("Move: A/D or arrows")
+    lines.add("Rotate: W or Up")
+    lines.add("Drop: S/Down, Space hard drop")
+
+    var innerWidth = 0
+    for (line in lines) {
+        if (line.size > innerWidth) innerWidth = line.size
+    }
+    innerWidth += 4
+    val maxInner = max(12, contentWidth - 2)
+    if (innerWidth > maxInner) innerWidth = maxInner
+    if (innerWidth % 2 != 0) innerWidth--
+
+    val boxWidth = innerWidth + 2
+    val boxHeight = lines.size + 2
+
+    val left = originCol + max(0, (contentWidth - boxWidth) / 2)
+    val top = originRow + max(0, (contentHeight - boxHeight) / 2)
+
+    val topBorder = UNICODE_TOP_LEFT + repeatText(UNICODE_HORIZONTAL, innerWidth / 2) + UNICODE_TOP_RIGHT
+    val bottomBorder = UNICODE_BOTTOM_LEFT + repeatText(UNICODE_HORIZONTAL, innerWidth / 2) + UNICODE_BOTTOM_RIGHT
+
+    Console.moveTo(top, left)
+    Console.write(topBorder)
+
+    for (i in 0..<lines.size) {
+        Console.moveTo(top + 1 + i, left)
+        Console.write(UNICODE_VERTICAL + fitLine("  " + lines[i], innerWidth) + UNICODE_VERTICAL)
+    }
+
+    Console.moveTo(top + boxHeight - 1, left)
+    Console.write(bottomBorder)
 }
 
 fun waitForMinimumSize(minCols: Int, minRows: Int): Object {
@@ -471,7 +530,22 @@ if (!Console.isSupported()) {
 
         fun applyKeyInput(s: GameState, key: String): Void {
             try {
-                if (key == "__CTRL_C__" || key == "q" || key == "Q" || key == "Escape") {
+                if (key == "__CTRL_C__") {
+                    s.running = false
+                }
+                else if (s.paused) {
+                    if (key == "Escape") {
+                        s.running = false
+                    } else {
+                        s.paused = false
+                        prevFrameLines = []
+                    }
+                }
+                else if (key == "p" || key == "P" || key == "Escape") {
+                    s.paused = true
+                    prevFrameLines = []
+                }
+                else if (key == "q" || key == "Q") {
                     s.running = false
                 }
                 else if (key == "ArrowLeft" || key == "a" || key == "A") {
@@ -653,7 +727,9 @@ if (!Console.isSupported()) {
                         }
                         prevOriginRow = frameData.originRow
                         prevOriginCol = frameData.originCol
-                        frame = advanceGravity(state, frame)
+                        if (!state.paused) {
+                            frame = advanceGravity(state, frame)
+                        }
                         prevFrameLines = render(
                             state,
                             board,
@@ -664,6 +740,9 @@ if (!Console.isSupported()) {
                             frameData.originCol,
                             useColor
                         )
+                        if (state.paused) {
+                            renderPauseOverlay(frameData.originRow, frameData.originCol, boardW, boardH)
+                        }
                     }
                 }
                 Console.flush()
