@@ -37,10 +37,7 @@ import net.sergeych.lyng.obj.toObj
 import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.raiseIllegalOperation
 import net.sergeych.lyng.requireScope
-import net.sergeych.lyngio.console.ConsoleEvent
-import net.sergeych.lyngio.console.ConsoleEventSource
-import net.sergeych.lyngio.console.LyngConsole
-import net.sergeych.lyngio.console.getSystemConsole
+import net.sergeych.lyngio.console.*
 import net.sergeych.lyngio.console.security.ConsoleAccessDeniedException
 import net.sergeych.lyngio.console.security.ConsoleAccessPolicy
 import net.sergeych.lyngio.console.security.LyngConsoleSecured
@@ -245,13 +242,27 @@ private class ObjConsoleEventIterator(
     private suspend fun ensureCached(): Boolean {
         if (closed) return false
         if (cached != null) return true
-        val event = source.nextEvent()
-        if (event == null) {
-            closeSource()
-            return false
+        while (!closed && cached == null) {
+            val event = try {
+                source.nextEvent()
+            } catch (e: Throwable) {
+                // Consumer loops must survive source/read failures: report and keep polling.
+                consoleFlowDebug("console-bridge: nextEvent failed; dropping failure and continuing", e)
+                continue
+            }
+            if (event == null) {
+                closeSource()
+                return false
+            }
+            cached = try {
+                event.toObjEvent()
+            } catch (e: Throwable) {
+                // Malformed/native event payload must not terminate consumer iteration.
+                consoleFlowDebug("console-bridge: malformed event dropped: $event", e)
+                null
+            }
         }
-        cached = event.toObjEvent()
-        return true
+        return cached != null
     }
 
     private suspend fun closeSource() {
@@ -292,8 +303,14 @@ private class ObjConsoleEventIterator(
 
 private fun ConsoleEvent.toObjEvent(): Obj = when (this) {
     is ConsoleEvent.Resize -> ObjConsoleResizeEvent(columns, rows)
-    is ConsoleEvent.KeyDown -> ObjConsoleKeyEvent(type = ConsoleEnums.KEY_DOWN, key = key, codeName = code, ctrl = ctrl, alt = alt, shift = shift, meta = meta)
-    is ConsoleEvent.KeyUp -> ObjConsoleKeyEvent(type = ConsoleEnums.KEY_UP, key = key, codeName = code, ctrl = ctrl, alt = alt, shift = shift, meta = meta)
+    is ConsoleEvent.KeyDown -> ObjConsoleKeyEvent(type = ConsoleEnums.KEY_DOWN, key = sanitizedKeyOrFallback(key), codeName = code, ctrl = ctrl, alt = alt, shift = shift, meta = meta)
+    is ConsoleEvent.KeyUp -> ObjConsoleKeyEvent(type = ConsoleEnums.KEY_UP, key = sanitizedKeyOrFallback(key), codeName = code, ctrl = ctrl, alt = alt, shift = shift, meta = meta)
+}
+
+private fun sanitizedKeyOrFallback(key: String): String {
+    if (key.isNotEmpty()) return key
+    consoleFlowDebug("console-bridge: empty key value received; using fallback key name")
+    return "Unknown"
 }
 
 private object ConsoleEnums {

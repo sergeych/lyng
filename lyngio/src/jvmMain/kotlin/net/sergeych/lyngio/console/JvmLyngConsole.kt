@@ -215,10 +215,29 @@ object JvmLyngConsole : LyngConsole {
         var reader = activeTerm.reader()
         var keyThread: Thread? = null
         var heartbeatThread: Thread? = null
+        val resizeEmitMutex = Any()
+        var lastResizeCols = Int.MIN_VALUE
+        var lastResizeRows = Int.MIN_VALUE
 
         fun emitResize() {
             val size = runCatching { activeTerm.size }.getOrNull() ?: return
-            out.trySend(ConsoleEvent.Resize(size.columns, size.rows))
+            val cols = size.columns
+            val rows = size.rows
+            if (cols < 1 || rows < 1) {
+                consoleFlowDebug("jline-events: ignored invalid resize columns=$cols rows=$rows")
+                return
+            }
+            val shouldEmit = synchronized(resizeEmitMutex) {
+                if (cols == lastResizeCols && rows == lastResizeRows) {
+                    false
+                } else {
+                    lastResizeCols = cols
+                    lastResizeRows = rows
+                    true
+                }
+            }
+            if (!shouldEmit) return
+            out.trySend(ConsoleEvent.Resize(cols, rows))
         }
 
         fun cleanup() {

@@ -100,8 +100,9 @@ object MordantLyngConsole : LyngConsole {
         var running = true
 
         globalLaunch {
-        var lastWidth = t.updateSize().width
-        var lastHeight = t.updateSize().height
+        val initialSize = runCatching { t.updateSize() }.getOrNull()
+        var lastWidth = initialSize?.width ?: 0
+        var lastHeight = initialSize?.height ?: 0
         val startMark = TimeSource.Monotonic.markNow()
         var lastHeartbeatMark = startMark
         var loops = 0L
@@ -113,6 +114,18 @@ object MordantLyngConsole : LyngConsole {
         var lastKeyMark = startMark
         var lastRawRecoveryMark = startMark
 
+        fun tryEmitResize(width: Int, height: Int) {
+            if (width < 1 || height < 1) {
+                consoleFlowDebug("events: ignored invalid resize width=$width height=$height")
+                return
+            }
+            if (width == lastWidth && height == lastHeight) return
+            out.trySend(ConsoleEvent.Resize(width, height))
+            lastWidth = width
+            lastHeight = height
+            resizeEvents += 1
+        }
+
         consoleFlowDebug("events: collector started")
         try {
             while (currentCoroutineContext().isActive && sourceState.withLock { running }) {
@@ -122,12 +135,7 @@ object MordantLyngConsole : LyngConsole {
                     delay(150)
                     continue
                 }
-                if (currentSize.width != lastWidth || currentSize.height != lastHeight) {
-                    out.trySend(ConsoleEvent.Resize(currentSize.width, currentSize.height))
-                    lastWidth = currentSize.width
-                    lastHeight = currentSize.height
-                    resizeEvents += 1
-                }
+                tryEmitResize(currentSize.width, currentSize.height)
 
                 val raw = stateMutex.withLock {
                     if (!rawModeRequested) {
@@ -173,10 +181,8 @@ object MordantLyngConsole : LyngConsole {
                 val ev = readResult.getOrNull()
 
                 val resized = runCatching { t.updateSize() }.getOrNull()
-                if (resized != null && (resized.width != lastWidth || resized.height != lastHeight)) {
-                    out.trySend(ConsoleEvent.Resize(resized.width, resized.height))
-                    lastWidth = resized.width
-                    lastHeight = resized.height
+                if (resized != null) {
+                    tryEmitResize(resized.width, resized.height)
                 }
 
                 when (ev) {

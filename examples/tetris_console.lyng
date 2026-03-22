@@ -10,6 +10,14 @@
  *  - Space: hard drop
  *  - P or Escape: pause
  *  - Q: quit
+
+    Tsted to score:
+sergeych@sergeych-XPS-17-9720:~$ ~/dev/lyng/examples/tetris_console.lyng
+Bye.
+Score: 435480
+Lines: 271
+Level: 28
+Ssergeych@sergeych-XPS-17-9720:~$
  */
 
 import lyng.io.console
@@ -28,6 +36,7 @@ val DROP_FRAMES_BASE = 15
 val DROP_FRAMES_MIN = 3
 val FRAME_DELAY_MS = 35
 val RESIZE_WAIT_MS = 250
+val MAX_PENDING_INPUTS = 64
 val ROTATION_KICKS = [0, -1, 1, -2, 2]
 val ANSI_ESC = "\u001b["
 val ANSI_RESET = ANSI_ESC + "0m"
@@ -78,7 +87,14 @@ fun clearAndHome() {
 
 fun logError(message: String, err: Object?): Void {
     try {
-        val details = if (err == null) "" else ": " + err
+        var details = ""
+        if (err != null) {
+            try {
+                details = ": " + err
+            } catch (_: Object) {
+                details = ": <error-format-failed>"
+            }
+        }
         Path(ERROR_LOG_PATH).appendUtf8(message + details + "\n")
     } catch (_: Object) {
         // Never let logging errors affect gameplay.
@@ -136,24 +152,30 @@ fun emptyCellText(useColor: Bool): String {
 }
 
 fun canPlace(board: Board, boardW: Int, boardH: Int, pieceId: Int, rot: Int, px: Int, py: Int): Bool {
-    if (pieceId < 1 || pieceId > 7) return false
-    val piece: Piece = PIECES[pieceId - 1]
-    if (rot < 0 || rot >= piece.rotations.size) return false
-    val cells = piece.rotations[rot]
+    try {
+        if (pieceId < 1 || pieceId > 7) return false
+        val piece: Piece = PIECES[pieceId - 1]
+        if (rot < 0 || rot >= piece.rotations.size) return false
+        val cells = piece.rotations[rot]
 
-    for (cell in cells) {
-        val x = px + cell[0]
-        val y = py + cell[1]
+        for (cell in cells) {
+            val x = px + cell[0]
+            val y = py + cell[1]
 
-        if (x < 0 || x >= boardW) return false
-        if (y >= boardH) return false
+            if (x < 0 || x >= boardW) return false
+            if (y >= boardH) return false
 
-        if (y >= 0) {
-            val row = board[y]
-            if (row[x] != 0) return false
+            if (y >= 0) {
+                if (y >= board.size) return false
+                val row = board[y]
+                if (row == null) return false
+                if (row[x] != 0) return false
+            }
         }
+        true
+    } catch (_: Object) {
+        false
     }
-    true
 }
 
 fun lockPiece(board: Board, pieceId: Int, rot: Int, px: Int, py: Int): Void {
@@ -164,9 +186,11 @@ fun lockPiece(board: Board, pieceId: Int, rot: Int, px: Int, py: Int): Void {
         val x = px + cell[0]
         val y = py + cell[1]
 
-        if (y >= 0) {
+        if (y >= 0 && y < board.size) {
             val row = board[y]
-            row[x] = pieceId
+            if (row != null) {
+                row[x] = pieceId
+            }
         }
     }
 }
@@ -177,7 +201,17 @@ fun clearCompletedLines(board: Board, boardW: Int, boardH: Int): Int {
     var cleared = 0
 
     while (y >= 0) {
+        if (y >= b.size) {
+            y--
+            continue
+        }
         val row = b[y]
+        if (row == null) {
+            b.removeAt(y)
+            b.insertAt(0, emptyRow(boardW))
+            cleared++
+            continue
+        }
         var full = true
         for (x in 0..<boardW) {
             if (row[x] == 0) {
@@ -298,8 +332,8 @@ fun render(
 
         for (x in 0..<boardW) {
             val a = activeCellId(state.pieceId, state.rot, state.px, state.py, x, y)
-            val row = board[y]
-            val b = row[x]
+            val row = if (y < board.size) board[y] else null
+            val b = if (row == null) 0 else row[x]
             val id = if (a > 0) a else b
             line += if (id > 0) blockText(id, useColor) else emptyCellText(useColor)
         }
@@ -507,8 +541,9 @@ if (!Console.isSupported()) {
     )
     var prevFrameLines: List<String> = []
 
-    val gameMutex = Mutex()
-    var hasResizeEvent = false
+    val gameMutex: Mutex = Mutex()
+    var forceRedraw = false
+    val pendingInputs: List<String> = []
 
     val rawModeEnabled = Console.setRawMode(true)
     if (!rawModeEnabled) {
@@ -538,12 +573,12 @@ if (!Console.isSupported()) {
                         s.running = false
                     } else {
                         s.paused = false
-                        prevFrameLines = []
+                        forceRedraw = true
                     }
                 }
                 else if (key == "p" || key == "P" || key == "Escape") {
                     s.paused = true
-                    prevFrameLines = []
+                    forceRedraw = true
                 }
                 else if (key == "q" || key == "Q") {
                     s.running = false
@@ -607,15 +642,14 @@ if (!Console.isSupported()) {
                                         logError("Dropped key event with empty/null key", null)
                                         continue
                                     }
-                                    gameMutex.withLock {
-                                        val mapped = if (ctrl && (key == "c" || key == "C")) "__CTRL_C__" else key
-                                        applyKeyInput(state, mapped)
+                                    val mapped = if (ctrl && (key == "c" || key == "C")) "__CTRL_C__" else key
+                                    val mm: Mutex = gameMutex
+                                    mm.withLock {
+                                        if (pendingInputs.size >= MAX_PENDING_INPUTS) {
+                                            pendingInputs.removeAt(0)
+                                        }
+                                        pendingInputs.add(mapped)
                                     }
-                                }
-                            } else if (ev is ConsoleResizeEvent) {
-                                gameMutex.withLock {
-                                    hasResizeEvent = true
-                                    prevFrameLines = []
                                 }
                             }
                         } catch (eventErr: Object) {
@@ -644,12 +678,6 @@ if (!Console.isSupported()) {
                 return null
             }
 
-            var resized = false
-            gameMutex.withLock {
-                resized = hasResizeEvent
-                hasResizeEvent = false
-            }
-
             val contentCols = boardW * 2 + 2 + 3 + PANEL_WIDTH
             val contentRows = boardH + 1
             val requiredCols = max(MIN_COLS, contentCols)
@@ -663,7 +691,7 @@ if (!Console.isSupported()) {
 
             val originCol = max(1, ((c - contentCols) / 2) + 1)
             val originRow = max(1, ((r - contentRows) / 2) + 1)
-            LoopFrame(resized, originRow, originCol)
+            LoopFrame(false, originRow, originCol)
         }
 
         fun advanceGravity(s: GameState, frame: Int): Int {
@@ -709,41 +737,59 @@ if (!Console.isSupported()) {
             var shouldStop = false
             var prevOriginRow = -1
             var prevOriginCol = -1
+            var prevPaused = false
             while (!shouldStop) {
                 val frameData = pollLoopFrame()
                 if (frameData == null) {
                     frame = 0
+                    prevPaused = false
                     continue
                 }
 
-                gameMutex.withLock {
-                    if (!state.running || state.gameOver) {
-                        shouldStop = true
-                    } else {
-                        val movedOrigin = frameData.originRow != prevOriginRow || frameData.originCol != prevOriginCol
-                        if (frameData.resized || movedOrigin) {
-                            clearAndHome()
-                            prevFrameLines = []
+                val mm: Mutex = gameMutex
+                mm.withLock {
+                    if (pendingInputs.size > 0) {
+                        val toApply: List<String> = []
+                        while (pendingInputs.size > 0) {
+                            val k = pendingInputs[0]
+                            pendingInputs.removeAt(0)
+                            toApply.add(k)
                         }
-                        prevOriginRow = frameData.originRow
-                        prevOriginCol = frameData.originCol
-                        if (!state.paused) {
-                            frame = advanceGravity(state, frame)
-                        }
-                        prevFrameLines = render(
-                            state,
-                            board,
-                            boardW,
-                            boardH,
-                            prevFrameLines,
-                            frameData.originRow,
-                            frameData.originCol,
-                            useColor
-                        )
-                        if (state.paused) {
-                            renderPauseOverlay(frameData.originRow, frameData.originCol, boardW, boardH)
+                        for (k in toApply) {
+                            applyKeyInput(state, k)
+                            if (!state.running || state.gameOver) break
                         }
                     }
+                }
+                if (!state.running || state.gameOver) {
+                    shouldStop = true
+                } else {
+                    val localForceRedraw = forceRedraw
+                    forceRedraw = false
+                    val movedOrigin = frameData.originRow != prevOriginRow || frameData.originCol != prevOriginCol
+                    if (frameData.resized || movedOrigin || localForceRedraw) {
+                        clearAndHome()
+                        prevFrameLines = []
+                    }
+                    prevOriginRow = frameData.originRow
+                    prevOriginCol = frameData.originCol
+                    if (!state.paused) {
+                        frame = advanceGravity(state, frame)
+                    }
+                    prevFrameLines = render(
+                        state,
+                        board,
+                        boardW,
+                        boardH,
+                        prevFrameLines,
+                        frameData.originRow,
+                        frameData.originCol,
+                        useColor
+                    )
+                    if (state.paused && (!prevPaused || frameData.resized || movedOrigin)) {
+                        renderPauseOverlay(frameData.originRow, frameData.originCol, boardW, boardH)
+                    }
+                    prevPaused = state.paused
                 }
                 Console.flush()
                 delay(FRAME_DELAY_MS)
