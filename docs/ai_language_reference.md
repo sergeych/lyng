@@ -17,6 +17,14 @@ Primary sources used: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/{Parser,T
   - Supported escapes: `\n`, `\r`, `\t`, `\"`, `\\`, `\uXXXX` (4 hex digits).
   - Unicode escapes use exactly 4 hex digits (for example: `"\u0416"` -> `Ж`).
   - Unknown `\x` escapes in strings are preserved literally as two characters (`\` and `x`).
+  - String interpolation is supported:
+    - identifier form: `"$name"`
+    - expression form: `"${expr}"`
+    - escaped dollar: `"\$"` and `"$$"` both produce literal `$`.
+    - `\\$x` means backslash + interpolated `x`.
+  - Per-file opt-out is supported via leading comment directive:
+    - `// feature: interpolation: off`
+    - with this directive, `$...` stays literal text.
 - Numbers: `Int` (`123`, `1_000`), `Real` (`1.2`, `1e3`), hex (`0xFF`).
 - Char: `'a'`, escaped chars supported.
   - Supported escapes: `\n`, `\r`, `\t`, `\'`, `\\`, `\uXXXX` (4 hex digits).

@@ -4194,26 +4194,43 @@ class ScriptTest {
 //    }
 
 
-//    @Ignore
-//    @Test
-//    fun interpolationTest() = runTest {
-//        eval($$$"""
-//
-//            val foo = "bar"
-//            val buzz = ["foo", "bar"]
-//
-//            // 1. simple interpolation
-//            assertEquals( "bar", "$foo" )
-//            assertEquals( "bar", "${foo}" )
-//
-//            // 2. escaping the dollar sign
-//            assertEquals( "$", "\$foo"[0] )
-//            assertEquals( "foo, "\$foo"[1..] )
-//
-//            // 3. interpolation with expression
-//            assertEquals( "foo!. bar?", "${buzz[0]+"!"}. ${buzz[1]+"?"}" )
-//        """.trimIndent())
-//    }
+    @Test
+    fun interpolationTest() = runTest {
+        val d = '$'
+        eval(
+            """
+            val foo = "bar"
+            val buzz = ["foo", "bar"]
+
+            // 1. simple interpolation
+            assertEquals("bar", "${d}foo")
+            assertEquals("bar", "${d}{foo}")
+
+            // 2. escaping / literal dollar forms
+            assertEquals("${d}${d}foo", "\${d}foo")
+            assertEquals("${d}${d}foo", "${d}${d}foo")
+            assertEquals("\\bar", "\\${d}foo")
+
+            // 3. interpolation with expression
+            assertEquals("foo!. bar?", "${d}{buzz[0] + "!"}. ${d}{buzz[1] + "?"}")
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun interpolationCanBeDisabledByFeatureComment() = runTest {
+        val d = '$'
+        eval(
+            """
+            // feature: interpolation: off
+            val name = "lyng"
+            assertEquals("hello, ${d}name!", "hello, ${d}name!")
+            assertEquals("${d}{name}", "${d}{name}")
+            assertEquals("${d}${d}name", "${d}${d}name")
+            assertEquals("\\${d}name", "\\${d}name")
+        """.trimIndent()
+        )
+    }
 
     @Test
     fun testInlineArrayLiteral() = runTest {

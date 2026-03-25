@@ -1573,6 +1573,52 @@ same as:
     assert(s[1] == 'a')
     >>> void
 
+### String interpolation
+
+Supported forms:
+
+- `$name`
+- `${expr}`
+
+Literal dollar forms:
+
+- `\$` -> `$`
+- `$$` -> `$`
+
+Example:
+
+    val name = "Lyng"
+    assertEquals("hello, Lyng!", "hello, $name!")
+    assertEquals("sum=3", "sum=${1+2}")
+    assertEquals("\$name", "\$name")
+    assertEquals("\$name", "$$name")
+    assertEquals("\\Lyng", "\\$name")
+    >>> void
+
+Interpolation and `printf`-style formatting can be combined when needed:
+
+    val method = "transfer"
+    val argc = 2
+    val compact = "%s:%d"(method, argc)
+    assertEquals("call=transfer:2", "call=$compact")
+    assertEquals("[transfer:2] ok", "[${"%s:%d"(method, argc)}] ok")
+    >>> void
+
+Interpolation also works well with regex patterns. To keep a literal `$` in the
+regex, escape it in the resulting pattern:
+
+    val currency = "USD"
+    val amount = 15
+    val escapedDollar = "\\$"
+    val re = Regex("^${currency}${escapedDollar}${amount}$")
+    assert("USD$15" =~ re)
+    assert("USD15" !~ re)
+    >>> void
+
+If you need old literal behavior in a file, add a leading directive comment:
+
+    // feature: interpolation: off
+
 ### Char literal escapes
 
 Are the same as in string literals with little difference:

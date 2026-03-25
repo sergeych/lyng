@@ -58,8 +58,8 @@ class Ledger(storage) {
     fun transfer(from: Int, to: Int, amount: Int) {
         require(amount > 0)
 
-        val fromKey = "bal:%05d"(from)
-        val toKey = "bal:%05d"(to)
+        val fromKey = "bal:$from"
+        val toKey = "bal:$to"
 
         val fromBal = storage[fromKey] ?: 0
         require(fromBal >= amount)
@@ -105,9 +105,9 @@ This model is useful for distributed validation, scoring, and pre-consensus chec
 fun square<T: Int | Real>(x: T) = x * x
 
 fun describeValue<T: Int | Real>(x: T): String = when (T) {
-    Int -> "Int value=%s"(x)
-    Real -> "Real value=%s"(x)
-    else -> "Numeric value=%s"(x)
+    Int -> "Int value=$x"
+    Real -> "Real value=$x"
+    else -> "Numeric value=$x"
 }
 
 fun sameType<T>(x: T, y: Object): Bool = y is T
@@ -147,7 +147,7 @@ val owner by state
 var limit by state
 
 object RpcDelegate {
-    fun invoke(thisRef, name, args...) = "%s:%d"(name, args.size)
+    fun invoke(thisRef, name, args...) = "$name:${args.size}"
 }
 fun remoteCall by RpcDelegate
 

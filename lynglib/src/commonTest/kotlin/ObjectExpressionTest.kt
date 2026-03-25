@@ -114,7 +114,7 @@ class ObjectExpressionTest {
         eval("""
             val x = object { }
             val name = ((x::class as Class).className as String)
-            assert(name.startsWith("${'$'}Anon_"))
+            assert(name.startsWith("\${'$'}Anon_"))
         """.trimIndent())
     }
 }

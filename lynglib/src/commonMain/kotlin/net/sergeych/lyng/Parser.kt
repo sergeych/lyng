@@ -26,7 +26,10 @@ val idNextChars = { d: Char -> d.isLetter() || d == '_' || d.isDigit() || d == '
 val idFirstChars = { d: Char -> d.isLetter() || d == '_' || d == '$' }
 
 fun parseLyng(source: Source): List<Token> {
-    val p = Parser(fromPos = source.startPos)
+    val p = Parser(
+        fromPos = source.startPos,
+        interpolationEnabled = detectInterpolationEnabled(source.text)
+    )
     val tokens = mutableListOf<Token>()
     do {
         val t = p.nextToken()
@@ -35,9 +38,70 @@ fun parseLyng(source: Source): List<Token> {
     return tokens
 }
 
-private class Parser(fromPos: Pos) {
+private fun parseLyng(source: Source, interpolationEnabled: Boolean): List<Token> {
+    val p = Parser(
+        fromPos = source.startPos,
+        interpolationEnabled = interpolationEnabled
+    )
+    val tokens = mutableListOf<Token>()
+    do {
+        val t = p.nextToken()
+        tokens += t
+    } while (t.type != Token.Type.EOF)
+    return tokens
+}
+
+private fun detectInterpolationEnabled(text: String): Boolean {
+    // Per-file feature switch in leading comments:
+    //   // feature: interpolation: off
+    //   // feature: interpolation: on
+    var enabled = true
+    val lines = text.split('\n')
+    var i = 0
+    while (i < lines.size) {
+        val line = lines[i]
+        val trimmed = line.trim()
+        if (trimmed.isBlank()) {
+            i++
+            continue
+        }
+        if (i == 0 && trimmed.startsWith("#!")) {
+            i++
+            continue
+        }
+        if (trimmed.startsWith("//")) {
+            val m = Regex("^//\\s*feature\\s*:\\s*interpolation\\s*:\\s*(on|off)\\s*$", RegexOption.IGNORE_CASE)
+                .matchEntire(trimmed)
+            if (m != null) {
+                enabled = m.groupValues[1].equals("on", ignoreCase = true)
+            }
+            i++
+            continue
+        }
+        if (trimmed.startsWith("/*")) {
+            // Skip leading block comment(s); directives are intentionally line-comment based.
+            var j = i
+            var closed = false
+            while (j < lines.size) {
+                if (lines[j].contains("*/")) {
+                    closed = true
+                    break
+                }
+                j++
+            }
+            if (!closed) break
+            i = j + 1
+            continue
+        }
+        break
+    }
+    return enabled
+}
+
+private class Parser(fromPos: Pos, private val interpolationEnabled: Boolean = true) {
 
     private val pos = MutablePos(fromPos)
+    private val bufferedTokens = ArrayDeque<Token>()
 
     /**
      * Immutable copy of current position
@@ -47,6 +111,7 @@ private class Parser(fromPos: Pos) {
     private fun raise(msg: String): Nothing = throw ScriptError(currentPos, msg)
 
     fun nextToken(): Token {
+        if (bufferedTokens.isNotEmpty()) return bufferedTokens.removeFirst()
         skipws()
         if (pos.end) return Token("", currentPos, Token.Type.EOF)
         val from = currentPos
@@ -296,7 +361,7 @@ private class Parser(fromPos: Pos) {
                     Token(":", from, Token.Type.COLON)
             }
 
-            '"' -> loadStringToken()
+            '"' -> loadStringTokens(from)
 
             in digitsSet -> {
                 pos.back()
@@ -485,11 +550,6 @@ private class Parser(fromPos: Pos) {
 
     private fun loadStringToken(): Token {
         val start = currentPos
-
-//        if (currentChar == '"') pos.advance()
-//        else start = start.back()
-//        start = start.back()
-
         val sb = StringBuilder()
         var newlineDetected = false
         while (currentChar != '"') {
@@ -546,6 +606,262 @@ private class Parser(fromPos: Pos) {
         val result = sb.toString().let { if (newlineDetected) fixMultilineStringLiteral(it) else it }
 
         return Token(result, start, Token.Type.STRING)
+    }
+
+    private sealed interface StringChunk {
+        data class Literal(val text: String, val pos: Pos) : StringChunk
+        data class Expr(val tokens: List<Token>, val pos: Pos) : StringChunk
+    }
+
+    private fun loadStringTokens(startQuotePos: Pos): Token {
+        if (!interpolationEnabled) return loadStringToken()
+        val tokenPos = currentPos
+
+        val chunks = mutableListOf<StringChunk>()
+        val literal = StringBuilder()
+        var newlineDetected = false
+        var hasInterpolation = false
+
+        fun flushLiteralChunk() {
+            if (literal.isNotEmpty()) {
+                chunks += StringChunk.Literal(literal.toString(), tokenPos)
+                literal.clear()
+            }
+        }
+
+        while (currentChar != '"') {
+            if (pos.end) throw ScriptError(startQuotePos, "unterminated string started there")
+            when (currentChar) {
+                '\\' -> {
+                    pos.advance() ?: raise("unterminated string")
+                    when (currentChar) {
+                        'n' -> {
+                            literal.append('\n'); pos.advance()
+                        }
+
+                        'r' -> {
+                            literal.append('\r'); pos.advance()
+                        }
+
+                        't' -> {
+                            literal.append('\t'); pos.advance()
+                        }
+
+                        '"' -> {
+                            literal.append('"'); pos.advance()
+                        }
+
+                        '\\' -> {
+                            literal.append('\\'); pos.advance()
+                        }
+
+                        'u' -> {
+                            literal.append(loadUnicodeEscape(tokenPos))
+                        }
+
+                        '$' -> {
+                            // Backslash-escaped dollar is always literal.
+                            literal.append('$')
+                            pos.advance()
+                        }
+
+                        else -> {
+                            literal.append('\\').append(currentChar)
+                            pos.advance()
+                        }
+                    }
+                }
+
+                '$' -> {
+                    pos.advance()
+                    when {
+                        currentChar == '$' -> {
+                            // $$ -> literal '$'
+                            literal.append('$')
+                            pos.advance()
+                        }
+
+                        currentChar == '{' -> {
+                            hasInterpolation = true
+                            flushLiteralChunk()
+                            val exprStart = pos.toPos()
+                            pos.advance() // consume '{'
+                            val exprText = readInterpolationExprText(startQuotePos)
+                            val exprTokens = parseEmbeddedExpressionTokens(exprText, exprStart)
+                            chunks += StringChunk.Expr(exprTokens, exprStart)
+                        }
+
+                        idFirstChars(currentChar) -> {
+                            hasInterpolation = true
+                            flushLiteralChunk()
+                            val idPos = pos.toPos()
+                            val id = loadChars(idNextChars)
+                            val idToken = Token(id, idPos, Token.Type.ID)
+                            chunks += StringChunk.Expr(listOf(idToken), idPos)
+                        }
+
+                        else -> {
+                            // Bare '$' before non-interpolation text stays literal.
+                            literal.append('$')
+                        }
+                    }
+                }
+
+                '\n', '\r' -> {
+                    newlineDetected = true
+                    literal.append(currentChar)
+                    pos.advance()
+                }
+
+                else -> {
+                    literal.append(currentChar)
+                    pos.advance()
+                }
+            }
+        }
+        pos.advance() // closing quote
+
+        if (!hasInterpolation) {
+            val result = literal.toString().let { if (newlineDetected) fixMultilineStringLiteral(it) else it }
+            return Token(result, tokenPos, Token.Type.STRING)
+        }
+
+        flushLiteralChunk()
+        if (chunks.isEmpty()) {
+            return Token("", tokenPos, Token.Type.STRING)
+        }
+        val expanded = mutableListOf<Token>()
+        expanded += Token("(", tokenPos, Token.Type.LPAREN)
+        var emittedPieces = 0
+        for (chunk in chunks) {
+            val pieceTokens = when (chunk) {
+                is StringChunk.Literal -> {
+                    if (chunk.text.isEmpty()) emptyList()
+                    else listOf(Token(chunk.text, chunk.pos, Token.Type.STRING))
+                }
+                is StringChunk.Expr -> {
+                    if (chunk.tokens.isEmpty()) throw ScriptError(chunk.pos, "empty interpolation expression")
+                    if (chunk.tokens.size == 1) {
+                        chunk.tokens
+                    } else {
+                        listOf(Token("(", chunk.pos, Token.Type.LPAREN)) +
+                            chunk.tokens +
+                            listOf(Token(")", chunk.pos, Token.Type.RPAREN))
+                    }
+                }
+            }
+            if (pieceTokens.isEmpty()) continue
+            if (emittedPieces > 0) expanded += Token("+", tokenPos, Token.Type.PLUS)
+            expanded += pieceTokens
+            emittedPieces++
+        }
+        if (emittedPieces == 0) {
+            expanded += Token("", tokenPos, Token.Type.STRING)
+        }
+        expanded += Token(")", tokenPos, Token.Type.RPAREN)
+
+        val first = expanded.first()
+        for (i in 1 until expanded.size) bufferedTokens.addLast(expanded[i])
+        return first
+    }
+
+    private fun parseEmbeddedExpressionTokens(text: String, exprPos: Pos): List<Token> {
+        val tokens = parseLyng(Source(exprPos.source.fileName, text), interpolationEnabled)
+        if (tokens.isEmpty()) return emptyList()
+        val withoutEof = if (tokens.last().type == Token.Type.EOF) tokens.dropLast(1) else tokens
+        return withoutEof
+    }
+
+    private fun readInterpolationExprText(start: Pos): String {
+        val out = StringBuilder()
+        var depth = 1
+        while (!pos.end) {
+            val ch = currentChar
+            if (ch == '"') {
+                appendQuoted(out, '"')
+                continue
+            }
+            if (ch == '\'') {
+                appendQuoted(out, '\'')
+                continue
+            }
+            if (ch == '/' && peekChar() == '/') {
+                out.append('/').append('/')
+                pos.advance()
+                pos.advance()
+                while (!pos.end && currentChar != '\n') {
+                    out.append(currentChar)
+                    pos.advance()
+                }
+                continue
+            }
+            if (ch == '/' && peekChar() == '*') {
+                out.append('/').append('*')
+                pos.advance()
+                pos.advance()
+                var closed = false
+                while (!pos.end) {
+                    val c = currentChar
+                    if (c == '*' && peekChar() == '/') {
+                        out.append('*').append('/')
+                        pos.advance()
+                        pos.advance()
+                        closed = true
+                        break
+                    }
+                    out.append(c)
+                    pos.advance()
+                }
+                if (!closed) throw ScriptError(start, "unterminated block comment in interpolation")
+                continue
+            }
+            if (ch == '{') {
+                depth++
+                out.append(ch)
+                pos.advance()
+                continue
+            }
+            if (ch == '}') {
+                depth--
+                if (depth == 0) {
+                    pos.advance() // consume closing '}'
+                    return out.toString()
+                }
+                out.append(ch)
+                pos.advance()
+                continue
+            }
+            out.append(ch)
+            pos.advance()
+        }
+        throw ScriptError(start, "unterminated interpolation expression")
+    }
+
+    private fun appendQuoted(out: StringBuilder, quote: Char) {
+        out.append(quote)
+        pos.advance()
+        while (!pos.end) {
+            val c = currentChar
+            out.append(c)
+            pos.advance()
+            if (c == '\\') {
+                if (!pos.end) {
+                    out.append(currentChar)
+                    pos.advance()
+                }
+                continue
+            }
+            if (c == quote) return
+        }
+    }
+
+    private fun peekChar(): Char {
+        if (pos.end) return 0.toChar()
+        val mark = pos.toPos()
+        pos.advance()
+        val result = currentChar
+        pos.resetTo(mark)
+        return result
     }
 
     private fun loadUnicodeEscape(start: Pos): Char {
