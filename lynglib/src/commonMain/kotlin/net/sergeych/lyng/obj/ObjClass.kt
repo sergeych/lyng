@@ -106,10 +106,20 @@ open class ObjClass(
     vararg parents: ObjClass,
 ) : Obj() {
 
+    private fun declaringModulePackageName(scope: Scope?): String? {
+        var current = scope
+        while (current != null) {
+            if (current is ModuleScope) return current.packageName
+            current = current.parent
+        }
+        return null
+    }
+
     var isAnonymous: Boolean = false
 
     var isAbstract: Boolean = false
     var isClosed: Boolean = false
+    var logicalPackageNameOverride: String? = null
 
     // Stable identity and simple structural version for PICs
     val classId: Long = ClassIdGen.nextId()
@@ -168,6 +178,16 @@ open class ObjClass(
      * external, kotlin classes with [addClassConst] and [addClassFn], etc.
      */
     var classScope: Scope? = null
+
+    /**
+     * Stable logical identity for class matching across separately instantiated modules.
+     * Uses declaring module package plus class name when available.
+     */
+    val logicalPackageName: String?
+        get() = logicalPackageNameOverride ?: declaringModulePackageName(classScope)
+
+    val logicalName: String
+        get() = logicalPackageName?.let { "$it::$className" } ?: className
 
     /** Direct parents in declaration order (kept deterministic). */
     val directParents: List<ObjClass> = parents.toList()

@@ -129,6 +129,7 @@ open class ObjDynamic(var readCallback: Obj? = null, var writeCallback: Obj? = n
         }
 
         val type = object : ObjClass("Delegate") {}.apply {
+            logicalPackageNameOverride = "lyng.stdlib"
             addFn("getValue") { raiseError("Delegate.getValue is not implemented") }
             addFn("setValue") { raiseError("Delegate.setValue is not implemented") }
             addFn("invoke") { raiseError("Delegate.invoke is not implemented") }

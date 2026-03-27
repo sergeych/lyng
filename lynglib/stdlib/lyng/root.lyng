@@ -421,7 +421,6 @@ fun with<T,R>(self: T, block: T.()->R): R {
     Can only be used with 'val' properties.
 */
 class lazy<T,ThisRefType=Object>(creatorParam: ThisRefType.()->T) : Delegate<T,ThisRefType> {
-    private val creator: ThisRefType.()->T = creatorParam
     private var value = Unset
 
     override fun bind(name: String, access: DelegateAccess, thisRef: ThisRefType): Object {
@@ -431,7 +430,7 @@ class lazy<T,ThisRefType=Object>(creatorParam: ThisRefType.()->T) : Delegate<T,T
 
     override fun getValue(thisRef: ThisRefType, name: String): T {
         if (value == Unset)
-            value = with(thisRef, creator)
+            value = with(thisRef, creatorParam)
         value as T
     }
 }

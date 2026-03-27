@@ -583,7 +583,7 @@ class Compiler(
         val baseNames = cls.directParents.map { it.className }
         val nextFieldId = (fieldIds.values.maxOrNull() ?: -1) + 1
         val nextMethodId = (methodIds.values.maxOrNull() ?: -1) + 1
-        return CompileClassInfo(name, fieldIds, methodIds, nextFieldId, nextMethodId, baseNames)
+        return CompileClassInfo(name, cls.logicalPackageName, fieldIds, methodIds, nextFieldId, nextMethodId, baseNames)
     }
 
     private data class BaseMemberIds(
@@ -1553,6 +1553,7 @@ class Compiler(
 
     private data class CompileClassInfo(
         val name: String,
+        val packageName: String?,
         val fieldIds: Map<String, Int>,
         val methodIds: Map<String, Int>,
         val nextFieldId: Int,
@@ -6710,6 +6711,7 @@ class Compiler(
         )
         compileClassInfos[qualifiedName] = CompileClassInfo(
             name = qualifiedName,
+            packageName = packageName,
             fieldIds = fieldIds,
             methodIds = methodIds,
             nextFieldId = fieldIds.size,
@@ -6832,6 +6834,7 @@ class Compiler(
                         classCtx?.let { ctx ->
                             compileClassInfos[className] = CompileClassInfo(
                                 name = className,
+                                packageName = packageName,
                                 fieldIds = ctx.memberFieldIds.toMap(),
                                 methodIds = ctx.memberMethodIds.toMap(),
                                 nextFieldId = ctx.nextFieldId,
@@ -6873,6 +6876,7 @@ class Compiler(
                     val baseIds = collectBaseMemberIds(baseSpecs.map { it.name })
                     compileClassInfos[className] = CompileClassInfo(
                         name = className,
+                        packageName = packageName,
                         fieldIds = baseIds.fieldIds,
                         methodIds = baseIds.methodIds,
                         nextFieldId = baseIds.nextFieldId,
@@ -7121,6 +7125,7 @@ class Compiler(
                                 }
                                 compileClassInfos[qualifiedName] = CompileClassInfo(
                                     name = qualifiedName,
+                                    packageName = packageName,
                                     fieldIds = ctx.memberFieldIds.toMap(),
                                     methodIds = ctx.memberMethodIds.toMap(),
                                     nextFieldId = ctx.nextFieldId,
@@ -7136,6 +7141,7 @@ class Compiler(
                             classCtx?.let { ctx ->
                                 compileClassInfos[qualifiedName] = CompileClassInfo(
                                     name = qualifiedName,
+                                    packageName = packageName,
                                     fieldIds = ctx.memberFieldIds.toMap(),
                                     methodIds = ctx.memberMethodIds.toMap(),
                                     nextFieldId = ctx.nextFieldId,
@@ -7222,6 +7228,7 @@ class Compiler(
                                 }
                                 compileClassInfos[qualifiedName] = CompileClassInfo(
                                     name = qualifiedName,
+                                    packageName = packageName,
                                     fieldIds = ctx.memberFieldIds.toMap(),
                                     methodIds = ctx.memberMethodIds.toMap(),
                                     nextFieldId = ctx.nextFieldId,
@@ -8470,9 +8477,9 @@ class Compiler(
             ?: unwrapDirectRef(initializer)?.let { inferObjClassFromRef(it) }
             ?: throw ScriptError(initializer.pos, "Delegate type must be known at compile time")
         if (initClass !== delegateClass &&
-            initClass.className != delegateClass.className &&
+            initClass.logicalName != delegateClass.logicalName &&
             !initClass.allParentsSet.contains(delegateClass) &&
-            !initClass.allParentsSet.any { it.className == delegateClass.className } &&
+            !initClass.allParentsSet.any { it.logicalName == delegateClass.logicalName } &&
             !initClass.allImplementingNames.contains(delegateClass.className)
         ) {
             throw ScriptError(
@@ -8562,7 +8569,9 @@ class Compiler(
             if (closedParent != null) {
                 throw ScriptError(Pos.builtIn, "can't inherit from closed class ${closedParent.className}")
             }
-            ObjInstanceClass(info.name, *parents.toTypedArray())
+            ObjInstanceClass(info.name, *parents.toTypedArray()).apply {
+                logicalPackageNameOverride = info.packageName
+            }
         }
         if (stub is ObjInstanceClass) {
             for ((fieldName, fieldId) in info.fieldIds) {
@@ -8982,7 +8991,11 @@ class Compiler(
 
         if (isDelegate && initialExpression != null) {
             ensureDelegateType(initialExpression)
-            if (isMutable && resolveInitializerObjClass(initialExpression)?.className == "lazy") {
+            val lazyClass = resolveClassByName("lazy")
+            if (isMutable &&
+                lazyClass != null &&
+                resolveInitializerObjClass(initialExpression)?.logicalName == lazyClass.logicalName
+            ) {
                 throw ScriptError(initialExpression.pos, "lazy delegate is read-only")
             }
         }
