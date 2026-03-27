@@ -221,17 +221,15 @@ All of this is documented in the [language site](https://lynglang.com) and local
 
 - [x] site with integrated interpreter to give a try
 - [x] kotlin part public API good docs, integration focused
-- [ ] type specifications
+- [x] type specifications
 - [x] Textmate Bundle
 - [x] IDEA plugin
-- [ ] source docs and maybe lyng.md to a standard
-- [ ] metadata first class access from lyng
+- [x] source docs and maybe lyng.md to a standard
 - [x] aggressive optimizations
-- [ ] compile to JVM bytecode optimization
 
 ## After 1.5 "Ideal scripting"
 
-Estimated summer 2026
+* __we are here now ;)__
 
 - propose your feature! 
 
@@ -239,8 +237,12 @@ Estimated summer 2026
 
 @-links are for contacting authors on [project home](https://gitea.sergeych.net/SergeychWorks/lyng): this simplest s to open issue for the person you need to convey any information about this project.
 
-__Sergey Chernov__ @sergeych: Initial idea and architecture, language concept, design, implementation.
+<img src="https://www.gravatar.com/avatar/7e3a56ff8a090fc9ffbd1909dea94904?s=32&d=identicon" alt="Sergey Chernov" width="32" height="32" style="vertical-align: middle; margin-right: 0.5em;" /> <b>Sergey Chernov</b> @sergeych, real.sergeych@gmail.com: Initial idea and architecture, language concept, design, implementation.
 
-__Yulia Nezhinskaya__ @AlterEgoJuliaN: System analysis, math and features design.
+<br/>
+
+<img src="https://www.gravatar.com/avatar/53a90bca30c85a81db8f0c0d8dea43a1?s=32&d=identicon" alt="Yulia Nezhinskaya" width="32" height="32" style="vertical-align: middle; margin-right: 0.5em;" /> <b>Yulia Nezhinskaya</b> @AlterEgoJuliaN, neleka88@gmail.com: System analysis, math and feature design.
+
+
 
 [parallelism]: docs/parallelism.md
