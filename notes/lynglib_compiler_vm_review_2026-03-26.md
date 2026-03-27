@@ -30,18 +30,20 @@
 - Coverage added: `ScriptImportPreparationTest`.
 
 ### 3. Medium: missing module captures are silently converted into fresh `Unset` slots
+- Status: fixed in worktree on 2026-03-27; covered by `CompilerVmReviewRegressionTest`.
 - File: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/bytecode/CmdRuntime.kt:3950-3970`
 - In `CmdFrame.buildCaptureRecords()`, the module-capture path first tries several lookups. If the requested `slotId` is missing but the capture has a `name`, it calls `target.applySlotPlan(mapOf(name to slotId))` and immediately returns `target.getSlotRecord(slotId)`.
 - That record is a newly created placeholder from `Scope.applySlotPlan()` (`Scope.kt:460-471`) and defaults to `ObjUnset`.
 - Impact: a compiler/runtime disagreement in capture resolution is masked as a normal capture of `Unset`, so the failure moves far away from closure creation and becomes data corruption or an unrelated later exception. This will be difficult to debug when it happens.
-- Suggested fix: if the named module capture cannot be resolved to an existing record, fail immediately with a Lyng error instead of manufacturing a placeholder slot. Add a regression test around missing imported/module captures.
+- Resolution taken: the VM now refuses to treat synthetic placeholder slots as real module/captured bindings. Reads and capture construction fail with a source-positioned `ScriptError` when the execution scope was not prepared with the script's required module/import bindings.
 
 ### 4. Medium: subject-less `when { ... }` still crashes through a raw Kotlin `TODO`
+- Status: fixed in worktree on 2026-03-27; covered by `CompilerVmReviewRegressionTest`.
 - File: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Compiler.kt:6447-6449`
 - The unsupported branch uses `TODO("when without object is not yet implemented")`.
 - Current docs explicitly say subject-less `when` is not implemented, so the language limitation itself is documented. The problem is the failure mode: the compiler throws a raw Kotlin `NotImplementedError` instead of a normal `ScriptError` or a feature diagnostic.
 - Impact: IDE/embedding callers get an implementation exception rather than a source-positioned language error, which is especially bad across non-JVM targets and for editor tooling.
-- Suggested fix: replace the `TODO(...)` with a `ScriptError` at the current source position, or gate it earlier in parsing with a normal diagnostic.
+- Resolution taken: the parser now throws a normal `ScriptError` at the `when` position with an explicit "when without subject is not implemented" message.
 
 ## Risks Worth Checking Next
 
@@ -56,11 +58,12 @@
 ## Test Status
 - `./gradlew :lynglib:jvmTest` passed during this review.
 - `./gradlew :lynglib:jvmTest --tests ScriptImportPreparationTest --tests SeedLocalsRegressionTest` passed after the fixes/API additions.
+- `./gradlew :lynglib:jvmTest --tests CompilerVmReviewRegressionTest --tests ScriptImportPreparationTest --tests SeedLocalsRegressionTest` passed after fixing findings 3 and 4.
 - Finding 1 is covered directly; finding 2 is covered by explicit preparation API tests.
 
 ## Suggested Fix Order
 1. Fix finding 1 first: it is a concrete slot-index bug with likely recursive failure modes. Done.
 2. Keep `Script.execute(scope)` semantics stable and use explicit preparation APIs where script-owned import/module setup is needed. Done.
-3. Tighten finding 3 next: fail fast on capture mismatches.
-4. Replace the raw `TODO` in finding 4 so unsupported syntax produces normal diagnostics.
+3. Tighten finding 3 next: fail fast on capture mismatches. Done.
+4. Replace the raw `TODO` in finding 4 so unsupported syntax produces normal diagnostics. Done.
 5. Decide whether finding 5 matters for current module-reload workflows; add a regression before changing behavior.

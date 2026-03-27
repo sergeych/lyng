@@ -6446,7 +6446,7 @@ class Compiler(
             WhenStatement(value, cases, elseCase, whenPos)
         } else {
             // when { cond -> ... }
-            TODO("when without object is not yet implemented")
+            throw ScriptError(t.pos, "when without subject is not implemented")
         }
         return wrapBytecode(stmt)
     }

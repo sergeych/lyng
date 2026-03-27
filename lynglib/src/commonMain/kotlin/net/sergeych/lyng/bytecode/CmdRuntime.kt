@@ -3930,7 +3930,7 @@ class CmdFrame(
                     } else {
                         val raw = frame.getRawObj(localIndex)
                         if (raw == null && name != null) {
-                            val record = scope.get(name)
+                            val record = findNamedExistingRecord(scope, name)
                             if (record != null) {
                                 val value = record.value
                                 return@mapIndexed when (value) {
@@ -3938,6 +3938,12 @@ class CmdFrame(
                                     is RecordSlotRef -> ObjRecord(value, isMutable)
                                     else -> ObjRecord(value, isMutable)
                                 }
+                            }
+                            if (hasNamedScopeBinding(scope, name)) {
+                                throw ScriptError(
+                                    ensureScope().pos,
+                                    "captured binding '$name' is not available in the execution scope; prepare the script imports/module bindings explicitly"
+                                )
                             }
                         }
                         when (raw) {
@@ -3952,22 +3958,27 @@ class CmdFrame(
                     val target = moduleScope
                     val name = captureNames?.getOrNull(index)
                     if (name != null) {
-                        target.tryGetLocalRecord(target, name, target.currentClassCtx)?.let { return@mapIndexed it }
-                        target.getSlotIndexOf(name)?.let { return@mapIndexed target.getSlotRecord(it) }
-                        target.get(name)?.let { return@mapIndexed it }
+                        findNamedExistingRecord(target, name)?.let { return@mapIndexed it }
                         // Fallback to current scope in case the module scope isn't in the parent chain
                         // or doesn't carry the imported symbol yet.
-                        scope.tryGetLocalRecord(scope, name, scope.currentClassCtx)?.let { return@mapIndexed it }
-                        scope.get(name)?.let { return@mapIndexed it }
+                        findNamedExistingRecord(scope, name)?.let { return@mapIndexed it }
                     }
                     if (slotId < target.slotCount) {
-                        return@mapIndexed target.getSlotRecord(slotId)
+                        val existing = target.getSlotRecord(slotId)
+                        if (name == null || existing.value !== ObjUnset || hasResolvedNamedScopeBinding(target, name)) {
+                            return@mapIndexed existing
+                        }
                     }
                     if (name != null) {
-                        target.applySlotPlan(mapOf(name to slotId))
-                        return@mapIndexed target.getSlotRecord(slotId)
+                        throw ScriptError(
+                            ensureScope().pos,
+                            "module capture '$name' is not available in the execution scope; prepare the script imports/module bindings explicitly"
+                        )
                     }
-                    error("Missing module capture slot $slotId")
+                    throw ScriptError(
+                        ensureScope().pos,
+                        "missing module capture slot $slotId"
+                    )
                 }
             }
         }
@@ -4776,12 +4787,13 @@ class CmdFrame(
 
     private suspend fun getScopeSlotValue(slot: Int): Obj {
         val target = scopeTarget(slot)
+        val name = fn.scopeSlotNames[slot]
+        val hadNamedBinding = name != null && hasResolvedNamedScopeBinding(target, name)
         val index = ensureScopeSlot(target, slot)
         val record = target.getSlotRecord(index)
         val direct = record.value
         if (direct is FrameSlotRef) return direct.read()
         if (direct is RecordSlotRef) return direct.read()
-        val name = fn.scopeSlotNames[slot]
         if (name != null && record.memberName != null && record.memberName != name) {
             val resolved = target.get(name)
             if (resolved != null) {
@@ -4802,9 +4814,15 @@ class CmdFrame(
             return direct
         }
         if (name == null) return record.value
-        val resolved = target.get(name) ?: return record.value
+        val resolved = target.get(name)
+        if (resolved == null) {
+            failMissingPreparedModuleBinding(slot, name, hadNamedBinding, record)
+            return record.value
+        }
         if (resolved.value !== ObjUnset) {
             target.updateSlotFor(name, resolved)
+        } else {
+            failMissingPreparedModuleBinding(slot, name, hadNamedBinding, resolved)
         }
         return resolved.value
     }
@@ -4812,12 +4830,13 @@ class CmdFrame(
     private suspend fun getScopeSlotValueAtAddr(addrSlot: Int): Obj {
         val target = addrScopes[addrSlot] ?: error("Address slot $addrSlot is not resolved")
         val index = addrIndices[addrSlot]
+        val slotId = addrScopeSlots[addrSlot]
+        val name = fn.scopeSlotNames.getOrNull(slotId)
+        val hadNamedBinding = name != null && hasResolvedNamedScopeBinding(target, name)
         val record = target.getSlotRecord(index)
         val direct = record.value
         if (direct is FrameSlotRef) return direct.read()
         if (direct is RecordSlotRef) return direct.read()
-        val slotId = addrScopeSlots[addrSlot]
-        val name = fn.scopeSlotNames.getOrNull(slotId)
         if (name != null && record.memberName != null && record.memberName != name) {
             val resolved = target.get(name)
             if (resolved != null) {
@@ -4838,9 +4857,15 @@ class CmdFrame(
             return direct
         }
         if (name == null) return record.value
-        val resolved = target.get(name) ?: return record.value
+        val resolved = target.get(name)
+        if (resolved == null) {
+            failMissingPreparedModuleBinding(slotId, name, hadNamedBinding, record)
+            return record.value
+        }
         if (resolved.value !== ObjUnset) {
             target.updateSlotFor(name, resolved)
+        } else {
+            failMissingPreparedModuleBinding(slotId, name, hadNamedBinding, resolved)
         }
         return resolved.value
     }
@@ -4873,6 +4898,41 @@ class CmdFrame(
             target.updateSlotFor(name, resolved)
         }
         return index
+    }
+
+    private fun hasNamedScopeBinding(target: Scope, name: String): Boolean {
+        if (target.tryGetLocalRecord(target, name, target.currentClassCtx) != null) return true
+        if (target.getSlotIndexOf(name) != null) return true
+        if (target.get(name) != null) return true
+        return false
+    }
+
+    private fun hasResolvedNamedScopeBinding(target: Scope, name: String): Boolean =
+        findNamedExistingRecord(target, name) != null
+
+    private fun findNamedExistingRecord(target: Scope, name: String): ObjRecord? {
+        target.tryGetLocalRecord(target, name, target.currentClassCtx)?.let { return it }
+        target.get(name)?.let { record ->
+            if (record.value !== ObjUnset || record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property) {
+                return record
+            }
+        }
+        return null
+    }
+
+    private fun failMissingPreparedModuleBinding(
+        slot: Int,
+        name: String,
+        hadNamedBinding: Boolean,
+        record: ObjRecord
+    ) {
+        if (hadNamedBinding) return
+        if (record.value !== ObjUnset) return
+        if (fn.scopeSlotIsModule.getOrNull(slot) != true) return
+        throw ScriptError(
+            ensureScope().pos,
+            "module binding '$name' is not available in the execution scope; prepare the script imports/module bindings explicitly"
+        )
     }
 
     private fun ensureLocalMutable(localIndex: Int) {
