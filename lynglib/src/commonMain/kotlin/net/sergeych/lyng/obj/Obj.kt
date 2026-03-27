@@ -591,11 +591,14 @@ open class Obj {
             return obj.copy(value = res, type = ObjRecord.Type.Other)
         }
         val value = obj.value
-        if (value is ObjProperty || obj.type == ObjRecord.Type.Property) {
-            val prop = (value as? ObjProperty)
-                ?: scope.raiseError("Expected ObjProperty for property member $name, got ${value::class}")
-            val res = prop.callGetter(scope, this, decl)
-            return ObjRecord(res, obj.isMutable)
+        if (value is ObjProperty) {
+            val res = value.callGetter(scope, this, decl)
+            return obj.copy(value = res, type = ObjRecord.Type.Other)
+        }
+        if (obj.type == ObjRecord.Type.Property) {
+            // Some runtime paths cache the resolved property value back into the record.
+            // Treat that as an already-resolved read result instead of trying to call a getter again.
+            return obj.copy(type = ObjRecord.Type.Other)
         }
         val caller = scope.currentClassCtx
         // Check visibility for non-property members here if they weren't checked before

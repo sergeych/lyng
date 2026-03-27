@@ -50,7 +50,7 @@ class BytecodeStatement private constructor(
                     ?: scope.parent?.get(name)
                     ?: scope.get(name)
                     ?: continue
-                val value = if (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property) {
+                val value = if (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || record.value is net.sergeych.lyng.obj.ObjProperty) {
                     scope.resolve(record, name)
                 } else {
                     record.value

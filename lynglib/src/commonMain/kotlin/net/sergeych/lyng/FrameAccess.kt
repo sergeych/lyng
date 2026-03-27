@@ -167,6 +167,19 @@ class RecordSlotRef(
         }
     }
 
+    suspend fun read(scope: Scope, name: String?): Obj {
+        val direct = record.value
+        if (name != null && (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || direct is ObjProperty)) {
+            return scope.resolve(record, name)
+        }
+        return when (direct) {
+            is FrameSlotRef -> direct.read()
+            is RecordSlotRef -> direct.read(scope, name)
+            is ScopeSlotRef -> direct.read()
+            else -> direct
+        }
+    }
+
     override suspend fun callOn(scope: Scope): Obj {
         val resolved = read()
         if (resolved === this) {
@@ -192,5 +205,19 @@ class RecordSlotRef(
         } else {
             record.value = value
         }
+    }
+
+    suspend fun write(scope: Scope, name: String?, value: Obj): Boolean {
+        val direct = record.value
+        if (name != null && (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || direct is ObjProperty)) {
+            scope.assign(record, name, value)
+            return true
+        }
+        when (direct) {
+            is ScopeSlotRef -> direct.write(value)
+            is RecordSlotRef -> if (direct.write(scope, name, value)) return true else direct.write(value)
+            else -> record.value = value
+        }
+        return false
     }
 }

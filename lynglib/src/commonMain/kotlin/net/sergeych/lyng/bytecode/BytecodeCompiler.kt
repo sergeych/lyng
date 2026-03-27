@@ -2396,7 +2396,8 @@ class BytecodeCompiler(
                 builder.emit(Opcode.THROW, posId, msgSlot)
                 return value
             }
-            val slot = resolveSlot(localTarget)
+            val slot = resolveCapturedOwnerScopeSlot(localTarget)
+                ?: resolveSlot(localTarget)
                 ?: resolveAssignableSlotByName(localTarget.name)?.first
                 ?: return null
             if (slot < scopeSlotCount && value.type != SlotType.UNKNOWN) {
@@ -2702,7 +2703,7 @@ class BytecodeCompiler(
                 return CompiledValue(result, SlotType.OBJ)
             }
             if (localTarget.isDelegated) return compileEvalRef(ref)
-            val slot = resolveSlot(localTarget) ?: return null
+            val slot = resolveCapturedOwnerScopeSlot(localTarget) ?: resolveSlot(localTarget) ?: return null
             val targetType = slotTypes[slot] ?: SlotType.OBJ
             if (!localTarget.isMutable) {
                 if (targetType != SlotType.OBJ && targetType != SlotType.UNKNOWN) return compileEvalRef(ref)
@@ -7628,6 +7629,13 @@ class BytecodeCompiler(
         if (localIndex != null) return scopeSlotCount + localIndex
         val scopeKey = ScopeSlotKey(refScopeId(ref), refSlot(ref))
         return scopeSlotMap[scopeKey]
+    }
+
+    private fun resolveCapturedOwnerScopeSlot(ref: LocalSlotRef): Int? {
+        val ownerScopeId = ref.captureOwnerScopeId ?: return null
+        val ownerSlot = ref.captureOwnerSlot ?: return null
+        val key = ScopeSlotKey(ownerScopeId, ownerSlot)
+        return scopeSlotMap[key]
     }
 
     private fun updateSlotType(slot: Int, type: SlotType) {

@@ -18,6 +18,7 @@
 package net.sergeych.lyng
 
 import kotlinx.coroutines.test.runTest
+import net.sergeych.lyng.obj.ObjRecord
 import net.sergeych.lyng.bridge.bindGlobalVar
 import net.sergeych.lyng.bridge.globalBinder
 import kotlin.test.Test
@@ -48,5 +49,36 @@ class GlobalPropertyCaptureRegressionTest {
         scope.eval("main()")
 
         assertEquals(2.0, x, "bound extern var should stay live inside function bodies")
+    }
+
+    @Test
+    fun externGlobalVarShouldStayLiveWhenScriptRunsInChildScope() = runTest {
+        val base = Script.newScope() as ModuleScope
+        var x = 1.0
+
+        base.eval("extern var X: Real")
+        base.globalBinder().bindGlobalVar(
+            name = "X",
+            get = { x },
+            set = { x = it }
+        )
+
+        val child = base.createChildScope()
+        child.eval(
+            Source(
+                "child-scope-probe",
+                """
+                fun main() {
+                    X = X + 1.0
+                }
+                """.trimIndent()
+            )
+        )
+
+        val mainRecord = child["main"]
+        check(mainRecord?.type == ObjRecord.Type.Fun)
+        child.eval("main()")
+
+        assertEquals(2.0, x, "bound extern var should stay live in child-scope execution")
     }
 }

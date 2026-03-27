@@ -8253,7 +8253,7 @@ class Compiler(
                                 ?: context.parent?.get(localName)
                                 ?: context.get(localName)
                                 ?: continue
-                            val value = if (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property) {
+                            val value = if (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || record.value is ObjProperty) {
                                 context.resolve(record, localName)
                             } else {
                                 record.value

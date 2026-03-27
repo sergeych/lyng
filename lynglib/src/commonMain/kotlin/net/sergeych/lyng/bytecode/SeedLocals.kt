@@ -31,7 +31,7 @@ internal suspend fun seedFrameLocalsFromScope(frame: CmdFrame, scope: Scope) {
         val record = scope.getLocalRecordDirect(name)
             ?: scope.chainLookupIgnoreClosure(name, followClosure = true)
             ?: continue
-        val value = if (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property) {
+        val value = if (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || record.value is net.sergeych.lyng.obj.ObjProperty) {
             scope.resolve(record, name)
         } else {
             record.value
