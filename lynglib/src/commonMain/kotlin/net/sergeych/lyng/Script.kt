@@ -540,14 +540,6 @@ class Script(
                     cachedValue
                 }
             }
-            addFn("lazy") {
-                val builder = requireOnlyArg<Obj>()
-                ObjLazyDelegate(builder, requireScope().snapshotForClosure())
-            }
-            addFn("__builtinLazy") {
-                val builder = requireOnlyArg<Obj>()
-                ObjLazyDelegate(builder, requireScope().snapshotForClosure())
-            }
             addVoidFn("delay") {
                 val a = args.firstAndOnly()
                 when (a) {

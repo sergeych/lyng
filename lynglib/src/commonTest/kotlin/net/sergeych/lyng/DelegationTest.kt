@@ -213,6 +213,96 @@ class DelegationTest {
     }
 
     @Test
+    fun testPureLyngLazyPreservesReceiverAndClosure() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            val GLOBAL_NUMBERS = [1,2,3]
+
+            class PureLazy<T,ThisRefType=Object>(creatorParam: ThisRefType.()->T) : Delegate<T,ThisRefType> {
+                private val creator: ThisRefType.()->T = creatorParam
+                private var value = Unset
+
+                override fun bind(name: String, access, thisRef: ThisRefType): Object = this
+
+                override fun getValue(thisRef: ThisRefType, name: String): T {
+                    if (value == Unset)
+                        value = creator(thisRef)
+                    value as T
+                }
+            }
+
+            fun pureLazy<T,ThisRefType=Object>(creator: ThisRefType.()->T): Delegate<T,ThisRefType> = PureLazy(creator)
+
+            class A {
+                val numbers = [1,2,3]
+                val fromThis: List by pureLazy { this.numbers }
+                val fromScope: List by pureLazy { GLOBAL_NUMBERS }
+            }
+
+            class B {
+                val a: A by pureLazy { A() }
+                val test: List by pureLazy { (a as A).fromThis + [4] }
+            }
+
+            assertEquals([1,2,3], A().fromThis)
+            assertEquals([1,2,3], A().fromScope)
+            assertEquals([1,2,3,4], B().test)
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testImportedPureLyngLazyPreservesReceiverAndClosure() = runTest {
+        val scope = Script.newScope()
+        scope.importManager.addTextPackages(
+            """
+            package repro.lazy
+
+            import lyng.stdlib
+
+            class PureLazy<T,ThisRefType=Object>(creatorParam: ThisRefType.()->T) : Delegate<T,ThisRefType> {
+                private val creator: ThisRefType.()->T = creatorParam
+                private var value = Unset
+
+                override fun bind(name: String, access: DelegateAccess, thisRef: ThisRefType): Object {
+                    if (access != DelegateAccess.Val) throw "lazy delegate can only be used with 'val'"
+                    this
+                }
+
+                override fun getValue(thisRef: ThisRefType, name: String): T {
+                    if (value == Unset)
+                        value = with(thisRef, creator)
+                    value as T
+                }
+            }
+            """.trimIndent()
+        )
+        scope.eval(
+            """
+            import repro.lazy
+
+            val GLOBAL_NUMBERS = [1,2,3]
+
+            class A {
+                val numbers = [1,2,3]
+                val fromThis: List by PureLazy { this.numbers }
+                val fromScope: List by PureLazy { GLOBAL_NUMBERS }
+            }
+
+            class B {
+                val a: A by PureLazy { A() }
+                val test: List by PureLazy { (a as A).fromThis + [4] }
+            }
+
+            assertEquals([1,2,3], A().fromThis)
+            assertEquals([1,2,3], A().fromScope)
+            assertEquals([1,2,3,4], B().test)
+            """.trimIndent()
+        )
+    }
+
+    @Test
     fun testLazyIsDelegate() = runTest {
         eval("""
             val l = lazy { 42 }

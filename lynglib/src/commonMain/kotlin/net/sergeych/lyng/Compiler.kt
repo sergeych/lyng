@@ -8401,7 +8401,7 @@ class Compiler(
             is ImplicitThisMethodCallRef -> {
                 when (directRef.methodName()) {
                     "iterator" -> ObjIterator
-                    "lazy" -> ObjLazyDelegate.type
+                    "lazy" -> resolveClassByName("lazy") ?: inferMethodCallReturnClass(directRef.methodName())
                     else -> inferMethodCallReturnClass(directRef.methodName())
                 }
             }
@@ -8420,7 +8420,7 @@ class Compiler(
                 when {
                     target is LocalSlotRef -> {
                         when (target.name) {
-                            "lazy" -> ObjLazyDelegate.type
+                            "lazy" -> resolveClassByName("lazy")
                             "iterator" -> ObjIterator
                             "flow" -> ObjFlow.type
                             "launch" -> ObjDeferred.type
@@ -8431,7 +8431,7 @@ class Compiler(
                     }
                     target is LocalVarRef -> {
                         when (target.name) {
-                            "lazy" -> ObjLazyDelegate.type
+                            "lazy" -> resolveClassByName("lazy")
                             "iterator" -> ObjIterator
                             "flow" -> ObjFlow.type
                             "launch" -> ObjDeferred.type
@@ -8470,7 +8470,9 @@ class Compiler(
             ?: unwrapDirectRef(initializer)?.let { inferObjClassFromRef(it) }
             ?: throw ScriptError(initializer.pos, "Delegate type must be known at compile time")
         if (initClass !== delegateClass &&
+            initClass.className != delegateClass.className &&
             !initClass.allParentsSet.contains(delegateClass) &&
+            !initClass.allParentsSet.any { it.className == delegateClass.className } &&
             !initClass.allImplementingNames.contains(delegateClass.className)
         ) {
             throw ScriptError(
@@ -8980,7 +8982,7 @@ class Compiler(
 
         if (isDelegate && initialExpression != null) {
             ensureDelegateType(initialExpression)
-            if (isMutable && resolveInitializerObjClass(initialExpression) == ObjLazyDelegate.type) {
+            if (isMutable && resolveInitializerObjClass(initialExpression)?.className == "lazy") {
                 throw ScriptError(initialExpression.pos, "lazy delegate is read-only")
             }
         }

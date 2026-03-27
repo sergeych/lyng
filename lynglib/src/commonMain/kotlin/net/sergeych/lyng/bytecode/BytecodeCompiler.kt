@@ -1089,7 +1089,6 @@ class BytecodeCompiler(
 
     private fun isDelegateClass(receiverClass: ObjClass): Boolean =
         receiverClass.className == "Delegate" ||
-            receiverClass.className == "LazyDelegate" ||
             receiverClass.implementingNames.contains("Delegate")
 
     private fun operatorMemberName(op: BinOp): String? = when (op) {
