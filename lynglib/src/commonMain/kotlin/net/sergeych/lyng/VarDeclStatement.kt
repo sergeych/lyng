@@ -24,6 +24,7 @@ class VarDeclStatement(
     val name: String,
     val isMutable: Boolean,
     val visibility: Visibility,
+    val actualExtern: Boolean,
     val initializer: Statement?,
     val isTransient: Boolean,
     val typeDecl: TypeDecl?,

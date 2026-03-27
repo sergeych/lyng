@@ -42,6 +42,7 @@ class BytecodeCompiler(
     private val callableReturnTypeByScopeId: Map<Int, Map<Int, ObjClass>> = emptyMap(),
     private val callableReturnTypeByName: Map<String, ObjClass> = emptyMap(),
     private val externCallableNames: Set<String> = emptySet(),
+    private val externBindingNames: Set<String> = emptySet(),
     private val lambdaCaptureEntriesByRef: Map<ValueFnRef, List<LambdaCaptureEntry>> = emptyMap(),
 ) {
     private val useScopeSlots: Boolean = allowedScopeNames != null || scopeSlotNameSet != null
@@ -4508,7 +4509,7 @@ class BytecodeCompiler(
             val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
             return CompiledValue(slot, resolved)
         }
-        if (useScopeSlots && allowedScopeNames?.contains(name) == true) {
+        if (useScopeSlots && isPreparedScopeName(name)) {
             scopeSlotIndexByName[name]?.let { slot ->
                 val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
                 return CompiledValue(slot, resolved)
@@ -8073,7 +8074,7 @@ class BytecodeCompiler(
                         slotInitClassByKey[ScopeSlotKey(scopeId, slotIndex)] = cls
                     }
                 }
-                if (allowLocalSlots && slotIndex != null && !shouldUseScopeSlotFor(scopeId)) {
+                if (allowLocalSlots && slotIndex != null && (stmt.actualExtern || !shouldUseScopeSlotFor(scopeId, stmt.name, isDelegated = false))) {
                     val key = ScopeSlotKey(scopeId, slotIndex)
                     declaredLocalKeys.add(key)
                     if (!localSlotInfoMap.containsKey(key)) {
@@ -8100,7 +8101,7 @@ class BytecodeCompiler(
                 val scopeId = stmt.spec.scopeId ?: 0
                 if (slotIndex != null) {
                     val key = ScopeSlotKey(scopeId, slotIndex)
-                    if (allowLocalSlots && !shouldUseScopeSlotFor(scopeId)) {
+                    if (allowLocalSlots && !shouldUseScopeSlotFor(scopeId, stmt.spec.name, isDelegated = false)) {
                         if (!localSlotInfoMap.containsKey(key)) {
                             localSlotInfoMap[key] = LocalSlotInfo(stmt.spec.name, isMutable = false, isDelegated = false)
                         }
@@ -8117,7 +8118,7 @@ class BytecodeCompiler(
             is DelegatedVarDeclStatement -> {
                 val slotIndex = stmt.slotIndex
                 val scopeId = stmt.scopeId ?: 0
-                if (allowLocalSlots && slotIndex != null && !shouldUseScopeSlotFor(scopeId)) {
+                if (allowLocalSlots && slotIndex != null && !shouldUseScopeSlotFor(scopeId, stmt.name, isDelegated = true)) {
                     val key = ScopeSlotKey(scopeId, slotIndex)
                     declaredLocalKeys.add(key)
                     if (!localSlotInfoMap.containsKey(key)) {
@@ -8283,13 +8284,24 @@ class BytecodeCompiler(
 
     private fun isModuleSlot(scopeId: Int, name: String?): Boolean {
         if (moduleScopeId != null && scopeId != moduleScopeId) return false
-        val scopeNames = allowedScopeNames ?: scopeSlotNameSet
-        if (scopeNames == null || name == null) return false
-        return scopeNames.contains(name)
+        return isPreparedScopeName(name)
     }
 
     private fun shouldUseScopeSlotFor(scopeId: Int): Boolean {
         return useScopeSlots && moduleScopeId != null && scopeId == moduleScopeId
+    }
+
+    private fun shouldUseScopeSlotFor(scopeId: Int, name: String, isDelegated: Boolean): Boolean {
+        if (moduleScopeId == null || scopeId != moduleScopeId) return false
+        if (isDelegated) return false
+        if (externBindingNames.contains(name)) return true
+        return useScopeSlots && isPreparedScopeName(name)
+    }
+
+    private fun isPreparedScopeName(name: String?): Boolean {
+        if (name == null) return false
+        if (scopeSlotNameSet?.contains(name) == true) return true
+        return allowedScopeNames?.contains(name) == true
     }
 
     private fun collectLoopVarNames(stmt: Statement) {
@@ -8400,8 +8412,9 @@ class BytecodeCompiler(
                     captureSlotKeys.add(key)
                     return
                 }
+                val forceScopeSlot = shouldUseScopeSlotFor(scopeId, ref.name, ref.isDelegated)
                 val isModuleSlot = if (ref.isDelegated) false else isModuleSlot(scopeId, ref.name)
-                if (allowLocalSlots && !isModuleSlot) {
+                if (allowLocalSlots && !isModuleSlot && !forceScopeSlot) {
                     if (!localSlotInfoMap.containsKey(key)) {
                         localSlotInfoMap[key] = LocalSlotInfo(ref.name, ref.isMutable, ref.isDelegated)
                     }
@@ -8448,8 +8461,9 @@ class BytecodeCompiler(
                         }
                         captureSlotKeys.add(key)
                     } else {
+                        val forceScopeSlot = shouldUseScopeSlotFor(scopeId, target.name, target.isDelegated)
                         val isModuleSlot = if (target.isDelegated) false else isModuleSlot(scopeId, target.name)
-                        if (allowLocalSlots && !isModuleSlot) {
+                        if (allowLocalSlots && !isModuleSlot && !forceScopeSlot) {
                             if (!localSlotInfoMap.containsKey(key)) {
                                 localSlotInfoMap[key] = LocalSlotInfo(target.name, target.isMutable, target.isDelegated)
                             }

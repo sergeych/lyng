@@ -87,6 +87,7 @@ class BytecodeStatement private constructor(
             callableReturnTypeByScopeId: Map<Int, Map<Int, ObjClass>> = emptyMap(),
             callableReturnTypeByName: Map<String, ObjClass> = emptyMap(),
             externCallableNames: Set<String> = emptySet(),
+            externBindingNames: Set<String> = emptySet(),
             lambdaCaptureEntriesByRef: Map<ValueFnRef, List<LambdaCaptureEntry>> = emptyMap(),
             slotTypeDeclByScopeId: Map<Int, Map<Int, TypeDecl>> = emptyMap(),
         ): Statement {
@@ -122,6 +123,7 @@ class BytecodeStatement private constructor(
                 callableReturnTypeByScopeId = callableReturnTypeByScopeId,
                 callableReturnTypeByName = callableReturnTypeByName,
                 externCallableNames = externCallableNames,
+                externBindingNames = externBindingNames,
                 lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef
             )
             val compiled = compiler.compileStatement(nameHint, statement)
@@ -236,6 +238,7 @@ class BytecodeStatement private constructor(
                         stmt.name,
                         stmt.isMutable,
                         stmt.visibility,
+                        stmt.actualExtern,
                         stmt.initializer?.let { unwrapDeep(it) },
                         stmt.isTransient,
                         stmt.typeDecl,

@@ -2392,8 +2392,13 @@ class CmdDeclLocal(internal val constId: Int, internal val slot: Int) : Cmd() {
             ?: error("DECL_LOCAL expects LocalDecl at $constId")
         if (slot < frame.fn.scopeSlotCount) {
             val target = frame.scopeTarget(slot)
-            frame.ensureScopeSlot(target, slot)
-            val value = frame.slotToObj(slot).byValueCopy()
+            val index = frame.ensureScopeSlot(target, slot)
+            val raw = target.getSlotRecord(index).value
+            val value = when (raw) {
+                is FrameSlotRef -> raw.read()
+                is RecordSlotRef -> raw.read()
+                else -> raw
+            }.byValueCopy()
             target.updateSlotFor(
                 decl.name,
                 ObjRecord(
@@ -4557,7 +4562,7 @@ class CmdFrame(
         return getScopeSlotValueAtAddr(addrSlot)
     }
 
-    fun setAddrObj(addrSlot: Int, value: Obj) {
+    suspend fun setAddrObj(addrSlot: Int, value: Obj) {
         setScopeSlotValueAtAddr(addrSlot, value)
     }
 
@@ -4565,7 +4570,7 @@ class CmdFrame(
         return getScopeSlotValueAtAddr(addrSlot).toLong()
     }
 
-    fun setAddrInt(addrSlot: Int, value: Long) {
+    suspend fun setAddrInt(addrSlot: Int, value: Long) {
         setScopeSlotValueAtAddr(addrSlot, ObjInt.of(value))
     }
 
@@ -4573,7 +4578,7 @@ class CmdFrame(
         return getScopeSlotValueAtAddr(addrSlot).toDouble()
     }
 
-    fun setAddrReal(addrSlot: Int, value: Double) {
+    suspend fun setAddrReal(addrSlot: Int, value: Double) {
         setScopeSlotValueAtAddr(addrSlot, ObjReal.of(value))
     }
 
@@ -4581,7 +4586,7 @@ class CmdFrame(
         return getScopeSlotValueAtAddr(addrSlot).toBool()
     }
 
-    fun setAddrBool(addrSlot: Int, value: Boolean) {
+    suspend fun setAddrBool(addrSlot: Int, value: Boolean) {
         setScopeSlotValueAtAddr(addrSlot, if (value) ObjTrue else ObjFalse)
     }
 
@@ -4870,9 +4875,16 @@ class CmdFrame(
         return resolved.value
     }
 
-    private fun setScopeSlotValueAtAddr(addrSlot: Int, value: Obj) {
+    private suspend fun setScopeSlotValueAtAddr(addrSlot: Int, value: Obj) {
         val target = addrScopes[addrSlot] ?: error("Address slot $addrSlot is not resolved")
         val index = addrIndices[addrSlot]
+        val record = target.getSlotRecord(index)
+        val slotId = addrScopeSlots[addrSlot]
+        val name = fn.scopeSlotNames.getOrNull(slotId)
+        if (name != null && (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || record.value is ObjProperty)) {
+            target.assign(record, name, value)
+            return
+        }
         target.setSlotValue(index, value)
     }
 

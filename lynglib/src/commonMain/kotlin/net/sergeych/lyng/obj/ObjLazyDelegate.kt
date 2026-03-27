@@ -18,9 +18,11 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Arguments
+import net.sergeych.lyng.BytecodeBodyProvider
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Statement
+import net.sergeych.lyng.bytecode.BytecodeStatement
 import net.sergeych.lyng.Visibility
 import net.sergeych.lyng.executeBytecodeWithSeed
 
@@ -43,13 +45,25 @@ class ObjLazyDelegate(
         onNotFoundResult: (suspend () -> Obj?)?,
     ): Obj {
         return when (name) {
+            "bind" -> {
+                val access = args.getOrNull(1)?.toString() ?: ""
+                if (!access.endsWith("Val")) {
+                    scope.raiseIllegalArgument("lazy delegate can only be used with 'val'")
+                }
+                this
+            }
             "getValue" -> {
                 if (!calculated) {
-                    val callScope = capturedScope.createChildScope(capturedScope.pos, args = Arguments.EMPTY)
-                    cachedValue = if (builder is Statement) {
-                        executeBytecodeWithSeed(callScope, builder, "lazy delegate")
+                    val receiver = args.getOrNull(0) ?: ObjNull
+                    val callScope = scope.createChildScope(
+                        scope.pos,
+                        args = Arguments.EMPTY,
+                        newThisObj = receiver
+                    )
+                    cachedValue = if (builder is BytecodeStatement || builder is BytecodeBodyProvider) {
+                        executeBytecodeWithSeed(callScope, builder as Statement, "lazy delegate")
                     } else {
-                        builder.callOn(callScope)
+                        builder.invoke(callScope, receiver, Arguments.EMPTY)
                     }
                     calculated = true
                 }

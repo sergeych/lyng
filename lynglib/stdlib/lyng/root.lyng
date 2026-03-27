@@ -415,24 +415,26 @@ fun with<T,R>(self: T, block: T.()->R): R {
     block(self)
 }
 
+extern fun __builtinLazy(creator: Object): Object
+
 /*
     Standard implementation of a lazy-initialized property delegate.
     The provided creator lambda is called once on the first access to compute the value.
     Can only be used with 'val' properties.
 */
 class lazy<T,ThisRefType=Object>(creatorParam: ThisRefType.()->T) : Delegate<T,ThisRefType> {
-    private val creator: ThisRefType.()->T = creatorParam
-    private var value = Unset
+    private val delegate: Delegate<T,ThisRefType> = __builtinLazy(creatorParam) as Delegate<T,ThisRefType>
 
     override fun bind(name: String, access: DelegateAccess, thisRef: ThisRefType): Object {
-        if (access != DelegateAccess.Val) throw "lazy delegate can only be used with 'val'"
-        this
+        delegate.bind(name, access, thisRef)
     }
 
     override fun getValue(thisRef: ThisRefType, name: String): T {
-        if (value == Unset)
-            value = with(thisRef,creator)
-        value as T
+        delegate.getValue(thisRef, name) as T
+    }
+
+    override fun setValue(thisRef: ThisRefType, name: String, newValue: T): void {
+        delegate.setValue(thisRef, name, newValue)
     }
 }
 

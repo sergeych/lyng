@@ -542,7 +542,11 @@ class Script(
             }
             addFn("lazy") {
                 val builder = requireOnlyArg<Obj>()
-                ObjLazyDelegate(builder, requireScope())
+                ObjLazyDelegate(builder, requireScope().snapshotForClosure())
+            }
+            addFn("__builtinLazy") {
+                val builder = requireOnlyArg<Obj>()
+                ObjLazyDelegate(builder, requireScope().snapshotForClosure())
             }
             addVoidFn("delay") {
                 val a = args.firstAndOnly()

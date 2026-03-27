@@ -184,6 +184,7 @@ class Compiler(
     private val encodedPayloadTypeByName: MutableMap<String, ObjClass> = mutableMapOf()
     private val objectDeclNames: MutableSet<String> = mutableSetOf()
     private val externCallableNames: MutableSet<String> = mutableSetOf()
+    private val externBindingNames: MutableSet<String> = mutableSetOf()
     private val moduleDeclaredNames: MutableSet<String> = mutableSetOf()
     private var seedingSlotPlan: Boolean = false
 
@@ -192,6 +193,7 @@ class Compiler(
         if (plan.slots.isEmpty()) return emptyMap()
         val result = LinkedHashMap<String, ForcedLocalSlotInfo>(plan.slots.size)
         for ((name, entry) in plan.slots) {
+            if (externBindingNames.contains(name)) continue
             result[name] = ForcedLocalSlotInfo(
                 index = entry.index,
                 isMutable = entry.isMutable,
@@ -885,6 +887,7 @@ class Compiler(
             name = declaredName,
             isMutable = false,
             visibility = Visibility.Public,
+            actualExtern = false,
             initializer = initStmt,
             isTransient = false,
             typeDecl = null,
@@ -1751,6 +1754,7 @@ class Compiler(
                         enumEntriesByName = enumEntriesByName,
                         callableReturnTypeByScopeId = callableReturnTypeByScopeId,
                         callableReturnTypeByName = callableReturnTypeByName,
+                        externBindingNames = externBindingNames,
                         lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef
                     ) as BytecodeStatement
                     unwrapped to bytecodeStmt.bytecodeFunction()
@@ -1957,6 +1961,9 @@ class Compiler(
         val scopeIndex = slotPlanStack.indexOfLast { it.id == slotLoc.scopeId }
         if (functionIndex >= 0 && scopeIndex >= functionIndex) return null
         val modulePlan = moduleSlotPlan()
+        if (modulePlan != null && slotLoc.scopeId == modulePlan.id && externBindingNames.contains(name)) {
+            return null
+        }
         if (useScopeSlots && modulePlan != null && slotLoc.scopeId == modulePlan.id) {
             return null
         }
@@ -2075,6 +2082,7 @@ class Compiler(
             callableReturnTypeByScopeId = callableReturnTypeByScopeId,
             callableReturnTypeByName = callableReturnTypeByName,
             externCallableNames = externCallableNames,
+            externBindingNames = externBindingNames,
             lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef
         )
     }
@@ -2105,6 +2113,7 @@ class Compiler(
             callableReturnTypeByScopeId = callableReturnTypeByScopeId,
             callableReturnTypeByName = callableReturnTypeByName,
             externCallableNames = externCallableNames,
+            externBindingNames = externBindingNames,
             lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef
         )
     }
@@ -2160,6 +2169,7 @@ class Compiler(
             callableReturnTypeByScopeId = callableReturnTypeByScopeId,
             callableReturnTypeByName = callableReturnTypeByName,
             externCallableNames = externCallableNames,
+            externBindingNames = externBindingNames,
             lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef
         )
     }
@@ -2343,6 +2353,7 @@ class Compiler(
                     stmt.name,
                     stmt.isMutable,
                     stmt.visibility,
+                    stmt.actualExtern,
                     init,
                     stmt.isTransient,
                     stmt.typeDecl,
@@ -8893,7 +8904,7 @@ class Compiler(
         val effectiveEqToken = if (isProperty) null else eqToken
 
         // Register the local name at compile time so that subsequent identifiers can be emitted as fast locals
-        if (!isStatic && declaringClassNameCaptured == null) declareLocalName(name, isMutable)
+        if (!isStatic && declaringClassNameCaptured == null && !actualExtern) declareLocalName(name, isMutable)
         val declKind = if (codeContexts.lastOrNull() is CodeContext.ClassBody) {
             SymbolKind.MEMBER
         } else {
@@ -8902,6 +8913,8 @@ class Compiler(
         resolutionSink?.declareSymbol(name, declKind, isMutable, nameStartPos, isOverride = isOverride)
         if (declKind == SymbolKind.MEMBER && extTypeName == null) {
             (codeContexts.lastOrNull() as? CodeContext.ClassBody)?.declaredMembers?.add(name)
+        } else if (actualExtern) {
+            externBindingNames.add(name)
         }
 
         val isDelegate = if (isAbstract || actualExtern) {
@@ -9059,6 +9072,7 @@ class Compiler(
                 name,
                 isMutable,
                 visibility,
+                actualExtern,
                 initialExpression,
                 isTransient,
                 declaredType,
