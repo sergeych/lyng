@@ -72,6 +72,14 @@ For module-level APIs, the default workflow is:
 1. declare globals in Lyng using `extern fun` / `extern val` / `extern var`;
 2. bind Kotlin implementation via `ModuleScope.globalBinder()`.
 
+This is also the recommended way to expose a Kotlin-backed value that should behave like a true
+Lyng global variable/property. If you need `x` to read/write through Kotlin on every access, use
+`extern var` / `extern val` plus `bindGlobalVar(...)`.
+
+Do not use `addConst(...)` for this case: `addConst(...)` installs a value, not a Kotlin-backed
+property accessor. It is appropriate for fixed values and objects, but not for a global that should
+delegate reads/writes back into Kotlin state.
+
 ```kotlin
 import net.sergeych.lyng.bridge.*
 import net.sergeych.lyng.obj.ObjInt
@@ -116,6 +124,12 @@ globalProp = "changed"
 assertEquals("changed", globalProp)
 assertEquals("1.0.0", globalVersion)
 ```
+
+Minimal rule of thumb:
+
+- use `bindGlobalFun(...)` for global functions
+- use `bindGlobalVar(...)` for Kotlin-backed global variables/properties
+- use `addConst(...)` only for fixed values/objects that do not need getter/setter behavior
 
 For custom argument handling and full runtime access:
 
@@ -462,13 +476,20 @@ im.addPackage("my.tools") { module: ModuleScope ->
     module.eval(
         """
         extern val version: String
+        extern var status: String
         extern fun triple(x: Int): Int
         """.trimIndent()
     )
     val binder = module.globalBinder()
+    var status = "ready"
     binder.bindGlobalVar(
         name = "version",
         get = { "1.0" }
+    )
+    binder.bindGlobalVar(
+        name = "status",
+        get = { status },
+        set = { status = it }
     )
     binder.bindGlobalFun1<Int>("triple") { x ->
         ObjInt.of((x * 3).toLong())
@@ -479,6 +500,7 @@ im.addPackage("my.tools") { module: ModuleScope ->
 scope.eval("""
     import my.tools.*
     val v = triple(14)
+    status = "busy"
 """)
 val v = scope.eval("v").toKotlin(scope) // -> 42
 ```

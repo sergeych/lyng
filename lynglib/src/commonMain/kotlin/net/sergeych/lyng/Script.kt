@@ -46,6 +46,28 @@ class Script(
 //    private val catchReturn: Boolean = false,
 ) : Statement() {
     fun statements(): List<Statement> = statements
+
+    /**
+     * Explicitly apply this script's import/module bindings to [scope] without executing the script.
+     * This is intended for embedding scenarios where the host owns scope lifecycle and wants
+     * script-specific imports to be a separate, opt-in preparation step.
+     */
+    suspend fun importInto(scope: Scope, seedScope: Scope = scope): Scope {
+        prepareScriptScope(scope, seedScope)
+        return scope
+    }
+
+    /**
+     * Create a fresh raw module scope and apply this script's import/module bindings to it.
+     * If [seedScope] is provided, its import provider is reused and seed-bound imports resolve from it.
+     */
+    suspend fun instantiateModule(seedScope: Scope? = null, pos: Pos = this.pos): ModuleScope {
+        val provider = seedScope?.currentImportProvider ?: defaultImportManager
+        val module = provider.newModuleAt(pos)
+        prepareScriptScope(module, seedScope ?: module)
+        return module
+    }
+
     override suspend fun execute(scope: Scope): Obj {
         scope.pos = pos
         val execScope = resolveModuleScope(scope) ?: scope
@@ -73,6 +95,19 @@ class Script(
             scope.raiseIllegalState("bytecode-only execution is required; missing module bytecode")
         }
         return ObjVoid
+    }
+
+    private suspend fun prepareScriptScope(scope: Scope, seedScope: Scope) {
+        if (importBindings.isNotEmpty() || importedModules.isNotEmpty()) {
+            seedImportBindings(scope, seedScope)
+        }
+        if (moduleSlotPlan.isNotEmpty()) {
+            scope.applySlotPlan(moduleSlotPlan)
+            for (name in moduleSlotPlan.keys) {
+                val record = scope.objects[name] ?: scope.localBindings[name] ?: continue
+                scope.updateSlotFor(name, record)
+            }
+        }
     }
 
     private suspend fun seedModuleSlots(scope: Scope, seedScope: Scope) {

@@ -36,7 +36,7 @@ internal suspend fun seedFrameLocalsFromScope(frame: CmdFrame, scope: Scope) {
         } else {
             record.value
         }
-        if (value is net.sergeych.lyng.FrameSlotRef && value.refersTo(frame.frame, base + i)) {
+        if (value is net.sergeych.lyng.FrameSlotRef && value.refersTo(frame.frame, i)) {
             continue
         }
         frame.setObjUnchecked(base + i, value)
