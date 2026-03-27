@@ -364,6 +364,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
         onNotFoundResult: (suspend () -> Obj?)?
     ): Obj {
         val caller = scope.currentClassCtx
+        val methodScope = scope.applyClosure(instanceScope)
         
         // Fast path for public members when outside any class context
         if (caller == null) {
@@ -373,7 +374,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                     if (rec.type == ObjRecord.Type.Property) {
                         if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, decl)
                     } else if (rec.type == ObjRecord.Type.Fun) {
-                        return rec.value.invoke(instanceScope, this, args, decl)
+                        return rec.value.invoke(methodScope, this, args, decl)
                     }
                 }
             }
@@ -384,7 +385,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                         if (rec.type == ObjRecord.Type.Property) {
                             if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, decl)
                         } else if (rec.type == ObjRecord.Type.Fun) {
-                            return rec.value.invoke(instanceScope, this, args, decl)
+                            return rec.value.invoke(methodScope, this, args, decl)
                         }
                     }
                 }
@@ -394,7 +395,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                         if (rec.type == ObjRecord.Type.Property) {
                             if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, decl)
                         } else if (rec.type == ObjRecord.Type.Fun) {
-                            return rec.value.invoke(instanceScope, this, args, decl)
+                            return rec.value.invoke(methodScope, this, args, decl)
                         }
                     }
                 }
@@ -409,7 +410,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                     if (rec.type == ObjRecord.Type.Property) {
                         if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, c)
                     } else if (rec.type == ObjRecord.Type.Fun) {
-                        return rec.value.invoke(instanceScope, this, args, c)
+                        return rec.value.invoke(methodScope, this, args, c)
                     }
                 }
             }
@@ -418,7 +419,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                     if (rec.type == ObjRecord.Type.Property) {
                         if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, c)
                     } else if (rec.type == ObjRecord.Type.Fun) {
-                        return rec.value.invoke(instanceScope, this, args, c)
+                        return rec.value.invoke(methodScope, this, args, c)
                     }
                 }
             }
@@ -427,7 +428,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                     if (rec.type == ObjRecord.Type.Property) {
                         if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, c)
                     } else if (rec.type == ObjRecord.Type.Fun) {
-                        return rec.value.invoke(instanceScope, this, args, c)
+                        return rec.value.invoke(methodScope, this, args, c)
                     }
                 }
             }
@@ -439,7 +440,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 val decl = rec.declaringClass ?: objClass.findDeclaringClassOf(name) ?: objClass
                 val effectiveCaller = caller ?: if (scope.thisObj === this) objClass else null
                 if (canAccessMember(rec.visibility, decl, effectiveCaller, name)) {
-                    return rec.value.invoke(instanceScope, this, args, decl)
+                    return rec.value.invoke(methodScope, this, args, decl)
                 }
             }
         }
@@ -474,7 +475,7 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
                 if (args.isEmpty()) return (rec.value as ObjProperty).callGetter(scope, this, decl)
             } else if (rec.type == ObjRecord.Type.Fun) {
                 return rec.value.invoke(
-                    instanceScope,
+                    methodScope,
                     this,
                     args,
                     decl
@@ -586,8 +587,10 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
     }
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
-        if (other !is ObjInstance) return -1
-        if (other.objClass != objClass) return -1
+        if (other !is ObjInstance || other.objClass != objClass) {
+            OperatorInteropRegistry.invokeCompare(scope, this, other)?.let { return it }
+            return -1
+        }
         for (f in comparableVars) {
             val a = f.value.value
             val b = other.instanceScope.objects[f.key]?.value ?: scope.raiseError("Internal error: field ${f.key} not found in other instance")

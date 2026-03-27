@@ -101,6 +101,7 @@ kotlin {
                 //put your multiplatform dependencies here
                 api(libs.kotlinx.coroutines.core)
                 api(libs.mp.bintools)
+                implementation(libs.ionspin.bignum)
             }
         }
         val commonTest by getting {

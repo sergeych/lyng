@@ -4667,6 +4667,7 @@ class Compiler(
             }
             is MethodCallRef -> methodReturnTypeDeclByRef[ref]
             is CallRef -> callReturnTypeDeclByRef[ref]
+            is BinaryOpRef -> inferBinaryOpReturnTypeDecl(ref)
             is StatementRef -> (ref.statement as? ExpressionStatement)?.let { resolveReceiverTypeDecl(it.ref) }
             else -> null
         }
@@ -4730,6 +4731,7 @@ class Compiler(
             is ThisMethodSlotCallRef -> inferMethodCallReturnClass(ref.methodName())
             is QualifiedThisMethodSlotCallRef -> inferMethodCallReturnClass(ref.methodName())
             is CallRef -> inferCallReturnClass(ref)
+            is BinaryOpRef -> inferBinaryOpReturnClass(ref)
             is FieldRef -> {
                 val targetClass = resolveReceiverClassForMember(ref.target)
                 inferFieldReturnClass(targetClass, ref.name)
@@ -4744,10 +4746,105 @@ class Compiler(
         }
     }
 
+    private fun typeDeclOfClass(objClass: ObjClass): TypeDecl = TypeDecl.Simple(objClass.className, false)
+
+    private fun binaryOpMethodName(op: BinOp): String? = when (op) {
+        BinOp.PLUS -> "plus"
+        BinOp.MINUS -> "minus"
+        BinOp.STAR -> "mul"
+        BinOp.SLASH -> "div"
+        BinOp.PERCENT -> "mod"
+        else -> null
+    }
+
+    private fun interopOperatorFor(op: BinOp): InteropOperator? = when (op) {
+        BinOp.PLUS -> InteropOperator.Plus
+        BinOp.MINUS -> InteropOperator.Minus
+        BinOp.STAR -> InteropOperator.Mul
+        BinOp.SLASH -> InteropOperator.Div
+        BinOp.PERCENT -> InteropOperator.Mod
+        BinOp.LT, BinOp.LTE, BinOp.GT, BinOp.GTE -> InteropOperator.Compare
+        BinOp.EQ, BinOp.NEQ -> InteropOperator.Equals
+        else -> null
+    }
+
+    private fun sameClassArithmeticFallback(leftClass: ObjClass, rightClass: ObjClass, op: BinOp): TypeDecl? {
+        if (leftClass !== rightClass) return null
+        val methodName = binaryOpMethodName(op) ?: return null
+        if (leftClass.getInstanceMemberOrNull(methodName, includeAbstract = true) == null) return null
+        return typeDeclOfClass(leftClass)
+    }
+
+    private fun inferBinaryOpReturnTypeDecl(ref: BinaryOpRef): TypeDecl? {
+        val leftClass = resolveReceiverClassForMember(ref.left) ?: inferObjClassFromRef(ref.left)
+        val rightClass = resolveReceiverClassForMember(ref.right) ?: inferObjClassFromRef(ref.right)
+        val boolType = typeDeclOfClass(ObjBool.type)
+        val intType = typeDeclOfClass(ObjInt.type)
+        val realType = typeDeclOfClass(ObjReal.type)
+        val stringType = typeDeclOfClass(ObjString.type)
+
+        when (ref.op) {
+            BinOp.OR, BinOp.AND,
+            BinOp.EQARROW, BinOp.EQ, BinOp.NEQ, BinOp.REF_EQ, BinOp.REF_NEQ, BinOp.MATCH, BinOp.NOTMATCH,
+            BinOp.LTE, BinOp.LT, BinOp.GTE, BinOp.GT,
+            BinOp.IN, BinOp.NOTIN,
+            BinOp.IS, BinOp.NOTIS -> return boolType
+            else -> {}
+        }
+
+        if (leftClass == null || rightClass == null) return null
+
+        val leftIsInt = leftClass == ObjInt.type
+        val rightIsInt = rightClass == ObjInt.type
+        val leftIsReal = leftClass == ObjReal.type
+        val rightIsReal = rightClass == ObjReal.type
+        val leftIsNumeric = leftIsInt || leftIsReal
+        val rightIsNumeric = rightIsInt || rightIsReal
+
+        return when (ref.op) {
+            BinOp.PLUS -> when {
+                leftIsInt && rightIsInt -> intType
+                leftIsNumeric && rightIsNumeric -> realType
+                leftClass == ObjString.type -> stringType
+                interopOperatorFor(ref.op)?.let {
+                    OperatorInteropRegistry.commonClassFor(leftClass, rightClass, it)
+                } != null -> typeDeclOfClass(
+                    OperatorInteropRegistry.commonClassFor(leftClass, rightClass, interopOperatorFor(ref.op)!!)!!
+                )
+                else -> binaryOpMethodName(ref.op)?.let { classMethodReturnTypeDecl(leftClass, it) }
+                    ?: sameClassArithmeticFallback(leftClass, rightClass, ref.op)
+            }
+            BinOp.MINUS, BinOp.STAR, BinOp.SLASH, BinOp.PERCENT -> when {
+                leftIsInt && rightIsInt -> intType
+                leftIsNumeric && rightIsNumeric -> realType
+                ref.op == BinOp.STAR && leftClass == ObjString.type && rightIsNumeric -> stringType
+                interopOperatorFor(ref.op)?.let {
+                    OperatorInteropRegistry.commonClassFor(leftClass, rightClass, it)
+                } != null -> typeDeclOfClass(
+                    OperatorInteropRegistry.commonClassFor(leftClass, rightClass, interopOperatorFor(ref.op)!!)!!
+                )
+                else -> binaryOpMethodName(ref.op)?.let { classMethodReturnTypeDecl(leftClass, it) }
+                    ?: sameClassArithmeticFallback(leftClass, rightClass, ref.op)
+            }
+            BinOp.BAND, BinOp.BOR, BinOp.BXOR, BinOp.SHL, BinOp.SHR ->
+                if (leftIsInt && rightIsInt) intType else null
+            else -> null
+        }
+    }
+
     private fun inferBinaryOpReturnClass(ref: BinaryOpRef): ObjClass? {
+        inferBinaryOpReturnTypeDecl(ref)?.let { declared ->
+            resolveTypeDeclObjClass(declared)?.let { return it }
+        }
         val leftClass = resolveReceiverClassForMember(ref.left) ?: inferObjClassFromRef(ref.left)
         val rightClass = resolveReceiverClassForMember(ref.right) ?: inferObjClassFromRef(ref.right)
         if (leftClass == null || rightClass == null) return null
+        interopOperatorFor(ref.op)?.let { op ->
+            OperatorInteropRegistry.commonClassFor(leftClass, rightClass, op)?.let { return it }
+        }
+        sameClassArithmeticFallback(leftClass, rightClass, ref.op)?.let { declared ->
+            resolveTypeDeclObjClass(declared)?.let { return it }
+        }
         return when (ref.op) {
             BinOp.PLUS, BinOp.MINUS -> when {
                 leftClass == ObjInstant.type && rightClass == ObjInstant.type && ref.op == BinOp.MINUS -> ObjDuration.type

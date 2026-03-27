@@ -28,73 +28,84 @@ fun HomePage() {
     val samples = remember {
         listOf(
             """
+            // Decimal arithmetic with explicit local precision
+            import lyng.decimal
+
+            val exact = "0.3".d
+            val fromReal = (0.1 + 0.2).d
+
+            println(exact.toStringExpanded())
+            println(fromReal.toStringExpanded())
+            println(withDecimalContext(10) { (1.d / 3.d).toStringExpanded() })
+            """.trimIndent(),
+            """
+            // Mixed operators for your own type
+            import lyng.operators
+
+            class Coins(val amount: Int) {
+                fun plus(other: Coins) = Coins(amount + other.amount)
+                fun compareTo(other: Coins) = amount <=> other.amount
+            }
+
+            OperatorInterop.register(
+                Int,
+                Coins,
+                Coins,
+                [BinaryOperator.Plus, BinaryOperator.Compare, BinaryOperator.Equals],
+                { x: Int -> Coins(x) },
+                { x: Coins -> x }
+            )
+
+            println(1 + Coins(2))
+            println(3 > Coins(2))
+            """.trimIndent(),
+            """
+            // Non-local returns from closures
+            fun findFirst<T>(list: Iterable<T>, predicate: (T)->Bool): T? {
+                list.forEach {
+                    if (predicate(it)) return@findFirst it
+                }
+                null
+            }
+
+            val found: Int? = findFirst([1, 5, 8, 12]) { it > 10 }
+            println("Found: " + found)
+            """.trimIndent(),
+            """
+            // Implicit coroutines: parallelism without ceremony
+            import lyng.time
+
+            val d1 = launch {
+                delay(100.milliseconds)
+                "Task A finished"
+            }
+            val d2 = launch {
+                delay(50.milliseconds)
+                "Task B finished"
+            }
+
+            println(d1.await())
+            println(d2.await())
+            """.trimIndent(),
+            """
             // Everything is an expression
             val x: Int = 10
             val status: String = if (x > 0) "Positive" else "Zero or Negative"
 
-            // Even loops return values!
             val result = for (i in 1..5) {
                 if (i == 3) break "Found 3!"
             } else "Not found"
 
-            println("Result: " + result)
+            println(status)
+            println(result)
             """.trimIndent(),
             """
-            // Functional power with generics and collections
+            // Functional collections with strict static types
             val squares: List<Int> = (1..10)
                 .filter { it % 2 == 0 }
                 .map { it * it }
 
             println("Even squares: " + squares)
-            // Output: [4, 16, 36, 64, 100]
-            """.trimIndent(),
-            """
-            // Generics and type aliases
-            type Num = Int | Real
-            
-            class Box<out T: Num>(val value: T) {
-                fun get(): T = value
-            }
-            
-            val intBox = Box(42)
-            val realBox = Box(3.14)
-            println("Boxes: " + intBox.get() + ", " + realBox.get())
-            """.trimIndent(),
-            """
-            // Strict compile-time types and symbol resolution
-            fun greet(name: String, count: Int) {
-                for (i in 1..count) {
-                    println("Hello, " + name + "!")
-                }
-            }
-            
-            greet("Lyng", 3)
-            // greet(10, "error") // This would be a compile-time error!
-            """.trimIndent(),
-            """
-            // Flexible map literals and shorthands
-            val id = 101
-            val name = "Lyng"
-            val base = { id:, name: } // Shorthand for id: id, name: name
-
-            val full = { ...base, version: "1.5.0-SNAPSHOT", status: "active" }
-            println(full)
-            """.trimIndent(),
-            """
-            // Modern null safety
-            var config: Map<String, Int>? = null
-            config ?= { timeout: 30 } // Assign only if null
-
-            val timeout = config?["timeout"] ?: 60
-            println("Timeout is: " + timeout)
-            """.trimIndent(),
-            """
-            // Destructuring with splat operator
-            val [first, middle..., last] = [1, 2, 3, 4, 5, 6]
-
-            println("First: " + first)
-            println("Middle: " + middle)
-            println("Last: " + last)
             """.trimIndent(),
             """
             // Diamond-safe Multiple Inheritance (C3 MRO)
@@ -123,18 +134,6 @@ fun HomePage() {
             println([10, 20, 30].second)
             """.trimIndent(),
             """
-            // Non-local returns from closures
-            fun findFirst<T>(list: Iterable<T>, predicate: (T)->Bool): T? {
-                list.forEach {
-                    if (predicate(it)) return@findFirst it
-                }
-                null
-            }
-
-            val found: Int? = findFirst([1, 5, 8, 12]) { it > 10 }
-            println("Found: " + found)
-            """.trimIndent(),
-            """
             // Easy operator overloading
             class Vector(val x: Real, val y: Real) {
                 fun plus(other: Vector): Vector = Vector(x + other.x, y + other.y)
@@ -156,20 +155,13 @@ fun HomePage() {
             println("User name: " + u.name)
             """.trimIndent(),
             """
-            // Implicit coroutines: parallelism without ceremony
-            import lyng.time
+            // Flexible map literals and shorthands
+            val id = 101
+            val name = "Lyng"
+            val base = { id:, name: }
+            val full = { ...base, status: "active", tags: ["typed", "portable"] }
 
-            val d1 = launch {
-                delay(100.milliseconds)
-                "Task A finished"
-            }
-            val d2 = launch {
-                delay(50.milliseconds)
-                "Task B finished"
-            }
-
-            println(d1.await())
-            println(d2.await())
+            println(full)
             """.trimIndent()
         )
     }
@@ -195,6 +187,8 @@ fun HomePage() {
             Div({ classes("d-flex", "justify-content-center", "gap-2", "flex-wrap", "mb-4") }) {
                 // Benefits pills
                 listOf(
+                    "Decimal arithmetic",
+                    "Operator interop",
                     "Strict static typing",
                     "Generics & Type Aliases",
                     "Implicit coroutines",
@@ -229,6 +223,26 @@ fun HomePage() {
                     Text("Try Lyng")
                 }
                 // (Telegram button moved to the bottom of the page)
+            }
+        }
+    }
+
+    Div({ classes("row", "g-3", "mb-4") }) {
+        listOf(
+            Triple("New: Decimal", "Exact decimal values, local precision control, and mixed operators with Int and Real.", "#/docs/Decimal.md"),
+            Triple("New: Operator Interop", "Teach Lyng how your custom types interact with built-ins on the left-hand side.", "#/docs/OperatorInterop.md"),
+            Triple("What Changed", "Recent language, stdlib, and tooling improvements in one place.", "#/docs/whats_new.md")
+        ).forEach { (title, text, href) ->
+            Div({ classes("col-12", "col-lg-4") }) {
+                A(attrs = {
+                    classes("text-decoration-none")
+                    attr("href", href)
+                }) {
+                    Div({ classes("h-100", "p-3", "border", "rounded-3", "bg-body-tertiary") }) {
+                        H3({ classes("h5", "mb-2", "text-body") }) { Text(title) }
+                        P({ classes("mb-0", "text-muted") }) { Text(text) }
+                    }
+                }
             }
         }
     }
