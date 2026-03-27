@@ -18,9 +18,14 @@
 package net.sergeych.lyng
 
 import kotlinx.coroutines.test.runTest
+import net.sergeych.lyng.bridge.bind
 import net.sergeych.lyng.obj.ObjRecord
+import net.sergeych.lyng.bridge.data
 import net.sergeych.lyng.bridge.bindGlobalVar
 import net.sergeych.lyng.bridge.globalBinder
+import net.sergeych.lyng.obj.ObjFalse
+import net.sergeych.lyng.obj.ObjInstance
+import net.sergeych.lyng.obj.ObjTrue
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -81,4 +86,66 @@ class GlobalPropertyCaptureRegressionTest {
 
         assertEquals(2.0, x, "bound extern var should stay live in child-scope execution")
     }
+
+    @Test
+    fun externGlobalVarShouldStayLiveAfterExternClassPropertyBranchInChildScope() = runTest {
+        val base = Script.newScope() as ModuleScope
+        var x = 3.0
+
+        base.eval(
+            """
+            extern var X: Real
+
+            class ChoiceInputResult {
+                extern val isSkip: Bool
+            }
+
+            extern fun requestChoice(): ChoiceInputResult
+            """.trimIndent()
+        )
+
+        base.bind("ChoiceInputResult") {
+            addVal("isSkip") {
+                if (thisObjData<ChoicePayload>().isSkip) ObjTrue else ObjFalse
+            }
+        }
+
+        base.globalBinder().bindGlobalVar(
+            name = "X",
+            get = { x },
+            set = { x = it }
+        )
+
+        base.globalBinder().bindGlobalFunRaw("requestChoice") { _, _ ->
+            val instance = base.requireClass("ChoiceInputResult").callOn(base.createChildScope()) as ObjInstance
+            instance.data = ChoicePayload(isSkip = true)
+            instance
+        }
+
+        val child = base.createChildScope()
+        child.eval(
+            """
+            fun main() {
+                val c: ChoiceInputResult = requestChoice()
+                if (c.isSkip) {
+                    X = 77.0
+                }
+            }
+            """.trimIndent()
+        )
+
+        child.eval("main()")
+
+        assertEquals(77.0, x, "bound extern var should stay live after extern class property branch in child scope")
+    }
+}
+
+private data class ChoicePayload(
+    val isSkip: Boolean,
+)
+
+@Suppress("UNCHECKED_CAST")
+private fun <T> ScopeFacade.thisObjData(): T {
+    val instance = thisObj as? ObjInstance ?: raiseClassCastError("Expected result object instance")
+    return instance.data as? T ?: raiseIllegalState("Bridge payload is not initialized")
 }

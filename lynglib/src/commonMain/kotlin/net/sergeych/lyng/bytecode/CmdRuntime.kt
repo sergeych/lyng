@@ -100,6 +100,9 @@ class CmdMoveObj(internal val src: Int, internal val dst: Int) : Cmd() {
 class CmdMoveInt(internal val src: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         val value = frame.getInt(src)
+        if (frame.writeThroughPropertyLikeSlot(dst, ObjInt.of(value))) {
+            return
+        }
         if (frame.shouldBypassImmutableWrite(dst)) {
             frame.setIntUnchecked(dst, value)
         } else {
@@ -120,6 +123,9 @@ class CmdMoveIntLocal(internal val src: Int, internal val dst: Int) : Cmd() {
 class CmdMoveReal(internal val src: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         val value = frame.getReal(src)
+        if (frame.writeThroughPropertyLikeSlot(dst, ObjReal.of(value))) {
+            return
+        }
         if (frame.shouldBypassImmutableWrite(dst)) {
             frame.setRealUnchecked(dst, value)
         } else {
@@ -140,6 +146,9 @@ class CmdMoveRealLocal(internal val src: Int, internal val dst: Int) : Cmd() {
 class CmdMoveBool(internal val src: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         val value = frame.getBool(src)
+        if (frame.writeThroughPropertyLikeSlot(dst, if (value) ObjTrue else ObjFalse)) {
+            return
+        }
         if (frame.shouldBypassImmutableWrite(dst)) {
             frame.setBoolUnchecked(dst, value)
         } else {
@@ -4344,12 +4353,13 @@ class CmdFrame(
         }
         val localIndex = slot - fn.scopeSlotCount
         val name = fn.localSlotNames.getOrNull(localIndex) ?: return false
+        val isCapture = fn.localSlotCaptures.getOrNull(localIndex) == true
         val raw = frame.getRawObj(localIndex)
         if (raw is RecordSlotRef) {
             if (raw.write(scope, name, value)) return true
             return false
         }
-        if (raw !== ObjUnset && raw !is ObjProperty) return false
+        if (!isCapture && raw !== ObjUnset && raw !is ObjProperty) return false
         val record = scope.parent?.get(name) ?: scope.get(name) ?: return false
         if (record.type != ObjRecord.Type.Delegated && record.type != ObjRecord.Type.Property && record.value !is ObjProperty) {
             return false
