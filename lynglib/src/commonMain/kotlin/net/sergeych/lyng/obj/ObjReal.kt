@@ -19,6 +19,8 @@ package net.sergeych.lyng.obj
 
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
+import net.sergeych.lyng.InteropOperator
+import net.sergeych.lyng.OperatorInteropRegistry
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.miniast.addConstDoc
 import net.sergeych.lyng.miniast.addFnDoc
@@ -40,6 +42,8 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
     override fun byValueCopy(): Obj = this
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
+        if (other is ObjReal) return value.compareTo(other.value)
+        OperatorInteropRegistry.invokeCompare(scope, this, other)?.let { return it }
         if (other !is Numeric) return -2
         return value.compareTo(other.doubleValue)
     }
@@ -63,19 +67,24 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
     }
 
     override suspend fun plus(scope: Scope, other: Obj): Obj =
-        of(this.value + other.toDouble())
+        OperatorInteropRegistry.invokeBinary(scope, this, other, InteropOperator.Plus)
+            ?: of(this.value + other.toDouble())
 
     override suspend fun minus(scope: Scope, other: Obj): Obj =
-        of(this.value - other.toDouble())
+        OperatorInteropRegistry.invokeBinary(scope, this, other, InteropOperator.Minus)
+            ?: of(this.value - other.toDouble())
 
     override suspend fun mul(scope: Scope, other: Obj): Obj =
-        of(this.value * other.toDouble())
+        OperatorInteropRegistry.invokeBinary(scope, this, other, InteropOperator.Mul)
+            ?: of(this.value * other.toDouble())
 
     override suspend fun div(scope: Scope, other: Obj): Obj =
-        of(this.value / other.toDouble())
+        OperatorInteropRegistry.invokeBinary(scope, this, other, InteropOperator.Div)
+            ?: of(this.value / other.toDouble())
 
     override suspend fun mod(scope: Scope, other: Obj): Obj =
-        of(this.value % other.toDouble())
+        OperatorInteropRegistry.invokeBinary(scope, this, other, InteropOperator.Mod)
+            ?: of(this.value % other.toDouble())
 
     /**
      * Returns unboxed Double value

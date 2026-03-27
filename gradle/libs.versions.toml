@@ -8,6 +8,7 @@ android-compileSdk = "34"
 kotlinx-coroutines = "1.10.2"
 kotlinx-datetime = "0.6.1"
 mp_bintools = "0.3.2"
+ionspin-bignum = "0.3.10"
 firebaseCrashlyticsBuildtools = "3.0.3"
 okioVersion = "3.10.2"
 compiler = "3.2.0-alpha11"
@@ -22,6 +23,7 @@ kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-t
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
 mp_bintools = { module = "net.sergeych:mp_bintools", version.ref = "mp_bintools" }
+ionspin-bignum = { module = "com.ionspin.kotlin:bignum", version.ref = "ionspin-bignum" }
 firebase-crashlytics-buildtools = { group = "com.google.firebase", name = "firebase-crashlytics-buildtools", version.ref = "firebaseCrashlyticsBuildtools" }
 okio = { module = "com.squareup.okio:okio", version.ref = "okioVersion" }
 okio-fakefilesystem = { module = "com.squareup.okio:okio-fakefilesystem", version.ref = "okioVersion" }

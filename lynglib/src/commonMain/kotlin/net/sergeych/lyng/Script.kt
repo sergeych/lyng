@@ -27,7 +27,9 @@ import net.sergeych.lyng.bytecode.CmdVm
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
+import net.sergeych.lyng.stdlib_included.decimalLyng
 import net.sergeych.lyng.stdlib_included.observableLyng
+import net.sergeych.lyng.stdlib_included.operatorsLyng
 import net.sergeych.lyng.stdlib_included.rootLyng
 import net.sergeych.lynon.ObjLynonClass
 import net.sergeych.mp_tools.globalDefer
@@ -726,6 +728,36 @@ class Script(
                     module.addConst("ObservableList", ObjObservableList.type)
                     module.addConst("ChangeRejectionException", ObjChangeRejectionExceptionClass)
                     module.eval(Source("lyng.observable", observableLyng))
+                }
+                addPackage("lyng.operators") { module ->
+                    module.eval(Source("lyng.operators", operatorsLyng))
+                    module.bindObject("OperatorInterop") {
+                        addFun("register") {
+                            val leftClass = requiredArg<ObjClass>(0)
+                            val rightClass = requiredArg<ObjClass>(1)
+                            val commonClass = requiredArg<ObjClass>(2)
+                            val operators = requiredArg<ObjList>(3).list.map { value ->
+                                val entry = value as? ObjEnumEntry
+                                    ?: requireScope().raiseIllegalArgument(
+                                        "OperatorInterop.register expects BinaryOperator enum entries"
+                                    )
+                                entry.name.value
+                            }
+                            OperatorInteropRegistry.register(
+                                leftClass = leftClass,
+                                rightClass = rightClass,
+                                commonClass = commonClass,
+                                operatorNames = operators,
+                                leftToCommon = args[4],
+                                rightToCommon = args[5]
+                            )
+                            ObjVoid
+                        }
+                    }
+                }
+                addPackage("lyng.decimal") { module ->
+                    module.eval(Source("lyng.decimal", decimalLyng))
+                    ObjBigDecimalSupport.bindTo(module)
                 }
                 addPackage("lyng.buffer") {
                     it.addConstDoc(

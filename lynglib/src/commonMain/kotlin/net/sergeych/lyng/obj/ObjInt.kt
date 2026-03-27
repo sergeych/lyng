@@ -19,6 +19,8 @@ package net.sergeych.lyng.obj
 
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
+import net.sergeych.lyng.InteropOperator
+import net.sergeych.lyng.OperatorInteropRegistry
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lynon.LynonDecoder
@@ -54,10 +56,11 @@ class ObjInt(val value: Long, override val isConst: Boolean = false) : Obj(), Nu
     }
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
-        if (other !is Numeric) return -2
         return if (other is ObjInt) {
             value.compareTo(other.value)
         } else {
+            OperatorInteropRegistry.invokeCompare(scope, this, other)?.let { return it }
+            if (other !is Numeric) return -2
             doubleValue.compareTo(other.doubleValue)
         }
     }
@@ -70,28 +73,39 @@ class ObjInt(val value: Long, override val isConst: Boolean = false) : Obj(), Nu
         if (other is ObjInt)
             of(this.value + other.value)
         else
+            OperatorInteropRegistry.invokeBinary(scope, this, other, InteropOperator.Plus)
+                ?:
             ObjReal.of(this.doubleValue + other.toDouble())
 
     override suspend fun minus(scope: Scope, other: Obj): Obj =
         if (other is ObjInt)
             of(this.value - other.value)
         else
+            OperatorInteropRegistry.invokeBinary(scope, this, other, InteropOperator.Minus)
+                ?:
             ObjReal.of(this.doubleValue - other.toDouble())
 
     override suspend fun mul(scope: Scope, other: Obj): Obj =
         if (other is ObjInt) {
             of(this.value * other.value)
-        } else ObjReal.of(this.value * other.toDouble())
+        } else {
+            OperatorInteropRegistry.invokeBinary(scope, this, other, InteropOperator.Mul)
+                ?: ObjReal.of(this.value * other.toDouble())
+        }
 
     override suspend fun div(scope: Scope, other: Obj): Obj =
         if (other is ObjInt)
             of(this.value / other.value)
-        else ObjReal.of(this.value / other.toDouble())
+        else
+            OperatorInteropRegistry.invokeBinary(scope, this, other, InteropOperator.Div)
+                ?: ObjReal.of(this.value / other.toDouble())
 
     override suspend fun mod(scope: Scope, other: Obj): Obj =
         if (other is ObjInt)
             of(this.value % other.value)
-        else ObjReal.of(this.value.toDouble() % other.toDouble())
+        else
+            OperatorInteropRegistry.invokeBinary(scope, this, other, InteropOperator.Mod)
+                ?: ObjReal.of(this.value.toDouble() % other.toDouble())
 
     /**
      * Numbers are now immutable, so we can't do in-place assignment.

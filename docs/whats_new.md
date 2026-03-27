@@ -5,6 +5,73 @@ For a programmer-focused migration summary, see `docs/whats_new_1_5.md`.
 
 ## Language Features
 
+### Decimal Arithmetic Module (`lyng.decimal`)
+Lyng now ships a first-class decimal module built as a regular extension library rather than a deep core special case.
+
+It provides:
+
+- `BigDecimal`
+- convenient `.d` conversions from `Int`, `Real`, and `String`
+- mixed arithmetic with `Int` and `Real`
+- local division precision and rounding control via `withDecimalContext(...)`
+
+```lyng
+import lyng.decimal
+
+assertEquals("3", (1 + 2.d).toStringExpanded())
+assertEquals("0.30000000000000004", (0.1 + 0.2).d.toStringExpanded())
+assertEquals("0.3", "0.3".d.toStringExpanded())
+
+assertEquals(
+    "0.3333333333",
+    withDecimalContext(10) { (1.d / 3.d).toStringExpanded() }
+)
+```
+
+The distinction between `Real -> Decimal` and exact decimal parsing is explicit by design:
+
+- `2.2.d` converts the current `Real` value
+- `"2.2".d` parses exact decimal text
+
+See [Decimal](Decimal.md).
+
+### Binary Operator Interop Registry
+Lyng now provides a general mechanism for mixed binary operators through `lyng.operators`.
+
+This solves cases like:
+
+- `Int + MyType`
+- `Real < MyType`
+- `Int == MyType`
+
+without requiring changes to built-in classes.
+
+```lyng
+import lyng.operators
+
+class DecimalBox(val value: Int) {
+    fun plus(other: DecimalBox) = DecimalBox(value + other.value)
+    fun compareTo(other: DecimalBox) = value <=> other.value
+}
+
+OperatorInterop.register(
+    Int,
+    DecimalBox,
+    DecimalBox,
+    [BinaryOperator.Plus, BinaryOperator.Compare, BinaryOperator.Equals],
+    { x: Int -> DecimalBox(x) },
+    { x: DecimalBox -> x }
+)
+
+assertEquals(DecimalBox(3), 1 + DecimalBox(2))
+assert(1 < DecimalBox(2))
+assert(2 == DecimalBox(2))
+```
+
+`lyng.decimal` uses this same mechanism internally to interoperate with `Int` and `Real`.
+
+See [Operator Interop Registry](OperatorInterop.md).
+
 ### Class Properties with Accessors
 Classes now support properties with custom `get()` and `set()` accessors. Properties in Lyng do **not** have automatic backing fields; they are pure accessors.
 

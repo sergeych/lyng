@@ -25,6 +25,8 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.serializer
 import net.sergeych.lyng.*
+import net.sergeych.lyng.InteropOperator
+import net.sergeych.lyng.OperatorInteropRegistry
 import net.sergeych.lyng.miniast.ParamDoc
 import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lyng.miniast.type
@@ -175,7 +177,8 @@ open class Obj {
         if (other === this) return 0
         if (other === ObjNull || other === ObjUnset || other === ObjVoid) return 2
         return invokeInstanceMethod(scope, "compareTo", Arguments(other)) {
-            scope.raiseNotImplemented("compareTo for ${objClass.className}")
+            OperatorInteropRegistry.invokeCompare(scope, this, other)?.let { ObjInt.of(it.toLong()) }
+                ?: scope.raiseNotImplemented("compareTo for ${objClass.className}")
         }.cast<ObjInt>(scope).toInt()
     }
 
@@ -284,7 +287,8 @@ open class Obj {
         }
         if (self !== this) return self.plus(scope, otherValue)
         return invokeInstanceMethod(scope, "plus", Arguments(otherValue)) {
-            scope.raiseNotImplemented("plus for ${objClass.className}")
+            OperatorInteropRegistry.invokeBinary(scope, self, otherValue, InteropOperator.Plus)
+                ?: scope.raiseNotImplemented("plus for ${objClass.className}")
         }
     }
 
@@ -301,7 +305,8 @@ open class Obj {
         }
         if (self !== this) return self.minus(scope, otherValue)
         return invokeInstanceMethod(scope, "minus", Arguments(otherValue)) {
-            scope.raiseNotImplemented("minus for ${objClass.className}")
+            OperatorInteropRegistry.invokeBinary(scope, self, otherValue, InteropOperator.Minus)
+                ?: scope.raiseNotImplemented("minus for ${objClass.className}")
         }
     }
 
@@ -324,7 +329,8 @@ open class Obj {
         }
         if (self !== this) return self.mul(scope, otherValue)
         return invokeInstanceMethod(scope, "mul", Arguments(otherValue)) {
-            scope.raiseNotImplemented("mul for ${objClass.className}")
+            OperatorInteropRegistry.invokeBinary(scope, self, otherValue, InteropOperator.Mul)
+                ?: scope.raiseNotImplemented("mul for ${objClass.className}")
         }
     }
 
@@ -341,7 +347,8 @@ open class Obj {
         }
         if (self !== this) return self.div(scope, otherValue)
         return invokeInstanceMethod(scope, "div", Arguments(otherValue)) {
-            scope.raiseNotImplemented("div for ${objClass.className}")
+            OperatorInteropRegistry.invokeBinary(scope, self, otherValue, InteropOperator.Div)
+                ?: scope.raiseNotImplemented("div for ${objClass.className}")
         }
     }
 
@@ -358,7 +365,8 @@ open class Obj {
         }
         if (self !== this) return self.mod(scope, otherValue)
         return invokeInstanceMethod(scope, "mod", Arguments(otherValue)) {
-            scope.raiseNotImplemented("mod for ${objClass.className}")
+            OperatorInteropRegistry.invokeBinary(scope, self, otherValue, InteropOperator.Mod)
+                ?: scope.raiseNotImplemented("mod for ${objClass.className}")
         }
     }
 
