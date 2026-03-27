@@ -287,8 +287,8 @@ fun HomePage() {
         }
     }
 
-    // Bottom section with a small Telegram button
-    Div({ classes("text-center", "mt-5", "pb-4") }) {
+    // Bottom section with Telegram and authors links
+    Div({ classes("text-center", "mt-5", "d-flex", "justify-content-center", "gap-2", "flex-wrap") }) {
         A(attrs = {
             classes("btn", "btn-outline-primary", "btn-sm")
             attr("href", "https://t.me/lynglang")
@@ -297,6 +297,13 @@ fun HomePage() {
         }) {
             I({ classes("bi", "bi-telegram", "me-1") })
             Text("Join our Telegram channel")
+        }
+        A(attrs = {
+            classes("btn", "btn-outline-secondary", "btn-sm")
+            attr("href", "#/authors")
+        }) {
+            I({ classes("bi", "bi-people", "me-1") })
+            Text("Meet the authors")
         }
     }
 }

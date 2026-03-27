@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -117,10 +117,27 @@ val generateDocsIndex by tasks.registering {
     }
 }
 
+val generateSiteVersion by tasks.registering(Copy::class) {
+    group = "documentation"
+    description = "Generates lyng-version.js from :lynglib version"
+
+    val outDir = layout.buildDirectory.dir("generated-resources")
+    val versionText = project(":lynglib").version.toString()
+
+    inputs.property("lyngVersion", versionText)
+    from(layout.projectDirectory.dir("src/version-template")) {
+        include("lyng-version.js")
+        filter<org.apache.tools.ant.filters.ReplaceTokens>(
+            "tokens" to mapOf("LYNG_VERSION" to versionText)
+        )
+    }
+    into(outDir)
+}
+
 // Ensure any ProcessResources task depends on docs index generation so the JSON is packaged
 tasks.configureEach {
     if (name.endsWith("ProcessResources")) {
-        dependsOn(generateDocsIndex)
+        dependsOn(generateDocsIndex, generateSiteVersion)
     }
 }
 

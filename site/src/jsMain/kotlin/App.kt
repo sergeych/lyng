@@ -70,6 +70,7 @@ fun App() {
 
     PageTemplate(title = when {
         isDocsRoute -> null
+        route.startsWith("authors") -> "Authors"
         route.startsWith("reference") -> "Reference"
         route.isBlank() -> null
         else -> null
@@ -118,6 +119,7 @@ fun App() {
             Div({ classes("col-12", if (isDocsRoute) "col-lg-9" else "col-lg-12") }) {
                 when {
                     route.isBlank() -> HomePage()
+                    route.startsWith("authors") -> AuthorsPage()
                     route.startsWith("tryling") -> TryLyngPage(route)
                     route.startsWith("search") -> SearchPage(route)
                     !isDocsRoute -> ReferencePage()

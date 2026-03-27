@@ -332,16 +332,22 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
     <!-- and it's easy to individually load additional languages -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/languages/go.min.js"></script>
+    <script src="lyng-version.js"></script>
 
 
 </head>
 <body>
 <!-- Top-left version ribbon -->
 <div class="corner-ribbon bg-danger text-white">
-        <span style="margin-left: -5em">
-            v1.5.2
+        <span id="lyng-version-ribbon" style="margin-left: -5em">
         </span>
 </div>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        var ribbon = document.getElementById("lyng-version-ribbon");
+        if (ribbon) ribbon.textContent = "v" + (window.LYNG_VERSION || "");
+    });
+</script>
 <!-- Fixed top navbar for the whole site -->
 <a href="#root" class="visually-hidden-focusable position-absolute top-0 start-0 m-2 px-2 py-1 bg-body border rounded">Skip
     to content</a>
@@ -384,6 +390,7 @@
                         <!-- Will be populated at runtime -->
                         <li><a class="dropdown-item" href="#/docs/tutorial.md" data-route="docs">Tutorial</a></li>
                         <li><a class="dropdown-item" href="#/reference" data-route="reference">Reference</a></li>
+                        <li><a class="dropdown-item" href="#/authors" data-route="authors">Authors</a></li>
                         <li>
                             <hr class="dropdown-divider">
                         </li>
@@ -485,7 +492,7 @@
             var activeLink = null;
             if (!hash || hash === '#' || hash === '#/') {
                 activeLink = document.querySelector('#topbarNav .nav-link[data-route="home"]');
-            } else if (hash.startsWith('#/docs/')) {
+            } else if (hash.startsWith('#/docs/') || hash.startsWith('#/authors')) {
                 // Mark Docs menu root as active
                 activeLink = document.querySelector('#topbarNav .nav-link.dropdown-toggle');
             } else if (hash.startsWith('#/reference')) {
