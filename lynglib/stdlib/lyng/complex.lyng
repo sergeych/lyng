@@ -27,45 +27,22 @@ class Complex(val real: Real, val imag: Real = 0.0) {
     val re get() = real
     val im get() = imag
 
-    fun plus(other: Complex): Complex {
-        val ar = real
-        val ai = imag
-        val br = other.real
-        val bi = other.imag
-        val realPart = ar + br
-        val imagPart = ai + bi
-        Complex(realPart, imagPart)
-    }
+    fun plus(other: Complex): Complex = Complex(real + other.real, imag + other.imag)
 
-    fun minus(other: Complex): Complex {
-        val ar = real
-        val ai = imag
-        val br = other.real
-        val bi = other.imag
-        val realPart = ar - br
-        val imagPart = ai - bi
-        Complex(realPart, imagPart)
-    }
+    fun minus(other: Complex): Complex = Complex(real - other.real, imag - other.imag)
 
-    fun mul(other: Complex): Complex {
-        val ar = real
-        val ai = imag
-        val br = other.real
-        val bi = other.imag
-        val realPart = ar * br - ai * bi
-        val imagPart = ar * bi + ai * br
-        Complex(realPart, imagPart)
-    }
+    fun mul(other: Complex): Complex =
+        Complex(
+            real * other.real - imag * other.imag,
+            real * other.imag + imag * other.real
+        )
 
     fun div(other: Complex): Complex {
-        val ar = real
-        val ai = imag
-        val br = other.real
-        val bi = other.imag
-        val denominator = br * br + bi * bi
-        val realPart = (ar * br + ai * bi) / denominator
-        val imagPart = (ai * br - ar * bi) / denominator
-        Complex(realPart, imagPart)
+        val denominator = other.real * other.real + other.imag * other.imag
+        Complex(
+            (real * other.real + imag * other.imag) / denominator,
+            (imag * other.real - real * other.imag) / denominator
+        )
     }
 
     fun negate(): Complex = Complex(-real, -imag)
@@ -114,9 +91,8 @@ class Complex(val real: Real, val imag: Real = 0.0) {
         Complex(Math.sqrt(real), 0.0)
     } else {
         val radius = magnitude
-        val realPart = Math.sqrt((radius + real) / 2.0)
         val imagPart = Math.sqrt((radius - real) / 2.0)
-        Complex(realPart, if (imag < 0.0) -imagPart else imagPart)
+        Complex(Math.sqrt((radius + real) / 2.0), if (imag < 0.0) -imagPart else imagPart)
     }
 
     override fun toString() =
