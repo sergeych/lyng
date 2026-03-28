@@ -57,7 +57,7 @@ Lyng now ships a first-class decimal module built as a regular extension library
 
 It provides:
 
-- `BigDecimal`
+- `Decimal`
 - convenient `.d` conversions from `Int`, `Real`, and `String`
 - mixed arithmetic with `Int` and `Real`
 - local division precision and rounding control via `withDecimalContext(...)`

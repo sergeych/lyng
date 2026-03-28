@@ -97,7 +97,7 @@ enum BinaryOperator {
  * The registry is symmetric for the converted values, but not for the original syntax.
  * Its job is specifically to fill the gap where your custom type appears on the right:
  *
- * - `myDecimal + 1` usually already works if `BigDecimal.plus(Int)` exists
+ * - `myDecimal + 1` usually already works if `Decimal.plus(Int)` exists
  * - `1 + myDecimal` needs registration because `Int` itself is not rewritten
  *
  * Typical pattern for a custom type:
@@ -135,7 +135,7 @@ enum BinaryOperator {
  * - `3 > Rational(5, 2)` works
  * - `2 == Rational(2, 1)` works
  *
- * Decimal uses the same mechanism internally to make `Int + BigDecimal` and `Real + BigDecimal`
+ * Decimal uses the same mechanism internally to make `Int + Decimal` and `Real + Decimal`
  * work without changing the built-in `Int` or `Real` classes.
  */
 extern object OperatorInterop {

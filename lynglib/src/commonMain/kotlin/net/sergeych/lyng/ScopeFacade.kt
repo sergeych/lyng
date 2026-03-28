@@ -17,6 +17,7 @@
 
 package net.sergeych.lyng
 
+import com.ionspin.kotlin.bignum.decimal.BigDecimal
 import net.sergeych.lyng.obj.*
 
 /**
@@ -133,3 +134,6 @@ fun ScopeFacade.raiseIllegalOperation(message: String = "Operation is illegal"):
 
 fun ScopeFacade.raiseIterationFinished(): Nothing =
     raiseError(ObjIterationFinishedException(requireScope()))
+
+suspend fun ScopeFacade.newDecimal(value: BigDecimal): ObjInstance =
+    ObjDecimalSupport.newDecimal(this, value)

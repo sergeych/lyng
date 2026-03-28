@@ -79,10 +79,10 @@ extern class MapEntry<K,V> : Array<Object> {
 // Built-in math helpers (implemented in host runtime).
 //
 // Decimal note:
-// - these helpers accept `BigDecimal` values too
+// - these helpers accept `Decimal` values too
 // - `abs`, `floor`, `ceil`, `round`, and `pow(x, y)` with integral `y` keep decimal arithmetic
 // - the remaining decimal cases currently use a temporary bridge:
-//   `BigDecimal -> Real -> host math -> BigDecimal`
+//   `Decimal -> Real -> host math -> Decimal`
 // - this is temporary and will be replaced with dedicated decimal implementations
 extern fun abs(x: Object): Object
 extern fun ln(x: Object): Object

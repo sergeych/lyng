@@ -1,8 +1,8 @@
 # Decimal Math TODO
 
-These stdlib math helpers currently accept `BigDecimal`, but some still use the temporary compatibility path
+These stdlib math helpers currently accept `Decimal`, but some still use the temporary compatibility path
 
-`BigDecimal -> Real -> host math -> BigDecimal`
+`Decimal -> Real -> host math -> Decimal`
 
 instead of a native decimal implementation.
 

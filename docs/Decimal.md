@@ -8,9 +8,9 @@ Import it when you need decimal arithmetic that should not inherit `Real`'s bina
 import lyng.decimal
 ```
 
-## What `BigDecimal` Is For
+## What `Decimal` Is For
 
-Use `BigDecimal` when values are fundamentally decimal:
+Use `Decimal` when values are fundamentally decimal:
 
 - money
 - human-entered quantities
@@ -38,8 +38,8 @@ assertEquals("2.2", c.toStringExpanded())
 
 The three forms mean different things:
 
-- `1.d`: convert `Int -> BigDecimal`
-- `2.2.d`: convert `Real -> BigDecimal`
+- `1.d`: convert `Int -> Decimal`
+- `2.2.d`: convert `Real -> Decimal`
 - `"2.2".d`: parse exact decimal text
 
 That distinction is intentional.
@@ -67,16 +67,36 @@ The explicit factory methods are:
 ```lyng
 import lyng.decimal
 
-BigDecimal.fromInt(10)
-BigDecimal.fromReal(2.5)
-BigDecimal.fromString("12.34")
+Decimal.fromInt(10)
+Decimal.fromReal(2.5)
+Decimal.fromString("12.34")
 ```
 
 These are equivalent to the conversion-property forms, but sometimes clearer in APIs or generated code.
 
+## From Kotlin
+
+If you already have an ionspin `BigDecimal` on the host side, the simplest supported way to create a Lyng `Decimal` is:
+
+```kotlin
+import com.ionspin.kotlin.bignum.decimal.BigDecimal
+import net.sergeych.lyng.Script
+import net.sergeych.lyng.asFacade
+import net.sergeych.lyng.newDecimal
+
+val scope = Script.newScope()
+val decimal = scope.asFacade().newDecimal(BigDecimal.parseStringWithMode("12.34"))
+```
+
+Notes:
+
+- `newDecimal(...)` loads `lyng.decimal` if needed
+- it returns a real Lyng `Decimal` object instance
+- this is the preferred Kotlin-side construction path when you already hold a host `BigDecimal`
+
 ## Core Operations
 
-`BigDecimal` supports:
+`Decimal` supports:
 
 - `+`
 - `-`
@@ -115,7 +135,7 @@ assert(2 == 2.d)
 assert(3 > 2.d)
 ```
 
-Without this registration mechanism, only the cases directly implemented on the left-hand class would work. The bridge fills the gap for expressions such as `Int + BigDecimal` and `Real + BigDecimal`.
+Without this registration mechanism, only the cases directly implemented on the left-hand class would work. The bridge fills the gap for expressions such as `Int + Decimal` and `Real + Decimal`.
 
 See [OperatorInterop.md](OperatorInterop.md) for the generic mechanism behind that.
 
@@ -226,7 +246,7 @@ assertEquals("-0.12", withDecimalContext(2, DecimalRounding.HalfTowardsZero) { (
 ## Decimal With Stdlib Math Functions
 
 Core math helpers such as `abs`, `floor`, `ceil`, `round`, `sin`, `exp`, `ln`, `sqrt`, `log10`, `log2`, and `pow`
-now also accept `BigDecimal`.
+now also accept `Decimal`.
 
 Current behavior is intentionally split:
 
@@ -235,7 +255,7 @@ Current behavior is intentionally split:
   - `floor(x)`
   - `ceil(x)`
   - `round(x)`
-  - `pow(x, y)` when `x` is `BigDecimal` and `y` is an integral exponent
+  - `pow(x, y)` when `x` is `Decimal` and `y` is an integral exponent
 - temporary bridge through `Real`:
   - `sin`, `cos`, `tan`
   - `asin`, `acos`, `atan`
@@ -248,7 +268,7 @@ Current behavior is intentionally split:
 The temporary bridge is:
 
 ```lyng
-BigDecimal -> Real -> host math -> BigDecimal
+Decimal -> Real -> host math -> Decimal
 ```
 
 This is a compatibility step, not the long-term design. Native decimal implementations will replace these bridge-based
@@ -259,12 +279,12 @@ Examples:
 ```lyng
 import lyng.decimal
 
-assertEquals("2.5", (abs("-2.5".d) as BigDecimal).toStringExpanded())
-assertEquals("2", (floor("2.9".d) as BigDecimal).toStringExpanded())
+assertEquals("2.5", (abs("-2.5".d) as Decimal).toStringExpanded())
+assertEquals("2", (floor("2.9".d) as Decimal).toStringExpanded())
 
 // Temporary Real bridge:
-assertEquals((exp(1.25) as Real).d.toStringExpanded(), (exp("1.25".d) as BigDecimal).toStringExpanded())
-assertEquals((sqrt(2.0) as Real).d.toStringExpanded(), (sqrt("2".d) as BigDecimal).toStringExpanded())
+assertEquals((exp(1.25) as Real).d.toStringExpanded(), (exp("1.25".d) as Decimal).toStringExpanded())
+assertEquals((sqrt(2.0) as Real).d.toStringExpanded(), (sqrt("2".d) as Decimal).toStringExpanded())
 ```
 
 If you care about exact decimal source text:

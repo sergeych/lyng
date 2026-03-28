@@ -48,7 +48,7 @@ enum DecimalRounding {
 /**
  * Dynamic decimal arithmetic settings.
  *
- * A decimal context is not attached permanently to a `BigDecimal` value. Instead, it is applied dynamically
+ * A decimal context is not attached permanently to a `Decimal` value. Instead, it is applied dynamically
  * inside `withDecimalContext(...)`, which makes the rule local to a block of code.
  *
  * Default context:
@@ -76,7 +76,7 @@ class DecimalContext(
 /**
  * Arbitrary-precision decimal value.
  *
- * `BigDecimal` is intended for decimal arithmetic where binary floating-point (`Real`) is the wrong tool:
+ * `Decimal` is intended for decimal arithmetic where binary floating-point (`Real`) is the wrong tool:
  * - money
  * - human-entered decimal values
  * - ratios that should round in decimal, not in binary
@@ -84,10 +84,10 @@ class DecimalContext(
  *
  * Creating values:
  *
- * - `1.d` converts `Int -> BigDecimal`
- * - `2.2.d` converts `Real -> BigDecimal` by preserving the current IEEE-754 value
+ * - `1.d` converts `Int -> Decimal`
+ * - `2.2.d` converts `Real -> Decimal` by preserving the current IEEE-754 value
  * - `"2.2".d` parses exact decimal text
- * - `BigDecimal.fromInt(...)`, `fromReal(...)`, `fromString(...)` are explicit factory forms
+ * - `Decimal.fromInt(...)`, `fromReal(...)`, `fromString(...)` are explicit factory forms
  *
  * Important distinction:
  *
@@ -109,7 +109,7 @@ class DecimalContext(
  *
  * Mixed arithmetic:
  *
- * `BigDecimal` defines its own operators against decimal-compatible values, and the decimal module also registers
+ * `Decimal` defines its own operators against decimal-compatible values, and the decimal module also registers
  * interop bridges so built-in left-hand operands work naturally:
  *
  *     import lyng.decimal
@@ -134,15 +134,15 @@ class DecimalContext(
  *
  *     "2.2".d
  *
- * That is the precise form. `2.2.d` remains a `Real -> BigDecimal` conversion by design.
+ * That is the precise form. `2.2.d` remains a `Real -> Decimal` conversion by design.
  */
-extern class BigDecimal() {
+extern class Decimal() {
     /** Add another decimal-compatible value. */
-    extern fun plus(other: Object): BigDecimal
+    extern fun plus(other: Object): Decimal
     /** Subtract another decimal-compatible value. */
-    extern fun minus(other: Object): BigDecimal
+    extern fun minus(other: Object): Decimal
     /** Multiply by another decimal-compatible value. */
-    extern fun mul(other: Object): BigDecimal
+    extern fun mul(other: Object): Decimal
     /**
      * Divide by another decimal-compatible value.
      *
@@ -150,13 +150,13 @@ extern class BigDecimal() {
      * - by default: `34` significant digits, `HalfEven`
      * - inside `withDecimalContext(...)`: the context active for the current block
      */
-    extern fun div(other: Object): BigDecimal
+    extern fun div(other: Object): Decimal
     /** Remainder with another decimal-compatible value. */
-    extern fun mod(other: Object): BigDecimal
+    extern fun mod(other: Object): Decimal
     /** Compare with another decimal-compatible value. */
     extern fun compareTo(other: Object): Int
     /** Unary minus. */
-    extern fun negate(): BigDecimal
+    extern fun negate(): Decimal
     /** Convert to `Int` by dropping the fractional part according to backend conversion rules. */
     extern fun toInt(): Int
     /** Convert to `Real`. */
@@ -169,16 +169,16 @@ extern class BigDecimal() {
     extern fun toStringExpanded(): String
 
     /** Create a decimal from an `Int`. */
-    static extern fun fromInt(value: Int): BigDecimal
+    static extern fun fromInt(value: Int): Decimal
     /**
      * Create a decimal from a `Real`.
      *
      * This preserves the current IEEE-754 value using a round-trip-safe decimal conversion.
      * It does not try to recover the original source text.
      */
-    static extern fun fromReal(value: Real): BigDecimal
+    static extern fun fromReal(value: Real): Decimal
     /** Parse exact decimal text. */
-    static extern fun fromString(value: String): BigDecimal
+    static extern fun fromString(value: String): Decimal
 }
 
 /**

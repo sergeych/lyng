@@ -160,15 +160,15 @@ import lyng.decimal
 3 > 2.d
 ```
 
-work naturally even though `Int` and `Real` themselves were not edited to know `BigDecimal`.
+work naturally even though `Int` and `Real` themselves were not edited to know `Decimal`.
 
 The shape is:
 
 - `leftClass = Int` or `Real`
-- `rightClass = BigDecimal`
-- `commonClass = BigDecimal`
-- convert built-ins into `BigDecimal`
-- leave `BigDecimal` values unchanged
+- `rightClass = Decimal`
+- `commonClass = Decimal`
+- convert built-ins into `Decimal`
+- leave `Decimal` values unchanged
 
 ## Step-By-Step Pattern For Your Own Type
 

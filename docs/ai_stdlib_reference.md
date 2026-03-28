@@ -15,9 +15,9 @@ Sources: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Script.kt`, `lynglib/s
 - Preconditions: `require`, `check`.
 - Async/concurrency: `launch`, `yield`, `flow`, `delay`.
 - Math: `floor`, `ceil`, `round`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`, `exp`, `ln`, `log10`, `log2`, `pow`, `sqrt`, `abs`, `clamp`.
-  - These helpers also accept `lyng.decimal.BigDecimal`.
+  - These helpers also accept `lyng.decimal.Decimal`.
   - Exact Decimal path today: `abs`, `floor`, `ceil`, `round`, and `pow` with integral exponent.
-  - Temporary Decimal path for the rest: convert `BigDecimal -> Real`, compute, then convert back to `BigDecimal`.
+  - Temporary Decimal path for the rest: convert `Decimal -> Real`, compute, then convert back to `Decimal`.
   - Treat that bridge as temporary; prefer native Decimal implementations when they become available.
 
 ## 3. Core Global Constants/Types
@@ -60,6 +60,9 @@ Sources: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Script.kt`, `lynglib/s
 ## 5. Additional Built-in Modules (import explicitly)
 - `import lyng.observable`
   - `Observable`, `Subscription`, `ObservableList`, `ListChange` and change subtypes, `ChangeRejectionException`.
+- `import lyng.decimal`
+  - `Decimal`, `DecimalContext`, `DecimalRounding`, `withDecimalContext(...)`.
+  - Kotlin host helper: `ScopeFacade.newDecimal(BigDecimal)` wraps an ionspin host decimal as a Lyng `Decimal`.
 - `import lyng.complex`
   - `Complex`, `complex(re, im)`, `cis(angle)`, and numeric embedding extensions such as `2.i` / `3.re`.
 - `import lyng.matrix`

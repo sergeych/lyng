@@ -253,7 +253,7 @@ class Script(
     companion object {
 
         private suspend fun ScopeFacade.numberToDouble(value: Obj): Double =
-            ObjBigDecimalSupport.toDoubleOrNull(value) ?: value.toDouble()
+            ObjDecimalSupport.toDoubleOrNull(value) ?: value.toDouble()
 
         private suspend fun ScopeFacade.decimalAwareUnaryMath(
             value: Obj,
@@ -263,9 +263,9 @@ class Script(
             exactDecimal?.let { exact ->
                 exact(value)?.let { return it }
             }
-            if (ObjBigDecimalSupport.isDecimalValue(value)) {
-                return ObjBigDecimalSupport.fromRealLike(this, value, fallback(numberToDouble(value)))
-                    ?: raiseIllegalState("failed to convert Real result back to BigDecimal")
+            if (ObjDecimalSupport.isDecimalValue(value)) {
+                return ObjDecimalSupport.fromRealLike(this, value, fallback(numberToDouble(value)))
+                    ?: raiseIllegalState("failed to convert Real result back to Decimal")
             }
             return ObjReal(fallback(numberToDouble(value)))
         }
@@ -281,11 +281,11 @@ class Script(
         }
 
         private suspend fun ScopeFacade.decimalAwarePow(base: Obj, exponent: Obj): Obj {
-            ObjBigDecimalSupport.exactPow(this, base, exponent)?.let { return it }
-            if (ObjBigDecimalSupport.isDecimalValue(base) || ObjBigDecimalSupport.isDecimalValue(exponent)) {
-                return ObjBigDecimalSupport.fromRealLike(this, base, numberToDouble(base).pow(numberToDouble(exponent)))
-                    ?: ObjBigDecimalSupport.fromRealLike(this, exponent, numberToDouble(base).pow(numberToDouble(exponent)))
-                    ?: raiseIllegalState("failed to convert Real pow result back to BigDecimal")
+            ObjDecimalSupport.exactPow(this, base, exponent)?.let { return it }
+            if (ObjDecimalSupport.isDecimalValue(base) || ObjDecimalSupport.isDecimalValue(exponent)) {
+                return ObjDecimalSupport.fromRealLike(this, base, numberToDouble(base).pow(numberToDouble(exponent)))
+                    ?: ObjDecimalSupport.fromRealLike(this, exponent, numberToDouble(base).pow(numberToDouble(exponent)))
+                    ?: raiseIllegalState("failed to convert Real pow result back to Decimal")
             }
             return ObjReal(numberToDouble(base).pow(numberToDouble(exponent)))
         }
@@ -327,15 +327,15 @@ class Script(
             }
             addFn("floor") {
                 val x = args.firstAndOnly()
-                decimalAwareRoundLike(x, ObjBigDecimalSupport::exactFloor, ::floor)
+                decimalAwareRoundLike(x, ObjDecimalSupport::exactFloor, ::floor)
             }
             addFn("ceil") {
                 val x = args.firstAndOnly()
-                decimalAwareRoundLike(x, ObjBigDecimalSupport::exactCeil, ::ceil)
+                decimalAwareRoundLike(x, ObjDecimalSupport::exactCeil, ::ceil)
             }
             addFn("round") {
                 val x = args.firstAndOnly()
-                decimalAwareRoundLike(x, ObjBigDecimalSupport::exactRound, ::round)
+                decimalAwareRoundLike(x, ObjDecimalSupport::exactRound, ::round)
             }
 
             addFn("sin") {
@@ -401,7 +401,7 @@ class Script(
             addFn("abs") {
                 val x = args.firstAndOnly()
                 if (x is ObjInt) ObjInt(x.value.absoluteValue)
-                else decimalAwareUnaryMath(x, ObjBigDecimalSupport::exactAbs) { it.absoluteValue }
+                else decimalAwareUnaryMath(x, ObjDecimalSupport::exactAbs) { it.absoluteValue }
             }
 
             addFnDoc(
@@ -661,15 +661,15 @@ class Script(
                 )
                 ensureFn("floor") {
                     val x = args.firstAndOnly()
-                    decimalAwareRoundLike(x, ObjBigDecimalSupport::exactFloor, ::floor)
+                    decimalAwareRoundLike(x, ObjDecimalSupport::exactFloor, ::floor)
                 }
                 ensureFn("ceil") {
                     val x = args.firstAndOnly()
-                    decimalAwareRoundLike(x, ObjBigDecimalSupport::exactCeil, ::ceil)
+                    decimalAwareRoundLike(x, ObjDecimalSupport::exactCeil, ::ceil)
                 }
                 ensureFn("round") {
                     val x = args.firstAndOnly()
-                    decimalAwareRoundLike(x, ObjBigDecimalSupport::exactRound, ::round)
+                    decimalAwareRoundLike(x, ObjDecimalSupport::exactRound, ::round)
                 }
                 ensureFn("sin") {
                     decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::sin)
@@ -729,7 +729,7 @@ class Script(
                 ensureFn("abs") {
                     val x = args.firstAndOnly()
                     if (x is ObjInt) ObjInt(x.value.absoluteValue)
-                    else decimalAwareUnaryMath(x, ObjBigDecimalSupport::exactAbs) { it.absoluteValue }
+                    else decimalAwareUnaryMath(x, ObjDecimalSupport::exactAbs) { it.absoluteValue }
                 }
             }
         }
@@ -867,7 +867,7 @@ class Script(
                 }
                 addPackage("lyng.decimal") { module ->
                     module.eval(Source("lyng.decimal", decimalLyng))
-                    ObjBigDecimalSupport.bindTo(module)
+                    ObjDecimalSupport.bindTo(module)
                 }
                 addPackage("lyng.matrix") { module ->
                     module.eval(Source("lyng.matrix", matrixLyng))
