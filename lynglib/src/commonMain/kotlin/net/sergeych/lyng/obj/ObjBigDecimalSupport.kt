@@ -17,22 +17,14 @@
 
 package net.sergeych.lyng.obj
 
-import com.ionspin.kotlin.bignum.decimal.BigDecimal as IonBigDecimal
 import com.ionspin.kotlin.bignum.decimal.DecimalMode
 import com.ionspin.kotlin.bignum.decimal.RoundingMode
 import com.ionspin.kotlin.bignum.integer.BigInteger
-import net.sergeych.lyng.Arguments
-import net.sergeych.lyng.FrameSlotRef
-import net.sergeych.lyng.InteropOperator
-import net.sergeych.lyng.ModuleScope
-import net.sergeych.lyng.OperatorInteropRegistry
-import net.sergeych.lyng.RecordSlotRef
-import net.sergeych.lyng.Scope
-import net.sergeych.lyng.ScopeFacade
-import net.sergeych.lyng.TypeDecl
+import net.sergeych.lyng.*
 import net.sergeych.lyng.miniast.addPropertyDoc
 import net.sergeych.lyng.miniast.type
 import net.sergeych.lyng.requiredArg
+import com.ionspin.kotlin.bignum.decimal.BigDecimal as IonBigDecimal
 
 object ObjBigDecimalSupport {
     private const val decimalContextVar = "__lyng_decimal_context__"
@@ -87,6 +79,9 @@ object ObjBigDecimalSupport {
         }
         decimalClass.addFn("toReal") {
             ObjReal.of(valueOf(thisObj).doubleValue(false))
+        }
+        decimalClass.addFn("toString") {
+            ObjString(valueOf(thisObj).toStringExpanded())
         }
         decimalClass.addFn("toStringExpanded") {
             ObjString(valueOf(thisObj).toStringExpanded())

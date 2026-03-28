@@ -29,6 +29,7 @@ import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.stdlib_included.complexLyng
 import net.sergeych.lyng.stdlib_included.decimalLyng
+import net.sergeych.lyng.stdlib_included.matrixLyng
 import net.sergeych.lyng.stdlib_included.observableLyng
 import net.sergeych.lyng.stdlib_included.operatorsLyng
 import net.sergeych.lyng.stdlib_included.rootLyng
@@ -838,6 +839,10 @@ class Script(
                 addPackage("lyng.decimal") { module ->
                     module.eval(Source("lyng.decimal", decimalLyng))
                     ObjBigDecimalSupport.bindTo(module)
+                }
+                addPackage("lyng.matrix") { module ->
+                    module.eval(Source("lyng.matrix", matrixLyng))
+                    ObjMatrixSupport.bindTo(module)
                 }
                 addPackage("lyng.complex") { module ->
                     module.eval(Source("lyng.complex", complexLyng))

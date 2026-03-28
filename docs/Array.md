@@ -4,6 +4,13 @@ It's an interface if the [Collection] that provides indexing access, like `array
 Array therefore implements [Iterable] too. Well known implementations of `Array` are
 [List] and [ImmutableList].
 
+The language-level bracket syntax supports one or more selectors:
+
+- `value[i]`
+- `value[i, j]`
+
+Concrete array-like types decide what selectors they accept. Built-in list-like arrays use one selector at a time; custom types such as matrices may interpret multiple selectors.
+
 Array adds the following methods:
 
 ## Binary search

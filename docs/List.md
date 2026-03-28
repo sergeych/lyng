@@ -30,6 +30,13 @@ There is a shortcut for the last:
 
 __Important__ negative indexes works wherever indexes are used, e.g. in insertion and removal methods too.
 
+The language also allows multi-selector indexing syntax such as `value[i, j]`, but `List` itself uses a single selector only:
+
+- `list[index]` for one element
+- `list[range]` for a slice copy
+
+Multi-selector indexing is intended for custom indexers such as `Matrix`.
+
 ## Concatenation
 
 You can concatenate lists or iterable objects:

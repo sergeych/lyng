@@ -375,6 +375,18 @@ It is rather simple, like everywhere else:
 
 See [math](math.md) for more on it. Notice using Greek as identifier, all languages are allowed.
 
+For linear algebra, import `lyng.matrix`:
+
+    import lyng.matrix
+
+    val a: Matrix = matrix([[1, 2], [3, 4]])
+    val i: Matrix = Matrix.identity(2)
+    val sum: Matrix = a + i
+    assertEquals([[2.0, 2.0], [3.0, 5.0]], sum.toList())
+    >>> void
+
+See [Matrix](Matrix.md) for vectors, matrix multiplication, inversion, and slicing such as `m[0..2, 1]`.
+
 Logical operation could be used the same
 
     var x = 10
@@ -810,6 +822,14 @@ Lists can contain any type of objects, lists too:
     >>> void
 
 Notice usage of indexing. You can use negative indexes to offset from the end of the list; see more in [Lists](List.md).
+
+In general, bracket indexing may contain more than one selector:
+
+    value[i]
+    value[i, j]
+
+For built-in lists, strings, maps, and buffers, the selector is usually a single value such as an `Int`, `Range`, or `Regex`.
+For types with custom indexers, multiple selectors are packed into one list-like index object and passed to `getAt` / `putAt`.
 
 When you want to "flatten" it to single array, you can use splat syntax:
 
@@ -1697,6 +1717,14 @@ Open-ended ranges could be used to get start and end too:
     assertEquals( "cat", "catapult"[ ..< 3 ])
     assertEquals( "cat", "catapult"[ .. 2 ])
     assertEquals( "pult", "catapult"[ 4.. ])
+    >>> void
+
+The same bracket syntax is also used by imported numeric modules such as `lyng.matrix`, where indexing can be multi-axis:
+
+    import lyng.matrix
+
+    val m: Matrix = matrix([[1, 2, 3], [4, 5, 6]])
+    assertEquals(6.0, m[1, 2])
     >>> void
 
 ### String operations

@@ -58,6 +58,8 @@ Sources: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Script.kt`, `lynglib/s
   - `Observable`, `Subscription`, `ObservableList`, `ListChange` and change subtypes, `ChangeRejectionException`.
 - `import lyng.complex`
   - `Complex`, `complex(re, im)`, `cis(angle)`, and numeric embedding extensions such as `2.i` / `3.re`.
+- `import lyng.matrix`
+  - `Matrix`, `Vector`, `matrix(rows)`, `vector(values)`, dense linear algebra, inversion, solving, and matrix slicing with `m[row, col]`.
 - `import lyng.buffer`
   - `Buffer`, `MutableBuffer`.
 - `import lyng.serialization`

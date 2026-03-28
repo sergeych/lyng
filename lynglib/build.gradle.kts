@@ -29,7 +29,7 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidLibrary)
 //    alias(libs.plugins.vanniktech.mavenPublish)
-    kotlin("plugin.serialization") version "2.2.21"
+    kotlin("plugin.serialization") version "2.3.20"
     id("com.codingfeline.buildkonfig") version "0.17.1"
     `maven-publish`
 }
@@ -110,6 +110,27 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.test)
             }
         }
+        val matrixMultikMain by creating {
+            dependsOn(commonMain)
+            dependencies {
+                implementation(libs.multik.default)
+            }
+        }
+        val matrixPureMain by creating {
+            dependsOn(commonMain)
+        }
+        val jvmMain by getting { dependsOn(matrixMultikMain) }
+        val androidMain by getting { dependsOn(matrixPureMain) }
+        val jsMain by getting { dependsOn(matrixMultikMain) }
+        val wasmJsMain by getting { dependsOn(matrixMultikMain) }
+        val iosX64Main by getting { dependsOn(matrixMultikMain) }
+        val iosArm64Main by getting { dependsOn(matrixMultikMain) }
+        val iosSimulatorArm64Main by getting { dependsOn(matrixMultikMain) }
+        val macosX64Main by getting { dependsOn(matrixMultikMain) }
+        val macosArm64Main by getting { dependsOn(matrixMultikMain) }
+        val mingwX64Main by getting { dependsOn(matrixMultikMain) }
+        val linuxX64Main by getting { dependsOn(matrixMultikMain) }
+        val linuxArm64Main by getting { dependsOn(matrixPureMain) }
         val jvmTest by getting {
             dependencies {
                 // Allow tests to load external docs like lyng.io.fs via registrar

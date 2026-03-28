@@ -183,6 +183,72 @@ Scope-backed Kotlin lambdas receive a `ScopeFacade` (not a full `Scope`). For mi
 
 If you truly need the full `Scope` (e.g., for low-level interop), use `requireScope()` explicitly.
 
+### 4.5) Indexers from Kotlin: `getAt` and `putAt`
+
+Lyng bracket syntax is dispatched through `getAt` and `putAt`.
+
+That means:
+
+- `x[i]` calls `getAt(index)`
+- `x[i] = value` calls `putAt(index, value)` or `setAt(index, value)`
+- field-like `x["name"]` also uses the same index path unless you expose a real field/property
+
+For Kotlin-backed classes, bind indexers as ordinary methods named `getAt` and `putAt`:
+
+```kotlin
+moduleScope.eval("""
+    extern class Grid {
+        override fun getAt(index: List<Int>): Int
+        override fun putAt(index: List<Int>, value: Int): void
+    }
+""".trimIndent())
+
+moduleScope.bind("Grid") {
+    init { _ -> data = IntArray(4) }
+
+    addFun("getAt") {
+        val index = args.requiredArg<ObjList>(0)
+        val row = (index.list[0] as ObjInt).value.toInt()
+        val col = (index.list[1] as ObjInt).value.toInt()
+        val data = (thisObj as ObjInstance).data as IntArray
+        ObjInt.of(data[row * 2 + col].toLong())
+    }
+
+    addFun("putAt") {
+        val index = args.requiredArg<ObjList>(0)
+        val value = args.requiredArg<ObjInt>(1).value.toInt()
+        val row = (index.list[0] as ObjInt).value.toInt()
+        val col = (index.list[1] as ObjInt).value.toInt()
+        val data = (thisObj as ObjInstance).data as IntArray
+        data[row * 2 + col] = value
+        ObjVoid
+    }
+}
+```
+
+Usage from Lyng:
+
+```lyng
+val g = Grid()
+g[0, 1] = 42
+assertEquals(42, g[0, 1])
+```
+
+Important rule: multiple selectors inside brackets are packed into one index object.
+So:
+
+- `x[i]` passes `i`
+- `x[i, j]` passes a `List` containing `[i, j]`
+- `x[i, j, k]` passes `[i, j, k]`
+
+This applies equally to:
+
+- Kotlin-backed classes
+- Lyng classes overriding `getAt`
+- `dynamic { get { ... } set { ... } }`
+
+If you want multi-axis slicing semantics, decode that list yourself in `getAt`.
+
 ### 5) Add Kotlin‑backed fields
 
 If you need a simple field (with a value) instead of a computed property, use `createField`. This adds a field to the class that will be present in all its instances.

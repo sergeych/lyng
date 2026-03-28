@@ -110,6 +110,56 @@ For example:
     assert( 5.clamp(0..10) == 5 )
     >>> void
 
+## Linear algebra: `lyng.matrix`
+
+For vectors and dense matrices, import `lyng.matrix`:
+
+```lyng
+import lyng.matrix
+```
+
+It provides:
+
+- `Vector`
+- `Matrix`
+- `vector(values)`
+- `matrix(rows)`
+
+Core operations include:
+
+- matrix addition and subtraction
+- matrix-matrix multiplication
+- matrix-vector multiplication
+- transpose
+- determinant
+- inverse
+- linear solve
+- vector dot, norm, normalize, cross, outer product
+
+Example:
+
+```lyng
+import lyng.matrix
+
+val a: Matrix = matrix([[1, 2, 3], [4, 5, 6]])
+val b: Matrix = matrix([[7, 8], [9, 10], [11, 12]])
+val product: Matrix = a * b
+assertEquals([[58.0, 64.0], [139.0, 154.0]], product.toList())
+```
+
+Matrices also support two-axis bracket indexing and slicing:
+
+```lyng
+import lyng.matrix
+
+val m: Matrix = matrix([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+assertEquals(6.0, m[1, 2])
+val sub: Matrix = m[0..1, 1..2]
+assertEquals([[2.0, 3.0], [5.0, 6.0]], sub.toList())
+```
+
+See [Matrix](Matrix.md) for the full API.
+
 ## Random values
 
 Lyng stdlib provides a global random singleton and deterministic seeded generators:

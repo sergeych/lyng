@@ -82,11 +82,16 @@ Primary sources used: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/{Parser,T
 - Type/containment: `is`, `!is`, `in`, `!in`, `as`, `as?`.
 - Null-safe family:
   - member access: `?.`
-  - safe index: `?[i]`
+  - safe index: `?[i]`, `?[i, j]`
   - safe invoke: `?(...)`
   - safe block invoke: `?{ ... }`
   - elvis: `?:` and `??`.
 - Increment/decrement: prefix and postfix `++`, `--`.
+- Indexing syntax:
+  - single selector: `a[i]`
+  - multiple selectors: `a[i, j, k]`
+  - language-level indexing with multiple selectors is passed to `getAt`/`putAt` as one list-like index object, not as multiple method arguments.
+  - example: `m[0..2, 2]`.
 
 ## 5. Declarations
 - Variables:

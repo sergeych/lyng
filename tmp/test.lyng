@@ -1,0 +1,18 @@
+#!/binenv lyng
+
+import lyng.decimal
+
+val x = "0.1".d
+val y = 0.1
+var s0 = 0.d
+var s1 = 0.0
+
+for( i in 1..100 ) {
+    s0 += x
+    s1 += y
+}
+
+println("$s0")
+println("$s1")
+
+println(":: ${sin(3.14)}")

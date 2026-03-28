@@ -1,0 +1,157 @@
+package lyng.matrix
+
+type MatrixScalar = Real | Int
+
+/** Dense immutable vector backed by double-precision elements. */
+extern class Vector() {
+    /** Number of elements. */
+    val size: Int
+
+    /** Alias to `size`. */
+    val length: Int
+
+    /** Convert to a plain list. */
+    extern fun toList(): List<Real>
+
+    /** Get one element by zero-based index. */
+    extern fun get(index: Int): Real
+
+    /** Element-wise addition. */
+    extern fun plus(other: Vector): Vector
+
+    /** Element-wise subtraction. */
+    extern fun minus(other: Vector): Vector
+
+    /** Scale every element. */
+    extern fun mul(other: MatrixScalar): Vector
+
+    /** Divide every element by a scalar. */
+    extern fun div(other: MatrixScalar): Vector
+
+    /** Dot product. */
+    extern fun dot(other: Vector): Real
+
+    /** Euclidean norm. */
+    extern fun norm(): Real
+
+    /** Return a unit-length vector in the same direction. */
+    extern fun normalize(): Vector
+
+    /** 3D cross product. Both vectors must have length 3. */
+    extern fun cross(other: Vector): Vector
+
+    /** Outer product, returning a matrix of shape `(this.size, other.size)`. */
+    extern fun outer(other: Vector): Matrix
+
+    /** Build a vector from numeric values. */
+    static extern fun fromList(values: List<MatrixScalar>): Vector
+
+    /** Zero-filled vector. */
+    static extern fun zeros(size: Int): Vector
+}
+
+/**
+ * Dense immutable matrix backed by double-precision elements.
+ *
+ * `Matrix` supports arbitrary rectangular geometry (`rows x cols`), matrix arithmetic,
+ * transpose, determinant, and inversion.
+ *
+ * Use this type for numeric linear algebra where contiguous dense storage is appropriate.
+ */
+extern class Matrix() {
+    /** Number of rows. */
+    val rows: Int
+
+    /** Number of columns. */
+    val cols: Int
+
+    /** Two-element shape `[rows, cols]`. */
+    val shape: List<Int>
+
+    /** Whether `rows == cols`. */
+    val isSquare: Bool
+
+    /** Element-wise addition. Shapes must match. */
+    extern fun plus(other: Matrix): Matrix
+
+    /** Element-wise subtraction. Shapes must match. */
+    extern fun minus(other: Matrix): Matrix
+
+    /**
+     * Multiply by another matrix, by a vector, or by a scalar.
+     *
+     * - `Matrix * Matrix`: matrix product (`A.cols == B.rows`)
+     * - `Matrix * Vector`: matrix-vector product (`A.cols == x.size`)
+     * - `Matrix * MatrixScalar`: scale every element
+     */
+    extern fun mul(other: Matrix | Vector | MatrixScalar): Matrix | Vector
+
+    /** Divide every element by a scalar. */
+    extern fun div(other: MatrixScalar): Matrix
+
+    /** Matrix transpose. */
+    extern fun transpose(): Matrix
+
+    /** Sum of diagonal elements of a square matrix. */
+    extern fun trace(): Real
+
+    /** Row rank computed numerically via row-echelon reduction. */
+    extern fun rank(): Int
+
+    /**
+     * Determinant of a square matrix.
+     *
+     * Raises an error for non-square matrices.
+     */
+    extern fun determinant(): Real
+
+    /**
+     * Inverse of a square matrix.
+     *
+     * Raises an error for non-square or singular matrices.
+     */
+    extern fun inverse(): Matrix
+
+    /**
+     * Solve `A * x = rhs`.
+     *
+     * - with a `Vector` right-hand side, returns a `Vector`
+     * - with a `Matrix` right-hand side, returns a `Matrix`
+     */
+    extern fun solve(rhs: Vector | Matrix): Vector | Matrix
+
+    /**
+     * Bracket indexing by `[row, col]`.
+     *
+     * Each selector may be an `Int` or a `Range`:
+     * - `m[1, 2]` returns one scalar
+     * - `m[0..2, 2]` returns a `3x1` matrix
+     * - `m[0..2, 0..2]` returns a sub-matrix
+     * - `m[1.., 1..]` returns the bottom-right tail
+     */
+    override extern fun getAt(index: List<Int | Range>): Real | Matrix
+
+    /** Get one element by zero-based row and column indices. */
+    extern fun get(row: Int, col: Int): Real
+
+    /** Return one row as a `List<Real>`. */
+    extern fun row(index: Int): List<Real>
+
+    /** Return one column as a `List<Real>`. */
+    extern fun column(index: Int): List<Real>
+
+    /** Convert to nested row lists. */
+    extern fun toList(): List<List<Real>>
+
+    /** Build a matrix from nested row lists. All rows must have the same length. */
+    static extern fun fromRows(rows: List<List<MatrixScalar>>): Matrix
+
+    /** Create a zero-filled matrix. */
+    static extern fun zeros(rows: Int, cols: Int): Matrix
+
+    /** Create an identity matrix of shape `(size, size)`. */
+    static extern fun identity(size: Int): Matrix
+}
+
+fun vector(values: List<MatrixScalar>): Vector = Vector.fromList(values)
+fun matrix(rows: List<List<MatrixScalar>>): Matrix = Matrix.fromRows(rows)

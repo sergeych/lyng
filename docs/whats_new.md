@@ -5,6 +5,53 @@ For a programmer-focused migration summary, see `docs/whats_new_1_5.md`.
 
 ## Language Features
 
+### Matrix and Vector Module (`lyng.matrix`)
+Lyng now ships a dense linear algebra module with immutable double-precision `Matrix` and `Vector` types.
+
+It provides:
+
+- `matrix([[...]])` and `vector([...])`
+- matrix multiplication
+- matrix inversion
+- determinant, trace, rank
+- solving `A * x = b`
+- vector operations such as `dot`, `normalize`, `cross`, and `outer`
+
+```lyng
+import lyng.matrix
+
+val a: Matrix = matrix([[4, 7], [2, 6]])
+val inv: Matrix = a.inverse()
+assert(abs(inv.get(0, 0) - 0.6) < 1e-9)
+```
+
+Matrices also support Lyng-style slicing:
+
+```lyng
+import lyng.matrix
+
+val m: Matrix = matrix([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+assertEquals(6.0, m[1, 2])
+val column: Matrix = m[0..2, 2]
+val tail: Matrix = m[1.., 1..]
+assertEquals([[3.0], [6.0], [9.0]], column.toList())
+assertEquals([[5.0, 6.0], [8.0, 9.0]], tail.toList())
+```
+
+See [Matrix](Matrix.md).
+
+### Multiple Selectors in Bracket Indexing
+Bracket indexing now accepts more than one selector:
+
+```lyng
+value[i]
+value[i, j]
+value[i, j, k]
+```
+
+For custom indexers, multiple selectors are packed into one list-like index object and dispatched through `getAt` / `putAt`.
+This is the rule used by `lyng.matrix` and by embedding APIs for Kotlin-backed indexers.
+
 ### Decimal Arithmetic Module (`lyng.decimal`)
 Lyng now ships a first-class decimal module built as a regular extension library rather than a deep core special case.
 

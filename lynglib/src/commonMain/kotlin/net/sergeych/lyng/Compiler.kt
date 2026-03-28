@@ -2915,9 +2915,9 @@ class Compiler(
                     operand?.let { left ->
                         // array access via ObjRef
                         val isOptional = t.type == Token.Type.NULL_COALESCE_INDEX
-                        val index = parseStatement() ?: throw ScriptError(t.pos, "Expecting index expression")
+                        val index = parseIndexExpression() ?: throw ScriptError(t.pos, "Expecting index expression")
                         cc.skipTokenOfType(Token.Type.RBRACKET, "missing ']' at the end of the list literal")
-                        operand = IndexRef(left, StatementRef(index), isOptional)
+                        operand = IndexRef(left, index, isOptional)
                     } ?: run {
                         // array literal
                         val entries = parseArrayLiteral()
@@ -3410,6 +3410,20 @@ class Compiler(
                 }
             }
         }
+    }
+
+    private suspend fun parseIndexExpression(): ObjRef? {
+        val first = parseExpressionLevel() ?: return null
+        if (!cc.skipTokenOfType(Token.Type.COMMA, isOptional = true)) {
+            return first
+        }
+
+        val entries = mutableListOf<ListEntry>(ListEntry.Element(first))
+        do {
+            val next = parseExpressionLevel() ?: throw ScriptError(cc.currentPos(), "Expecting index expression")
+            entries += ListEntry.Element(next)
+        } while (cc.skipTokenOfType(Token.Type.COMMA, isOptional = true))
+        return ListLiteralRef(entries)
     }
 
     private suspend fun parseDestructuringPattern(): List<ListEntry> {

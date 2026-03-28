@@ -135,4 +135,15 @@ class BigDecimalModuleTest {
             """.trimIndent()
         )
     }
+
+    @Test
+    fun testDefaultToString() = runTest {
+        eval("""
+            import lyng.decimal
+            
+            var s0 = "0.1".d + "0.1".d
+            assertEquals("0.2", s0.toStringExpanded())
+            assertEquals("0.2", s0.toString())
+        """.trimIndent())
+    }
 }

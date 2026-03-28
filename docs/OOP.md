@@ -1183,8 +1183,24 @@ collection's sugar won't work with it:
     assertEquals("buzz", x[0])
     >>> void
 
-If you want dynamic to function like an array, create a [feature
-request](https://gitea.sergeych.net/SergeychWorks/lyng/issues).
+Multiple selectors are packed into one list index object:
+
+    val x = dynamic {
+        get {
+            if( it == [1, 2] ) "hit"
+            else null
+        }
+    }
+    assertEquals("hit", x[1, 2])
+    >>> void
+
+So:
+
+- `x[i]` passes `i`
+- `x[i, j]` passes `[i, j]`
+- `x[i, j, k]` passes `[i, j, k]`
+
+This is the same rule used by Kotlin-backed `getAt` / `putAt` indexers in embedding.
 
 # Theory
 
