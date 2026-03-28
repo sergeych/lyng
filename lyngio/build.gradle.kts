@@ -44,7 +44,6 @@ kotlin {
     iosX64()
     iosArm64()
     iosSimulatorArm64()
-    macosX64()
     macosArm64()
     mingwX64()
     linuxX64()
@@ -62,8 +61,10 @@ kotlin {
     // Keep expect/actual warning suppressed consistently with other modules
     targets.configureEach {
         compilations.configureEach {
-            compilerOptions.configure {
-                freeCompilerArgs.add("-Xexpect-actual-classes")
+            compileTaskProvider.configure {
+                compilerOptions {
+                    freeCompilerArgs.add("-Xexpect-actual-classes")
+                }
             }
         }
     }
@@ -81,11 +82,33 @@ kotlin {
                 api(libs.mordant.core)
             }
         }
+        val nativeMain by creating {
+            dependsOn(commonMain)
+        }
+        val iosMain by creating {
+            dependsOn(nativeMain)
+        }
+        val linuxMain by creating {
+            dependsOn(nativeMain)
+        }
+        val macosMain by creating {
+            dependsOn(nativeMain)
+        }
+        val mingwMain by creating {
+            dependsOn(nativeMain)
+        }
         val commonTest by getting {
             dependencies {
                 implementation(libs.kotlin.test)
             }
         }
+        val iosX64Main by getting { dependsOn(iosMain) }
+        val iosArm64Main by getting { dependsOn(iosMain) }
+        val iosSimulatorArm64Main by getting { dependsOn(iosMain) }
+        val macosArm64Main by getting { dependsOn(macosMain) }
+        val mingwX64Main by getting { dependsOn(mingwMain) }
+        val linuxX64Main by getting { dependsOn(linuxMain) }
+        val linuxArm64Main by getting { dependsOn(linuxMain) }
 
         // JS: use runtime detection in jsMain to select Node vs Browser implementation
         val jsMain by getting {

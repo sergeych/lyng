@@ -58,7 +58,6 @@ kotlin {
     iosX64()
     iosArm64()
     iosSimulatorArm64()
-    macosX64()
     macosArm64()
     mingwX64()
     linuxX64()
@@ -76,8 +75,10 @@ kotlin {
     // Suppress Beta warning for expect/actual classes across all targets
     targets.configureEach {
         compilations.configureEach {
-            compilerOptions.configure {
-                freeCompilerArgs.add("-Xexpect-actual-classes")
+            compileTaskProvider.configure {
+                compilerOptions {
+                    freeCompilerArgs.add("-Xexpect-actual-classes")
+                }
             }
         }
     }
@@ -94,7 +95,7 @@ kotlin {
         }
 
         val commonMain by getting {
-            kotlin.srcDir("$buildDir/generated/buildConfig/commonMain/kotlin")
+            kotlin.srcDir(layout.buildDirectory.dir("generated/buildConfig/commonMain/kotlin"))
             dependencies {
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
                 implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")
@@ -116,6 +117,9 @@ kotlin {
                 implementation(libs.multik.default)
             }
         }
+        val nativeMain by creating {
+            dependsOn(commonMain)
+        }
         val matrixPureMain by creating {
             dependsOn(commonMain)
         }
@@ -123,14 +127,35 @@ kotlin {
         val androidMain by getting { dependsOn(matrixPureMain) }
         val jsMain by getting { dependsOn(matrixMultikMain) }
         val wasmJsMain by getting { dependsOn(matrixMultikMain) }
-        val iosX64Main by getting { dependsOn(matrixMultikMain) }
-        val iosArm64Main by getting { dependsOn(matrixMultikMain) }
-        val iosSimulatorArm64Main by getting { dependsOn(matrixMultikMain) }
-        val macosX64Main by getting { dependsOn(matrixMultikMain) }
-        val macosArm64Main by getting { dependsOn(matrixMultikMain) }
-        val mingwX64Main by getting { dependsOn(matrixMultikMain) }
-        val linuxX64Main by getting { dependsOn(matrixMultikMain) }
-        val linuxArm64Main by getting { dependsOn(matrixPureMain) }
+        // Multik 0.3.0 does not publish ios native artifacts, so keep iOS on the pure backend.
+        val iosX64Main by getting {
+            dependsOn(nativeMain)
+            dependsOn(matrixPureMain)
+        }
+        val iosArm64Main by getting {
+            dependsOn(nativeMain)
+            dependsOn(matrixPureMain)
+        }
+        val iosSimulatorArm64Main by getting {
+            dependsOn(nativeMain)
+            dependsOn(matrixPureMain)
+        }
+        val macosArm64Main by getting {
+            dependsOn(nativeMain)
+            dependsOn(matrixPureMain)
+        }
+        val mingwX64Main by getting {
+            dependsOn(nativeMain)
+            dependsOn(matrixPureMain)
+        }
+        val linuxX64Main by getting {
+            dependsOn(nativeMain)
+            dependsOn(matrixPureMain)
+        }
+        val linuxArm64Main by getting {
+            dependsOn(nativeMain)
+            dependsOn(matrixPureMain)
+        }
         val jvmTest by getting {
             dependencies {
                 // Allow tests to load external docs like lyng.io.fs via registrar

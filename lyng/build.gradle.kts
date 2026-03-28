@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,8 +34,10 @@ kotlin {
     // Suppress Beta warning for expect/actual classes across all targets in this module
     targets.configureEach {
         compilations.configureEach {
-            compilerOptions.configure {
-                freeCompilerArgs.add("-Xexpect-actual-classes")
+            compileTaskProvider.configure {
+                compilerOptions {
+                    freeCompilerArgs.add("-Xexpect-actual-classes")
+                }
             }
         }
     }
@@ -75,19 +77,17 @@ kotlin {
                 implementation(libs.okio.fakefilesystem)
             }
         }
+        val nativeMain by creating {
+            dependsOn(commonMain)
+        }
         val jvmTest by getting {
             dependencies {
                 implementation(kotlin("test"))
                 implementation(kotlin("test-junit"))
             }
         }
-//        val nativeMain by getting {
-//            dependencies {
-//                implementation(kotlin("stdlib-common"))
-//            }
-//        }
         val linuxX64Main by getting {
-
+            dependsOn(nativeMain)
         }
     }
 }
