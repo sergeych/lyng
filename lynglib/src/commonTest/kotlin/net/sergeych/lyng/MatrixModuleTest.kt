@@ -168,4 +168,21 @@ class MatrixModuleTest {
             assertEquals(Vector, vectorValue::class)
         """.trimIndent())
     }
+
+    @Test
+    fun testMatrixAndVectorComparisons() = runTest {
+        eval("""
+            import lyng.matrix
+
+            val v0 = vector([1, 2, 3])
+            val v1 = vector([1, 2, 4])
+            assert(v0 < v1)
+            assert(v0 == vector([1, 2, 3]))
+
+            val m0 = matrix([[1, 2], [3, 4]])
+            val m1 = matrix([[1, 2], [3, 5]])
+            assert(m0 < m1)
+            assert(m0 == matrix([[1, 2], [3, 4]]))
+        """.trimIndent())
+    }
 }

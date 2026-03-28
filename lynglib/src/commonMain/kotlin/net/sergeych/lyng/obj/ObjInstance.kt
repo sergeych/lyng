@@ -587,6 +587,10 @@ class ObjInstance(override val objClass: ObjClass) : Obj() {
     }
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
+        val explicitCompare = objClass.getInstanceMemberOrNull("compareTo", includeStatic = false)
+        if (explicitCompare != null) {
+            return invokeInstanceMethod(scope, "compareTo", Arguments(other)).cast<ObjInt>(scope).toInt()
+        }
         if (other !is ObjInstance || other.objClass != objClass) {
             OperatorInteropRegistry.invokeCompare(scope, this, other)?.let { return it }
             return -1
