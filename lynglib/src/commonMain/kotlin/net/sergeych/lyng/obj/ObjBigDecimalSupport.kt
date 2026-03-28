@@ -128,6 +128,37 @@ object ObjBigDecimalSupport {
         registerInterop(decimalClass)
     }
 
+    fun isDecimalValue(value: Obj): Boolean =
+        value is ObjInstance && value.objClass.className == "BigDecimal"
+
+    suspend fun exactAbs(scope: ScopeFacade, value: Obj): Obj? =
+        decimalValueOrNull(value)?.let { scope.newInstanceLikeDecimal(value, it.abs()) }
+
+    suspend fun exactFloor(scope: ScopeFacade, value: Obj): Obj? =
+        decimalValueOrNull(value)?.let { scope.newInstanceLikeDecimal(value, it.floor()) }
+
+    suspend fun exactCeil(scope: ScopeFacade, value: Obj): Obj? =
+        decimalValueOrNull(value)?.let { scope.newInstanceLikeDecimal(value, it.ceil()) }
+
+    suspend fun exactRound(scope: ScopeFacade, value: Obj): Obj? =
+        decimalValueOrNull(value)?.let {
+            scope.newInstanceLikeDecimal(value, it.roundToDigitPositionAfterDecimalPoint(0, RoundingMode.ROUND_HALF_CEILING))
+        }
+
+    suspend fun exactPow(scope: ScopeFacade, base: Obj, exponent: Obj): Obj? {
+        val decimal = decimalValueOrNull(base) ?: return null
+        val intExponent = exponent as? ObjInt ?: return null
+        return scope.newInstanceLikeDecimal(base, decimal.pow(intExponent.value))
+    }
+
+    suspend fun fromRealLike(scope: ScopeFacade, sample: Obj, value: Double): Obj? {
+        if (!isDecimalValue(sample)) return null
+        return scope.newInstanceLikeDecimal(sample, IonBigDecimal.fromDouble(value, realConversionMode))
+    }
+
+    fun toDoubleOrNull(value: Obj): Double? =
+        decimalValueOrNull(value)?.doubleValue(false)
+
     private fun valueOf(obj: Obj): IonBigDecimal {
         val instance = obj as? ObjInstance ?: error("BigDecimal receiver must be an object instance")
         return instance.kotlinInstanceData as? IonBigDecimal ?: zero
@@ -158,6 +189,12 @@ object ObjBigDecimalSupport {
             ?: raiseIllegalState("BigDecimal() did not return an object instance")
         instance.kotlinInstanceData = value
         return instance
+    }
+
+    private suspend fun ScopeFacade.newInstanceLikeDecimal(sample: Obj, value: IonBigDecimal): ObjInstance {
+        val decimalClass = (sample as? ObjInstance)?.objClass
+            ?: raiseIllegalState("BigDecimal sample must be an object instance")
+        return newInstance(decimalClass, value)
     }
 
     private fun coerceArg(scope: Scope, value: Obj): IonBigDecimal = when (value) {
@@ -246,6 +283,12 @@ object ObjBigDecimalSupport {
             "TowardsZero" -> RoundingMode.TOWARDS_ZERO
             else -> scope.raiseIllegalArgument("unsupported DecimalRounding: ${entry.name.value}")
         }
+    }
+
+    private fun decimalValueOrNull(value: Obj): IonBigDecimal? {
+        if (!isDecimalValue(value)) return null
+        val instance = value as ObjInstance
+        return instance.kotlinInstanceData as? IonBigDecimal ?: zero
     }
 
     private fun registerBuiltinConversions(decimalClass: ObjClass) {

@@ -448,37 +448,37 @@ private fun buildStdlibDocs(): List<MiniDecl> {
     // Math helpers (scalar versions)
     fun math1(name: String) = mod.funDoc(
         name = name,
-        doc = StdlibInlineDocIndex.topFunDoc(name) ?: "Compute $name(x).",
+        doc = StdlibInlineDocIndex.topFunDoc(name) ?: "Compute $name(x). Accepts Int, Real, and BigDecimal. BigDecimal currently uses a temporary Real bridge and will get native decimal implementations later.",
         params = listOf(ParamDoc("x", type("lyng.Number")))
     )
     math1("sin"); math1("cos"); math1("tan"); math1("asin"); math1("acos"); math1("atan")
-    mod.funDoc(name = "floor", doc = StdlibInlineDocIndex.topFunDoc("floor") ?: "Round down the number to the nearest integer.", params = listOf(ParamDoc("x", type("lyng.Number"))))
-    mod.funDoc(name = "ceil", doc = StdlibInlineDocIndex.topFunDoc("ceil") ?: "Round up the number to the nearest integer.", params = listOf(ParamDoc("x", type("lyng.Number"))))
-    mod.funDoc(name = "round", doc = StdlibInlineDocIndex.topFunDoc("round") ?: "Round the number to the nearest integer.", params = listOf(ParamDoc("x", type("lyng.Number"))))
+    mod.funDoc(name = "floor", doc = StdlibInlineDocIndex.topFunDoc("floor") ?: "Round down the number to the nearest integer. BigDecimal is handled directly and stays BigDecimal.", params = listOf(ParamDoc("x", type("lyng.Number"))))
+    mod.funDoc(name = "ceil", doc = StdlibInlineDocIndex.topFunDoc("ceil") ?: "Round up the number to the nearest integer. BigDecimal is handled directly and stays BigDecimal.", params = listOf(ParamDoc("x", type("lyng.Number"))))
+    mod.funDoc(name = "round", doc = StdlibInlineDocIndex.topFunDoc("round") ?: "Round the number to the nearest integer. BigDecimal is handled directly and stays BigDecimal.", params = listOf(ParamDoc("x", type("lyng.Number"))))
 
     // Hyperbolic and inverse hyperbolic
     math1("sinh"); math1("cosh"); math1("tanh"); math1("asinh"); math1("acosh"); math1("atanh")
 
     // Exponentials and logarithms
-    mod.funDoc(name = "exp", doc = StdlibInlineDocIndex.topFunDoc("exp") ?: "Euler's exponential e^x.", params = listOf(ParamDoc("x", type("lyng.Number"))))
-    mod.funDoc(name = "ln", doc = StdlibInlineDocIndex.topFunDoc("ln") ?: "Natural logarithm (base e).", params = listOf(ParamDoc("x", type("lyng.Number"))))
-    mod.funDoc(name = "log10", doc = StdlibInlineDocIndex.topFunDoc("log10") ?: "Logarithm base 10.", params = listOf(ParamDoc("x", type("lyng.Number"))))
-    mod.funDoc(name = "log2", doc = StdlibInlineDocIndex.topFunDoc("log2") ?: "Logarithm base 2.", params = listOf(ParamDoc("x", type("lyng.Number"))))
+    mod.funDoc(name = "exp", doc = StdlibInlineDocIndex.topFunDoc("exp") ?: "Euler's exponential e^x. BigDecimal currently uses a temporary Real bridge and will get a native decimal implementation later.", params = listOf(ParamDoc("x", type("lyng.Number"))))
+    mod.funDoc(name = "ln", doc = StdlibInlineDocIndex.topFunDoc("ln") ?: "Natural logarithm (base e). BigDecimal currently uses a temporary Real bridge and will get a native decimal implementation later.", params = listOf(ParamDoc("x", type("lyng.Number"))))
+    mod.funDoc(name = "log10", doc = StdlibInlineDocIndex.topFunDoc("log10") ?: "Logarithm base 10. BigDecimal currently uses a temporary Real bridge and will get a native decimal implementation later.", params = listOf(ParamDoc("x", type("lyng.Number"))))
+    mod.funDoc(name = "log2", doc = StdlibInlineDocIndex.topFunDoc("log2") ?: "Logarithm base 2. BigDecimal currently uses a temporary Real bridge and will get a native decimal implementation later.", params = listOf(ParamDoc("x", type("lyng.Number"))))
 
     // Power/roots and absolute value
     mod.funDoc(
         name = "pow",
-        doc = StdlibInlineDocIndex.topFunDoc("pow") ?: "Raise `x` to the power `y`.",
+        doc = StdlibInlineDocIndex.topFunDoc("pow") ?: "Raise `x` to the power `y`. BigDecimal with integral `y` is handled directly; other BigDecimal cases currently use a temporary Real bridge.",
         params = listOf(ParamDoc("x", type("lyng.Number")), ParamDoc("y", type("lyng.Number")))
     )
     mod.funDoc(
         name = "sqrt",
-        doc = StdlibInlineDocIndex.topFunDoc("sqrt") ?: "Square root of `x`.",
+        doc = StdlibInlineDocIndex.topFunDoc("sqrt") ?: "Square root of `x`. BigDecimal currently uses a temporary Real bridge and will get a native decimal implementation later.",
         params = listOf(ParamDoc("x", type("lyng.Number")))
     )
     mod.funDoc(
         name = "abs",
-        doc = StdlibInlineDocIndex.topFunDoc("abs") ?: "Absolute value of a number (works for Int and Real).",
+        doc = StdlibInlineDocIndex.topFunDoc("abs") ?: "Absolute value of a number. Int stays Int, and BigDecimal stays BigDecimal.",
         params = listOf(ParamDoc("x", type("lyng.Number")))
     )
 

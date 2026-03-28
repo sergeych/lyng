@@ -15,6 +15,10 @@ Sources: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Script.kt`, `lynglib/s
 - Preconditions: `require`, `check`.
 - Async/concurrency: `launch`, `yield`, `flow`, `delay`.
 - Math: `floor`, `ceil`, `round`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`, `exp`, `ln`, `log10`, `log2`, `pow`, `sqrt`, `abs`, `clamp`.
+  - These helpers also accept `lyng.decimal.BigDecimal`.
+  - Exact Decimal path today: `abs`, `floor`, `ceil`, `round`, and `pow` with integral exponent.
+  - Temporary Decimal path for the rest: convert `BigDecimal -> Real`, compute, then convert back to `BigDecimal`.
+  - Treat that bridge as temporary; prefer native Decimal implementations when they become available.
 
 ## 3. Core Global Constants/Types
 - Values: `Unset`, `π`.

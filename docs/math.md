@@ -60,8 +60,13 @@ but:
 
 ## Round and range
 
-The following functions return its argument if it is `Int`,
-or transformed `Real` otherwise.
+The following functions return the argument unchanged if it is `Int`.
+
+For `BigDecimal`:
+- `floor(x)`, `ceil(x)`, and `round(x)` currently use exact decimal operations
+- the result stays `BigDecimal`
+
+For `Real`, the result is a transformed `Real`.
 
 | name           | description                                            |
 |----------------|--------------------------------------------------------|
@@ -71,6 +76,14 @@ or transformed `Real` otherwise.
 | x.roundToInt() | shortcut to `round(x).toInt()`                         |
 
 ## Lyng math functions
+
+Decimal note:
+- all scalar math helpers accept `BigDecimal`
+- `abs(x)` stays exact for `BigDecimal`
+- `pow(x, y)` is exact for `BigDecimal` when `y` is an integral exponent
+- the remaining `BigDecimal` cases currently use a temporary bridge:
+  `BigDecimal -> Real -> host math -> BigDecimal`
+- this is temporary; native decimal implementations are planned
 
 | name      | meaning                                              |
 |-----------|------------------------------------------------------|
@@ -91,7 +104,7 @@ or transformed `Real` otherwise.
 | log10(x)  | $log_{10}(x)$                                        |
 | pow(x, y) | ${x^y}$                                              |
 | sqrt(x)   | $ \sqrt {x}$                                         |
-| abs(x)    | absolute value of x. Int if x is Int, Real otherwise |
+| abs(x)    | absolute value of x. Int if x is Int, BigDecimal if x is BigDecimal, Real otherwise |
 | clamp(x, range) | limit x to be inside range boundaries          |
 
 For example:
@@ -103,6 +116,13 @@ For example:
     // abs() keeps the argument type:
     assert( abs(-1) is Int)
     assert( abs(-2.21) == 2.21 )
+
+    import lyng.decimal
+
+    // Decimal-aware math works too. Some functions are exact, some still bridge through Real temporarily:
+    assert( (abs("-2.5".d) as BigDecimal).toStringExpanded() == "2.5" )
+    assert( (floor("2.9".d) as BigDecimal).toStringExpanded() == "2" )
+    assert( sin("0.5".d) is BigDecimal )
 
     // clamp() limits value to the range:
     assert( clamp(15, 0..10) == 10 )

@@ -152,4 +152,20 @@ class MatrixModuleTest {
             """.trimIndent()
         )
     }
+
+    @Test
+    fun matrixAndVectorMustBeObjs() = runTest {
+        eval("""
+            import lyng.matrix
+
+            val matrixValue = matrix([[1, 2], [3, 4]])
+            val vectorValue = vector([1, 2, 3])
+
+            assert(matrixValue is Matrix)
+            assertEquals(Matrix, matrixValue::class)
+
+            assert(vectorValue is Vector)
+            assertEquals(Vector, vectorValue::class)
+        """.trimIndent())
+    }
 }

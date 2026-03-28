@@ -223,6 +223,50 @@ assertEquals("-0.12", withDecimalContext(2, DecimalRounding.HalfTowardsZero) { (
 
 ## Recommended Usage Rules
 
+## Decimal With Stdlib Math Functions
+
+Core math helpers such as `abs`, `floor`, `ceil`, `round`, `sin`, `exp`, `ln`, `sqrt`, `log10`, `log2`, and `pow`
+now also accept `BigDecimal`.
+
+Current behavior is intentionally split:
+
+- exact decimal implementation:
+  - `abs(x)`
+  - `floor(x)`
+  - `ceil(x)`
+  - `round(x)`
+  - `pow(x, y)` when `x` is `BigDecimal` and `y` is an integral exponent
+- temporary bridge through `Real`:
+  - `sin`, `cos`, `tan`
+  - `asin`, `acos`, `atan`
+  - `sinh`, `cosh`, `tanh`
+  - `asinh`, `acosh`, `atanh`
+  - `exp`, `ln`, `log10`, `log2`
+  - `sqrt`
+  - `pow` for the remaining non-integral decimal exponent cases
+
+The temporary bridge is:
+
+```lyng
+BigDecimal -> Real -> host math -> BigDecimal
+```
+
+This is a compatibility step, not the long-term design. Native decimal implementations will replace these bridge-based
+paths over time.
+
+Examples:
+
+```lyng
+import lyng.decimal
+
+assertEquals("2.5", (abs("-2.5".d) as BigDecimal).toStringExpanded())
+assertEquals("2", (floor("2.9".d) as BigDecimal).toStringExpanded())
+
+// Temporary Real bridge:
+assertEquals((exp(1.25) as Real).d.toStringExpanded(), (exp("1.25".d) as BigDecimal).toStringExpanded())
+assertEquals((sqrt(2.0) as Real).d.toStringExpanded(), (sqrt("2".d) as BigDecimal).toStringExpanded())
+```
+
 If you care about exact decimal source text:
 
 ```lyng

@@ -252,6 +252,44 @@ class Script(
 
     companion object {
 
+        private suspend fun ScopeFacade.numberToDouble(value: Obj): Double =
+            ObjBigDecimalSupport.toDoubleOrNull(value) ?: value.toDouble()
+
+        private suspend fun ScopeFacade.decimalAwareUnaryMath(
+            value: Obj,
+            exactDecimal: (suspend ScopeFacade.(Obj) -> Obj?)? = null,
+            fallback: (Double) -> Double
+        ): Obj {
+            exactDecimal?.let { exact ->
+                exact(value)?.let { return it }
+            }
+            if (ObjBigDecimalSupport.isDecimalValue(value)) {
+                return ObjBigDecimalSupport.fromRealLike(this, value, fallback(numberToDouble(value)))
+                    ?: raiseIllegalState("failed to convert Real result back to BigDecimal")
+            }
+            return ObjReal(fallback(numberToDouble(value)))
+        }
+
+        private suspend fun ScopeFacade.decimalAwareRoundLike(
+            value: Obj,
+            exactDecimal: suspend ScopeFacade.(Obj) -> Obj?,
+            realFallback: (Double) -> Double
+        ): Obj {
+            if (value is ObjInt) return value
+            exactDecimal(value)?.let { return it }
+            return ObjReal(realFallback(numberToDouble(value)))
+        }
+
+        private suspend fun ScopeFacade.decimalAwarePow(base: Obj, exponent: Obj): Obj {
+            ObjBigDecimalSupport.exactPow(this, base, exponent)?.let { return it }
+            if (ObjBigDecimalSupport.isDecimalValue(base) || ObjBigDecimalSupport.isDecimalValue(exponent)) {
+                return ObjBigDecimalSupport.fromRealLike(this, base, numberToDouble(base).pow(numberToDouble(exponent)))
+                    ?: ObjBigDecimalSupport.fromRealLike(this, exponent, numberToDouble(base).pow(numberToDouble(exponent)))
+                    ?: raiseIllegalState("failed to convert Real pow result back to BigDecimal")
+            }
+            return ObjReal(numberToDouble(base).pow(numberToDouble(exponent)))
+        }
+
         /**
          * Create new scope using a standard safe set of modules, using [defaultImportManager]. It is
          * suspended as first time invocation requires compilation of standard library or other
@@ -289,87 +327,81 @@ class Script(
             }
             addFn("floor") {
                 val x = args.firstAndOnly()
-                (if (x is ObjInt) x
-                else ObjReal(floor(x.toDouble())))
+                decimalAwareRoundLike(x, ObjBigDecimalSupport::exactFloor, ::floor)
             }
             addFn("ceil") {
                 val x = args.firstAndOnly()
-                (if (x is ObjInt) x
-                else ObjReal(ceil(x.toDouble())))
+                decimalAwareRoundLike(x, ObjBigDecimalSupport::exactCeil, ::ceil)
             }
             addFn("round") {
                 val x = args.firstAndOnly()
-                (if (x is ObjInt) x
-                else ObjReal(round(x.toDouble())))
+                decimalAwareRoundLike(x, ObjBigDecimalSupport::exactRound, ::round)
             }
 
             addFn("sin") {
-                ObjReal(sin(args.firstAndOnly().toDouble()))
+                decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::sin)
             }
             addFn("cos") {
-                ObjReal(cos(args.firstAndOnly().toDouble()))
+                decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::cos)
             }
             addFn("tan") {
-                ObjReal(tan(args.firstAndOnly().toDouble()))
+                decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::tan)
             }
             addFn("asin") {
-                ObjReal(asin(args.firstAndOnly().toDouble()))
+                decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::asin)
             }
             addFn("acos") {
-                ObjReal(acos(args.firstAndOnly().toDouble()))
+                decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::acos)
             }
             addFn("atan") {
-                ObjReal(atan(args.firstAndOnly().toDouble()))
+                decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::atan)
             }
 
             addFn("sinh") {
-                ObjReal(sinh(args.firstAndOnly().toDouble()))
+                decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::sinh)
             }
             addFn("cosh") {
-                ObjReal(cosh(args.firstAndOnly().toDouble()))
+                decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::cosh)
             }
             addFn("tanh") {
-                ObjReal(tanh(args.firstAndOnly().toDouble()))
+                decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::tanh)
             }
             addFn("asinh") {
-                ObjReal(asinh(args.firstAndOnly().toDouble()))
+                decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::asinh)
             }
             addFn("acosh") {
-                ObjReal(acosh(args.firstAndOnly().toDouble()))
+                decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::acosh)
             }
             addFn("atanh") {
-                ObjReal(atanh(args.firstAndOnly().toDouble()))
+                decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::atanh)
             }
 
             addFn("exp") {
-                ObjReal(exp(args.firstAndOnly().toDouble()))
+                decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::exp)
             }
             addFn("ln") {
-                ObjReal(ln(args.firstAndOnly().toDouble()))
+                decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::ln)
             }
 
             addFn("log10") {
-                ObjReal(log10(args.firstAndOnly().toDouble()))
+                decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::log10)
             }
 
             addFn("log2") {
-                ObjReal(log2(args.firstAndOnly().toDouble()))
+                decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::log2)
             }
 
             addFn("pow") {
                 requireExactCount(2)
-                ObjReal(
-                    (args[0].toDouble()).pow(args[1].toDouble())
-                )
+                decimalAwarePow(args[0], args[1])
             }
             addFn("sqrt") {
-                ObjReal(
-                    sqrt(args.firstAndOnly().toDouble())
-                )
+                decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::sqrt)
             }
             addFn("abs") {
                 val x = args.firstAndOnly()
-                if (x is ObjInt) ObjInt(x.value.absoluteValue) else ObjReal(x.toDouble().absoluteValue)
+                if (x is ObjInt) ObjInt(x.value.absoluteValue)
+                else decimalAwareUnaryMath(x, ObjBigDecimalSupport::exactAbs) { it.absoluteValue }
             }
 
             addFnDoc(
@@ -629,78 +661,75 @@ class Script(
                 )
                 ensureFn("floor") {
                     val x = args.firstAndOnly()
-                    if (x is ObjInt) x else ObjReal(floor(x.toDouble()))
+                    decimalAwareRoundLike(x, ObjBigDecimalSupport::exactFloor, ::floor)
                 }
                 ensureFn("ceil") {
                     val x = args.firstAndOnly()
-                    if (x is ObjInt) x else ObjReal(ceil(x.toDouble()))
+                    decimalAwareRoundLike(x, ObjBigDecimalSupport::exactCeil, ::ceil)
                 }
                 ensureFn("round") {
                     val x = args.firstAndOnly()
-                    if (x is ObjInt) x else ObjReal(round(x.toDouble()))
+                    decimalAwareRoundLike(x, ObjBigDecimalSupport::exactRound, ::round)
                 }
                 ensureFn("sin") {
-                    ObjReal(sin(args.firstAndOnly().toDouble()))
+                    decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::sin)
                 }
                 ensureFn("cos") {
-                    ObjReal(cos(args.firstAndOnly().toDouble()))
+                    decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::cos)
                 }
                 ensureFn("tan") {
-                    ObjReal(tan(args.firstAndOnly().toDouble()))
+                    decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::tan)
                 }
                 ensureFn("asin") {
-                    ObjReal(asin(args.firstAndOnly().toDouble()))
+                    decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::asin)
                 }
                 ensureFn("acos") {
-                    ObjReal(acos(args.firstAndOnly().toDouble()))
+                    decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::acos)
                 }
                 ensureFn("atan") {
-                    ObjReal(atan(args.firstAndOnly().toDouble()))
+                    decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::atan)
                 }
                 ensureFn("sinh") {
-                    ObjReal(sinh(args.firstAndOnly().toDouble()))
+                    decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::sinh)
                 }
                 ensureFn("cosh") {
-                    ObjReal(cosh(args.firstAndOnly().toDouble()))
+                    decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::cosh)
                 }
                 ensureFn("tanh") {
-                    ObjReal(tanh(args.firstAndOnly().toDouble()))
+                    decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::tanh)
                 }
                 ensureFn("asinh") {
-                    ObjReal(asinh(args.firstAndOnly().toDouble()))
+                    decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::asinh)
                 }
                 ensureFn("acosh") {
-                    ObjReal(acosh(args.firstAndOnly().toDouble()))
+                    decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::acosh)
                 }
                 ensureFn("atanh") {
-                    ObjReal(atanh(args.firstAndOnly().toDouble()))
+                    decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::atanh)
                 }
                 ensureFn("exp") {
-                    ObjReal(exp(args.firstAndOnly().toDouble()))
+                    decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::exp)
                 }
                 ensureFn("ln") {
-                    ObjReal(ln(args.firstAndOnly().toDouble()))
+                    decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::ln)
                 }
                 ensureFn("log10") {
-                    ObjReal(log10(args.firstAndOnly().toDouble()))
+                    decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::log10)
                 }
                 ensureFn("log2") {
-                    ObjReal(log2(args.firstAndOnly().toDouble()))
+                    decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::log2)
                 }
                 ensureFn("pow") {
                     requireExactCount(2)
-                    ObjReal(
-                        (args[0].toDouble()).pow(args[1].toDouble())
-                    )
+                    decimalAwarePow(args[0], args[1])
                 }
                 ensureFn("sqrt") {
-                    ObjReal(
-                        sqrt(args.firstAndOnly().toDouble())
-                    )
+                    decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::sqrt)
                 }
                 ensureFn("abs") {
                     val x = args.firstAndOnly()
-                    if (x is ObjInt) ObjInt(x.value.absoluteValue) else ObjReal(x.toDouble().absoluteValue)
+                    if (x is ObjInt) ObjInt(x.value.absoluteValue)
+                    else decimalAwareUnaryMath(x, ObjBigDecimalSupport::exactAbs) { it.absoluteValue }
                 }
             }
         }

@@ -146,4 +146,84 @@ class BigDecimalModuleTest {
             assertEquals("0.2", s0.toString())
         """.trimIndent())
     }
+
+    @Test
+    fun testDecimalMathHelpersUseExactImplementationsWhenAvailable() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            import lyng.decimal
+
+            val absValue = abs("-2.5".d) as BigDecimal
+            val floorPos = floor("2.9".d) as BigDecimal
+            val floorNeg = floor("-2.1".d) as BigDecimal
+            val ceilPos = ceil("2.1".d) as BigDecimal
+            val ceilNeg = ceil("-2.1".d) as BigDecimal
+            val roundPos = round("2.5".d) as BigDecimal
+            val roundNeg = round("-2.5".d) as BigDecimal
+            val powInt = pow("1.5".d, 2) as BigDecimal
+
+            assertEquals("2.5", absValue.toStringExpanded())
+            assertEquals("2", floorPos.toStringExpanded())
+            assertEquals("-3", floorNeg.toStringExpanded())
+            assertEquals("3", ceilPos.toStringExpanded())
+            assertEquals("-2", ceilNeg.toStringExpanded())
+            assertEquals("3", roundPos.toStringExpanded())
+            assertEquals("-2", roundNeg.toStringExpanded())
+            assertEquals("2.25", powInt.toStringExpanded())
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testDecimalMathHelpersFallbackThroughRealTemporarily() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            import lyng.decimal
+
+            val sinDecimal = sin("0.5".d) as BigDecimal
+            val expDecimal = exp("1.25".d) as BigDecimal
+            val sqrtDecimal = sqrt("2".d) as BigDecimal
+            val lnDecimal = ln("2".d) as BigDecimal
+            val log10Decimal = log10("2".d) as BigDecimal
+            val log2Decimal = log2("2".d) as BigDecimal
+            val powDecimal = pow("2".d, "0.5".d) as BigDecimal
+
+            assertEquals((sin(0.5) as Real).d.toStringExpanded(), sinDecimal.toStringExpanded())
+            assertEquals((exp(1.25) as Real).d.toStringExpanded(), expDecimal.toStringExpanded())
+            assertEquals((sqrt(2.0) as Real).d.toStringExpanded(), sqrtDecimal.toStringExpanded())
+            assertEquals((ln(2.0) as Real).d.toStringExpanded(), lnDecimal.toStringExpanded())
+            assertEquals((log10(2.0) as Real).d.toStringExpanded(), log10Decimal.toStringExpanded())
+            assertEquals((log2(2.0) as Real).d.toStringExpanded(), log2Decimal.toStringExpanded())
+            assertEquals((pow(2.0, 0.5) as Real).d.toStringExpanded(), powDecimal.toStringExpanded())
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun decimalMustBeObj() = runTest {
+        eval("""
+            import lyng.decimal
+
+            val decimal = 42.d
+            val context = DecimalContext(12)
+
+            assert(decimal is BigDecimal)
+            assertEquals(BigDecimal, decimal::class)
+
+            assert(context is DecimalContext)
+            assertEquals(DecimalContext, context::class)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testFromRealLife1() = runTest {
+        eval("""
+            import lyng.decimal
+            var X = 42.d
+            X += 11
+            assertEquals(53.d, X)
+        """)
+    }
 }
