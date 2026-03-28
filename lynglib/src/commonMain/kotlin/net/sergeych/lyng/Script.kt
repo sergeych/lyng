@@ -27,6 +27,7 @@ import net.sergeych.lyng.bytecode.CmdVm
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
+import net.sergeych.lyng.stdlib_included.complexLyng
 import net.sergeych.lyng.stdlib_included.decimalLyng
 import net.sergeych.lyng.stdlib_included.observableLyng
 import net.sergeych.lyng.stdlib_included.operatorsLyng
@@ -615,12 +616,91 @@ class Script(
                 type = type("lyng.Real")
             )
             getOrCreateNamespace("Math").apply {
+                fun ensureFn(name: String, fn: suspend ScopeFacade.() -> Obj) {
+                    if (members.containsKey(name)) return
+                    addFn(name, code = fn)
+                }
                 addConstDoc(
                     name = "PI",
                     value = pi,
                     doc = "The mathematical constant pi (π) in the Math namespace.",
                     type = type("lyng.Real")
                 )
+                ensureFn("floor") {
+                    val x = args.firstAndOnly()
+                    if (x is ObjInt) x else ObjReal(floor(x.toDouble()))
+                }
+                ensureFn("ceil") {
+                    val x = args.firstAndOnly()
+                    if (x is ObjInt) x else ObjReal(ceil(x.toDouble()))
+                }
+                ensureFn("round") {
+                    val x = args.firstAndOnly()
+                    if (x is ObjInt) x else ObjReal(round(x.toDouble()))
+                }
+                ensureFn("sin") {
+                    ObjReal(sin(args.firstAndOnly().toDouble()))
+                }
+                ensureFn("cos") {
+                    ObjReal(cos(args.firstAndOnly().toDouble()))
+                }
+                ensureFn("tan") {
+                    ObjReal(tan(args.firstAndOnly().toDouble()))
+                }
+                ensureFn("asin") {
+                    ObjReal(asin(args.firstAndOnly().toDouble()))
+                }
+                ensureFn("acos") {
+                    ObjReal(acos(args.firstAndOnly().toDouble()))
+                }
+                ensureFn("atan") {
+                    ObjReal(atan(args.firstAndOnly().toDouble()))
+                }
+                ensureFn("sinh") {
+                    ObjReal(sinh(args.firstAndOnly().toDouble()))
+                }
+                ensureFn("cosh") {
+                    ObjReal(cosh(args.firstAndOnly().toDouble()))
+                }
+                ensureFn("tanh") {
+                    ObjReal(tanh(args.firstAndOnly().toDouble()))
+                }
+                ensureFn("asinh") {
+                    ObjReal(asinh(args.firstAndOnly().toDouble()))
+                }
+                ensureFn("acosh") {
+                    ObjReal(acosh(args.firstAndOnly().toDouble()))
+                }
+                ensureFn("atanh") {
+                    ObjReal(atanh(args.firstAndOnly().toDouble()))
+                }
+                ensureFn("exp") {
+                    ObjReal(exp(args.firstAndOnly().toDouble()))
+                }
+                ensureFn("ln") {
+                    ObjReal(ln(args.firstAndOnly().toDouble()))
+                }
+                ensureFn("log10") {
+                    ObjReal(log10(args.firstAndOnly().toDouble()))
+                }
+                ensureFn("log2") {
+                    ObjReal(log2(args.firstAndOnly().toDouble()))
+                }
+                ensureFn("pow") {
+                    requireExactCount(2)
+                    ObjReal(
+                        (args[0].toDouble()).pow(args[1].toDouble())
+                    )
+                }
+                ensureFn("sqrt") {
+                    ObjReal(
+                        sqrt(args.firstAndOnly().toDouble())
+                    )
+                }
+                ensureFn("abs") {
+                    val x = args.firstAndOnly()
+                    if (x is ObjInt) ObjInt(x.value.absoluteValue) else ObjReal(x.toDouble().absoluteValue)
+                }
             }
         }
 
@@ -758,6 +838,9 @@ class Script(
                 addPackage("lyng.decimal") { module ->
                     module.eval(Source("lyng.decimal", decimalLyng))
                     ObjBigDecimalSupport.bindTo(module)
+                }
+                addPackage("lyng.complex") { module ->
+                    module.eval(Source("lyng.complex", complexLyng))
                 }
                 addPackage("lyng.buffer") {
                     it.addConstDoc(

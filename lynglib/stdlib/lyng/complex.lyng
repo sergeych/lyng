@@ -1,0 +1,158 @@
+package lyng.complex
+
+import lyng.operators
+
+/*
+Complex number backed by `Real` components.
+
+This module intentionally keeps the storage model simple:
+- `re`: real part
+- `im`: imaginary part
+
+The algebra is implemented in pure Lyng and interoperates with `Int` and `Real`
+through `lyng.operators`, so expressions like `1 + 2.i` and `0.5 * (1 + 2.i)` work.
+
+For transcendental functions, use the member-style API for now:
+- `z.exp()`
+- `z.ln()`
+- `z.sin()`
+- `z.cos()`
+- `z.tan()`
+- `z.sqrt()`
+
+This avoids collisions with the built-in real-valued top-level math functions
+such as `exp(x)` and `sin(x)`.
+*/
+class Complex(val real: Real, val imag: Real = 0.0) {
+    val re get() = real
+    val im get() = imag
+
+    fun plus(other: Complex): Complex {
+        val ar = real
+        val ai = imag
+        val br = other.real
+        val bi = other.imag
+        val realPart = ar + br
+        val imagPart = ai + bi
+        Complex(realPart, imagPart)
+    }
+
+    fun minus(other: Complex): Complex {
+        val ar = real
+        val ai = imag
+        val br = other.real
+        val bi = other.imag
+        val realPart = ar - br
+        val imagPart = ai - bi
+        Complex(realPart, imagPart)
+    }
+
+    fun mul(other: Complex): Complex {
+        val ar = real
+        val ai = imag
+        val br = other.real
+        val bi = other.imag
+        val realPart = ar * br - ai * bi
+        val imagPart = ar * bi + ai * br
+        Complex(realPart, imagPart)
+    }
+
+    fun div(other: Complex): Complex {
+        val ar = real
+        val ai = imag
+        val br = other.real
+        val bi = other.imag
+        val denominator = br * br + bi * bi
+        val realPart = (ar * br + ai * bi) / denominator
+        val imagPart = (ai * br - ar * bi) / denominator
+        Complex(realPart, imagPart)
+    }
+
+    fun negate(): Complex = Complex(-real, -imag)
+
+    val conjugate get() = Complex(real, -imag)
+    val magnitude2 get() = real * real + imag * imag
+    val magnitude get() = Math.sqrt(magnitude2)
+
+    val phase: Real
+        get() = if (real > 0.0) {
+            Math.atan(imag / real)
+        } else if (real < 0.0 && imag >= 0.0) {
+            Math.atan(imag / real) + π
+        } else if (real < 0.0 && imag < 0.0) {
+            Math.atan(imag / real) - π
+        } else if (real == 0.0 && imag > 0.0) {
+            π / 2.0
+        } else if (real == 0.0 && imag < 0.0) {
+            -π / 2.0
+        } else {
+            0.0
+        }
+
+    fun exp(): Complex {
+        val scale = Math.exp(real)
+        Complex(scale * Math.cos(imag), scale * Math.sin(imag))
+    }
+
+    fun ln(): Complex = Complex(Math.ln(magnitude), phase)
+
+    fun sin(): Complex =
+        Complex(
+            Math.sin(real) * Math.cosh(imag),
+            Math.cos(real) * Math.sinh(imag)
+        )
+
+    fun cos(): Complex =
+        Complex(
+            Math.cos(real) * Math.cosh(imag),
+            -Math.sin(real) * Math.sinh(imag)
+        )
+
+    fun tan(): Complex = sin() / cos()
+
+    fun sqrt(): Complex = if (imag == 0.0 && real >= 0.0) {
+        Complex(Math.sqrt(real), 0.0)
+    } else {
+        val radius = magnitude
+        val realPart = Math.sqrt((radius + real) / 2.0)
+        val imagPart = Math.sqrt((radius - real) / 2.0)
+        Complex(realPart, if (imag < 0.0) -imagPart else imagPart)
+    }
+
+    override fun toString() =
+        real.toString() +
+        (if (imag < 0.0) imag.toString() else "+" + imag.toString()) +
+        "i"
+
+    static fun fromInt(value: Int): Complex = Complex(value + 0.0, 0.0)
+    static fun fromReal(value: Real): Complex = Complex(value, 0.0)
+    static fun imaginary(value: Real): Complex = Complex(0.0, value)
+    static fun fromPolar(radius: Real, angle: Real): Complex =
+        Complex(radius * Math.cos(angle), radius * Math.sin(angle))
+}
+
+fun complex(re: Real, im: Real = 0.0): Complex = Complex(re, im)
+fun cis(angle: Real): Complex = Complex.fromPolar(1.0, angle)
+
+val Int.re: Complex get() = Complex.fromInt(this)
+val Real.re: Complex get() = Complex.fromReal(this)
+val Int.i: Complex get() = Complex.imaginary(this + 0.0)
+val Real.i: Complex get() = Complex.imaginary(this)
+
+OperatorInterop.register(
+    Int,
+    Complex,
+    Complex,
+    [BinaryOperator.Plus, BinaryOperator.Minus, BinaryOperator.Mul, BinaryOperator.Div],
+    { x: Int -> Complex.fromInt(x) },
+    { x: Complex -> x }
+)
+
+OperatorInterop.register(
+    Real,
+    Complex,
+    Complex,
+    [BinaryOperator.Plus, BinaryOperator.Minus, BinaryOperator.Mul, BinaryOperator.Div],
+    { x: Real -> Complex.fromReal(x) },
+    { x: Complex -> x }
+)

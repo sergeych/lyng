@@ -56,6 +56,8 @@ Sources: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Script.kt`, `lynglib/s
 ## 5. Additional Built-in Modules (import explicitly)
 - `import lyng.observable`
   - `Observable`, `Subscription`, `ObservableList`, `ListChange` and change subtypes, `ChangeRejectionException`.
+- `import lyng.complex`
+  - `Complex`, `complex(re, im)`, `cis(angle)`, and numeric embedding extensions such as `2.i` / `3.re`.
 - `import lyng.buffer`
   - `Buffer`, `MutableBuffer`.
 - `import lyng.serialization`

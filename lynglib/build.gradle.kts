@@ -149,6 +149,9 @@ abstract class GenerateLyngStdlib : DefaultTask() {
         val outBase = outputDir.get().asFile
         val targetDir = outBase.resolve(pkgPath)
         targetDir.mkdirs()
+        targetDir.listFiles()
+            ?.filter { it.isFile && it.name.endsWith(".generated.kt") }
+            ?.forEach { it.delete() }
 
         val srcDir = sourceDir.get().asFile
         val files = srcDir.walkTopDown()
@@ -156,34 +159,38 @@ abstract class GenerateLyngStdlib : DefaultTask() {
             .sortedBy { it.name }
             .toList()
 
-        val content = if (files.isEmpty()) "" else buildString {
-            files.forEachIndexed { idx, f ->
-                val text = f.readText()
-                if (idx > 0) append("\n\n")
-                append(text)
-            }
-        }
-
         fun escapeForQuoted(s: String): String = buildString {
             for (ch in s) when (ch) {
                 '\\' -> append("\\\\")
                 '"' -> append("\\\"")
+                '$' -> append("\\$")
                 '\n' -> append("\\n")
                 '\r' -> {}
                 '\t' -> append("\\t")
                 else -> append(ch)
             }
         }
-        val body = escapeForQuoted(content)
 
-        val sb = StringBuilder()
-        sb.append("package ").append(targetPkg).append("\n\n")
-        sb.append("@Suppress(\"Unused\", \"MemberVisibilityCanBePrivate\")\n")
-        sb.append("internal val rootLyng = \"")
-        sb.append(body)
-        sb.append("\"\n")
+        fun constantName(baseName: String): String {
+            val parts = baseName.split(Regex("[^A-Za-z0-9]+")).filter { it.isNotEmpty() }
+            if (parts.isEmpty()) return "moduleLyng"
+            val head = parts.first().replaceFirstChar { it.lowercase() }
+            val tail = parts.drop(1).joinToString("") { part ->
+                part.replaceFirstChar { it.uppercase() }
+            }
+            return "${head}${tail}Lyng"
+        }
 
-        targetDir.resolve("root_lyng.generated.kt").writeText(sb.toString())
+        for (file in files) {
+            val body = escapeForQuoted(file.readText())
+            val sb = StringBuilder()
+            sb.append("package ").append(targetPkg).append("\n\n")
+            sb.append("@Suppress(\"Unused\", \"MemberVisibilityCanBePrivate\")\n")
+            sb.append("internal val ").append(constantName(file.nameWithoutExtension)).append(" = \"")
+            sb.append(body)
+            sb.append("\"\n")
+            targetDir.resolve("${file.nameWithoutExtension}_lyng.generated.kt").writeText(sb.toString())
+        }
     }
 }
 
