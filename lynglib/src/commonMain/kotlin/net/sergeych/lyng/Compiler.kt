@@ -172,6 +172,7 @@ class Compiler(
     private val callReturnTypeDeclByRef: MutableMap<CallRef, TypeDecl> = mutableMapOf()
     private val callableReturnTypeByScopeId: MutableMap<Int, MutableMap<Int, ObjClass>> = mutableMapOf()
     private val callableReturnTypeByName: MutableMap<String, ObjClass> = mutableMapOf()
+    private val callableReturnTypeDeclByName: MutableMap<String, TypeDecl> = mutableMapOf()
     private val lambdaReturnTypeByRef: MutableMap<ObjRef, ObjClass> = mutableMapOf()
     private val lambdaCaptureEntriesByRef: MutableMap<ValueFnRef, List<net.sergeych.lyng.bytecode.LambdaCaptureEntry>> =
         mutableMapOf()
@@ -4313,14 +4314,17 @@ class Compiler(
             is MapLiteralRef -> inferMapLiteralTypeDecl(ref)
             is ConstRef -> inferTypeDeclFromConst(ref.constValue)
             is CallRef -> {
+                val targetName = when (val target = ref.target) {
+                    is LocalVarRef -> target.name
+                    is FastLocalVarRef -> target.name
+                    is LocalSlotRef -> target.name
+                    else -> null
+                }
+                if (targetName != null) {
+                    callableReturnTypeDeclByName[targetName]?.let { return it }
+                }
                 inferCallReturnClass(ref)?.let { TypeDecl.Simple(it.className, false) }
                     ?: run {
-                        val targetName = when (val target = ref.target) {
-                            is LocalVarRef -> target.name
-                            is FastLocalVarRef -> target.name
-                            is LocalSlotRef -> target.name
-                            else -> null
-                        }
                         if (targetName != null && targetName.firstOrNull()?.isUpperCase() == true) {
                             TypeDecl.Simple(targetName, false)
                         } else {
@@ -8156,6 +8160,10 @@ class Compiler(
                     callableReturnTypeByScopeId.getOrPut(slotLoc.scopeId) { mutableMapOf() }[slotLoc.slot] =
                         inferredReturnClass
                 }
+            }
+            val inferredReturnDecl = returnTypeDecl ?: inferredReturnClass?.let { TypeDecl.Simple(it.className, false) }
+            if (declKind != SymbolKind.MEMBER && inferredReturnDecl != null) {
+                callableReturnTypeDeclByName[name] = inferredReturnDecl
             }
             val fnStatements = rawFnStatements?.let { stmt ->
                 if (!compileBytecode) return@let stmt
