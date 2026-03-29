@@ -88,7 +88,7 @@ object ObjDecimalSupport {
         }
         decimalClass.addClassFn("fromInt") {
             val value = requiredArg<ObjInt>(0).value
-            newInstance(decimalClass, IonBigDecimal.fromLongAsSignificand(value))
+            newInstance(decimalClass, IonBigDecimal.fromLong(value))
         }
         decimalClass.addClassFn("fromReal") {
             val value = requiredArg<ObjReal>(0).value
@@ -204,7 +204,7 @@ object ObjDecimalSupport {
     }
 
     private fun coerceArg(scope: Scope, value: Obj): IonBigDecimal = when (value) {
-        is ObjInt -> IonBigDecimal.fromLongAsSignificand(value.value)
+        is ObjInt -> IonBigDecimal.fromLong(value.value)
         is ObjReal -> IonBigDecimal.fromDouble(value.value, realConversionMode)
         is ObjInstance -> {
             if (value.objClass.className != "Decimal") {
@@ -303,7 +303,7 @@ object ObjDecimalSupport {
             doc = "Convert this integer to a Decimal.",
             type = type("lyng.decimal.Decimal"),
             moduleName = "lyng.decimal",
-            getter = { newInstance(decimalClass, IonBigDecimal.fromLongAsSignificand(thisAs<ObjInt>().value)) }
+            getter = { newInstance(decimalClass, IonBigDecimal.fromLong(thisAs<ObjInt>().value)) }
         )
         ObjInt.type.members["d"] = ObjInt.type.members.getValue("d").copy(typeDecl = decimalTypeDecl)
         ObjReal.type.addPropertyDoc(
@@ -347,7 +347,7 @@ object ObjDecimalSupport {
             ),
             leftToCommon = ObjExternCallable.fromBridge {
                 val value = requiredArg<ObjInt>(0).value
-                newInstance(decimalClass, IonBigDecimal.fromLongAsSignificand(value))
+                newInstance(decimalClass, IonBigDecimal.fromLong(value))
             },
             rightToCommon = ObjExternCallable.fromBridge {
                 requiredArg<Obj>(0)

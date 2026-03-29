@@ -17,14 +17,15 @@
 
 package net.sergeych.lyng
 
+import com.ionspin.kotlin.bignum.decimal.BigDecimal
 import kotlinx.coroutines.test.runTest
-import net.sergeych.lyng.bridge.bindGlobalFun1
-import net.sergeych.lyng.bridge.bindGlobalFun3
-import net.sergeych.lyng.bridge.bindGlobalVar
-import net.sergeych.lyng.bridge.globalBinder
+import net.sergeych.lyng.bridge.*
+import net.sergeych.lyng.obj.ObjInstance
 import net.sergeych.lyng.obj.ObjInt
+import net.sergeych.lyng.obj.ObjReal
 import net.sergeych.lyng.obj.ObjString
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class GlobalBindingTest {
@@ -135,5 +136,88 @@ class GlobalBindingTest {
             assertTrue(missingSetter)
             assertTrue(readonlySetter)
         }
+    }
+
+    @Test
+    fun rawDecimalExternBindingDoesNotBreakDecimalLiteralRendering() = runTest {
+        val scope = Script.newScope()
+        var x = BigDecimal.ZERO
+
+        scope.eval(
+            """
+            import lyng.decimal
+            extern var X: Decimal
+            """.trimIndent()
+        )
+
+        scope.globalBinder().bindGlobalVarRaw(
+            name = "X",
+            get = { it.newDecimal(x) },
+            set = { _, value ->
+                x = when (value) {
+                    is ObjInt -> BigDecimal.fromLong(value.value)
+                    is ObjReal -> BigDecimal.fromDouble(value.value)
+                    is ObjInstance -> value.data as BigDecimal
+                    else -> error("unexpected value: $value")
+                }
+            }
+        )
+
+        scope.eval(
+            """
+            fun main() {
+                assertEquals("42", 42.d.toStringExpanded())
+            }
+
+            main()
+            """.trimIndent()
+        )
+
+        assertEquals(BigDecimal.ZERO, x)
+    }
+
+    @Test
+    fun externDecimalDeclarationAloneDoesNotBreakDecimalLiteralRendering() = runTest {
+        val scope = Script.newScope()
+
+        scope.eval(
+            """
+            import lyng.decimal
+            extern var X: Decimal
+
+            fun main() {
+                assertEquals("42", 42.d.toStringExpanded())
+            }
+
+            main()
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun parserKeeps42DotDAsIntDotIdentifierAfterExternDecimalDeclaration() = runTest {
+        val tokens = parseLyng(
+            Source(
+                "test",
+                """
+                import lyng.decimal
+                extern var X: Decimal
+
+                fun main() {
+                    42.d.toStringExpanded()
+                }
+                """.trimIndent()
+            )
+        )
+        val tokenTexts = tokens.map { it.type to it.value }
+        val needle = listOf(
+            Token.Type.INT to "42",
+            Token.Type.DOT to ".",
+            Token.Type.ID to "d",
+            Token.Type.DOT to ".",
+            Token.Type.ID to "toStringExpanded",
+        )
+        val found = tokenTexts.windowed(needle.size).any { it == needle }
+        assertTrue(found, tokenTexts.joinToString())
     }
 }

@@ -32,8 +32,10 @@ class DecimalModuleTest {
 
             assertEquals("12.34", Decimal.fromString("12.34").toStringExpanded())
             assertEquals("1", Decimal.fromInt(1).toStringExpanded())
+            assertEquals("42", Decimal.fromInt(42).toStringExpanded())
             assertEquals("2.5", "2.5".d.toStringExpanded())
             assertEquals("1", 1.d.toStringExpanded())
+            assertEquals("42", 42.d.toStringExpanded())
             assertEquals("2.2", 2.2.d.toStringExpanded())
             assertEquals("3", (1 + 2).d.toStringExpanded())
             assertEquals("1.5", (1 + 0.5).d.toStringExpanded())
@@ -227,6 +229,21 @@ class DecimalModuleTest {
             X += 11
             assertEquals(53.d, X)
         """)
+    }
+
+    @Test
+    fun decimalPropertyWorksInsideFunctionBody() = runTest {
+        eval("""
+            import lyng.decimal
+
+            fun main() {
+                val x = 42.d
+                assertEquals(42.d, x)
+                assertEquals(53.d, x + 11)
+            }
+
+            main()
+        """.trimIndent())
     }
 
     @Test
