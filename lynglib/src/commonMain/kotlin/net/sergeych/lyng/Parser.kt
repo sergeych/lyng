@@ -732,7 +732,8 @@ private class Parser(fromPos: Pos, private val interpolationEnabled: Boolean = t
         }
         val expanded = mutableListOf<Token>()
         expanded += Token("(", tokenPos, Token.Type.LPAREN)
-        var emittedPieces = 0
+        expanded += Token("", tokenPos, Token.Type.STRING)
+        var emittedPieces = 1
         for (chunk in chunks) {
             val pieceTokens = when (chunk) {
                 is StringChunk.Literal -> {
@@ -755,9 +756,6 @@ private class Parser(fromPos: Pos, private val interpolationEnabled: Boolean = t
             expanded += pieceTokens
             emittedPieces++
         }
-        if (emittedPieces == 0) {
-            expanded += Token("", tokenPos, Token.Type.STRING)
-        }
         expanded += Token(")", tokenPos, Token.Type.RPAREN)
 
         val first = expanded.first()
@@ -766,10 +764,21 @@ private class Parser(fromPos: Pos, private val interpolationEnabled: Boolean = t
     }
 
     private fun parseEmbeddedExpressionTokens(text: String, exprPos: Pos): List<Token> {
-        val tokens = parseLyng(Source(exprPos.source.fileName, text), interpolationEnabled)
+        val tokens = try {
+            parseLyng(Source(exprPos.source.fileName, text), interpolationEnabled)
+        } catch (e: ScriptError) {
+            throw ScriptError(remapEmbeddedPos(exprPos, e.pos), e.errorMessage, e)
+        }
         if (tokens.isEmpty()) return emptyList()
         val withoutEof = if (tokens.last().type == Token.Type.EOF) tokens.dropLast(1) else tokens
-        return withoutEof
+        return withoutEof.map { it.copy(pos = remapEmbeddedPos(exprPos, it.pos)) }
+    }
+
+    private fun remapEmbeddedPos(exprPos: Pos, embeddedPos: Pos): Pos {
+        if (embeddedPos.line < 0 || embeddedPos.column < 0) return exprPos
+        val line = exprPos.line + embeddedPos.line
+        val column = if (embeddedPos.line == 0) exprPos.column + embeddedPos.column else embeddedPos.column
+        return Pos(exprPos.source, line, column)
     }
 
     private fun readInterpolationExprText(start: Pos): String {

@@ -21,6 +21,7 @@ import com.ionspin.kotlin.bignum.decimal.BigDecimal
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class DecimalModuleTest {
     @Test
@@ -265,5 +266,33 @@ class DecimalModuleTest {
             assert(X < 43)
             assert(X == 42)
         """.trimIndent())
+    }
+
+    @Test
+    fun testDecimalStringInterpolation() = runTest {
+        eval(
+            $$"""
+            import lyng.decimal
+            var X = "2".d
+            var re = 50.d
+            var im = X
+            val s = "$re + ${im}i"
+            assertEquals("50 + 2i", s)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testDecimalInterpolationSyntaxErrorKeepsOriginalSourcePosition() = runTest {
+        val ex = assertFailsWith<ScriptError> {
+            eval(
+                $$"""
+                import lyng.decimal
+                var re = 50.d
+                val s = "${re + }"
+            """.trimIndent()
+            )
+        }
+
+        assertEquals(2, ex.pos.line)
     }
 }
