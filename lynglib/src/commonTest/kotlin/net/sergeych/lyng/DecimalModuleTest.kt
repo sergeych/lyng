@@ -295,4 +295,17 @@ class DecimalModuleTest {
 
         assertEquals(2, ex.pos.line)
     }
+
+    @Test
+    fun testOverloading() = runTest {
+        eval("""
+            import lyng.decimal
+            assert( 1.d is Decimal )
+            assertEquals(Decimal, abs(1.d)::class)
+            // here the inference must work:
+            val t = abs(-10.d)
+            assert(t is Decimal)
+            assertEquals(10,t)
+        """.trimIndent())
+    }
 }

@@ -1180,8 +1180,11 @@ open class ObjClass(
         scope: Scope, name: String, args: Arguments,
         onNotFoundResult: (suspend () -> Obj?)?
     ): Obj {
-        getInstanceMemberOrNull(name)?.let { rec ->
-            val decl = rec.declaringClass ?: findDeclaringClassOf(name) ?: this
+        classScope?.objects?.get(name)?.let { rec ->
+            val decl = rec.declaringClass ?: this
+            if (!rec.visibility.isPublic) {
+                return super.invokeInstanceMethod(scope, name, args, onNotFoundResult)
+            }
             if (rec.type == ObjRecord.Type.Delegated) {
                 val del = rec.delegate ?: scope.raiseError("Internal error: delegated member $name has no delegate")
                 val allArgs = (listOf(this, ObjString(name)) + args.list).toTypedArray()
