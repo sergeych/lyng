@@ -73,4 +73,32 @@ class ComplexModuleTest {
             """.trimIndent()
         )
     }
+
+    @Test
+    fun testInferences() = runTest {
+        eval(
+            $$"""
+            import lyng.decimal
+            import lyng.complex
+            
+            assert( 1.i is Complex )
+            assert( 5 + 1.i is Complex )
+        """.trimIndent()
+        )
+    }
+    @Test
+    fun testDecimalInferences() = runTest {
+        eval(
+            $$"""
+            import lyng.decimal
+            import lyng.complex
+            
+            assert( 1.d.i is Complex )
+            assert( 5 + 1.d.i is Complex )
+            assert( 5.d + 1.i is Complex )
+            assert( 5.d + 2.d.i is Complex )
+        """.trimIndent()
+        )
+    }
+
 }

@@ -54,16 +54,20 @@ object ObjDecimalSupport {
             instance.kotlinInstanceData = zero
         }
         decimalClass.addFn("plus") {
-            newInstance(decimalClass, valueOf(thisObj).plus(coerceArg(requireScope(), args.firstAndOnly())))
+            OperatorInteropRegistry.invokeBinary(requireScope(), thisObj, args.firstAndOnly(), InteropOperator.Plus)
+                ?: newInstance(decimalClass, valueOf(thisObj).plus(coerceArg(requireScope(), args.firstAndOnly())))
         }
         decimalClass.addFn("minus") {
-            newInstance(decimalClass, valueOf(thisObj).minus(coerceArg(requireScope(), args.firstAndOnly())))
+            OperatorInteropRegistry.invokeBinary(requireScope(), thisObj, args.firstAndOnly(), InteropOperator.Minus)
+                ?: newInstance(decimalClass, valueOf(thisObj).minus(coerceArg(requireScope(), args.firstAndOnly())))
         }
         decimalClass.addFn("mul") {
-            newInstance(decimalClass, valueOf(thisObj).times(coerceArg(requireScope(), args.firstAndOnly())))
+            OperatorInteropRegistry.invokeBinary(requireScope(), thisObj, args.firstAndOnly(), InteropOperator.Mul)
+                ?: newInstance(decimalClass, valueOf(thisObj).times(coerceArg(requireScope(), args.firstAndOnly())))
         }
         decimalClass.addFn("div") {
-            newInstance(decimalClass, divideWithContext(valueOf(thisObj), coerceArg(requireScope(), args.firstAndOnly()), currentDivisionMode(requireScope())))
+            OperatorInteropRegistry.invokeBinary(requireScope(), thisObj, args.firstAndOnly(), InteropOperator.Div)
+                ?: newInstance(decimalClass, divideWithContext(valueOf(thisObj), coerceArg(requireScope(), args.firstAndOnly()), currentDivisionMode(requireScope())))
         }
         decimalClass.addFn("mod") {
             newInstance(decimalClass, valueOf(thisObj).rem(coerceArg(requireScope(), args.firstAndOnly())))

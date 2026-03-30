@@ -875,6 +875,7 @@ class Script(
                 }
                 addPackage("lyng.complex") { module ->
                     module.eval(Source("lyng.complex", complexLyng))
+                    ObjComplexSupport.bindTo(module)
                 }
                 addPackage("lyng.buffer") {
                     it.addConstDoc(
