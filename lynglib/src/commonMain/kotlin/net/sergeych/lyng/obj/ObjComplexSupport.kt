@@ -87,11 +87,37 @@ object ObjComplexSupport {
         )
     }
 
+    internal suspend fun decimalBinary(scope: ScopeFacade, decimal: Obj, other: Obj, operator: InteropOperator): Obj? {
+        val left = ObjDecimalSupport.toDoubleOrNull(decimal) ?: return null
+        val complex = other as? ObjInstance ?: return null
+        if (complex.objClass.className != "Complex") return null
+        val otherReal = complex.readField(scope.requireScope(), "real").value.toDouble()
+        val otherImag = complex.readField(scope.requireScope(), "imag").value.toDouble()
+        return when (operator) {
+            InteropOperator.Plus -> instantiateComplex(scope, complex.objClass, left + otherReal, otherImag)
+            InteropOperator.Minus -> instantiateComplex(scope, complex.objClass, left - otherReal, -otherImag)
+            InteropOperator.Mul -> instantiateComplex(scope, complex.objClass, left * otherReal, left * otherImag)
+            InteropOperator.Div -> {
+                val denominator = otherReal * otherReal + otherImag * otherImag
+                instantiateComplex(scope, complex.objClass, left * otherReal / denominator, -left * otherImag / denominator)
+            }
+            else -> null
+        }
+    }
+
     private suspend fun ScopeFacade.newComplex(complexClass: ObjClass, real: Double, imag: Double): ObjInstance =
-        call(
-            complexClass,
-            Arguments(ObjReal.of(real), ObjReal.of(imag))
-        ) as? ObjInstance ?: raiseIllegalState("Complex() did not return an object instance")
+        instantiateComplex(this, complexClass, real, imag)
+
+    private suspend fun instantiateComplex(scope: ScopeFacade, complexClass: ObjClass, real: Double, imag: Double): ObjInstance {
+        val runtimeScope = scope.requireScope()
+        val instance = complexClass.createInstance(runtimeScope)
+        complexClass.initializeInstance(
+            instance,
+            Arguments(ObjReal.of(real), ObjReal.of(imag)),
+            runConstructors = false
+        )
+        return instance
+    }
 
     private fun ScopeFacade.decimalToReal(value: Obj): Double =
         ObjDecimalSupport.toDoubleOrNull(value)

@@ -54,19 +54,23 @@ object ObjDecimalSupport {
             instance.kotlinInstanceData = zero
         }
         decimalClass.addFn("plus") {
-            OperatorInteropRegistry.invokeBinary(requireScope(), thisObj, args.firstAndOnly(), InteropOperator.Plus)
+            ObjComplexSupport.decimalBinary(this, thisObj, args.firstAndOnly(), InteropOperator.Plus)
+                ?: OperatorInteropRegistry.invokeBinary(requireScope(), thisObj, args.firstAndOnly(), InteropOperator.Plus)
                 ?: newInstance(decimalClass, valueOf(thisObj).plus(coerceArg(requireScope(), args.firstAndOnly())))
         }
         decimalClass.addFn("minus") {
-            OperatorInteropRegistry.invokeBinary(requireScope(), thisObj, args.firstAndOnly(), InteropOperator.Minus)
+            ObjComplexSupport.decimalBinary(this, thisObj, args.firstAndOnly(), InteropOperator.Minus)
+                ?: OperatorInteropRegistry.invokeBinary(requireScope(), thisObj, args.firstAndOnly(), InteropOperator.Minus)
                 ?: newInstance(decimalClass, valueOf(thisObj).minus(coerceArg(requireScope(), args.firstAndOnly())))
         }
         decimalClass.addFn("mul") {
-            OperatorInteropRegistry.invokeBinary(requireScope(), thisObj, args.firstAndOnly(), InteropOperator.Mul)
+            ObjComplexSupport.decimalBinary(this, thisObj, args.firstAndOnly(), InteropOperator.Mul)
+                ?: OperatorInteropRegistry.invokeBinary(requireScope(), thisObj, args.firstAndOnly(), InteropOperator.Mul)
                 ?: newInstance(decimalClass, valueOf(thisObj).times(coerceArg(requireScope(), args.firstAndOnly())))
         }
         decimalClass.addFn("div") {
-            OperatorInteropRegistry.invokeBinary(requireScope(), thisObj, args.firstAndOnly(), InteropOperator.Div)
+            ObjComplexSupport.decimalBinary(this, thisObj, args.firstAndOnly(), InteropOperator.Div)
+                ?: OperatorInteropRegistry.invokeBinary(requireScope(), thisObj, args.firstAndOnly(), InteropOperator.Div)
                 ?: newInstance(decimalClass, divideWithContext(valueOf(thisObj), coerceArg(requireScope(), args.firstAndOnly()), currentDivisionMode(requireScope())))
         }
         decimalClass.addFn("mod") {

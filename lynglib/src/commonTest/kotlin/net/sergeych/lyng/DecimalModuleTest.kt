@@ -308,4 +308,5 @@ class DecimalModuleTest {
             assertEquals(10,t)
         """.trimIndent())
     }
+
 }

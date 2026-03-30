@@ -97,6 +97,15 @@ class ComplexModuleTest {
             assert( 5 + 1.d.i is Complex )
             assert( 5.d + 1.i is Complex )
             assert( 5.d + 2.d.i is Complex )
+            assertEquals("0.0+1.0i", 1.d.i.toString())
+            assertEquals("1.0+0.0i", 1.d.re.toString())
+            
+            var c = 1 + 2.i
+            assert(c is Complex)
+            assertEquals("1.0+2.0i", c.toString())
+        
+            c = 1.d + 2.i
+            assertEquals("1.0+2.0i", c.toString())
         """.trimIndent()
         )
     }
