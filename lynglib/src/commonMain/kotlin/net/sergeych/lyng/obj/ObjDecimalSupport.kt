@@ -94,6 +94,12 @@ object ObjDecimalSupport {
         decimalClass.addFn("toReal") {
             ObjReal.of(valueOf(thisObj).doubleValue(false))
         }
+        decimalClass.addFn("isInfinite") {
+            ObjFalse
+        }
+        decimalClass.addFn("isNaN") {
+            ObjFalse
+        }
         decimalClass.addFn("toString") {
             ObjString(valueOf(thisObj).toStringExpanded())
         }

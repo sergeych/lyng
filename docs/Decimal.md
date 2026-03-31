@@ -166,6 +166,17 @@ assertEquals(2.9, "2.9".d.toReal())
 
 Use `toReal()` only when you are willing to return to binary floating-point semantics.
 
+## Non-Finite Checks
+
+`Decimal` values are always finite, so these helpers exist for API symmetry with `Real` and always return `false`:
+
+```lyng
+import lyng.decimal
+
+assertEquals(false, "2.9".d.isInfinite())
+assertEquals(false, "2.9".d.isNaN())
+```
+
 ## Division Context
 
 Division is the operation where precision and rounding matter most.

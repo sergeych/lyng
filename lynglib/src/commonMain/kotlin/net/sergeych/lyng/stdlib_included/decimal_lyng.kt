@@ -161,6 +161,10 @@ extern class Decimal() {
     extern fun toInt(): Int
     /** Convert to `Real`. */
     extern fun toReal(): Real
+    /** Return true if this decimal is positive or negative infinity. Always false for Decimal. */
+    extern fun isInfinite(): Bool
+    /** Return true if this decimal is NaN (not a number). Always false for Decimal. */
+    extern fun isNaN(): Bool
     /**
      * Convert to a plain decimal string without scientific notation.
      *

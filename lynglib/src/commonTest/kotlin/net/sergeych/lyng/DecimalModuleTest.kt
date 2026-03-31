@@ -52,6 +52,21 @@ class DecimalModuleTest {
     }
 
     @Test
+    fun testDecimalIsInfiniteAndIsNaN() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            import lyng.decimal
+
+            assertEquals(false, 0.d.isInfinite())
+            assertEquals(false, "12.34".d.isInfinite())
+            assertEquals(false, 0.d.isNaN())
+            assertEquals(false, "12.34".d.isNaN())
+            """.trimIndent()
+        )
+    }
+
+    @Test
     fun testDecimalModuleMixedIntOperators() = runTest {
         val scope = Script.newScope()
         scope.eval(
