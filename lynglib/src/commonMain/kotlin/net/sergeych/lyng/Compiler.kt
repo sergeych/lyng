@@ -343,6 +343,73 @@ class Compiler(
             }
             return t
         }
+        fun handleTopLevelKeyword(keyword: Token): Boolean {
+            when (keyword.value) {
+                "fun", "fn" -> {
+                    val nameToken = nextNonWs()
+                    if (nameToken.type != Token.Type.ID) return true
+                    val afterName = cc.peekNextNonWhitespace()
+                    if (afterName.type == Token.Type.DOT) {
+                        cc.nextNonWhitespace()
+                        val actual = cc.nextNonWhitespace()
+                        if (actual.type == Token.Type.ID) {
+                            extensionNames.add(actual.value)
+                            registerExtensionName(nameToken.value, actual.value)
+                            declareSlotNameIn(plan, extensionCallableName(nameToken.value, actual.value), isMutable = false, isDelegated = false)
+                            moduleDeclaredNames.add(extensionCallableName(nameToken.value, actual.value))
+                        }
+                        return true
+                    }
+                    declareSlotNameIn(plan, nameToken.value, isMutable = false, isDelegated = false)
+                    moduleDeclaredNames.add(nameToken.value)
+                    return true
+                }
+                "val", "var" -> {
+                    val nameToken = nextNonWs()
+                    if (nameToken.type != Token.Type.ID) return true
+                    val afterName = cc.peekNextNonWhitespace()
+                    if (afterName.type == Token.Type.DOT) {
+                        cc.nextNonWhitespace()
+                        val actual = cc.nextNonWhitespace()
+                        if (actual.type == Token.Type.ID) {
+                            extensionNames.add(actual.value)
+                            registerExtensionName(nameToken.value, actual.value)
+                            declareSlotNameIn(plan, extensionPropertyGetterName(nameToken.value, actual.value), isMutable = false, isDelegated = false)
+                            moduleDeclaredNames.add(extensionPropertyGetterName(nameToken.value, actual.value))
+                            if (keyword.value == "var") {
+                                declareSlotNameIn(plan, extensionPropertySetterName(nameToken.value, actual.value), isMutable = false, isDelegated = false)
+                                moduleDeclaredNames.add(extensionPropertySetterName(nameToken.value, actual.value))
+                            }
+                        }
+                        return true
+                    }
+                    declareSlotNameIn(plan, nameToken.value, isMutable = keyword.value == "var", isDelegated = false)
+                    moduleDeclaredNames.add(nameToken.value)
+                    predeclaredTopLevelValueNames.add(nameToken.value)
+                    return true
+                }
+                "class", "object" -> {
+                    val nameToken = nextNonWs()
+                    if (nameToken.type == Token.Type.ID) {
+                        declareSlotNameIn(plan, nameToken.value, isMutable = false, isDelegated = false)
+                        scopeSeedNames.add(nameToken.value)
+                        moduleDeclaredNames.add(nameToken.value)
+                    }
+                    return true
+                }
+                "enum" -> {
+                    val next = nextNonWs()
+                    val nameToken = if (next.type == Token.Type.ID && next.value == "class") nextNonWs() else next
+                    if (nameToken.type == Token.Type.ID) {
+                        declareSlotNameIn(plan, nameToken.value, isMutable = false, isDelegated = false)
+                        scopeSeedNames.add(nameToken.value)
+                        moduleDeclaredNames.add(nameToken.value)
+                    }
+                    return true
+                }
+            }
+            return false
+        }
         try {
             while (cc.hasNext()) {
                 val t = cc.next()
@@ -355,66 +422,11 @@ class Compiler(
                     Token.Type.RBRACKET -> if (bracketDepth > 0) bracketDepth--
                     Token.Type.ID -> if (depth == 0) {
                         if (parenDepth > 0 || bracketDepth > 0) continue
-                        when (t.value) {
-                            "fun", "fn" -> {
-                                val nameToken = nextNonWs()
-                                if (nameToken.type != Token.Type.ID) continue
-                                val afterName = cc.peekNextNonWhitespace()
-                                if (afterName.type == Token.Type.DOT) {
-                                    cc.nextNonWhitespace()
-                                    val actual = cc.nextNonWhitespace()
-                                    if (actual.type == Token.Type.ID) {
-                                        extensionNames.add(actual.value)
-                                        registerExtensionName(nameToken.value, actual.value)
-                                        declareSlotNameIn(plan, extensionCallableName(nameToken.value, actual.value), isMutable = false, isDelegated = false)
-                                        moduleDeclaredNames.add(extensionCallableName(nameToken.value, actual.value))
-                                    }
-                                    continue
-                                }
-                                declareSlotNameIn(plan, nameToken.value, isMutable = false, isDelegated = false)
-                                moduleDeclaredNames.add(nameToken.value)
-                            }
-                            "val", "var" -> {
-                                val nameToken = nextNonWs()
-                                if (nameToken.type != Token.Type.ID) continue
-                                val afterName = cc.peekNextNonWhitespace()
-                                if (afterName.type == Token.Type.DOT) {
-                                    cc.nextNonWhitespace()
-                                    val actual = cc.nextNonWhitespace()
-                                    if (actual.type == Token.Type.ID) {
-                                        extensionNames.add(actual.value)
-                                        registerExtensionName(nameToken.value, actual.value)
-                                        declareSlotNameIn(plan, extensionPropertyGetterName(nameToken.value, actual.value), isMutable = false, isDelegated = false)
-                                        moduleDeclaredNames.add(extensionPropertyGetterName(nameToken.value, actual.value))
-                                        if (t.value == "var") {
-                                            declareSlotNameIn(plan, extensionPropertySetterName(nameToken.value, actual.value), isMutable = false, isDelegated = false)
-                                            moduleDeclaredNames.add(extensionPropertySetterName(nameToken.value, actual.value))
-                                        }
-                                    }
-                                    continue
-                                }
-                                declareSlotNameIn(plan, nameToken.value, isMutable = t.value == "var", isDelegated = false)
-                                moduleDeclaredNames.add(nameToken.value)
-                                predeclaredTopLevelValueNames.add(nameToken.value)
-                            }
-                            "class", "object" -> {
-                                val nameToken = nextNonWs()
-                                if (nameToken.type == Token.Type.ID) {
-                                    declareSlotNameIn(plan, nameToken.value, isMutable = false, isDelegated = false)
-                                    scopeSeedNames.add(nameToken.value)
-                                    moduleDeclaredNames.add(nameToken.value)
-                                }
-                            }
-                            "enum" -> {
-                                val next = nextNonWs()
-                                val nameToken = if (next.type == Token.Type.ID && next.value == "class") nextNonWs() else next
-                                if (nameToken.type == Token.Type.ID) {
-                                    declareSlotNameIn(plan, nameToken.value, isMutable = false, isDelegated = false)
-                                    scopeSeedNames.add(nameToken.value)
-                                    moduleDeclaredNames.add(nameToken.value)
-                                }
-                            }
+                        if (t.value == "extern") {
+                            handleTopLevelKeyword(nextNonWs())
+                            continue
                         }
+                        handleTopLevelKeyword(t)
                     }
                     else -> {}
                 }
@@ -9070,7 +9082,10 @@ class Compiler(
         val effectiveEqToken = if (isProperty) null else eqToken
 
         // Register the local name at compile time so that subsequent identifiers can be emitted as fast locals
-        if (!isStatic && declaringClassNameCaptured == null && !actualExtern) declareLocalName(name, isMutable)
+        val isTopLevelExtern = actualExtern && declaringClassNameCaptured == null && slotPlanStack.size == 1
+        if (!isStatic && declaringClassNameCaptured == null && (!actualExtern || isTopLevelExtern)) {
+            declareLocalName(name, isMutable)
+        }
         val declKind = if (codeContexts.lastOrNull() is CodeContext.ClassBody) {
             SymbolKind.MEMBER
         } else {

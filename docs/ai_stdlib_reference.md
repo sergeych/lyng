@@ -14,6 +14,8 @@ Sources: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Script.kt`, `lynglib/s
 - Assertions/tests: `assert`, `assertEquals`/`assertEqual`, `assertNotEquals`, `assertThrows`.
 - Preconditions: `require`, `check`.
 - Async/concurrency: `launch`, `yield`, `flow`, `delay`.
+  - `Deferred.cancel()` cancels an active task.
+  - `Deferred.await()` throws `CancellationException` if that task was cancelled.
 - Math: `floor`, `ceil`, `round`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`, `exp`, `ln`, `log10`, `log2`, `pow`, `sqrt`, `abs`, `clamp`.
   - These helpers also accept `lyng.decimal.Decimal`.
   - Exact Decimal path today: `abs`, `floor`, `ceil`, `round`, and `pow` with integral exponent.
@@ -26,13 +28,14 @@ Sources: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Script.kt`, `lynglib/s
 - Collections/types: `Iterable`, `Iterator`, `Collection`, `Array`, `List`, `ImmutableList`, `Set`, `ImmutableSet`, `Map`, `ImmutableMap`, `MapEntry`, `Range`, `RingBuffer`.
 - Random: singleton `Random` and class `SeededRandom`.
 - Async types: `Deferred`, `CompletableDeferred`, `Mutex`, `Flow`, `FlowBuilder`.
+- Async exception: `CancellationException`.
 - Delegation types: `Delegate`, `DelegateContext`.
 - Regex types: `Regex`, `RegexMatch`.
 - Also present: `Math.PI` namespace constant.
 
 ## 4. `lyng.stdlib` Module Surface (from `root.lyng`)
 ### 4.1 Extern class declarations
-- Exceptions/delegation base: `Exception`, `IllegalArgumentException`, `NotImplementedException`, `Delegate`.
+- Exceptions/delegation base: `Exception`, `CancellationException`, `IllegalArgumentException`, `NotImplementedException`, `Delegate`.
 - Collections and iterables: `Iterable<T>`, `Iterator<T>`, `Collection<T>`, `Array<T>`, `List<T>`, `ImmutableList<T>`, `Set<T>`, `ImmutableSet<T>`, `Map<K,V>`, `ImmutableMap<K,V>`, `MapEntry<K,V>`, `RingBuffer<T>`.
 - Host iterator bridge: `KotlinIterator<T>`.
 - Random APIs: `extern object Random`, `extern class SeededRandom`.

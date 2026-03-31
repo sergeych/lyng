@@ -278,6 +278,7 @@ open class ObjException(
                 "AssertionFailedException",
                 "ClassCastException",
                 "IndexOutOfBoundsException",
+                "CancellationException",
                 "IllegalArgumentException",
                 "IllegalStateException",
                 "NoSuchElementException",
@@ -310,6 +311,9 @@ class ObjAssertionFailedException(scope: Scope, message: String) :
 class ObjClassCastException(scope: Scope, message: String) : ObjException("ClassCastException", scope, message)
 class ObjIndexOutOfBoundsException(scope: Scope, message: String = "index out of bounds") :
     ObjException("IndexOutOfBoundsException", scope, message)
+
+class ObjCancellationException(scope: Scope, message: String = "cancelled") :
+    ObjException("CancellationException", scope, message)
 
 class ObjIllegalArgumentException(scope: Scope, message: String = "illegal argument") :
     ObjException("IllegalArgumentException", scope, message)

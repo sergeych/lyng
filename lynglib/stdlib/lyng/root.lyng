@@ -1,11 +1,48 @@
 package lyng.stdlib
 
+/* Launch `code` asynchronously and return its result handle. */
+extern fun launch(code): Deferred
+/* Yield execution so other scheduled coroutines can run. */
+extern fun yield(): void
+/* Build a lazy asynchronous sequence. */
 extern fun flow(builder: FlowBuilder.()->void): Flow
 
 /* Built-in exception type. */
 extern class Exception
 extern class IllegalArgumentException
 extern class NotImplementedException
+/* Raised when an awaited asynchronous task was cancelled before producing a value. */
+extern class CancellationException : Exception
+
+/* A handle to a running asynchronous task. */
+extern class Deferred {
+    /* Cancel the task if it is still active. Safe to call multiple times. */
+    fun cancel(): void
+    /* Suspend until the task finishes and return its value.
+       Throws `CancellationException` if the task was cancelled. */
+    fun await(): Object
+    /* True when the task has finished, failed, or otherwise reached a terminal state. */
+    val isCompleted: Bool
+    /* True while the task is still running and has not been cancelled. */
+    val isActive: Bool
+    /* True when the task was cancelled. */
+    val isCancelled: Bool
+}
+
+/* A deferred result that can be completed manually. */
+extern class CompletableDeferred : Deferred {
+    fun complete(value: Object): void
+}
+
+/* Receiver passed into `flow { ... }` builders. */
+extern class FlowBuilder {
+    fun emit(value: Object): void
+}
+
+/* A cold asynchronous iterable sequence. */
+extern class Flow<T> : Iterable<T> {
+}
+
 extern class Delegate
 extern class Iterable<T> {
     fun iterator(): Iterator<T>

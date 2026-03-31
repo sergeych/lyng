@@ -59,6 +59,30 @@ class TestCoroutines {
     }
 
     @Test
+    fun testDeferredCancel() = runTest {
+        eval(
+            """
+            var reached = false
+            val d = launch {
+                delay(100)
+                reached = true
+                "ok"
+            }
+
+            d.cancel()
+            d.cancel()
+            assertThrows(CancellationException) { d.await() }
+
+            delay(150)
+
+            assert(d.isCancelled)
+            assert(!d.isActive)
+            assert(!reached)
+        """.trimIndent()
+        )
+    }
+
+    @Test
     fun testMutex() = runTest {
         eval(
             """

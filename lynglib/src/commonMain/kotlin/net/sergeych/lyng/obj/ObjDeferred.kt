@@ -18,6 +18,7 @@
 package net.sergeych.lyng.obj
 
 import kotlinx.coroutines.Deferred
+import kotlin.coroutines.cancellation.CancellationException as KotlinCancellationException
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lyng.miniast.addPropertyDoc
@@ -34,11 +35,26 @@ open class ObjDeferred(val deferred: Deferred<Obj>): Obj() {
             }
         }.apply {
             addFnDoc(
+                name = "cancel",
+                doc = "Cancel this deferred if it is still active. Safe to call multiple times.",
+                returns = type("lyng.Void"),
+                moduleName = "lyng.stdlib"
+            ) {
+                thisAs<ObjDeferred>().deferred.cancel()
+                ObjVoid
+            }
+            addFnDoc(
                 name = "await",
-                doc = "Suspend until completion and return the result value (or throw if failed).",
+                doc = "Suspend until completion and return the result value. Throws `CancellationException` if cancelled.",
                 returns = type("lyng.Any"),
                 moduleName = "lyng.stdlib"
-            ) { thisAs<ObjDeferred>().deferred.await() }
+            ) {
+                try {
+                    thisAs<ObjDeferred>().deferred.await()
+                } catch (e: KotlinCancellationException) {
+                    requireScope().raiseError(ObjCancellationException(requireScope(), e.message ?: "Deferred was cancelled"))
+                }
+            }
             addPropertyDoc(
                 name = "isCompleted",
                 doc = "Whether this deferred has completed (successfully or with an error).",
@@ -66,4 +82,3 @@ open class ObjDeferred(val deferred: Deferred<Obj>): Obj() {
         }
     }
 }
-

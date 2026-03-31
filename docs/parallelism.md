@@ -32,9 +32,24 @@ Depending on the platform, these coroutines may be executed on different CPU and
     assert(xIsCalled)
     >>> void
 
-This example shows how to launch a coroutine with `launch` which returns [Deferred] instance, the latter have ways to await for the coroutine completion and retrieve possible result.
+This example shows how to launch a coroutine with `launch` which returns [Deferred] instance, the latter have ways to await for the coroutine completion, cancel it if it is no longer needed, and retrieve possible result.
 
 Launch has the only argument which should be a callable (lambda usually) that is run in parallel (or cooperatively in parallel), and return anything as the result.
+
+If you no longer need the result, cancel the deferred. Awaiting a cancelled deferred throws `CancellationException`:
+
+    var reached = false
+    val work = launch {
+        delay(100)
+        reached = true
+        "ok"
+    }
+    work.cancel()
+    assertThrows(CancellationException) { work.await() }
+    assert(work.isCancelled)
+    assert(!work.isActive)
+    assert(!reached)
+    >>> void
 
 ## Synchronization: Mutex
 

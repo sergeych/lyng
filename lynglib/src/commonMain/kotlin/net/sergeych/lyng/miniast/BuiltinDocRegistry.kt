@@ -540,7 +540,8 @@ private fun buildStdlibDocs(): List<MiniDecl> {
 
     // Concurrency helpers
     mod.classDoc(name = "Deferred", doc = "Represents a value that will be available in the future.", bases = listOf(type("Obj"))) {
-        method(name = "await", doc = "Suspend until the value is available and return it.")
+        method(name = "cancel", doc = "Cancel the deferred if it is still active.")
+        method(name = "await", doc = "Suspend until the value is available and return it. Throws `CancellationException` if cancelled.")
     }
     mod.funDoc(
         name = "launch",
