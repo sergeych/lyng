@@ -155,6 +155,22 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
             ) {
                 ObjInt.of(thisAs<ObjReal>().value.toLong())
             }
+            addFnDoc(
+                name = "isInfinite",
+                doc = "Return true if this real number is positive or negative infinity.",
+                returns = type("lyng.Bool"),
+                moduleName = "lyng.stdlib"
+            ) {
+                ObjBool(thisAs<ObjReal>().value.isInfinite())
+            }
+            addFnDoc(
+                name = "isNaN",
+                doc = "Return true if this real number is NaN (not a number).",
+                returns = type("lyng.Bool"),
+                moduleName = "lyng.stdlib"
+            ) {
+                ObjBool(thisAs<ObjReal>().value.isNaN())
+            }
         }
     }
 }

@@ -5272,6 +5272,19 @@ class ScriptTest {
     }
 
     @Test
+    fun testRealIsInfiniteAndIsNaN() = runTest {
+        eval(
+            """
+            assertEquals(false, 1.0.isInfinite())
+            assertEquals(true, (1.0 / 0.0).isInfinite())
+            assertEquals(true, (-1.0 / 0.0).isInfinite())
+            assertEquals(false, 1.0.isNaN())
+            assertEquals(true, (0.0 / 0.0).isNaN())
+        """.trimIndent()
+        )
+    }
+
+    @Test
     fun testEmptySpreadList() = runTest {
         eval(
             """
