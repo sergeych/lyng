@@ -1,28 +1,13 @@
-
-/*
-    Рассчитывает глубину провала по времени падения камня и прихода звука.
-
-    @param T измеренное полное время (с)
-    @param m масса камня (кг)
-    @param d диаметр камня (м) (предполагается сферическая форма)
-    @param rho плотность воздуха (кг/м³), по умолчанию 1.2
-    @param c скорость звука (м/с), по умолчанию 340.0
-    @param g ускорение свободного падения (м/с²), по умолчанию 9.81
-    @param Cd коэффициент лобового сопротивления, по умолчанию 0.5
-    @param epsilon относительная точность (м), по умолчанию 1e-3
-    @param maxIter максимальное число итераций, по умолчанию 20
-    @return глубина h (м), или null если расчёт не сошёлся
-*/
 fun calculateDepth(
-        T: Real,
-        m: Real,
-        d: Real,
-        rho: Real = 1.2,
-        c: Real = 340.0,
-        g: Real = 9.81,
-        Cd: Real = 0.5,
-        epsilon: Real = 1e-3,
-        maxIter: Int = 20
+    T: Real,
+    m: Real,
+    d: Real,
+    rho: Real = 1.2,
+    c: Real = 340.0,
+    g: Real = 9.81,
+    Cd: Real = 0.5,
+    eps: Real = 1e-3,
+    maxIter: Int = 100
 ): Real? {
     // Площадь миделя
     val r = d / 2.0
@@ -36,69 +21,56 @@ fun calculateDepth(
 
     // Функция времени падения с высоты h
     fun tFall(h: Real): Real {
+        // Для численной стабильности при больших h используем логарифмическую форму
         val arg = exp(g * h / (vTerm * vTerm))
         // arcosh(x) = ln(x + sqrt(x^2 - 1))
         val arcosh = ln(arg + sqrt(arg * arg - 1.0))
         return vTerm / g * arcosh
     }
 
-    // Производная времени падения по h
-    fun dtFall_dh(h: Real): Real {
-        val expArg = exp(2.0 * g * h / (vTerm * vTerm))
-        return 1.0 / (vTerm * sqrt(expArg - 1.0))
-    }
-
-    // Полное расчётное время T_calc(h) = tFall(h) + h/c
+    // Полное расчётное время
     fun Tcalc(h: Real): Real = tFall(h) + h / c
 
-    // Производная T_calc по h
-    fun dTcalc_dh(h: Real): Real = dtFall_dh(h) + 1.0 / c
-
-    // Начальное приближение (без сопротивления)
-    val term = 1.0 + g * T / c
-    val sqrtTerm = sqrt(1.0 + 2.0 * g * T / c)
-    var h = (c * c / g) * (term - sqrtTerm)
-
-    // Проверка на валидность начального приближения
-    if (h.isNaN() || h <= 0.0) {
-        // Если формула дала некорректный результат, используем оценку по свободному падению
-        h = 0.5 * g * T * T // грубая оценка, всё равно будет уточняться
-        if (h.isNaN() || h <= 0.0) return null
+    // Находим интервал, содержащий корень
+    // Нижняя граница: глубина не может быть отрицательной
+    var lo = 0.0
+    // Верхняя граница: сначала попробуем оценку по свободному падению (без звука)
+    var hi = 0.5 * g * T * T  // максимальная глубина, если бы не было сопротивления и звука
+    // Уточним hi, чтобы Tcalc(hi) было заведомо больше T
+    while (Tcalc(hi) < T && hi < 1e4) {
+        hi *= 2.0
     }
+    // Проверка, что hi достаточно велико
+    if (Tcalc(hi) < T) return null // слишком большая глубина, не укладываемся в разумное
 
-    // Итерации Ньютона
+    // Бисекция
     var iter = 0
-    while (iter < maxIter) {
+    var h = (lo + hi) / 2.0
+    while (iter < maxIter && (hi - lo) > eps) {
         val f = Tcalc(h) - T
-        val df = dTcalc_dh(h)
-
-        // Если производная близка к нулю, выходим
-        if (abs(df) < 1e-12) return null
-
-        val hNew = h - f / df
-
-        // Проверка сходимости
-        if (abs(hNew - h) < epsilon) {
-            return hNew
+        if (abs(f) < eps) break
+        if (f > 0) {
+            hi = h
+        } else {
+            lo = h
         }
-
-        h = hNew
+        h = (lo + hi) / 2.0
         iter++
-        println("iter: $iter: $h")
     }
 
-    // Не сошлось за maxIter
-    return null
+    return h
 }
 
-// Пример использования
-val T = 6.0      // секунды
-val m = 1.0      // кг
-val d = 0.1      // м (10 см)
+    // Пример: T=12 секунд
+    val T = 26.0
+    val m = 1.0   // кг
+    val d = 0.1   // м
 
-val depth = calculateDepth(T, m, d)
-if (depth != null) {
-    println("Глубина: %.2f м"(depth))
-} else {
-    println("Расчёт не сошёлся")
-}
+    val depth = calculateDepth(T, m, d)
+    if (depth != null) {
+        println("Глубина: %.2f м"(depth))
+        // Для проверки выведем теоретическое время при найденной глубине
+        // (можно добавить функцию для самопроверки)
+    } else {
+        println("Расчёт не сошёлся")
+    }

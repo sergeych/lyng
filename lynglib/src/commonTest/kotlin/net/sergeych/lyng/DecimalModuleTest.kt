@@ -285,6 +285,31 @@ class DecimalModuleTest {
     }
 
     @Test
+    fun testDecimalTruncateToTwoFractionDigitsViaGlobalRound() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            import lyng.decimal
+
+            fun trunc2(x: Decimal): Decimal {
+                val scaled = x * 100.d
+                val whole = if (scaled >= 0.d) {
+                    floor(scaled) as Decimal
+                } else {
+                    ceil(scaled) as Decimal
+                }
+                whole / 100.d
+            }
+
+            assertEquals("12.34", trunc2("12.349".d).toStringExpanded())
+            assertEquals("12.34", trunc2("12.340".d).toStringExpanded())
+            assertEquals("-12.34", trunc2("-12.349".d).toStringExpanded())
+            assertEquals("-12.34", trunc2("-12.340".d).toStringExpanded())
+            """.trimIndent()
+        )
+    }
+
+    @Test
     fun testDecimalMathHelpersFallbackThroughRealTemporarily() = runTest {
         val scope = Script.newScope()
         scope.eval(
