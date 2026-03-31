@@ -158,6 +158,7 @@ private class Fmt : CliktCommand(name = "fmt") {
 
 private class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() {
 
+    override val invokeWithoutSubcommand = true
     override val printHelpOnEmptyArgs = true
 
     val version by option("-v", "--version", help = "Print version and exit").flag()

@@ -5474,33 +5474,112 @@ class ScriptTest {
         )
     }
 
-//    @Test
-//    fun testFromCalcrus1() = runTest {
-//        eval($$"""
-//            import lyng.decimal
-//            var x = 7.0.d
-//            // глубина по звуку падения
-//            val m = 1 // kg
-//            val d = 0.06 // 6 cm
-//            val c = 340 // скор. звука
-//            val g = 9.82
-//            var cnt = 0
-//            var h = 0.0
-//            var t = x
-//            var message = ""
-//
-//            while(true){
-//               val h0 = 0
-//               h = c*c/h*(1 + g*t/c -sqrt(1+2*g*t/c))
-//               message = "iter ${cnt++}"
-//               if( cnt > 100 ) {
-//                  message= "ошибка"
-//                  break 0
-//               }
-//               x = h
-//               if( abs(h-h0)/h > 0.08 ) break h
-//            }
-//            println(x)
-//        """.trimIndent())
-//    }
+    @Test
+    fun testFromCalcurus1() = runTest {
+        eval($$"""
+            
+            /*
+                Рассчитывает глубину провала по времени падения камня и прихода звука.
+            
+                @param T измеренное полное время (с)
+                @param m масса камня (кг)
+                @param d диаметр камня (м) (предполагается сферическая форма)
+                @param rho плотность воздуха (кг/м³), по умолчанию 1.2
+                @param c скорость звука (м/с), по умолчанию 340.0
+                @param g ускорение свободного падения (м/с²), по умолчанию 9.81
+                @param Cd коэффициент лобового сопротивления, по умолчанию 0.5
+                @param epsilon относительная точность (м), по умолчанию 1e-3
+                @param maxIter максимальное число итераций, по умолчанию 20
+                @return глубина h (м), или null если расчёт не сошёлся
+            */
+            fun calculateDepth(
+                    T: Real,
+                    m: Real,
+                    d: Real,
+                    rho: Real = 1.2,
+                    c: Real = 340.0,
+                    g: Real = 9.81,
+                    Cd: Real = 0.5,
+                    epsilon: Real = 1e-3,
+                    maxIter: Int = 20
+            ): Real? {
+                // Площадь миделя
+                val r = d / 2.0
+                val A = π * r * r
+            
+                // Коэффициент сопротивления
+                val k = 0.5 * Cd * rho * A
+            
+                // Предельная скорость
+                val vTerm = sqrt(m * g / k)
+            
+                // Функция времени падения с высоты h
+                fun tFall(h: Real): Real {
+                    val arg = exp(g * h / (vTerm * vTerm))
+                    // arcosh(x) = ln(x + sqrt(x^2 - 1))
+                    val arcosh = ln(arg + sqrt(arg * arg - 1.0))
+                    return vTerm / g * arcosh
+                }
+            
+                // Производная времени падения по h
+                fun dtFall_dh(h: Real): Real {
+                    val expArg = exp(2.0 * g * h / (vTerm * vTerm))
+                    return 1.0 / (vTerm * sqrt(expArg - 1.0))
+                }
+            
+                // Полное расчётное время T_calc(h) = tFall(h) + h/c
+                fun Tcalc(h: Real): Real = tFall(h) + h / c
+            
+                // Производная T_calc по h
+                fun dTcalc_dh(h: Real): Real = dtFall_dh(h) + 1.0 / c
+            
+                // Начальное приближение (без сопротивления)
+                val term = 1.0 + g * T / c
+                val sqrtTerm = sqrt(1.0 + 2.0 * g * T / c)
+                var h = (c * c / g) * (term - sqrtTerm)
+            
+                // Проверка на валидность начального приближения
+                if (h.isNaN() || h <= 0.0) {
+                    // Если формула дала некорректный результат, используем оценку по свободному падению
+                    h = 0.5 * g * T * T // грубая оценка, всё равно будет уточняться
+                    if (h.isNaN() || h <= 0.0) return null
+                }
+            
+                // Итерации Ньютона
+                var iter = 0
+                while (iter < maxIter) {
+                    val f = Tcalc(h) - T
+                    val df = dTcalc_dh(h)
+            
+                    // Если производная близка к нулю, выходим
+                    if (abs(df) < 1e-12) return null
+            
+                    val hNew = h - f / df
+            
+                    // Проверка сходимости
+                    if (abs(hNew - h) < epsilon) {
+                        return hNew
+                    }
+            
+                    h = hNew
+                    iter++
+                }
+            
+                // Не сошлось за maxIter
+                return null
+            }
+            
+            // Пример использования
+            val T = 6.0      // секунды
+            val m = 1.0      // кг
+            val d = 0.1      // м (10 см)
+            
+            val depth = calculateDepth(T, m, d)
+            if (depth != null) {
+                println("Глубина: %.2f м".format(depth))
+            } else {
+                println("Расчёт не сошёлся")
+            }
+        """.trimIndent())
+    }
 }

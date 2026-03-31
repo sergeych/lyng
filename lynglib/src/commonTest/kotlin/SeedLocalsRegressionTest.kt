@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Sergey S. Chernov
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,17 +12,14 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.FrameSlotRef
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Scope
-import net.sergeych.lyng.bytecode.BytecodeConst
-import net.sergeych.lyng.bytecode.CmdFrame
-import net.sergeych.lyng.bytecode.CmdFunction
-import net.sergeych.lyng.bytecode.CmdVm
-import net.sergeych.lyng.bytecode.seedFrameLocalsFromScope
+import net.sergeych.lyng.bytecode.*
 import kotlin.test.Test
 import kotlin.test.assertNull
 
@@ -39,6 +36,8 @@ class SeedLocalsRegressionTest {
             scopeSlotIndices = intArrayOf(0),
             scopeSlotNames = arrayOf(null),
             scopeSlotIsModule = booleanArrayOf(false),
+            scopeSlotRequiresPreparedBinding = booleanArrayOf(false),
+            scopeSlotRefPos = arrayOfNulls(1),
             localSlotNames = arrayOf("x"),
             localSlotMutables = booleanArrayOf(true),
             localSlotDelegated = booleanArrayOf(false),

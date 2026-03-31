@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -130,5 +130,19 @@ class CliFmtJvmTest {
         } finally {
             Files.deleteIfExists(tmp)
         }
+    }
+
+    @Test
+    fun inlineExecuteWithDashXStillWorksAndPassesArgv() {
+        val r = runCli(
+            "-x",
+            """println("INLINE"); println(ARGV[0]); println(ARGV[1])""",
+            "one",
+            "two"
+        )
+        assertTrue("Expected inline execution output", r.out.contains("INLINE"))
+        assertTrue("Expected ARGV to include first trailing arg", r.out.contains("one"))
+        assertTrue("Expected ARGV to include second trailing arg", r.out.contains("two"))
+        assertTrue("Did not expect CLI exit()", r.exitCode == null)
     }
 }

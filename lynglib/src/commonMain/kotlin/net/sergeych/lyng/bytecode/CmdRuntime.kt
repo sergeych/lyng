@@ -4112,7 +4112,7 @@ class CmdFrame(
     }
 
     fun ensureScope(): Scope {
-        val pos = posForIp(ip - 1)
+        val pos = currentErrorPos()
         if (pos != null && lastScopePosIp != ip) {
             scope.pos = pos
             lastScopePosIp = ip
@@ -4187,6 +4187,33 @@ class CmdFrame(
     private fun posForIp(ip: Int): Pos? {
         if (ip < 0) return null
         return fn.posByIp.getOrNull(ip)
+    }
+
+    private fun currentErrorPos(): Pos? {
+        val center = ip - 1
+        if (center < 0) return null
+        var fallback: Pos? = null
+        val maxRadius = maxOf(center, fn.posByIp.size - 1 - center)
+        for (radius in 0..maxRadius) {
+            val before = center - radius
+            if (before >= 0) {
+                val pos = posForIp(before)
+                if (pos != null) {
+                    if (pos.source !== Source.builtIn && pos.source !== Source.UNKNOWN) return pos
+                    if (fallback == null) fallback = pos
+                }
+            }
+            if (radius == 0) continue
+            val after = center + radius
+            if (after < fn.posByIp.size) {
+                val pos = posForIp(after)
+                if (pos != null) {
+                    if (pos.source !== Source.builtIn && pos.source !== Source.UNKNOWN) return pos
+                    if (fallback == null) fallback = pos
+                }
+            }
+        }
+        return fallback
     }
 
     fun pushScope(plan: Map<String, Int>, captures: List<String>) {
@@ -5045,8 +5072,12 @@ class CmdFrame(
         if (hadNamedBinding) return
         if (record.value !== ObjUnset) return
         if (fn.scopeSlotIsModule.getOrNull(slot) != true) return
+        val pos = fn.scopeSlotRefPos.getOrNull(slot) ?: currentErrorPos() ?: ensureScope().pos
+        if (fn.scopeSlotRequiresPreparedBinding.getOrNull(slot) != true) {
+            throw ScriptError(pos, "symbol '$name' is not defined")
+        }
         throw ScriptError(
-            ensureScope().pos,
+            pos,
             "module binding '$name' is not available in the execution scope; prepare the script imports/module bindings explicitly"
         )
     }

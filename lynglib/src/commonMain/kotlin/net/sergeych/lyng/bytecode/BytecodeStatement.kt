@@ -88,6 +88,8 @@ class BytecodeStatement private constructor(
             callableReturnTypeByName: Map<String, ObjClass> = emptyMap(),
             externCallableNames: Set<String> = emptySet(),
             externBindingNames: Set<String> = emptySet(),
+            preparedModuleBindingNames: Set<String> = emptySet(),
+            scopeRefPosByName: Map<String, Pos> = emptyMap(),
             lambdaCaptureEntriesByRef: Map<ValueFnRef, List<LambdaCaptureEntry>> = emptyMap(),
             slotTypeDeclByScopeId: Map<Int, Map<Int, TypeDecl>> = emptyMap(),
         ): Statement {
@@ -124,6 +126,8 @@ class BytecodeStatement private constructor(
                 callableReturnTypeByName = callableReturnTypeByName,
                 externCallableNames = externCallableNames,
                 externBindingNames = externBindingNames,
+                preparedModuleBindingNames = preparedModuleBindingNames,
+                scopeRefPosByName = scopeRefPosByName,
                 lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef
             )
             val compiled = compiler.compileStatement(nameHint, statement)

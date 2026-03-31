@@ -187,6 +187,8 @@ class Compiler(
     private val externCallableNames: MutableSet<String> = mutableSetOf()
     private val externBindingNames: MutableSet<String> = mutableSetOf()
     private val moduleDeclaredNames: MutableSet<String> = mutableSetOf()
+    private val predeclaredTopLevelValueNames: MutableSet<String> = mutableSetOf()
+    private val moduleReferencePosByName: MutableMap<String, Pos> = mutableMapOf()
     private var seedingSlotPlan: Boolean = false
 
     private fun moduleForcedLocalSlotInfo(): Map<String, ForcedLocalSlotInfo> {
@@ -393,6 +395,7 @@ class Compiler(
                                 }
                                 declareSlotNameIn(plan, nameToken.value, isMutable = t.value == "var", isDelegated = false)
                                 moduleDeclaredNames.add(nameToken.value)
+                                predeclaredTopLevelValueNames.add(nameToken.value)
                             }
                             "class", "object" -> {
                                 val nameToken = nextNonWs()
@@ -933,6 +936,7 @@ class Compiler(
                 }
             }
             captureLocalRef(name, slotLoc, pos)?.let { ref ->
+                moduleReferencePosByName.putIfAbsent(name, pos)
                 resolutionSink?.reference(name, pos)
                 return ref
             }
@@ -978,8 +982,11 @@ class Compiler(
         if (moduleLoc != null) {
             val moduleDeclaredNames = localNamesStack.firstOrNull()
             if (moduleDeclaredNames == null || !moduleDeclaredNames.contains(name)) {
-                resolveImportBinding(name, pos)?.let { resolved ->
-                    registerImportBinding(name, resolved.binding, pos)
+                val resolvedImport = resolveImportBinding(name, pos)
+                if (resolvedImport != null) {
+                    registerImportBinding(name, resolvedImport.binding, pos)
+                } else if (predeclaredTopLevelValueNames.contains(name)) {
+                    throw ScriptError(pos, "symbol '$name' is not defined")
                 }
             }
             val ref = LocalSlotRef(
@@ -1008,8 +1015,11 @@ class Compiler(
             if (moduleEntry != null) {
                 val moduleDeclaredNames = localNamesStack.firstOrNull()
                 if (moduleDeclaredNames == null || !moduleDeclaredNames.contains(name)) {
-                    resolveImportBinding(name, pos)?.let { resolved ->
-                        registerImportBinding(name, resolved.binding, pos)
+                    val resolvedImport = resolveImportBinding(name, pos)
+                    if (resolvedImport != null) {
+                        registerImportBinding(name, resolvedImport.binding, pos)
+                    } else if (predeclaredTopLevelValueNames.contains(name)) {
+                        throw ScriptError(pos, "symbol '$name' is not defined")
                     }
                 }
                 val moduleLoc = SlotLocation(
@@ -1020,6 +1030,7 @@ class Compiler(
                     moduleEntry.isDelegated
                 )
                 captureLocalRef(name, moduleLoc, pos)?.let { ref ->
+                    moduleReferencePosByName.putIfAbsent(name, pos)
                     resolutionSink?.reference(name, pos)
                     return ref
                 }
@@ -1046,6 +1057,7 @@ class Compiler(
                         strictSlotRefs
                     )
                 }
+                moduleReferencePosByName.putIfAbsent(name, pos)
                 resolutionSink?.reference(name, pos)
                 return ref
             }
@@ -1080,6 +1092,7 @@ class Compiler(
                 val slot = lookupSlotLocation(name)
                 if (slot != null) {
                     captureLocalRef(name, slot, pos)?.let { ref ->
+                        moduleReferencePosByName.putIfAbsent(name, pos)
                         resolutionSink?.reference(name, pos)
                         return ref
                     }
@@ -1106,6 +1119,7 @@ class Compiler(
                             strictSlotRefs
                         )
                     }
+                    moduleReferencePosByName.putIfAbsent(name, pos)
                     resolutionSink?.reference(name, pos)
                     return ref
                 }
@@ -1757,6 +1771,8 @@ class Compiler(
                         callableReturnTypeByScopeId = callableReturnTypeByScopeId,
                         callableReturnTypeByName = callableReturnTypeByName,
                         externBindingNames = externBindingNames,
+                        preparedModuleBindingNames = importBindings.keys,
+                        scopeRefPosByName = moduleReferencePosByName,
                         lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef
                     ) as BytecodeStatement
                     unwrapped to bytecodeStmt.bytecodeFunction()
@@ -2085,6 +2101,8 @@ class Compiler(
             callableReturnTypeByName = callableReturnTypeByName,
             externCallableNames = externCallableNames,
             externBindingNames = externBindingNames,
+            preparedModuleBindingNames = importBindings.keys,
+            scopeRefPosByName = moduleReferencePosByName,
             lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef
         )
     }
@@ -2116,6 +2134,8 @@ class Compiler(
             callableReturnTypeByName = callableReturnTypeByName,
             externCallableNames = externCallableNames,
             externBindingNames = externBindingNames,
+            preparedModuleBindingNames = importBindings.keys,
+            scopeRefPosByName = moduleReferencePosByName,
             lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef
         )
     }
@@ -2172,6 +2192,8 @@ class Compiler(
             callableReturnTypeByName = callableReturnTypeByName,
             externCallableNames = externCallableNames,
             externBindingNames = externBindingNames,
+            preparedModuleBindingNames = importBindings.keys,
+            scopeRefPosByName = moduleReferencePosByName,
             lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef
         )
     }

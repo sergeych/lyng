@@ -43,6 +43,8 @@ class BytecodeCompiler(
     private val callableReturnTypeByName: Map<String, ObjClass> = emptyMap(),
     private val externCallableNames: Set<String> = emptySet(),
     private val externBindingNames: Set<String> = emptySet(),
+    private val preparedModuleBindingNames: Set<String> = emptySet(),
+    private val scopeRefPosByName: Map<String, Pos> = emptyMap(),
     private val lambdaCaptureEntriesByRef: Map<ValueFnRef, List<LambdaCaptureEntry>> = emptyMap(),
 ) {
     private val useScopeSlots: Boolean = allowedScopeNames != null || scopeSlotNameSet != null
@@ -53,12 +55,15 @@ class BytecodeCompiler(
     private var scopeSlotIndices = IntArray(0)
     private var scopeSlotNames = emptyArray<String?>()
     private var scopeSlotIsModule = BooleanArray(0)
+    private var scopeSlotRequiresPreparedBinding = BooleanArray(0)
+    private var scopeSlotRefPos = emptyArray<Pos?>()
     private var scopeSlotMutables = BooleanArray(0)
     private var scopeKeyByIndex = emptyArray<ScopeSlotKey?>()
     private val scopeSlotMap = LinkedHashMap<ScopeSlotKey, Int>()
     private val scopeSlotNameMap = LinkedHashMap<ScopeSlotKey, String>()
     private val scopeSlotMutableMap = LinkedHashMap<ScopeSlotKey, Boolean>()
     private val scopeSlotIndexByName = LinkedHashMap<String, Int>()
+    private val scopeSlotRefPosByKey = LinkedHashMap<ScopeSlotKey, Pos>()
     private val pendingScopeNameRefs = LinkedHashSet<String>()
     private val addrSlotByScopeSlot = LinkedHashMap<Int, Int>()
     private data class LocalSlotInfo(val name: String, val isMutable: Boolean, val isDelegated: Boolean)
@@ -119,6 +124,8 @@ class BytecodeCompiler(
                     scopeSlotIndices,
                     scopeSlotNames,
                     scopeSlotIsModule,
+                    scopeSlotRequiresPreparedBinding,
+                    scopeSlotRefPos,
                     localSlotNames,
                     localSlotMutables,
                     localSlotDelegated,
@@ -140,6 +147,8 @@ class BytecodeCompiler(
                     scopeSlotIndices,
                     scopeSlotNames,
                     scopeSlotIsModule,
+                    scopeSlotRequiresPreparedBinding,
+                    scopeSlotRefPos,
                     localSlotNames,
                     localSlotMutables,
                     localSlotDelegated,
@@ -158,6 +167,8 @@ class BytecodeCompiler(
                     scopeSlotIndices,
                     scopeSlotNames,
                     scopeSlotIsModule,
+                    scopeSlotRequiresPreparedBinding,
+                    scopeSlotRefPos,
                     localSlotNames,
                     localSlotMutables,
                     localSlotDelegated,
@@ -176,6 +187,8 @@ class BytecodeCompiler(
                     scopeSlotIndices,
                     scopeSlotNames,
                     scopeSlotIsModule,
+                    scopeSlotRequiresPreparedBinding,
+                    scopeSlotRefPos,
                     localSlotNames,
                     localSlotMutables,
                     localSlotDelegated,
@@ -194,6 +207,8 @@ class BytecodeCompiler(
                     scopeSlotIndices,
                     scopeSlotNames,
                     scopeSlotIsModule,
+                    scopeSlotRequiresPreparedBinding,
+                    scopeSlotRefPos,
                     localSlotNames,
                     localSlotMutables,
                     localSlotDelegated,
@@ -212,6 +227,8 @@ class BytecodeCompiler(
                     scopeSlotIndices,
                     scopeSlotNames,
                     scopeSlotIsModule,
+                    scopeSlotRequiresPreparedBinding,
+                    scopeSlotRefPos,
                     localSlotNames,
                     localSlotMutables,
                     localSlotDelegated,
@@ -230,6 +247,8 @@ class BytecodeCompiler(
                     scopeSlotIndices,
                     scopeSlotNames,
                     scopeSlotIsModule,
+                    scopeSlotRequiresPreparedBinding,
+                    scopeSlotRefPos,
                     localSlotNames,
                     localSlotMutables,
                     localSlotDelegated,
@@ -248,6 +267,8 @@ class BytecodeCompiler(
                     scopeSlotIndices,
                     scopeSlotNames,
                     scopeSlotIsModule,
+                    scopeSlotRequiresPreparedBinding,
+                    scopeSlotRefPos,
                     localSlotNames,
                     localSlotMutables,
                     localSlotDelegated,
@@ -266,6 +287,8 @@ class BytecodeCompiler(
                     scopeSlotIndices,
                     scopeSlotNames,
                     scopeSlotIsModule,
+                    scopeSlotRequiresPreparedBinding,
+                    scopeSlotRefPos,
                     localSlotNames,
                     localSlotMutables,
                     localSlotDelegated,
@@ -284,6 +307,8 @@ class BytecodeCompiler(
                     scopeSlotIndices,
                     scopeSlotNames,
                     scopeSlotIsModule,
+                    scopeSlotRequiresPreparedBinding,
+                    scopeSlotRefPos,
                     localSlotNames,
                     localSlotMutables,
                     localSlotDelegated,
@@ -302,6 +327,8 @@ class BytecodeCompiler(
                     scopeSlotIndices,
                     scopeSlotNames,
                     scopeSlotIsModule,
+                    scopeSlotRequiresPreparedBinding,
+                    scopeSlotRefPos,
                     localSlotNames,
                     localSlotMutables,
                     localSlotDelegated,
@@ -322,6 +349,8 @@ class BytecodeCompiler(
                     scopeSlotIndices,
                     scopeSlotNames,
                     scopeSlotIsModule,
+                    scopeSlotRequiresPreparedBinding,
+                    scopeSlotRefPos,
                     localSlotNames,
                     localSlotMutables,
                     localSlotDelegated,
@@ -340,6 +369,8 @@ class BytecodeCompiler(
                     scopeSlotIndices,
                     scopeSlotNames,
                     scopeSlotIsModule,
+                    scopeSlotRequiresPreparedBinding,
+                    scopeSlotRefPos,
                     localSlotNames,
                     localSlotMutables,
                     localSlotDelegated,
@@ -358,6 +389,8 @@ class BytecodeCompiler(
                     scopeSlotIndices,
                     scopeSlotNames,
                     scopeSlotIsModule,
+                    scopeSlotRequiresPreparedBinding,
+                    scopeSlotRefPos,
                     localSlotNames,
                     localSlotMutables,
                     localSlotDelegated,
@@ -376,6 +409,8 @@ class BytecodeCompiler(
                     scopeSlotIndices,
                     scopeSlotNames,
                     scopeSlotIsModule,
+                    scopeSlotRequiresPreparedBinding,
+                    scopeSlotRefPos,
                     localSlotNames,
                     localSlotMutables,
                     localSlotDelegated,
@@ -395,6 +430,8 @@ class BytecodeCompiler(
                     scopeSlotIndices,
                     scopeSlotNames,
                     scopeSlotIsModule,
+                    scopeSlotRequiresPreparedBinding,
+                    scopeSlotRefPos,
                     localSlotNames,
                     localSlotMutables,
                     localSlotDelegated,
@@ -416,6 +453,8 @@ class BytecodeCompiler(
             scopeSlotIndices,
             scopeSlotNames,
             scopeSlotIsModule,
+            scopeSlotRequiresPreparedBinding,
+            scopeSlotRefPos,
             localSlotNames,
             localSlotMutables,
             localSlotDelegated,
@@ -439,6 +478,8 @@ class BytecodeCompiler(
             scopeSlotIndices,
             scopeSlotNames,
             scopeSlotIsModule,
+            scopeSlotRequiresPreparedBinding,
+            scopeSlotRefPos,
             localSlotNames,
             localSlotMutables,
             localSlotDelegated,
@@ -459,6 +500,8 @@ class BytecodeCompiler(
             scopeSlotIndices,
             scopeSlotNames,
             scopeSlotIsModule,
+            scopeSlotRequiresPreparedBinding,
+            scopeSlotRefPos,
             localSlotNames,
             localSlotMutables,
             localSlotDelegated,
@@ -534,6 +577,7 @@ class BytecodeCompiler(
                     resolved = SlotType.INT
                 }
                 if (mapped < scopeSlotCount && resolved != SlotType.UNKNOWN) {
+                    noteScopeSlotRef(mapped, ref.pos())
                     val addrSlot = ensureScopeAddr(mapped)
                     val local = allocSlot()
                     emitLoadFromAddr(addrSlot, local, resolved)
@@ -544,6 +588,7 @@ class BytecodeCompiler(
                     return CompiledValue(local, resolved)
                 }
                 if (mapped < scopeSlotCount && resolved == SlotType.UNKNOWN) {
+                    noteScopeSlotRef(mapped, ref.pos())
                     val addrSlot = ensureScopeAddr(mapped)
                     val local = allocSlot()
                     emitLoadFromAddr(addrSlot, local, SlotType.OBJ)
@@ -563,6 +608,7 @@ class BytecodeCompiler(
                 }
                 if (allowLocalSlots) {
                     scopeSlotIndexByName[ref.name]?.let { slot ->
+                        noteScopeSlotRef(slot, callSitePos())
                         val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
                         return CompiledValue(slot, resolved)
                     }
@@ -585,6 +631,7 @@ class BytecodeCompiler(
                         return CompiledValue(slot, resolved)
                     }
                     scopeSlotIndexByName[ref.name]?.let { slot ->
+                        noteScopeSlotRef(slot, callSitePos())
                         val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
                         return CompiledValue(slot, resolved)
                     }
@@ -596,6 +643,7 @@ class BytecodeCompiler(
                 val slot = ref.slotIndex()
                 val resolved = slotTypes[slot] ?: SlotType.UNKNOWN
                 if (slot < scopeSlotCount && resolved != SlotType.UNKNOWN) {
+                    noteScopeSlotRef(slot, callSitePos())
                     val addrSlot = ensureScopeAddr(slot)
                     val local = allocSlot()
                     emitLoadFromAddr(addrSlot, local, resolved)
@@ -5002,6 +5050,8 @@ class BytecodeCompiler(
             scopeSlotIndices,
             scopeSlotNames,
             scopeSlotIsModule,
+            scopeSlotRequiresPreparedBinding,
+            scopeSlotRefPos,
             localSlotNames,
             localSlotMutables,
             localSlotDelegated,
@@ -5021,6 +5071,8 @@ class BytecodeCompiler(
             scopeSlotIndices,
             scopeSlotNames,
             scopeSlotIsModule,
+            scopeSlotRequiresPreparedBinding,
+            scopeSlotRefPos,
             localSlotNames,
             localSlotMutables,
             localSlotDelegated,
@@ -5041,6 +5093,8 @@ class BytecodeCompiler(
             scopeSlotIndices,
             scopeSlotNames,
             scopeSlotIsModule,
+            scopeSlotRequiresPreparedBinding,
+            scopeSlotRefPos,
             localSlotNames,
             localSlotMutables,
             localSlotDelegated,
@@ -5061,6 +5115,8 @@ class BytecodeCompiler(
             scopeSlotIndices,
             scopeSlotNames,
             scopeSlotIsModule,
+            scopeSlotRequiresPreparedBinding,
+            scopeSlotRefPos,
             localSlotNames,
             localSlotMutables,
             localSlotDelegated,
@@ -5084,6 +5140,8 @@ class BytecodeCompiler(
             scopeSlotIndices,
             scopeSlotNames,
             scopeSlotIsModule,
+            scopeSlotRequiresPreparedBinding,
+            scopeSlotRefPos,
             localSlotNames,
             localSlotMutables,
             localSlotDelegated,
@@ -5103,6 +5161,8 @@ class BytecodeCompiler(
             scopeSlotIndices,
             scopeSlotNames,
             scopeSlotIsModule,
+            scopeSlotRequiresPreparedBinding,
+            scopeSlotRefPos,
             localSlotNames,
             localSlotMutables,
             localSlotDelegated,
@@ -5727,6 +5787,8 @@ class BytecodeCompiler(
             scopeSlotIndices,
             scopeSlotNames,
             scopeSlotIsModule,
+            scopeSlotRequiresPreparedBinding,
+            scopeSlotRefPos,
             localSlotNames,
             localSlotMutables,
             localSlotDelegated,
@@ -7599,6 +7661,12 @@ class BytecodeCompiler(
     private fun assignValue(ref: AssignRef): ObjRef = ref.value
     private fun refPos(ref: BinaryOpRef): Pos = Pos.builtIn
 
+    private fun noteScopeSlotRef(slot: Int, pos: Pos) {
+        if (slot >= scopeSlotCount) return
+        val key = scopeKeyByIndex.getOrNull(slot) ?: return
+        scopeSlotRefPosByKey.putIfAbsent(key, pos)
+    }
+
     private fun resolveSlot(ref: LocalSlotRef): Int? {
         loopSlotOverrides[ref.name]?.let { return it }
         val scopeId = refScopeId(ref)
@@ -7606,8 +7674,14 @@ class BytecodeCompiler(
             val key = ScopeSlotKey(scopeId, refSlot(ref))
             val localIndex = localSlotIndexByKey[key]
             if (localIndex != null) return scopeSlotCount + localIndex
-            scopeSlotMap[key]?.let { return it }
-            scopeSlotIndexByName[ref.name]?.let { return it }
+            scopeSlotMap[key]?.let {
+                scopeSlotRefPosByKey.putIfAbsent(key, ref.pos())
+                return it
+            }
+            scopeSlotIndexByName[ref.name]?.let {
+                scopeSlotRefPosByKey.putIfAbsent(key, ref.pos())
+                return it
+            }
         }
         if (ref.captureOwnerScopeId != null) {
             val scopeKey = ScopeSlotKey(refScopeId(ref), refSlot(ref))
@@ -7617,7 +7691,11 @@ class BytecodeCompiler(
                     return scopeSlotCount + localIndex
                 }
             }
-            return scopeSlotMap[scopeKey]
+            val resolved = scopeSlotMap[scopeKey]
+            if (resolved != null) {
+                scopeSlotRefPosByKey.putIfAbsent(scopeKey, ref.pos())
+            }
+            return resolved
         }
         if (ref.isDelegated) {
             val localKey = ScopeSlotKey(refScopeId(ref), refSlot(ref))
@@ -7628,7 +7706,11 @@ class BytecodeCompiler(
         val localIndex = localSlotIndexByKey[localKey]
         if (localIndex != null) return scopeSlotCount + localIndex
         val scopeKey = ScopeSlotKey(refScopeId(ref), refSlot(ref))
-        return scopeSlotMap[scopeKey]
+        val resolved = scopeSlotMap[scopeKey]
+        if (resolved != null) {
+            scopeSlotRefPosByKey.putIfAbsent(scopeKey, ref.pos())
+        }
+        return resolved
     }
 
     private fun resolveCapturedOwnerScopeSlot(ref: LocalSlotRef): Int? {
@@ -7858,6 +7940,8 @@ class BytecodeCompiler(
         scopeSlotIndices = IntArray(scopeSlotCount)
         scopeSlotNames = arrayOfNulls(scopeSlotCount)
         scopeSlotIsModule = BooleanArray(scopeSlotCount)
+        scopeSlotRequiresPreparedBinding = BooleanArray(scopeSlotCount)
+        scopeSlotRefPos = arrayOfNulls(scopeSlotCount)
         scopeSlotMutables = BooleanArray(scopeSlotCount) { true }
         scopeKeyByIndex = arrayOfNulls(scopeSlotCount)
         for ((key, index) in scopeSlotMap) {
@@ -7865,6 +7949,8 @@ class BytecodeCompiler(
             scopeSlotIndices[index] = key.slot
             scopeSlotNames[index] = name
             scopeSlotIsModule[index] = moduleScopeId != null && key.scopeId == moduleScopeId
+            scopeSlotRequiresPreparedBinding[index] = name != null && preparedModuleBindingNames.contains(name)
+            scopeSlotRefPos[index] = name?.let { scopeRefPosByName[it] } ?: scopeSlotRefPosByKey[key]
             scopeSlotMutableMap[key]?.let { scopeSlotMutables[index] = it }
             scopeKeyByIndex[index] = key
         }

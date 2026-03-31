@@ -26,6 +26,8 @@ data class CmdFunction(
     val scopeSlotIndices: IntArray,
     val scopeSlotNames: Array<String?>,
     val scopeSlotIsModule: BooleanArray,
+    val scopeSlotRequiresPreparedBinding: BooleanArray,
+    val scopeSlotRefPos: Array<net.sergeych.lyng.Pos?>,
     val localSlotNames: Array<String?>,
     val localSlotMutables: BooleanArray,
     val localSlotDelegated: BooleanArray,
@@ -38,6 +40,8 @@ data class CmdFunction(
         require(scopeSlotIndices.size == scopeSlotCount) { "scopeSlotIndices size mismatch" }
         require(scopeSlotNames.size == scopeSlotCount) { "scopeSlotNames size mismatch" }
         require(scopeSlotIsModule.size == scopeSlotCount) { "scopeSlotIsModule size mismatch" }
+        require(scopeSlotRequiresPreparedBinding.size == scopeSlotCount) { "scopeSlotRequiresPreparedBinding size mismatch" }
+        require(scopeSlotRefPos.size == scopeSlotCount) { "scopeSlotRefPos size mismatch" }
         require(localSlotNames.size == localSlotMutables.size) { "localSlot metadata size mismatch" }
         require(localSlotNames.size == localSlotDelegated.size) { "localSlot delegation size mismatch" }
         require(localSlotNames.size == localSlotCaptures.size) { "localSlot capture size mismatch" }

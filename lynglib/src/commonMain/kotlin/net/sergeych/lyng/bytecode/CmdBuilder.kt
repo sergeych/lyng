@@ -67,6 +67,8 @@ class CmdBuilder {
         scopeSlotIndices: IntArray = IntArray(0),
         scopeSlotNames: Array<String?> = emptyArray(),
         scopeSlotIsModule: BooleanArray = BooleanArray(0),
+        scopeSlotRequiresPreparedBinding: BooleanArray = BooleanArray(0),
+        scopeSlotRefPos: Array<net.sergeych.lyng.Pos?> = emptyArray(),
         localSlotNames: Array<String?> = emptyArray(),
         localSlotMutables: BooleanArray = BooleanArray(0),
         localSlotDelegated: BooleanArray = BooleanArray(0),
@@ -78,6 +80,12 @@ class CmdBuilder {
         }
         require(scopeSlotIsModule.isEmpty() || scopeSlotIsModule.size == scopeSlotCount) {
             "scope slot module mapping size mismatch"
+        }
+        require(scopeSlotRequiresPreparedBinding.isEmpty() || scopeSlotRequiresPreparedBinding.size == scopeSlotCount) {
+            "scope slot prepared-binding mapping size mismatch"
+        }
+        require(scopeSlotRefPos.isEmpty() || scopeSlotRefPos.size == scopeSlotCount) {
+            "scope slot position mapping size mismatch"
         }
         require(localSlotNames.size == localSlotMutables.size) { "local slot metadata size mismatch" }
         require(localSlotNames.size == localSlotDelegated.size) { "local slot delegation size mismatch" }
@@ -113,6 +121,8 @@ class CmdBuilder {
             scopeSlotIndices = scopeSlotIndices,
             scopeSlotNames = if (scopeSlotNames.isEmpty()) Array(scopeSlotCount) { null } else scopeSlotNames,
             scopeSlotIsModule = if (scopeSlotIsModule.isEmpty()) BooleanArray(scopeSlotCount) else scopeSlotIsModule,
+            scopeSlotRequiresPreparedBinding = if (scopeSlotRequiresPreparedBinding.isEmpty()) BooleanArray(scopeSlotCount) else scopeSlotRequiresPreparedBinding,
+            scopeSlotRefPos = if (scopeSlotRefPos.isEmpty()) Array(scopeSlotCount) { null } else scopeSlotRefPos,
             localSlotNames = localSlotNames,
             localSlotMutables = localSlotMutables,
             localSlotDelegated = localSlotDelegated,
