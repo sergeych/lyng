@@ -1296,23 +1296,11 @@ class Compiler(
             }
         }
         if (seedRecord != null) {
-            val value = seedRecord.value
-            if (!nameObjClass.containsKey(name)) {
-                when (value) {
-                    is ObjClass -> nameObjClass[name] = value
-                    is ObjInstance -> nameObjClass[name] = value.objClass
-                }
-            }
+            seedImportTypeMetadata(name, seedRecord)
             return ImportBindingResolution(ImportBinding(name, ImportBindingSource.Seed), seedRecord)
         }
         if (rootRecord != null) {
-            val value = rootRecord.value
-            if (!nameObjClass.containsKey(name)) {
-                when (value) {
-                    is ObjClass -> nameObjClass[name] = value
-                    is ObjInstance -> nameObjClass[name] = value.objClass
-                }
-            }
+            seedImportTypeMetadata(name, rootRecord)
             return ImportBindingResolution(ImportBinding(name, ImportBindingSource.Root), rootRecord)
         }
         if (moduleMatches.isEmpty()) return null
@@ -1327,13 +1315,7 @@ class Compiler(
                 val candidates = byOrigin[origin] ?: mutableListOf()
                 val preferred = candidates.firstOrNull { it.first.scope.packageName == origin } ?: candidates.first()
                 val binding = ImportBinding(name, ImportBindingSource.Module(origin, preferred.first.pos))
-                val value = preferred.second.value
-                if (!nameObjClass.containsKey(name)) {
-                    when (value) {
-                        is ObjClass -> nameObjClass[name] = value
-                        is ObjInstance -> nameObjClass[name] = value.objClass
-                    }
-                }
+                seedImportTypeMetadata(name, preferred.second)
                 return ImportBindingResolution(binding, preferred.second)
             }
             val moduleNames = moduleMatches.keys.toList()
@@ -1341,14 +1323,24 @@ class Compiler(
         }
         val (module, record) = moduleMatches.values.first()
         val binding = ImportBinding(name, ImportBindingSource.Module(module.scope.packageName, module.pos))
-        val value = record.value
+        seedImportTypeMetadata(name, record)
+        return ImportBindingResolution(binding, record)
+    }
+
+    private fun seedImportTypeMetadata(name: String, record: ObjRecord) {
+        if (record.typeDecl != null && nameTypeDecl[name] == null) {
+            nameTypeDecl[name] = record.typeDecl
+        }
         if (!nameObjClass.containsKey(name)) {
-            when (value) {
+            record.typeDecl?.let { resolveTypeDeclObjClass(it) }?.let {
+                nameObjClass[name] = it
+                return
+            }
+            when (val value = record.value) {
                 is ObjClass -> nameObjClass[name] = value
                 is ObjInstance -> nameObjClass[name] = value.objClass
             }
         }
-        return ImportBindingResolution(binding, record)
     }
 
     private fun collectModuleRecordMatches(
@@ -4336,14 +4328,19 @@ class Compiler(
             is MapLiteralRef -> inferMapLiteralTypeDecl(ref)
             is ConstRef -> inferTypeDeclFromConst(ref.constValue)
             is CallRef -> {
+                val targetDecl = resolveReceiverTypeDecl(ref.target)
                 val targetName = when (val target = ref.target) {
                     is LocalVarRef -> target.name
                     is FastLocalVarRef -> target.name
                     is LocalSlotRef -> target.name
                     else -> null
                 }
+                if (targetDecl is TypeDecl.Function) {
+                    return targetDecl.returnType
+                }
                 if (targetName != null) {
                     callableReturnTypeDeclByName[targetName]?.let { return it }
+                    (seedTypeDeclByName(targetName) as? TypeDecl.Function)?.let { return it.returnType }
                 }
                 inferCallReturnClass(ref)?.let { TypeDecl.Simple(it.className, false) }
                     ?: run {
@@ -4677,6 +4674,17 @@ class Compiler(
         return null
     }
 
+    private fun lookupLocalTypeDeclByName(name: String): TypeDecl? {
+        val slotLoc = lookupSlotLocation(name, includeModule = true) ?: return null
+        return slotTypeDeclByScopeId[slotLoc.scopeId]?.get(slotLoc.slot)
+    }
+
+    private fun lookupLocalObjClassByName(name: String): ObjClass? {
+        val slotLoc = lookupSlotLocation(name, includeModule = true) ?: return null
+        return slotTypeByScopeId[slotLoc.scopeId]?.get(slotLoc.slot)
+            ?: slotTypeDeclByScopeId[slotLoc.scopeId]?.get(slotLoc.slot)?.let { resolveTypeDeclObjClass(it) }
+    }
+
     private fun resolveReceiverTypeDecl(ref: ObjRef): TypeDecl? {
         return when (ref) {
             is LocalSlotRef -> {
@@ -4686,8 +4694,12 @@ class Compiler(
                     ?: nameTypeDecl[ref.name]
                     ?: seedTypeDeclByName(ref.name)
             }
-            is LocalVarRef -> nameTypeDecl[ref.name] ?: seedTypeDeclByName(ref.name)
-            is FastLocalVarRef -> nameTypeDecl[ref.name] ?: seedTypeDeclByName(ref.name)
+            is LocalVarRef -> nameTypeDecl[ref.name]
+                ?: lookupLocalTypeDeclByName(ref.name)
+                ?: seedTypeDeclByName(ref.name)
+            is FastLocalVarRef -> nameTypeDecl[ref.name]
+                ?: lookupLocalTypeDeclByName(ref.name)
+                ?: seedTypeDeclByName(ref.name)
             is FieldRef -> {
                 val targetDecl = resolveReceiverTypeDecl(ref.target) ?: return null
                 val targetClass = resolveTypeDeclObjClass(targetDecl) ?: resolveReceiverClassForMember(ref.target)
@@ -4733,11 +4745,13 @@ class Compiler(
             is LocalVarRef -> nameObjClass[ref.name]
                 ?.takeIf { it == ObjDynamic.type }
                 ?: nameObjClass[ref.name]
+                ?: lookupLocalObjClassByName(ref.name)
                 ?: nameTypeDecl[ref.name]?.let { resolveTypeDeclObjClass(it) }
                 ?: resolveClassByName(ref.name)
             is FastLocalVarRef -> nameObjClass[ref.name]
                 ?.takeIf { it == ObjDynamic.type }
                 ?: nameObjClass[ref.name]
+                ?: lookupLocalObjClassByName(ref.name)
                 ?: nameTypeDecl[ref.name]?.let { resolveTypeDeclObjClass(it) }
                 ?: resolveClassByName(ref.name)
             is ClassScopeMemberRef -> {

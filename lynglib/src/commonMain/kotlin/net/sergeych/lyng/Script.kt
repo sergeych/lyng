@@ -395,9 +395,20 @@ class Script(
                 requireExactCount(2)
                 decimalAwarePow(args[0], args[1])
             }
-            addFn("sqrt") {
-                decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::sqrt)
-            }
+            addItem(
+                "sqrt",
+                false,
+                ObjExternCallable.fromBridge {
+                    decimalAwareUnaryMath(args.firstAndOnly(), fallback = ::sqrt)
+                },
+                recordType = ObjRecord.Type.Fun,
+                typeDecl = TypeDecl.Function(
+                    receiver = null,
+                    params = listOf(TypeDecl.TypeAny),
+                    returnType = TypeDecl.Simple("Real", false),
+                    nullable = false
+                )
+            )
             addFn("abs") {
                 val x = args.firstAndOnly()
                 if (x is ObjInt) ObjInt(x.value.absoluteValue)

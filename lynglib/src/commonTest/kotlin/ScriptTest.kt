@@ -5576,7 +5576,7 @@ class ScriptTest {
             
             val depth = calculateDepth(T, m, d)
             if (depth != null) {
-                println("Глубина: %.2f м".format(depth))
+                println("Глубина: %.2f м"(depth))
             } else {
                 println("Расчёт не сошёлся")
             }

@@ -84,6 +84,7 @@ fun calculateDepth(
 
         h = hNew
         iter++
+        println("iter: $iter: $h")
     }
 
     // Не сошлось за maxIter
@@ -97,7 +98,7 @@ val d = 0.1      // м (10 см)
 
 val depth = calculateDepth(T, m, d)
 if (depth != null) {
-    println("Глубина: %.2f м".format(depth))
+    println("Глубина: %.2f м"(depth))
 } else {
     println("Расчёт не сошёлся")
 }

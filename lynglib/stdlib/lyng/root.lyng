@@ -87,7 +87,7 @@ extern class MapEntry<K,V> : Array<Object> {
 extern fun abs(x: Object): Object
 extern fun ln(x: Object): Object
 extern fun pow(x: Object, y: Object): Object
-extern fun sqrt(x: Object): Object
+extern fun sqrt(x: Object): Real
 extern fun clamp<T>(value: T, range: Range<T>): T
 
 class SeededRandom {
