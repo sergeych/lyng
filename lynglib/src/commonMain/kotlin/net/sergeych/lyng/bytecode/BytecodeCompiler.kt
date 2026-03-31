@@ -7664,7 +7664,9 @@ class BytecodeCompiler(
     private fun noteScopeSlotRef(slot: Int, pos: Pos) {
         if (slot >= scopeSlotCount) return
         val key = scopeKeyByIndex.getOrNull(slot) ?: return
-        scopeSlotRefPosByKey.putIfAbsent(key, pos)
+        if (!scopeSlotRefPosByKey.containsKey(key)) {
+            scopeSlotRefPosByKey[key] = pos
+        }
     }
 
     private fun resolveSlot(ref: LocalSlotRef): Int? {
@@ -7675,11 +7677,15 @@ class BytecodeCompiler(
             val localIndex = localSlotIndexByKey[key]
             if (localIndex != null) return scopeSlotCount + localIndex
             scopeSlotMap[key]?.let {
-                scopeSlotRefPosByKey.putIfAbsent(key, ref.pos())
+                if (!scopeSlotRefPosByKey.containsKey(key)) {
+                    scopeSlotRefPosByKey[key] = ref.pos()
+                }
                 return it
             }
             scopeSlotIndexByName[ref.name]?.let {
-                scopeSlotRefPosByKey.putIfAbsent(key, ref.pos())
+                if (!scopeSlotRefPosByKey.containsKey(key)) {
+                    scopeSlotRefPosByKey[key] = ref.pos()
+                }
                 return it
             }
         }
@@ -7693,7 +7699,9 @@ class BytecodeCompiler(
             }
             val resolved = scopeSlotMap[scopeKey]
             if (resolved != null) {
-                scopeSlotRefPosByKey.putIfAbsent(scopeKey, ref.pos())
+                if (!scopeSlotRefPosByKey.containsKey(scopeKey)) {
+                    scopeSlotRefPosByKey[scopeKey] = ref.pos()
+                }
             }
             return resolved
         }
@@ -7708,7 +7716,9 @@ class BytecodeCompiler(
         val scopeKey = ScopeSlotKey(refScopeId(ref), refSlot(ref))
         val resolved = scopeSlotMap[scopeKey]
         if (resolved != null) {
-            scopeSlotRefPosByKey.putIfAbsent(scopeKey, ref.pos())
+            if (!scopeSlotRefPosByKey.containsKey(scopeKey)) {
+                scopeSlotRefPosByKey[scopeKey] = ref.pos()
+            }
         }
         return resolved
     }

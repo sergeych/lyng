@@ -436,6 +436,12 @@ class Compiler(
         }
     }
 
+    private fun rememberModuleReferencePos(name: String, pos: Pos) {
+        if (!moduleReferencePosByName.containsKey(name)) {
+            moduleReferencePosByName[name] = pos
+        }
+    }
+
     private fun predeclareClassMembers(target: MutableSet<String>, overrides: MutableMap<String, Boolean>) {
         val saved = cc.savePos()
         var depth = 0
@@ -948,7 +954,7 @@ class Compiler(
                 }
             }
             captureLocalRef(name, slotLoc, pos)?.let { ref ->
-                moduleReferencePosByName.putIfAbsent(name, pos)
+                rememberModuleReferencePos(name, pos)
                 resolutionSink?.reference(name, pos)
                 return ref
             }
@@ -1042,7 +1048,7 @@ class Compiler(
                     moduleEntry.isDelegated
                 )
                 captureLocalRef(name, moduleLoc, pos)?.let { ref ->
-                    moduleReferencePosByName.putIfAbsent(name, pos)
+                    rememberModuleReferencePos(name, pos)
                     resolutionSink?.reference(name, pos)
                     return ref
                 }
@@ -1069,7 +1075,7 @@ class Compiler(
                         strictSlotRefs
                     )
                 }
-                moduleReferencePosByName.putIfAbsent(name, pos)
+                rememberModuleReferencePos(name, pos)
                 resolutionSink?.reference(name, pos)
                 return ref
             }
@@ -1100,14 +1106,14 @@ class Compiler(
                         )
                     }
                 }
-                registerImportBinding(name, resolved.binding, pos)
-                val slot = lookupSlotLocation(name)
-                if (slot != null) {
-                    captureLocalRef(name, slot, pos)?.let { ref ->
-                        moduleReferencePosByName.putIfAbsent(name, pos)
-                        resolutionSink?.reference(name, pos)
-                        return ref
-                    }
+                    registerImportBinding(name, resolved.binding, pos)
+                    val slot = lookupSlotLocation(name)
+                    if (slot != null) {
+                        captureLocalRef(name, slot, pos)?.let { ref ->
+                            rememberModuleReferencePos(name, pos)
+                            resolutionSink?.reference(name, pos)
+                            return ref
+                        }
                     val ref = if (!useScopeSlots && capturePlanStack.isEmpty() && slot.depth > 0) {
                         LocalSlotRef(
                             name,
@@ -1131,7 +1137,7 @@ class Compiler(
                             strictSlotRefs
                         )
                     }
-                    moduleReferencePosByName.putIfAbsent(name, pos)
+                    rememberModuleReferencePos(name, pos)
                     resolutionSink?.reference(name, pos)
                     return ref
                 }
