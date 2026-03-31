@@ -19,6 +19,7 @@ package net.sergeych.lyng
 
 import com.ionspin.kotlin.bignum.decimal.BigDecimal
 import kotlinx.coroutines.test.runTest
+import net.sergeych.lyng.obj.ObjException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -74,6 +75,94 @@ class DecimalModuleTest {
             assert(2 == 2.d)
             assert(2.d == 2)
             """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testDecimalModuleMixedRealOperators() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            import lyng.decimal
+
+            assertEquals(3.5.d, 1.5 + 2.d)
+            assertEquals(3.5.d, 2.d + 1.5)
+            assertEquals(1.5.d, 3.5 - 2.d)
+            assertEquals(1.5.d, 3.5.d - 2.0)
+            assertEquals(7.d, 3.5 * 2.d)
+            assertEquals(7.d, 3.5.d * 2.0)
+            assertEquals(1.75.d, 3.5 / 2.d)
+            assertEquals(1.75.d, 3.5.d / 2.0)
+            assert(1.5 < 2.d)
+            assert(2.5.d > 2.0)
+            assert(2.5 == 2.5.d)
+            assert(2.5.d == 2.5)
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testMixedRealDecimalNonFiniteResultsStayReal() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            import lyng.decimal
+
+            val inf1 = 1.0 / 0.d
+            val inf2 = 1.d / 0.0
+            val inf3 = (1.0 / 0.0) * 2.d
+            val negInf = -1.d / 0.0
+            val nan1 = 0.0 / 0.d
+            val nan2 = (0.0 / 0.0) + 1.d
+
+            assert(inf1 is Real)
+            assert(inf2 is Real)
+            assert(inf3 is Real)
+            assert(negInf is Real)
+            assert(nan1 is Real)
+            assert(nan2 is Real)
+
+            assertEquals("Infinity", inf1.toString())
+            assertEquals("Infinity", inf2.toString())
+            assertEquals("Infinity", inf3.toString())
+            assertEquals("-Infinity", negInf.toString())
+            assertEquals("NaN", nan1.toString())
+            assertEquals("NaN", nan2.toString())
+
+            assert(inf1 > 999999999.d)
+            assert(negInf < -999999999.d)
+            assert(!(nan1 == 1.d))
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testDecimalRejectsExplicitNonFiniteRealConversions() = runTest {
+        val scope = Script.newScope()
+        val ex1 = assertFailsWith<ExecutionError> {
+            scope.eval(
+                """
+                import lyng.decimal
+                (1.0 / 0.0).d
+                """.trimIndent()
+            )
+        }
+        val ex2 = assertFailsWith<ExecutionError> {
+            scope.eval(
+                """
+                import lyng.decimal
+                Decimal.fromReal(0.0 / 0.0)
+                """.trimIndent()
+            )
+        }
+
+        assertEquals(
+            "cannot convert non-finite Real to Decimal: Infinity",
+            (ex1.errorObject as ObjException).message.value
+        )
+        assertEquals(
+            "cannot convert non-finite Real to Decimal: NaN",
+            (ex2.errorObject as ObjException).message.value
         )
     }
 

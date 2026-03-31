@@ -54,30 +54,36 @@ object ObjDecimalSupport {
             instance.kotlinInstanceData = zero
         }
         decimalClass.addFn("plus") {
-            ObjComplexSupport.decimalBinary(this, thisObj, args.firstAndOnly(), InteropOperator.Plus)
+            mixedRealDecimalArithmeticFallback(thisObj, args.firstAndOnly(), InteropOperator.Plus)
+                ?: ObjComplexSupport.decimalBinary(this, thisObj, args.firstAndOnly(), InteropOperator.Plus)
                 ?: OperatorInteropRegistry.invokeBinary(requireScope(), thisObj, args.firstAndOnly(), InteropOperator.Plus)
                 ?: newInstance(decimalClass, valueOf(thisObj).plus(coerceArg(requireScope(), args.firstAndOnly())))
         }
         decimalClass.addFn("minus") {
-            ObjComplexSupport.decimalBinary(this, thisObj, args.firstAndOnly(), InteropOperator.Minus)
+            mixedRealDecimalArithmeticFallback(thisObj, args.firstAndOnly(), InteropOperator.Minus)
+                ?: ObjComplexSupport.decimalBinary(this, thisObj, args.firstAndOnly(), InteropOperator.Minus)
                 ?: OperatorInteropRegistry.invokeBinary(requireScope(), thisObj, args.firstAndOnly(), InteropOperator.Minus)
                 ?: newInstance(decimalClass, valueOf(thisObj).minus(coerceArg(requireScope(), args.firstAndOnly())))
         }
         decimalClass.addFn("mul") {
-            ObjComplexSupport.decimalBinary(this, thisObj, args.firstAndOnly(), InteropOperator.Mul)
+            mixedRealDecimalArithmeticFallback(thisObj, args.firstAndOnly(), InteropOperator.Mul)
+                ?: ObjComplexSupport.decimalBinary(this, thisObj, args.firstAndOnly(), InteropOperator.Mul)
                 ?: OperatorInteropRegistry.invokeBinary(requireScope(), thisObj, args.firstAndOnly(), InteropOperator.Mul)
                 ?: newInstance(decimalClass, valueOf(thisObj).times(coerceArg(requireScope(), args.firstAndOnly())))
         }
         decimalClass.addFn("div") {
-            ObjComplexSupport.decimalBinary(this, thisObj, args.firstAndOnly(), InteropOperator.Div)
+            mixedRealDecimalArithmeticFallback(thisObj, args.firstAndOnly(), InteropOperator.Div)
+                ?: ObjComplexSupport.decimalBinary(this, thisObj, args.firstAndOnly(), InteropOperator.Div)
                 ?: OperatorInteropRegistry.invokeBinary(requireScope(), thisObj, args.firstAndOnly(), InteropOperator.Div)
                 ?: newInstance(decimalClass, divideWithContext(valueOf(thisObj), coerceArg(requireScope(), args.firstAndOnly()), currentDivisionMode(requireScope())))
         }
         decimalClass.addFn("mod") {
-            newInstance(decimalClass, valueOf(thisObj).rem(coerceArg(requireScope(), args.firstAndOnly())))
+            mixedRealDecimalArithmeticFallback(thisObj, args.firstAndOnly(), InteropOperator.Mod)
+                ?: newInstance(decimalClass, valueOf(thisObj).rem(coerceArg(requireScope(), args.firstAndOnly())))
         }
         decimalClass.addFn("compareTo") {
-            ObjInt.of(valueOf(thisObj).compareTo(coerceArg(requireScope(), args.firstAndOnly())).toLong())
+            mixedRealDecimalCompareFallback(thisObj, args.firstAndOnly())?.toObj()
+                ?: ObjInt.of(valueOf(thisObj).compareTo(coerceArg(requireScope(), args.firstAndOnly())).toLong())
         }
         decimalClass.addFn("negate") {
             newInstance(decimalClass, valueOf(thisObj).unaryMinus())
@@ -100,7 +106,7 @@ object ObjDecimalSupport {
         }
         decimalClass.addClassFn("fromReal") {
             val value = requiredArg<ObjReal>(0).value
-            newInstance(decimalClass, IonBigDecimal.fromDouble(value, realConversionMode))
+            newInstanceFromFiniteReal(decimalClass, value)
         }
         decimalClass.addClassFn("fromString") {
             val value = requiredArg<ObjString>(0).value
@@ -161,11 +167,34 @@ object ObjDecimalSupport {
 
     suspend fun fromRealLike(scope: ScopeFacade, sample: Obj, value: Double): Obj? {
         if (!isDecimalValue(sample)) return null
+        if (!value.isFinite()) return ObjReal.of(value)
         return scope.newInstanceLikeDecimal(sample, IonBigDecimal.fromDouble(value, realConversionMode))
     }
 
     fun toDoubleOrNull(value: Obj): Double? =
         decimalValueOrNull(value)?.doubleValue(false)
+
+    internal fun mixedRealDecimalArithmeticFallback(left: Obj, right: Obj, operator: InteropOperator): Obj? {
+        if (!isMixedRealDecimal(left, right)) return null
+        val leftDouble = numericDoubleOrNull(left) ?: return null
+        val rightDouble = numericDoubleOrNull(right) ?: return null
+        val result = when (operator) {
+            InteropOperator.Plus -> leftDouble + rightDouble
+            InteropOperator.Minus -> leftDouble - rightDouble
+            InteropOperator.Mul -> leftDouble * rightDouble
+            InteropOperator.Div -> leftDouble / rightDouble
+            InteropOperator.Mod -> leftDouble % rightDouble
+            else -> return null
+        }
+        return if (result.isFinite()) null else ObjReal.of(result)
+    }
+
+    internal fun mixedRealDecimalCompareFallback(left: Obj, right: Obj): Int? {
+        if (!isMixedRealDecimal(left, right)) return null
+        val leftDouble = numericDoubleOrNull(left) ?: return null
+        val rightDouble = numericDoubleOrNull(right) ?: return null
+        return if (leftDouble.isFinite() && rightDouble.isFinite()) null else leftDouble.compareTo(rightDouble)
+    }
 
     suspend fun newDecimal(scope: ScopeFacade, value: IonBigDecimal): ObjInstance {
         val decimalModule = scope.requireScope().currentImportProvider.createModuleScope(scope.pos, "lyng.decimal")
@@ -205,6 +234,13 @@ object ObjDecimalSupport {
         return instance
     }
 
+    private suspend fun ScopeFacade.newInstanceFromFiniteReal(decimalClass: ObjClass, value: Double): ObjInstance {
+        if (!value.isFinite()) {
+            requireScope().raiseIllegalArgument("cannot convert non-finite Real to Decimal: $value")
+        }
+        return newInstance(decimalClass, IonBigDecimal.fromDouble(value, realConversionMode))
+    }
+
     private suspend fun ScopeFacade.newInstanceLikeDecimal(sample: Obj, value: IonBigDecimal): ObjInstance {
         val decimalClass = (sample as? ObjInstance)?.objClass
             ?: raiseIllegalState("Decimal sample must be an object instance")
@@ -213,7 +249,12 @@ object ObjDecimalSupport {
 
     private fun coerceArg(scope: Scope, value: Obj): IonBigDecimal = when (value) {
         is ObjInt -> IonBigDecimal.fromLong(value.value)
-        is ObjReal -> IonBigDecimal.fromDouble(value.value, realConversionMode)
+        is ObjReal -> {
+            if (!value.value.isFinite()) {
+                scope.raiseIllegalArgument("cannot convert non-finite Real to Decimal: ${value.value}")
+            }
+            IonBigDecimal.fromDouble(value.value, realConversionMode)
+        }
         is ObjInstance -> {
             if (value.objClass.className != "Decimal") {
                 scope.raiseIllegalArgument("expected Decimal-compatible value, got ${value.objClass.className}")
@@ -319,7 +360,7 @@ object ObjDecimalSupport {
             doc = "Convert this real number to a Decimal by preserving the current IEEE-754 value with 17 significant digits and half-even rounding.",
             type = type("lyng.decimal.Decimal"),
             moduleName = "lyng.decimal",
-            getter = { newInstance(decimalClass, IonBigDecimal.fromDouble(thisAs<ObjReal>().value, realConversionMode)) }
+            getter = { newInstanceFromFiniteReal(decimalClass, thisAs<ObjReal>().value) }
         )
         ObjReal.type.members["d"] = ObjReal.type.members.getValue("d").copy(typeDecl = decimalTypeDecl)
         ObjString.type.addPropertyDoc(
@@ -340,26 +381,48 @@ object ObjDecimalSupport {
     }
 
     private fun registerInterop(decimalClass: ObjClass) {
+        val decimalIdentity = ObjExternCallable.fromBridge {
+            requiredArg<Obj>(0)
+        }
+        val numericOperators = listOf(
+            InteropOperator.Plus.name,
+            InteropOperator.Minus.name,
+            InteropOperator.Mul.name,
+            InteropOperator.Div.name,
+            InteropOperator.Mod.name,
+            InteropOperator.Compare.name,
+            InteropOperator.Equals.name
+        )
         OperatorInteropRegistry.register(
             leftClass = ObjInt.type,
             rightClass = decimalClass,
             commonClass = decimalClass,
-            operatorNames = listOf(
-                InteropOperator.Plus.name,
-                InteropOperator.Minus.name,
-                InteropOperator.Mul.name,
-                InteropOperator.Div.name,
-                InteropOperator.Mod.name,
-                InteropOperator.Compare.name,
-                InteropOperator.Equals.name
-            ),
+            operatorNames = numericOperators,
             leftToCommon = ObjExternCallable.fromBridge {
                 val value = requiredArg<ObjInt>(0).value
                 newInstance(decimalClass, IonBigDecimal.fromLong(value))
             },
-            rightToCommon = ObjExternCallable.fromBridge {
-                requiredArg<Obj>(0)
-            }
+            rightToCommon = decimalIdentity
         )
+        OperatorInteropRegistry.register(
+            leftClass = ObjReal.type,
+            rightClass = decimalClass,
+            commonClass = decimalClass,
+            operatorNames = numericOperators,
+            leftToCommon = ObjExternCallable.fromBridge {
+                val value = requiredArg<ObjReal>(0).value
+                newInstanceFromFiniteReal(decimalClass, value)
+            },
+            rightToCommon = decimalIdentity
+        )
+    }
+
+    private fun isMixedRealDecimal(left: Obj, right: Obj): Boolean =
+        (left is ObjReal && isDecimalValue(right)) || (right is ObjReal && isDecimalValue(left))
+
+    private fun numericDoubleOrNull(value: Obj): Double? = when (value) {
+        is Numeric -> value.doubleValue
+        is ObjInstance -> toDoubleOrNull(value)
+        else -> null
     }
 }

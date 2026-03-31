@@ -5460,4 +5460,34 @@ class ScriptTest {
         """.trimIndent()
         )
     }
+
+//    @Test
+//    fun testFromCalcrus1() = runTest {
+//        eval($$"""
+//            import lyng.decimal
+//            var x = 7.0.d
+//            // глубина по звуку падения
+//            val m = 1 // kg
+//            val d = 0.06 // 6 cm
+//            val c = 340 // скор. звука
+//            val g = 9.82
+//            var cnt = 0
+//            var h = 0.0
+//            var t = x
+//            var message = ""
+//
+//            while(true){
+//               val h0 = 0
+//               h = c*c/h*(1 + g*t/c -sqrt(1+2*g*t/c))
+//               message = "iter ${cnt++}"
+//               if( cnt > 100 ) {
+//                  message= "ошибка"
+//                  break 0
+//               }
+//               x = h
+//               if( abs(h-h0)/h > 0.08 ) break h
+//            }
+//            println(x)
+//        """.trimIndent())
+//    }
 }

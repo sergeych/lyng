@@ -1079,6 +1079,7 @@ interface Numeric {
 
 fun Obj.toDouble(): Double =
     (this as? Numeric)?.doubleValue
+        ?: ObjDecimalSupport.toDoubleOrNull(this)
         ?: (this as? ObjString)?.value?.toDouble()
         ?: throw IllegalArgumentException("cannot convert to double $this")
 

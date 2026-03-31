@@ -43,6 +43,7 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
         if (other is ObjReal) return value.compareTo(other.value)
+        ObjDecimalSupport.mixedRealDecimalCompareFallback(this, other)?.let { return it }
         OperatorInteropRegistry.invokeCompare(scope, this, other)?.let { return it }
         if (other !is Numeric) return -2
         return value.compareTo(other.doubleValue)
@@ -67,23 +68,28 @@ data class ObjReal(val value: Double) : Obj(), Numeric {
     }
 
     override suspend fun plus(scope: Scope, other: Obj): Obj =
-        OperatorInteropRegistry.invokeBinary(scope, this, other, InteropOperator.Plus)
+        ObjDecimalSupport.mixedRealDecimalArithmeticFallback(this, other, InteropOperator.Plus)
+            ?: OperatorInteropRegistry.invokeBinary(scope, this, other, InteropOperator.Plus)
             ?: of(this.value + other.toDouble())
 
     override suspend fun minus(scope: Scope, other: Obj): Obj =
-        OperatorInteropRegistry.invokeBinary(scope, this, other, InteropOperator.Minus)
+        ObjDecimalSupport.mixedRealDecimalArithmeticFallback(this, other, InteropOperator.Minus)
+            ?: OperatorInteropRegistry.invokeBinary(scope, this, other, InteropOperator.Minus)
             ?: of(this.value - other.toDouble())
 
     override suspend fun mul(scope: Scope, other: Obj): Obj =
-        OperatorInteropRegistry.invokeBinary(scope, this, other, InteropOperator.Mul)
+        ObjDecimalSupport.mixedRealDecimalArithmeticFallback(this, other, InteropOperator.Mul)
+            ?: OperatorInteropRegistry.invokeBinary(scope, this, other, InteropOperator.Mul)
             ?: of(this.value * other.toDouble())
 
     override suspend fun div(scope: Scope, other: Obj): Obj =
-        OperatorInteropRegistry.invokeBinary(scope, this, other, InteropOperator.Div)
+        ObjDecimalSupport.mixedRealDecimalArithmeticFallback(this, other, InteropOperator.Div)
+            ?: OperatorInteropRegistry.invokeBinary(scope, this, other, InteropOperator.Div)
             ?: of(this.value / other.toDouble())
 
     override suspend fun mod(scope: Scope, other: Obj): Obj =
-        OperatorInteropRegistry.invokeBinary(scope, this, other, InteropOperator.Mod)
+        ObjDecimalSupport.mixedRealDecimalArithmeticFallback(this, other, InteropOperator.Mod)
+            ?: OperatorInteropRegistry.invokeBinary(scope, this, other, InteropOperator.Mod)
             ?: of(this.value % other.toDouble())
 
     /**
