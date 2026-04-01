@@ -636,9 +636,17 @@ class Script(
             addFn("launch") {
                 val callable = requireOnlyArg<Obj>()
                 val captured = this
-                ObjDeferred(globalDefer {
-                    captured.call(callable)
-                })
+                val session = EvalSession.currentOrNull()
+                val deferred = if (session != null) {
+                    session.launchTrackedDeferred {
+                        captured.call(callable)
+                    }
+                } else {
+                    globalDefer {
+                        captured.call(callable)
+                    }
+                }
+                ObjDeferred(deferred)
             }
 
             addFn("yield") {
@@ -649,7 +657,7 @@ class Script(
             addFn("flow", callSignature = CallSignature(tailBlockReceiverType = "FlowBuilder")) {
                 // important is: current context contains closure often used in call;
                 // we'll need it for the producer
-                ObjFlow(requireOnlyArg<Obj>(), requireScope())
+                ObjFlow(requireOnlyArg<Obj>(), requireScope(), EvalSession.currentOrNull())
             }
 
             val pi = ObjReal(PI)

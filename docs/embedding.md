@@ -36,21 +36,60 @@ dependencies {
 
 If you use Kotlin Multiplatform, add the dependency in the `commonMain` source set (and platform‑specific sets if you need platform APIs).
 
-### 2) Create a runtime (Scope) and execute scripts
+### 2) Preferred runtime: `EvalSession`
 
-The easiest way to get a ready‑to‑use scope with standard packages is via `Script.newScope()`.
+For host applications, prefer `EvalSession` as the main way to run scripts.
+It owns one reusable Lyng scope, serializes `eval(...)` calls, and governs coroutines started from Lyng `launch { ... }`.
+
+Main entrypoints:
+
+- `session.eval(code)` / `session.eval(source)`
+- `session.getScope()` when you need low-level binding APIs
+- `session.cancel()` to cancel active session-owned coroutines
+- `session.join()` to wait for active session-owned coroutines
+
+```kotlin
+fun main() = kotlinx.coroutines.runBlocking {
+    val session = EvalSession()
+
+    // Evaluate a one‑liner
+    val result = session.eval("1 + 2 * 3")
+    println("Lyng result: $result") // ObjReal/ObjInt etc.
+
+    // Optional lifecycle management
+    session.join()
+}
+```
+
+The session creates its underlying scope lazily. If you need raw low-level APIs, get the scope explicitly:
+
+```kotlin
+val session = EvalSession()
+val scope = session.getScope()
+```
+
+Use `cancel()` / `join()` to govern async work started by scripts:
+
+```kotlin
+val session = EvalSession()
+session.eval("""launch { delay(1000); println("done") }""")
+session.cancel()
+session.join()
+```
+
+### 2.1) Low-level runtime: `Scope`
+
+Use `Scope` directly when you intentionally want lower-level control.
 
 ```kotlin
 fun main() = kotlinx.coroutines.runBlocking {
     val scope = Script.newScope() // suspends on first init
-
-    // Evaluate a one‑liner
     val result = scope.eval("1 + 2 * 3")
-    println("Lyng result: $result") // ObjReal/ObjInt etc.
+    println("Lyng result: $result")
 }
 ```
 
-You can also pre‑compile a script and execute it multiple times:
+You can also pre‑compile a script and execute it multiple times on the same scope:
 
 ```kotlin
 val script = Compiler.compile("""
@@ -63,7 +102,8 @@ val run1 = script.execute(scope)
 val run2 = script.execute(scope)
 ```
 
-`Scope.eval("...")` is a shortcut that compiles and executes on the given scope.
+`Scope.eval("...")` is the low-level shortcut that compiles and executes on the given scope.
+For most embedding use cases, prefer `session.eval("...")`.
 
 ### 3) Preferred: bind extern globals from Kotlin
 
@@ -85,6 +125,8 @@ import net.sergeych.lyng.bridge.*
 import net.sergeych.lyng.obj.ObjInt
 import net.sergeych.lyng.obj.ObjString
 
+val session = EvalSession()
+val scope = session.getScope()
 val im = Script.defaultImportManager.copy()
 im.addPackage("my.api") { module ->
     module.eval("""
@@ -149,6 +191,9 @@ binder.bindGlobalFunRaw("echoRaw") { _, args ->
 Use this when you intentionally want raw `Scope` APIs. For most module APIs, prefer section 3.
 
 ```kotlin
+val session = EvalSession()
+val scope = session.getScope()
+
 // A function returning value
 scope.addFn<ObjInt>("inc") {
     val x = args.firstAndOnly() as ObjInt
@@ -167,7 +212,7 @@ scope.addVoidFn("log") {
 // }
 
 // Call them from Lyng
-scope.eval("val y = inc(41); log('Answer:', y)")
+session.eval("val y = inc(41); log('Answer:', y)")
 ```
 
 You can register multiple names (aliases) at once: `addFn<ObjInt>("inc", "increment") { ... }`.
@@ -254,6 +299,8 @@ If you want multi-axis slicing semantics, decode that list yourself in `getAt`.
 If you need a simple field (with a value) instead of a computed property, use `createField`. This adds a field to the class that will be present in all its instances.
 
 ```kotlin
+val session = EvalSession()
+val scope = session.getScope()
 val myClass = ObjClass("MyClass")
 
 // Add a read-only field (constant)
@@ -281,6 +328,8 @@ println(instance.count)   // -> 5
 Properties in Lyng are pure accessors (getters and setters) and do not have automatic backing fields. You can add them to a class using `addProperty`.
 
 ```kotlin
+val session = EvalSession()
+val scope = session.getScope()
 val myClass = ObjClass("MyClass")
 var internalValue: Long = 10
 
@@ -447,8 +496,9 @@ For Kotlin code that needs dynamic access to Lyng variables, functions, or membe
 It provides explicit, cached handles and predictable lookup rules.
 
 ```kotlin
-val scope = Script.newScope()
-scope.eval("""
+val session = EvalSession()
+val scope = session.getScope()
+session.eval("""
     val x = 40
     fun add(a, b) = a + b
     class Box { var value = 1 }
@@ -463,7 +513,7 @@ val x = resolver.resolveVal("x").get(scope)
 val sum = (resolver as BridgeCallByName).callByName(scope, "add", Arguments(ObjInt(1), ObjInt(2)))
 
 // Member access
-val box = scope.eval("Box()")
+val box = session.eval("Box()")
 val valueHandle = resolver.resolveMemberVar(box, "value")
 valueHandle.set(scope, ObjInt(10))
 val value = valueHandle.get(scope)
@@ -474,12 +524,14 @@ val value = valueHandle.get(scope)
 The simplest approach: evaluate an expression that yields the value and convert it.
 
 ```kotlin
-val kotlinAnswer = scope.eval("(1 + 2) * 3").toKotlin(scope) // -> 9 (Int)
+val session = EvalSession()
+val scope = session.getScope()
+val kotlinAnswer = session.eval("(1 + 2) * 3").toKotlin(scope) // -> 9 (Int)
 
 // After scripts manipulate your vars:
 scope.addOrUpdateItem("name", ObjString("Lyng"))
-scope.eval("name = name + ' rocks!'")
-val kotlinName = scope.eval("name").toKotlin(scope) // -> "Lyng rocks!"
+session.eval("name = name + ' rocks!'")
+val kotlinName = session.eval("name").toKotlin(scope) // -> "Lyng rocks!"
 ```
 
 Advanced: you can also grab a variable record directly via `scope.get(name)` and work with its `Obj` value, but evaluating `"name"` is often clearer and enforces Lyng semantics consistently.
@@ -492,16 +544,20 @@ There are two convenient patterns.
 
 ```kotlin
 // Suppose Lyng defines: fun add(a, b) = a + b
-scope.eval("fun add(a, b) = a + b")
+val session = EvalSession()
+val scope = session.getScope()
+session.eval("fun add(a, b) = a + b")
 
-val sum = scope.eval("add(20, 22)").toKotlin(scope) // -> 42
+val sum = session.eval("add(20, 22)").toKotlin(scope) // -> 42
 ```
 
 2) Call a Lyng function by name via a prepared call scope:
 
 ```kotlin
 // Ensure the function exists in the scope
-scope.eval("fun add(a, b) = a + b")
+val session = EvalSession()
+val scope = session.getScope()
+session.eval("fun add(a, b) = a + b")
 
 // Look up the function object
 val addFn = scope.get("add")!!.value as Statement
@@ -532,7 +588,8 @@ Register a Kotlin‑built package:
 import net.sergeych.lyng.bridge.*
 import net.sergeych.lyng.obj.ObjInt
 
-val scope = Script.newScope()
+val session = EvalSession()
+val scope = session.getScope()
 
 // Access the import manager behind this scope
 val im: ImportManager = scope.importManager
@@ -563,12 +620,12 @@ im.addPackage("my.tools") { module: ModuleScope ->
 }
 
 // Use it from Lyng
-scope.eval("""
+session.eval("""
     import my.tools.*
     val v = triple(14)
     status = "busy"
 """)
-val v = scope.eval("v").toKotlin(scope) // -> 42
+val v = session.eval("v").toKotlin(scope) // -> 42
 ```
 
 Register a package from Lyng source text:
@@ -582,24 +639,27 @@ val pkgText = """
 
 scope.importManager.addTextPackages(pkgText)
 
-scope.eval("""
+session.eval("""
     import math.extra.*
     val s = sqr(12)
 """)
-val s = scope.eval("s").toKotlin(scope) // -> 144
+val s = session.eval("s").toKotlin(scope) // -> 144
 ```
 
 You can also register from parsed `Source` instances via `addSourcePackages(source)`.
 
 ### 10) Executing from files, security, and isolation
 
-- To run code from a file, read it and pass to `scope.eval(text)` or compile with `Compiler.compile(Source(fileName, text))`.
+- To run code from a file, read it and pass to `session.eval(text)` or compile with `Compiler.compile(Source(fileName, text))`.
 - `ImportManager` takes an optional `SecurityManager` if you need to restrict what packages or operations are available. By default, `Script.defaultImportManager` allows everything suitable for embedded use; clamp it down in sandboxed environments.
-- For isolation, create fresh modules/scopes via `Scope.new()` or `Script.newScope()` when you need a clean environment per request.
+- For isolation, prefer a fresh `EvalSession()` per request. Use `Scope.new()` / `Script.newScope()` when you specifically need low-level raw scopes or modules.
 
 ```kotlin
-// Fresh module based on the default manager, without the standard prelude
-val isolated = net.sergeych.lyng.Scope.new()
+// Preferred per-request runtime:
+val isolatedSession = EvalSession()
+
+// Low-level fresh module based on the default manager, without the standard prelude:
+val isolatedScope = net.sergeych.lyng.Scope.new()
 ```
 
 ### 11) Tips and troubleshooting
@@ -634,8 +694,11 @@ To simplify handling these objects from Kotlin, several extension methods are pr
 You can serialize Lyng exception objects using `Lynon` to transmit them across boundaries and then rethrow them.
 
 ```kotlin
+val session = EvalSession()
+val scope = session.getScope()
+
 try {
-    scope.eval("throw MyUserException(404, \"Not Found\")")
+    session.eval("throw MyUserException(404, \"Not Found\")")
 } catch (e: ExecutionError) {
     // 1. Serialize the Lyng exception object
     val encoded: UByteArray = lynonEncodeAny(scope, e.errorObject)

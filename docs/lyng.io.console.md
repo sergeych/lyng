@@ -9,12 +9,13 @@
 #### Install in host
 
 ```kotlin
-import net.sergeych.lyng.Script
+import net.sergeych.lyng.EvalSession
 import net.sergeych.lyng.io.console.createConsoleModule
 import net.sergeych.lyngio.console.security.PermitAllConsoleAccessPolicy
 
 suspend fun initScope() {
-    val scope = Script.newScope()
+    val session = EvalSession()
+    val scope = session.getScope()
     createConsoleModule(PermitAllConsoleAccessPolicy, scope)
 }
 ```

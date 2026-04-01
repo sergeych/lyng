@@ -93,42 +93,49 @@ import net.sergeych.lyng.*
 // we need a coroutine to start, as Lyng
 // is a coroutine based language, async topdown
 runBlocking {
-    assert(5 == eval(""" 3*3 - 4 """).toInt())
-    eval(""" println("Hello, Lyng!") """)
+    val session = EvalSession()
+    assert(5 == session.eval(""" 3*3 - 4 """).toInt())
+    session.eval(""" println("Hello, Lyng!") """)
 }
 ```
 
 ### Exchanging information
 
-Script is executed over some `Scope`. Create instance,
-add your specific vars and functions to it, and call:
+The preferred host runtime is `EvalSession`. It owns the script scope and any coroutines
+started with `launch { ... }`. Create a session, grab its scope when you need low-level
+binding APIs, then execute scripts through the session:
 
 ```kotlin
 import net.sergeych.lyng.*
 
-// simple function
-val scope = Script.newScope().apply {
-    addFn("sumOf") {
-        var sum = 0.0
-        for (a in args) sum += a.toDouble()
-        ObjReal(sum)
-    }
-    addConst("LIGHT_SPEED", ObjReal(299_792_458.0))
+runBlocking {
+    val session = EvalSession()
+    val scope = session.getScope().apply {
+        // simple function
+        addFn("sumOf") {
+            var sum = 0.0
+            for (a in args) sum += a.toDouble()
+            ObjReal(sum)
+        }
+        addConst("LIGHT_SPEED", ObjReal(299_792_458.0))
 
-    // callback back to kotlin to some suspend fn, for example::
-    // suspend fun doSomeWork(text: String): Int
-    addFn("doSomeWork") {
-        // this _is_ a suspend lambda, we can call suspend function,
-        // and it won't consume the thread.
-        // note that in kotlin handler, `args` is a list of `Obj` arguments
-        // and return value from this lambda should be Obj too:
-        doSomeWork(args[0]).toObj()
+        // callback back to kotlin to some suspend fn, for example::
+        // suspend fun doSomeWork(text: String): Int
+        addFn("doSomeWork") {
+            // this _is_ a suspend lambda, we can call suspend function,
+            // and it won't consume the thread.
+            // note that in kotlin handler, `args` is a list of `Obj` arguments
+            // and return value from this lambda should be Obj too:
+            doSomeWork(args[0]).toObj()
+        }
     }
+
+    // execute through the session:
+    session.eval("sumOf(1,2,3)") // <- 6
 }
-// adding constant:
-scope.eval("sumOf(1,2,3)") // <- 6
 ```
-Note that the scope stores all changes in it so you can make calls on a single scope to preserve state between calls.
+Note that the session reuses one scope, so state persists across `session.eval(...)` calls.
+Use raw `Scope.eval(...)` only when you intentionally want low-level control without session-owned coroutine lifecycle.
 
 ## IntelliJ IDEA plugin: Lightweight autocompletion (experimental)
 

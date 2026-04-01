@@ -80,11 +80,11 @@ If you already have an ionspin `BigDecimal` on the host side, the simplest suppo
 
 ```kotlin
 import com.ionspin.kotlin.bignum.decimal.BigDecimal
-import net.sergeych.lyng.Script
+import net.sergeych.lyng.EvalSession
 import net.sergeych.lyng.asFacade
 import net.sergeych.lyng.newDecimal
 
-val scope = Script.newScope()
+val scope = EvalSession().getScope()
 val decimal = scope.asFacade().newDecimal(BigDecimal.parseStringWithMode("12.34"))
 ```
 

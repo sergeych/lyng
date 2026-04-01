@@ -37,7 +37,7 @@ dependencies {
 To use `lyngio` modules in your scripts, you must install them into your Lyng scope and provide a security policy.
 
 ```kotlin
-import net.sergeych.lyng.Script
+import net.sergeych.lyng.EvalSession
 import net.sergeych.lyng.io.fs.createFs
 import net.sergeych.lyng.io.process.createProcessModule
 import net.sergeych.lyng.io.console.createConsoleModule
@@ -46,7 +46,8 @@ import net.sergeych.lyngio.process.security.PermitAllProcessAccessPolicy
 import net.sergeych.lyngio.console.security.PermitAllConsoleAccessPolicy
 
 suspend fun runMyScript() {
-    val scope = Script.newScope()
+    val session = EvalSession()
+    val scope = session.getScope()
     
     // Install modules with policies
     createFs(PermitAllAccessPolicy, scope)
@@ -54,7 +55,7 @@ suspend fun runMyScript() {
     createConsoleModule(PermitAllConsoleAccessPolicy, scope)
     
     // Now scripts can import them
-    scope.eval("""
+    session.eval("""
         import lyng.io.fs
         import lyng.io.process
         import lyng.io.console

@@ -20,24 +20,26 @@ For external projects, ensure you have the appropriate Maven repository configur
 
 ---
 
-#### Install the module into a Lyng Scope
+#### Install the module into a Lyng session
 
-The process module is not installed automatically. You must explicitly register it in the scope’s `ImportManager` using `createProcessModule`. You can customize access control via `ProcessAccessPolicy`.
+The process module is not installed automatically. The preferred host runtime is `EvalSession`: create the session, get its underlying scope, install the module there, and execute scripts through the session. You can customize access control via `ProcessAccessPolicy`.
 
 Kotlin (host) bootstrap example:
 
 ```kotlin
 import net.sergeych.lyng.Scope
-import net.sergeych.lyng.Script
+import net.sergeych.lyng.EvalSession
 import net.sergeych.lyng.io.process.createProcessModule
 import net.sergeych.lyngio.process.security.PermitAllProcessAccessPolicy
 
-// ... inside a suspend function or runBlocking
-val scope: Scope = Script.newScope()
-createProcessModule(PermitAllProcessAccessPolicy, scope)
+suspend fun bootstrapProcess() {
+    val session = EvalSession()
+    val scope: Scope = session.getScope()
+    createProcessModule(PermitAllProcessAccessPolicy, scope)
 
-// In scripts (or via scope.eval), import the module:
-scope.eval("import lyng.io.process")
+    // In scripts (or via session.eval), import the module:
+    session.eval("import lyng.io.process")
+}
 ```
 
 ---

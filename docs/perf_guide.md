@@ -114,10 +114,12 @@ When running end‑to‑end “book” workloads or heavier benches, you can ena
 Flags are mutable at runtime, e.g.:
 
 ```kotlin
-PerfFlags.ARG_BUILDER = false
-val r1 = (Scope().eval(script) as ObjInt).value
-PerfFlags.ARG_BUILDER = true
-val r2 = (Scope().eval(script) as ObjInt).value
+runTest {
+    PerfFlags.ARG_BUILDER = false
+    val r1 = (EvalSession(Scope()).eval(script) as ObjInt).value
+    PerfFlags.ARG_BUILDER = true
+    val r2 = (EvalSession(Scope()).eval(script) as ObjInt).value
+}
 ```
 
 Reset flags at the end of a test to avoid impacting other tests.
@@ -619,4 +621,3 @@ Reproduce
 Notes
 - Negative caches are installed only after a real miss throws (cache‑after‑miss), preserving error semantics and invalidation on `layoutVersion` changes.
 - IndexRef PIC augments the existing direct path and uses move‑to‑front promotion; it is keyed on `(classId, layoutVersion)` like other PICs.
-

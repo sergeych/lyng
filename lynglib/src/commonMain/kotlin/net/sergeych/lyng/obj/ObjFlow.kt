@@ -17,6 +17,7 @@
 
 package net.sergeych.lyng.obj
 
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ChannelResult
@@ -24,6 +25,7 @@ import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import net.sergeych.lyng.EvalSession
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.ScriptFlowIsNoMoreCollected
 import net.sergeych.lyng.miniast.ParamDoc
@@ -72,25 +74,34 @@ class ObjFlowBuilder(val output: SendChannel<Obj>) : Obj() {
     }
 }
 
-private fun createLyngFlowInput(scope: Scope, producer: Obj): ReceiveChannel<Obj> {
+private suspend fun createLyngFlowInput(scope: Scope, producer: Obj, ownerSession: EvalSession?): ReceiveChannel<Obj> {
     val channel = Channel<Obj>(Channel.RENDEZVOUS)
     val builder = ObjFlowBuilder(channel)
     val builderScope = scope.createChildScope(newThisObj = builder)
-    globalLaunch {
+    val runProducer: suspend CoroutineScope.() -> Unit = {
+        var failure: Throwable? = null
         try {
             producer.callOn(builderScope)
         } catch (x: ScriptFlowIsNoMoreCollected) {
             // premature flow closing, OK
         } catch (x: Throwable) {
-            channel.close(x)
-            return@globalLaunch
+            failure = x
         }
-        channel.close()
+        if (failure != null) {
+            channel.close(failure)
+        } else {
+            channel.close()
+        }
+    }
+    if (ownerSession != null) {
+        ownerSession.launchTrackedJob(runProducer)
+    } else {
+        globalLaunch(block = runProducer)
     }
     return channel
 }
 
-class ObjFlow(val producer: Obj, val scope: Scope) : Obj() {
+class ObjFlow(val producer: Obj, val scope: Scope, val ownerSession: EvalSession? = null) : Obj() {
 
     override val objClass get() = type
 
@@ -109,14 +120,14 @@ class ObjFlow(val producer: Obj, val scope: Scope) : Obj() {
                 val objFlow = thisAs<ObjFlow>()
                 ObjFlowIterator(ObjExternCallable.fromBridge {
                     call(objFlow.producer)
-                })
+                }, objFlow.ownerSession)
             }
         }
     }
 }
 
 
-class ObjFlowIterator(val producer: Obj) : Obj() {
+class ObjFlowIterator(val producer: Obj, val ownerSession: EvalSession? = null) : Obj() {
 
     override val objClass: ObjClass get() = type
 
@@ -134,7 +145,7 @@ class ObjFlowIterator(val producer: Obj) : Obj() {
     suspend fun hasNext(scope: Scope): ObjBool {
         checkNotCancelled(scope)
         // cold start:
-        if (channel == null) channel = createLyngFlowInput(scope, producer)
+        if (channel == null) channel = createLyngFlowInput(scope, producer, ownerSession)
         if (nextItem == null) nextItem = channel!!.receiveCatching()
         nextItem?.exceptionOrNull()?.let { throw it }
         return ObjBool(nextItem!!.isSuccess)

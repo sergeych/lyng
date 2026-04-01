@@ -122,7 +122,8 @@ data class TestJson2(
 
 @Test
 fun deserializeMapWithJsonTest() = runTest {
-    val x = eval("""
+    val session = EvalSession()
+    val x = session.eval("""
         import lyng.serialization
         { value: 1, inner: { "foo": 1, "bar": 2 }}
     """.trimIndent()).decodeSerializable<TestJson2>()
@@ -143,7 +144,8 @@ data class TestJson3(
 )
 @Test
 fun deserializeAnyMapWithJsonTest() = runTest {
-    val x = eval("""
+    val session = EvalSession()
+    val x = session.eval("""
         import lyng.serialization
         { value: 12, inner: { "foo": 1, "bar": "two" }}
     """.trimIndent()).decodeSerializable<TestJson3>()
@@ -175,4 +177,3 @@ on [Instant](time.md), see `Instant.truncateTo...` functions.
 
 (3)
 : Map keys must be strings, map values may be any objects serializable to Json.
-
