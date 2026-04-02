@@ -49,6 +49,7 @@ val UNICODE_BOTTOM_RIGHT = "┘"
 val UNICODE_HORIZONTAL = "──"
 val UNICODE_VERTICAL = "│"
 val UNICODE_DOT = "· "
+val PIECES: List<Piece> = []
 
 type Cell = List<Int>
 type Rotation = List<Cell>
@@ -467,8 +468,6 @@ fun rot(a: Cell, b: Cell, c: Cell, d: Cell): Rotation {
     r.add(d)
     r
 }
-
-val PIECES: List<Piece> = []
 
 val iRots: Rotations = []
 iRots.add(rot(cell(0,1), cell(1,1), cell(2,1), cell(3,1)))
