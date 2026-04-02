@@ -13,6 +13,9 @@
 - **[lyng.io.fs](lyng.io.fs.md):** Async filesystem access. Provides the `Path` class for file/directory operations, streaming, and globbing.
 - **[lyng.io.process](lyng.io.process.md):** External process execution and shell commands. Provides `Process`, `RunningProcess`, and `Platform` information.
 - **[lyng.io.console](lyng.io.console.md):** Rich console/TTY access. Provides `Console` capability detection, geometry, output, and iterable events.
+- **[lyng.io.http](lyng.io.http.md):** HTTP/HTTPS client access. Provides `Http`, `HttpRequest`, `HttpResponse`, and `HttpHeaders`.
+- **[lyng.io.ws](lyng.io.ws.md):** WebSocket client access. Provides `Ws`, `WsSession`, and `WsMessage`.
+- **[lyng.io.net](lyng.io.net.md):** Transport networking. Provides `Net`, `TcpSocket`, `TcpServer`, `UdpSocket`, and `SocketAddress`.
 
 ---
 
@@ -41,9 +44,15 @@ import net.sergeych.lyng.EvalSession
 import net.sergeych.lyng.io.fs.createFs
 import net.sergeych.lyng.io.process.createProcessModule
 import net.sergeych.lyng.io.console.createConsoleModule
+import net.sergeych.lyng.io.http.createHttpModule
+import net.sergeych.lyng.io.net.createNetModule
+import net.sergeych.lyng.io.ws.createWsModule
 import net.sergeych.lyngio.fs.security.PermitAllAccessPolicy
 import net.sergeych.lyngio.process.security.PermitAllProcessAccessPolicy
 import net.sergeych.lyngio.console.security.PermitAllConsoleAccessPolicy
+import net.sergeych.lyngio.http.security.PermitAllHttpAccessPolicy
+import net.sergeych.lyngio.net.security.PermitAllNetAccessPolicy
+import net.sergeych.lyngio.ws.security.PermitAllWsAccessPolicy
 
 suspend fun runMyScript() {
     val session = EvalSession()
@@ -53,16 +62,25 @@ suspend fun runMyScript() {
     createFs(PermitAllAccessPolicy, scope)
     createProcessModule(PermitAllProcessAccessPolicy, scope)
     createConsoleModule(PermitAllConsoleAccessPolicy, scope)
+    createHttpModule(PermitAllHttpAccessPolicy, scope)
+    createNetModule(PermitAllNetAccessPolicy, scope)
+    createWsModule(PermitAllWsAccessPolicy, scope)
     
     // Now scripts can import them
     session.eval("""
         import lyng.io.fs
         import lyng.io.process
         import lyng.io.console
+        import lyng.io.http
+        import lyng.io.net
+        import lyng.io.ws
         
         println("Working dir: " + Path(".").readUtf8())
         println("OS: " + Platform.details().name)
         println("TTY: " + Console.isTty())
+        println("HTTP available: " + Http.isSupported())
+        println("TCP available: " + Net.isTcpAvailable())
+        println("WS available: " + Ws.isSupported())
     """)
 }
 ```
@@ -76,21 +94,27 @@ suspend fun runMyScript() {
 - **Filesystem Security:** Implement `FsAccessPolicy` to restrict access to specific paths or operations (e.g., read-only access to a sandbox directory).
 - **Process Security:** Implement `ProcessAccessPolicy` to restrict which executables can be run or to disable shell execution entirely.
 - **Console Security:** Implement `ConsoleAccessPolicy` to control output writes, event reads, and raw mode switching.
+- **HTTP Security:** Implement `HttpAccessPolicy` to restrict which requests scripts may send.
+- **Transport Security:** Implement `NetAccessPolicy` to restrict DNS resolution and TCP/UDP socket operations.
+- **WebSocket Security:** Implement `WsAccessPolicy` to restrict websocket connects and message flow.
 
 For more details, see the specific module documentation:
 - [Filesystem Security Details](lyng.io.fs.md#access-policy-security)
 - [Process Security Details](lyng.io.process.md#security-policy)
 - [Console Module Details](lyng.io.console.md)
+- [HTTP Module Details](lyng.io.http.md)
+- [Transport Networking Details](lyng.io.net.md)
+- [WebSocket Module Details](lyng.io.ws.md)
 
 ---
 
 #### Platform Support Overview
 
-| Platform | lyng.io.fs | lyng.io.process | lyng.io.console |
-| :--- | :---: | :---: | :---: |
-| **JVM** | ✅ | ✅ | ✅ (baseline) |
-| **Native (Linux/macOS)** | ✅ | ✅ | 🚧 |
-| **Native (Windows)** | ✅ | 🚧 (Planned) | 🚧 |
-| **Android** | ✅ | ❌ | ❌ |
-| **NodeJS** | ✅ | ❌ | ❌ |
-| **Browser / Wasm** | ✅ (In-memory) | ❌ | ❌ |
+| Platform | lyng.io.fs | lyng.io.process | lyng.io.console | lyng.io.http | lyng.io.ws | lyng.io.net |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **JVM** | ✅ | ✅ | ✅ (baseline) | ✅ | ✅ | ✅ |
+| **Native (Linux/macOS)** | ✅ | ✅ | 🚧 | 🚧 | 🚧 | 🚧 |
+| **Native (Windows)** | ✅ | 🚧 (Planned) | 🚧 | 🚧 | 🚧 | 🚧 |
+| **Android** | ✅ | ❌ | ❌ | 🚧 | 🚧 | 🚧 |
+| **NodeJS** | ✅ | ❌ | ❌ | 🚧 | 🚧 | 🚧 |
+| **Browser / Wasm** | ✅ (In-memory) | ❌ | ❌ | 🚧 | 🚧 | 🚧 |

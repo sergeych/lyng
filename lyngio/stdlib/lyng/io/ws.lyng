@@ -1,0 +1,40 @@
+package lyng.io.ws
+
+/* Received WebSocket message. */
+extern class WsMessage {
+    /* True when this message carries text payload. */
+    val isText: Bool
+    /* Text payload for text messages, otherwise null. */
+    val text: String?
+    /* Binary payload for binary messages, otherwise null. */
+    val data: Buffer?
+}
+
+/* Active WebSocket client session. */
+extern class WsSession {
+    /* True while the session remains open. */
+    fun isOpen(): Bool
+    /* Connected URL string. */
+    fun url(): String
+    /* Send a text message. */
+    fun sendText(text: String): void
+    /* Send a binary message. */
+    fun sendBytes(data: Buffer): void
+    /* Receive next message, or null on clean close. */
+    fun receive(): WsMessage?
+    /* Close the session with optional status code and reason. */
+    fun close(code: Int = 1000, reason: String = ""): void
+}
+
+/* WebSocket client singleton. */
+extern object Ws {
+    /* True when WebSocket client support is available on this runtime. */
+    fun isSupported(): Bool
+
+    /*
+        Open a client WebSocket session.
+        `headers...` accepts `MapEntry` values such as `"Authorization" => "Bearer x"`
+        and 2-item lists such as `["Authorization", "Bearer x"]`.
+    */
+    fun connect(url: String, headers...): WsSession
+}

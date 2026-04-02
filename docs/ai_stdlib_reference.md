@@ -82,8 +82,11 @@ Requires installing `lyngio` into the import manager from host code.
 - `import lyng.io.fs` (filesystem `Path` API)
 - `import lyng.io.process` (process execution API)
 - `import lyng.io.console` (console capabilities, geometry, ANSI/output, events)
+- `import lyng.io.http` (HTTP/HTTPS client API)
+- `import lyng.io.ws` (WebSocket client API; currently supported on JVM, capability-gated elsewhere)
+- `import lyng.io.net` (TCP/UDP transport API; currently supported on JVM, capability-gated elsewhere)
 
 ## 7. AI Generation Tips
 - Assume `lyng.stdlib` APIs exist in regular script contexts.
-- For platform-sensitive code (`fs`, `process`, `console`), gate assumptions and mention required module install.
+- For platform-sensitive code (`fs`, `process`, `console`, `http`, `ws`, `net`), gate assumptions and mention required module install.
 - Prefer extension-method style (`items.filter { ... }`) and standard scope helpers (`let`/`also`/`apply`/`run`).

@@ -1,0 +1,72 @@
+package lyng.io.http
+
+/*
+    Response/header view that behaves like a map for the first value of each header name.
+    Multi-valued headers are exposed through `getAll`.
+*/
+extern class HttpHeaders : Map<String, String> {
+    /* Return the first value for the given header name, or null when absent. */
+    fun get(name: String): String?
+    /* Return all values for the given header name, preserving wire order when available. */
+    fun getAll(name: String): List<String>
+    /* Return distinct header names present in this response. */
+    fun names(): List<String>
+}
+
+/* Mutable request descriptor for programmatic HTTP calls. */
+extern class HttpRequest {
+    /* Request method, e.g. GET, POST, PUT, DELETE. */
+    var method: String
+    /* Absolute URL including scheme. */
+    var url: String
+    /* Simple request headers map. */
+    var headers: Map<String, String>
+    /* Optional UTF-8 request body. */
+    var bodyText: String?
+    /* Optional binary request body. */
+    var bodyBytes: Buffer?
+    /* Optional total request timeout in milliseconds. */
+    var timeoutMillis: Int?
+}
+
+/* HTTP response snapshot with cached body accessors. */
+extern class HttpResponse {
+    /* Numeric status code, e.g. 200, 404, 500. */
+    val status: Int
+    /* Human-readable status text when available. */
+    val statusText: String
+    /* Response headers. */
+    val headers: HttpHeaders
+    /* Decode response body as text. Cached after first call. */
+    fun text(): String
+    /* Return response body as bytes. Cached after first call. */
+    fun bytes(): Buffer
+}
+
+/* HTTP/HTTPS client singleton. */
+extern object Http {
+    /* True when HTTP client support is available on this runtime. */
+    fun isSupported(): Bool
+
+    /* Execute a request described by `HttpRequest`. */
+    fun request(req: HttpRequest): HttpResponse
+
+    /*
+        Convenience GET request.
+        `headers...` accepts `MapEntry` values such as `"Accept" => "text/plain"`
+        and 2-item lists such as `["Accept", "text/plain"]`.
+    */
+    fun get(url: String, headers...): HttpResponse
+
+    /*
+        Convenience POST request with UTF-8 body text.
+        `headers...` follows the same rules as `get`.
+    */
+    fun post(url: String, bodyText: String = "", contentType: String? = null, headers...): HttpResponse
+
+    /*
+        Convenience POST request with binary body.
+        `headers...` follows the same rules as `get`.
+    */
+    fun postBytes(url: String, body: Buffer, contentType: String? = null, headers...): HttpResponse
+}

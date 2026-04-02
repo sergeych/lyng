@@ -1,0 +1,113 @@
+package lyng.io.net
+
+/* Address family for resolved or bound endpoints. */
+enum IpVersion {
+    IPV4,
+    IPV6
+}
+
+/* Concrete socket endpoint. */
+extern class SocketAddress {
+    /* Numeric or host-form address string. */
+    val host: String
+    /* Transport port number. */
+    val port: Int
+    /* Address family. */
+    val ipVersion: IpVersion
+    /* True when obtained from DNS resolution rather than raw bind input. */
+    val resolved: Bool
+    /* Stable printable form such as `127.0.0.1:4040` or `[::1]:4040`. */
+    override fun toString(): String
+}
+
+/* Datagram payload paired with sender/peer address. */
+extern class Datagram {
+    val data: Buffer
+    val address: SocketAddress
+}
+
+/* Connected TCP socket. */
+extern class TcpSocket {
+    /* True while the socket remains open. */
+    fun isOpen(): Bool
+    /* Local bound address after connect/bind. */
+    fun localAddress(): SocketAddress
+    /* Connected peer address. */
+    fun remoteAddress(): SocketAddress
+    /* Read up to `maxBytes`; returns null on clean EOF before any data. */
+    fun read(maxBytes: Int = 65536): Buffer?
+    /* Read one UTF-8 line without trailing newline; null on clean EOF. */
+    fun readLine(): String?
+    /* Write all bytes from the buffer. */
+    fun write(data: Buffer): void
+    /* Write UTF-8 encoded text. */
+    fun writeUtf8(text: String): void
+    /* Flush buffered output if needed by the backend. */
+    fun flush(): void
+    /* Close the socket. */
+    fun close(): void
+}
+
+/* Listening TCP server socket. */
+extern class TcpServer {
+    /* True while the listening socket remains open. */
+    fun isOpen(): Bool
+    /* Actual local bind address. */
+    fun localAddress(): SocketAddress
+    /* Accept next incoming client connection. */
+    fun accept(): TcpSocket
+    /* Close the listening socket. */
+    fun close(): void
+}
+
+/* Bound UDP socket. */
+extern class UdpSocket {
+    /* True while the socket remains open. */
+    fun isOpen(): Bool
+    /* Actual local bind address. */
+    fun localAddress(): SocketAddress
+    /* Receive one datagram up to `maxBytes`, or null on clean shutdown. */
+    fun receive(maxBytes: Int = 65536): Datagram?
+    /* Send one datagram to the provided host and port. */
+    fun send(data: Buffer, host: String, port: Int): void
+    /* Close the socket. */
+    fun close(): void
+}
+
+/* Raw transport networking singleton. */
+extern object Net {
+    /* True when at least one transport feature is implemented on this runtime. */
+    fun isSupported(): Bool
+    /* True when outbound TCP client sockets are available. */
+    fun isTcpAvailable(): Bool
+    /* True when listening TCP server sockets are available. */
+    fun isTcpServerAvailable(): Bool
+    /* True when UDP datagram sockets are available. */
+    fun isUdpAvailable(): Bool
+
+    /* Resolve host name and port into concrete addresses. */
+    fun resolve(host: String, port: Int): List<SocketAddress>
+
+    /* Connect outbound TCP socket. */
+    fun tcpConnect(
+        host: String,
+        port: Int,
+        timeoutMillis: Int? = null,
+        noDelay: Bool = true
+    ): TcpSocket
+
+    /* Start listening TCP server socket. */
+    fun tcpListen(
+        port: Int,
+        host: String? = null,
+        backlog: Int = 128,
+        reuseAddress: Bool = true
+    ): TcpServer
+
+    /* Bind UDP socket, using an ephemeral port by default. */
+    fun udpBind(
+        port: Int = 0,
+        host: String? = null,
+        reuseAddress: Bool = true
+    ): UdpSocket
+}
