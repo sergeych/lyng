@@ -112,9 +112,16 @@ For more details, see the specific module documentation:
 
 | Platform | lyng.io.fs | lyng.io.process | lyng.io.console | lyng.io.http | lyng.io.ws | lyng.io.net |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **JVM** | ✅ | ✅ | ✅ (baseline) | ✅ | ✅ | ✅ |
-| **Native (Linux/macOS)** | ✅ | ✅ | 🚧 | 🚧 | 🚧 | 🚧 |
-| **Native (Windows)** | ✅ | 🚧 (Planned) | 🚧 | 🚧 | 🚧 | 🚧 |
-| **Android** | ✅ | ❌ | ❌ | 🚧 | 🚧 | 🚧 |
-| **NodeJS** | ✅ | ❌ | ❌ | 🚧 | 🚧 | 🚧 |
-| **Browser / Wasm** | ✅ (In-memory) | ❌ | ❌ | 🚧 | 🚧 | 🚧 |
+| **JVM** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Linux Native** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Apple Native** | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ |
+| **Windows Native** | ✅ | ❌ | ✅ | ✅ | ✅ | ❌ |
+| **Android** | ✅ | ❌ | ⚠️ | ✅ | ✅ | ✅ |
+| **JS / Node** | ✅ | ❌ | ⚠️ | ✅ | ✅ | ✅ |
+| **JS / Browser** | ✅ (in-memory) | ❌ | ⚠️ | ✅ | ✅ | ❌ |
+| **Wasm** | ✅ (in-memory) | ❌ | ⚠️ | ❌ | ❌ | ❌ |
+
+Legend:
+- `✅` supported
+- `⚠️` available but environment-dependent or not fully host-verified yet
+- `❌` unsupported
