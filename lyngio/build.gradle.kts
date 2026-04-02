@@ -86,6 +86,9 @@ kotlin {
         }
         val nativeMain by creating {
             dependsOn(commonMain)
+            dependencies {
+                implementation(libs.ktor.network)
+            }
         }
         val darwinMain by creating {
             dependsOn(nativeMain)
@@ -117,6 +120,9 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.test)
             }
         }
+        val linuxTest by creating {
+            dependsOn(commonTest)
+        }
         val iosX64Main by getting { dependsOn(iosMain) }
         val iosArm64Main by getting { dependsOn(iosMain) }
         val iosSimulatorArm64Main by getting { dependsOn(iosMain) }
@@ -124,6 +130,8 @@ kotlin {
         val mingwX64Main by getting { dependsOn(mingwMain) }
         val linuxX64Main by getting { dependsOn(linuxMain) }
         val linuxArm64Main by getting { dependsOn(linuxMain) }
+        val linuxX64Test by getting { dependsOn(linuxTest) }
+        val linuxArm64Test by getting { dependsOn(linuxTest) }
 
         // JS: use runtime detection in jsMain to select Node vs Browser implementation
         val jsMain by getting {

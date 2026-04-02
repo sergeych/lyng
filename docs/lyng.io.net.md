@@ -1,6 +1,6 @@
 ### lyng.io.net — TCP and UDP sockets for Lyng scripts
 
-This module provides minimal raw transport networking for Lyng scripts. It is implemented in `lyngio` and backed by Ktor sockets on the JVM and by Node networking APIs on JS/Node runtimes.
+This module provides minimal raw transport networking for Lyng scripts. It is implemented in `lyngio` and backed by Ktor sockets on the JVM and Linux Native, and by Node networking APIs on JS/Node runtimes.
 
 > **Note:** `lyngio` is a separate library module. It must be explicitly added as a dependency to your host application and initialized in your Lyng scopes.
 
@@ -164,4 +164,6 @@ The module uses `NetAccessPolicy` to authorize network operations before they ar
 - **Android:** supported via the Ktor CIO and Ktor sockets backends
 - **JS/Node:** supported for `resolve`, TCP client/server, and UDP
 - **JS/browser:** unsupported; capability checks report unavailable
-- **Other targets:** currently report unsupported; use capability checks before relying on raw sockets
+- **Linux Native:** supported via Ktor sockets
+- **Apple Native:** enabled via the shared native Ktor sockets backend; compile-verified, runtime not yet host-verified
+- **Other native targets:** currently report unsupported; use capability checks before relying on raw sockets
