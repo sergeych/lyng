@@ -1,5 +1,7 @@
 # Embedding Lyng in your Kotlin project
 
+[//]: # (topMenu)
+
 Lyng is a tiny, embeddable, Kotlin‑first scripting language. This page shows, step by step, how to:
 
 - add Lyng to your build

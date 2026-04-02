@@ -1,5 +1,7 @@
 # Lyng Stdlib Reference for AI Agents (Compact)
 
+[//]: # (excludeFromIndex)
+
 Purpose: fast overview of what is available by default and what must be imported.
 
 Sources: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Script.kt`, `lynglib/stdlib/lyng/root.lyng`, `lynglib/src/commonMain/kotlin/net/sergeych/lyng/stdlib_included/observable_lyng.kt`.
