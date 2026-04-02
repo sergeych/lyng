@@ -1,0 +1,21 @@
+import lyng.buffer
+import lyng.io.net
+
+val server = Net.tcpListen(0, "127.0.0.1")
+val port = server.localAddress().port
+val accepted = launch {
+    val client = server.accept()
+    val line = (client.read(4) as Buffer).decodeUtf8()
+    client.writeUtf8("echo:" + line)
+    client.flush()
+    client.close()
+    server.close()
+    line
+}
+
+val socket = Net.tcpConnect("127.0.0.1", port)
+socket.writeUtf8("ping")
+socket.flush()
+val reply = (socket.read(16) as Buffer).decodeUtf8()
+socket.close()
+println("${accepted.await()}: $reply")

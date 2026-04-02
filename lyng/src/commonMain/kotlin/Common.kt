@@ -27,7 +27,7 @@ import com.github.ajalt.clikt.parameters.arguments.optional
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import kotlinx.coroutines.runBlocking
-import net.sergeych.lyng.Compiler
+import net.sergeych.lyng.EvalSession
 import net.sergeych.lyng.LyngVersion
 import net.sergeych.lyng.Script
 import net.sergeych.lyng.ScriptError
@@ -216,12 +216,7 @@ private class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() 
                     launcher {
                         // there is no script name, it is a first argument instead:
                         processErrors {
-                            val script = Compiler.compileWithResolution(
-                                Source("<eval>", execute!!),
-                                baseScope.currentImportProvider,
-                                seedScope = baseScope
-                            )
-                            script.execute(baseScope)
+                            executeSource(Source("<eval>", execute!!))
                         }
                     }
                 }
@@ -247,6 +242,15 @@ fun executeFileWithArgs(fileName: String, args: List<String>) {
     }
 }
 
+suspend fun executeSource(source: Source) {
+    val session = EvalSession(baseScopeDefer.await())
+    try {
+        session.eval(source)
+    } finally {
+        session.cancelAndJoin()
+    }
+}
+
 suspend fun executeFile(fileName: String) {
     var text = FileSystem.SYSTEM.source(fileName.toPath()).use { fileSource ->
         fileSource.buffer().use { bs ->
@@ -259,13 +263,7 @@ suspend fun executeFile(fileName: String) {
         text = text.substring(pos + 1)
     }
     processErrors {
-        val scope = baseScopeDefer.await()
-        val script = Compiler.compileWithResolution(
-            Source(fileName, text),
-            scope.currentImportProvider,
-            seedScope = scope
-        )
-        script.execute(scope)
+        executeSource(Source(fileName, text))
     }
 }
 
