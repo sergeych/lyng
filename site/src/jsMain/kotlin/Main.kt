@@ -512,8 +512,9 @@ internal fun plainFromMarkdown(md: String): String {
     // Use non-greedy dot-all equivalents ("[\n\r\s\S]") instead of character classes with ']' where possible.
     try {
         // Safer patterns (avoid unescaped ']' inside character classes):
-        val reCodeBlocks = Regex("```[\\s\\S]*?```")
-        val reInlineCode = Regex("`[^`]*`")
+        val reBacktickCodeBlocks = Regex("```[\\s\\S]*?```")
+        val reTildeCodeBlocks = Regex("~~~[\\s\\S]*?~~~")
+        val reInlineCode = Regex("`([^`]*)`")
         val reBlockquote = Regex("^> +", setOf(RegexOption.MULTILINE))
         val reHeadings = Regex("^#+ +", setOf(RegexOption.MULTILINE))
         // Images: ![alt](url) — capture alt lazily with [\s\S]*? to avoid character class pitfalls
@@ -523,9 +524,10 @@ internal fun plainFromMarkdown(md: String): String {
 
         var t = md
         // Triple-backtick code blocks across lines
-        t = t.replace(reCodeBlocks, " ")
-        // Inline code
-        t = t.replace(reInlineCode, " ")
+        t = t.replace(reBacktickCodeBlocks, " ")
+        t = t.replace(reTildeCodeBlocks, " ")
+        // Keep inline code content so API names in prose and headings remain searchable
+        t = t.replace(reInlineCode, "\$1")
         // Strip blockquotes and headings markers
         t = t.replace(reBlockquote, "")
         t = t.replace(reHeadings, "")
@@ -539,7 +541,8 @@ internal fun plainFromMarkdown(md: String): String {
         // Minimal safe fallback: strip code blocks and inline code, then normalize
         var t = md
         t = t.replace(Regex("```[\\s\\S]*?```"), " ")
-        t = t.replace(Regex("`[^`]*`"), " ")
+        t = t.replace(Regex("~~~[\\s\\S]*?~~~"), " ")
+        t = t.replace(Regex("`([^`]*)`"), "\$1")
         return norm(t)
     }
 }

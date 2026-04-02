@@ -21,6 +21,7 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.EvalSession
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.Script
 import net.sergeych.lyng.obj.ObjBool
 import net.sergeych.lyng.obj.ObjFlow
 import net.sergeych.lyng.obj.ObjInt
@@ -41,25 +42,49 @@ class EvalSessionTest {
 
     @Test
     fun sessionCancelStopsLaunchedCoroutines() = runTest {
-        val scope = Scope()
+        val scope = Script.newScope()
+        scope.eval("var exportedVal=0")
         val session = EvalSession(scope)
 
         session.eval(
             """
             var touched = false
             launch {
-                delay(100)
-                touched = true
+                while(true) {
+                    delay(100)
+                    touched = true
+                }
             }
             """
                 .trimIndent()
         )
 
-        session.cancel()
-        session.join()
+        session.cancelAndJoin()
         advanceTimeBy(150)
 
         assertFalse((scope.eval("touched") as ObjBool).value)
+    }
+
+    @Test
+    fun cancelAndJoinStopsLaunchedCoroutinesForUserProvidedScriptScope() = runTest {
+        val scope = Script.newScope()
+        val session = EvalSession(scope)
+
+        session.eval(
+            """
+            var counter = 0
+            launch {
+                delay(10)
+                counter += 1
+            }
+            """
+                .trimIndent()
+        )
+
+        session.cancelAndJoin()
+        advanceTimeBy(20)
+
+        assertEquals(0L, (scope.eval("counter") as ObjInt).value)
     }
 
     @Test
