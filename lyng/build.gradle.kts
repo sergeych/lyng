@@ -80,6 +80,11 @@ kotlin {
         val nativeMain by creating {
             dependsOn(commonMain)
         }
+        val jvmMain by getting {
+            dependencies {
+                implementation(libs.slf4j.nop)
+            }
+        }
         val jvmTest by getting {
             dependencies {
                 implementation(kotlin("test"))

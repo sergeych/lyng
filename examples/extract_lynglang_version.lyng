@@ -1,0 +1,23 @@
+#!/env/bin lyng
+
+import lyng.io.http
+
+// Step 1: download the main lynglang.com page.
+val home = Http.get("https://lynglang.com").text()
+
+// Step 2: find the version-script reference in the page HTML.
+val jsRef = "src=\"([^\"]*lyng-version\\.js)\"".re.find(home)
+require(jsRef != null, "lyng-version.js reference not found on the homepage")
+
+// Step 3: extract the referenced script path from the first regex capture.
+val versionJsPath = jsRef[1]
+
+// Step 4: download the script that exposes `window.LYNG_VERSION`.
+val versionJs = Http.get("https://lynglang.com/" + versionJsPath).text()
+
+// Step 5: pull the actual version string from the JavaScript source.
+val versionMatch = "LYNG_VERSION\\s*=\\s*\"([^\"]+)\"".re.find(versionJs)
+require(versionMatch != null, "LYNG_VERSION assignment not found")
+
+// Step 6: print the discovered version for the user.
+println("Lynglang.com version: " + ((versionMatch as RegexMatch)[1]))

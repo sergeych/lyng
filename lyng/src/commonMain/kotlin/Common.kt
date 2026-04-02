@@ -34,9 +34,15 @@ import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.Source
 import net.sergeych.lyng.io.console.createConsoleModule
 import net.sergeych.lyng.io.fs.createFs
+import net.sergeych.lyng.io.http.createHttpModule
+import net.sergeych.lyng.io.net.createNetModule
+import net.sergeych.lyng.io.ws.createWsModule
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyngio.console.security.PermitAllConsoleAccessPolicy
 import net.sergeych.lyngio.fs.security.PermitAllAccessPolicy
+import net.sergeych.lyngio.http.security.PermitAllHttpAccessPolicy
+import net.sergeych.lyngio.net.security.PermitAllNetAccessPolicy
+import net.sergeych.lyngio.ws.security.PermitAllWsAccessPolicy
 import net.sergeych.mp_tools.globalDefer
 import okio.FileSystem
 import okio.Path.Companion.toPath
@@ -74,6 +80,11 @@ val baseScopeDefer = globalDefer {
         // Install console access by default for interactive CLI scripts.
         // Scripts still need to `import lyng.io.console` to use it.
         createConsoleModule(PermitAllConsoleAccessPolicy, this)
+        // Install network-oriented lyngio modules for CLI scripts.
+        // Scripts still need to import the modules they use explicitly.
+        createHttpModule(PermitAllHttpAccessPolicy, this)
+        createWsModule(PermitAllWsAccessPolicy, this)
+        createNetModule(PermitAllNetAccessPolicy, this)
     }
 }
 
