@@ -332,7 +332,9 @@ private class ObjHttpResponse(
         fun from(response: LyngHttpResponse): ObjHttpResponse {
             val single = linkedMapOf<String, String>()
             response.headers.forEach { (name, values) ->
-                if (values.isNotEmpty()) single.putIfAbsent(name, values.first())
+                if (values.isNotEmpty() && !single.containsKey(name)) {
+                    single[name] = values.first()
+                }
             }
             return ObjHttpResponse(
                 status = response.status.toLong(),

@@ -4532,6 +4532,15 @@ class Compiler(
         }
     }
 
+    private fun inferForLoopElementType(source: Statement, constRange: ConstIntRange?): TypeDecl? {
+        if (constRange != null) return TypeDecl.Simple("Int", false)
+        val sourceType = inferTypeDeclFromInitializer(source) ?: return null
+        return when {
+            isRangeType(sourceType) -> TypeDecl.Simple("Int", false)
+            else -> inferCollectionElementType(expandTypeAliases(sourceType, source.pos))
+        }
+    }
+
     private fun typeDeclSubtypeOf(arg: TypeDecl, param: TypeDecl): Boolean {
         if (param == TypeDecl.TypeAny || param == TypeDecl.TypeNullableAny) return true
         val (argBase, argNullable) = stripNullable(arg)
@@ -4934,12 +4943,33 @@ class Compiler(
 
     private fun inferCallReturnClass(ref: CallRef): ObjClass? {
         return when (val target = ref.target) {
-            is LocalSlotRef -> callableReturnTypeByScopeId[target.scopeId]?.get(target.slot)
-                ?: resolveClassByName(target.name)
-            is LocalVarRef -> callableReturnTypeByName[target.name]
-                ?: resolveClassByName(target.name)
-            is FastLocalVarRef -> callableReturnTypeByName[target.name]
-                ?: resolveClassByName(target.name)
+            is LocalSlotRef -> when (target.name) {
+                "lazy" -> resolveClassByName("lazy")
+                "iterator" -> ObjIterator
+                "flow" -> ObjFlow.type
+                "launch" -> ObjDeferred.type
+                "dynamic" -> ObjDynamic.type
+                else -> callableReturnTypeByScopeId[target.scopeId]?.get(target.slot)
+                    ?: resolveClassByName(target.name)
+            }
+            is LocalVarRef -> when (target.name) {
+                "lazy" -> resolveClassByName("lazy")
+                "iterator" -> ObjIterator
+                "flow" -> ObjFlow.type
+                "launch" -> ObjDeferred.type
+                "dynamic" -> ObjDynamic.type
+                else -> callableReturnTypeByName[target.name]
+                    ?: resolveClassByName(target.name)
+            }
+            is FastLocalVarRef -> when (target.name) {
+                "lazy" -> resolveClassByName("lazy")
+                "iterator" -> ObjIterator
+                "flow" -> ObjFlow.type
+                "launch" -> ObjDeferred.type
+                "dynamic" -> ObjDynamic.type
+                else -> callableReturnTypeByName[target.name]
+                    ?: resolveClassByName(target.name)
+            }
             is ConstRef -> when (val value = target.constValue) {
                 is ObjClass -> value
                 is ObjString -> ObjString.type
@@ -7490,6 +7520,20 @@ class Compiler(
             val loopSlotPlan = SlotPlan(mutableMapOf(), 0, nextScopeId++)
             slotPlanStack.add(loopSlotPlan)
             declareSlotName(tVar.value, isMutable = true, isDelegated = false)
+            val loopSlotIndex = loopSlotPlan.slots[tVar.value]?.index
+            val loopVarTypeDecl = inferForLoopElementType(source, constRange)
+            val hadLoopNameType = nameTypeDecl.containsKey(tVar.value)
+            val prevLoopNameType = nameTypeDecl[tVar.value]
+            val hadLoopNameClass = nameObjClass.containsKey(tVar.value)
+            val prevLoopNameClass = nameObjClass[tVar.value]
+            if (loopSlotIndex != null && loopVarTypeDecl != null) {
+                slotTypeDeclByScopeId.getOrPut(loopSlotPlan.id) { mutableMapOf() }[loopSlotIndex] = loopVarTypeDecl
+                nameTypeDecl[tVar.value] = loopVarTypeDecl
+                resolveTypeDeclObjClass(loopVarTypeDecl)?.let { loopVarClass ->
+                    slotTypeByScopeId.getOrPut(loopSlotPlan.id) { mutableMapOf() }[loopSlotIndex] = loopVarClass
+                    nameObjClass[tVar.value] = loopVarClass
+                }
+            }
             val (canBreak, body, elseStatement) = try {
                 resolutionSink?.enterScope(ScopeKind.BLOCK, tVar.pos, null)
                 resolutionSink?.declareSymbol(tVar.value, SymbolKind.LOCAL, isMutable = true, pos = tVar.pos)
@@ -7509,6 +7553,16 @@ class Compiler(
                     Triple(loopParsed.first, loopParsed.second, elseStmt)
                 }
             } finally {
+                if (hadLoopNameType) {
+                    nameTypeDecl[tVar.value] = prevLoopNameType!!
+                } else {
+                    nameTypeDecl.remove(tVar.value)
+                }
+                if (hadLoopNameClass) {
+                    nameObjClass[tVar.value] = prevLoopNameClass!!
+                } else {
+                    nameObjClass.remove(tVar.value)
+                }
                 resolutionSink?.exitScope(cc.currentPos())
                 slotPlanStack.removeLast()
             }
@@ -9164,7 +9218,6 @@ class Compiler(
                 varTypeDecl = inferred
             }
         }
-
         if (isDelegate && initialExpression != null) {
             ensureDelegateType(initialExpression)
             val lazyClass = resolveClassByName("lazy")
