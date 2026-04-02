@@ -209,4 +209,26 @@ class TestCoroutines {
 //            }.toList())
         """.trimIndent())
     }
+
+    @Test
+    fun testInferenceList() = runTest {
+        eval("""
+            import lyng.time
+
+            val d1 = launch {
+                delay(1000.milliseconds)
+                "Task A finished"
+            }
+            val d2 = launch {
+                delay(500.milliseconds)
+                "Task B finished"
+            }
+            val foo = [d1, d2]
+            for (d in foo) {
+                d.await()
+                println(d)
+            }
+
+        """.trimIndent())
+    }
 }

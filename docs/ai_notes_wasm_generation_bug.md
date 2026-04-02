@@ -1,5 +1,7 @@
 # AI notes: avoid Kotlin/Wasm invalid IR with suspend lambdas
 
+[//]: # (excludeFromIndex)
+
 ## Do
 - Prefer explicit `object : Statement()` with `override suspend fun execute(...)` when building compiler statements.
 - Keep `Statement` objects non-lambda, especially in compiler hot paths like parsing/var declarations.

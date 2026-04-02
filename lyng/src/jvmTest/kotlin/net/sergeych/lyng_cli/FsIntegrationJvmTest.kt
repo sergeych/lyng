@@ -31,11 +31,12 @@ class FsIntegrationJvmTest {
             val dir = createTempDirectory("lyng_cli_fs_test_")
             try {
                 val file = dir.resolve("hello.txt")
+                val filePath = file.toString().replace("\\", "\\\\")
                 // Drive the operation via Lyng code to validate bindings end-to-end
                 scope.eval(
                     """
                     import lyng.io.fs
-                    val p = Path("${'$'}{file}")
+                    val p = Path("${filePath}")
                     p.writeUtf8("hello from cli test")
                     assertEquals(true, p.exists())
                     assertEquals("hello from cli test", p.readUtf8())

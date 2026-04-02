@@ -1,5 +1,7 @@
 # Lyng Language Reference for AI Agents (Current Compiler State)
 
+[//]: # (excludeFromIndex)
+
 Purpose: dense, implementation-first reference for generating valid Lyng code.
 
 Primary sources used: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/{Parser,Token,Compiler,Script,TypeDecl}.kt`, `lynglib/stdlib/lyng/root.lyng`, tests in `lynglib/src/commonTest` and `lynglib/src/jvmTest`.

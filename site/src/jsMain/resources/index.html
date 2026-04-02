@@ -414,6 +414,9 @@
                     </ul>
                 </li>
                 <li class="nav-item">
+                    <a class="nav-link" href="#/docs/downloads.md" data-route="downloads">Downloads</a>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link" href="#/tryling" data-route="tryling">Try in browser</a>
                 </li>
             </ul>
@@ -492,6 +495,8 @@
             var activeLink = null;
             if (!hash || hash === '#' || hash === '#/') {
                 activeLink = document.querySelector('#topbarNav .nav-link[data-route="home"]');
+            } else if (hash.startsWith('#/docs/downloads.md')) {
+                activeLink = document.querySelector('#topbarNav .nav-link[data-route="downloads"]');
             } else if (hash.startsWith('#/docs/') || hash.startsWith('#/authors')) {
                 // Mark Docs menu root as active
                 activeLink = document.querySelector('#topbarNav .nav-link.dropdown-toggle');
