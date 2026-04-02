@@ -107,9 +107,42 @@ The module uses `WsAccessPolicy` to authorize websocket operations.
 - `WsAccessOp.Send(url, bytes, isText)`
 - `WsAccessOp.Receive(url)`
 
+Example restricted policy in Kotlin:
+
+```kotlin
+import net.sergeych.lyngio.fs.security.AccessContext
+import net.sergeych.lyngio.fs.security.AccessDecision
+import net.sergeych.lyngio.fs.security.Decision
+import net.sergeych.lyngio.ws.security.WsAccessOp
+import net.sergeych.lyngio.ws.security.WsAccessPolicy
+
+val allowLocalOnly = object : WsAccessPolicy {
+    override suspend fun check(op: WsAccessOp, ctx: AccessContext): AccessDecision =
+        when (op) {
+            is WsAccessOp.Connect ->
+                if (
+                    op.url.startsWith("ws://127.0.0.1:") ||
+                    op.url.startsWith("wss://127.0.0.1:") ||
+                    op.url.startsWith("ws://localhost:") ||
+                    op.url.startsWith("wss://localhost:")
+                )
+                    AccessDecision(Decision.Allow)
+                else
+                    AccessDecision(Decision.Deny, "only local ws/wss connections are allowed")
+
+            else -> AccessDecision(Decision.Allow)
+        }
+}
+```
+
 ---
 
 #### Platform support
 
 - **JVM:** supported
-- **Other targets:** currently report unsupported; use `Ws.isSupported()` before relying on websocket client access
+- **Android:** supported via the Ktor CIO websocket client backend
+- **JS:** supported via the Ktor JS websocket client backend
+- **Linux native:** supported via the Ktor Curl websocket client backend
+- **Windows native:** supported via the Ktor WinHttp websocket client backend
+- **Apple native:** supported via the Ktor Darwin websocket client backend
+- **Other targets:** may report unsupported; use `Ws.isSupported()` before relying on websocket client access

@@ -19,10 +19,13 @@ package net.sergeych.lyng.io.http
 
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
+import com.sun.net.httpserver.HttpsConfigurator
+import com.sun.net.httpserver.HttpsServer
 import kotlinx.coroutines.runBlocking
 import net.sergeych.lyng.Compiler
 import net.sergeych.lyng.ExecutionError
 import net.sergeych.lyng.Script
+import net.sergeych.lyng.io.testtls.TlsTestMaterial
 import net.sergeych.lyngio.fs.security.AccessContext
 import net.sergeych.lyngio.fs.security.AccessDecision
 import net.sergeych.lyngio.fs.security.Decision
@@ -102,6 +105,33 @@ class LyngHttpModuleTest {
     }
 
     @Test
+    fun testHttpsGet() = runBlocking {
+        TlsTestMaterial.installJvmClientTrust()
+        val server = newServer(secure = true) { exchange ->
+            exchange.responseHeaders.add("Content-Type", "text/plain; charset=utf-8")
+            writeResponse(exchange, 200, "hello over tls")
+        }
+        try {
+            val scope = Script.newScope()
+            createHttpModule(PermitAllHttpAccessPolicy, scope)
+
+            val code = """
+                import lyng.io.http
+
+                val r = Http.get("https://127.0.0.1:${server.address.port}/hello")
+                [r.status, r.text()]
+            """.trimIndent()
+
+            val result = Compiler.compile(code).execute(scope)
+            val rendered = result.inspect(scope)
+            assertTrue(rendered.contains("200"), rendered)
+            assertTrue(rendered.contains("hello over tls"), rendered)
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    @Test
     fun testPolicyDenialSurfacesAsLyngError() = runBlocking {
         val scope = Script.newScope()
         val denyAll = object : HttpAccessPolicy {
@@ -121,8 +151,14 @@ class LyngHttpModuleTest {
         assertTrue(error.errorMessage.isNotBlank())
     }
 
-    private fun newServer(handler: (HttpExchange) -> Unit): HttpServer {
-        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+    private fun newServer(secure: Boolean = false, handler: (HttpExchange) -> Unit): HttpServer {
+        val server = if (secure) {
+            HttpsServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+                httpsConfigurator = HttpsConfigurator(TlsTestMaterial.sslContext)
+            }
+        } else {
+            HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        }
         server.createContext("/") { exchange ->
             handler(exchange)
         }

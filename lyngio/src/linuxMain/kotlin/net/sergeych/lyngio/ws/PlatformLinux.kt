@@ -1,7 +1,7 @@
 package net.sergeych.lyngio.ws
 
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
+import io.ktor.client.engine.curl.Curl
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocketSession
 import io.ktor.client.request.header
@@ -14,12 +14,12 @@ import io.ktor.websocket.readText
 import io.ktor.websocket.send
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 
-actual fun getSystemWsEngine(): LyngWsEngine = AndroidKtorWsEngine
+actual fun getSystemWsEngine(): LyngWsEngine = LinuxKtorWsEngine
 
-private object AndroidKtorWsEngine : LyngWsEngine {
+private object LinuxKtorWsEngine : LyngWsEngine {
     private val clientResult by lazy {
         runCatching {
-            HttpClient(CIO) {
+            HttpClient(Curl) {
                 install(WebSockets)
             }
         }
@@ -36,15 +36,14 @@ private object AndroidKtorWsEngine : LyngWsEngine {
             url(url)
             headers.forEach { (name, value) -> header(name, value) }
         }
-        return AndroidLyngWsSession(url, session)
+        return LinuxLyngWsSession(url, session)
     }
 }
 
-private class AndroidLyngWsSession(
+private class LinuxLyngWsSession(
     private val targetUrl: String,
     private val session: DefaultWebSocketSession,
 ) : LyngWsSession {
-    @Volatile
     private var closed = false
 
     override fun isOpen(): Boolean = !closed

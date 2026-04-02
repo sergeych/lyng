@@ -81,28 +81,40 @@ kotlin {
                 api(libs.kotlinx.coroutines.core)
                 api(libs.mordant.core)
                 api(libs.ktor.client.core)
-                implementation(libs.ktor.client.cio)
                 implementation(libs.ktor.client.websockets)
             }
         }
         val nativeMain by creating {
             dependsOn(commonMain)
         }
-        val iosMain by creating {
+        val darwinMain by creating {
             dependsOn(nativeMain)
+            dependencies {
+                implementation(libs.ktor.client.darwin)
+            }
+        }
+        val iosMain by creating {
+            dependsOn(darwinMain)
         }
         val linuxMain by creating {
             dependsOn(nativeMain)
+            dependencies {
+                implementation(libs.ktor.client.curl)
+            }
         }
         val macosMain by creating {
-            dependsOn(nativeMain)
+            dependsOn(darwinMain)
         }
         val mingwMain by creating {
             dependsOn(nativeMain)
+            dependencies {
+                implementation(libs.ktor.client.winhttp)
+            }
         }
         val commonTest by getting {
             dependencies {
                 implementation(libs.kotlin.test)
+                implementation(libs.kotlinx.coroutines.test)
             }
         }
         val iosX64Main by getting { dependsOn(iosMain) }
@@ -119,6 +131,13 @@ kotlin {
                 api(libs.okio)
                 implementation(libs.okio.fakefilesystem)
                 implementation("com.squareup.okio:okio-nodefilesystem:${libs.versions.okioVersion.get()}")
+                implementation(libs.ktor.client.js)
+            }
+        }
+        val androidMain by getting {
+            dependencies {
+                implementation(libs.ktor.client.cio)
+                implementation(libs.ktor.network)
             }
         }
         val jvmMain by getting {
@@ -126,6 +145,7 @@ kotlin {
                 implementation(libs.mordant.jvm.jna)
                 implementation("org.jline:jline-reader:3.29.0")
                 implementation("org.jline:jline-terminal:3.29.0")
+                implementation(libs.ktor.client.cio)
                 implementation(libs.ktor.network)
             }
         }

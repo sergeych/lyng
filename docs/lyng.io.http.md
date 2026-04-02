@@ -153,10 +153,15 @@ val allowLocalOnly = object : HttpAccessPolicy {
     override suspend fun check(op: HttpAccessOp, ctx: AccessContext): AccessDecision =
         when (op) {
             is HttpAccessOp.Request ->
-                if (op.url.startsWith("http://127.0.0.1:") || op.url.startsWith("http://localhost:"))
+                if (
+                    op.url.startsWith("http://127.0.0.1:") ||
+                    op.url.startsWith("https://127.0.0.1:") ||
+                    op.url.startsWith("http://localhost:") ||
+                    op.url.startsWith("https://localhost:")
+                )
                     AccessDecision(Decision.Allow)
                 else
-                    AccessDecision(Decision.Deny, "only local HTTP requests are allowed")
+                    AccessDecision(Decision.Deny, "only local HTTP/HTTPS requests are allowed")
         }
 }
 ```
@@ -166,4 +171,9 @@ val allowLocalOnly = object : HttpAccessPolicy {
 #### Platform support
 
 - **JVM:** supported
-- **Other targets:** implementation may be added later; use `Http.isSupported()` before relying on it
+- **Android:** supported via the Ktor CIO client backend
+- **JS:** supported via the Ktor JS client backend
+- **Linux native:** supported via the Ktor Curl client backend
+- **Windows native:** supported via the Ktor WinHttp client backend
+- **Apple native:** supported via the Ktor Darwin client backend
+- **Other targets:** may report unsupported; use `Http.isSupported()` before relying on it
