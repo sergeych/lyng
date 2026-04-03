@@ -3,6 +3,7 @@
 ## Lync CLI tool
 
 - [lyng-linuxX64.zip](/distributables/lyng-linuxX64.zip) CLI tool for linuxX64: nodependencies, small monolith executable binary.
+- [lyng-jvm.zip](/distributables/lyng-jvm.zip) JVM CLI distribution: download, unpack, and run `lyng-jvm/bin/lyng`.
 
 ## IDE plugins
 

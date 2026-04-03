@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #
-# Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+# Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,13 +19,15 @@
 
 set -e
 
-root=./lyng/build/install/lyng-jvm/
+archive=./lyng/build/distributions/lyng-jvm.zip
+install_root="$HOME/bin/jlyng-jvm"
+launcher="$install_root/lyng-jvm/bin/lyng"
 
-./gradlew :lyng:installJvmDist
-#strip $file
-#upx   $file
-rm -rf ~/bin/jlyng-jvm || true
-rm ~/bin/jlyng 2>/dev/null || true
-mkdir -p ~/bin/jlyng-jvm
-cp -R $root ~/bin/jlyng-jvm
-ln -s ~/bin/jlyng-jvm/lyng-jvm/bin/lyng ~/bin/jlyng
+./gradlew :lyng:jvmDistZip
+mkdir -p ./distributables
+cp "$archive" ./distributables/lyng-jvm.zip
+rm -rf "$install_root" || true
+rm "$HOME/bin/jlyng" 2>/dev/null || true
+mkdir -p "$install_root"
+unzip -q ./distributables/lyng-jvm.zip -d "$install_root"
+ln -s "$launcher" "$HOME/bin/jlyng"

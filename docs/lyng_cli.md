@@ -40,15 +40,16 @@ What this does:
 
 ##### Option B: JVM distribution (`jlyng` launcher)
 
-This creates a JVM distribution with a launcher script and links it to `~/bin/jlyng`.
+This creates a JVM distribution with a launcher script, packages it as a downloadable zip, and links it to `~/bin/jlyng`.
 
 ```
 bin/local_jrelease
 ```
 
 What this does:
-- Runs `./gradlew :lyng:installJvmDist` to build the JVM app distribution to `lyng/build/install/lyng-jvm`.
-- Copies the distribution under `~/bin/jlyng-jvm`.
+- Runs `./gradlew :lyng:jvmDistZip` to build the JVM app distribution archive at `lyng/build/distributions/lyng-jvm.zip`.
+- Copies the archive to `distributables/lyng-jvm.zip`.
+- Unpacks that distribution under `~/bin/jlyng-jvm`.
 - Creates a symlink `~/bin/jlyng` pointing to the launcher script.
 
 
