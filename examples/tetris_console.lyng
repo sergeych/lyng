@@ -80,6 +80,30 @@ class GameState(
     var paused = false
 }
 class LoopFrame(val resized: Bool, val originRow: Int, val originCol: Int) {}
+class InputBuffer {
+    private val mutex: Mutex = Mutex()
+    private val items: List<String> = []
+
+    fun push(value: String): Void {
+        mutex.withLock {
+            if (items.size >= MAX_PENDING_INPUTS) {
+                items.removeAt(0)
+            }
+            items.add(value)
+        }
+    }
+
+    fun drain(): List<String> {
+        val out: List<String> = []
+        mutex.withLock {
+            while (items.size > 0) {
+                out.add(items[0])
+                items.removeAt(0)
+            }
+        }
+        out
+    }
+}
 
 fun clearAndHome() {
     Console.clear()
@@ -540,9 +564,8 @@ if (!Console.isSupported()) {
     )
     var prevFrameLines: List<String> = []
 
-    val gameMutex: Mutex = Mutex()
     var forceRedraw = false
-    val pendingInputs: List<String> = []
+    val inputBuffer: InputBuffer = InputBuffer()
 
     val rawModeEnabled = Console.setRawMode(true)
     if (!rawModeEnabled) {
@@ -642,13 +665,7 @@ if (!Console.isSupported()) {
                                         continue
                                     }
                                     val mapped = if (ctrl && (key == "c" || key == "C")) "__CTRL_C__" else key
-                                    val mm: Mutex = gameMutex
-                                    mm.withLock {
-                                        if (pendingInputs.size >= MAX_PENDING_INPUTS) {
-                                            pendingInputs.removeAt(0)
-                                        }
-                                        pendingInputs.add(mapped)
-                                    }
+                                    inputBuffer.push(mapped)
                                 }
                             }
                         } catch (eventErr: Object) {
@@ -745,19 +762,11 @@ if (!Console.isSupported()) {
                     continue
                 }
 
-                val mm: Mutex = gameMutex
-                mm.withLock {
-                    if (pendingInputs.size > 0) {
-                        val toApply: List<String> = []
-                        while (pendingInputs.size > 0) {
-                            val k = pendingInputs[0]
-                            pendingInputs.removeAt(0)
-                            toApply.add(k)
-                        }
-                        for (k in toApply) {
-                            applyKeyInput(state, k)
-                            if (!state.running || state.gameOver) break
-                        }
+                val toApply = inputBuffer.drain()
+                if (toApply.size > 0) {
+                    for (k in toApply) {
+                        applyKeyInput(state, k)
+                        if (!state.running || state.gameOver) break
                     }
                 }
                 if (!state.running || state.gameOver) {

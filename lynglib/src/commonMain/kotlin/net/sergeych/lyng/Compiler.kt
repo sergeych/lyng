@@ -4674,6 +4674,7 @@ class Compiler(
                 ?: nameObjClass[ref.name]
                 ?: resolveClassByName(ref.name)
         }
+        is ImplicitThisMemberRef -> resolveReceiverClassForMember(ref)
         is ClassScopeMemberRef -> {
             val targetClass = resolveClassByName(ref.ownerClassName()) ?: return null
             inferFieldReturnClass(targetClass, ref.name)
@@ -4728,6 +4729,15 @@ class Compiler(
             is FastLocalVarRef -> nameTypeDecl[ref.name]
                 ?: lookupLocalTypeDeclByName(ref.name)
                 ?: seedTypeDeclByName(ref.name)
+            is ImplicitThisMemberRef -> {
+                val typeName = ref.preferredThisTypeName() ?: currentImplicitThisTypeName()
+                val targetClass = typeName?.let { resolveClassByName(it) } ?: return null
+                targetClass.getInstanceMemberOrNull(ref.name, includeAbstract = true)?.typeDecl?.let { return it }
+                classFieldTypesByName[targetClass.className]?.get(ref.name)
+                    ?.let { return TypeDecl.Simple(it.className, false) }
+                classMethodReturnTypeDeclByName[targetClass.className]?.get(ref.name)?.let { return it }
+                null
+            }
             is FieldRef -> {
                 val targetDecl = resolveReceiverTypeDecl(ref.target) ?: return null
                 val targetClass = resolveTypeDeclObjClass(targetDecl) ?: resolveReceiverClassForMember(ref.target)
@@ -7388,6 +7398,15 @@ class Compiler(
                 val mutable = param.accessType?.isMutable ?: false
                 declareSlotNameIn(classSlotPlan, param.name, mutable, isDelegated = false)
             }
+            constructorArgsDeclaration?.let { ctorDecl ->
+                val classParamTypeMap = slotTypeByScopeId.getOrPut(classSlotPlan.id) { mutableMapOf() }
+                val classParamTypeDeclMap = slotTypeDeclByScopeId.getOrPut(classSlotPlan.id) { mutableMapOf() }
+                for (param in ctorDecl.params) {
+                    val slot = classSlotPlan.slots[param.name]?.index ?: continue
+                    classParamTypeDeclMap[slot] = param.type
+                    resolveTypeDeclObjClass(param.type)?.let { classParamTypeMap[slot] = it }
+                }
+            }
             val ctorForcedLocalSlots = LinkedHashMap<String, Int>()
             if (constructorArgsDeclaration != null) {
                 val ctorDecl = constructorArgsDeclaration
@@ -8873,6 +8892,7 @@ class Compiler(
                 val targetClass = resolveReceiverClassForMember(directRef.target)
                 inferFieldReturnClass(targetClass, directRef.name)
             }
+            is ImplicitThisMemberRef -> resolveReceiverClassForMember(directRef)
             is CallRef -> {
                 val target = directRef.target
                 when {

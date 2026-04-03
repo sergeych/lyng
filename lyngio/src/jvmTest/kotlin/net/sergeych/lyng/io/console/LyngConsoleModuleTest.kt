@@ -22,16 +22,14 @@ import net.sergeych.lyng.ExecutionError
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.obj.ObjBool
 import net.sergeych.lyng.obj.ObjIllegalOperationException
+import net.sergeych.lyngio.console.*
 import net.sergeych.lyngio.console.security.ConsoleAccessOp
 import net.sergeych.lyngio.console.security.ConsoleAccessPolicy
 import net.sergeych.lyngio.console.security.PermitAllConsoleAccessPolicy
 import net.sergeych.lyngio.fs.security.AccessContext
 import net.sergeych.lyngio.fs.security.AccessDecision
 import net.sergeych.lyngio.fs.security.Decision
-import kotlin.test.Test
-import kotlin.test.assertFalse
-import kotlin.test.assertIs
-import kotlin.test.assertTrue
+import kotlin.test.*
 
 class LyngConsoleModuleTest {
 
@@ -111,5 +109,64 @@ class LyngConsoleModuleTest {
 
         assertIs<ObjIllegalOperationException>(error.errorObject)
         }
+    }
+
+    @Test
+    fun eventsIteratorRecoversAfterSourceFailure() = runBlocking {
+        val scope = newScope()
+        var eventsCalls = 0
+        val console = object : LyngConsole {
+            override val isSupported: Boolean = true
+
+            override suspend fun isTty(): Boolean = true
+
+            override suspend fun geometry(): ConsoleGeometry? = null
+
+            override suspend fun ansiLevel(): ConsoleAnsiLevel = ConsoleAnsiLevel.NONE
+
+            override suspend fun write(text: String) {}
+
+            override suspend fun flush() {}
+
+            override fun events(): ConsoleEventSource {
+                eventsCalls += 1
+                val callNo = eventsCalls
+                return object : ConsoleEventSource {
+                    private var emitted = false
+
+                    override suspend fun nextEvent(timeoutMs: Long): ConsoleEvent? {
+                        if (emitted) return null
+                        emitted = true
+                        return when (callNo) {
+                            1 -> throw IllegalStateException("synthetic source failure")
+                            else -> ConsoleEvent.KeyDown(key = "x")
+                        }
+                    }
+
+                    override suspend fun close() {}
+                }
+            }
+
+            override suspend fun setRawMode(enabled: Boolean): Boolean = enabled
+        }
+
+        assertTrue(createConsoleModule(PermitAllConsoleAccessPolicy, scope.importManager, console))
+
+        val result = scope.eval(
+            """
+            import lyng.io.console
+
+            val it = Console.events().iterator()
+            assert(it.hasNext())
+            val ev = it.next()
+            assert(ev is ConsoleKeyEvent)
+            assert((ev as ConsoleKeyEvent).key == "x")
+            true
+            """.trimIndent()
+        )
+
+        assertIs<ObjBool>(result)
+        assertTrue(result.value)
+        assertEquals(2, eventsCalls)
     }
 }

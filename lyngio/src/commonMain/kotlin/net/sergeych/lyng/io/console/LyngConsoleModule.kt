@@ -17,6 +17,7 @@
 
 package net.sergeych.lyng.io.console
 
+import kotlinx.coroutines.delay
 import net.sergeych.lyng.ModuleScope
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.ScopeFacade
@@ -58,18 +59,31 @@ fun createConsoleModule(policy: ConsoleAccessPolicy, manager: ImportManager): Bo
     if (manager.packageNames.contains(CONSOLE_MODULE_NAME)) return false
 
     manager.addPackage(CONSOLE_MODULE_NAME) { module ->
-        buildConsoleModule(module, policy)
+        buildConsoleModule(module, policy, getSystemConsole())
     }
     return true
 }
 
 fun createConsole(policy: ConsoleAccessPolicy, manager: ImportManager): Boolean = createConsoleModule(policy, manager)
 
-private suspend fun buildConsoleModule(module: ModuleScope, policy: ConsoleAccessPolicy) {
+internal fun createConsoleModule(
+    policy: ConsoleAccessPolicy,
+    manager: ImportManager,
+    console: LyngConsole,
+): Boolean {
+    if (manager.packageNames.contains(CONSOLE_MODULE_NAME)) return false
+
+    manager.addPackage(CONSOLE_MODULE_NAME) { module ->
+        buildConsoleModule(module, policy, console)
+    }
+    return true
+}
+
+private suspend fun buildConsoleModule(module: ModuleScope, policy: ConsoleAccessPolicy, baseConsole: LyngConsole) {
     // Load Lyng declarations for console enums/types first (module-local source of truth).
     module.eval(Source(CONSOLE_MODULE_NAME, consoleLyng))
     ConsoleEnums.initialize(module)
-    val console: LyngConsole = LyngConsoleSecured(getSystemConsole(), policy)
+    val console: LyngConsole = LyngConsoleSecured(baseConsole, policy)
 
     val consoleType = object : net.sergeych.lyng.obj.ObjClass("Console") {}
 
@@ -179,7 +193,7 @@ private suspend fun buildConsoleModule(module: ModuleScope, policy: ConsoleAcces
 
         addClassFn("events") {
             consoleGuard {
-                console.events().toConsoleEventStream()
+                ObjConsoleEventStream { console.events() }
             }
         }
 
@@ -210,12 +224,8 @@ private suspend inline fun ScopeFacade.consoleGuard(crossinline block: suspend (
     }
 }
 
-private fun ConsoleEventSource.toConsoleEventStream(): ObjConsoleEventStream {
-    return ObjConsoleEventStream(this)
-}
-
 private class ObjConsoleEventStream(
-    private val source: ConsoleEventSource,
+    private val sourceFactory: () -> ConsoleEventSource,
 ) : Obj() {
     override val objClass: net.sergeych.lyng.obj.ObjClass
         get() = type
@@ -224,35 +234,61 @@ private class ObjConsoleEventStream(
         val type = net.sergeych.lyng.obj.ObjClass("ConsoleEventStream", ObjIterable).apply {
             addFn("iterator") {
                 val stream = thisAs<ObjConsoleEventStream>()
-                ObjConsoleEventIterator(stream.source)
+                ObjConsoleEventIterator(stream.sourceFactory)
             }
         }
     }
 }
 
 private class ObjConsoleEventIterator(
-    private val source: ConsoleEventSource,
+    private val sourceFactory: () -> ConsoleEventSource,
 ) : Obj() {
     private var cached: Obj? = null
     private var closed = false
+    private var source: ConsoleEventSource? = null
 
     override val objClass: net.sergeych.lyng.obj.ObjClass
         get() = type
+
+    private fun ensureSource(): ConsoleEventSource {
+        val current = source
+        if (current != null) return current
+        return sourceFactory().also { source = it }
+    }
+
+    private suspend fun recycleSource(reason: String, error: Throwable? = null) {
+        if (error != null) {
+            consoleFlowDebug(reason, error)
+        } else {
+            consoleFlowDebug(reason)
+        }
+        val current = source
+        source = null
+        runCatching { current?.close() }
+            .onFailure { consoleFlowDebug("console-bridge: failed to close recycled source", it) }
+        if (!closed) delay(25)
+    }
 
     private suspend fun ensureCached(): Boolean {
         if (closed) return false
         if (cached != null) return true
         while (!closed && cached == null) {
-            val event = try {
-                source.nextEvent()
+            val currentSource = try {
+                ensureSource()
             } catch (e: Throwable) {
-                // Consumer loops must survive source/read failures: report and keep polling.
-                consoleFlowDebug("console-bridge: nextEvent failed; dropping failure and continuing", e)
+                recycleSource("console-bridge: source creation failed; retrying", e)
+                continue
+            }
+            val event = try {
+                currentSource.nextEvent()
+            } catch (e: Throwable) {
+                // Consumer loops must survive source/read failures: rebuild the source and keep polling.
+                recycleSource("console-bridge: nextEvent failed; recycling source", e)
                 continue
             }
             if (event == null) {
-                closeSource()
-                return false
+                recycleSource("console-bridge: source ended; recreating")
+                continue
             }
             cached = try {
                 event.toObjEvent()
@@ -268,10 +304,10 @@ private class ObjConsoleEventIterator(
     private suspend fun closeSource() {
         if (closed) return
         closed = true
-        // Do not close the underlying console source from VM iterator cancellation.
-        // CmdFrame.cancelIterators() may call cancelIteration() while user code is still
-        // expected to keep processing input (e.g. recover from app-level exceptions).
-        // The source lifecycle is managed by the console runtime.
+        val current = source
+        source = null
+        runCatching { current?.close() }
+            .onFailure { consoleFlowDebug("console-bridge: failed to close iterator source", it) }
     }
 
     suspend fun hasNext(): Boolean = ensureCached()

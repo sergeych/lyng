@@ -36,6 +36,97 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
+internal object JvmConsoleKeyDecoder {
+    fun decode(firstCode: Int, nextCode: (Long) -> Int?): ConsoleEvent.KeyDown {
+        if (firstCode == 27) {
+            val next = nextCode(25L)
+            if (next == null || next < 0) {
+                return key("Escape")
+            }
+            if (next == '['.code || next == 'O'.code) {
+                val sb = StringBuilder()
+                sb.append(next.toChar())
+                var i = 0
+                while (i < 6) {
+                    val c = nextCode(25L) ?: break
+                    if (c < 0) break
+                    sb.append(c.toChar())
+                    if (c.toChar().isLetter() || c == '~'.code) break
+                    i += 1
+                }
+                return keyFromAnsiSequence(sb.toString()) ?: key("Escape")
+            }
+            val base = decodePlainKey(next)
+            return ConsoleEvent.KeyDown(
+                key = base.key,
+                code = base.code,
+                ctrl = base.ctrl,
+                alt = true,
+                shift = base.shift,
+                meta = false,
+            )
+        }
+        return decodePlainKey(firstCode)
+    }
+
+    private fun decodePlainKey(code: Int): ConsoleEvent.KeyDown = when (code) {
+        3 -> key("c", ctrl = true)
+        9 -> key("Tab")
+        10, 13 -> key("Enter")
+        127, 8 -> key("Backspace")
+        32 -> key(" ")
+        else -> {
+            if (code in 1..26) {
+                val ch = ('a'.code + code - 1).toChar().toString()
+                key(ch, ctrl = true)
+            } else {
+                val ch = code.toChar().toString()
+                key(ch, shift = ch.length == 1 && ch[0].isLetter() && ch[0].isUpperCase())
+            }
+        }
+    }
+
+    private fun keyFromAnsiSequence(seq: String): ConsoleEvent.KeyDown? {
+        val shift = seq.contains(";2")
+        val alt = seq.contains(";3")
+        val ctrl = seq.contains(";5")
+        val key = when {
+            seq.endsWith("A") -> "ArrowUp"
+            seq.endsWith("B") -> "ArrowDown"
+            seq.endsWith("C") -> "ArrowRight"
+            seq.endsWith("D") -> "ArrowLeft"
+            seq.endsWith("H") -> "Home"
+            seq.endsWith("F") -> "End"
+            seq.endsWith("~") -> when (seq.substringAfter('[').substringBefore(';').substringBefore('~')) {
+                "2" -> "Insert"
+                "3" -> "Delete"
+                "5" -> "PageUp"
+                "6" -> "PageDown"
+                else -> null
+            }
+            else -> null
+        } ?: return null
+        return key(key, ctrl = ctrl, alt = alt, shift = shift)
+    }
+
+    private fun key(
+        value: String,
+        ctrl: Boolean = false,
+        alt: Boolean = false,
+        shift: Boolean = false,
+    ): ConsoleEvent.KeyDown {
+        require(value.isNotEmpty()) { "ConsoleEvent.KeyDown.key must never be empty" }
+        return ConsoleEvent.KeyDown(
+            key = value,
+            code = null,
+            ctrl = ctrl,
+            alt = alt,
+            shift = shift,
+            meta = false,
+        )
+    }
+}
+
 /**
  * JVM console implementation:
  * - output/capabilities/input use a single JLine terminal instance
@@ -508,40 +599,7 @@ object JvmLyngConsole : LyngConsole {
         val code = reader.read(120L)
         if (code == NonBlockingReader.READ_EXPIRED) return null
         if (code < 0) throw EOFException("non-blocking reader returned EOF")
-        return decodeKey(code) { timeout -> readNextCode(reader, timeout) }
-    }
-
-    private fun decodeKey(code: Int, nextCode: (Long) -> Int?): ConsoleEvent.KeyDown {
-        if (code == 27) {
-            val next = nextCode(25L)
-            if (next == null || next < 0) {
-                return key("Escape")
-            }
-            if (next == '['.code || next == 'O'.code) {
-                val sb = StringBuilder()
-                sb.append(next.toChar())
-                var i = 0
-                while (i < 6) {
-                    val c = nextCode(25L) ?: break
-                    if (c < 0) break
-                    sb.append(c.toChar())
-                    if (c.toChar().isLetter() || c == '~'.code) break
-                    i += 1
-                }
-                return keyFromAnsiSequence(sb.toString()) ?: key("Escape")
-            }
-            // Alt+key
-            val base = decodePlainKey(next)
-            return ConsoleEvent.KeyDown(
-                key = base.key,
-                code = base.code,
-                ctrl = base.ctrl,
-                alt = true,
-                shift = base.shift,
-                meta = false
-            )
-        }
-        return decodePlainKey(code)
+        return JvmConsoleKeyDecoder.decode(code) { timeout -> readNextCode(reader, timeout) }
     }
 
     private fun readNextCode(reader: NonBlockingReader, timeoutMs: Long): Int? {
@@ -549,54 +607,5 @@ object JvmLyngConsole : LyngConsole {
         if (c == NonBlockingReader.READ_EXPIRED) return null
         if (c < 0) throw EOFException("non-blocking reader returned EOF while decoding key sequence")
         return c
-    }
-
-
-    private fun decodePlainKey(code: Int): ConsoleEvent.KeyDown = when (code) {
-        3 -> key("c", ctrl = true)
-        9 -> key("Tab")
-        10, 13 -> key("Enter")
-        127, 8 -> key("Backspace")
-        32 -> key(" ")
-        else -> {
-            if (code in 1..26) {
-                val ch = ('a'.code + code - 1).toChar().toString()
-                key(ch, ctrl = true)
-            } else {
-                val ch = code.toChar().toString()
-                key(ch, shift = ch.length == 1 && ch[0].isLetter() && ch[0].isUpperCase())
-            }
-        }
-    }
-
-    private fun keyFromAnsiSequence(seq: String): ConsoleEvent.KeyDown? = when (seq) {
-        "[A", "OA" -> key("ArrowUp")
-        "[B", "OB" -> key("ArrowDown")
-        "[C", "OC" -> key("ArrowRight")
-        "[D", "OD" -> key("ArrowLeft")
-        "[H", "OH" -> key("Home")
-        "[F", "OF" -> key("End")
-        "[2~" -> key("Insert")
-        "[3~" -> key("Delete")
-        "[5~" -> key("PageUp")
-        "[6~" -> key("PageDown")
-        else -> null
-    }
-
-    private fun key(
-        value: String,
-        ctrl: Boolean = false,
-        alt: Boolean = false,
-        shift: Boolean = false,
-    ): ConsoleEvent.KeyDown {
-        require(value.isNotEmpty()) { "ConsoleEvent.KeyDown.key must never be empty" }
-        return ConsoleEvent.KeyDown(
-            key = value,
-            code = null,
-            ctrl = ctrl,
-            alt = alt,
-            shift = shift,
-            meta = false
-        )
     }
 }
