@@ -116,6 +116,7 @@ Primary sources used: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/{Parser,T
   - shorthand: `fun f(x) = expr`.
   - generics: `fun f<T>(x: T): T`.
   - extension functions: `fun Type.name(...) { ... }`.
+  - static extension functions are callable on the type object: `static fun List<T>.fill(...)` -> `List.fill(...)`.
   - delegated callable: `fun f(...) by delegate`.
 - Type aliases:
   - `type Name = TypeExpr`

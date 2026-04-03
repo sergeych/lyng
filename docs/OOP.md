@@ -1020,6 +1020,14 @@ For example, we want to create an extension method that would test if a value ca
         assert( ! "5.2".isInteger() )
         >>> void
 
+Extension methods normally act like instance members. If declared as `static`, they are called on the type object itself:
+
+```lyng
+static fun List<T>.fill(size: Int, block: (Int)->T): List<T> { ... }
+
+val tens = List.fill(5) { it * 10 }
+```
+
 ## Extension properties
 
 Just like methods, you can extend existing classes with properties. These can be defined using simple initialization (for `val` only) or with custom accessors.

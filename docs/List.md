@@ -45,6 +45,16 @@ You can concatenate lists or iterable objects:
     assert( [4,5] + (1..3) == [4, 5, 1, 2, 3])
     >>> void
 
+## Constructing lists
+
+Besides literals, you can build a list by size using `List.fill`:
+
+    val squares = List.fill(5) { i -> i * i }
+    assertEquals([0, 1, 4, 9, 16], squares)
+    >>> void
+
+`List.fill(size) { ... }` calls the block once for each index from `0` to `size - 1` and returns a new mutable list.
+
 ## Appending
 
 To append to lists, use `+=` with elements, lists and any [Iterable] instances, but beware it will
@@ -164,6 +174,7 @@ List could be sorted in place, just like [Collection] provide sorted copies, in 
 | `[index]`                     | get or set element at index                  | Int         |
 | `[Range]`                     | get slice of the array (copy)                | Range       |
 | `+=`                          | append element(s) (2)                        | List or Obj |
+| `List.fill(size, block)`      | build a new list from indices `0..<size`     | Int, Callable |
 | `sort()`                      | in-place sort, natural order                 | void        |
 | `sortBy(predicate)`           | in-place sort bu `predicate` call result (3) | void        |
 | `sortWith(comparator)`        | in-place sort using `comarator` function (4) | void        |

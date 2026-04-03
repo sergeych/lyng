@@ -811,6 +811,12 @@ Lyng has built-in mutable array class `List` with simple literals:
 many collection based methods are implemented there.
 For immutable list values, use `list.toImmutable()` and [ImmutableList].
 
+To construct a list programmatically, use the static helper `List.fill`:
+
+    val tens = List.fill(5) { index -> index * 10 }
+    assertEquals([0, 10, 20, 30, 40], tens)
+    >>> void
+
 Lists can contain any type of objects, lists too:
 
     val list = [1, [2, 3], 4]

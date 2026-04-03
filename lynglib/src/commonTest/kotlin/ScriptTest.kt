@@ -4022,6 +4022,14 @@ class ScriptTest {
     }
 
     @Test
+    fun testListFill() = runTest {
+        eval("""
+            val x = List.fill(5) { it*10 }
+            assertEquals( [0,10,20,30,40], x)
+        """.trimIndent())
+    }
+
+    @Test
     fun binarySearchTest() = runTest {
         eval(
             """

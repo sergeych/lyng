@@ -46,7 +46,8 @@ Sources: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Script.kt`, `lynglib/s
 - Iteration/filtering: `forEach`, `filter`, `filterFlow`, `filterNotNull`, `filterFlowNotNull`, `drop`, `dropLast`, `takeLast`.
 - Search/predicates: `findFirst`, `findFirstOrNull`, `any`, `all`, `count`, `first`, `last`.
 - Mapping/aggregation: `map`, `flatMap`, `flatten`, `sum`, `sumOf`, `minOf`, `maxOf`.
-- Ordering: `sorted`, `sortedBy`, `shuffled`, `List.sort`, `List.sortBy`.
+- Ordering and list building: `sorted`, `sortedBy`, `shuffled`, `List.sort`, `List.sortBy`, `List.fill`.
+  - `List.fill(size) { index -> ... }` constructs a new `List<T>` by evaluating the block once per index from `0` to `size - 1`.
 - String helper: `joinToString`, `String.re`.
 
 ### 4.3 Delegation helpers

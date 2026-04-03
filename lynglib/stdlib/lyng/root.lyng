@@ -422,6 +422,13 @@ fun List<T>.sort(): void {
     sortWith { a, b -> a <=> b }
 }
 
+/* Build a new list of `size` elements by calling `block(index)` for each index. */
+static fun List<T>.fill(size: Int, block: (Int)->T): List<T> {
+    val result = List<T>()
+    for( i in 0..<size ) result += block(i)
+    result
+}
+
 /* Print this exception and its stack trace to standard output. */
 fun Exception.printStackTrace(): void {
     println(this)

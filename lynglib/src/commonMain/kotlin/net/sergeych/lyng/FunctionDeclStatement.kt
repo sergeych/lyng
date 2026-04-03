@@ -169,18 +169,29 @@ internal suspend fun executeFunctionDecl(
     spec.extTypeName?.let { typeName ->
         val type = scope[typeName]?.value ?: scope.raiseSymbolNotFound("class $typeName not found")
         if (type !is ObjClass) scope.raiseClassCastError("$typeName is not the class instance")
-        scope.addExtension(
-            type,
-            spec.name,
-            ObjRecord(
+        if (spec.isStatic) {
+            type.createClassField(
+                spec.name,
                 compiledFnBody,
                 isMutable = false,
                 visibility = spec.visibility,
-                declaringClass = null,
+                pos = spec.startPos,
                 type = ObjRecord.Type.Fun,
-                typeDecl = spec.typeDecl
             )
-        )
+        } else {
+            scope.addExtension(
+                type,
+                spec.name,
+                ObjRecord(
+                    compiledFnBody,
+                    isMutable = false,
+                    visibility = spec.visibility,
+                    declaringClass = null,
+                    type = ObjRecord.Type.Fun,
+                    typeDecl = spec.typeDecl
+                )
+            )
+        }
         val wrapperName = spec.extensionWrapperName ?: extensionCallableName(typeName, spec.name)
         val wrapper = ObjExtensionMethodCallable(spec.name, compiledFnBody)
         scope.addItem(

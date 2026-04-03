@@ -4359,6 +4359,7 @@ class Compiler(
             is ListLiteralRef -> inferListLiteralTypeDecl(ref)
             is MapLiteralRef -> inferMapLiteralTypeDecl(ref)
             is ConstRef -> inferTypeDeclFromConst(ref.constValue)
+            is RangeRef -> TypeDecl.Simple("Range", false)
             is CallRef -> {
                 val targetDecl = resolveReceiverTypeDecl(ref.target) ?: seedTypeDeclFromRef(ref.target)
                 val targetName = when (val target = ref.target) {
@@ -4394,6 +4395,7 @@ class Compiler(
         is ObjString -> TypeDecl.Simple("String", false)
         is ObjBool -> TypeDecl.Simple("Bool", false)
         is ObjChar -> TypeDecl.Simple("Char", false)
+        is ObjRange -> TypeDecl.Simple("Range", false)
         is ObjNull -> TypeDecl.TypeNullableAny
         is ObjList -> TypeDecl.Generic("List", listOf(TypeDecl.TypeAny), false)
         is ObjMap -> TypeDecl.Generic("Map", listOf(TypeDecl.TypeAny, TypeDecl.TypeAny), false)
@@ -8714,7 +8716,7 @@ class Compiler(
                 startPos = start
             )
             val declaredFn = FunctionDeclStatement(spec)
-            if (isStatic) {
+            if (isStatic && parentIsClassBody) {
                 currentInitScope += declaredFn
                 NopStatement
             } else
