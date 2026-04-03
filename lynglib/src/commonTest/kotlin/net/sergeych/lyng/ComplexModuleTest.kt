@@ -86,6 +86,7 @@ class ComplexModuleTest {
         """.trimIndent()
         )
     }
+
     @Test
     fun testDecimalInferences() = runTest {
         eval(

@@ -4346,7 +4346,7 @@ class Compiler(
             is MapLiteralRef -> inferMapLiteralTypeDecl(ref)
             is ConstRef -> inferTypeDeclFromConst(ref.constValue)
             is CallRef -> {
-                val targetDecl = resolveReceiverTypeDecl(ref.target)
+                val targetDecl = resolveReceiverTypeDecl(ref.target) ?: seedTypeDeclFromRef(ref.target)
                 val targetName = when (val target = ref.target) {
                     is LocalVarRef -> target.name
                     is FastLocalVarRef -> target.name
@@ -4354,8 +4354,9 @@ class Compiler(
                     else -> null
                 }
                 if (targetDecl is TypeDecl.Function) {
-                    return targetDecl.returnType
+                    return inferCallReturnTypeDecl(ref) ?: targetDecl.returnType
                 }
+                inferCallReturnTypeDecl(ref)?.let { return it }
                 if (targetName != null) {
                     callableReturnTypeDeclByName[targetName]?.let { return it }
                     (seedTypeDeclByName(targetName) as? TypeDecl.Function)?.let { return it.returnType }
@@ -4745,7 +4746,7 @@ class Compiler(
                 classMethodReturnTypeDecl(targetClass, "getAt")
             }
             is MethodCallRef -> methodReturnTypeDeclByRef[ref]
-            is CallRef -> callReturnTypeDeclByRef[ref]
+            is CallRef -> callReturnTypeDeclByRef[ref] ?: inferCallReturnTypeDecl(ref)
             is BinaryOpRef -> inferBinaryOpReturnTypeDecl(ref)
             is StatementRef -> (ref.statement as? ExpressionStatement)?.let { resolveReceiverTypeDecl(it.ref) }
             else -> null
@@ -4811,7 +4812,7 @@ class Compiler(
             is ImplicitThisMethodCallRef -> inferMethodCallReturnClass(ref.methodName())
             is ThisMethodSlotCallRef -> inferMethodCallReturnClass(ref.methodName())
             is QualifiedThisMethodSlotCallRef -> inferMethodCallReturnClass(ref.methodName())
-            is CallRef -> inferCallReturnClass(ref)
+            is CallRef -> inferCallReturnTypeDecl(ref)?.let { resolveTypeDeclObjClass(it) } ?: inferCallReturnClass(ref)
             is BinaryOpRef -> inferBinaryOpReturnClass(ref)
             is FieldRef -> {
                 val targetClass = resolveReceiverClassForMember(ref.target)
@@ -5478,12 +5479,45 @@ class Compiler(
         args: List<ParsedArgument>,
         pos: Pos
     ) {
+        lookupNamedFunctionDecl(target)?.let { decl ->
+            val hasComplexArgs = args.any { it.name != null } ||
+                decl.typeParams.isNotEmpty() ||
+                decl.params.any { it.defaultValue != null || it.isEllipsis }
+            if (hasComplexArgs) return
+            if (args.any { it.isSplat }) return
+            val actual = args.size
+            val params = decl.params
+            val ellipsisIndex = params.indexOfFirst { it.isEllipsis }
+            if (ellipsisIndex < 0) {
+                val minArgs = params.count { it.defaultValue == null }
+                val maxArgs = params.size
+                if (actual < minArgs || actual > maxArgs) {
+                    val message = if (minArgs == maxArgs) {
+                        "expected $maxArgs arguments, got $actual"
+                    } else {
+                        "expected $minArgs..$maxArgs arguments, got $actual"
+                    }
+                    throw ScriptError(pos, message)
+                }
+                return
+            }
+            val headRequired = (0 until ellipsisIndex).count { params[it].defaultValue == null }
+            val tailRequired = (ellipsisIndex + 1 until params.size).count { params[it].defaultValue == null }
+            val minArgs = headRequired + tailRequired
+            if (actual < minArgs) {
+                throw ScriptError(pos, "expected at least $minArgs arguments, got $actual")
+            }
+            return
+        }
+        val seededCallable = lookupNamedCallableRecord(target)
+        if (seededCallable != null && seededCallable.type == ObjRecord.Type.Fun && seededCallable.value !is ObjExternCallable) {
+            return
+        }
         val decl = (resolveReceiverTypeDecl(target) as? TypeDecl.Function)
             ?: seedTypeDeclFromRef(target) as? TypeDecl.Function
             ?: return
         if (args.any { it.isSplat }) return
         val actual = args.size
-        val receiverCount = if (decl.receiver != null) 1 else 0
         val paramList = mutableListOf<TypeDecl>()
         decl.receiver?.let { paramList += it }
         paramList += decl.params
@@ -5512,6 +5546,91 @@ class Compiler(
         } ?: return null
         seedScope?.getLocalRecordDirect(name)?.typeDecl?.let { return it }
         return seedScope?.get(name)?.typeDecl
+            ?: importManager.rootScope.getLocalRecordDirect(name)?.typeDecl
+            ?: importManager.rootScope.get(name)?.typeDecl
+    }
+
+    private fun lookupNamedFunctionDecl(target: ObjRef): GenericFunctionDecl? {
+        val name = when (target) {
+            is LocalVarRef -> target.name
+            is LocalSlotRef -> target.name
+            is FastLocalVarRef -> target.name
+            else -> null
+        } ?: return null
+        return lookupGenericFunctionDecl(name)
+    }
+
+    private fun lookupNamedCallableRecord(target: ObjRef): ObjRecord? {
+        val name = when (target) {
+            is LocalVarRef -> target.name
+            is LocalSlotRef -> target.name
+            is FastLocalVarRef -> target.name
+            else -> null
+        } ?: return null
+        findSeedScopeRecord(name)?.let { return it }
+        importManager.rootScope.getLocalRecordDirect(name)?.let { return it }
+        importManager.rootScope.get(name)?.let { return it }
+        for (module in importedModules.asReversed()) {
+            module.scope.get(name)?.let { return it }
+        }
+        return null
+    }
+
+    private fun inferCallReturnTypeDecl(ref: CallRef): TypeDecl? {
+        callReturnTypeDeclByRef[ref]?.let { return it }
+        val targetDecl = (resolveReceiverTypeDecl(ref.target) ?: seedTypeDeclFromRef(ref.target)) as? TypeDecl.Function
+            ?: return null
+        val bindings = mutableMapOf<String, TypeDecl>()
+        val paramList = mutableListOf<TypeDecl>()
+        targetDecl.receiver?.let { paramList += it }
+        paramList += targetDecl.params
+
+        fun argTypeDecl(arg: ParsedArgument): TypeDecl? {
+            val stmt = arg.value as? ExpressionStatement ?: return null
+            val directRef = stmt.ref
+            return inferTypeDeclFromRef(directRef)
+                ?: inferObjClassFromRef(directRef)?.let { TypeDecl.Simple(it.className, false) }
+        }
+
+        val ellipsisIndex = paramList.indexOfFirst { it is TypeDecl.Ellipsis }
+        if (ellipsisIndex < 0) {
+            val limit = minOf(paramList.size, ref.args.size)
+            for (i in 0 until limit) {
+                val argType = argTypeDecl(ref.args[i]) ?: continue
+                collectTypeVarBindings(paramList[i], argType, bindings)
+            }
+        } else {
+            val headCount = ellipsisIndex
+            val tailCount = paramList.size - ellipsisIndex - 1
+            val argCount = ref.args.size
+            val headLimit = minOf(headCount, argCount)
+            for (i in 0 until headLimit) {
+                val argType = argTypeDecl(ref.args[i]) ?: continue
+                collectTypeVarBindings(paramList[i], argType, bindings)
+            }
+            val tailStartArg = maxOf(headCount, argCount - tailCount)
+            for (i in tailStartArg until argCount) {
+                val paramIndex = paramList.size - (argCount - i)
+                val argType = argTypeDecl(ref.args[i]) ?: continue
+                collectTypeVarBindings(paramList[paramIndex], argType, bindings)
+            }
+            val ellipsisArgEnd = argCount - tailCount
+            val ellipsisType = paramList[ellipsisIndex] as TypeDecl.Ellipsis
+            for (i in headCount until ellipsisArgEnd) {
+                val argType = if (ref.args[i].isSplat) {
+                    val stmt = ref.args[i].value as? ExpressionStatement
+                    stmt?.ref?.let { inferElementTypeFromSpread(it) }
+                } else {
+                    argTypeDecl(ref.args[i])
+                } ?: continue
+                collectTypeVarBindings(ellipsisType.elementType, argType, bindings)
+            }
+        }
+
+        val inferred = if (bindings.isEmpty()) targetDecl.returnType
+        else substituteTypeAliasTypeVars(targetDecl.returnType, bindings)
+        callReturnTypeDeclByRef[ref] = inferred
+        return inferred
     }
 
     private fun checkFunctionTypeCallTypes(
@@ -5519,6 +5638,102 @@ class Compiler(
         args: List<ParsedArgument>,
         pos: Pos
     ) {
+        lookupNamedFunctionDecl(target)?.let { decl ->
+            val hasComplexArgs = args.any { it.name != null } ||
+                decl.typeParams.isNotEmpty() ||
+                decl.params.any { it.defaultValue != null || it.isEllipsis }
+            if (hasComplexArgs) return
+            val paramList = decl.params.map { if (it.isEllipsis) TypeDecl.Ellipsis(it.type) else it.type }
+            if (paramList.isEmpty()) return
+            val ellipsisIndex = decl.params.indexOfFirst { it.isEllipsis }
+            fun argTypeDecl(arg: ParsedArgument): TypeDecl? {
+                val stmt = arg.value as? ExpressionStatement ?: return null
+                val ref = stmt.ref
+                return inferTypeDeclFromRef(ref)
+                    ?: inferObjClassFromRef(ref)?.let { TypeDecl.Simple(it.className, false) }
+            }
+            fun typeDeclSubtypeOf(arg: TypeDecl, param: TypeDecl): Boolean {
+                if (param == TypeDecl.TypeAny || param == TypeDecl.TypeNullableAny) return true
+                val (argBase, argNullable) = stripNullable(arg)
+                val (paramBase, paramNullable) = stripNullable(param)
+                if (argNullable && !paramNullable) return false
+                if (paramBase == TypeDecl.TypeAny) return true
+                if (paramBase is TypeDecl.TypeVar) return true
+                if (argBase is TypeDecl.TypeVar) return true
+                if (paramBase is TypeDecl.Simple && (paramBase.name == "Object" || paramBase.name == "Obj")) return true
+                if (argBase is TypeDecl.Ellipsis) return typeDeclSubtypeOf(argBase.elementType, paramBase)
+                if (paramBase is TypeDecl.Ellipsis) return typeDeclSubtypeOf(argBase, paramBase.elementType)
+                return when (argBase) {
+                    is TypeDecl.Union -> argBase.options.all { typeDeclSubtypeOf(it, paramBase) }
+                    is TypeDecl.Intersection -> argBase.options.any { typeDeclSubtypeOf(it, paramBase) }
+                    else -> when (paramBase) {
+                        is TypeDecl.Union -> paramBase.options.any { typeDeclSubtypeOf(argBase, it) }
+                        is TypeDecl.Intersection -> paramBase.options.all { typeDeclSubtypeOf(argBase, it) }
+                        else -> {
+                            val argClass = resolveTypeDeclObjClass(argBase) ?: return false
+                            val paramClass = resolveTypeDeclObjClass(paramBase) ?: return false
+                            argClass == paramClass || argClass.allParentsSet.contains(paramClass)
+                        }
+                    }
+                }
+            }
+            fun fail(argPos: Pos, expected: TypeDecl, got: TypeDecl) {
+                throw ScriptError(argPos, "argument type ${typeDeclName(got)} does not match ${typeDeclName(expected)}")
+            }
+            if (ellipsisIndex < 0) {
+                val limit = minOf(paramList.size, args.size)
+                for (i in 0 until limit) {
+                    val arg = args[i]
+                    val argType = argTypeDecl(arg) ?: continue
+                    val paramType = paramList[i]
+                    if (!typeDeclSubtypeOf(argType, paramType)) {
+                        fail(arg.pos, paramType, argType)
+                    }
+                }
+                return
+            }
+            val headCount = ellipsisIndex
+            val tailCount = paramList.size - ellipsisIndex - 1
+            val ellipsisType = paramList[ellipsisIndex] as TypeDecl.Ellipsis
+            val argCount = args.size
+            val headLimit = minOf(headCount, argCount)
+            for (i in 0 until headLimit) {
+                val arg = args[i]
+                val argType = argTypeDecl(arg) ?: continue
+                val paramType = paramList[i]
+                if (!typeDeclSubtypeOf(argType, paramType)) {
+                    fail(arg.pos, paramType, argType)
+                }
+            }
+            val tailStartArg = maxOf(headCount, argCount - tailCount)
+            for (i in tailStartArg until argCount) {
+                val arg = args[i]
+                val paramType = paramList[paramList.size - (argCount - i)]
+                val argType = argTypeDecl(arg) ?: continue
+                if (!typeDeclSubtypeOf(argType, paramType)) {
+                    fail(arg.pos, paramType, argType)
+                }
+            }
+            val ellipsisArgEnd = argCount - tailCount
+            for (i in headCount until ellipsisArgEnd) {
+                val arg = args[i]
+                val argType = if (arg.isSplat) {
+                    val stmt = arg.value as? ExpressionStatement
+                    val ref = stmt?.ref
+                    ref?.let { inferElementTypeFromSpread(it) }
+                } else {
+                    argTypeDecl(arg)
+                } ?: continue
+                if (!typeDeclSubtypeOf(argType, ellipsisType.elementType)) {
+                    fail(arg.pos, ellipsisType.elementType, argType)
+                }
+            }
+            return
+        }
+        val seededCallable = lookupNamedCallableRecord(target)
+        if (seededCallable != null && seededCallable.type == ObjRecord.Type.Fun && seededCallable.value !is ObjExternCallable) {
+            return
+        }
         val decl = (resolveReceiverTypeDecl(target) as? TypeDecl.Function)
             ?: seedTypeDeclFromRef(target) as? TypeDecl.Function
             ?: return
@@ -8074,7 +8289,7 @@ class Compiler(
                     parseArgsDeclaration() ?: ArgsDeclaration(emptyList(), Token.Type.RPAREN)
                 } else ArgsDeclaration(emptyList(), Token.Type.RPAREN)
 
-            if (mergedTypeParamDecls.isNotEmpty() && declKind != SymbolKind.MEMBER) {
+            if (declKind != SymbolKind.MEMBER) {
                 currentGenericFunctionDecls()[name] = GenericFunctionDecl(mergedTypeParamDecls, argsDeclaration.params, nameStartPos)
             }
 
@@ -8096,6 +8311,9 @@ class Compiler(
             delegateExpression = parseExpression() ?: throw ScriptError(cc.current().pos, "Expected delegate expression")
             if (compileBytecode) {
                 delegateExpression = wrapFunctionBytecode(delegateExpression, "delegate@$name")
+            }
+            if (declKind != SymbolKind.MEMBER) {
+                currentGenericFunctionDecls().remove(name)
             }
         }
         if (isDelegated && declKind != SymbolKind.MEMBER) {
@@ -8441,6 +8659,12 @@ class Compiler(
                 parentIsClassBody = parentIsClassBody,
                 externCallSignature = externCallSignature,
                 annotation = annotation,
+                typeDecl = if (isDelegated) null else TypeDecl.Function(
+                    receiver = receiverTypeDecl,
+                    params = argsDeclaration.params.map { it.type },
+                    returnType = inferredReturnDecl ?: TypeDecl.TypeAny,
+                    nullable = false
+                ),
                 fnBody = fnBody,
                 closureBox = closureBox,
                 captureSlots = captureSlots,

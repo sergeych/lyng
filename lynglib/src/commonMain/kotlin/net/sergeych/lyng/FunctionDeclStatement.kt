@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Sergey S. Chernov
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,19 +12,12 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 package net.sergeych.lyng
 
-import net.sergeych.lyng.obj.Obj
-import net.sergeych.lyng.obj.ObjClass
-import net.sergeych.lyng.obj.ObjExternCallable
-import net.sergeych.lyng.obj.ObjExtensionMethodCallable
-import net.sergeych.lyng.obj.ObjInstance
-import net.sergeych.lyng.obj.ObjRecord
-import net.sergeych.lyng.obj.ObjString
-import net.sergeych.lyng.obj.ObjUnset
-import net.sergeych.lyng.obj.ObjVoid
+import net.sergeych.lyng.obj.*
 
 class FunctionClosureBox(
     var closure: Scope? = null,
@@ -50,6 +43,7 @@ data class FunctionDeclSpec(
     val parentIsClassBody: Boolean,
     val externCallSignature: CallSignature?,
     val annotation: (suspend (Scope, ObjString, Statement) -> Statement)?,
+    val typeDecl: TypeDecl?,
     val fnBody: Statement,
     val closureBox: FunctionClosureBox,
     val captureSlots: List<CaptureSlot>,
@@ -73,7 +67,8 @@ internal suspend fun executeFunctionDecl(
                 false,
                 value,
                 spec.visibility,
-                callSignature = existing.callSignature
+                callSignature = existing.callSignature,
+                typeDecl = spec.typeDecl
             )
             return value
         }
@@ -182,12 +177,20 @@ internal suspend fun executeFunctionDecl(
                 isMutable = false,
                 visibility = spec.visibility,
                 declaringClass = null,
-                type = ObjRecord.Type.Fun
+                type = ObjRecord.Type.Fun,
+                typeDecl = spec.typeDecl
             )
         )
         val wrapperName = spec.extensionWrapperName ?: extensionCallableName(typeName, spec.name)
         val wrapper = ObjExtensionMethodCallable(spec.name, compiledFnBody)
-        scope.addItem(wrapperName, false, wrapper, spec.visibility, recordType = ObjRecord.Type.Fun)
+        scope.addItem(
+            wrapperName,
+            false,
+            wrapper,
+            spec.visibility,
+            recordType = ObjRecord.Type.Fun,
+            typeDecl = spec.typeDecl
+        )
     } ?: run {
         val th = scope.thisObj
         if (!spec.isStatic && th is ObjClass) {
@@ -203,10 +206,18 @@ internal suspend fun executeFunctionDecl(
                 isClosed = spec.isClosed,
                 isOverride = spec.isOverride,
                 type = ObjRecord.Type.Fun,
-                methodId = spec.memberMethodId
+                methodId = spec.memberMethodId,
+                typeDecl = spec.typeDecl
             )
             val memberValue = cls.members[spec.name]?.value ?: compiledFnBody
-            scope.addItem(spec.name, false, memberValue, spec.visibility, callSignature = spec.externCallSignature)
+            scope.addItem(
+                spec.name,
+                false,
+                memberValue,
+                spec.visibility,
+                callSignature = spec.externCallSignature,
+                typeDecl = spec.typeDecl
+            )
             compiledFnBody
         } else {
             scope.addItem(
@@ -215,7 +226,8 @@ internal suspend fun executeFunctionDecl(
                 compiledFnBody,
                 spec.visibility,
                 recordType = ObjRecord.Type.Fun,
-                callSignature = spec.externCallSignature
+                callSignature = spec.externCallSignature,
+                typeDecl = spec.typeDecl
             )
         }
     }

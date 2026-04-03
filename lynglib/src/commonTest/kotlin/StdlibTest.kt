@@ -241,4 +241,136 @@ class StdlibTest {
             assertThrows(IllegalArgumentException) { Random.next(..) }
         """.trimIndent())
     }
+
+    @Test
+    fun testInference2() = runTest {
+        eval(
+            $$"""
+                val a = 10
+                val b = 3.0
+                val c = floor(a / b)
+                //assert(c is Real)
+                c.toInt()
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testStdlibGlobalFunctionInference() = runTest {
+        eval(
+            $$"""
+                val absInt = abs(-5)
+                assert(absInt is Int)
+                absInt.toInt()
+
+                val absReal = abs(-5.5)
+                assert(absReal is Real)
+                absReal.isNaN()
+
+                val floorInt = floor(7)
+                assert(floorInt is Int)
+                floorInt.toInt()
+
+                val floorReal = floor(7.9)
+                assert(floorReal is Real)
+                floorReal.toInt()
+
+                val ceilInt = ceil(7)
+                assert(ceilInt is Int)
+                ceilInt.toInt()
+
+                val ceilReal = ceil(7.1)
+                assert(ceilReal is Real)
+                ceilReal.toInt()
+
+                val roundInt = round(7)
+                assert(roundInt is Int)
+                roundInt.toInt()
+
+                val roundReal = round(7.4)
+                assert(roundReal is Real)
+                roundReal.toInt()
+
+                val sinValue = sin(1)
+                sinValue.isInfinite()
+                assert(sinValue is Real)
+
+                val cosValue = cos(1)
+                cosValue.isNaN()
+                assert(cosValue is Real)
+
+                val tanValue = tan(1)
+                tanValue.toInt()
+                assert(tanValue is Real)
+
+                val asinValue = asin(0.5)
+                asinValue.toInt()
+                assert(asinValue is Real)
+
+                val acosValue = acos(0.5)
+                acosValue.toInt()
+                assert(acosValue is Real)
+
+                val atanValue = atan(1)
+                atanValue.toInt()
+                assert(atanValue is Real)
+
+                val sinhValue = sinh(1)
+                sinhValue.isInfinite()
+                assert(sinhValue is Real)
+
+                val coshValue = cosh(1)
+                coshValue.isNaN()
+                assert(coshValue is Real)
+
+                val tanhValue = tanh(1)
+                tanhValue.toInt()
+                assert(tanhValue is Real)
+
+                val asinhValue = asinh(1)
+                asinhValue.toInt()
+                assert(asinhValue is Real)
+
+                val acoshValue = acosh(2)
+                acoshValue.toInt()
+                assert(acoshValue is Real)
+
+                val atanhValue = atanh(0.5)
+                atanhValue.toInt()
+                assert(atanhValue is Real)
+
+                val expValue = exp(1)
+                expValue.isInfinite()
+                assert(expValue is Real)
+
+                val lnValue = ln(2)
+                lnValue.isNaN()
+                assert(lnValue is Real)
+
+                val log10Value = log10(100)
+                log10Value.toInt()
+                assert(log10Value is Real)
+
+                val log2Value = log2(8)
+                log2Value.toInt()
+                assert(log2Value is Real)
+
+                val powValue = pow(2, 8)
+                powValue.isInfinite()
+                assert(powValue is Real)
+
+                val sqrtValue = sqrt(9)
+                sqrtValue.isNaN()
+                assert(sqrtValue is Real)
+
+                val clampedInt = clamp(20, 0..10)
+                assert(clampedInt is Int)
+                clampedInt.toInt()
+
+                val clampedReal = clamp(2.5, 0.0..10.0)
+                assert(clampedReal is Real)
+                clampedReal.toInt()
+            """.trimIndent()
+        )
+    }
 }
