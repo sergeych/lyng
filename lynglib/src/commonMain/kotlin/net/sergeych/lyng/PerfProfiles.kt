@@ -180,7 +180,7 @@ object PerfProfiles {
         PerfFlags.PIC_DEBUG_COUNTERS = false
 
         PerfFlags.PRIMITIVE_FASTOPS = true
-        PerfFlags.RVAL_FASTPATH = true
+        PerfFlags.RVAL_FASTPATH = false
 
         // Keep regex cache/platform setting; enable on JVM typically
         PerfFlags.REGEX_CACHE = PerfDefaults.REGEX_CACHE

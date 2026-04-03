@@ -36,7 +36,7 @@ actual object PerfDefaults {
     actual val PIC_DEBUG_COUNTERS: Boolean = false
 
     actual val PRIMITIVE_FASTOPS: Boolean = true
-    actual val RVAL_FASTPATH: Boolean = true
+    actual val RVAL_FASTPATH: Boolean = false
     // Regex caching aligns with JVM behavior on Android (Dalvik/ART)
     actual val REGEX_CACHE: Boolean = true
     actual val ARG_SMALL_ARITY_12: Boolean = false

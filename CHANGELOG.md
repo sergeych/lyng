@@ -7,6 +7,27 @@ History note:
 - Entries below are synchronized and curated for `1.5.x`.
 - Earlier history may be incomplete and should be cross-checked with git tags/commits when needed.
 
+## 1.5.4 (2026-04-03)
+
+### Runtime and compiler stability
+- Stabilized the recent `piSpigot` benchmark/compiler work for release.
+- Fixed numeric-mix regressions introduced by overly broad int-coercion in bytecode compilation.
+- Restored correct behavior for decimal arithmetic, mixed real/int flows, list literals, list size checks, and national-character script cases.
+- Fixed plain-list index fast paths so they no longer bypass subclass behavior such as `ObservableList` hooks and flow notifications.
+- Hardened local numeric compare fast paths to correctly handle primitive-coded frame slots.
+
+### Performance and examples
+- Added `piSpigot` benchmark/example coverage:
+  - `examples/pi-test.lyng`
+  - `examples/pi-bench.lyng`
+  - JVM benchmark test for release-baseline verification
+- Kept the safe list/index/runtime wins that improve the optimized `piSpigot` path without reintroducing type-unsound coercions.
+- Changed the default `RVAL_FASTPATH` setting off on JVM/Android and in the benchmark preset after verification that it no longer helps the stabilized `piSpigot` workload.
+
+### Release notes
+- Full JVM and wasm test gates pass on the release tree.
+- Benchmark findings and remaining post-release optimization targets are documented in `notes/pi_spigot_benchmark_baseline_2026-04-03.md`.
+
 ## 1.5.1 (2026-03-25)
 
 ### Language
