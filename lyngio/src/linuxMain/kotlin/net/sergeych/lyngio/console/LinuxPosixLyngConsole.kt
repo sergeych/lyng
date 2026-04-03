@@ -22,10 +22,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import platform.posix.*
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
 
 internal actual fun getNativeSystemConsole(): LyngConsole = LinuxPosixLyngConsole
+
+private const val RAW_IDLE_POLL_MS = 10L
+private const val NON_RAW_IDLE_POLL_MS = 25L
+private const val ESCAPE_FOLLOWUP_TIMEOUT_MS = 25L
 
 internal object LinuxConsoleKeyDecoder {
     fun decode(firstCode: Int, nextCode: (Long) -> Int?): ConsoleEvent.KeyDown {
@@ -132,6 +135,7 @@ object LinuxPosixLyngConsole : LyngConsole {
             }
         }
 
+        consoleFlowDebug("linux-events: source created")
         return object : ConsoleEventSource {
             var closed = false
             var lastGeometry: ConsoleGeometry? = null
@@ -147,23 +151,27 @@ object LinuxPosixLyngConsole : LyngConsole {
                     }
 
                     val rawRequested = stateMutex.withLock { rawModeRequested }
-                    val pollSliceMs = if (timeoutMs <= 0L) 250L else minOf(250L, timeoutMs)
                     if (rawRequested) {
-                        val ev = readKeyEvent(pollSliceMs)
+                        val ev = readKeyEventNonBlocking()
                         if (ev != null) return ev
-                    } else {
-                        delay(25)
                     }
 
-                    if (timeoutMs > 0L && started.elapsedNow() >= timeoutMs.milliseconds) {
+                    val elapsedMs = started.elapsedNow().inWholeMilliseconds
+                    if (timeoutMs > 0L && elapsedMs >= timeoutMs) {
                         return null
                     }
+
+                    val remainingMs = if (timeoutMs > 0L) timeoutMs - elapsedMs else Long.MAX_VALUE
+                    val idleMs = if (rawRequested) RAW_IDLE_POLL_MS else NON_RAW_IDLE_POLL_MS
+                    val sleepMs = if (timeoutMs > 0L) minOf(idleMs, remainingMs) else idleMs
+                    if (sleepMs > 0L) delay(sleepMs)
                 }
                 return null
             }
 
             override suspend fun close() {
                 closed = true
+                consoleFlowDebug("linux-events: source closed")
             }
         }
     }
@@ -183,12 +191,11 @@ object LinuxPosixLyngConsole : LyngConsole {
                     }
                     savedAttrsBlob = saved
 
-                    attrs.c_lflag = attrs.c_lflag and ICANON.convert<UInt>().inv() and ECHO.convert<UInt>().inv()
-                    attrs.c_iflag = attrs.c_iflag and IXON.convert<UInt>().inv() and ISTRIP.convert<UInt>().inv()
-                    attrs.c_oflag = attrs.c_oflag and OPOST.convert<UInt>().inv()
+                    configureRawInput(attrs)
                     if (tcsetattr(STDIN_FILENO, TCSANOW, attrs.ptr) != 0) return@withLock false
                 }
                 rawModeRequested = true
+                consoleFlowDebug("linux-events: setRawMode(true): enabled")
                 true
             } else {
                 val hadRaw = rawModeRequested
@@ -203,6 +210,7 @@ object LinuxPosixLyngConsole : LyngConsole {
                         tcsetattr(STDIN_FILENO, TCSANOW, attrs.ptr)
                     }
                 }
+                consoleFlowDebug("linux-events: setRawMode(false): disabled hadRaw=$hadRaw")
                 hadRaw
             }
         }
@@ -225,19 +233,55 @@ object LinuxPosixLyngConsole : LyngConsole {
         val ready = poll(pfd.ptr, 1.convert(), timeoutMs.toInt())
         if (ready <= 0) return null
 
+        readReadyByte()
+    }
+
+    private fun readReadyByte(): Int? {
         val buf = ByteArray(1)
         val count = buf.usePinned { pinned ->
             read(STDIN_FILENO, pinned.addressOf(0), 1.convert())
         }
-        if (count <= 0) return null
+        if (count <= 0) {
+            if (count < 0) {
+                consoleFlowDebug("linux-events: stdin read returned $count errno=$errno")
+            }
+            return null
+        }
         val b = buf[0].toInt()
-        if (b < 0) b + 256 else b
+        return if (b < 0) b + 256 else b
     }
 
-    private fun readKeyEvent(timeoutMs: Long): ConsoleEvent.KeyDown? {
-        val first = readByte(timeoutMs) ?: return null
+    private fun readByteNow(): Int? = memScoped {
+        val pfd = alloc<pollfd>()
+        pfd.fd = STDIN_FILENO
+        pfd.events = POLLIN.convert()
+        pfd.revents = 0
+        val ready = poll(pfd.ptr, 1.convert(), 0)
+        if (ready <= 0) return null
+        readReadyByte()
+    }
+
+    private fun readKeyEventNonBlocking(): ConsoleEvent.KeyDown? {
+        val first = readByteNow() ?: return null
         return LinuxConsoleKeyDecoder.decode(first) { timeout ->
-            readByte(timeout)
+            readByte(minOf(timeout, ESCAPE_FOLLOWUP_TIMEOUT_MS))
         }
     }
+}
+
+@OptIn(ExperimentalForeignApi::class)
+internal fun configureRawInput(attrs: termios) {
+    attrs.c_iflag = attrs.c_iflag and BRKINT.convert<UInt>().inv()
+    attrs.c_iflag = attrs.c_iflag and ICRNL.convert<UInt>().inv()
+    attrs.c_iflag = attrs.c_iflag and INPCK.convert<UInt>().inv()
+    attrs.c_iflag = attrs.c_iflag and ISTRIP.convert<UInt>().inv()
+    attrs.c_iflag = attrs.c_iflag and IXON.convert<UInt>().inv()
+    attrs.c_oflag = attrs.c_oflag and OPOST.convert<UInt>().inv()
+    attrs.c_cflag = attrs.c_cflag or CS8.convert<UInt>()
+    attrs.c_lflag = attrs.c_lflag and ECHO.convert<UInt>().inv()
+    attrs.c_lflag = attrs.c_lflag and ICANON.convert<UInt>().inv()
+    attrs.c_lflag = attrs.c_lflag and IEXTEN.convert<UInt>().inv()
+    attrs.c_lflag = attrs.c_lflag and ISIG.convert<UInt>().inv()
+    attrs.c_cc[VMIN] = 0u
+    attrs.c_cc[VTIME] = 1u
 }

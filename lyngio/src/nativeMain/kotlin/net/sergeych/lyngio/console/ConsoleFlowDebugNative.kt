@@ -17,6 +17,35 @@
 
 package net.sergeych.lyngio.console
 
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.toKString
+import platform.posix.fclose
+import platform.posix.fopen
+import platform.posix.fputs
+import platform.posix.getenv
+
+@OptIn(ExperimentalForeignApi::class)
+private val flowDebugLogFilePath: String
+    get() = getenv("LYNG_CONSOLE_DEBUG_LOG")?.toKString()?.takeIf { it.isNotBlank() }
+        ?: "/tmp/lyng_console_flow_debug.log"
+
+@OptIn(ExperimentalForeignApi::class)
 internal actual fun consoleFlowDebug(message: String, error: Throwable?) {
-    // no-op on Native
+    runCatching {
+        val line = buildString {
+            append("[console-flow] ")
+            append(message)
+            append('\n')
+            if (error != null) {
+                append(error.toString())
+                append('\n')
+            }
+        }
+        val file = fopen(flowDebugLogFilePath, "ab") ?: return
+        try {
+            fputs(line, file)
+        } finally {
+            fclose(file)
+        }
+    }
 }

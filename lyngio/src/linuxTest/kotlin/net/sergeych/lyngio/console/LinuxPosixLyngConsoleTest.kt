@@ -17,6 +17,8 @@
 
 package net.sergeych.lyngio.console
 
+import kotlinx.cinterop.*
+import platform.posix.*
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -63,5 +65,42 @@ class LinuxPosixLyngConsoleTest {
         val ev = decode('A'.code)
         assertEquals("A", ev.key)
         assertTrue(ev.shift)
+    }
+
+    @OptIn(ExperimentalForeignApi::class)
+    @Test
+    fun configuresRawModeReadSemantics() = memScoped {
+        val attrs = alloc<termios>()
+        attrs.c_iflag =
+            BRKINT.convert<UInt>() or
+                ICRNL.convert<UInt>() or
+                INPCK.convert<UInt>() or
+                ISTRIP.convert<UInt>() or
+                IXON.convert<UInt>()
+        attrs.c_oflag = OPOST.convert<UInt>()
+        attrs.c_cflag = 0u
+        attrs.c_lflag =
+            ECHO.convert<UInt>() or
+                ICANON.convert<UInt>() or
+                IEXTEN.convert<UInt>() or
+                ISIG.convert<UInt>()
+        attrs.c_cc[VMIN] = 9u
+        attrs.c_cc[VTIME] = 9u
+
+        configureRawInput(attrs)
+
+        assertEquals(0u, attrs.c_iflag and BRKINT.convert<UInt>())
+        assertEquals(0u, attrs.c_iflag and ICRNL.convert<UInt>())
+        assertEquals(0u, attrs.c_iflag and INPCK.convert<UInt>())
+        assertEquals(0u, attrs.c_iflag and ISTRIP.convert<UInt>())
+        assertEquals(0u, attrs.c_iflag and IXON.convert<UInt>())
+        assertEquals(0u, attrs.c_oflag and OPOST.convert<UInt>())
+        assertEquals(CS8.convert<UInt>(), attrs.c_cflag and CS8.convert<UInt>())
+        assertEquals(0u, attrs.c_lflag and ECHO.convert<UInt>())
+        assertEquals(0u, attrs.c_lflag and ICANON.convert<UInt>())
+        assertEquals(0u, attrs.c_lflag and IEXTEN.convert<UInt>())
+        assertEquals(0u, attrs.c_lflag and ISIG.convert<UInt>())
+        assertEquals(0u, attrs.c_cc[VMIN].toUInt())
+        assertEquals(1u, attrs.c_cc[VTIME].toUInt())
     }
 }
