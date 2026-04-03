@@ -77,7 +77,11 @@ class IfStatement(
     }
 }
 
-data class ConstIntRange(val start: Long, val endExclusive: Long)
+data class ConstIntRange(
+    val start: Long,
+    val stopBoundary: Long,
+    val isDescending: Boolean,
+)
 
 class ForInStatement(
     val loopVarName: String,

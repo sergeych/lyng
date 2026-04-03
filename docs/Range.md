@@ -25,6 +25,23 @@ Exclusive end ranges are adopted from kotlin either:
     assert(4 in r)
     >>> void
 
+Descending finite ranges are explicit too:
+
+    val r = 5 downTo 1
+    assert(r.isDescending)
+    assert(r.toList() == [5,4,3,2,1])
+    >>> void
+
+Use `downUntil` when the lower bound should be excluded:
+
+    val r = 5 downUntil 1
+    assert(r.toList() == [5,4,3,2])
+    assert(1 !in r)
+    >>> void
+
+This is explicit by design: `5..1` is not treated as a reverse range. It is an
+ordinary ascending range with no values in it when iterated.
+
 In any case, we can test an object to belong to using `in` and `!in` and
 access limits:
     
@@ -73,6 +90,23 @@ but
     >>> 2
     >>> void
 
+Descending ranges work in `for` loops exactly the same way:
+
+    for( i in 3 downTo 1 )
+        println(i)
+    >>> 3
+    >>> 2
+    >>> 1
+    >>> void
+
+And with an exclusive lower bound:
+
+    for( i in 3 downUntil 1 )
+        println(i)
+    >>> 3
+    >>> 2
+    >>> void
+
 ### Stepped ranges
 
 Use `step` to change the iteration increment. The range bounds still define membership,
@@ -80,8 +114,17 @@ so iteration ends when the next value is no longer in the range.
 
     assert( [1,3,5] == (1..5 step 2).toList() )
     assert( [1,3] == (1..<5 step 2).toList() )
+    assert( [5,3,1] == (5 downTo 1 step 2).toList() )
     assert( ['a','c','e'] == ('a'..'e' step 2).toList() )
     >>> void
+
+Descending ranges still use a positive `step`; the direction comes from
+`downTo` / `downUntil`:
+
+    assert( ['e','c','a'] == ('e' downTo 'a' step 2).toList() )
+    >>> void
+
+A negative step with `downTo` / `downUntil` is invalid.
 
 Real ranges require an explicit step:
 
@@ -119,6 +162,7 @@ Exclusive end char ranges are supported too:
 |-----------------|------------------------------|---------------|
 | contains(other) | used in `in`                 | Range, or Any |
 | isEndInclusive  | true for '..'                | Bool          |
+| isDescending    | true for `downTo`/`downUntil`| Bool          |
 | isOpen          | at any end                   | Bool          |
 | isIntRange      | both start and end are Int   | Bool          |
 | step            | explicit iteration step      | Any?          |

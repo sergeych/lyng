@@ -147,7 +147,7 @@ class CmdBuilder {
             Opcode.CHECK_IS, Opcode.MAKE_QUALIFIED_VIEW ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.RANGE_INT_BOUNDS ->
-                listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
+                listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.RET_LABEL, Opcode.THROW ->
                 listOf(OperandKind.CONST, OperandKind.SLOT)
             Opcode.RESOLVE_SCOPE_SLOT ->
@@ -228,7 +228,7 @@ class CmdBuilder {
             Opcode.SET_INDEX ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.MAKE_RANGE ->
-                listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
+                listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.LIST_LITERAL ->
                 listOf(OperandKind.CONST, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
             Opcode.GET_MEMBER_SLOT ->
@@ -311,10 +311,10 @@ class CmdBuilder {
             }
             Opcode.OBJ_TO_BOOL -> CmdObjToBool(operands[0], operands[1])
             Opcode.GET_OBJ_CLASS -> CmdGetObjClass(operands[0], operands[1])
-            Opcode.RANGE_INT_BOUNDS -> CmdRangeIntBounds(operands[0], operands[1], operands[2], operands[3])
+            Opcode.RANGE_INT_BOUNDS -> CmdRangeIntBounds(operands[0], operands[1], operands[2], operands[3], operands[4])
             Opcode.LOAD_THIS -> CmdLoadThis(operands[0])
             Opcode.LOAD_THIS_VARIANT -> CmdLoadThisVariant(operands[0], operands[1])
-            Opcode.MAKE_RANGE -> CmdMakeRange(operands[0], operands[1], operands[2], operands[3], operands[4])
+            Opcode.MAKE_RANGE -> CmdMakeRange(operands[0], operands[1], operands[2], operands[3], operands[4], operands[5])
             Opcode.CHECK_IS -> CmdCheckIs(operands[0], operands[1], operands[2])
             Opcode.ASSERT_IS -> CmdAssertIs(operands[0], operands[1])
             Opcode.MAKE_QUALIFIED_VIEW -> CmdMakeQualifiedView(operands[0], operands[1], operands[2])

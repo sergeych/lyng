@@ -3058,9 +3058,10 @@ class Compiler(
                     }
                 }
 
-                Token.Type.DOTDOT, Token.Type.DOTDOTLT -> {
+                Token.Type.DOTDOT, Token.Type.DOTDOTLT, Token.Type.DOWNTO, Token.Type.DOWNUNTIL -> {
                     // range operator
-                    val isEndInclusive = t.type == Token.Type.DOTDOT
+                    val isEndInclusive = t.type == Token.Type.DOTDOT || t.type == Token.Type.DOWNTO
+                    val isDescending = t.type == Token.Type.DOWNTO || t.type == Token.Type.DOWNUNTIL
                     val left = operand
                     // if it is an open end range, then the end of line could be here that we do not want
                     // to skip in parseExpression:
@@ -3078,12 +3079,19 @@ class Compiler(
                         val lConst = constIntValueOrNull(left)
                         val rConst = constIntValueOrNull(rightRef)
                         if (lConst != null && rConst != null) {
-                            operand = ConstRef(ObjRange(ObjInt.of(lConst), ObjInt.of(rConst), isEndInclusive).asReadonly)
+                            operand = ConstRef(
+                                ObjRange(
+                                    ObjInt.of(lConst),
+                                    ObjInt.of(rConst),
+                                    isEndInclusive,
+                                    isDescending = isDescending
+                                ).asReadonly
+                            )
                         } else {
-                            operand = RangeRef(left, rightRef, isEndInclusive)
+                            operand = RangeRef(left, rightRef, isEndInclusive, isDescending = isDescending)
                         }
                     } else {
-                        operand = RangeRef(left, rightRef, isEndInclusive)
+                        operand = RangeRef(left, rightRef, isEndInclusive, isDescending = isDescending)
                     }
                 }
 
@@ -3098,7 +3106,7 @@ class Compiler(
                             }
                             val leftRef = range.start?.takeUnless { it.isNull }?.let { ConstRef(it.asReadonly) }
                             val rightRef = range.end?.takeUnless { it.isNull }?.let { ConstRef(it.asReadonly) }
-                            RangeRef(leftRef, rightRef, range.isEndInclusive)
+                            RangeRef(leftRef, rightRef, range.isEndInclusive, isDescending = range.isDescending)
                         }
                         else -> {
                             cc.previous()
@@ -3108,7 +3116,13 @@ class Compiler(
                     if (rangeRef.step != null) throw ScriptError(t.pos, "step is already specified for this range")
                     val stepExpr = parseExpression() ?: throw ScriptError(t.pos, "Expected step expression")
                     val stepRef = StatementRef(stepExpr)
-                    operand = RangeRef(rangeRef.left, rangeRef.right, rangeRef.isEndInclusive, stepRef)
+                    operand = RangeRef(
+                        rangeRef.left,
+                        rangeRef.right,
+                        rangeRef.isEndInclusive,
+                        isDescending = rangeRef.isDescending,
+                        step = stepRef
+                    )
                 }
 
                 Token.Type.LBRACE, Token.Type.NULL_COALESCE_BLOCKINVOKE -> {
@@ -7828,15 +7842,23 @@ class Compiler(
                 if (range.step != null && !range.step.isNull) return null
                 val start = range.start?.toLong() ?: return null
                 val end = range.end?.toLong() ?: return null
-                val endExclusive = if (range.isEndInclusive) end + 1 else end
-                return ConstIntRange(start, endExclusive)
+                val stopBoundary = if (range.isDescending) {
+                    if (range.isEndInclusive) end - 1 else end
+                } else {
+                    if (range.isEndInclusive) end + 1 else end
+                }
+                return ConstIntRange(start, stopBoundary, range.isDescending)
             }
             is RangeRef -> {
                 if (ref.step != null) return null
                 val start = constIntValueOrNull(ref.left) ?: return null
                 val end = constIntValueOrNull(ref.right) ?: return null
-                val endExclusive = if (ref.isEndInclusive) end + 1 else end
-                return ConstIntRange(start, endExclusive)
+                val stopBoundary = if (ref.isDescending) {
+                    if (ref.isEndInclusive) end - 1 else end
+                } else {
+                    if (ref.isEndInclusive) end + 1 else end
+                }
+                return ConstIntRange(start, stopBoundary, ref.isDescending)
             }
             else -> return null
         }

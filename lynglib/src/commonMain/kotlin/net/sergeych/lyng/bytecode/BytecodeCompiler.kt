@@ -3617,6 +3617,9 @@ class BytecodeCompiler(
         val inclusiveSlot = allocSlot()
         val inclusiveId = builder.addConst(BytecodeConst.Bool(ref.isEndInclusive))
         builder.emit(Opcode.CONST_BOOL, inclusiveId, inclusiveSlot)
+        val descendingSlot = allocSlot()
+        val descendingId = builder.addConst(BytecodeConst.Bool(ref.isDescending))
+        builder.emit(Opcode.CONST_BOOL, descendingId, descendingSlot)
         val stepSlot = if (ref.step != null) {
             val step = compileRefWithFallback(ref.step, null, Pos.builtIn) ?: return null
             ensureObjSlot(step).slot
@@ -3627,7 +3630,7 @@ class BytecodeCompiler(
             slot
         }
         val dst = allocSlot()
-        builder.emit(Opcode.MAKE_RANGE, startSlot, endSlot, inclusiveSlot, stepSlot, dst)
+        builder.emit(Opcode.MAKE_RANGE, startSlot, endSlot, inclusiveSlot, descendingSlot, stepSlot, dst)
         updateSlotType(dst, SlotType.OBJ)
         slotObjClass[dst] = ObjRange.type
         return CompiledValue(dst, SlotType.OBJ)
@@ -6244,11 +6247,14 @@ class BytecodeCompiler(
 
         val iSlot = loopSlotId
         val endSlot = allocSlot()
+        val descendingSlot = allocSlot()
         if (range != null) {
             val startId = builder.addConst(BytecodeConst.IntVal(range.start))
-            val endId = builder.addConst(BytecodeConst.IntVal(range.endExclusive))
+            val endId = builder.addConst(BytecodeConst.IntVal(range.stopBoundary))
+            val descendingId = builder.addConst(BytecodeConst.Bool(range.isDescending))
             builder.emit(Opcode.CONST_INT, startId, iSlot)
             builder.emit(Opcode.CONST_INT, endId, endSlot)
+            builder.emit(Opcode.CONST_BOOL, descendingId, descendingSlot)
             updateSlotType(iSlot, SlotType.INT)
             updateSlotTypeByName(stmt.loopVarName, SlotType.INT)
         } else {
@@ -6258,9 +6264,15 @@ class BytecodeCompiler(
                 val startValue = compileRef(left) ?: return null
                 val endValue = compileRef(right) ?: return null
                 if (startValue.type != SlotType.INT || endValue.type != SlotType.INT) return null
+                val descendingId = builder.addConst(BytecodeConst.Bool(rangeRef.isDescending))
                 emitMove(startValue, iSlot)
                 emitMove(endValue, endSlot)
-                if (rangeRef.isEndInclusive) {
+                builder.emit(Opcode.CONST_BOOL, descendingId, descendingSlot)
+                if (rangeRef.isDescending) {
+                    if (rangeRef.isEndInclusive) {
+                        builder.emit(Opcode.DEC_INT, endSlot)
+                    }
+                } else if (rangeRef.isEndInclusive) {
                     builder.emit(Opcode.INC_INT, endSlot)
                 }
                 updateSlotType(iSlot, SlotType.INT)
@@ -6270,7 +6282,7 @@ class BytecodeCompiler(
                 val rangeValue = compileRef(rangeLocal) ?: return null
                 val rangeObj = ensureObjSlot(rangeValue)
                 val okSlot = allocSlot()
-                builder.emit(Opcode.RANGE_INT_BOUNDS, rangeObj.slot, iSlot, endSlot, okSlot)
+                builder.emit(Opcode.RANGE_INT_BOUNDS, rangeObj.slot, iSlot, endSlot, descendingSlot, okSlot)
                 val badRangeLabel = builder.label()
                 builder.emit(
                     Opcode.JMP_IF_FALSE,
@@ -6294,14 +6306,7 @@ class BytecodeCompiler(
                 val endLabel = builder.label()
                 val doneLabel = builder.label()
                 builder.mark(loopLabel)
-                builder.emit(
-                    Opcode.JMP_IF_GTE_INT,
-                    listOf(
-                        CmdBuilder.Operand.IntVal(iSlot),
-                        CmdBuilder.Operand.IntVal(endSlot),
-                        CmdBuilder.Operand.LabelRef(endLabel)
-                    )
-                )
+                emitIntForLoopCheck(iSlot, endSlot, descendingSlot, endLabel)
                 updateSlotType(iSlot, SlotType.INT)
                 updateSlotTypeByName(stmt.loopVarName, SlotType.INT)
                 loopStack.addLast(
@@ -6324,7 +6329,7 @@ class BytecodeCompiler(
                     builder.emit(Opcode.MOVE_OBJ, bodyObj.slot, resultSlot!!)
                 }
                 builder.mark(continueLabel)
-                builder.emit(Opcode.INC_INT, iSlot)
+                emitIntForLoopStep(iSlot, descendingSlot)
                 if (hasRealWiden) {
                     emitLoopRealCoercions(realWidenSlots)
                 }
@@ -6377,14 +6382,7 @@ class BytecodeCompiler(
         val continueLabel = builder.label()
         val endLabel = builder.label()
         builder.mark(loopLabel)
-        builder.emit(
-            Opcode.JMP_IF_GTE_INT,
-            listOf(
-                CmdBuilder.Operand.IntVal(iSlot),
-                CmdBuilder.Operand.IntVal(endSlot),
-                CmdBuilder.Operand.LabelRef(endLabel)
-            )
-        )
+        emitIntForLoopCheck(iSlot, endSlot, descendingSlot, endLabel)
         updateSlotType(iSlot, SlotType.INT)
         updateSlotTypeByName(stmt.loopVarName, SlotType.INT)
         loopStack.addLast(
@@ -6407,7 +6405,7 @@ class BytecodeCompiler(
             builder.emit(Opcode.MOVE_OBJ, bodyObj.slot, resultSlot!!)
         }
         builder.mark(continueLabel)
-        builder.emit(Opcode.INC_INT, iSlot)
+        emitIntForLoopStep(iSlot, descendingSlot)
         if (hasRealWiden) {
             emitLoopRealCoercions(realWidenSlots)
         }
@@ -8719,9 +8717,57 @@ class BytecodeCompiler(
             val end = range.end as? ObjInt ?: return null
             val left = ConstRef(start.asReadonly)
             val right = ConstRef(end.asReadonly)
-            return RangeRef(left, right, range.isEndInclusive)
+            return RangeRef(left, right, range.isEndInclusive, isDescending = range.isDescending)
         }
         return null
+    }
+
+    private fun emitIntForLoopCheck(iSlot: Int, stopSlot: Int, descendingSlot: Int, endLabel: CmdBuilder.Label) {
+        val descendingLabel = builder.label()
+        val afterCheckLabel = builder.label()
+        builder.emit(
+            Opcode.JMP_IF_TRUE,
+            listOf(
+                CmdBuilder.Operand.IntVal(descendingSlot),
+                CmdBuilder.Operand.LabelRef(descendingLabel)
+            )
+        )
+        builder.emit(
+            Opcode.JMP_IF_GTE_INT,
+            listOf(
+                CmdBuilder.Operand.IntVal(iSlot),
+                CmdBuilder.Operand.IntVal(stopSlot),
+                CmdBuilder.Operand.LabelRef(endLabel)
+            )
+        )
+        builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(afterCheckLabel)))
+        builder.mark(descendingLabel)
+        builder.emit(
+            Opcode.JMP_IF_LTE_INT,
+            listOf(
+                CmdBuilder.Operand.IntVal(iSlot),
+                CmdBuilder.Operand.IntVal(stopSlot),
+                CmdBuilder.Operand.LabelRef(endLabel)
+            )
+        )
+        builder.mark(afterCheckLabel)
+    }
+
+    private fun emitIntForLoopStep(iSlot: Int, descendingSlot: Int) {
+        val descendingLabel = builder.label()
+        val afterStepLabel = builder.label()
+        builder.emit(
+            Opcode.JMP_IF_TRUE,
+            listOf(
+                CmdBuilder.Operand.IntVal(descendingSlot),
+                CmdBuilder.Operand.LabelRef(descendingLabel)
+            )
+        )
+        builder.emit(Opcode.INC_INT, iSlot)
+        builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(afterStepLabel)))
+        builder.mark(descendingLabel)
+        builder.emit(Opcode.DEC_INT, iSlot)
+        builder.mark(afterStepLabel)
     }
 
     private fun extractRangeFromLocal(source: Statement): RangeRef? {

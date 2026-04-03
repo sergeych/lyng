@@ -50,8 +50,10 @@ Primary sources used: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/{Parser,T
 - Range literals:
   - inclusive: `a..b`
   - exclusive end: `a..<b`
+  - descending inclusive: `a downTo b`
+  - descending exclusive end: `a downUntil b`
   - open-ended forms are supported (`a..`, `..b`, `..`).
-  - optional step: `a..b step 2`
+  - optional step: `a..b step 2`, `a downTo b step 2`
 - Lambda literal:
   - with params: `{ x, y -> x + y }`
   - implicit `it`: `{ it + 1 }`

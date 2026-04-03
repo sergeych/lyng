@@ -273,6 +273,7 @@ class CmdMakeRange(
     internal val startSlot: Int,
     internal val endSlot: Int,
     internal val inclusiveSlot: Int,
+    internal val descendingSlot: Int,
     internal val stepSlot: Int,
     internal val dst: Int,
 ) : Cmd() {
@@ -280,9 +281,10 @@ class CmdMakeRange(
         val start = frame.slotToObj(startSlot)
         val end = frame.slotToObj(endSlot)
         val inclusive = frame.slotToObj(inclusiveSlot).toBool()
+        val descending = frame.slotToObj(descendingSlot).toBool()
         val stepObj = frame.slotToObj(stepSlot)
         val step = if (stepObj.isNull) null else stepObj
-        frame.storeObjResult(dst, ObjRange(start, end, isEndInclusive = inclusive, step = step))
+        frame.storeObjResult(dst, ObjRange(start, end, isEndInclusive = inclusive, isDescending = descending, step = step))
         return
     }
 }
@@ -430,6 +432,7 @@ class CmdRangeIntBounds(
     internal val src: Int,
     internal val startSlot: Int,
     internal val endSlot: Int,
+    internal val descendingSlot: Int,
     internal val okSlot: Int,
 ) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
@@ -439,10 +442,19 @@ class CmdRangeIntBounds(
             frame.setBool(okSlot, false)
             return
         }
+        if (range.isDescending) {
+            frame.setBool(okSlot, false)
+            return
+        }
         val start = (range.start as ObjInt).value
         val end = (range.end as ObjInt).value
         frame.setInt(startSlot, start)
-        frame.setInt(endSlot, if (range.isEndInclusive) end + 1 else end)
+        frame.setInt(endSlot, if (range.isDescending) {
+            if (range.isEndInclusive) end - 1 else end
+        } else {
+            if (range.isEndInclusive) end + 1 else end
+        })
+        frame.setBool(descendingSlot, range.isDescending)
         frame.setBool(okSlot, true)
         return
     }

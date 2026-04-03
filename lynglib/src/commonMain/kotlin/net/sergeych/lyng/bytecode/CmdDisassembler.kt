@@ -96,11 +96,12 @@ object CmdDisassembler {
             is CmdCheckIs -> Opcode.CHECK_IS to intArrayOf(cmd.objSlot, cmd.typeSlot, cmd.dst)
             is CmdAssertIs -> Opcode.ASSERT_IS to intArrayOf(cmd.objSlot, cmd.typeSlot)
             is CmdMakeQualifiedView -> Opcode.MAKE_QUALIFIED_VIEW to intArrayOf(cmd.objSlot, cmd.typeSlot, cmd.dst)
-            is CmdRangeIntBounds -> Opcode.RANGE_INT_BOUNDS to intArrayOf(cmd.src, cmd.startSlot, cmd.endSlot, cmd.okSlot)
+            is CmdRangeIntBounds -> Opcode.RANGE_INT_BOUNDS to intArrayOf(cmd.src, cmd.startSlot, cmd.endSlot, cmd.descendingSlot, cmd.okSlot)
             is CmdMakeRange -> Opcode.MAKE_RANGE to intArrayOf(
                 cmd.startSlot,
                 cmd.endSlot,
                 cmd.inclusiveSlot,
+                cmd.descendingSlot,
                 cmd.stepSlot,
                 cmd.dst
             )

@@ -294,6 +294,18 @@ class ScriptTest {
         assertEquals(Token.Type.INT, tt[0].type)
         assertEquals(Token.Type.DOTDOTLT, tt[1].type)
         assertEquals(Token.Type.INT, tt[2].type)
+
+        tt = parseLyng("5 downTo 4".toSource())
+
+        assertEquals(Token.Type.INT, tt[0].type)
+        assertEquals(Token.Type.DOWNTO, tt[1].type)
+        assertEquals(Token.Type.INT, tt[2].type)
+
+        tt = parseLyng("5 downUntil 4".toSource())
+
+        assertEquals(Token.Type.INT, tt[0].type)
+        assertEquals(Token.Type.DOWNUNTIL, tt[1].type)
+        assertEquals(Token.Type.INT, tt[2].type)
     }
 
     @Test
@@ -1278,6 +1290,36 @@ class ScriptTest {
         val convIndex = disasm.indexOf("INT_TO_REAL")
         assertTrue(convIndex >= 0, "expected INT_TO_REAL in for-loop disasm")
         assertTrue(convIndex > incIndex, "INT_TO_REAL should appear after INC_INT")
+    }
+
+    @Test
+    fun testDescendingForLoopDisasm() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun countDown() {
+                var acc = 0
+                for (i in 5 downTo 1) {
+                    acc += i
+                }
+            }
+            fun countDownVar() {
+                var acc = 0
+                val r = 5 downTo 1
+                for (i in r) {
+                    acc += i
+                }
+            }
+            """.trimIndent()
+        )
+        val constDisasm = scope.disassembleSymbol("countDown")
+        val varDisasm = scope.disassembleSymbol("countDownVar")
+        assertTrue("DEC_INT" in constDisasm, "expected DEC_INT in descending for-loop disasm")
+        assertTrue("JMP_IF_LTE_INT" in constDisasm, "expected JMP_IF_LTE_INT in descending for-loop disasm")
+        assertTrue("CALL_MEMBER_SLOT" !in constDisasm, "descending literal range should avoid iterator fallback")
+        assertTrue("DEC_INT" in varDisasm, "expected DEC_INT in descending range-variable for-loop disasm")
+        assertTrue("JMP_IF_LTE_INT" in varDisasm, "expected descending comparison in range-variable for-loop disasm")
+        assertTrue("CALL_MEMBER_SLOT" !in varDisasm, "descending range-variable loop should avoid iterator fallback")
     }
 
     @Test
@@ -3485,16 +3527,57 @@ class ScriptTest {
     fun testRangeStepIteration() = runTest {
         val ints = eval("""(1..5 step 2).toList()""") as ObjList
         assertEquals(listOf(1, 3, 5), ints.list.map { it.toInt() })
+        val descending = eval("""(5 downTo 1).toList()""") as ObjList
+        assertEquals(listOf(5, 4, 3, 2, 1), descending.list.map { it.toInt() })
+        val descendingExclusive = eval("""(5 downUntil 1).toList()""") as ObjList
+        assertEquals(listOf(5, 4, 3, 2), descendingExclusive.list.map { it.toInt() })
+        val descendingStep = eval("""(10 downTo 1 step 3).toList()""") as ObjList
+        assertEquals(listOf(10, 7, 4, 1), descendingStep.list.map { it.toInt() })
+        val descendingChars = eval("""('e' downTo 'a' step 2).toList()""") as ObjList
+        assertEquals(listOf('e', 'c', 'a'), descendingChars.list.map { it.toString().single() })
         val chars = eval("""('a'..'e' step 2).toList()""") as ObjList
         assertEquals(listOf('a', 'c', 'e'), chars.list.map { it.toString().single() })
         val reals = eval("""(0.0..1.0 step 0.25).toList()""") as ObjList
         assertEquals(listOf(0.0, 0.25, 0.5, 0.75, 1.0), reals.list.map { it.toDouble() })
         val empty = eval("""(5..1 step 1).toList()""") as ObjList
         assertEquals(0, empty.list.size)
+        val plainDescending = eval("""(5..1).toList()""") as ObjList
+        assertEquals(0, plainDescending.list.size)
         val openEnd = eval("""(0.. step 1).take(3).toList()""") as ObjList
         assertEquals(listOf(0, 1, 2), openEnd.list.map { it.toInt() })
+        assertEquals(
+            true,
+            eval(
+                """
+                val r = 10 downTo 1
+                r.isDescending && r.isEndInclusive && (10 in r) && (1 in r) && (0 !in r)
+                """.trimIndent()
+            ).toBool()
+        )
+        assertEquals(
+            true,
+            eval(
+                """
+                val r = 10 downUntil 1
+                r.isDescending && !r.isEndInclusive && (10 in r) && (1 !in r) && ((8 downTo 3) in r)
+                """.trimIndent()
+            ).toBool()
+        )
+        assertEquals(
+            15,
+            (eval(
+                """
+                var s = 0
+                for (i in 5 downTo 1) s += i
+                s
+                """.trimIndent()
+            ) as ObjInt).toInt()
+        )
         assertFailsWith<ExecutionError> {
             eval("""(0.0..1.0).toList()""")
+        }
+        assertFailsWith<ExecutionError> {
+            eval("""(5 downTo 1 step -1).toList()""")
         }
         assertFailsWith<ExecutionError> {
             eval("""(0..).toList()""")

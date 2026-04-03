@@ -28,6 +28,7 @@ class ObjRange(
     val start: Obj?,
     val end: Obj?,
     val isEndInclusive: Boolean,
+    val isDescending: Boolean = false,
     val step: Obj? = null
 ) : Obj() {
 
@@ -39,14 +40,37 @@ class ObjRange(
 
     override suspend fun defaultToString(scope: Scope): ObjString {
         val result = StringBuilder()
-        result.append("${start?.inspect(scope) ?: '∞'} ..")
-        if (!isEndInclusive) result.append('<')
-        result.append(" ${end?.inspect(scope) ?: '∞'}")
+        result.append(start?.inspect(scope) ?: "∞")
+        when {
+            isDescending && isEndInclusive -> result.append(" downTo ")
+            isDescending && !isEndInclusive -> result.append(" downUntil ")
+            else -> {
+                result.append(" ..")
+                if (!isEndInclusive) result.append('<')
+                result.append(' ')
+            }
+        }
+        result.append(end?.inspect(scope) ?: "∞")
         if (hasExplicitStep) {
             result.append(" step ${step?.inspect(scope)}")
         }
         return ObjString(result.toString())
     }
+
+    private data class NormalizedLowerBound(val value: Obj, val inclusive: Boolean)
+    private data class NormalizedUpperBound(val value: Obj, val inclusive: Boolean)
+
+    private fun normalizedLowerBound(): NormalizedLowerBound? =
+        when {
+            isDescending -> end?.takeUnless { it.isNull }?.let { NormalizedLowerBound(it, isEndInclusive) }
+            else -> start?.takeUnless { it.isNull }?.let { NormalizedLowerBound(it, true) }
+        }
+
+    private fun normalizedUpperBound(): NormalizedUpperBound? =
+        when {
+            isDescending -> start?.takeUnless { it.isNull }?.let { NormalizedUpperBound(it, true) }
+            else -> end?.takeUnless { it.isNull }?.let { NormalizedUpperBound(it, isEndInclusive) }
+        }
 
     /**
      * IF end is open (null/ObjNull), returns null
@@ -74,29 +98,21 @@ class ObjRange(
         }
 
     suspend fun containsRange(scope: Scope, other: ObjRange): Boolean {
-        if (!isOpenStart) {
-            // our start is not -∞ so other start should be GTE or is not contained:
-            if (!other.isOpenStart && start!!.compareTo(scope, other.start!!) > 0) return false
+        val ourLower = normalizedLowerBound()
+        val otherLower = other.normalizedLowerBound()
+        if (ourLower != null) {
+            if (otherLower == null) return false
+            val cmp = ourLower.value.compareTo(scope, otherLower.value)
+            if (cmp == -2 || cmp > 0) return false
+            if (cmp == 0 && otherLower.inclusive && !ourLower.inclusive) return false
         }
-        if (!isOpenEnd) {
-            // same with the end: if it is open, it can't be contained in ours:
-            if (other.isOpenEnd) return false
-            // both exists, now there could be 4 cases:
-            return when {
-                other.isEndInclusive && isEndInclusive ->
-                    end!!.compareTo(scope, other.end!!) >= 0
-
-                !other.isEndInclusive && !isEndInclusive ->
-                    end!!.compareTo(scope, other.end!!) >= 0
-
-                other.isEndInclusive && !isEndInclusive ->
-                    end!!.compareTo(scope, other.end!!) > 0
-
-                !other.isEndInclusive && isEndInclusive ->
-                    end!!.compareTo(scope, other.end!!) >= 0
-
-                else -> throw IllegalStateException("unknown comparison")
-            }
+        val ourUpper = normalizedUpperBound()
+        val otherUpper = other.normalizedUpperBound()
+        if (ourUpper != null) {
+            if (otherUpper == null) return false
+            val cmp = ourUpper.value.compareTo(scope, otherUpper.value)
+            if (cmp == -2 || cmp < 0) return false
+            if (cmp == 0 && otherUpper.inclusive && !ourUpper.inclusive) return false
         }
         return true
     }
@@ -108,35 +124,38 @@ class ObjRange(
 
         if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
             if (start is ObjInt && end is ObjInt && other is ObjInt) {
-                val s = start.value
-                val e = end.value
+                val lower = if (isDescending) end.value else start.value
+                val upper = if (isDescending) start.value else end.value
                 val v = other.value
-                if (v < s) return false
-                return if (isEndInclusive) v <= e else v < e
+                if (v < lower || v > upper) return false
+                return if (isDescending) v != lower || isEndInclusive else v != upper || isEndInclusive
             }
             if (start is ObjChar && end is ObjChar && other is ObjChar) {
-                val s = start.value
-                val e = end.value
+                val lower = if (isDescending) end.value else start.value
+                val upper = if (isDescending) start.value else end.value
                 val v = other.value
-                if (v < s) return false
-                return if (isEndInclusive) v <= e else v < e
+                if (v < lower || v > upper) return false
+                return if (isDescending) v != lower || isEndInclusive else v != upper || isEndInclusive
             }
             if (start is ObjString && end is ObjString && other is ObjString) {
-                val s = start.value
-                val e = end.value
+                val lower = if (isDescending) end.value else start.value
+                val upper = if (isDescending) start.value else end.value
                 val v = other.value
-                if (v < s) return false
-                return if (isEndInclusive) v <= e else v < e
+                if (v < lower || v > upper) return false
+                return if (isDescending) v != lower || isEndInclusive else v != upper || isEndInclusive
             }
         }
 
-        if (isOpenStart && isOpenEnd) return true
-        if (!isOpenStart) {
-            if (start!!.compareTo(scope, other) > 0) return false
+        val lower = normalizedLowerBound()
+        val upper = normalizedUpperBound()
+        if (lower == null && upper == null) return true
+        if (lower != null) {
+            val cmp = lower.value.compareTo(scope, other)
+            if (cmp == -2 || cmp > 0 || (!lower.inclusive && cmp == 0)) return false
         }
-        if (!isOpenEnd) {
-            val cmp = end!!.compareTo(scope, other)
-            if (isEndInclusive && cmp < 0 || !isEndInclusive && cmp <= 0) return false
+        if (upper != null) {
+            val cmp = upper.value.compareTo(scope, other)
+            if (cmp == -2 || cmp < 0 || (!upper.inclusive && cmp == 0)) return false
         }
         return true
     }
@@ -153,7 +172,12 @@ class ObjRange(
         if (!hasExplicitStep && start is ObjInt && end is ObjInt) {
             val s = start.value
             val e = end.value
-            if (isEndInclusive) {
+            if (isDescending) {
+                val last = if (isEndInclusive) e else e + 1
+                for (i in s downTo last) {
+                    if (!callback(ObjInt.of(i))) break
+                }
+            } else if (isEndInclusive) {
                 for (i in s..e) {
                     if (!callback(ObjInt.of(i))) break
                 }
@@ -165,7 +189,14 @@ class ObjRange(
         } else if (!hasExplicitStep && start is ObjChar && end is ObjChar) {
             val s = start.value
             val e = end.value
-            if (isEndInclusive) {
+            if (isDescending) {
+                var c = s.code
+                val last = if (isEndInclusive) e.code else e.code + 1
+                while (c >= last) {
+                    if (!callback(ObjChar(c.toChar()))) break
+                    c--
+                }
+            } else if (isEndInclusive) {
                 for (c in s..e) {
                     if (!callback(ObjChar(c))) break
                 }
@@ -184,6 +215,7 @@ class ObjRange(
             if (start == other.start &&
                 end == other.end &&
                 isEndInclusive == other.isEndInclusive &&
+                isDescending == other.isDescending &&
                 step == other.step
             ) 0 else -1
         }
@@ -194,6 +226,7 @@ class ObjRange(
         var result = start?.hashCode() ?: 0
         result = 31 * result + (end?.hashCode() ?: 0)
         result = 31 * result + isEndInclusive.hashCode()
+        result = 31 * result + isDescending.hashCode()
         result = 31 * result + (step?.hashCode() ?: 0)
         return result
     }
@@ -207,6 +240,7 @@ class ObjRange(
         if (start != other.start) return false
         if (end != other.end) return false
         if (isEndInclusive != other.isEndInclusive) return false
+        if (isDescending != other.isDescending) return false
         if (step != other.step) return false
 
         return true
@@ -264,6 +298,13 @@ class ObjRange(
                 moduleName = "lyng.stdlib",
                 getter = { thisAs<ObjRange>().isEndInclusive.toObj() }
             )
+            addPropertyDoc(
+                name = "isDescending",
+                doc = "Whether the range iterates from the start bound down toward the end bound.",
+                type = type("lyng.Bool"),
+                moduleName = "lyng.stdlib",
+                getter = { thisAs<ObjRange>().isDescending.toObj() }
+            )
             addFnDoc(
                 name = "iterator",
                 doc = "Iterator over elements in this range (optimized for Int ranges).",
@@ -290,18 +331,22 @@ class ObjRange(
             if (startObj is Numeric && explicitStep !is Numeric) {
                 scope.raiseIllegalState("Numeric range step must be numeric")
             }
+            if (isDescending) {
+                val sign = when (explicitStep) {
+                    is ObjInt -> explicitStep.value.compareTo(0)
+                    is Numeric -> explicitStep.doubleValue.compareTo(0.0)
+                    else -> 1
+                }
+                if (sign < 0) scope.raiseIllegalState("Descending range step must be positive")
+                return explicitStep.negate(scope)
+            }
             return explicitStep
         }
         if (startObj is ObjInt) {
-            val cmp = if (end == null || end.isNull) 0 else startObj.compareTo(scope, end)
-            val dir = if (cmp >= 0) -1 else 1
-            return ObjInt.of(dir.toLong())
+            return ObjInt.of(if (isDescending) -1 else 1)
         }
         if (startObj is ObjChar) {
-            val endChar = end as? ObjChar
-                ?: scope.raiseIllegalState("Char range requires Char end to infer step")
-            val dir = if (startObj.value >= endChar.value) -1 else 1
-            return ObjInt.of(dir.toLong())
+            return ObjInt.of(if (isDescending) -1 else 1)
         }
         if (startObj is ObjReal) {
             scope.raiseIllegalState("Real range requires explicit step")

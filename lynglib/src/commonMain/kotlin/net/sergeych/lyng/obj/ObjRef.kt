@@ -1028,6 +1028,7 @@ class RangeRef(
     internal val left: ObjRef?,
     internal val right: ObjRef?,
     internal val isEndInclusive: Boolean,
+    internal val isDescending: Boolean = false,
     internal val step: ObjRef? = null
 ) : ObjRef {
     override suspend fun get(scope: Scope): ObjRecord = scope.raiseObjRefEvalDisabled()

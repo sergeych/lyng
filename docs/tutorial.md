@@ -1359,6 +1359,41 @@ size and index access, like lists:
     "total letters: "+letters
     >>> "total letters: 10"
 
+When you need a counting loop that goes backwards, use an explicit descending
+range:
+
+    var sum = 0
+    for( i in 5 downTo 1 ) {
+        sum += i
+    }
+    sum
+    >>> 15
+
+If the lower bound should be excluded, use `downUntil`:
+
+    val xs = []
+    for( i in 5 downUntil 1 ) {
+        xs.add(i)
+    }
+    xs
+    >>> [5,4,3,2]
+
+This is intentionally explicit: `5..1` is an empty ascending range, not an
+implicit reverse loop.
+
+Descending loops also support `step`:
+
+    val xs = []
+    for( i in 10 downTo 1 step 3 ) {
+        xs.add(i)
+    }
+    xs
+    >>> [10,7,4,1]
+
+For descending ranges, `step` stays positive. The direction comes from
+`downTo` / `downUntil`, so `10 downTo 1 step 3` is valid, while
+`10 downTo 1 step -3` is an error.
+
 For loop support breaks the same as while loops above:
 
     fun search(haystack, needle) {    
@@ -1488,6 +1523,14 @@ It could be open and closed:
     assert( 5 !in (1..<5) )
     >>> void
 
+Descending ranges are explicit too:
+
+    (5 downTo 1).toList()
+    >>> [5,4,3,2,1]
+
+    (5 downUntil 1).toList()
+    >>> [5,4,3,2]
+
 Ranges could be inside other ranges:
 
     assert( (2..3) in (1..10) )
@@ -1503,6 +1546,14 @@ and you can use ranges in for-loops:
     for( x in 'a' ..< 'c' ) println(x)
     >>> a
     >>> b
+    >>> void
+
+Descending character ranges work the same way:
+
+    for( ch in 'e' downTo 'a' step 2 ) println(ch)
+    >>> e
+    >>> c
+    >>> a
     >>> void
 
 See [Ranges](Range.md) for detailed documentation on it.

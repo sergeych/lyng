@@ -448,6 +448,8 @@ private class Parser(fromPos: Pos, private val interpolationEnabled: Boolean = t
                             "is" -> Token("is", from, Token.Type.IS)
                             "by" -> Token("by", from, Token.Type.BY)
                             "step" -> Token("step", from, Token.Type.STEP)
+                            "downTo" -> Token("downTo", from, Token.Type.DOWNTO)
+                            "downUntil" -> Token("downUntil", from, Token.Type.DOWNUNTIL)
                             "object" -> Token("object", from, Token.Type.OBJECT)
                             "as" -> {
                                 // support both `as` and tight `as?` without spaces
