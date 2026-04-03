@@ -26,7 +26,9 @@ import com.github.ajalt.clikt.parameters.arguments.multiple
 import com.github.ajalt.clikt.parameters.arguments.optional
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import net.sergeych.lyng.EvalSession
 import net.sergeych.lyng.LyngVersion
 import net.sergeych.lyng.Script
@@ -245,11 +247,16 @@ fun executeFileWithArgs(fileName: String, args: List<String>) {
 suspend fun executeSource(source: Source) {
     val session = EvalSession(baseScopeDefer.await())
     try {
-        session.eval(source)
+        evalOnCliDispatcher(session, source)
     } finally {
         session.cancelAndJoin()
     }
 }
+
+internal suspend fun evalOnCliDispatcher(session: EvalSession, source: Source): Obj =
+    withContext(Dispatchers.Default) {
+        session.eval(source)
+    }
 
 suspend fun executeFile(fileName: String) {
     var text = FileSystem.SYSTEM.source(fileName.toPath()).use { fileSource ->

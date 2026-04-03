@@ -50,23 +50,18 @@ fn piSpigot(iThread: Int, n: Int) {
     println(iThread, " - done: ", s)
 }
 
-
 var counter = 0
 
+val t0 = Instant()
+(1..TASK_COUNT).map { n ->
+    val counterState = counter
+    val t = launch {
+        piSpigot(counterState, WORK_SIZE)
+    }
+    ++counter
+    t
+}.forEach { (it as Deferred).await() }
 
-for( repeat in 1..30) {
-    val t0 = Instant()
-    (1..TASK_COUNT).map {
-        val counterState = counter
-        val t = launch {
-            piSpigot(counterState, WORK_SIZE)
-        }
-        ++counter
-        t
-    }.forEach { (it as Deferred).await() }
+val dt = Instant() - t0
 
-    val dt = Instant() - t0
-
-    println("$repeat: all done, dt = ", dt)
-    delay(1000)
-}
+println("all done, dt = ", dt)
