@@ -1,0 +1,72 @@
+import lyng.time
+
+val WORK_SIZE = 200
+val TASK_COUNT = 10
+
+fn piSpigot(iThread: Int, n: Int) {
+    var pi = []
+    val boxes = n * 10 / 3
+    var reminders = List.fill(boxes) { 2 }
+    var heldDigits = 0
+    for (i in 0..n) {
+        var carriedOver = 0
+        var sum = 0
+        for (k in 1..boxes) {
+            val j = boxes - k
+            val denom = j * 2 + 1
+            reminders[j] *= 10
+            sum = reminders[j] + carriedOver
+            val quotient = sum / denom
+            reminders[j] = sum % denom
+            carriedOver = quotient * j
+        }
+        reminders[0] = sum % 10
+        var q = sum / 10
+        if (q == 9) {
+            ++heldDigits
+        } else if (q == 10) {
+            q = 0
+            for (k in 1..heldDigits) {
+                var replaced = pi[i - k]
+                if (replaced == 9) {
+                    replaced = 0
+                } else {
+                    ++replaced
+                }
+                pi[i - k] = replaced
+            }
+            heldDigits = 1
+        } else {
+            heldDigits = 1
+        }
+        pi.add(q)
+    }
+
+    var s = ""
+    for (i in (n - 8)..<n) {
+        s += pi[i]
+    }
+
+    println(iThread, " - done: ", s)
+}
+
+
+var counter = 0
+
+
+for( repeat in 1..30) {
+    val t0 = Instant()
+    (1..TASK_COUNT).map {
+        val counterState = counter
+        val t = launch {
+            piSpigot(counterState, WORK_SIZE)
+        }
+        ++counter
+        t
+    }.forEach { (it as Deferred).await() }
+
+    val dt = Instant() - t0
+
+    println("$repeat: all done, dt = ", dt)
+    delay(1000)
+}

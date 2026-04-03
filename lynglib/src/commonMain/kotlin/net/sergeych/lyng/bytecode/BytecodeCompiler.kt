@@ -1783,7 +1783,11 @@ class BytecodeCompiler(
         return when (slotTypes[slot]) {
             SlotType.INT -> NumericKind.INT
             SlotType.REAL -> NumericKind.REAL
-            else -> NumericKind.UNKNOWN
+            else -> when (slotObjClass[slot]) {
+                ObjInt.type -> NumericKind.INT
+                ObjReal.type -> NumericKind.REAL
+                else -> NumericKind.UNKNOWN
+            }
         }
     }
 
@@ -1800,7 +1804,21 @@ class BytecodeCompiler(
             is ConstRef -> numericKindFromConst(ref.constValue)
             is LocalVarRef -> resolveDirectNameSlot(ref.name)?.let { numericKindFromSlot(it.slot) } ?: NumericKind.UNKNOWN
             is FastLocalVarRef -> resolveDirectNameSlot(ref.name)?.let { numericKindFromSlot(it.slot) } ?: NumericKind.UNKNOWN
-            is LocalSlotRef -> resolveSlot(ref)?.let { numericKindFromSlot(it) } ?: NumericKind.UNKNOWN
+            is LocalSlotRef -> resolveLocalSlotByRefOrName(ref)?.let { numericKindFromSlot(it) } ?: NumericKind.UNKNOWN
+            is IndexRef -> {
+                val receiver = when (val target = ref.targetRef) {
+                    is LocalSlotRef -> resolveLocalSlotByRefOrName(target)
+                    is LocalVarRef -> resolveDirectNameSlot(target.name)?.slot
+                    is FastLocalVarRef -> resolveDirectNameSlot(target.name)?.slot
+                    else -> null
+                }
+                val elementClass = receiver?.let { listElementClassBySlot[it] } ?: listElementClassFromReceiverRef(ref.targetRef)
+                when (elementClass) {
+                    ObjInt.type -> NumericKind.INT
+                    ObjReal.type -> NumericKind.REAL
+                    else -> NumericKind.UNKNOWN
+                }
+            }
             is UnaryOpRef -> inferNumericKind(ref.a)
             is BinaryOpRef -> {
                 val op = ref.op
@@ -2431,7 +2449,7 @@ class BytecodeCompiler(
                 updateSlotType(slot, SlotType.OBJ)
                 return value
             }
-            val value = compileRef(assignValue(ref)) ?: return null
+            var value = compileRef(assignValue(ref)) ?: return null
             if (isLoopVarRef(localTarget)) {
                 emitLoopVarReassignError(localTarget.name, localTarget.pos())
                 return value
@@ -2473,7 +2491,7 @@ class BytecodeCompiler(
             else -> null
         }
         if (nameTarget != null) {
-            val value = compileRef(assignValue(ref)) ?: return null
+            var value = compileRef(assignValue(ref)) ?: return null
             val resolved = resolveAssignableSlotByName(nameTarget) ?: return null
             val slot = resolved.first
             val isMutable = resolved.second
@@ -2698,6 +2716,7 @@ class BytecodeCompiler(
             if (!target.optionalRef) {
                 val index = compileRefWithFallback(target.indexRef, null, Pos.builtIn) ?: return null
                 builder.emit(Opcode.SET_INDEX, receiver.slot, index.slot, value.slot)
+                noteListElementClassMutation(receiver.slot, value)
             } else {
                 val nullSlot = allocSlot()
                 builder.emit(Opcode.CONST_NULL, nullSlot)
@@ -2710,6 +2729,7 @@ class BytecodeCompiler(
                 )
                 val index = compileRefWithFallback(target.indexRef, null, Pos.builtIn) ?: return null
                 builder.emit(Opcode.SET_INDEX, receiver.slot, index.slot, value.slot)
+                noteListElementClassMutation(receiver.slot, value)
                 builder.mark(endLabel)
             }
             return value
@@ -3026,9 +3046,32 @@ class BytecodeCompiler(
             val receiver = compileRefWithFallback(indexTarget.targetRef, null, Pos.builtIn) ?: return null
             val current = allocSlot()
             val result = allocSlot()
-            val rhs = compileRef(ref.value) ?: return compileEvalRef(ref)
+            var rhs = compileRef(ref.value) ?: return compileEvalRef(ref)
+            val elementClass = listElementClassBySlot[receiver.slot] ?: listElementClassFromReceiverRef(indexTarget.targetRef)
             if (!indexTarget.optionalRef) {
                 val index = compileRefWithFallback(indexTarget.indexRef, null, Pos.builtIn) ?: return null
+                if (elementClass == ObjInt.type) {
+                    builder.emit(Opcode.GET_INDEX, receiver.slot, index.slot, current)
+                    val currentInt = allocSlot()
+                    builder.emit(Opcode.UNBOX_INT_OBJ, current, currentInt)
+                    updateSlotType(currentInt, SlotType.INT)
+                    if (rhs.type != SlotType.INT) {
+                        coerceToArithmeticInt(ref.value, rhs)?.let { rhs = it }
+                    }
+                    val typed = when (ref.op) {
+                        BinOp.PLUS -> compileAssignOpBinary(SlotType.INT, rhs, currentInt, Opcode.ADD_INT, Opcode.ADD_REAL, Opcode.ADD_OBJ)
+                        BinOp.MINUS -> compileAssignOpBinary(SlotType.INT, rhs, currentInt, Opcode.SUB_INT, Opcode.SUB_REAL, Opcode.SUB_OBJ)
+                        BinOp.STAR -> compileAssignOpBinary(SlotType.INT, rhs, currentInt, Opcode.MUL_INT, Opcode.MUL_REAL, Opcode.MUL_OBJ)
+                        BinOp.SLASH -> compileAssignOpBinary(SlotType.INT, rhs, currentInt, Opcode.DIV_INT, Opcode.DIV_REAL, Opcode.DIV_OBJ)
+                        BinOp.PERCENT -> compileAssignOpBinary(SlotType.INT, rhs, currentInt, Opcode.MOD_INT, null, Opcode.MOD_OBJ)
+                        else -> null
+                    }
+                    if (typed != null && typed.type == SlotType.INT) {
+                        builder.emit(Opcode.SET_INDEX, receiver.slot, index.slot, currentInt)
+                        noteListElementClassMutation(receiver.slot, typed)
+                        return CompiledValue(currentInt, SlotType.INT)
+                    }
+                }
                 builder.emit(Opcode.GET_INDEX, receiver.slot, index.slot, current)
                 builder.emit(objOp, current, rhs.slot, result)
                 builder.emit(Opcode.SET_INDEX, receiver.slot, index.slot, result)
@@ -3586,7 +3629,7 @@ class BytecodeCompiler(
         val elementClass = listElementClassBySlot[receiver.slot] ?: listElementClassFromReceiverRef(ref.targetRef)
         if (elementClass != null) {
             slotObjClass[dst] = elementClass
-            if (elementClass == ObjString.type && elementClass.isClosed) {
+            if (elementClass.isClosed) {
                 stableObjSlots.add(dst)
             } else {
                 stableObjSlots.remove(dst)
@@ -4649,6 +4692,9 @@ class BytecodeCompiler(
                 val encodedCount = encodeCallArgCount(args) ?: return null
                 setPos(callPos)
                 builder.emit(Opcode.CALL_MEMBER_SLOT, receiver.slot, encodedMethodId, args.base, encodedCount, dst)
+                if (receiverClass == ObjList.type && ref.name == "add" && ref.args.size == 1 && !ref.args.first().isSplat) {
+                    noteListElementClassMutation(receiver.slot, CompiledValue(args.base, SlotType.OBJ))
+                }
                 return CompiledValue(dst, SlotType.OBJ)
             }
             val nullSlot = allocSlot()
@@ -4815,7 +4861,7 @@ class BytecodeCompiler(
                 " receiver=$kind(${ref.name}) slot=$slot slotClass=$slotCls nameClass=$nameCls"
             }
             is LocalSlotRef -> {
-                val slot = resolveSlot(ref)
+                val slot = resolveLocalSlotByRefOrName(ref)
                 val slotCls = slot?.let { slotObjClass[it]?.className }
                 val nameCls = nameObjClass[ref.name]?.className
                 val scopeId = refScopeId(ref)
@@ -4971,9 +5017,10 @@ class BytecodeCompiler(
         val specs = if (needPlan) ArrayList<BytecodeConst.CallArgSpec>(args.size) else null
         for ((index, arg) in args.withIndex()) {
             val compiled = compileArgValue(arg.value) ?: return null
+            val objValue = ensureObjSlot(compiled)
             val dst = argSlots[index]
-            if (compiled.slot != dst || compiled.type != SlotType.OBJ) {
-                builder.emit(Opcode.BOX_OBJ, compiled.slot, dst)
+            if (objValue.slot != dst) {
+                emitMove(objValue, dst)
             }
             updateSlotType(dst, SlotType.OBJ)
             specs?.add(BytecodeConst.CallArgSpec(arg.name, arg.isSplat))
@@ -5833,7 +5880,8 @@ class BytecodeCompiler(
                 emitMove(value, localSlot)
             }
             updateSlotType(localSlot, value.type)
-            updateSlotObjClass(localSlot, stmt.initializer, stmt.initializerObjClass)
+            slotObjClass[value.slot]?.let { slotObjClass[localSlot] = it }
+                ?: updateSlotObjClass(localSlot, stmt.initializer, stmt.initializerObjClass)
             updateListElementClassFromDecl(localSlot, scopeId, stmt.slotIndex)
             updateListElementClassFromInitializer(localSlot, stmt.initializer)
             updateNameObjClassFromSlot(stmt.name, localSlot)
@@ -5865,7 +5913,8 @@ class BytecodeCompiler(
             }
             updateSlotType(scopeSlot, value.type)
             updateNameObjClassFromSlot(stmt.name, scopeSlot)
-            updateSlotObjClass(scopeSlot, stmt.initializer, stmt.initializerObjClass)
+            slotObjClass[value.slot]?.let { slotObjClass[scopeSlot] = it }
+                ?: updateSlotObjClass(scopeSlot, stmt.initializer, stmt.initializerObjClass)
             updateListElementClassFromDecl(scopeSlot, scopeId, stmt.slotIndex)
             updateListElementClassFromInitializer(scopeSlot, stmt.initializer)
             val declId = builder.addConst(
@@ -5901,7 +5950,9 @@ class BytecodeCompiler(
             updateSlotTypeByName(stmt.name, value.type)
         }
         updateNameObjClassFromSlot(stmt.name, value.slot)
-        updateSlotObjClass(value.slot, stmt.initializer, stmt.initializerObjClass)
+        if (slotObjClass[value.slot] == null) {
+            updateSlotObjClass(value.slot, stmt.initializer, stmt.initializerObjClass)
+        }
         updateListElementClassFromDecl(value.slot, scopeId, stmt.slotIndex)
         updateListElementClassFromInitializer(value.slot, stmt.initializer)
         return value
@@ -5989,6 +6040,16 @@ class BytecodeCompiler(
     private fun updateListElementClassFromInitializer(slot: Int, initializer: Statement?) {
         val elementClass = listElementClassFromInitializer(initializer) ?: return
         listElementClassBySlot[slot] = elementClass
+    }
+
+    private fun noteListElementClassMutation(receiverSlot: Int, value: CompiledValue) {
+        val newClass = elementClassFromValue(value) ?: return
+        val current = listElementClassBySlot[receiverSlot]
+        if (current == null || current == newClass) {
+            listElementClassBySlot[receiverSlot] = newClass
+        } else {
+            listElementClassBySlot.remove(receiverSlot)
+        }
     }
 
     private fun updateNameObjClassFromSlot(name: String, slot: Int) {
@@ -6086,9 +6147,6 @@ class BytecodeCompiler(
         if (range == null && rangeRef == null) {
             rangeRef = extractRangeFromLocal(stmt.source)
         }
-        if (rangeRef != null && !isConstIntRange(rangeRef)) {
-            rangeRef = null
-        }
         val typedRangeLocal = if (range == null && rangeRef == null) extractTypedRangeLocal(stmt.source) else null
         val loopSlotPlan = stmt.loopSlotPlan
         val loopSlotIndex = stmt.loopSlotPlan[stmt.loopVarName]
@@ -6129,120 +6187,16 @@ class BytecodeCompiler(
         val breakFlagSlot = allocSlot()
         if (range == null && rangeRef == null && typedRangeLocal == null) {
             val sourceValue = compileStatementValueOrFallback(stmt.source) ?: return null
-            val sourceObj = ensureObjSlot(sourceValue)
-            val typeId = builder.addConst(BytecodeConst.ObjRef(ObjIterable))
-            val typeSlot = allocSlot()
-            builder.emit(Opcode.CONST_OBJ, typeId, typeSlot)
-            builder.emit(Opcode.ASSERT_IS, sourceObj.slot, typeSlot)
-
-            val iterableMethods = ObjIterable.instanceMethodIdMap(includeAbstract = true)
-            val iteratorMethodId = iterableMethods["iterator"]
-            if (iteratorMethodId == null) {
-                throw BytecodeCompileException("Missing member id for Iterable.iterator", stmt.pos)
-            }
-            val iteratorMethods = ObjIterator.instanceMethodIdMap(includeAbstract = true)
-            val hasNextMethodId = iteratorMethods["hasNext"]
-            if (hasNextMethodId == null) {
-                throw BytecodeCompileException("Missing member id for Iterator.hasNext", stmt.pos)
-            }
-            val nextMethodId = iteratorMethods["next"]
-            if (nextMethodId == null) {
-                throw BytecodeCompileException("Missing member id for Iterator.next", stmt.pos)
-            }
-
-            val iterSlot = allocSlot()
-            builder.emit(Opcode.CALL_MEMBER_SLOT, sourceObj.slot, iteratorMethodId, 0, 0, iterSlot)
-            builder.emit(Opcode.ITER_PUSH, iterSlot)
-
-            if (needsBreakFlag) {
-                val falseId = builder.addConst(BytecodeConst.Bool(false))
-                builder.emit(Opcode.CONST_BOOL, falseId, breakFlagSlot)
-            }
-            val resultSlot = if (wantResult) {
-                val slot = allocSlot()
-                val voidId = builder.addConst(BytecodeConst.ObjRef(ObjVoid))
-                builder.emit(Opcode.CONST_OBJ, voidId, slot)
-                slot
-            } else {
-                null
-            }
-
-            val loopLabel = builder.label()
-            val continueLabel = builder.label()
-            val endLabel = builder.label()
-            builder.mark(loopLabel)
-
-            val hasNextSlot = allocSlot()
-            builder.emit(Opcode.CALL_MEMBER_SLOT, iterSlot, hasNextMethodId, 0, 0, hasNextSlot)
-            val condSlot = allocSlot()
-            builder.emit(Opcode.OBJ_TO_BOOL, hasNextSlot, condSlot)
-            builder.emit(
-                Opcode.JMP_IF_FALSE,
-                listOf(CmdBuilder.Operand.IntVal(condSlot), CmdBuilder.Operand.LabelRef(endLabel))
+            return emitIterableForIn(
+                stmt = stmt,
+                sourceValue = sourceValue,
+                wantResult = wantResult,
+                loopSlotId = loopSlotId,
+                breakFlagSlot = breakFlagSlot,
+                needsBreakFlag = needsBreakFlag,
+                hasRealWiden = hasRealWiden,
+                realWidenSlots = realWidenSlots,
             )
-
-            val nextSlot = allocSlot()
-            builder.emit(Opcode.CALL_MEMBER_SLOT, iterSlot, nextMethodId, 0, 0, nextSlot)
-            val nextObj = ensureObjSlot(CompiledValue(nextSlot, SlotType.UNKNOWN))
-            emitMove(CompiledValue(nextObj.slot, SlotType.OBJ), loopSlotId)
-            updateSlotType(loopSlotId, SlotType.OBJ)
-            updateSlotTypeByName(stmt.loopVarName, SlotType.OBJ)
-
-            loopStack.addLast(
-                LoopContext(
-                    stmt.label,
-                    endLabel,
-                    continueLabel,
-                    breakFlagSlot,
-                    resultSlot,
-                    hasIterator = true
-                )
-            )
-            val bodyValue = compileLoopBody(stmt.body, wantResult) ?: return null
-            if (hasRealWiden) {
-                applySlotTypes(realWidenSlots, SlotType.UNKNOWN)
-            }
-            loopStack.removeLast()
-            if (wantResult) {
-                val bodyObj = ensureObjSlot(bodyValue)
-                builder.emit(Opcode.MOVE_OBJ, bodyObj.slot, resultSlot!!)
-            }
-            builder.mark(continueLabel)
-            if (hasRealWiden) {
-                emitLoopRealCoercions(realWidenSlots)
-            }
-            builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(loopLabel)))
-
-            builder.mark(endLabel)
-            if (needsBreakFlag) {
-                val afterPop = builder.label()
-                builder.emit(
-                    Opcode.JMP_IF_TRUE,
-                    listOf(CmdBuilder.Operand.IntVal(breakFlagSlot), CmdBuilder.Operand.LabelRef(afterPop))
-                )
-                builder.emit(Opcode.ITER_POP)
-                builder.mark(afterPop)
-            } else {
-                builder.emit(Opcode.ITER_POP)
-            }
-            if (stmt.elseStatement != null) {
-                val afterElse = if (needsBreakFlag) builder.label() else null
-                if (needsBreakFlag) {
-                    builder.emit(
-                        Opcode.JMP_IF_TRUE,
-                        listOf(CmdBuilder.Operand.IntVal(breakFlagSlot), CmdBuilder.Operand.LabelRef(afterElse!!))
-                    )
-                }
-                val elseValue = compileStatementValueOrFallback(stmt.elseStatement, wantResult) ?: return null
-                if (wantResult) {
-                    val elseObj = ensureObjSlot(elseValue)
-                    builder.emit(Opcode.MOVE_OBJ, elseObj.slot, resultSlot!!)
-                }
-                if (needsBreakFlag) {
-                    builder.mark(afterElse!!)
-                }
-            }
-            return resultSlot ?: breakFlagSlot
         }
 
         val iSlot = loopSlotId
@@ -6261,9 +6215,23 @@ class BytecodeCompiler(
             if (rangeRef != null) {
                 val left = rangeRef.left ?: return null
                 val right = rangeRef.right ?: return null
-                val startValue = compileRef(left) ?: return null
-                val endValue = compileRef(right) ?: return null
-                if (startValue.type != SlotType.INT || endValue.type != SlotType.INT) return null
+                val startCompiled = compileRef(left) ?: return null
+                val endCompiled = compileRef(right) ?: return null
+                val startValue = coerceToLoopInt(startCompiled)
+                val endValue = coerceToLoopInt(endCompiled)
+                if (startValue == null || endValue == null) {
+                    val rangeValue = emitRangeObject(startCompiled, endCompiled, rangeRef)
+                    return emitIterableForIn(
+                        stmt = stmt,
+                        sourceValue = rangeValue,
+                        wantResult = wantResult,
+                        loopSlotId = loopSlotId,
+                        breakFlagSlot = breakFlagSlot,
+                        needsBreakFlag = needsBreakFlag,
+                        hasRealWiden = hasRealWiden,
+                        realWidenSlots = realWidenSlots,
+                    )
+                }
                 val descendingId = builder.addConst(BytecodeConst.Bool(rangeRef.isDescending))
                 emitMove(startValue, iSlot)
                 emitMove(endValue, endSlot)
@@ -7308,7 +7276,8 @@ class BytecodeCompiler(
             is LocalSlotRef -> {
                 val ownerScopeId = ref.captureOwnerScopeId ?: ref.scopeId
                 val ownerSlot = ref.captureOwnerSlot ?: ref.slot
-                slotTypeByScopeId[ownerScopeId]?.get(ownerSlot)
+                resolveLocalSlotByRefOrName(ref)?.let { slotObjClass[it] }
+                    ?: slotTypeByScopeId[ownerScopeId]?.get(ownerSlot)
                     ?: slotInitClassByKey[ScopeSlotKey(ownerScopeId, ownerSlot)]
                     ?: nameObjClass[ref.name]
                     ?: resolveTypeNameClass(ref.name)
@@ -7719,6 +7688,11 @@ class BytecodeCompiler(
             }
         }
         return resolved
+    }
+
+    private fun resolveLocalSlotByRefOrName(ref: LocalSlotRef): Int? {
+        return resolveSlot(ref)
+            ?: ref.name.takeIf { it.isNotEmpty() }?.let { name -> resolveDirectNameSlot(name)?.slot }
     }
 
     private fun resolveCapturedOwnerScopeSlot(ref: LocalSlotRef): Int? {
@@ -8698,10 +8672,237 @@ class BytecodeCompiler(
         return if (ref.step != null) null else ref
     }
 
-    private fun isConstIntRange(ref: RangeRef): Boolean {
-        val left = ref.left as? ConstRef ?: return false
-        val right = ref.right as? ConstRef ?: return false
-        return left.constValue is ObjInt && right.constValue is ObjInt
+    private fun emitIterableForIn(
+        stmt: net.sergeych.lyng.ForInStatement,
+        sourceValue: CompiledValue,
+        wantResult: Boolean,
+        loopSlotId: Int,
+        breakFlagSlot: Int,
+        needsBreakFlag: Boolean,
+        hasRealWiden: Boolean,
+        realWidenSlots: Set<Int>,
+    ): Int? {
+        val sourceObj = ensureObjSlot(sourceValue)
+        val typeId = builder.addConst(BytecodeConst.ObjRef(ObjIterable))
+        val typeSlot = allocSlot()
+        builder.emit(Opcode.CONST_OBJ, typeId, typeSlot)
+        builder.emit(Opcode.ASSERT_IS, sourceObj.slot, typeSlot)
+
+        val iterableMethods = ObjIterable.instanceMethodIdMap(includeAbstract = true)
+        val iteratorMethodId = iterableMethods["iterator"]
+            ?: throw BytecodeCompileException("Missing member id for Iterable.iterator", stmt.pos)
+        val iteratorMethods = ObjIterator.instanceMethodIdMap(includeAbstract = true)
+        val hasNextMethodId = iteratorMethods["hasNext"]
+            ?: throw BytecodeCompileException("Missing member id for Iterator.hasNext", stmt.pos)
+        val nextMethodId = iteratorMethods["next"]
+            ?: throw BytecodeCompileException("Missing member id for Iterator.next", stmt.pos)
+
+        val iterSlot = allocSlot()
+        builder.emit(Opcode.CALL_MEMBER_SLOT, sourceObj.slot, iteratorMethodId, 0, 0, iterSlot)
+        builder.emit(Opcode.ITER_PUSH, iterSlot)
+
+        if (needsBreakFlag) {
+            val falseId = builder.addConst(BytecodeConst.Bool(false))
+            builder.emit(Opcode.CONST_BOOL, falseId, breakFlagSlot)
+        }
+        val resultSlot = if (wantResult) {
+            val slot = allocSlot()
+            val voidId = builder.addConst(BytecodeConst.ObjRef(ObjVoid))
+            builder.emit(Opcode.CONST_OBJ, voidId, slot)
+            slot
+        } else {
+            null
+        }
+
+        val loopLabel = builder.label()
+        val continueLabel = builder.label()
+        val endLabel = builder.label()
+        builder.mark(loopLabel)
+
+        val hasNextSlot = allocSlot()
+        builder.emit(Opcode.CALL_MEMBER_SLOT, iterSlot, hasNextMethodId, 0, 0, hasNextSlot)
+        val condSlot = allocSlot()
+        builder.emit(Opcode.OBJ_TO_BOOL, hasNextSlot, condSlot)
+        builder.emit(
+            Opcode.JMP_IF_FALSE,
+            listOf(CmdBuilder.Operand.IntVal(condSlot), CmdBuilder.Operand.LabelRef(endLabel))
+        )
+
+        val nextSlot = allocSlot()
+        builder.emit(Opcode.CALL_MEMBER_SLOT, iterSlot, nextMethodId, 0, 0, nextSlot)
+        val nextObj = ensureObjSlot(CompiledValue(nextSlot, SlotType.UNKNOWN))
+        emitMove(CompiledValue(nextObj.slot, SlotType.OBJ), loopSlotId)
+        updateSlotType(loopSlotId, SlotType.OBJ)
+        updateSlotTypeByName(stmt.loopVarName, SlotType.OBJ)
+
+        loopStack.addLast(
+            LoopContext(
+                stmt.label,
+                endLabel,
+                continueLabel,
+                breakFlagSlot,
+                resultSlot,
+                hasIterator = true
+            )
+        )
+        val bodyValue = compileLoopBody(stmt.body, wantResult) ?: return null
+        if (hasRealWiden) {
+            applySlotTypes(realWidenSlots, SlotType.UNKNOWN)
+        }
+        loopStack.removeLast()
+        if (wantResult) {
+            val bodyObj = ensureObjSlot(bodyValue)
+            builder.emit(Opcode.MOVE_OBJ, bodyObj.slot, resultSlot!!)
+        }
+        builder.mark(continueLabel)
+        if (hasRealWiden) {
+            emitLoopRealCoercions(realWidenSlots)
+        }
+        builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(loopLabel)))
+
+        builder.mark(endLabel)
+        if (needsBreakFlag) {
+            val afterPop = builder.label()
+            builder.emit(
+                Opcode.JMP_IF_TRUE,
+                listOf(CmdBuilder.Operand.IntVal(breakFlagSlot), CmdBuilder.Operand.LabelRef(afterPop))
+            )
+            builder.emit(Opcode.ITER_POP)
+            builder.mark(afterPop)
+        } else {
+            builder.emit(Opcode.ITER_POP)
+        }
+        if (stmt.elseStatement != null) {
+            val afterElse = if (needsBreakFlag) builder.label() else null
+            if (needsBreakFlag) {
+                builder.emit(
+                    Opcode.JMP_IF_TRUE,
+                    listOf(CmdBuilder.Operand.IntVal(breakFlagSlot), CmdBuilder.Operand.LabelRef(afterElse!!))
+                )
+            }
+            val elseValue = compileStatementValueOrFallback(stmt.elseStatement, wantResult) ?: return null
+            if (wantResult) {
+                val elseObj = ensureObjSlot(elseValue)
+                builder.emit(Opcode.MOVE_OBJ, elseObj.slot, resultSlot!!)
+            }
+            if (needsBreakFlag) {
+                builder.mark(afterElse!!)
+            }
+        }
+        return resultSlot ?: breakFlagSlot
+    }
+
+    private fun emitRangeObject(startValue: CompiledValue, endValue: CompiledValue, ref: RangeRef): CompiledValue {
+        val startObj = ensureObjSlot(startValue)
+        val endObj = ensureObjSlot(endValue)
+        val inclusiveSlot = allocSlot()
+        val inclusiveId = builder.addConst(BytecodeConst.Bool(ref.isEndInclusive))
+        builder.emit(Opcode.CONST_BOOL, inclusiveId, inclusiveSlot)
+        val descendingSlot = allocSlot()
+        val descendingId = builder.addConst(BytecodeConst.Bool(ref.isDescending))
+        builder.emit(Opcode.CONST_BOOL, descendingId, descendingSlot)
+        val stepSlot = allocSlot()
+        builder.emit(Opcode.CONST_NULL, stepSlot)
+        updateSlotType(stepSlot, SlotType.OBJ)
+        val dst = allocSlot()
+        builder.emit(Opcode.MAKE_RANGE, startObj.slot, endObj.slot, inclusiveSlot, descendingSlot, stepSlot, dst)
+        updateSlotType(dst, SlotType.OBJ)
+        slotObjClass[dst] = ObjRange.type
+        return CompiledValue(dst, SlotType.OBJ)
+    }
+
+    private fun isDynamicIntRangeCandidate(ref: RangeRef): Boolean {
+        val left = ref.left ?: return false
+        val right = ref.right ?: return false
+        return isIntLikeRef(left) && isIntLikeRef(right)
+    }
+
+    private fun isIntLikeRef(ref: ObjRef): Boolean {
+        if (inferNumericKind(ref) == NumericKind.INT) {
+            return true
+        }
+        return when (ref) {
+            is ConstRef -> ref.constValue is ObjInt
+            is LocalSlotRef,
+            is LocalVarRef,
+            is FastLocalVarRef,
+            is BoundLocalVarRef,
+            is CallRef,
+            is MethodCallRef,
+            is FieldRef,
+            is CastRef,
+            is StatementRef -> resolveReceiverClass(ref) == ObjInt.type
+            is ThisMethodSlotCallRef,
+            is ImplicitThisMethodCallRef,
+            is ThisFieldSlotRef,
+            is ImplicitThisMemberRef -> resolveReceiverClassForScopeCollection(ref) == ObjInt.type
+            is UnaryOpRef -> ref.op == UnaryOp.NEGATE && isIntLikeRef(unaryOperand(ref))
+            is BinaryOpRef -> when (binaryOp(ref)) {
+                BinOp.PLUS,
+                BinOp.MINUS,
+                BinOp.STAR,
+                BinOp.SLASH,
+                BinOp.PERCENT,
+                BinOp.BAND,
+                BinOp.BXOR,
+                BinOp.BOR,
+                BinOp.SHL,
+                BinOp.SHR -> isIntLikeRef(binaryLeft(ref)) && isIntLikeRef(binaryRight(ref))
+                else -> false
+            }
+            else -> false
+        }
+    }
+
+    private fun coerceToLoopInt(value: CompiledValue): CompiledValue? {
+        return when (value.type) {
+            SlotType.INT -> value
+            SlotType.OBJ -> {
+                val isExactInt = isExactNonNullSlotClassOrTemp(value.slot, ObjInt.type)
+                val isStableIntObj = slotObjClass[value.slot] == ObjInt.type && isStablePrimitiveSourceSlot(value.slot)
+                if (!isExactInt && !isStableIntObj && !isStablePrimitiveSourceSlot(value.slot)) return null
+                val objSlot = if (isExactInt || isStableIntObj) {
+                    value.slot
+                } else {
+                    val boxed = allocSlot()
+                    builder.emit(Opcode.BOX_OBJ, value.slot, boxed)
+                    updateSlotType(boxed, SlotType.OBJ)
+                    emitAssertObjSlotIsInt(boxed)
+                }
+                val intSlot = allocSlot()
+                builder.emit(Opcode.UNBOX_INT_OBJ, objSlot, intSlot)
+                updateSlotType(intSlot, SlotType.INT)
+                CompiledValue(intSlot, SlotType.INT)
+            }
+            SlotType.UNKNOWN -> {
+                if (!isStablePrimitiveSourceSlot(value.slot)) return null
+                val boxed = allocSlot()
+                builder.emit(Opcode.BOX_OBJ, value.slot, boxed)
+                updateSlotType(boxed, SlotType.OBJ)
+                val checked = emitAssertObjSlotIsInt(boxed)
+                val intSlot = allocSlot()
+                builder.emit(Opcode.UNBOX_INT_OBJ, checked, intSlot)
+                updateSlotType(intSlot, SlotType.INT)
+                CompiledValue(intSlot, SlotType.INT)
+            }
+            else -> null
+        }
+    }
+
+    private fun coerceToArithmeticInt(ref: ObjRef, value: CompiledValue): CompiledValue? {
+        if (value.type == SlotType.INT) return value
+        val refSuggestsInt = inferNumericKind(ref) == NumericKind.INT
+        val stableNonTemp = !isTempSlot(value.slot) && isStablePrimitiveSourceSlot(value.slot)
+        if (!refSuggestsInt && !stableNonTemp) return null
+        return coerceToLoopInt(value)
+    }
+
+    private fun emitAssertObjSlotIsInt(slot: Int): Int {
+        val typeId = builder.addConst(BytecodeConst.ObjRef(ObjInt.type))
+        val typeSlot = allocSlot()
+        builder.emit(Opcode.CONST_OBJ, typeId, typeSlot)
+        builder.emit(Opcode.ASSERT_IS, slot, typeSlot)
+        return slot
     }
 
     private fun extractDeclaredRange(stmt: Statement?): RangeRef? {

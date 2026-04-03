@@ -314,8 +314,13 @@ class CmdUnboxIntObj(internal val src: Int, internal val dst: Int) : Cmd() {
 class CmdUnboxIntObjLocal(internal val src: Int, internal val dst: Int) : Cmd() {
     override val isFast: Boolean = true
     override fun performFast(frame: CmdFrame) {
-        val value = frame.frame.getRawObj(src) as ObjInt
-        frame.setLocalInt(dst, value.value)
+        when (frame.frame.getSlotTypeCode(src)) {
+            SlotType.INT.code -> frame.setLocalInt(dst, frame.frame.getInt(src))
+            else -> {
+                val value = frame.frame.getRawObj(src) as ObjInt
+                frame.setLocalInt(dst, value.value)
+            }
+        }
         return
     }
 }
@@ -331,8 +336,13 @@ class CmdUnboxRealObj(internal val src: Int, internal val dst: Int) : Cmd() {
 class CmdUnboxRealObjLocal(internal val src: Int, internal val dst: Int) : Cmd() {
     override val isFast: Boolean = true
     override fun performFast(frame: CmdFrame) {
-        val value = frame.frame.getRawObj(src) as ObjReal
-        frame.setLocalReal(dst, value.value)
+        when (frame.frame.getSlotTypeCode(src)) {
+            SlotType.REAL.code -> frame.setLocalReal(dst, frame.frame.getReal(src))
+            else -> {
+                val value = frame.frame.getRawObj(src) as ObjReal
+                frame.setLocalReal(dst, value.value)
+            }
+        }
         return
     }
 }
@@ -1540,9 +1550,15 @@ class CmdCmpEqIntObj(internal val a: Int, internal val b: Int, internal val dst:
 class CmdCmpEqIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override val isFast: Boolean = true
     override fun performFast(frame: CmdFrame) {
-        val left = frame.frame.getRawObj(a) as ObjInt
-        val right = frame.frame.getRawObj(b) as ObjInt
-        frame.setLocalBool(dst, left.value == right.value)
+        val left = when (frame.frame.getSlotTypeCode(a)) {
+            SlotType.INT.code -> frame.frame.getInt(a)
+            else -> (frame.frame.getRawObj(a) as ObjInt).value
+        }
+        val right = when (frame.frame.getSlotTypeCode(b)) {
+            SlotType.INT.code -> frame.frame.getInt(b)
+            else -> (frame.frame.getRawObj(b) as ObjInt).value
+        }
+        frame.setLocalBool(dst, left == right)
         return
     }
 }
@@ -1563,9 +1579,15 @@ class CmdCmpNeqIntObj(internal val a: Int, internal val b: Int, internal val dst
 class CmdCmpNeqIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override val isFast: Boolean = true
     override fun performFast(frame: CmdFrame) {
-        val left = frame.frame.getRawObj(a) as ObjInt
-        val right = frame.frame.getRawObj(b) as ObjInt
-        frame.setLocalBool(dst, left.value != right.value)
+        val left = when (frame.frame.getSlotTypeCode(a)) {
+            SlotType.INT.code -> frame.frame.getInt(a)
+            else -> (frame.frame.getRawObj(a) as ObjInt).value
+        }
+        val right = when (frame.frame.getSlotTypeCode(b)) {
+            SlotType.INT.code -> frame.frame.getInt(b)
+            else -> (frame.frame.getRawObj(b) as ObjInt).value
+        }
+        frame.setLocalBool(dst, left != right)
         return
     }
 }
@@ -1586,9 +1608,15 @@ class CmdCmpLtIntObj(internal val a: Int, internal val b: Int, internal val dst:
 class CmdCmpLtIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override val isFast: Boolean = true
     override fun performFast(frame: CmdFrame) {
-        val left = frame.frame.getRawObj(a) as ObjInt
-        val right = frame.frame.getRawObj(b) as ObjInt
-        frame.setLocalBool(dst, left.value < right.value)
+        val left = when (frame.frame.getSlotTypeCode(a)) {
+            SlotType.INT.code -> frame.frame.getInt(a)
+            else -> (frame.frame.getRawObj(a) as ObjInt).value
+        }
+        val right = when (frame.frame.getSlotTypeCode(b)) {
+            SlotType.INT.code -> frame.frame.getInt(b)
+            else -> (frame.frame.getRawObj(b) as ObjInt).value
+        }
+        frame.setLocalBool(dst, left < right)
         return
     }
 }
@@ -1609,9 +1637,15 @@ class CmdCmpLteIntObj(internal val a: Int, internal val b: Int, internal val dst
 class CmdCmpLteIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override val isFast: Boolean = true
     override fun performFast(frame: CmdFrame) {
-        val left = frame.frame.getRawObj(a) as ObjInt
-        val right = frame.frame.getRawObj(b) as ObjInt
-        frame.setLocalBool(dst, left.value <= right.value)
+        val left = when (frame.frame.getSlotTypeCode(a)) {
+            SlotType.INT.code -> frame.frame.getInt(a)
+            else -> (frame.frame.getRawObj(a) as ObjInt).value
+        }
+        val right = when (frame.frame.getSlotTypeCode(b)) {
+            SlotType.INT.code -> frame.frame.getInt(b)
+            else -> (frame.frame.getRawObj(b) as ObjInt).value
+        }
+        frame.setLocalBool(dst, left <= right)
         return
     }
 }
@@ -1632,9 +1666,15 @@ class CmdCmpGtIntObj(internal val a: Int, internal val b: Int, internal val dst:
 class CmdCmpGtIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override val isFast: Boolean = true
     override fun performFast(frame: CmdFrame) {
-        val left = frame.frame.getRawObj(a) as ObjInt
-        val right = frame.frame.getRawObj(b) as ObjInt
-        frame.setLocalBool(dst, left.value > right.value)
+        val left = when (frame.frame.getSlotTypeCode(a)) {
+            SlotType.INT.code -> frame.frame.getInt(a)
+            else -> (frame.frame.getRawObj(a) as ObjInt).value
+        }
+        val right = when (frame.frame.getSlotTypeCode(b)) {
+            SlotType.INT.code -> frame.frame.getInt(b)
+            else -> (frame.frame.getRawObj(b) as ObjInt).value
+        }
+        frame.setLocalBool(dst, left > right)
         return
     }
 }
@@ -1655,9 +1695,15 @@ class CmdCmpGteIntObj(internal val a: Int, internal val b: Int, internal val dst
 class CmdCmpGteIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override val isFast: Boolean = true
     override fun performFast(frame: CmdFrame) {
-        val left = frame.frame.getRawObj(a) as ObjInt
-        val right = frame.frame.getRawObj(b) as ObjInt
-        frame.setLocalBool(dst, left.value >= right.value)
+        val left = when (frame.frame.getSlotTypeCode(a)) {
+            SlotType.INT.code -> frame.frame.getInt(a)
+            else -> (frame.frame.getRawObj(a) as ObjInt).value
+        }
+        val right = when (frame.frame.getSlotTypeCode(b)) {
+            SlotType.INT.code -> frame.frame.getInt(b)
+            else -> (frame.frame.getRawObj(b) as ObjInt).value
+        }
+        frame.setLocalBool(dst, left >= right)
         return
     }
 }
@@ -1678,9 +1724,15 @@ class CmdCmpEqRealObj(internal val a: Int, internal val b: Int, internal val dst
 class CmdCmpEqRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override val isFast: Boolean = true
     override fun performFast(frame: CmdFrame) {
-        val left = frame.frame.getRawObj(a) as ObjReal
-        val right = frame.frame.getRawObj(b) as ObjReal
-        frame.setLocalBool(dst, left.value == right.value)
+        val left = when (frame.frame.getSlotTypeCode(a)) {
+            SlotType.REAL.code -> frame.frame.getReal(a)
+            else -> (frame.frame.getRawObj(a) as ObjReal).value
+        }
+        val right = when (frame.frame.getSlotTypeCode(b)) {
+            SlotType.REAL.code -> frame.frame.getReal(b)
+            else -> (frame.frame.getRawObj(b) as ObjReal).value
+        }
+        frame.setLocalBool(dst, left == right)
         return
     }
 }
@@ -1701,9 +1753,15 @@ class CmdCmpNeqRealObj(internal val a: Int, internal val b: Int, internal val ds
 class CmdCmpNeqRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override val isFast: Boolean = true
     override fun performFast(frame: CmdFrame) {
-        val left = frame.frame.getRawObj(a) as ObjReal
-        val right = frame.frame.getRawObj(b) as ObjReal
-        frame.setLocalBool(dst, left.value != right.value)
+        val left = when (frame.frame.getSlotTypeCode(a)) {
+            SlotType.REAL.code -> frame.frame.getReal(a)
+            else -> (frame.frame.getRawObj(a) as ObjReal).value
+        }
+        val right = when (frame.frame.getSlotTypeCode(b)) {
+            SlotType.REAL.code -> frame.frame.getReal(b)
+            else -> (frame.frame.getRawObj(b) as ObjReal).value
+        }
+        frame.setLocalBool(dst, left != right)
         return
     }
 }
@@ -1724,9 +1782,15 @@ class CmdCmpLtRealObj(internal val a: Int, internal val b: Int, internal val dst
 class CmdCmpLtRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override val isFast: Boolean = true
     override fun performFast(frame: CmdFrame) {
-        val left = frame.frame.getRawObj(a) as ObjReal
-        val right = frame.frame.getRawObj(b) as ObjReal
-        frame.setLocalBool(dst, left.value < right.value)
+        val left = when (frame.frame.getSlotTypeCode(a)) {
+            SlotType.REAL.code -> frame.frame.getReal(a)
+            else -> (frame.frame.getRawObj(a) as ObjReal).value
+        }
+        val right = when (frame.frame.getSlotTypeCode(b)) {
+            SlotType.REAL.code -> frame.frame.getReal(b)
+            else -> (frame.frame.getRawObj(b) as ObjReal).value
+        }
+        frame.setLocalBool(dst, left < right)
         return
     }
 }
@@ -1747,9 +1811,15 @@ class CmdCmpLteRealObj(internal val a: Int, internal val b: Int, internal val ds
 class CmdCmpLteRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override val isFast: Boolean = true
     override fun performFast(frame: CmdFrame) {
-        val left = frame.frame.getRawObj(a) as ObjReal
-        val right = frame.frame.getRawObj(b) as ObjReal
-        frame.setLocalBool(dst, left.value <= right.value)
+        val left = when (frame.frame.getSlotTypeCode(a)) {
+            SlotType.REAL.code -> frame.frame.getReal(a)
+            else -> (frame.frame.getRawObj(a) as ObjReal).value
+        }
+        val right = when (frame.frame.getSlotTypeCode(b)) {
+            SlotType.REAL.code -> frame.frame.getReal(b)
+            else -> (frame.frame.getRawObj(b) as ObjReal).value
+        }
+        frame.setLocalBool(dst, left <= right)
         return
     }
 }
@@ -1770,9 +1840,15 @@ class CmdCmpGtRealObj(internal val a: Int, internal val b: Int, internal val dst
 class CmdCmpGtRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override val isFast: Boolean = true
     override fun performFast(frame: CmdFrame) {
-        val left = frame.frame.getRawObj(a) as ObjReal
-        val right = frame.frame.getRawObj(b) as ObjReal
-        frame.setLocalBool(dst, left.value > right.value)
+        val left = when (frame.frame.getSlotTypeCode(a)) {
+            SlotType.REAL.code -> frame.frame.getReal(a)
+            else -> (frame.frame.getRawObj(a) as ObjReal).value
+        }
+        val right = when (frame.frame.getSlotTypeCode(b)) {
+            SlotType.REAL.code -> frame.frame.getReal(b)
+            else -> (frame.frame.getRawObj(b) as ObjReal).value
+        }
+        frame.setLocalBool(dst, left > right)
         return
     }
 }
@@ -1793,9 +1869,15 @@ class CmdCmpGteRealObj(internal val a: Int, internal val b: Int, internal val ds
 class CmdCmpGteRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override val isFast: Boolean = true
     override fun performFast(frame: CmdFrame) {
-        val left = frame.frame.getRawObj(a) as ObjReal
-        val right = frame.frame.getRawObj(b) as ObjReal
-        frame.setLocalBool(dst, left.value >= right.value)
+        val left = when (frame.frame.getSlotTypeCode(a)) {
+            SlotType.REAL.code -> frame.frame.getReal(a)
+            else -> (frame.frame.getRawObj(a) as ObjReal).value
+        }
+        val right = when (frame.frame.getSlotTypeCode(b)) {
+            SlotType.REAL.code -> frame.frame.getReal(b)
+            else -> (frame.frame.getRawObj(b) as ObjReal).value
+        }
+        frame.setLocalBool(dst, left >= right)
         return
     }
 }
@@ -3624,7 +3706,13 @@ class CmdGetIndex(
     internal val dst: Int,
 ) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        val result = frame.slotToObj(targetSlot).getAt(frame.ensureScope(), frame.slotToObj(indexSlot))
+        val target = frame.storedSlotObj(targetSlot)
+        val index = frame.storedSlotObj(indexSlot)
+        if (target is ObjList && target::class == ObjList::class && index is ObjInt) {
+            frame.storeObjResult(dst, target.list[index.toInt()])
+            return
+        }
+        val result = target.getAt(frame.ensureScope(), index)
         frame.storeObjResult(dst, result)
         return
     }
@@ -3636,7 +3724,14 @@ class CmdSetIndex(
     internal val valueSlot: Int,
 ) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
-        frame.slotToObj(targetSlot).putAt(frame.ensureScope(), frame.slotToObj(indexSlot), frame.slotToObj(valueSlot))
+        val target = frame.storedSlotObj(targetSlot)
+        val index = frame.storedSlotObj(indexSlot)
+        val value = frame.slotToObj(valueSlot)
+        if (target is ObjList && target::class == ObjList::class && index is ObjInt) {
+            target.list[index.toInt()] = value
+            return
+        }
+        target.putAt(frame.ensureScope(), index, value)
         return
     }
 }
