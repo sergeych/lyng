@@ -939,11 +939,11 @@ class Script(
                     )
                     it.addVoidFnDoc(
                         "delay",
-                        doc = "Suspend for the given time. Accepts Duration, Int seconds, or Real seconds."
+                        doc = "Suspend for the given time. Accepts Duration, Int milliseconds, or Real seconds."
                     ) {
                         val a = args.firstAndOnly()
                         when (a) {
-                            is ObjInt -> delay(a.value * 1000)
+                            is ObjInt -> delay(a.value)
                             is ObjReal -> delay((a.value * 1000).roundToLong())
                             is ObjDuration -> delay(a.duration)
                             else -> raiseIllegalArgument("Expected Duration, Int or Real, got ${inspect(a)}")
