@@ -34,28 +34,24 @@ class CmdVm {
         frame.applyCaptureRecords()
         binder?.invoke(frame, args)
         val cmds = fn.cmds
-        try {
-            while (result == null) {
-                try {
-                    while (result == null) {
-                        val cmd = cmds[frame.ip]
-                        frame.ip += 1
-                        if (cmd.isFast) {
-                            cmd.performFast(frame)
-                        } else {
-                            cmd.perform(frame)
-                        }
-                    }
-                } catch (e: Throwable) {
-                    if (!frame.handleException(e)) {
-                        frame.cancelIterators()
-                        throw e
+        while (true) {
+            try {
+                while (result == null) {
+                    val cmd = cmds[frame.ip]
+                    frame.ip += 1
+                    if (cmd.isFast) {
+                        cmd.performFast(frame)
+                    } else {
+                        cmd.perform(frame)
                     }
                 }
+                break
+            } catch (e: Throwable) {
+                if (!frame.handleException(e)) {
+                    frame.cancelIterators()
+                    throw e
+                }
             }
-        } catch (e: Throwable) {
-            frame.cancelIterators()
-            throw e
         }
         frame.cancelIterators()
         return result ?: ObjVoid
@@ -71,6 +67,7 @@ sealed class Cmd {
     open fun performFast(frame: CmdFrame) {
         error("fast command not supported: ${this::class.simpleName}")
     }
+
     open suspend fun perform(frame: CmdFrame) {
         error("slow command not supported: ${this::class.simpleName}")
     }
@@ -179,6 +176,7 @@ class CmdConstObj(internal val constId: Int, internal val dst: Int) : Cmd() {
                     else -> frame.setObj(dst, obj)
                 }
             }
+
             is BytecodeConst.StringVal -> frame.setObj(dst, ObjString(c.value))
             else -> error("CONST_OBJ expects ObjRef/StringVal at $constId")
         }
@@ -255,7 +253,10 @@ class CmdLoadThisVariant(
                     if (candidate.isInstanceOf(typeName)) return@run candidate
                     if (typeClass != null) {
                         val inst = candidate as? net.sergeych.lyng.obj.ObjInstance
-                        if (inst != null && (inst.objClass === typeClass || inst.objClass.allParentsSet.contains(typeClass))) {
+                        if (inst != null && (inst.objClass === typeClass || inst.objClass.allParentsSet.contains(
+                                typeClass
+                            ))
+                        ) {
                             return@run inst
                         }
                     }
@@ -284,7 +285,10 @@ class CmdMakeRange(
         val descending = frame.slotToObj(descendingSlot).toBool()
         val stepObj = frame.slotToObj(stepSlot)
         val step = if (stepObj.isNull) null else stepObj
-        frame.storeObjResult(dst, ObjRange(start, end, isEndInclusive = inclusive, isDescending = descending, step = step))
+        frame.storeObjResult(
+            dst,
+            ObjRange(start, end, isEndInclusive = inclusive, isDescending = descending, step = step)
+        )
         return
     }
 }
@@ -372,6 +376,7 @@ class CmdCheckIs(internal val objSlot: Int, internal val typeSlot: Int, internal
                 val rightDecl = typeDeclFromObj(frame.ensureScope(), typeObj) ?: return frame.setBool(dst, false)
                 typeDeclIsSubtype(frame.ensureScope(), leftDecl, rightDecl)
             }
+
             typeObj is ObjTypeExpr -> matchesTypeDecl(frame.ensureScope(), obj, typeObj.typeDecl)
             typeObj is ObjClass -> obj.isInstanceOf(typeObj)
             else -> false
@@ -393,6 +398,7 @@ class CmdAssertIs(internal val objSlot: Int, internal val typeSlot: Int) : Cmd()
                     )
                 }
             }
+
             is ObjTypeExpr -> {
                 if (!matchesTypeDecl(frame.ensureScope(), obj, typeObj.typeDecl)) {
                     frame.ensureScope().raiseClassCastError(
@@ -400,6 +406,7 @@ class CmdAssertIs(internal val objSlot: Int, internal val typeSlot: Int) : Cmd()
                     )
                 }
             }
+
             else -> frame.ensureScope().raiseClassCastError(
                 "${typeObj.inspect(frame.ensureScope())} is not the class instance"
             )
@@ -428,6 +435,7 @@ class CmdMakeQualifiedView(
                     base
                 }
             }
+
             is ObjTypeExpr -> base
             else -> frame.ensureScope().raiseClassCastError(
                 "${typeObj.inspect(frame.ensureScope())} is not the class instance"
@@ -459,11 +467,13 @@ class CmdRangeIntBounds(
         val start = (range.start as ObjInt).value
         val end = (range.end as ObjInt).value
         frame.setInt(startSlot, start)
-        frame.setInt(endSlot, if (range.isDescending) {
-            if (range.isEndInclusive) end - 1 else end
-        } else {
-            if (range.isEndInclusive) end + 1 else end
-        })
+        frame.setInt(
+            endSlot, if (range.isDescending) {
+                if (range.isEndInclusive) end - 1 else end
+            } else {
+                if (range.isEndInclusive) end + 1 else end
+            }
+        )
         frame.setBool(descendingSlot, range.isDescending)
         frame.setBool(okSlot, true)
         return
@@ -974,6 +984,7 @@ class CmdInvIntLocal(internal val src: Int, internal val dst: Int) : Cmd() {
         return
     }
 }
+
 class CmdCmpEqInt(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         frame.setBool(dst, frame.getInt(a) == frame.getInt(b))
@@ -3118,6 +3129,7 @@ private suspend fun assignDestructureTarget(frame: CmdFrame, ref: ObjRef, value:
             assignDestructurePattern(frame, ref, value, pos)
             return
         }
+
         is LocalSlotRef -> {
             val index = resolveLocalSlotIndex(frame.fn, ref.name, preferCapture = ref.captureOwnerScopeId != null)
             if (index != null) {
@@ -3132,6 +3144,7 @@ private suspend fun assignDestructureTarget(frame: CmdFrame, ref: ObjRef, value:
                 return
             }
         }
+
         is LocalVarRef -> {
             val index = resolveLocalSlotIndex(frame.fn, ref.name, preferCapture = false)
             if (index != null) {
@@ -3146,6 +3159,7 @@ private suspend fun assignDestructureTarget(frame: CmdFrame, ref: ObjRef, value:
                 return
             }
         }
+
         is FastLocalVarRef -> {
             val index = resolveLocalSlotIndex(frame.fn, ref.name, preferCapture = false)
             if (index != null) {
@@ -3160,6 +3174,7 @@ private suspend fun assignDestructureTarget(frame: CmdFrame, ref: ObjRef, value:
                 return
             }
         }
+
         else -> {}
     }
     ref.setAt(pos, frame.ensureScope(), value)
@@ -3213,7 +3228,8 @@ class CmdDeclExtProperty(internal val constId: Int, internal val slot: Int) : Cm
         if (decl.property.setter != null) {
             val setterName = extensionPropertySetterName(decl.extTypeName, decl.property.name)
             val setterWrapper = ObjExtensionPropertySetterCallable(decl.property.name, decl.property)
-            frame.ensureScope().addItem(setterName, false, setterWrapper, decl.visibility, recordType = ObjRecord.Type.Fun)
+            frame.ensureScope()
+                .addItem(setterName, false, setterWrapper, decl.visibility, recordType = ObjRecord.Type.Fun)
             val setterLocal = resolveLocalSlotIndex(frame.fn, setterName, preferCapture = false)
             if (setterLocal != null) {
                 frame.setObjUnchecked(frame.fn.scopeSlotCount + setterLocal, setterWrapper)
@@ -3341,6 +3357,7 @@ class CmdListLiteral(
                         list.ensureCapacity(list.size + value.list.size)
                         list.addAll(value.list)
                     }
+
                     else -> frame.ensureScope().raiseError("Spread element must be list")
                 }
             } else {
@@ -3415,7 +3432,9 @@ class CmdGetMemberSlot(
         val (methodIdResolved, methodOnObjClass) = decodeMemberId(methodId)
         val fieldRec = if (fieldIdResolved >= 0) {
             when {
-                inst != null -> inst.fieldRecordForId(fieldIdResolved) ?: inst.objClass.fieldRecordForId(fieldIdResolved)
+                inst != null -> inst.fieldRecordForId(fieldIdResolved)
+                    ?: inst.objClass.fieldRecordForId(fieldIdResolved)
+
                 cls != null && fieldOnObjClass -> cls.objClass.fieldRecordForId(fieldIdResolved)
                 cls != null -> cls.fieldRecordForId(fieldIdResolved)
                 else -> receiver.objClass.fieldRecordForId(fieldIdResolved)
@@ -3424,7 +3443,10 @@ class CmdGetMemberSlot(
         val rec = fieldRec ?: run {
             if (methodIdResolved >= 0) {
                 when {
-                    inst != null -> inst.methodRecordForId(methodIdResolved) ?: inst.objClass.methodRecordForId(methodIdResolved)
+                    inst != null -> inst.methodRecordForId(methodIdResolved) ?: inst.objClass.methodRecordForId(
+                        methodIdResolved
+                    )
+
                     cls != null && methodOnObjClass -> cls.objClass.methodRecordForId(methodIdResolved)
                     cls != null -> cls.methodRecordForId(methodIdResolved)
                     else -> receiver.objClass.methodRecordForId(methodIdResolved)
@@ -3456,9 +3478,15 @@ class CmdGetMemberSlot(
         } else {
             rawName
         }
+
         suspend fun autoCallIfMethod(resolved: ObjRecord, recv: Obj): Obj {
             return if (resolved.type == ObjRecord.Type.Fun && !resolved.isAbstract) {
-                resolved.value.invoke(frame.ensureScope(), resolved.receiver ?: recv, Arguments.EMPTY, resolved.declaringClass)
+                resolved.value.invoke(
+                    frame.ensureScope(),
+                    resolved.receiver ?: recv,
+                    Arguments.EMPTY,
+                    resolved.declaringClass
+                )
             } else {
                 resolved.value
             }
@@ -3489,7 +3517,9 @@ class CmdSetMemberSlot(
         val (methodIdResolved, methodOnObjClass) = decodeMemberId(methodId)
         val fieldRec = if (fieldIdResolved >= 0) {
             when {
-                inst != null -> inst.fieldRecordForId(fieldIdResolved) ?: inst.objClass.fieldRecordForId(fieldIdResolved)
+                inst != null -> inst.fieldRecordForId(fieldIdResolved)
+                    ?: inst.objClass.fieldRecordForId(fieldIdResolved)
+
                 cls != null && fieldOnObjClass -> cls.objClass.fieldRecordForId(fieldIdResolved)
                 cls != null -> cls.fieldRecordForId(fieldIdResolved)
                 else -> receiver.objClass.fieldRecordForId(fieldIdResolved)
@@ -3498,7 +3528,10 @@ class CmdSetMemberSlot(
         val rec = fieldRec ?: run {
             if (methodIdResolved >= 0) {
                 when {
-                    inst != null -> inst.methodRecordForId(methodIdResolved) ?: inst.objClass.methodRecordForId(methodIdResolved)
+                    inst != null -> inst.methodRecordForId(methodIdResolved) ?: inst.objClass.methodRecordForId(
+                        methodIdResolved
+                    )
+
                     cls != null && methodOnObjClass -> cls.objClass.methodRecordForId(methodIdResolved)
                     cls != null -> cls.methodRecordForId(methodIdResolved)
                     else -> receiver.objClass.methodRecordForId(methodIdResolved)
@@ -3692,10 +3725,12 @@ class CmdCallMemberSlot(
                 if (callArgs.isEmpty()) (rec.value as ObjProperty).callGetter(scope, receiver, decl)
                 else scope.raiseError("property $name cannot be called with arguments")
             }
+
             ObjRecord.Type.Fun -> {
                 val callScope = inst?.instanceScope ?: scope
                 rec.value.invoke(callScope, receiver, callArgs, decl)
             }
+
             ObjRecord.Type.Delegated -> {
                 val delegate = when (receiver) {
                     is ObjInstance -> {
@@ -3707,9 +3742,13 @@ class CmdCallMemberSlot(
                                 if (del != null) break
                             }
                         }
-                        del ?: scope.raiseError("Internal error: delegated member $name has no delegate (tried $storageName)")
+                        del
+                            ?: scope.raiseError("Internal error: delegated member $name has no delegate (tried $storageName)")
                     }
-                    is ObjClass -> rec.delegate ?: scope.raiseError("Internal error: delegated member $name has no delegate")
+
+                    is ObjClass -> rec.delegate
+                        ?: scope.raiseError("Internal error: delegated member $name has no delegate")
+
                     else -> rec.delegate ?: scope.raiseError("Internal error: delegated member $name has no delegate")
                 }
                 val allArgs = (listOf(receiver, ObjString(name)) + callArgs.list).toTypedArray()
@@ -3718,6 +3757,7 @@ class CmdCallMemberSlot(
                     propVal.invoke(scope, receiver, callArgs, decl)
                 })
             }
+
             else -> frame.ensureScope().raiseError("member $name is not callable")
         }
         frame.storeObjResult(dst, result)
@@ -3939,11 +3979,12 @@ class BytecodeLambdaCallable(
                         ?: context.parent?.get(name)
                         ?: context.get(name)
                         ?: continue
-                    val value = if (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || record.value is ObjProperty) {
-                        context.resolve(record, name)
-                    } else {
-                        record.value
-                    }
+                    val value =
+                        if (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || record.value is ObjProperty) {
+                            context.resolve(record, name)
+                        } else {
+                            record.value
+                        }
                     frame.frame.setObj(i, value)
                 }
             }
@@ -4000,6 +4041,7 @@ class CmdFrame(
     private var scopeDepth = 0
     private var virtualDepth = 0
     private val iterStack = ArrayDeque<Obj>()
+
     internal data class TryHandler(
         val exceptionSlot: Int,
         val catchIp: Int,
@@ -4007,6 +4049,7 @@ class CmdFrame(
         val iterDepthAtPush: Int,
         var inCatch: Boolean = false
     )
+
     internal val tryStack = ArrayDeque<TryHandler>()
     private var pendingThrowable: Throwable? = null
 
@@ -4045,6 +4088,7 @@ class CmdFrame(
                     else -> obj
                 }
             }
+
             else -> {
                 val obj = frame.getObj(localIndex)
                 when (obj) {
@@ -4055,6 +4099,7 @@ class CmdFrame(
             }
         }
     }
+
     internal fun isFastLocalSlot(slot: Int): Boolean {
         if (slot < fn.scopeSlotCount) return false
         val localIndex = slot - fn.scopeSlotCount
@@ -4195,6 +4240,7 @@ class CmdFrame(
                         }
                     }
                 }
+
                 CaptureOwnerFrameKind.MODULE -> {
                     val slotId = entry.slotIndex
                     val target = moduleScope
@@ -4325,9 +4371,9 @@ class CmdFrame(
 
     suspend fun handleException(t: Throwable): Boolean {
         val handler = tryStack.lastOrNull() ?: return false
-        vmIterDebug(
+        vmIterDebug {
             "handleException fn=${fn.name} throwable=${t::class.simpleName} message=${t.message} catchIp=${handler.catchIp} finallyIp=${handler.finallyIp} iterDepth=${iterStack.size}"
-        )
+        }
         val finallyIp = handler.finallyIp
         if (t is ReturnException || t is LoopBreakContinueException) {
             if (finallyIp >= 0) {
@@ -4453,42 +4499,50 @@ class CmdFrame(
     fun pushIterator(iter: Obj) {
         iterStack.addLast(iter)
         if (iter.objClass.className == "FlowIterator") {
-            vmIterDebug("pushIterator fn=${fn.name} depth=${iterStack.size} iterClass=${iter.objClass.className}")
+            vmIterDebug { "pushIterator fn=${fn.name} depth=${iterStack.size} iterClass=${iter.objClass.className}" }
         }
     }
 
     fun popIterator() {
         val iter = iterStack.lastOrNull()
         if (iter != null && iter.objClass.className == "FlowIterator") {
-            vmIterDebug("popIterator fn=${fn.name} depth=${iterStack.size} iterClass=${iter.objClass.className}")
+            vmIterDebug { "popIterator fn=${fn.name} depth=${iterStack.size} iterClass=${iter.objClass.className}" }
         }
         iterStack.removeLastOrNull()
     }
 
     suspend fun cancelTopIterator() {
         val iter = iterStack.removeLastOrNull() ?: return
-        vmIterDebug("cancelTopIterator fn=${fn.name} depthAfter=${iterStack.size} iterClass=${iter.objClass.className}")
+        vmIterDebug { "cancelTopIterator fn=${fn.name} depthAfter=${iterStack.size} iterClass=${iter.objClass.className}" }
         iter.invokeInstanceMethod(ensureScope(), "cancelIteration") { ObjVoid }
     }
 
     suspend fun cancelIterators() {
         while (iterStack.isNotEmpty()) {
             val iter = iterStack.removeLast()
-            vmIterDebug("cancelIterators fn=${fn.name} depthAfter=${iterStack.size} iterClass=${iter.objClass.className}")
-            iter.invokeInstanceMethod(ensureScope(), "cancelIteration") { ObjVoid }
+            vmIterDebug { "cancelIterators fn=${fn.name} depthAfter=${iterStack.size} iterClass=${iter.objClass.className}" }
+            try {
+                iter.invokeInstanceMethod(ensureScope(), "cancelIteration") { ObjVoid }
+            } catch (e: Throwable) {
+                vmIterDebug(e) {
+                    "cancelIterators: cancelIteration failed fn=${fn.name} depthAfter=${iterStack.size} iterClass=${iter.objClass.className}"
+                }
+            }
         }
     }
 
     private suspend fun cancelIteratorsToDepth(depth: Int, reason: String) {
         while (iterStack.size > depth) {
             val iter = iterStack.removeLast()
-            vmIterDebug(
+            vmIterDebug {
                 "cancelIteratorsToDepth fn=${fn.name} reason=$reason targetDepth=$depth depthAfter=${iterStack.size} iterClass=${iter.objClass.className}"
-            )
+            }
             try {
                 iter.invokeInstanceMethod(ensureScope(), "cancelIteration") { ObjVoid }
             } catch (e: Throwable) {
-                vmIterDebug("cancelIteratorsToDepth: cancelIteration failed fn=${fn.name} reason=$reason", e)
+                vmIterDebug(e) {
+                    "cancelIteratorsToDepth: cancelIteration failed fn=${fn.name} reason=$reason"
+                }
             }
         }
     }
@@ -4549,10 +4603,12 @@ class CmdFrame(
                         existing.write(value)
                         return
                     }
+
                     is RecordSlotRef -> {
                         existing.write(value)
                         return
                     }
+
                     else -> {}
                 }
             }
@@ -4629,10 +4685,12 @@ class CmdFrame(
                         existing.write(ObjInt.of(value))
                         return
                     }
+
                     is RecordSlotRef -> {
                         existing.write(ObjInt.of(value))
                         return
                     }
+
                     else -> {}
                 }
             }
@@ -4659,10 +4717,12 @@ class CmdFrame(
                         existing.write(ObjInt.of(value))
                         return
                     }
+
                     is RecordSlotRef -> {
                         existing.write(ObjInt.of(value))
                         return
                     }
+
                     else -> {}
                 }
             }
@@ -4712,10 +4772,12 @@ class CmdFrame(
                         existing.write(ObjReal.of(value))
                         return
                     }
+
                     is RecordSlotRef -> {
                         existing.write(ObjReal.of(value))
                         return
                     }
+
                     else -> {}
                 }
             }
@@ -4736,10 +4798,12 @@ class CmdFrame(
                         existing.write(ObjReal.of(value))
                         return
                     }
+
                     is RecordSlotRef -> {
                         existing.write(ObjReal.of(value))
                         return
                     }
+
                     else -> {}
                 }
             }
@@ -4783,10 +4847,12 @@ class CmdFrame(
                         existing.write(if (value) ObjTrue else ObjFalse)
                         return
                     }
+
                     is RecordSlotRef -> {
                         existing.write(if (value) ObjTrue else ObjFalse)
                         return
                     }
+
                     else -> {}
                 }
             }
@@ -4807,10 +4873,12 @@ class CmdFrame(
                         existing.write(if (value) ObjTrue else ObjFalse)
                         return
                     }
+
                     is RecordSlotRef -> {
                         existing.write(if (value) ObjTrue else ObjFalse)
                         return
                     }
+
                     else -> {}
                 }
             }
@@ -4903,6 +4971,7 @@ class CmdFrame(
                 null -> ObjNull
                 else -> raw
             }
+
             else -> frame.getRawObj(local) ?: ObjNull
         }
     }
@@ -4929,10 +4998,12 @@ class CmdFrame(
                         existing.write(value)
                         return
                     }
+
                     is RecordSlotRef -> {
                         existing.write(value)
                         return
                     }
+
                     else -> {}
                 }
             }
@@ -5018,15 +5089,18 @@ class CmdFrame(
                         }
                         namedSeen = true
                     }
+
                     value is ObjList -> {
                         if (namedSeen) scope.raiseIllegalArgument("positional splat cannot follow named arguments")
                         positional.addAll(value.list)
                     }
+
                     value.isInstanceOf(ObjIterable) -> {
                         if (namedSeen) scope.raiseIllegalArgument("positional splat cannot follow named arguments")
                         val list = (value.invokeInstanceMethod(scope, "toList") as ObjList).list
                         positional.addAll(list)
                     }
+
                     else -> scope.raiseClassCastError("expected list of objects for splat argument")
                 }
             } else {
@@ -5075,6 +5149,7 @@ class CmdFrame(
                     else -> obj
                 }
             }
+
             else -> {
                 val obj = frame.getObj(localIndex)
                 when (obj) {

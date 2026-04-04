@@ -20,6 +20,18 @@ package net.sergeych.lyng.bytecode
 import java.io.File
 import java.time.Instant
 
+private fun parseEnabledFlag(value: String?): Boolean {
+    return when (value?.lowercase()) {
+        "1", "true", "yes", "on" -> true
+        else -> false
+    }
+}
+
+internal actual val vmIterDebugEnabled: Boolean = run {
+    parseEnabledFlag(System.getProperty("LYNG_VM_ITER_DEBUG"))
+        || parseEnabledFlag(System.getenv("LYNG_VM_ITER_DEBUG"))
+}
+
 private val vmIterLogFilePath: String =
     System.getenv("LYNG_VM_DEBUG_LOG")
         ?.takeIf { it.isNotBlank() }
@@ -27,7 +39,7 @@ private val vmIterLogFilePath: String =
 
 private val vmIterLogLock = Any()
 
-internal actual fun vmIterDebug(message: String, error: Throwable?) {
+internal actual fun vmIterDebugWrite(message: String, error: Throwable?) {
     runCatching {
         val line = buildString {
             append(Instant.now().toString())

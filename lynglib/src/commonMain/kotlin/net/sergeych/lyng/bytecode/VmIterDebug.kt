@@ -17,4 +17,18 @@
 
 package net.sergeych.lyng.bytecode
 
-internal expect fun vmIterDebug(message: String, error: Throwable? = null)
+internal expect val vmIterDebugEnabled: Boolean
+
+internal expect fun vmIterDebugWrite(message: String, error: Throwable? = null)
+
+internal inline fun vmIterDebug(message: () -> String) {
+    if (vmIterDebugEnabled) {
+        vmIterDebugWrite(message())
+    }
+}
+
+internal inline fun vmIterDebug(error: Throwable, message: () -> String) {
+    if (vmIterDebugEnabled) {
+        vmIterDebugWrite(message(), error)
+    }
+}

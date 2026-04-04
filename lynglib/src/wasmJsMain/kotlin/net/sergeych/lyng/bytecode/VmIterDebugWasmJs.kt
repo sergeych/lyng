@@ -17,6 +17,8 @@
 
 package net.sergeych.lyng.bytecode
 
-internal actual fun vmIterDebug(message: String, error: Throwable?) {
+internal actual val vmIterDebugEnabled: Boolean = false
+
+internal actual fun vmIterDebugWrite(message: String, error: Throwable?) {
     // no-op on wasmJs
 }

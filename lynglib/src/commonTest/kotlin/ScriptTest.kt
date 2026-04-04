@@ -131,7 +131,7 @@ class ScriptTest {
     }
 
     // --- Helpers to test iterator cancellation semantics ---
-    class ObjTestIterable : Obj() {
+    class ObjTestIterable(private val throwOnCancel: Boolean = false) : Obj() {
 
         var cancelCount: Int = 0
 
@@ -145,6 +145,13 @@ class ScriptTest {
                 addFn("cancelCount") { thisAs<ObjTestIterable>().cancelCount.toObj() }
             }
         }
+
+        internal fun onCancel() {
+            cancelCount += 1
+            if (throwOnCancel) {
+                throw IllegalStateException("cancel failed")
+            }
+        }
     }
 
     class ObjTestIterator(private val owner: ObjTestIterable) : Obj() {
@@ -154,7 +161,7 @@ class ScriptTest {
         private fun hasNext(): Boolean = i < 5
         private fun next(): Obj = ObjInt((++i).toLong())
         private fun cancelIteration() {
-            owner.cancelCount += 1
+            owner.onCancel()
         }
 
         companion object {
@@ -219,6 +226,33 @@ class ScriptTest {
             // ignore
         }
         assertEquals(1, ti.cancelCount)
+    }
+
+    @Test
+    fun testVmCancelsAllIteratorsWhenOneCancelFails() = runTest {
+        val scope = Script.newScope()
+        val outer = ObjTestIterable()
+        val inner = ObjTestIterable(throwOnCancel = true)
+        scope.addConst("outer", outer)
+        scope.addConst("inner", inner)
+
+        try {
+            scope.eval(
+                """
+                    for (o in outer) {
+                        for (i in inner) {
+                            throw "boom"
+                        }
+                    }
+                """.trimIndent()
+            )
+            fail("Exception expected")
+        } catch (_: Exception) {
+            // ignore
+        }
+
+        assertEquals(1, inner.cancelCount)
+        assertEquals(1, outer.cancelCount)
     }
 
     @Test
