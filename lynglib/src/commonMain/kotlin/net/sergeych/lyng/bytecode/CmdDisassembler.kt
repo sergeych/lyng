@@ -493,6 +493,9 @@ object CmdDisassembler {
             is CmdCallDynamicMember -> Opcode.CALL_DYNAMIC_MEMBER to intArrayOf(cmd.recvSlot, cmd.nameId, cmd.argBase, cmd.argCount, cmd.dst)
             is CmdGetIndex -> Opcode.GET_INDEX to intArrayOf(cmd.targetSlot, cmd.indexSlot, cmd.dst)
             is CmdSetIndex -> Opcode.SET_INDEX to intArrayOf(cmd.targetSlot, cmd.indexSlot, cmd.valueSlot)
+            is CmdGetIndexInt -> Opcode.GET_INDEX_INT to intArrayOf(cmd.targetSlot, cmd.indexSlot, cmd.dst)
+            is CmdSetIndexInt -> Opcode.SET_INDEX_INT to intArrayOf(cmd.targetSlot, cmd.indexSlot, cmd.valueSlot)
+            is CmdListFillInt -> Opcode.LIST_FILL_INT to intArrayOf(cmd.sizeSlot, cmd.callableSlot, cmd.dst)
             is CmdListLiteral -> Opcode.LIST_LITERAL to intArrayOf(cmd.planId, cmd.baseSlot, cmd.count, cmd.dst)
             is CmdGetMemberSlot -> Opcode.GET_MEMBER_SLOT to intArrayOf(cmd.recvSlot, cmd.fieldId, cmd.methodId, cmd.dst)
             is CmdSetMemberSlot -> Opcode.SET_MEMBER_SLOT to intArrayOf(cmd.recvSlot, cmd.fieldId, cmd.methodId, cmd.valueSlot)
@@ -611,6 +614,12 @@ object CmdDisassembler {
             Opcode.GET_INDEX ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.SET_INDEX ->
+                listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
+            Opcode.GET_INDEX_INT ->
+                listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
+            Opcode.SET_INDEX_INT ->
+                listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
+            Opcode.LIST_FILL_INT ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.LIST_LITERAL ->
                 listOf(OperandKind.CONST, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)

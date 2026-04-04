@@ -1,18 +1,18 @@
 import lyng.time
 
-val WORK_SIZE = 200
-val TASK_COUNT = 10
+val WORK_SIZE = 500
+val THREADS = 1
 
 fn piSpigot(iThread: Int, n: Int) {
-    var pi = []
+    var piIter = 0
+    var pi = List.fill(n) { 0 }
     val boxes = n * 10 / 3
     var reminders = List.fill(boxes) { 2 }
     var heldDigits = 0
-    for (i in 0..n) {
+    for (i in 0..<n) {
         var carriedOver = 0
         var sum = 0
-        for (k in 1..boxes) {
-            val j = boxes - k
+        for (j in (boxes - 1) downTo 0) {
             val denom = j * 2 + 1
             reminders[j] *= 10
             sum = reminders[j] + carriedOver
@@ -39,29 +39,29 @@ fn piSpigot(iThread: Int, n: Int) {
         } else {
             heldDigits = 1
         }
-        pi.add(q)
+        pi[piIter] = q
+        ++piIter
     }
 
-    var s = ""
+    var res = ""
     for (i in (n - 8)..<n) {
-        s += pi[i]
+        res += pi[i]
     }
 
-    println(iThread, " - done: ", s)
+    println(iThread.toString() + ": " + res)
+    res
 }
 
-var counter = 0
+for( r in 0..100 ) {
+    val t0 = Instant()
 
-val t0 = Instant()
-(1..TASK_COUNT).map { n ->
-    val counterState = counter
-    val t = launch {
-        piSpigot(counterState, WORK_SIZE)
+    println("piBench (lyng): THREADS = " + THREADS + ", WORK_SIZE = " + WORK_SIZE)
+    for (i in 0..<THREADS) {
+        piSpigot(i, WORK_SIZE)
     }
-    ++counter
-    t
-}.forEach { (it as Deferred).await() }
 
-val dt = Instant() - t0
+    val dt = Instant() - t0
 
-println("all done, dt = ", dt)
+    println("all done, dt = ", dt)
+    delay(800)
+}

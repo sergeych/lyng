@@ -16,25 +16,13 @@
  */
 
 import kotlinx.coroutines.test.runTest
-import net.sergeych.lyng.Benchmarks
-import net.sergeych.lyng.BytecodeBodyProvider
-import net.sergeych.lyng.PerfFlags
-import net.sergeych.lyng.PerfProfiles
-import net.sergeych.lyng.Script
-import net.sergeych.lyng.Statement
-import net.sergeych.lyng.bytecode.BytecodeStatement
-import net.sergeych.lyng.bytecode.CmdCallMemberSlot
-import net.sergeych.lyng.bytecode.CmdFunction
-import net.sergeych.lyng.bytecode.CmdGetIndex
-import net.sergeych.lyng.bytecode.CmdIterPush
-import net.sergeych.lyng.bytecode.CmdMakeRange
-import net.sergeych.lyng.bytecode.CmdSetIndex
+import net.sergeych.lyng.*
+import net.sergeych.lyng.bytecode.*
 import net.sergeych.lyng.obj.ObjString
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 import kotlin.time.TimeSource
 
 class PiSpigotBenchmarkTest {
@@ -42,17 +30,11 @@ class PiSpigotBenchmarkTest {
     fun benchmarkPiSpigot() = runTest {
         if (!Benchmarks.enabled) return@runTest
 
-        val source = Files.readString(resolveExample("pi-test.lyng"))
-        val legacySource = source.replace(
-            "val quotient = sum / denom",
-            "var quotient = floor((sum / (denom * 1.0))).toInt()"
-        )
-        assertTrue(legacySource != source, "failed to build legacy piSpigot benchmark case")
+        val source = loadPiSpigotSource()
 
         val digits = 200
         val expectedSuffix = "49303819"
 
-        val legacyElapsed = runCase("legacy-real-division", legacySource, digits, expectedSuffix, dumpBytecode = true)
         val saved = PerfProfiles.snapshot()
         PerfFlags.RVAL_FASTPATH = false
         val optimizedRvalOffElapsed = runCase(
@@ -64,15 +46,11 @@ class PiSpigotBenchmarkTest {
         )
         PerfProfiles.restore(saved)
         val optimizedElapsed = runCase("optimized-int-division-rval-on", source, digits, expectedSuffix, dumpBytecode = true)
-        val sourceSpeedup = legacyElapsed.toDouble() / optimizedRvalOffElapsed.toDouble()
         val runtimeSpeedup = optimizedRvalOffElapsed.toDouble() / optimizedElapsed.toDouble()
-        val totalSpeedup = legacyElapsed.toDouble() / optimizedElapsed.toDouble()
         println(
-            "[DEBUG_LOG] [BENCH] pi-spigot compare n=$digits legacy=${legacyElapsed} ms " +
-                "intDiv=${optimizedRvalOffElapsed} ms rvalOn=${optimizedElapsed} ms " +
-                "intDivSpeedup=${"%.2f".format(sourceSpeedup)}x " +
-                "rvalSpeedup=${"%.2f".format(runtimeSpeedup)}x " +
-                "total=${"%.2f".format(totalSpeedup)}x"
+            "[DEBUG_LOG] [BENCH] pi-spigot compare n=$digits " +
+                "rvalOff=${optimizedRvalOffElapsed} ms rvalOn=${optimizedElapsed} ms " +
+                "rvalSpeedup=${"%.2f".format(runtimeSpeedup)}x"
         )
     }
 
@@ -91,18 +69,18 @@ class PiSpigotBenchmarkTest {
             dumpHotOps(scope, "piSpigot")
         }
 
-        val first = scope.eval("piSpigot($digits)") as ObjString
+        val first = scope.eval("piSpigot(0, $digits)") as ObjString
         assertEquals(expectedSuffix, first.value)
 
         repeat(2) {
-            val warm = scope.eval("piSpigot($digits)") as ObjString
+            val warm = scope.eval("piSpigot(0, $digits)") as ObjString
             assertEquals(expectedSuffix, warm.value)
         }
 
         val iterations = 3
         val start = TimeSource.Monotonic.markNow()
         repeat(iterations) {
-            val result = scope.eval("piSpigot($digits)") as ObjString
+            val result = scope.eval("piSpigot(0, $digits)") as ObjString
             assertEquals(expectedSuffix, result.value)
         }
         val elapsedMs = start.elapsedNow().inWholeMilliseconds
@@ -133,6 +111,11 @@ class PiSpigotBenchmarkTest {
         val stmt = record.value as? Statement ?: return null
         return (stmt as? BytecodeStatement)?.bytecodeFunction()
             ?: (stmt as? BytecodeBodyProvider)?.bytecodeBody()?.bytecodeFunction()
+    }
+
+    private fun loadPiSpigotSource(): String {
+        val source = Files.readString(resolveExample("pi-bench.lyng"))
+        return source.substringBefore("\nval t0 = Instant()")
     }
 
     private fun resolveExample(name: String): Path {

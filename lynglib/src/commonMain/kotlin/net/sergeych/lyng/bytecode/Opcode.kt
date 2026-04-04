@@ -177,7 +177,10 @@ enum class Opcode(val code: Int) {
 
     GET_INDEX(0xA2),
     SET_INDEX(0xA3),
+    GET_INDEX_INT(0xA4),
     LIST_LITERAL(0xA5),
+    SET_INDEX_INT(0xA6),
+    LIST_FILL_INT(0xA7),
     GET_MEMBER_SLOT(0xA8),
     SET_MEMBER_SLOT(0xA9),
     GET_CLASS_SCOPE(0xAA),

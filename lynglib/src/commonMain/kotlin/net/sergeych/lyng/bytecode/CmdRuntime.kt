@@ -3352,6 +3352,31 @@ class CmdListLiteral(
     }
 }
 
+class CmdListFillInt(
+    internal val sizeSlot: Int,
+    internal val callableSlot: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val size = frame.getInt(sizeSlot).toInt()
+        if (size < 0) frame.ensureScope().raiseIllegalArgument("list size must be non-negative")
+        val callable = frame.storedSlotObj(callableSlot)
+        val scope = frame.ensureScope()
+        val result = ObjList(LongArray(size))
+        for (i in 0 until size) {
+            val value = if (callable is BytecodeLambdaCallable && callable.supportsImplicitIntFillFastPath()) {
+                callable.invokeImplicitIntArg(scope, i.toLong())
+            } else {
+                callable.callOn(scope.createChildScope(scope.pos, args = Arguments(ObjInt.of(i.toLong()))))
+            }
+            val intValue = (value as? ObjInt)?.value ?: scope.raiseClassCastError("expected Int fill result")
+            result.setIntAtFast(i, intValue)
+        }
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
 private fun decodeMemberId(id: Int): Pair<Int, Boolean> {
     return if (id <= -2) {
         Pair(-id - 2, true)
@@ -3709,7 +3734,7 @@ class CmdGetIndex(
         val target = frame.storedSlotObj(targetSlot)
         val index = frame.storedSlotObj(indexSlot)
         if (target is ObjList && target::class == ObjList::class && index is ObjInt) {
-            frame.storeObjResult(dst, target.list[index.toInt()])
+            frame.storeObjResult(dst, target.getObjAtFast(index.toInt()))
             return
         }
         val result = target.getAt(frame.ensureScope(), index)
@@ -3728,10 +3753,51 @@ class CmdSetIndex(
         val index = frame.storedSlotObj(indexSlot)
         val value = frame.slotToObj(valueSlot)
         if (target is ObjList && target::class == ObjList::class && index is ObjInt) {
-            target.list[index.toInt()] = value
+            target.setObjAtFast(index.toInt(), value)
             return
         }
         target.putAt(frame.ensureScope(), index, value)
+        return
+    }
+}
+
+class CmdGetIndexInt(
+    internal val targetSlot: Int,
+    internal val indexSlot: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val target = frame.storedSlotObj(targetSlot)
+        val index = frame.getInt(indexSlot).toInt()
+        if (target is ObjList && target::class == ObjList::class) {
+            target.getIntAtFast(index)?.let {
+                frame.setInt(dst, it)
+                return
+            }
+        }
+        val result = target.getAt(frame.ensureScope(), ObjInt.of(index.toLong()))
+        if (result is ObjInt) {
+            frame.setInt(dst, result.value)
+            return
+        }
+        frame.ensureScope().raiseClassCastError("expected Int list element")
+    }
+}
+
+class CmdSetIndexInt(
+    internal val targetSlot: Int,
+    internal val indexSlot: Int,
+    internal val valueSlot: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val target = frame.storedSlotObj(targetSlot)
+        val index = frame.getInt(indexSlot).toInt()
+        if (target is ObjList && target::class == ObjList::class) {
+            target.setIntAtFast(index, frame.getInt(valueSlot))
+            return
+        }
+        val value = ObjInt.of(frame.getInt(valueSlot))
+        target.putAt(frame.ensureScope(), ObjInt.of(index.toLong()), value)
         return
     }
 }
@@ -3788,6 +3854,31 @@ class BytecodeLambdaCallable(
         )
     }
 
+    fun supportsImplicitIntFillFastPath(): Boolean = argsDeclaration == null
+
+    suspend fun invokeImplicitIntArg(scope: Scope, arg: Long): Obj {
+        val context = scope.applyClosureForBytecode(closureScope, preferredThisType).also {
+            it.args = Arguments.EMPTY
+        }
+        if (captureRecords != null) {
+            context.captureRecords = captureRecords
+            context.captureNames = captureNames
+        } else if (captureNames.isNotEmpty()) {
+            closureScope.raiseIllegalState("bytecode lambda capture records missing")
+        }
+        val binder: suspend (CmdFrame, Arguments) -> Unit = { frame, _ ->
+            paramSlotPlan["it"]?.let { itSlot ->
+                frame.frame.setInt(itSlot, arg)
+            }
+        }
+        return try {
+            CmdVm().execute(fn, context, Arguments.EMPTY, binder)
+        } catch (e: ReturnException) {
+            if (e.label == null || returnLabels.contains(e.label)) e.result
+            else throw e
+        }
+    }
+
     override suspend fun execute(scope: Scope): Obj {
         val context = scope.applyClosureForBytecode(closureScope, preferredThisType).also {
             it.args = scope.args
@@ -3818,7 +3909,12 @@ class BytecodeLambdaCallable(
                     }
                     val itSlot = slotPlan["it"]
                     if (itSlot != null) {
-                        frame.frame.setObj(itSlot, itValue)
+                        when (itValue) {
+                            is ObjInt -> frame.frame.setInt(itSlot, itValue.value)
+                            is ObjReal -> frame.frame.setReal(itSlot, itValue.value)
+                            is ObjBool -> frame.frame.setBool(itSlot, itValue.value)
+                            else -> frame.frame.setObj(itSlot, itValue)
+                        }
                     }
                 } else {
                     argsDeclaration.assignToFrame(

@@ -20,9 +20,11 @@ import kotlinx.coroutines.runBlocking
 import net.sergeych.lyng.EvalSession
 import net.sergeych.lyng.Script
 import net.sergeych.lyng.Source
+import net.sergeych.lyng.obj.ObjInt
 import net.sergeych.lyng.obj.ObjList
 import net.sergeych.lyng.obj.ObjString
 import org.junit.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 
 class CliDispatcherJvmTest {
@@ -65,6 +67,36 @@ class CliDispatcherJvmTest {
                 childThreadKey,
                 "CLI launch child should not inherit the runBlocking caller thread: $childThreadName"
             )
+        } finally {
+            session.cancelAndJoin()
+        }
+    }
+
+    @Test
+    fun cliEvalInfersDeferredItTypeFromMapLambdaLocal() = runBlocking {
+        val session = EvalSession(Script.newScope())
+        try {
+            val result = evalOnCliDispatcher(
+                session,
+                Source(
+                    "<cli-repro>",
+                    """
+                    var sum = 0
+                    var counter = 0
+
+                    (1..3).map { n ->
+                        val counterState = counter
+                        val task = launch { counterState + n }
+                        ++counter
+                        task
+                    }.forEach { sum += it.await() }
+
+                    sum
+                    """.trimIndent()
+                )
+            )
+
+            assertEquals(9, (result as ObjInt).value)
         } finally {
             session.cancelAndJoin()
         }

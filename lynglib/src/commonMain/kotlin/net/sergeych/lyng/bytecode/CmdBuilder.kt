@@ -227,6 +227,12 @@ class CmdBuilder {
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.SET_INDEX ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
+            Opcode.GET_INDEX_INT ->
+                listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
+            Opcode.SET_INDEX_INT ->
+                listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
+            Opcode.LIST_FILL_INT ->
+                listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.MAKE_RANGE ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.LIST_LITERAL ->
@@ -827,6 +833,9 @@ class CmdBuilder {
             Opcode.CALL_DYNAMIC_MEMBER -> CmdCallDynamicMember(operands[0], operands[1], operands[2], operands[3], operands[4])
             Opcode.GET_INDEX -> CmdGetIndex(operands[0], operands[1], operands[2])
             Opcode.SET_INDEX -> CmdSetIndex(operands[0], operands[1], operands[2])
+            Opcode.GET_INDEX_INT -> CmdGetIndexInt(operands[0], operands[1], operands[2])
+            Opcode.SET_INDEX_INT -> CmdSetIndexInt(operands[0], operands[1], operands[2])
+            Opcode.LIST_FILL_INT -> CmdListFillInt(operands[0], operands[1], operands[2])
             Opcode.LIST_LITERAL -> CmdListLiteral(operands[0], operands[1], operands[2], operands[3])
             Opcode.GET_MEMBER_SLOT -> CmdGetMemberSlot(operands[0], operands[1], operands[2], operands[3])
             Opcode.SET_MEMBER_SLOT -> CmdSetMemberSlot(operands[0], operands[1], operands[2], operands[3])

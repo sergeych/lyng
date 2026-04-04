@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -97,11 +97,26 @@ class TestCoroutines {
                         counter = c + 1
 //                    }
                 }
-             }.forEach { (it as Deferred).await() }
+             }.forEach { it.await() }
              println(counter)
              assert( counter < 10 )
              
     """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testMapForEachDeferredInference() = runTest {
+        eval(
+            """
+            var sum = 0
+
+            (1..3).map { n ->
+                launch { n }
+            }.forEach { sum += it.await() }
+
+            assertEquals(6, sum)
+            """.trimIndent()
         )
     }
 

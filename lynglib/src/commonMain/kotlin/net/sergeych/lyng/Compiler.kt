@@ -170,6 +170,20 @@ class Compiler(
     private val typeAliases: MutableMap<String, TypeAliasDecl> = mutableMapOf()
     private val methodReturnTypeDeclByRef: MutableMap<ObjRef, TypeDecl> = mutableMapOf()
     private val callReturnTypeDeclByRef: MutableMap<CallRef, TypeDecl> = mutableMapOf()
+    private val iterableLikeTypeNames = setOf(
+        "Iterable",
+        "Collection",
+        "Array",
+        "List",
+        "ImmutableList",
+        "Set",
+        "ImmutableSet",
+        "Flow",
+        "ObservableList",
+        "RingBuffer",
+        "Range",
+        "IntRange"
+    )
     private val callableReturnTypeByScopeId: MutableMap<Int, MutableMap<Int, ObjClass>> = mutableMapOf()
     private val callableReturnTypeByName: MutableMap<String, ObjClass> = mutableMapOf()
     private val callableReturnTypeDeclByName: MutableMap<String, TypeDecl> = mutableMapOf()
@@ -2721,7 +2735,7 @@ class Compiler(
                                 Token.Type.LPAREN -> {
                                     cc.next()
                                     if (shouldTreatAsClassScopeCall(left, next.value)) {
-                                        val parsed = parseArgs(null)
+                                        val parsed = parseArgs(null, implicitItTypeNameForMemberLambda(left, next.value))
                                         val args = parsed.first
                                         val tailBlock = parsed.second
                                         isCall = true
@@ -2738,7 +2752,7 @@ class Compiler(
                                         val receiverType = if (next.value == "apply" || next.value == "run") {
                                             inferReceiverTypeFromRef(left)
                                         } else null
-                                        val parsed = parseArgs(receiverType)
+                                        val parsed = parseArgs(receiverType, implicitItTypeNameForMemberLambda(left, next.value))
                                         val args = parsed.first
                                         val tailBlock = parsed.second
                                         if (left is LocalVarRef && left.name == "scope") {
@@ -2807,9 +2821,7 @@ class Compiler(
                                     val receiverType = if (next.value == "apply" || next.value == "run") {
                                         inferReceiverTypeFromRef(left)
                                     } else null
-                                    val itType = if (next.value == "let" || next.value == "also") {
-                                        inferReceiverTypeFromRef(left)
-                                    } else null
+                                    val itType = implicitItTypeNameForMemberLambda(left, next.value)
                                     val lambda = parseLambdaExpression(receiverType, implicitItType = itType)
                                     val argPos = next.pos
                                     val args = listOf(ParsedArgument(ExpressionStatement(lambda, argPos), next.pos))
@@ -3239,6 +3251,8 @@ class Compiler(
             if (cls != null && itSlot != null) {
                 val paramTypeMap = slotTypeByScopeId.getOrPut(paramSlotPlan.id) { mutableMapOf() }
                 paramTypeMap[itSlot] = cls
+                val paramTypeDeclMap = slotTypeDeclByScopeId.getOrPut(paramSlotPlan.id) { mutableMapOf() }
+                paramTypeDeclMap[itSlot] = TypeDecl.Simple(implicitItType, false)
             }
         }
 
@@ -3384,7 +3398,12 @@ class Compiler(
                             }
                             val itSlot = slotPlan["it"]
                             if (itSlot != null) {
-                                frame.frame.setObj(itSlot, itValue)
+                                when (itValue) {
+                                    is ObjInt -> frame.frame.setInt(itSlot, itValue.value)
+                                    is ObjReal -> frame.frame.setReal(itSlot, itValue.value)
+                                    is ObjBool -> frame.frame.setBool(itSlot, itValue.value)
+                                    else -> frame.frame.setObj(itSlot, itValue)
+                                }
                             }
                         } else {
                             argsDeclaration.assignToFrame(
@@ -3414,6 +3433,7 @@ class Compiler(
             paramSlotPlan = paramSlotPlanSnapshot,
             argsDeclaration = argsDeclaration,
             captureEntries = captureEntries,
+            inferredReturnClass = returnClass,
             preferredThisType = expectedReceiverType,
             wrapAsExtensionCallable = wrapAsExtensionCallable,
             returnLabels = returnLabels,
@@ -4771,7 +4791,7 @@ class Compiler(
                 val targetClass = resolveReceiverClassForMember(ref.targetRef)
                 classMethodReturnTypeDecl(targetClass, "getAt")
             }
-            is MethodCallRef -> methodReturnTypeDeclByRef[ref]
+            is MethodCallRef -> methodReturnTypeDeclByRef[ref] ?: inferMethodCallReturnTypeDecl(ref)
             is CallRef -> callReturnTypeDeclByRef[ref] ?: inferCallReturnTypeDecl(ref)
             is BinaryOpRef -> inferBinaryOpReturnTypeDecl(ref)
             is StatementRef -> (ref.statement as? ExpressionStatement)?.let { resolveReceiverTypeDecl(it.ref) }
@@ -5012,8 +5032,7 @@ class Compiler(
     }
 
     private fun inferMethodCallReturnClass(ref: MethodCallRef): ObjClass? {
-        val receiverDecl = resolveReceiverTypeDecl(ref.receiver)
-        val genericReturnDecl = inferMethodCallReturnTypeDecl(ref.name, receiverDecl)
+        val genericReturnDecl = inferMethodCallReturnTypeDecl(ref)
         if (genericReturnDecl != null) {
             methodReturnTypeDeclByRef[ref] = genericReturnDecl
             resolveTypeDeclObjClass(genericReturnDecl)?.let { return it }
@@ -5034,7 +5053,24 @@ class Compiler(
         return inferMethodCallReturnClass(ref.name)
     }
 
+    private fun inferMethodCallReturnTypeDecl(ref: MethodCallRef): TypeDecl? {
+        methodReturnTypeDeclByRef[ref]?.let { return it }
+        val inferred = inferMethodCallReturnTypeDecl(ref.name, resolveReceiverTypeDecl(ref.receiver), ref.args)
+        if (inferred != null) {
+            methodReturnTypeDeclByRef[ref] = inferred
+        }
+        return inferred
+    }
+
     private fun inferMethodCallReturnTypeDecl(name: String, receiver: TypeDecl?): TypeDecl? {
+        return inferMethodCallReturnTypeDecl(name, receiver, emptyList())
+    }
+
+    private fun inferMethodCallReturnTypeDecl(
+        name: String,
+        receiver: TypeDecl?,
+        args: List<ParsedArgument>
+    ): TypeDecl? {
         val base = when (receiver) {
             is TypeDecl.Generic -> receiver.name.substringAfterLast('.')
             is TypeDecl.Simple -> receiver.name.substringAfterLast('.')
@@ -5047,6 +5083,10 @@ class Compiler(
             }
             name == "next" && receiver is TypeDecl.Generic && base == "Iterator" -> {
                 receiver.args.firstOrNull()
+            }
+            name == "map" && base in iterableLikeTypeNames -> {
+                val mappedType = args.firstOrNull()?.let { inferCallableReturnTypeDeclFromArgument(it) } ?: TypeDecl.TypeAny
+                TypeDecl.Generic("List", listOf(mappedType), false)
             }
             name == "toImmutableList" && receiver is TypeDecl.Generic && (base == "Iterable" || base == "Collection" || base == "Array" || base == "List" || base == "ImmutableList") -> {
                 val arg = receiver.args.firstOrNull() ?: TypeDecl.TypeAny
@@ -5117,6 +5157,79 @@ class Compiler(
             name == "toImmutable" && base == "Map" -> TypeDecl.Simple("ImmutableMap", false)
             name == "toMutable" && base == "ImmutableMap" -> TypeDecl.Simple("Map", false)
             else -> null
+        }
+    }
+
+    private fun inferCallableReturnTypeDeclFromArgument(arg: ParsedArgument): TypeDecl? {
+        val stmt = arg.value as? ExpressionStatement ?: return null
+        val ref = stmt.ref
+        val fnType = inferTypeDeclFromRef(ref) as? TypeDecl.Function
+        if (fnType != null) {
+            return fnType.returnType
+        }
+        return when (ref) {
+            is ValueFnRef -> lambdaReturnTypeByRef[ref]?.let { TypeDecl.Simple(it.className, false) }
+            is ClassOperatorRef -> lambdaReturnTypeByRef[ref]?.let { TypeDecl.Simple(it.className, false) }
+            else -> null
+        }
+    }
+
+    private fun inferIterableElementTypeDecl(receiver: TypeDecl?): TypeDecl? {
+        return when (receiver) {
+            is TypeDecl.Generic -> {
+                val base = receiver.name.substringAfterLast('.')
+                when {
+                    base in iterableLikeTypeNames -> receiver.args.firstOrNull() ?: TypeDecl.TypeAny
+                    else -> null
+                }
+            }
+            is TypeDecl.Simple -> when (receiver.name.substringAfterLast('.')) {
+                "Range", "IntRange" -> TypeDecl.Simple("Int", false)
+                "String" -> TypeDecl.Simple("Char", false)
+                else -> null
+            }
+            else -> null
+        }
+    }
+
+    private fun inferIterableElementTypeDecl(receiver: ObjRef): TypeDecl? {
+        inferIterableElementTypeDecl(inferTypeDeclFromRef(receiver) ?: resolveReceiverTypeDecl(receiver))?.let {
+            return it
+        }
+        return when (receiver) {
+            is MethodCallRef -> if (receiver.name == "map") {
+                receiver.args.firstOrNull()?.let { inferCallableReturnTypeDeclFromArgument(it) }
+            } else {
+                null
+            }
+            else -> null
+        }
+    }
+
+    private fun implicitItTypeNameForMemberLambda(receiver: ObjRef, memberName: String): String? {
+        if (memberName == "fill" && isListTypeRef(receiver)) {
+            return "Int"
+        }
+        if (memberName == "let" || memberName == "also") {
+            return inferReceiverTypeFromRef(receiver)
+        }
+        val typeDecl = when (memberName) {
+            "forEach", "map" -> inferIterableElementTypeDecl(receiver)
+            else -> null
+        } ?: return null
+        return when (typeDecl) {
+            is TypeDecl.Simple -> typeDecl.name.substringAfterLast('.')
+            is TypeDecl.Generic -> typeDecl.name.substringAfterLast('.')
+            else -> resolveTypeDeclObjClass(typeDecl)?.className
+        }
+    }
+
+    private fun isListTypeRef(ref: ObjRef): Boolean {
+        return when (ref) {
+            is LocalVarRef -> ref.name == "List"
+            is LocalSlotRef -> ref.name == "List"
+            is FastLocalVarRef -> ref.name == "List"
+            else -> false
         }
     }
 
@@ -6112,7 +6225,10 @@ class Compiler(
      * Parse arguments list during the call and detect last block argument
      * _following the parenthesis_ call: `(1,2) { ... }`
      */
-    private suspend fun parseArgs(expectedTailBlockReceiver: String? = null): Pair<List<ParsedArgument>, Boolean> {
+    private suspend fun parseArgs(
+        expectedTailBlockReceiver: String? = null,
+        implicitItType: String? = null
+    ): Pair<List<ParsedArgument>, Boolean> {
 
         val args = mutableListOf<ParsedArgument>()
         suspend fun tryParseNamedArg(): ParsedArgument? {
@@ -6169,7 +6285,7 @@ class Compiler(
         var lastBlockArgument = false
         if (end.type == Token.Type.LBRACE) {
             // last argument - callable
-            val callableAccessor = parseLambdaExpression(expectedTailBlockReceiver)
+            val callableAccessor = parseLambdaExpression(expectedTailBlockReceiver, implicitItType = implicitItType)
             args += ParsedArgument(
                 ExpressionStatement(callableAccessor, end.pos),
                 end.pos
@@ -8891,6 +9007,12 @@ class Compiler(
             is ListLiteralRef -> ObjList.type
             is MapLiteralRef -> ObjMap.type
             is RangeRef -> ObjRange.type
+            is LocalVarRef -> resolveReceiverTypeDecl(directRef)?.let { resolveTypeDeclObjClass(it) }
+                ?: inferObjClassFromRef(directRef)
+            is FastLocalVarRef -> resolveReceiverTypeDecl(directRef)?.let { resolveTypeDeclObjClass(it) }
+                ?: inferObjClassFromRef(directRef)
+            is LocalSlotRef -> resolveReceiverTypeDecl(directRef)?.let { resolveTypeDeclObjClass(it) }
+                ?: inferObjClassFromRef(directRef)
             is StatementRef -> {
                 val decl = directRef.statement as? ClassDeclStatement
                 decl?.let { resolveClassByName(it.typeName) }

@@ -17,7 +17,9 @@
 
 package net.sergeych.lyng.io.net
 
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import net.sergeych.lyng.Compiler
 import net.sergeych.lyng.Script
@@ -29,9 +31,9 @@ import kotlin.test.assertEquals
 class LyngNetTcpServerExampleTest {
 
     @Test
-    fun tcpServerExampleRoundTripsOverLoopback() = runBlocking {
+    fun tcpServerExampleRoundTripsOverLoopback() = runTest {
         val engine = getSystemNetEngine()
-        if (!engine.isSupported || !engine.isTcpAvailable || !engine.isTcpServerAvailable) return@runBlocking
+        if (!engine.isSupported || !engine.isTcpAvailable || !engine.isTcpServerAvailable) return@runTest
 
         val scope = Script.newScope()
         createNetModule(PermitAllNetAccessPolicy, scope)
@@ -60,8 +62,10 @@ class LyngNetTcpServerExampleTest {
             "${'$'}{accepted.await()}: ${'$'}reply"
         """.trimIndent()
 
-        val result = withTimeout(5_000) {
-            Compiler.compile(code).execute(scope).inspect(scope)
+        val result = withContext(Dispatchers.Default) {
+            withTimeout(5_000) {
+                Compiler.compile(code).execute(scope).inspect(scope)
+            }
         }
 
         assertEquals("\"ping: echo:ping\"", result)

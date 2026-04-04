@@ -140,7 +140,7 @@ Open-ended ranges require an explicit step to iterate:
 
 You can use Char as both ends of the closed range:
 
-    val r = 'a' .. 'c'
+    val r = 'a'..'c'
     assert( 'b' in r)
     assert( 'e' !in r)
     for( ch in r )

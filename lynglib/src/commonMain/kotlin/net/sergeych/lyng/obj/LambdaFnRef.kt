@@ -12,6 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 package net.sergeych.lyng.obj
@@ -28,6 +29,7 @@ class LambdaFnRef(
     val paramSlotPlan: Map<String, Int>,
     val argsDeclaration: ArgsDeclaration?,
     val captureEntries: List<LambdaCaptureEntry>,
+    val inferredReturnClass: ObjClass?,
     val preferredThisType: String?,
     val wrapAsExtensionCallable: Boolean,
     val returnLabels: Set<String>,

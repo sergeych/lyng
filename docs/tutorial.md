@@ -1531,11 +1531,9 @@ It could be open and closed:
 
 Descending ranges are explicit too:
 
-    (5 downTo 1).toList()
-    >>> [5,4,3,2,1]
-
-    (5 downUntil 1).toList()
-    >>> [5,4,3,2]
+    assertEquals([5,4,3,2,1], (5 downTo 1).toList())
+    assertEquals([5,4,3,2], (5 downUntil 1).toList())
+    >>> void
 
 Ranges could be inside other ranges:
 
@@ -1549,7 +1547,7 @@ There are character ranges too:
 
 and you can use ranges in for-loops:
 
-    for( x in 'a' ..< 'c' ) println(x)
+    for( x in 'a'..<'c' ) println(x)
     >>> a
     >>> b
     >>> void

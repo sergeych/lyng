@@ -16,21 +16,11 @@
  */
 
 import kotlinx.coroutines.test.runTest
-import net.sergeych.lyng.Compiler
-import net.sergeych.lyng.ExecutionError
-import net.sergeych.lyng.Pos
-import net.sergeych.lyng.Script
-import net.sergeych.lyng.ScriptError
-import net.sergeych.lyng.Source
-import net.sergeych.lyng.eval
-import net.sergeych.lyng.toSource
-import net.sergeych.lyng.bytecode.CmdDisassembler
-import net.sergeych.lyng.bytecode.CmdFunction
+import net.sergeych.lyng.*
 import net.sergeych.lyng.obj.toInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class BytecodeRecentOpsTest {
@@ -127,6 +117,79 @@ class BytecodeRecentOpsTest {
             assertEquals(3, a[1])
             """.trimIndent()
         )
+    }
+
+    @Test
+    fun intListIndexOpsUsePrimitiveBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                var a: List<Int> = [1, 2, 3]
+                val s = a[1]
+                a[1] += 3
+                a[1]++
+                a[1] = s
+                a[1]
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertTrue(disasm.contains("GET_INDEX_INT"), disasm)
+        assertTrue(disasm.contains("SET_INDEX_INT"), disasm)
+        assertEquals(2, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun listFillIntIndexOpsUsePrimitiveBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                var a = List.fill(4) { 2 }
+                val s = a[1]
+                a[1] += 3
+                a[1] = s
+                a[1]
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertTrue(disasm.contains("GET_INDEX_INT"), disasm)
+        assertTrue(disasm.contains("SET_INDEX_INT"), disasm)
+        assertEquals(2, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun listFillIntUsesPrimitiveFillBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                val xs = List.fill(5) { 2 }
+                xs[0] + xs[4]
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertTrue(disasm.contains("LIST_FILL_INT"), disasm)
+        assertEquals(4, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun listFillIntWithIndexLambdaKeepsSemantics() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                val xs = List.fill(5) { it * 3 }
+                xs[0] + xs[4]
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertTrue(disasm.contains("LIST_FILL_INT"), disasm)
+        assertEquals(12, scope.eval("calc()").toInt())
     }
 
     @Test

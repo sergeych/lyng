@@ -19,8 +19,8 @@ package net.sergeych.lyng.obj
 
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
-import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Arguments
+import net.sergeych.lyng.Scope
 import net.sergeych.lyng.miniast.ParamDoc
 import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lyng.miniast.addPropertyDoc
@@ -29,7 +29,120 @@ import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
 
-open class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
+open class ObjList(initialList: MutableList<Obj> = mutableListOf()) : Obj() {
+    private var boxedList: MutableList<Obj>? = null
+    private var primitiveIntList: LongArray? = null
+
+    init {
+        if (!adoptPrimitiveIntList(initialList)) {
+            boxedList = initialList
+        }
+    }
+
+    val list: MutableList<Obj>
+        get() = ensureBoxedList()
+
+    internal fun sizeFast(): Int = primitiveIntList?.size ?: boxedList?.size ?: 0
+
+    internal fun getObjAtFast(index: Int): Obj =
+        primitiveIntList?.let { ObjInt.of(it[index]) } ?: boxedList!![index]
+
+    internal fun getIntAtFast(index: Int): Long? =
+        primitiveIntList?.get(index) ?: (boxedList?.get(index) as? ObjInt)?.value
+
+    internal fun setObjAtFast(index: Int, value: Obj) {
+        val ints = primitiveIntList
+        if (ints != null) {
+            if (value is ObjInt) {
+                ints[index] = value.value
+                return
+            }
+            ensureBoxedList()[index] = value
+            return
+        }
+        boxedList!![index] = value
+    }
+
+    internal fun setIntAtFast(index: Int, value: Long) {
+        val ints = primitiveIntList
+        if (ints != null) {
+            ints[index] = value
+            return
+        }
+        boxedList?.let {
+            if (it[index] is ObjInt) {
+                it[index] = ObjInt.of(value)
+                return
+            }
+        }
+        ensureBoxedList()[index] = ObjInt.of(value)
+    }
+
+    internal fun appendFast(value: Obj) {
+        val ints = primitiveIntList
+        if (ints != null && value is ObjInt) {
+            primitiveIntList = ints.copyOf(ints.size + 1).also { it[ints.size] = value.value }
+            return
+        }
+        ensureBoxedList().add(value)
+    }
+
+    internal fun appendAllFast(other: ObjList) {
+        val ints = primitiveIntList
+        val otherInts = other.primitiveIntList
+        if (ints != null && otherInts != null) {
+            primitiveIntList = LongArray(ints.size + otherInts.size).also {
+                ints.copyInto(it, 0, 0, ints.size)
+                otherInts.copyInto(it, ints.size, 0, otherInts.size)
+            }
+            return
+        }
+        ensureBoxedList().addAll(other.list)
+    }
+
+    private fun adoptPrimitiveIntList(items: List<Obj>): Boolean {
+        if (items.isEmpty()) return false
+        val ints = LongArray(items.size)
+        for (i in items.indices) {
+            val value = items[i] as? ObjInt ?: return false
+            ints[i] = value.value
+        }
+        primitiveIntList = ints
+        boxedList = null
+        return true
+    }
+
+    private fun ensureBoxedList(): MutableList<Obj> {
+        boxedList?.let { return it }
+        val ints = primitiveIntList
+        if (ints == null) {
+            val empty = mutableListOf<Obj>()
+            boxedList = empty
+            return empty
+        }
+        val materialized = ArrayList<Obj>(ints.size)
+        for (value in ints) {
+            materialized.add(ObjInt.of(value))
+        }
+        boxedList = materialized
+        primitiveIntList = null
+        return materialized
+    }
+
+    private fun sliceRange(start: Int, endExclusive: Int): Obj {
+        val ints = primitiveIntList
+        return if (ints != null) {
+            ObjList(ints.copyOfRange(start, endExclusive))
+        } else {
+            ObjList(list.subList(start, endExclusive).toMutableList())
+        }
+    }
+
+    internal constructor(intValues: LongArray) : this(mutableListOf()) {
+        primitiveIntList = intValues
+        boxedList = null
+    }
+
     protected open fun shouldTreatAsSingleElement(scope: Scope, other: Obj): Boolean {
         if (!other.isInstanceOf(ObjIterable)) return true
         val declaredElementType = scope.declaredListElementTypeForValue(this)
@@ -48,9 +161,9 @@ open class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
             }
             return false
         }
-        if (list.size != other.list.size) return false
-        for (i in 0..<list.size) {
-            if (!list[i].equals(scope, other.list[i])) return false
+        if (sizeFast() != other.sizeFast()) return false
+        for (i in 0..<sizeFast()) {
+            if (!getObjAtFast(i).equals(scope, other.getObjAtFast(i))) return false
         }
         return true
     }
@@ -58,31 +171,31 @@ open class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
     override suspend fun getAt(scope: Scope, index: Obj): Obj {
         return when (index) {
             is ObjInt -> {
-                list[index.toInt()]
+                getObjAtFast(index.toInt())
             }
 
             is ObjRange -> {
                 when {
                     index.start is ObjInt && index.end is ObjInt -> {
                         if (index.isEndInclusive)
-                            ObjList(list.subList(index.start.toInt(), index.end.toInt() + 1).toMutableList())
+                            sliceRange(index.start.toInt(), index.end.toInt() + 1)
                         else
-                            ObjList(list.subList(index.start.toInt(), index.end.toInt()).toMutableList())
+                            sliceRange(index.start.toInt(), index.end.toInt())
                     }
 
                     index.isOpenStart && !index.isOpenEnd -> {
                         if (index.isEndInclusive)
-                            ObjList(list.subList(0, index.end!!.toInt() + 1).toMutableList())
+                            sliceRange(0, index.end!!.toInt() + 1)
                         else
-                            ObjList(list.subList(0, index.end!!.toInt()).toMutableList())
+                            sliceRange(0, index.end!!.toInt())
                     }
 
                     index.isOpenEnd && !index.isOpenStart -> {
-                        ObjList(list.subList(index.start!!.toInt(), list.size).toMutableList())
+                        sliceRange(index.start!!.toInt(), sizeFast())
                     }
 
                     index.isOpenStart && index.isOpenEnd -> {
-                        ObjList(list.toMutableList())
+                        sliceRange(0, sizeFast())
                     }
 
                     else -> {
@@ -96,16 +209,16 @@ open class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
     }
 
     open override suspend fun putAt(scope: Scope, index: Obj, newValue: Obj) {
-        list[index.toInt()] = newValue
+        setObjAtFast(index.toInt(), newValue)
     }
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {
         if (other is ObjList) {
-            val mySize = list.size
-            val otherSize = other.list.size
+            val mySize = sizeFast()
+            val otherSize = other.sizeFast()
             val commonSize = minOf(mySize, otherSize)
             for (i in 0..<commonSize) {
-                val d = list[i].compareTo(scope, other.list[i])
+                val d = getObjAtFast(i).compareTo(scope, other.getObjAtFast(i))
                 if (d != 0) {
                     return d
                 }
@@ -114,14 +227,13 @@ open class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
             return res
         }
         if (other.isInstanceOf(ObjIterable)) {
-            val it1 = this.list.iterator()
             val it2 = other.invokeInstanceMethod(scope, "iterator")
             val hasNext2 = it2.getInstanceMethod(scope, "hasNext")
             val next2 = it2.getInstanceMethod(scope, "next")
-            
-            while (it1.hasNext()) {
+
+            for (i in 0..<sizeFast()) {
                 if (!hasNext2.invoke(scope, it2).toBool()) return 1 // I'm longer
-                val v1 = it1.next()
+                val v1 = getObjAtFast(i)
                 val v2 = next2.invoke(scope, it2)
                 val d = v1.compareTo(scope, v2)
                 if (d != 0) return d
@@ -133,8 +245,18 @@ open class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
 
     override suspend fun plus(scope: Scope, other: Obj): Obj =
         when {
-            other is ObjList ->
-                ObjList((list + other.list).toMutableList())
+            other is ObjList -> {
+                val ints = primitiveIntList
+                val otherInts = other.primitiveIntList
+                if (ints != null && otherInts != null) {
+                    ObjList(LongArray(ints.size + otherInts.size).also {
+                        ints.copyInto(it, 0, 0, ints.size)
+                        otherInts.copyInto(it, ints.size, 0, otherInts.size)
+                    })
+                } else {
+                    ObjList((list + other.list).toMutableList())
+                }
+            }
 
             !shouldTreatAsSingleElement(scope, other) && other.isInstanceOf(ObjIterable) -> {
                 val l = other.callMethod<ObjList>(scope, "toList")
@@ -151,12 +273,12 @@ open class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
 
     open override suspend fun plusAssign(scope: Scope, other: Obj): Obj {
         if (other is ObjList) {
-            list.addAll(other.list)
+            appendAllFast(other)
         } else if (!shouldTreatAsSingleElement(scope, other) && other.isInstanceOf(ObjIterable)) {
             val otherList = (other.invokeInstanceMethod(scope, "toList") as ObjList).list
             list.addAll(otherList)
         } else {
-            list.add(other)
+            appendFast(other)
         }
         return this
     }
@@ -199,6 +321,13 @@ open class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
     }
 
     override suspend fun contains(scope: Scope, other: Obj): Boolean {
+        val ints = primitiveIntList
+        if (ints != null && other is ObjInt) {
+            for (value in ints) {
+                if (value == other.value) return true
+            }
+            return false
+        }
         if (net.sergeych.lyng.PerfFlags.PRIMITIVE_FASTOPS) {
             // Fast path: int membership in a list of ints (common case in benches)
             if (other is ObjInt) {
@@ -216,6 +345,13 @@ open class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
     }
 
     override suspend fun enumerate(scope: Scope, callback: suspend (Obj) -> Boolean) {
+        val ints = primitiveIntList
+        if (ints != null) {
+            for (value in ints) {
+                if (!callback(ObjInt.of(value))) break
+            }
+            return
+        }
         for (item in list) {
             if (!callback(item)) break
         }
@@ -225,6 +361,8 @@ open class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
         get() = type
 
     override suspend fun toKotlin(scope: Scope): Any {
+        val ints = primitiveIntList
+        if (ints != null) return ints.map { it }
         return list.map { it.toKotlin(scope) }
     }
 
@@ -256,8 +394,7 @@ open class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
     }
 
     override fun hashCode(): Int {
-        // check?
-        return list.hashCode()
+        return primitiveIntList?.contentHashCode() ?: list.hashCode()
     }
 
     override fun equals(other: Any?): Boolean {
@@ -266,16 +403,31 @@ open class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
 
         other as ObjList
 
-        return list == other.list
+        val ints = primitiveIntList
+        val otherInts = other.primitiveIntList
+        return if (ints != null && otherInts != null) {
+            ints.contentEquals(otherInts)
+        } else {
+            list == other.list
+        }
     }
 
     override suspend fun serialize(scope: Scope, encoder: LynonEncoder, lynonType: LynonType?) {
-        encoder.encodeAnyList(scope,list)
+        val ints = primitiveIntList
+        if (ints != null) {
+            encoder.encodeAnyList(scope, ints.mapTo(ArrayList(ints.size)) { ObjInt.of(it) })
+            return
+        }
+        encoder.encodeAnyList(scope, list)
     }
 
     override suspend fun lynonType(): LynonType = LynonType.List
 
     override suspend fun toJson(scope: Scope): JsonElement {
+        val ints = primitiveIntList
+        if (ints != null) {
+            return JsonArray(ints.map { ObjInt.of(it).toJson(scope) })
+        }
         return JsonArray(list.map { it.toJson(scope) })
     }
 
@@ -283,9 +435,17 @@ open class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
         return ObjString(buildString {
             append("[")
             var first = true
-            for (v in list) {
-                if (first) first = false else append(",")
-                append(v.toString(scope).value)
+            val ints = primitiveIntList
+            if (ints != null) {
+                for (v in ints) {
+                    if (first) first = false else append(",")
+                    append(v)
+                }
+            } else {
+                for (v in list) {
+                    if (first) first = false else append(",")
+                    append(v.toString(scope).value)
+                }
             }
             append("]")
         })
@@ -307,7 +467,7 @@ open class ObjList(val list: MutableList<Obj> = mutableListOf()) : Obj() {
                 type = type("lyng.Int"),
                 moduleName = "lyng.stdlib",
                 getter = { 
-                    val s = (this.thisObj as ObjList).list.size
+                    val s = (this.thisObj as ObjList).sizeFast()
                     s.toObj()
                 }
             )
