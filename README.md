@@ -48,6 +48,7 @@ assertEquals(A.E.One, A.One)
 
 - [Language home](https://lynglang.com)
 - [introduction and tutorial](docs/tutorial.md) - start here please
+- [Latest release notes (1.5.4)](docs/whats_new.md)
 - [What's New in 1.5](docs/whats_new_1_5.md)
 - [Testing and Assertions](docs/Testing.md)
 - [Filesystem and Processes (lyngio)](docs/lyngio.md)
@@ -63,8 +64,7 @@ assertEquals(A.E.One, A.One)
 ### Add dependency to your project
 
 ```kotlin
-// update to current please:
-val lyngVersion = "1.5.0-SNAPSHOT"
+val lyngVersion = "1.5.4"
 
 repositories {
     // ...
@@ -184,8 +184,7 @@ Designed to add scripting to kotlin multiplatform application in easy and effici
 
 # Language Roadmap
 
-We are now at **v1.5.0-SNAPSHOT** (stable development cycle): basic optimization performed, battery included: standard library is 90% here, initial
-support in HTML, popular editors, and IDEA; tools to syntax highlight and format code are ready. It was released closed to schedule.
+The current stable release is **v1.5.4**: the 1.5 cycle is feature-complete, compiler/runtime stabilization work is in, and the language, tooling, and site are aligned around the current release.
 
 Ready features:
 
@@ -222,7 +221,7 @@ Ready features:
 - [x] assign-if-null operator `?=`
 - [x] user-defined exception classes
 
-All of this is documented in the [language site](https://lynglang.com) and locally [docs/language.md](docs/tutorial.md). the current nightly builds published on the site and in the private maven repository.  
+All of this is documented on the [language site](https://lynglang.com) and locally in [docs/tutorial.md](docs/tutorial.md). The site reflects the current release, while development snapshots continue in the private Maven repository.  
 
 ## plan: towards v2.0 Next Generation
 

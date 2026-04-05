@@ -1,9 +1,74 @@
 # What's New in Lyng
 
-This document highlights the latest additions and improvements to the Lyng language and its ecosystem.
-For a programmer-focused migration summary, see `docs/whats_new_1_5.md`.
+This document highlights the current Lyng release, **1.5.4**, and the broader additions from the 1.5 cycle.
+It is intentionally user-facing: new language features, new modules, new tools, and the practical things you can build with them.
+For a programmer-focused migration summary across 1.5.x, see `docs/whats_new_1_5.md`.
+
+## Release 1.5.4 Highlights
+
+- `1.5.4` is the stabilization release for the 1.5 feature set.
+- The 1.5 line now brings together richer ranges and loops, interpolation, math modules, immutable and observable collections, richer `lyngio`, and much better CLI/IDE support.
+- `1.5.4` specifically fixes user-visible issues around decimal arithmetic, mixed numeric flows, list behavior, and observable list hooks.
+- The docs, homepage samples, and release metadata now point at the current stable version.
+
+## User Highlights Across 1.5.x
+
+- Descending ranges and loops with `downTo` / `downUntil`
+- String interpolation with `$name` and `${expr}`
+- Decimal arithmetic, matrices/vectors, and complex numbers
+- Immutable collections and opt-in `ObservableList`
+- Rich `lyngio` modules for console, HTTP, WebSocket, TCP, and UDP
+- CLI improvements including the built-in formatter `lyng fmt`
+- Better IDE support and stronger docs around the released feature set
 
 ## Language Features
+
+### Descending Ranges and Loops
+Lyng ranges are no longer just ascending. You can now write explicit descending ranges with inclusive or exclusive lower bounds.
+
+```lyng
+assertEquals([5,4,3,2,1], (5 downTo 1).toList())
+assertEquals([5,4,3,2], (5 downUntil 1).toList())
+
+for (i in 10 downTo 1 step 3) {
+    println(i)
+}
+```
+
+This also works for characters:
+
+```lyng
+assertEquals(['e','c','a'], ('e' downTo 'a' step 2).toList())
+```
+
+See [Range](Range.md).
+
+### String Interpolation
+Lyng 1.5.1 added built-in string interpolation:
+
+- `$name`
+- `${expr}`
+
+Literal dollar forms are explicit too:
+
+- `\$` -> `$`
+- `$$` -> `$`
+
+```lyng
+val name = "Lyng"
+assertEquals("hello, Lyng!", "hello, $name!")
+assertEquals("sum=3", "sum=${1+2}")
+assertEquals("\$name", "\$name")
+assertEquals("\$name", "$$name")
+```
+
+If you need legacy literal-dollar behavior in a file, add:
+
+```lyng
+// feature: interpolation: off
+```
+
+See [Tutorial](tutorial.md).
 
 ### Matrix and Vector Module (`lyng.matrix`)
 Lyng now ships a dense linear algebra module with immutable double-precision `Matrix` and `Vector` types.
@@ -81,6 +146,21 @@ The distinction between `Real -> Decimal` and exact decimal parsing is explicit 
 - `"2.2".d` parses exact decimal text
 
 See [Decimal](Decimal.md).
+
+### Complex Numbers (`lyng.complex`)
+Lyng also ships a complex-number module for ordinary arithmetic in the complex plane.
+
+```lyng
+import lyng.complex
+
+assertEquals(Complex(1.0, 2.0), 1 + 2.i)
+assertEquals(Complex(2.0, 2.0), 2.i + 2)
+
+val z = 1 + π.i
+println(z.exp())
+```
+
+See [Complex](Complex.md).
 
 ### Binary Operator Interop Registry
 Lyng now provides a general mechanism for mixed binary operators through `lyng.operators`.
@@ -216,7 +296,7 @@ Singleton objects are declared using the `object` keyword. They provide a conven
 
 ```lyng
 object Config {
-    val version = "1.5.0-SNAPSHOT"
+    val version = "1.5.4"
     fun show() = println("Config version: " + version)
 }
 
@@ -339,7 +419,123 @@ x.clamp(0..10)      // returns 10
 
 `clamp()` correctly handles inclusive (`..`) and exclusive (`..<`) ranges. For discrete types like `Int` and `Char`, clamping to an exclusive upper bound returns the previous value.
 
+### Immutable Collections
+Lyng 1.5 adds immutable collection types for APIs that should not expose mutable state through aliases:
+
+- `ImmutableList`
+- `ImmutableSet`
+- `ImmutableMap`
+
+```lyng
+val a = ImmutableList(1,2,3)
+val b = a + 4
+
+assertEquals(ImmutableList(1,2,3), a)
+assertEquals(ImmutableList(1,2,3,4), b)
+```
+
+See [ImmutableList](ImmutableList.md), [ImmutableSet](ImmutableSet.md), and [ImmutableMap](ImmutableMap.md).
+
+### Observable Mutable Lists
+For reactive-style code, `lyng.observable` provides `ObservableList` with hooks and change streams.
+
+```lyng
+import lyng.observable
+
+val xs = [1,2].observable()
+xs.onChange { println("changed") }
+xs += 3
+```
+
+You can validate or reject mutations in `beforeChange`, listen in `onChange`, and consume structured change events from `changes()`.
+
+See [ObservableList](ObservableList.md).
+
+### Random API
+The standard library now includes a built-in random API plus deterministic seeded generators.
+
+```lyng
+val rng = Random.seeded(1234)
+assert(rng.next(1..10) in 1..10)
+assert(rng.next('a'..<'f') in 'a'..<'f')
+```
+
+Use:
+
+- `Random.nextInt()`
+- `Random.nextFloat()`
+- `Random.next(range)`
+- `Random.seeded(seed)`
+
 ## Tooling and Infrastructure
+
+### Rich Console Apps with `lyng.io.console`
+`lyngio` now includes a real console module for terminal applications:
+
+- TTY detection
+- screen clearing and cursor movement
+- alternate screen buffer
+- raw input mode
+- typed key and resize events
+
+```lyng
+import lyng.io.console
+
+Console.enterAltScreen()
+Console.clear()
+Console.moveTo(1, 1)
+Console.write("Hello from Lyng console app")
+Console.flush()
+Console.leaveAltScreen()
+```
+
+The repository includes a full interactive Tetris sample built on this API.
+
+See [lyng.io.console](lyng.io.console.md).
+
+### HTTP, WebSocket, TCP, and UDP in `lyngio`
+`lyngio` grew from filesystem/process support into a broader application-facing I/O library. In 1.5.x it includes:
+
+- `lyng.io.http` for HTTP/HTTPS client calls
+- `lyng.io.ws` for WebSocket clients
+- `lyng.io.net` for raw TCP/UDP transport
+
+HTTP example:
+
+```lyng
+import lyng.io.http
+
+val r = Http.get("https://example.com")
+println(r.status)
+println(r.text())
+```
+
+TCP example:
+
+```lyng
+import lyng.io.net
+
+val socket = Net.tcpConnect("127.0.0.1", 4040)
+socket.writeUtf8("ping")
+socket.flush()
+println(socket.readLine())
+socket.close()
+```
+
+WebSocket example:
+
+```lyng
+import lyng.io.ws
+
+val ws = Ws.connect("wss://example.com/socket")
+ws.sendText("hello")
+println(ws.receive())
+ws.close()
+```
+
+These modules are capability-gated and host-installed, keeping Lyng safe by default while making networked scripts practical when enabled.
+
+See [lyngio overview](lyngio.md), [lyng.io.http](lyng.io.http.md), [lyng.io.ws](lyng.io.ws.md), and [lyng.io.net](lyng.io.net.md).
 
 ### CLI: Formatting Command
 A new `fmt` subcommand has been added to the Lyng CLI.
@@ -349,6 +545,15 @@ lyng fmt MyFile.lyng             # Print formatted code to stdout
 lyng fmt --in-place MyFile.lyng  # Format file in-place
 lyng fmt --check MyFile.lyng     # Check if file needs formatting
 ```
+
+### CLI: Better Terminal Workflows
+The CLI is no longer just a script launcher. In the 1.5 line it also gained:
+
+- built-in formatter support
+- integrated `lyng.io.console` support for terminal programs
+- downloadable packaged distributions for easier local use
+
+This makes CLI-first scripting and console applications much more practical than in earlier releases.
 
 ### IDEA Plugin: Autocompletion
 Experimental lightweight autocompletion is now available in the IntelliJ plugin. It features type-aware member suggestions and inheritance-aware completion.
