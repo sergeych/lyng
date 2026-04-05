@@ -37,13 +37,9 @@ class CmdVm {
         while (true) {
             try {
                 while (result == null) {
-                    val cmd = cmds[frame.ip]
-                    frame.ip += 1
-                    if (cmd.isFast) {
-                        cmd.performFast(frame)
-                    } else {
+                    val cmd = cmds[frame.ip++]
+                    if (!cmd.performFast(frame))
                         cmd.perform(frame)
-                    }
                 }
                 break
             } catch (e: Throwable) {
@@ -63,10 +59,7 @@ class CmdVm {
 }
 
 sealed class Cmd {
-    open val isFast: Boolean = false
-    open fun performFast(frame: CmdFrame) {
-        error("fast command not supported: ${this::class.simpleName}")
-    }
+    open fun performFast(frame: CmdFrame): Boolean = false
 
     open suspend fun perform(frame: CmdFrame) {
         error("slow command not supported: ${this::class.simpleName}")
@@ -110,10 +103,9 @@ class CmdMoveInt(internal val src: Int, internal val dst: Int) : Cmd() {
 }
 
 class CmdMoveIntLocal(internal val src: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalInt(dst, frame.getLocalInt(src))
-        return
+        return true
     }
 }
 
@@ -133,10 +125,9 @@ class CmdMoveReal(internal val src: Int, internal val dst: Int) : Cmd() {
 }
 
 class CmdMoveRealLocal(internal val src: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalReal(dst, frame.getLocalReal(src))
-        return
+        return true
     }
 }
 
@@ -156,16 +147,14 @@ class CmdMoveBool(internal val src: Int, internal val dst: Int) : Cmd() {
 }
 
 class CmdMoveBoolLocal(internal val src: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalBool(src))
-        return
+        return true
     }
 }
 
 class CmdConstObj(internal val constId: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         when (val c = frame.fn.constants[constId]) {
             is BytecodeConst.ObjRef -> {
                 val obj = c.value
@@ -180,47 +169,43 @@ class CmdConstObj(internal val constId: Int, internal val dst: Int) : Cmd() {
             is BytecodeConst.StringVal -> frame.setObj(dst, ObjString(c.value))
             else -> error("CONST_OBJ expects ObjRef/StringVal at $constId")
         }
-        return
+        return true
     }
 }
 
 class CmdConstInt(internal val constId: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val c = frame.fn.constants[constId] as? BytecodeConst.IntVal
             ?: error("CONST_INT expects IntVal at $constId")
         frame.setInt(dst, c.value)
-        return
+        return true
     }
 }
 
 class CmdConstIntLocal(internal val constId: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val c = frame.fn.constants[constId] as? BytecodeConst.IntVal
             ?: error("CONST_INT expects IntVal at $constId")
         frame.setLocalInt(dst, c.value)
-        return
+        return true
     }
 }
 
 class CmdConstReal(internal val constId: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val c = frame.fn.constants[constId] as? BytecodeConst.RealVal
             ?: error("CONST_REAL expects RealVal at $constId")
         frame.setReal(dst, c.value)
-        return
+        return true
     }
 }
 
 class CmdConstBool(internal val constId: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val c = frame.fn.constants[constId] as? BytecodeConst.Bool
             ?: error("CONST_BOOL expects Bool at $constId")
         frame.setBool(dst, c.value)
-        return
+        return true
     }
 }
 
@@ -316,8 +301,7 @@ class CmdUnboxIntObj(internal val src: Int, internal val dst: Int) : Cmd() {
 }
 
 class CmdUnboxIntObjLocal(internal val src: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         when (frame.frame.getSlotTypeCode(src)) {
             SlotType.INT.code -> frame.setLocalInt(dst, frame.frame.getInt(src))
             else -> {
@@ -325,7 +309,7 @@ class CmdUnboxIntObjLocal(internal val src: Int, internal val dst: Int) : Cmd() 
                 frame.setLocalInt(dst, value.value)
             }
         }
-        return
+        return true
     }
 }
 
@@ -338,8 +322,7 @@ class CmdUnboxRealObj(internal val src: Int, internal val dst: Int) : Cmd() {
 }
 
 class CmdUnboxRealObjLocal(internal val src: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         when (frame.frame.getSlotTypeCode(src)) {
             SlotType.REAL.code -> frame.setLocalReal(dst, frame.frame.getReal(src))
             else -> {
@@ -347,7 +330,7 @@ class CmdUnboxRealObjLocal(internal val src: Int, internal val dst: Int) : Cmd()
                 frame.setLocalReal(dst, value.value)
             }
         }
-        return
+        return true
     }
 }
 
@@ -632,11 +615,10 @@ class CmdIntToReal(internal val src: Int, internal val dst: Int) : Cmd() {
 }
 
 class CmdIntToRealLocal(internal val src: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val value = frame.getLocalObjRealValue(src)
         frame.setLocalReal(dst, value)
-        return
+        return true
     }
 }
 
@@ -648,10 +630,9 @@ class CmdRealToInt(internal val src: Int, internal val dst: Int) : Cmd() {
 }
 
 class CmdRealToIntLocal(internal val src: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalInt(dst, frame.getLocalReal(src).toLong())
-        return
+        return true
     }
 }
 
@@ -663,10 +644,9 @@ class CmdBoolToInt(internal val src: Int, internal val dst: Int) : Cmd() {
 }
 
 class CmdBoolToIntLocal(internal val src: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalInt(dst, if (frame.getLocalBool(src)) 1L else 0L)
-        return
+        return true
     }
 }
 
@@ -678,10 +658,9 @@ class CmdIntToBool(internal val src: Int, internal val dst: Int) : Cmd() {
 }
 
 class CmdIntToBoolLocal(internal val src: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalInt(src) != 0L)
-        return
+        return true
     }
 }
 
@@ -693,10 +672,9 @@ class CmdAddInt(internal val a: Int, internal val b: Int, internal val dst: Int)
 }
 
 class CmdAddIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalInt(dst, frame.getLocalInt(a) + frame.getLocalInt(b))
-        return
+        return true
     }
 }
 
@@ -708,10 +686,9 @@ class CmdSubInt(internal val a: Int, internal val b: Int, internal val dst: Int)
 }
 
 class CmdSubIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalInt(dst, frame.getLocalInt(a) - frame.getLocalInt(b))
-        return
+        return true
     }
 }
 
@@ -723,10 +700,9 @@ class CmdMulInt(internal val a: Int, internal val b: Int, internal val dst: Int)
 }
 
 class CmdMulIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalInt(dst, frame.getLocalInt(a) * frame.getLocalInt(b))
-        return
+        return true
     }
 }
 
@@ -738,10 +714,9 @@ class CmdDivInt(internal val a: Int, internal val b: Int, internal val dst: Int)
 }
 
 class CmdDivIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalInt(dst, frame.getLocalInt(a) / frame.getLocalInt(b))
-        return
+        return true
     }
 }
 
@@ -753,10 +728,9 @@ class CmdModInt(internal val a: Int, internal val b: Int, internal val dst: Int)
 }
 
 class CmdModIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalInt(dst, frame.getLocalInt(a) % frame.getLocalInt(b))
-        return
+        return true
     }
 }
 
@@ -768,10 +742,9 @@ class CmdNegInt(internal val src: Int, internal val dst: Int) : Cmd() {
 }
 
 class CmdNegIntLocal(internal val src: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalInt(dst, -frame.getLocalInt(src))
-        return
+        return true
     }
 }
 
@@ -783,10 +756,9 @@ class CmdIncInt(internal val slot: Int) : Cmd() {
 }
 
 class CmdIncIntLocal(internal val slot: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalInt(slot, frame.getLocalInt(slot) + 1L)
-        return
+        return true
     }
 }
 
@@ -798,10 +770,9 @@ class CmdDecInt(internal val slot: Int) : Cmd() {
 }
 
 class CmdDecIntLocal(internal val slot: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalInt(slot, frame.getLocalInt(slot) - 1L)
-        return
+        return true
     }
 }
 
@@ -813,10 +784,9 @@ class CmdAddReal(internal val a: Int, internal val b: Int, internal val dst: Int
 }
 
 class CmdAddRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalReal(dst, frame.getLocalReal(a) + frame.getLocalReal(b))
-        return
+        return true
     }
 }
 
@@ -828,10 +798,9 @@ class CmdSubReal(internal val a: Int, internal val b: Int, internal val dst: Int
 }
 
 class CmdSubRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalReal(dst, frame.getLocalReal(a) - frame.getLocalReal(b))
-        return
+        return true
     }
 }
 
@@ -843,10 +812,9 @@ class CmdMulReal(internal val a: Int, internal val b: Int, internal val dst: Int
 }
 
 class CmdMulRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalReal(dst, frame.getLocalReal(a) * frame.getLocalReal(b))
-        return
+        return true
     }
 }
 
@@ -858,10 +826,9 @@ class CmdDivReal(internal val a: Int, internal val b: Int, internal val dst: Int
 }
 
 class CmdDivRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalReal(dst, frame.getLocalReal(a) / frame.getLocalReal(b))
-        return
+        return true
     }
 }
 
@@ -873,10 +840,9 @@ class CmdNegReal(internal val src: Int, internal val dst: Int) : Cmd() {
 }
 
 class CmdNegRealLocal(internal val src: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalReal(dst, -frame.getLocalReal(src))
-        return
+        return true
     }
 }
 
@@ -888,10 +854,9 @@ class CmdAndInt(internal val a: Int, internal val b: Int, internal val dst: Int)
 }
 
 class CmdAndIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalInt(dst, frame.getLocalInt(a) and frame.getLocalInt(b))
-        return
+        return true
     }
 }
 
@@ -903,10 +868,9 @@ class CmdOrInt(internal val a: Int, internal val b: Int, internal val dst: Int) 
 }
 
 class CmdOrIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalInt(dst, frame.getLocalInt(a) or frame.getLocalInt(b))
-        return
+        return true
     }
 }
 
@@ -918,10 +882,9 @@ class CmdXorInt(internal val a: Int, internal val b: Int, internal val dst: Int)
 }
 
 class CmdXorIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalInt(dst, frame.getLocalInt(a) xor frame.getLocalInt(b))
-        return
+        return true
     }
 }
 
@@ -933,10 +896,9 @@ class CmdShlInt(internal val a: Int, internal val b: Int, internal val dst: Int)
 }
 
 class CmdShlIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalInt(dst, frame.getLocalInt(a) shl frame.getLocalInt(b).toInt())
-        return
+        return true
     }
 }
 
@@ -948,10 +910,9 @@ class CmdShrInt(internal val a: Int, internal val b: Int, internal val dst: Int)
 }
 
 class CmdShrIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalInt(dst, frame.getLocalInt(a) shr frame.getLocalInt(b).toInt())
-        return
+        return true
     }
 }
 
@@ -963,10 +924,9 @@ class CmdUshrInt(internal val a: Int, internal val b: Int, internal val dst: Int
 }
 
 class CmdUshrIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalInt(dst, frame.getLocalInt(a) ushr frame.getLocalInt(b).toInt())
-        return
+        return true
     }
 }
 
@@ -978,10 +938,9 @@ class CmdInvInt(internal val src: Int, internal val dst: Int) : Cmd() {
 }
 
 class CmdInvIntLocal(internal val src: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalInt(dst, frame.getLocalInt(src).inv())
-        return
+        return true
     }
 }
 
@@ -993,10 +952,9 @@ class CmdCmpEqInt(internal val a: Int, internal val b: Int, internal val dst: In
 }
 
 class CmdCmpEqIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalInt(a) == frame.getLocalInt(b))
-        return
+        return true
     }
 }
 
@@ -1008,10 +966,9 @@ class CmdCmpNeqInt(internal val a: Int, internal val b: Int, internal val dst: I
 }
 
 class CmdCmpNeqIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalInt(a) != frame.getLocalInt(b))
-        return
+        return true
     }
 }
 
@@ -1023,10 +980,9 @@ class CmdCmpLtInt(internal val a: Int, internal val b: Int, internal val dst: In
 }
 
 class CmdCmpLtIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalInt(a) < frame.getLocalInt(b))
-        return
+        return true
     }
 }
 
@@ -1038,10 +994,9 @@ class CmdCmpLteInt(internal val a: Int, internal val b: Int, internal val dst: I
 }
 
 class CmdCmpLteIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalInt(a) <= frame.getLocalInt(b))
-        return
+        return true
     }
 }
 
@@ -1053,10 +1008,9 @@ class CmdCmpGtInt(internal val a: Int, internal val b: Int, internal val dst: In
 }
 
 class CmdCmpGtIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalInt(a) > frame.getLocalInt(b))
-        return
+        return true
     }
 }
 
@@ -1068,10 +1022,9 @@ class CmdCmpGteInt(internal val a: Int, internal val b: Int, internal val dst: I
 }
 
 class CmdCmpGteIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalInt(a) >= frame.getLocalInt(b))
-        return
+        return true
     }
 }
 
@@ -1083,10 +1036,9 @@ class CmdCmpEqReal(internal val a: Int, internal val b: Int, internal val dst: I
 }
 
 class CmdCmpEqRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalReal(a) == frame.getLocalReal(b))
-        return
+        return true
     }
 }
 
@@ -1098,10 +1050,9 @@ class CmdCmpNeqReal(internal val a: Int, internal val b: Int, internal val dst: 
 }
 
 class CmdCmpNeqRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalReal(a) != frame.getLocalReal(b))
-        return
+        return true
     }
 }
 
@@ -1113,10 +1064,9 @@ class CmdCmpLtReal(internal val a: Int, internal val b: Int, internal val dst: I
 }
 
 class CmdCmpLtRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalReal(a) < frame.getLocalReal(b))
-        return
+        return true
     }
 }
 
@@ -1128,10 +1078,9 @@ class CmdCmpLteReal(internal val a: Int, internal val b: Int, internal val dst: 
 }
 
 class CmdCmpLteRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalReal(a) <= frame.getLocalReal(b))
-        return
+        return true
     }
 }
 
@@ -1143,10 +1092,9 @@ class CmdCmpGtReal(internal val a: Int, internal val b: Int, internal val dst: I
 }
 
 class CmdCmpGtRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalReal(a) > frame.getLocalReal(b))
-        return
+        return true
     }
 }
 
@@ -1158,10 +1106,9 @@ class CmdCmpGteReal(internal val a: Int, internal val b: Int, internal val dst: 
 }
 
 class CmdCmpGteRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalReal(a) >= frame.getLocalReal(b))
-        return
+        return true
     }
 }
 
@@ -1173,10 +1120,9 @@ class CmdCmpEqBool(internal val a: Int, internal val b: Int, internal val dst: I
 }
 
 class CmdCmpEqBoolLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalBool(a) == frame.getLocalBool(b))
-        return
+        return true
     }
 }
 
@@ -1188,10 +1134,9 @@ class CmdCmpNeqBool(internal val a: Int, internal val b: Int, internal val dst: 
 }
 
 class CmdCmpNeqBoolLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalBool(a) != frame.getLocalBool(b))
-        return
+        return true
     }
 }
 
@@ -1203,10 +1148,9 @@ class CmdCmpEqIntReal(internal val a: Int, internal val b: Int, internal val dst
 }
 
 class CmdCmpEqIntRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalInt(a).toDouble() == frame.getLocalReal(b))
-        return
+        return true
     }
 }
 
@@ -1218,10 +1162,9 @@ class CmdCmpEqRealInt(internal val a: Int, internal val b: Int, internal val dst
 }
 
 class CmdCmpEqRealIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalReal(a) == frame.getLocalInt(b).toDouble())
-        return
+        return true
     }
 }
 
@@ -1233,10 +1176,9 @@ class CmdCmpLtIntReal(internal val a: Int, internal val b: Int, internal val dst
 }
 
 class CmdCmpLtIntRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalInt(a).toDouble() < frame.getLocalReal(b))
-        return
+        return true
     }
 }
 
@@ -1248,10 +1190,9 @@ class CmdCmpLtRealInt(internal val a: Int, internal val b: Int, internal val dst
 }
 
 class CmdCmpLtRealIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalReal(a) < frame.getLocalInt(b).toDouble())
-        return
+        return true
     }
 }
 
@@ -1263,10 +1204,9 @@ class CmdCmpLteIntReal(internal val a: Int, internal val b: Int, internal val ds
 }
 
 class CmdCmpLteIntRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalInt(a).toDouble() <= frame.getLocalReal(b))
-        return
+        return true
     }
 }
 
@@ -1278,10 +1218,9 @@ class CmdCmpLteRealInt(internal val a: Int, internal val b: Int, internal val ds
 }
 
 class CmdCmpLteRealIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalReal(a) <= frame.getLocalInt(b).toDouble())
-        return
+        return true
     }
 }
 
@@ -1293,10 +1232,9 @@ class CmdCmpGtIntReal(internal val a: Int, internal val b: Int, internal val dst
 }
 
 class CmdCmpGtIntRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalInt(a).toDouble() > frame.getLocalReal(b))
-        return
+        return true
     }
 }
 
@@ -1308,10 +1246,9 @@ class CmdCmpGtRealInt(internal val a: Int, internal val b: Int, internal val dst
 }
 
 class CmdCmpGtRealIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalReal(a) > frame.getLocalInt(b).toDouble())
-        return
+        return true
     }
 }
 
@@ -1323,10 +1260,9 @@ class CmdCmpGteIntReal(internal val a: Int, internal val b: Int, internal val ds
 }
 
 class CmdCmpGteIntRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalInt(a).toDouble() >= frame.getLocalReal(b))
-        return
+        return true
     }
 }
 
@@ -1338,10 +1274,9 @@ class CmdCmpGteRealInt(internal val a: Int, internal val b: Int, internal val ds
 }
 
 class CmdCmpGteRealIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalReal(a) >= frame.getLocalInt(b).toDouble())
-        return
+        return true
     }
 }
 
@@ -1353,10 +1288,9 @@ class CmdCmpNeqIntReal(internal val a: Int, internal val b: Int, internal val ds
 }
 
 class CmdCmpNeqIntRealLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalInt(a).toDouble() != frame.getLocalReal(b))
-        return
+        return true
     }
 }
 
@@ -1368,10 +1302,9 @@ class CmdCmpNeqRealInt(internal val a: Int, internal val b: Int, internal val ds
 }
 
 class CmdCmpNeqRealIntLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalReal(a) != frame.getLocalInt(b).toDouble())
-        return
+        return true
     }
 }
 
@@ -1421,12 +1354,11 @@ class CmdCmpEqStr(internal val a: Int, internal val b: Int, internal val dst: In
 }
 
 class CmdCmpEqStrLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = frame.frame.getRawObj(a) as ObjString
         val right = frame.frame.getRawObj(b) as ObjString
         frame.setLocalBool(dst, left.value == right.value)
-        return
+        return true
     }
 }
 
@@ -1444,12 +1376,11 @@ class CmdCmpNeqStr(internal val a: Int, internal val b: Int, internal val dst: I
 }
 
 class CmdCmpNeqStrLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = frame.frame.getRawObj(a) as ObjString
         val right = frame.frame.getRawObj(b) as ObjString
         frame.setLocalBool(dst, left.value != right.value)
-        return
+        return true
     }
 }
 
@@ -1467,12 +1398,11 @@ class CmdCmpLtStr(internal val a: Int, internal val b: Int, internal val dst: In
 }
 
 class CmdCmpLtStrLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = frame.frame.getRawObj(a) as ObjString
         val right = frame.frame.getRawObj(b) as ObjString
         frame.setLocalBool(dst, left.value < right.value)
-        return
+        return true
     }
 }
 
@@ -1490,12 +1420,11 @@ class CmdCmpLteStr(internal val a: Int, internal val b: Int, internal val dst: I
 }
 
 class CmdCmpLteStrLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = frame.frame.getRawObj(a) as ObjString
         val right = frame.frame.getRawObj(b) as ObjString
         frame.setLocalBool(dst, left.value <= right.value)
-        return
+        return true
     }
 }
 
@@ -1513,12 +1442,11 @@ class CmdCmpGtStr(internal val a: Int, internal val b: Int, internal val dst: In
 }
 
 class CmdCmpGtStrLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = frame.frame.getRawObj(a) as ObjString
         val right = frame.frame.getRawObj(b) as ObjString
         frame.setLocalBool(dst, left.value > right.value)
-        return
+        return true
     }
 }
 
@@ -1536,12 +1464,11 @@ class CmdCmpGteStr(internal val a: Int, internal val b: Int, internal val dst: I
 }
 
 class CmdCmpGteStrLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = frame.frame.getRawObj(a) as ObjString
         val right = frame.frame.getRawObj(b) as ObjString
         frame.setLocalBool(dst, left.value >= right.value)
-        return
+        return true
     }
 }
 
@@ -1559,8 +1486,7 @@ class CmdCmpEqIntObj(internal val a: Int, internal val b: Int, internal val dst:
 }
 
 class CmdCmpEqIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = when (frame.frame.getSlotTypeCode(a)) {
             SlotType.INT.code -> frame.frame.getInt(a)
             else -> (frame.frame.getRawObj(a) as ObjInt).value
@@ -1570,7 +1496,7 @@ class CmdCmpEqIntObjLocal(internal val a: Int, internal val b: Int, internal val
             else -> (frame.frame.getRawObj(b) as ObjInt).value
         }
         frame.setLocalBool(dst, left == right)
-        return
+        return true
     }
 }
 
@@ -1588,8 +1514,7 @@ class CmdCmpNeqIntObj(internal val a: Int, internal val b: Int, internal val dst
 }
 
 class CmdCmpNeqIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = when (frame.frame.getSlotTypeCode(a)) {
             SlotType.INT.code -> frame.frame.getInt(a)
             else -> (frame.frame.getRawObj(a) as ObjInt).value
@@ -1599,7 +1524,7 @@ class CmdCmpNeqIntObjLocal(internal val a: Int, internal val b: Int, internal va
             else -> (frame.frame.getRawObj(b) as ObjInt).value
         }
         frame.setLocalBool(dst, left != right)
-        return
+        return true
     }
 }
 
@@ -1617,8 +1542,7 @@ class CmdCmpLtIntObj(internal val a: Int, internal val b: Int, internal val dst:
 }
 
 class CmdCmpLtIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = when (frame.frame.getSlotTypeCode(a)) {
             SlotType.INT.code -> frame.frame.getInt(a)
             else -> (frame.frame.getRawObj(a) as ObjInt).value
@@ -1628,7 +1552,7 @@ class CmdCmpLtIntObjLocal(internal val a: Int, internal val b: Int, internal val
             else -> (frame.frame.getRawObj(b) as ObjInt).value
         }
         frame.setLocalBool(dst, left < right)
-        return
+        return true
     }
 }
 
@@ -1646,8 +1570,7 @@ class CmdCmpLteIntObj(internal val a: Int, internal val b: Int, internal val dst
 }
 
 class CmdCmpLteIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = when (frame.frame.getSlotTypeCode(a)) {
             SlotType.INT.code -> frame.frame.getInt(a)
             else -> (frame.frame.getRawObj(a) as ObjInt).value
@@ -1657,7 +1580,7 @@ class CmdCmpLteIntObjLocal(internal val a: Int, internal val b: Int, internal va
             else -> (frame.frame.getRawObj(b) as ObjInt).value
         }
         frame.setLocalBool(dst, left <= right)
-        return
+        return true
     }
 }
 
@@ -1675,8 +1598,7 @@ class CmdCmpGtIntObj(internal val a: Int, internal val b: Int, internal val dst:
 }
 
 class CmdCmpGtIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = when (frame.frame.getSlotTypeCode(a)) {
             SlotType.INT.code -> frame.frame.getInt(a)
             else -> (frame.frame.getRawObj(a) as ObjInt).value
@@ -1686,7 +1608,7 @@ class CmdCmpGtIntObjLocal(internal val a: Int, internal val b: Int, internal val
             else -> (frame.frame.getRawObj(b) as ObjInt).value
         }
         frame.setLocalBool(dst, left > right)
-        return
+        return true
     }
 }
 
@@ -1704,8 +1626,7 @@ class CmdCmpGteIntObj(internal val a: Int, internal val b: Int, internal val dst
 }
 
 class CmdCmpGteIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = when (frame.frame.getSlotTypeCode(a)) {
             SlotType.INT.code -> frame.frame.getInt(a)
             else -> (frame.frame.getRawObj(a) as ObjInt).value
@@ -1715,7 +1636,7 @@ class CmdCmpGteIntObjLocal(internal val a: Int, internal val b: Int, internal va
             else -> (frame.frame.getRawObj(b) as ObjInt).value
         }
         frame.setLocalBool(dst, left >= right)
-        return
+        return true
     }
 }
 
@@ -1733,8 +1654,7 @@ class CmdCmpEqRealObj(internal val a: Int, internal val b: Int, internal val dst
 }
 
 class CmdCmpEqRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = when (frame.frame.getSlotTypeCode(a)) {
             SlotType.REAL.code -> frame.frame.getReal(a)
             else -> (frame.frame.getRawObj(a) as ObjReal).value
@@ -1744,7 +1664,7 @@ class CmdCmpEqRealObjLocal(internal val a: Int, internal val b: Int, internal va
             else -> (frame.frame.getRawObj(b) as ObjReal).value
         }
         frame.setLocalBool(dst, left == right)
-        return
+        return true
     }
 }
 
@@ -1762,8 +1682,7 @@ class CmdCmpNeqRealObj(internal val a: Int, internal val b: Int, internal val ds
 }
 
 class CmdCmpNeqRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = when (frame.frame.getSlotTypeCode(a)) {
             SlotType.REAL.code -> frame.frame.getReal(a)
             else -> (frame.frame.getRawObj(a) as ObjReal).value
@@ -1773,7 +1692,7 @@ class CmdCmpNeqRealObjLocal(internal val a: Int, internal val b: Int, internal v
             else -> (frame.frame.getRawObj(b) as ObjReal).value
         }
         frame.setLocalBool(dst, left != right)
-        return
+        return true
     }
 }
 
@@ -1791,8 +1710,7 @@ class CmdCmpLtRealObj(internal val a: Int, internal val b: Int, internal val dst
 }
 
 class CmdCmpLtRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = when (frame.frame.getSlotTypeCode(a)) {
             SlotType.REAL.code -> frame.frame.getReal(a)
             else -> (frame.frame.getRawObj(a) as ObjReal).value
@@ -1802,7 +1720,7 @@ class CmdCmpLtRealObjLocal(internal val a: Int, internal val b: Int, internal va
             else -> (frame.frame.getRawObj(b) as ObjReal).value
         }
         frame.setLocalBool(dst, left < right)
-        return
+        return true
     }
 }
 
@@ -1820,8 +1738,7 @@ class CmdCmpLteRealObj(internal val a: Int, internal val b: Int, internal val ds
 }
 
 class CmdCmpLteRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = when (frame.frame.getSlotTypeCode(a)) {
             SlotType.REAL.code -> frame.frame.getReal(a)
             else -> (frame.frame.getRawObj(a) as ObjReal).value
@@ -1831,7 +1748,7 @@ class CmdCmpLteRealObjLocal(internal val a: Int, internal val b: Int, internal v
             else -> (frame.frame.getRawObj(b) as ObjReal).value
         }
         frame.setLocalBool(dst, left <= right)
-        return
+        return true
     }
 }
 
@@ -1849,8 +1766,7 @@ class CmdCmpGtRealObj(internal val a: Int, internal val b: Int, internal val dst
 }
 
 class CmdCmpGtRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = when (frame.frame.getSlotTypeCode(a)) {
             SlotType.REAL.code -> frame.frame.getReal(a)
             else -> (frame.frame.getRawObj(a) as ObjReal).value
@@ -1860,7 +1776,7 @@ class CmdCmpGtRealObjLocal(internal val a: Int, internal val b: Int, internal va
             else -> (frame.frame.getRawObj(b) as ObjReal).value
         }
         frame.setLocalBool(dst, left > right)
-        return
+        return true
     }
 }
 
@@ -1878,8 +1794,7 @@ class CmdCmpGteRealObj(internal val a: Int, internal val b: Int, internal val ds
 }
 
 class CmdCmpGteRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = when (frame.frame.getSlotTypeCode(a)) {
             SlotType.REAL.code -> frame.frame.getReal(a)
             else -> (frame.frame.getRawObj(a) as ObjReal).value
@@ -1889,7 +1804,7 @@ class CmdCmpGteRealObjLocal(internal val a: Int, internal val b: Int, internal v
             else -> (frame.frame.getRawObj(b) as ObjReal).value
         }
         frame.setLocalBool(dst, left >= right)
-        return
+        return true
     }
 }
 
@@ -1901,10 +1816,9 @@ class CmdNotBool(internal val src: Int, internal val dst: Int) : Cmd() {
 }
 
 class CmdNotBoolLocal(internal val src: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, !frame.getLocalBool(src))
-        return
+        return true
     }
 }
 
@@ -1916,10 +1830,9 @@ class CmdAndBool(internal val a: Int, internal val b: Int, internal val dst: Int
 }
 
 class CmdAndBoolLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalBool(a) && frame.getLocalBool(b))
-        return
+        return true
     }
 }
 
@@ -1931,10 +1844,9 @@ class CmdOrBool(internal val a: Int, internal val b: Int, internal val dst: Int)
 }
 
 class CmdOrBoolLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.setLocalBool(dst, frame.getLocalBool(a) || frame.getLocalBool(b))
-        return
+        return true
     }
 }
 
@@ -2016,12 +1928,11 @@ class CmdAddIntObj(internal val a: Int, internal val b: Int, internal val dst: I
 }
 
 class CmdAddIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = frame.getLocalObjIntValue(a)
         val right = frame.getLocalObjIntValue(b)
         frame.storeObjResult(dst, ObjInt.of(left + right))
-        return
+        return true
     }
 }
 
@@ -2035,12 +1946,11 @@ class CmdSubIntObj(internal val a: Int, internal val b: Int, internal val dst: I
 }
 
 class CmdSubIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = frame.getLocalObjIntValue(a)
         val right = frame.getLocalObjIntValue(b)
         frame.storeObjResult(dst, ObjInt.of(left - right))
-        return
+        return true
     }
 }
 
@@ -2054,12 +1964,11 @@ class CmdMulIntObj(internal val a: Int, internal val b: Int, internal val dst: I
 }
 
 class CmdMulIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = frame.getLocalObjIntValue(a)
         val right = frame.getLocalObjIntValue(b)
         frame.storeObjResult(dst, ObjInt.of(left * right))
-        return
+        return true
     }
 }
 
@@ -2073,12 +1982,11 @@ class CmdDivIntObj(internal val a: Int, internal val b: Int, internal val dst: I
 }
 
 class CmdDivIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = frame.getLocalObjIntValue(a)
         val right = frame.getLocalObjIntValue(b)
         frame.storeObjResult(dst, ObjInt.of(left / right))
-        return
+        return true
     }
 }
 
@@ -2092,12 +2000,11 @@ class CmdModIntObj(internal val a: Int, internal val b: Int, internal val dst: I
 }
 
 class CmdModIntObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = frame.getLocalObjIntValue(a)
         val right = frame.getLocalObjIntValue(b)
         frame.storeObjResult(dst, ObjInt.of(left % right))
-        return
+        return true
     }
 }
 
@@ -2111,12 +2018,11 @@ class CmdAddRealObj(internal val a: Int, internal val b: Int, internal val dst: 
 }
 
 class CmdAddRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = frame.getLocalObjRealValue(a)
         val right = frame.getLocalObjRealValue(b)
         frame.storeObjResult(dst, ObjReal.of(left + right))
-        return
+        return true
     }
 }
 
@@ -2130,12 +2036,11 @@ class CmdSubRealObj(internal val a: Int, internal val b: Int, internal val dst: 
 }
 
 class CmdSubRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = frame.getLocalObjRealValue(a)
         val right = frame.getLocalObjRealValue(b)
         frame.storeObjResult(dst, ObjReal.of(left - right))
-        return
+        return true
     }
 }
 
@@ -2149,12 +2054,11 @@ class CmdMulRealObj(internal val a: Int, internal val b: Int, internal val dst: 
 }
 
 class CmdMulRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = frame.getLocalObjRealValue(a)
         val right = frame.getLocalObjRealValue(b)
         frame.storeObjResult(dst, ObjReal.of(left * right))
-        return
+        return true
     }
 }
 
@@ -2168,12 +2072,11 @@ class CmdDivRealObj(internal val a: Int, internal val b: Int, internal val dst: 
 }
 
 class CmdDivRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = frame.getLocalObjRealValue(a)
         val right = frame.getLocalObjRealValue(b)
         frame.storeObjResult(dst, ObjReal.of(left / right))
-        return
+        return true
     }
 }
 
@@ -2187,12 +2090,11 @@ class CmdModRealObj(internal val a: Int, internal val b: Int, internal val dst: 
 }
 
 class CmdModRealObjLocal(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         val left = frame.getLocalObjRealValue(a)
         val right = frame.getLocalObjRealValue(b)
         frame.storeObjResult(dst, ObjReal.of(left % right))
-        return
+        return true
     }
 }
 
@@ -2247,10 +2149,9 @@ class CmdAssignOpObj(
 }
 
 class CmdJmp(internal val target: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         frame.ip = target
-        return
+        return true
     }
 }
 
@@ -2264,12 +2165,11 @@ class CmdJmpIfTrue(internal val cond: Int, internal val target: Int) : Cmd() {
 }
 
 class CmdJmpIfTrueLocal(internal val cond: Int, internal val target: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         if (frame.getLocalBool(cond)) {
             frame.ip = target
         }
-        return
+        return true
     }
 }
 
@@ -2283,12 +2183,11 @@ class CmdJmpIfFalse(internal val cond: Int, internal val target: Int) : Cmd() {
 }
 
 class CmdJmpIfFalseLocal(internal val cond: Int, internal val target: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         if (!frame.getLocalBool(cond)) {
             frame.ip = target
         }
-        return
+        return true
     }
 }
 
@@ -2302,12 +2201,11 @@ class CmdJmpIfEqInt(internal val a: Int, internal val b: Int, internal val targe
 }
 
 class CmdJmpIfEqIntLocal(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         if (frame.getLocalInt(a) == frame.getLocalInt(b)) {
             frame.ip = target
         }
-        return
+        return true
     }
 }
 
@@ -2321,12 +2219,11 @@ class CmdJmpIfNeqInt(internal val a: Int, internal val b: Int, internal val targ
 }
 
 class CmdJmpIfNeqIntLocal(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         if (frame.getLocalInt(a) != frame.getLocalInt(b)) {
             frame.ip = target
         }
-        return
+        return true
     }
 }
 
@@ -2340,12 +2237,11 @@ class CmdJmpIfLtInt(internal val a: Int, internal val b: Int, internal val targe
 }
 
 class CmdJmpIfLtIntLocal(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         if (frame.getLocalInt(a) < frame.getLocalInt(b)) {
             frame.ip = target
         }
-        return
+        return true
     }
 }
 
@@ -2359,12 +2255,11 @@ class CmdJmpIfLteInt(internal val a: Int, internal val b: Int, internal val targ
 }
 
 class CmdJmpIfLteIntLocal(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         if (frame.getLocalInt(a) <= frame.getLocalInt(b)) {
             frame.ip = target
         }
-        return
+        return true
     }
 }
 
@@ -2378,12 +2273,11 @@ class CmdJmpIfGtInt(internal val a: Int, internal val b: Int, internal val targe
 }
 
 class CmdJmpIfGtIntLocal(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         if (frame.getLocalInt(a) > frame.getLocalInt(b)) {
             frame.ip = target
         }
-        return
+        return true
     }
 }
 
@@ -2397,12 +2291,11 @@ class CmdJmpIfGteInt(internal val a: Int, internal val b: Int, internal val targ
 }
 
 class CmdJmpIfGteIntLocal(internal val a: Int, internal val b: Int, internal val target: Int) : Cmd() {
-    override val isFast: Boolean = true
-    override fun performFast(frame: CmdFrame) {
+    override fun performFast(frame: CmdFrame): Boolean {
         if (frame.getLocalInt(a) >= frame.getLocalInt(b)) {
             frame.ip = target
         }
-        return
+        return true
     }
 }
 
