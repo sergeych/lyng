@@ -385,6 +385,32 @@ class OOTest {
     }
 
     @Test
+    fun testObjectSingletonSupportsExtensions() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            object X {
+                fun base() = "base"
+            }
+
+            fun X.decorate(value): String {
+                this.base() + ":" + value.toString()
+            }
+            val X.tag get() = this.base() + ":tag"
+
+            assertEquals("base", X.base())
+            assertEquals("base:42", X.decorate(42))
+            assertEquals("base:ok", X.decorate("ok"))
+            assertEquals("base:tag", X.tag)
+
+            // Wrapper names should be generated for singleton-object receivers too.
+            assertEquals("base:17", __ext__X__decorate(X, 17))
+            assertEquals("base:tag", __ext_get__X__tag(X))
+        """.trimIndent()
+        )
+    }
+
+    @Test
     fun testExtensionsAreScopeIsolated() = runTest {
         val scope1 = Script.newScope()
         scope1.eval(

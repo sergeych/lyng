@@ -1004,4 +1004,13 @@ open class Scope(
         return rec.value as? net.sergeych.lyng.obj.ObjClass
             ?: raiseClassCastError("Expected class $name, got ${rec.value.objClass.className}")
     }
+
+    internal fun resolveExtensionReceiverClass(name: String): net.sergeych.lyng.obj.ObjClass {
+        val value = get(name)?.value ?: raiseSymbolNotFound("class $name not found")
+        return when (value) {
+            is net.sergeych.lyng.obj.ObjClass -> value
+            is net.sergeych.lyng.obj.ObjInstance -> value.objClass
+            else -> raiseClassCastError("$name is not the class instance")
+        }
+    }
 }

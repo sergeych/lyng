@@ -85,8 +85,7 @@ internal suspend fun executeFunctionDecl(
         }
 
         if (spec.extTypeName != null) {
-            val type = scope[spec.extTypeName]?.value ?: scope.raiseSymbolNotFound("class ${spec.extTypeName} not found")
-            if (type !is ObjClass) scope.raiseClassCastError("${spec.extTypeName} is not the class instance")
+            val type = scope.resolveExtensionReceiverClass(spec.extTypeName)
             scope.addExtension(
                 type,
                 spec.name,
@@ -167,8 +166,7 @@ internal suspend fun executeFunctionDecl(
     val compiledFnBody = annotatedFnBody
 
     spec.extTypeName?.let { typeName ->
-        val type = scope[typeName]?.value ?: scope.raiseSymbolNotFound("class $typeName not found")
-        if (type !is ObjClass) scope.raiseClassCastError("$typeName is not the class instance")
+        val type = scope.resolveExtensionReceiverClass(typeName)
         if (spec.isStatic) {
             type.createClassField(
                 spec.name,

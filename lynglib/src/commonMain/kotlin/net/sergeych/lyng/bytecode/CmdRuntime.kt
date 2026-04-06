@@ -3094,11 +3094,7 @@ class CmdDeclExtProperty(internal val constId: Int, internal val slot: Int) : Cm
     override suspend fun perform(frame: CmdFrame) {
         val decl = frame.fn.constants[constId] as? BytecodeConst.ExtensionPropertyDecl
             ?: error("DECL_EXT_PROPERTY expects ExtensionPropertyDecl at $constId")
-        val type = frame.ensureScope()[decl.extTypeName]?.value
-            ?: frame.ensureScope().raiseSymbolNotFound("class ${decl.extTypeName} not found")
-        if (type !is ObjClass) {
-            frame.ensureScope().raiseClassCastError("${decl.extTypeName} is not the class instance")
-        }
+        val type = frame.ensureScope().resolveExtensionReceiverClass(decl.extTypeName)
         frame.ensureScope().addExtension(
             type,
             decl.property.name,

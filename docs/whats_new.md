@@ -9,6 +9,7 @@ For a programmer-focused migration summary across 1.5.x, see `docs/whats_new_1_5
 - `1.5.4` is the stabilization release for the 1.5 feature set.
 - The 1.5 line now brings together richer ranges and loops, interpolation, math modules, immutable and observable collections, richer `lyngio`, and much better CLI/IDE support.
 - `1.5.4` specifically fixes user-visible issues around decimal arithmetic, mixed numeric flows, list behavior, and observable list hooks.
+- `1.5.4` also fixes extension-member registration for named singleton `object` declarations, so `fun X.foo()` and `val X.bar` now work as expected.
 - The docs, homepage samples, and release metadata now point at the current stable version.
 
 ## User Highlights Across 1.5.x
@@ -301,6 +302,23 @@ object Config {
 }
 
 Config.show()
+```
+
+Named singleton objects can also be used as extension receivers:
+
+```lyng
+object X {
+    fun base() = "base"
+}
+
+fun X.decorate(value): String {
+    this.base() + ":" + value.toString()
+}
+
+val X.tag get() = this.base() + ":tag"
+
+assertEquals("base:42", X.decorate(42))
+assertEquals("base:tag", X.tag)
 ```
 
 ### Nested Declarations and Lifted Enums
