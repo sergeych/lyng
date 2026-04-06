@@ -1449,6 +1449,13 @@ class Compiler(
                 }
                 cc.nextNonWhitespace()
                 val afterSegment = cc.peekNextNonWhitespace()
+                if (afterSegment.type == Token.Type.LT) {
+                    val nextAfterSuffix = peekTokenAfterExtensionReceiverSegmentSuffix()
+                    if (nextAfterSuffix != Token.Type.DOT) {
+                        cc.restorePos(dotPos)
+                        break
+                    }
+                }
                 if (afterSegment.type != Token.Type.DOT &&
                     afterSegment.type != Token.Type.LT &&
                     afterSegment.type != Token.Type.QUESTION &&
@@ -1491,6 +1498,38 @@ class Compiler(
             val nameTok = cc.peekNextNonWhitespace()
             cc.restorePos(savedDot)
             return nameTok.type == Token.Type.ID
+        } finally {
+            cc.restorePos(saved)
+        }
+    }
+
+    private fun peekTokenAfterExtensionReceiverSegmentSuffix(): Token.Type {
+        val saved = cc.savePos()
+        try {
+            if (cc.peekNextNonWhitespace().type == Token.Type.LT) {
+                var depth = 0
+                while (true) {
+                    when (val tok = cc.nextNonWhitespace().type) {
+                        Token.Type.LT -> depth += 1
+                        Token.Type.GT -> {
+                            depth -= 1
+                            if (depth <= 0) break
+                        }
+                        Token.Type.SHR -> {
+                            depth -= 2
+                            if (depth <= 0) break
+                        }
+                        Token.Type.EOF -> return Token.Type.EOF
+                        else -> {}
+                    }
+                }
+            }
+            if (cc.peekNextNonWhitespace().type == Token.Type.QUESTION ||
+                cc.peekNextNonWhitespace().type == Token.Type.IFNULLASSIGN
+            ) {
+                cc.nextNonWhitespace()
+            }
+            return cc.peekNextNonWhitespace().type
         } finally {
             cc.restorePos(saved)
         }
@@ -4253,6 +4292,13 @@ class Compiler(
                 }
                 cc.nextNonWhitespace()
                 val afterSegment = cc.peekNextNonWhitespace()
+                if (afterSegment.type == Token.Type.LT) {
+                    val nextAfterSuffix = peekTokenAfterExtensionReceiverSegmentSuffix()
+                    if (nextAfterSuffix != Token.Type.DOT) {
+                        cc.restorePos(dotPos)
+                        break
+                    }
+                }
                 if (afterSegment.type != Token.Type.DOT &&
                     afterSegment.type != Token.Type.LT &&
                     afterSegment.type != Token.Type.QUESTION &&

@@ -393,7 +393,7 @@ class OOTest {
                 fun base() = "base"
             }
 
-            fun X.decorate(value): String {
+            fun X.decorate<T>(value: T): String {
                 this.base() + ":" + value.toString()
             }
             val X.tag get() = this.base() + ":tag"
