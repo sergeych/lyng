@@ -132,6 +132,9 @@ Primary sources used: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/{Parser,T
 
 ## 6. Control Flow
 - `if` is expression-like.
+- `compile if (cond) { ... } else { ... }` is a compile-time-only conditional.
+  - current condition grammar is restricted to `defined(NameOr.Package)`, `!`, `&&`, `||`, and parentheses.
+  - the untaken branch is skipped by the compiler and is not name-resolved or type-checked.
 - `when(value) { ... }` supported.
   - branch conditions support equality, `in`, `!in`, `is`, `!is`, and `nullable` predicate.
   - `when { ... }` (subject-less) is currently not implemented.

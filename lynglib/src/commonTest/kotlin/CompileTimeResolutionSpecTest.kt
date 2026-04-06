@@ -20,9 +20,7 @@ import net.sergeych.lyng.Compiler
 import net.sergeych.lyng.Script
 import net.sergeych.lyng.Source
 import net.sergeych.lyng.resolution.SymbolOrigin
-import kotlin.test.Ignore
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class CompileTimeResolutionSpecTest {
@@ -81,6 +79,20 @@ class CompileTimeResolutionSpecTest {
             """
         )
         assertTrue(report.errors.any { it.message.contains("missingName") })
+    }
+
+    @Test
+    fun compileIfSkipsResolutionForUnselectedBranch() = runTest {
+        val report = dryRun(
+            """
+            compile if (defined(NoSuchClass)) {
+                NoSuchClass("foo")
+            } else {
+                1
+            }
+            """
+        )
+        assertTrue(report.errors.isEmpty())
     }
 
     @Test

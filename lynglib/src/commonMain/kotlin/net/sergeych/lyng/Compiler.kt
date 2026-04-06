@@ -6763,6 +6763,16 @@ class Compiler(
         "break" -> parseBreakStatement(id.pos)
         "continue" -> parseContinueStatement(id.pos)
         "if" -> parseIfStatement()
+        "compile" -> {
+            val saved = cc.savePos()
+            val next = cc.nextNonWhitespace()
+            if (next.type == Token.Type.ID && next.value == "if") {
+                parseCompileIfStatement(id.pos)
+            } else {
+                cc.restorePos(saved)
+                null
+            }
+        }
         "class" -> {
             pendingDeclStart = id.pos
             pendingDeclDoc = consumePendingDoc()
@@ -8334,6 +8344,307 @@ class Compiler(
             IfStatement(condition, ifBody, null, start)
         }
         return wrapBytecode(stmt)
+    }
+
+    private suspend fun parseCompileIfStatement(startPos: Pos): Statement {
+        val start = ensureLparen()
+        val condition = parseCompileCondition()
+        val pos = ensureRparen()
+
+        val ifBody = if (condition) {
+            parseCompileIfBranch(pos, "compile if")
+        } else {
+            skipCompileIfBranch(pos, "compile if")
+            NopStatement
+        }
+
+        val saved = cc.savePos()
+        val maybeElse = cc.nextNonWhitespace()
+        return if (maybeElse.type == Token.Type.ID && maybeElse.value == "else") {
+            if (condition) {
+                skipCompileIfBranch(pos, "compile else")
+                ifBody
+            } else {
+                parseCompileIfBranch(pos, "compile else")
+            }
+        } else {
+            cc.restorePos(saved)
+            if (condition) ifBody else NopStatement
+        }
+    }
+
+    private suspend fun parseCompileCondition(): Boolean = parseCompileConditionOr()
+
+    private suspend fun parseCompileConditionOr(): Boolean {
+        var value = parseCompileConditionAnd()
+        while (true) {
+            val saved = cc.savePos()
+            val token = cc.nextNonWhitespace()
+            if (token.type != Token.Type.OR) {
+                cc.restorePos(saved)
+                return value
+            }
+            value = value || parseCompileConditionAnd()
+        }
+    }
+
+    private suspend fun parseCompileConditionAnd(): Boolean {
+        var value = parseCompileConditionUnary()
+        while (true) {
+            val saved = cc.savePos()
+            val token = cc.nextNonWhitespace()
+            if (token.type != Token.Type.AND) {
+                cc.restorePos(saved)
+                return value
+            }
+            value = value && parseCompileConditionUnary()
+        }
+    }
+
+    private suspend fun parseCompileConditionUnary(): Boolean {
+        val saved = cc.savePos()
+        val token = cc.nextNonWhitespace()
+        return when {
+            token.type == Token.Type.NOT -> !parseCompileConditionUnary()
+            token.type == Token.Type.LPAREN -> {
+                val nested = parseCompileConditionOr()
+                val close = cc.nextNonWhitespace()
+                if (close.type != Token.Type.RPAREN) {
+                    throw ScriptError(close.pos, "expected ')' in compile-time condition")
+                }
+                nested
+            }
+            token.type == Token.Type.ID && token.value == "defined" -> parseDefinedCompileCondition(token.pos)
+            else -> {
+                cc.restorePos(saved)
+                throw ScriptError(token.pos, "compile if condition supports only defined(...), !, &&, ||, and parentheses")
+            }
+        }
+    }
+
+    private suspend fun parseDefinedCompileCondition(atPos: Pos): Boolean {
+        val open = cc.nextNonWhitespace()
+        if (open.type != Token.Type.LPAREN) {
+            throw ScriptError(open.pos, "expected '(' after defined")
+        }
+        val target = parseDefinedCompileTarget()
+        val close = cc.nextNonWhitespace()
+        if (close.type != Token.Type.RPAREN) {
+            throw ScriptError(close.pos, "expected ')' after defined($target")
+        }
+        return isCompileDefined(target, atPos)
+    }
+
+    private fun parseDefinedCompileTarget(): String {
+        val first = cc.nextNonWhitespace()
+        if (first.type != Token.Type.ID) {
+            throw ScriptError(first.pos, "defined(...) expects a class or package name")
+        }
+        val parts = mutableListOf(first.value)
+        while (true) {
+            val saved = cc.savePos()
+            val dot = cc.nextNonWhitespace()
+            if (dot.type != Token.Type.DOT) {
+                cc.restorePos(saved)
+                break
+            }
+            val part = cc.nextNonWhitespace()
+            if (part.type != Token.Type.ID) {
+                throw ScriptError(part.pos, "expected identifier after '.' in defined(...)")
+            }
+            parts += part.value
+        }
+        return parts.joinToString(".")
+    }
+
+    private suspend fun isCompileDefined(name: String, pos: Pos): Boolean {
+        if (name.contains('.')) {
+            if (resolveClassByName(name) != null) return true
+            return try {
+                importManager.prepareImport(pos, name, null)
+                true
+            } catch (_: ImportException) {
+                false
+            }
+        }
+        if (name == "__PACKAGE__" || name == "this") return true
+        if (lookupSlotLocation(name, includeModule = false) != null) return true
+        val classCtx = codeContexts.lastOrNull { it is CodeContext.ClassBody } as? CodeContext.ClassBody
+        val implicitTypeFromFunc = implicitReceiverTypeForMember(name)
+        val hasImplicitClassMember = classCtx != null && hasImplicitThisMember(name, classCtx.name)
+        if (classCtx != null && classCtx.declaredMembers.contains(name)) return true
+        if (classCtx != null && classCtx.classScopeMembers.contains(name)) return true
+        if (classCtx != null && hasImplicitThisMember(name, classCtx.name)) return true
+        if (implicitTypeFromFunc != null) return true
+        if (codeContexts.any { it is CodeContext.ClassBody } && extensionNames.contains(name)) return true
+
+        val moduleLoc = if (slotPlanStack.size == 1) lookupSlotLocation(name, includeModule = true) else null
+        if (moduleLoc != null) {
+            val moduleDeclaredNames = localNamesStack.firstOrNull()
+            if (moduleDeclaredNames == null || !moduleDeclaredNames.contains(name)) {
+                if (resolveImportBinding(name, pos) != null) return true
+                if (predeclaredTopLevelValueNames.contains(name)) return false
+            }
+            return true
+        }
+
+        val modulePlan = moduleSlotPlan()
+        val moduleEntry = modulePlan?.slots?.get(name)
+        if (moduleEntry != null) {
+            val moduleDeclaredNames = localNamesStack.firstOrNull()
+            if (moduleDeclaredNames == null || !moduleDeclaredNames.contains(name)) {
+                if (resolveImportBinding(name, pos) != null) return true
+                if (predeclaredTopLevelValueNames.contains(name)) return false
+            }
+            return true
+        }
+        if (resolveImportBinding(name, pos) != null) return true
+        return resolveClassByName(name) != null
+    }
+
+    private suspend fun parseCompileIfBranch(pos: Pos, branchLabel: String): Statement {
+        return parseStatement() ?: throw ScriptError(pos, "$branchLabel expected statement")
+    }
+
+    private fun skipCompileIfBranch(pos: Pos, branchLabel: String) {
+        skipStandaloneStatement(pos, branchLabel)
+    }
+
+    private fun skipStandaloneStatement(pos: Pos, branchLabel: String) {
+        while (true) {
+            val token = cc.next()
+            when (token.type) {
+                Token.Type.NEWLINE,
+                Token.Type.SEMICOLON,
+                Token.Type.SINGLE_LINE_COMMENT,
+                Token.Type.MULTILINE_COMMENT -> continue
+                Token.Type.EOF -> throw ScriptError(pos, "$branchLabel expected statement")
+                else -> {
+                    skipStatementFromToken(token, branchLabel)
+                    return
+                }
+            }
+        }
+    }
+
+    private fun skipStatementFromToken(first: Token, branchLabel: String) {
+        if (first.type == Token.Type.LBRACE) {
+            skipBalancedGroup(Token.Type.LBRACE, Token.Type.RBRACE, branchLabel)
+            return
+        }
+        if (first.type == Token.Type.ID) {
+            when (first.value) {
+                "if" -> {
+                    skipParenthesizedAfterKeyword(branchLabel)
+                    skipStandaloneStatement(first.pos, branchLabel)
+                    skipOptionalElseBranch(branchLabel)
+                    return
+                }
+                "compile" -> {
+                    val saved = cc.savePos()
+                    val next = cc.nextNonWhitespace()
+                    if (next.type == Token.Type.ID && next.value == "if") {
+                        skipParenthesizedAfterKeyword(branchLabel)
+                        skipStandaloneStatement(first.pos, branchLabel)
+                        skipOptionalElseBranch(branchLabel)
+                        return
+                    }
+                    cc.restorePos(saved)
+                }
+                "while", "for" -> {
+                    skipParenthesizedAfterKeyword(branchLabel)
+                    skipStandaloneStatement(first.pos, branchLabel)
+                    skipOptionalElseBranch(branchLabel)
+                    return
+                }
+                "do" -> {
+                    skipStandaloneStatement(first.pos, branchLabel)
+                    val whileTok = cc.nextNonWhitespace()
+                    if (whileTok.type != Token.Type.ID || whileTok.value != "while") {
+                        throw ScriptError(whileTok.pos, "expected 'while' after do body in skipped $branchLabel")
+                    }
+                    skipParenthesizedAfterKeyword(branchLabel)
+                    skipOptionalElseBranch(branchLabel)
+                    return
+                }
+            }
+        }
+        skipFlatStatementRemainder(branchLabel)
+    }
+
+    private fun skipOptionalElseBranch(branchLabel: String) {
+        val saved = cc.savePos()
+        cc.skipTokenOfType(Token.Type.NEWLINE, isOptional = true)
+        val token = cc.nextNonWhitespace()
+        if (token.type == Token.Type.ID && token.value == "else") {
+            skipStandaloneStatement(token.pos, branchLabel)
+        } else {
+            cc.restorePos(saved)
+        }
+    }
+
+    private fun skipParenthesizedAfterKeyword(branchLabel: String) {
+        val open = cc.nextNonWhitespace()
+        if (open.type != Token.Type.LPAREN) {
+            throw ScriptError(open.pos, "expected '(' in skipped $branchLabel")
+        }
+        skipBalancedGroup(Token.Type.LPAREN, Token.Type.RPAREN, branchLabel)
+    }
+
+    private fun skipBalancedGroup(openType: Token.Type, closeType: Token.Type, branchLabel: String) {
+        var depth = 1
+        while (depth > 0) {
+            val token = cc.next()
+            when (token.type) {
+                openType -> depth += 1
+                closeType -> depth -= 1
+                Token.Type.EOF -> throw ScriptError(token.pos, "unbalanced tokens in skipped $branchLabel")
+                else -> {}
+            }
+        }
+    }
+
+    private fun skipFlatStatementRemainder(branchLabel: String) {
+        var parenDepth = 0
+        var bracketDepth = 0
+        var braceDepth = 0
+        while (true) {
+            val saved = cc.savePos()
+            val token = cc.next()
+            when (token.type) {
+                Token.Type.LPAREN -> parenDepth += 1
+                Token.Type.RPAREN -> {
+                    if (parenDepth == 0 && bracketDepth == 0 && braceDepth == 0) {
+                        cc.restorePos(saved)
+                        return
+                    }
+                    parenDepth -= 1
+                }
+                Token.Type.LBRACKET -> bracketDepth += 1
+                Token.Type.RBRACKET -> {
+                    if (bracketDepth == 0 && parenDepth == 0 && braceDepth == 0) {
+                        cc.restorePos(saved)
+                        return
+                    }
+                    bracketDepth -= 1
+                }
+                Token.Type.LBRACE -> braceDepth += 1
+                Token.Type.RBRACE -> {
+                    if (braceDepth == 0 && parenDepth == 0 && bracketDepth == 0) {
+                        cc.restorePos(saved)
+                        return
+                    }
+                    braceDepth -= 1
+                }
+                Token.Type.NEWLINE, Token.Type.SEMICOLON -> {
+                    if (parenDepth == 0 && bracketDepth == 0 && braceDepth == 0) {
+                        return
+                    }
+                }
+                Token.Type.EOF -> return
+                else -> {}
+            }
+        }
     }
 
     private suspend fun parseFunctionDeclaration(

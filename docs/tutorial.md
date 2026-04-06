@@ -1094,6 +1094,37 @@ Or, more neat:
     >>> just 3
     >>> void
 
+## compile if
+
+`compile if` is a compile-time conditional. Unlike normal `if`, the compiler evaluates its condition while compiling
+the file and completely skips the untaken branch. This is useful when some class or package may or may not be
+available:
+
+    compile if (defined(Udp)) {
+        val socket = Udp()
+        println("udp is available")
+    } else {
+        println("udp is not available")
+    }
+
+`compile if` also supports single-statement branches:
+
+    compile if (defined(lyng.io.net) && !defined(Udp))
+        println("network module exists, but Udp is not visible here")
+    else
+        println("either Udp exists or the module is unavailable")
+
+Current condition syntax is intentionally limited to compile-time symbol checks:
+
+- `defined(Name)`
+- `defined(package.name)`
+- `!`, `&&`, `||`
+- parentheses
+
+Examples:
+    compile if (defined(Udp) && defined(Tcp))
+        println("both transports are available")
+
 ## When
 
 See also: [Comprehensive guide to `when`](when.md)

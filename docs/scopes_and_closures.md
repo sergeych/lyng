@@ -6,6 +6,7 @@ This page documents the **current** rules: static name resolution, closure captu
 
 ## Current rules (bytecode compiler)
 - **All names resolve at compile time**: locals, parameters, captures, members, imports, and module globals must be known when compiling. Missing symbols are compile-time errors.
+- **Exception: `compile if` can skip dead branches**: inside an untaken `compile if (...)` branch, names are not resolved or type-checked at all. This is the supported way to guard optional classes or packages such as `defined(Udp)` or `defined(lyng.io.net)`.
 - **No runtime fallbacks**: there is no dynamic name lookup, no fallback opcodes, and no “search parent scopes” at runtime for missing names.
 - **Object members on unknown types only**: `toString`, `toInspectString`, `let`, `also`, `apply`, `run` are allowed on unknown types; all other members require a statically known receiver type or an explicit cast.
 - **Closures capture slots**: lambdas and nested functions capture **frame slots** directly. Captures are resolved at compile time and compiled to slot references.
