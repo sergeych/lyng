@@ -2771,7 +2771,14 @@ class Compiler(
                         val next = cc.next()
                         if (next.type == Token.Type.ID) {
                             // could be () call or obj.method {} call
-                            val nt = cc.current()
+                            var nt = cc.current()
+                            var memberCallTypeArgs: List<TypeDecl>? = null
+                            if (nt.type == Token.Type.LT) {
+                                memberCallTypeArgs = tryParseCallTypeArgsAfterLt()
+                                if (memberCallTypeArgs != null) {
+                                    nt = cc.current()
+                                }
+                            }
                             when (nt.type) {
                                 Token.Type.LPAREN -> {
                                     cc.next()
@@ -2784,9 +2791,9 @@ class Compiler(
                                         val nestedClass = receiverClass?.let { resolveClassByName("${it.className}.${next.value}") }
                                         if (nestedClass != null) {
                                             val field = FieldRef(left, next.value, isOptional)
-                                            operand = CallRef(field, args, tailBlock, isOptional)
+                                            operand = CallRef(field, args, tailBlock, isOptional, memberCallTypeArgs)
                                         } else {
-                                            operand = MethodCallRef(left, next.value, args, tailBlock, isOptional)
+                                            operand = MethodCallRef(left, next.value, args, tailBlock, isOptional, memberCallTypeArgs)
                                         }
                                     } else {
                                         // instance method call
@@ -2808,9 +2815,13 @@ class Compiler(
                                         operand = when (left) {
                                             is LocalVarRef -> if (left.name == "this") {
                                                 resolutionSink?.referenceMember(next.value, next.pos)
-                                                val implicitType = currentImplicitThisTypeName()
-                                                val ids = resolveMemberIds(next.value, next.pos, implicitType)
-                                                ThisMethodSlotCallRef(next.value, ids.methodId, args, tailBlock, isOptional)
+                                                if (memberCallTypeArgs != null) {
+                                                    MethodCallRef(left, next.value, args, tailBlock, isOptional, memberCallTypeArgs)
+                                                } else {
+                                                    val implicitType = currentImplicitThisTypeName()
+                                                    val ids = resolveMemberIds(next.value, next.pos, implicitType)
+                                                    ThisMethodSlotCallRef(next.value, ids.methodId, args, tailBlock, isOptional)
+                                                }
                                             } else if (left.name == "scope") {
                                                 if (next.value == "get" || next.value == "set") {
                                                     val first = args.firstOrNull()?.value
@@ -2820,26 +2831,32 @@ class Compiler(
                                                         resolutionSink?.referenceReflection(name.value, next.pos)
                                                     }
                                                 }
-                                                MethodCallRef(left, next.value, args, tailBlock, isOptional)
+                                                MethodCallRef(left, next.value, args, tailBlock, isOptional, memberCallTypeArgs)
                                             } else {
                                                 val unionCall = buildUnionMethodCall(left, next.value, next.pos, isOptional, args, tailBlock)
                                                 if (unionCall != null) {
                                                     unionCall
                                                 } else {
                                                     enforceReceiverTypeForMember(left, next.value, next.pos)
-                                                    MethodCallRef(left, next.value, args, tailBlock, isOptional)
+                                                    MethodCallRef(left, next.value, args, tailBlock, isOptional, memberCallTypeArgs)
                                                 }
                                             }
                                             is QualifiedThisRef ->
-                                                QualifiedThisMethodSlotCallRef(
-                                                    left.typeName,
-                                                    next.value,
-                                                    resolveMemberIds(next.value, next.pos, left.typeName).methodId,
-                                                    args,
-                                                    tailBlock,
-                                                    isOptional
-                                                ).also {
-                                                    resolutionSink?.referenceMember(next.value, next.pos, left.typeName)
+                                                if (memberCallTypeArgs != null) {
+                                                    MethodCallRef(left, next.value, args, tailBlock, isOptional, memberCallTypeArgs).also {
+                                                        resolutionSink?.referenceMember(next.value, next.pos, left.typeName)
+                                                    }
+                                                } else {
+                                                    QualifiedThisMethodSlotCallRef(
+                                                        left.typeName,
+                                                        next.value,
+                                                        resolveMemberIds(next.value, next.pos, left.typeName).methodId,
+                                                        args,
+                                                        tailBlock,
+                                                        isOptional
+                                                    ).also {
+                                                        resolutionSink?.referenceMember(next.value, next.pos, left.typeName)
+                                                    }
                                                 }
                                             else -> {
                                                 val unionCall = buildUnionMethodCall(left, next.value, next.pos, isOptional, args, tailBlock)
@@ -2847,7 +2864,7 @@ class Compiler(
                                                     unionCall
                                                 } else {
                                                     enforceReceiverTypeForMember(left, next.value, next.pos)
-                                                    MethodCallRef(left, next.value, args, tailBlock, isOptional)
+                                                    MethodCallRef(left, next.value, args, tailBlock, isOptional, memberCallTypeArgs)
                                                 }
                                             }
                                         }
@@ -3253,12 +3270,13 @@ class Compiler(
             is LocalVarRef -> ref.name
             is FastLocalVarRef -> ref.name
             is LocalSlotRef -> ref.name
+            is FieldRef -> ref.name
             else -> null
         }
         if (name != null) {
             if (lookupGenericFunctionDecl(name) != null) return true
             if (name.firstOrNull()?.isUpperCase() == true) return true
-            return false
+            return ref is FieldRef
         }
         return ref is ConstRef && ref.constValue is ObjClass
     }
@@ -6443,6 +6461,23 @@ class Compiler(
             }
         }
         val implicitThisTypeName = currentImplicitThisTypeName()
+        if (left is FieldRef && !explicitTypeArgs.isNullOrEmpty()) {
+            val nestedClass = if (shouldTreatAsClassScopeCall(left.target, left.name)) {
+                resolveReceiverClassForMember(left.target)?.let { resolveClassByName("${it.className}.${left.name}") }
+            } else {
+                null
+            }
+            if (nestedClass == null) {
+                return MethodCallRef(
+                    left.target,
+                    left.name,
+                    args,
+                    detectedBlockArgument,
+                    left.isOptional || isOptional,
+                    explicitTypeArgs
+                )
+            }
+        }
         val result = when (left) {
             is ImplicitThisMemberRef ->
                 if (left.methodId == null && left.fieldId != null) {

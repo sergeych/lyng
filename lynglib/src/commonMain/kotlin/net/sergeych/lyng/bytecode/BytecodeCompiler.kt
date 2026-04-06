@@ -4712,7 +4712,7 @@ class BytecodeCompiler(
         val receiver = compileRefWithFallback(ref.receiver, null, refPosOrCurrent(ref.receiver)) ?: return null
         val dst = allocSlot()
         fun emitDynamicCall(): CompiledValue? {
-            val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
+            val args = compileCallArgs(ref.args, ref.tailBlock, ref.explicitTypeArgs) ?: return null
             val encodedCount = encodeCallArgCount(args) ?: return null
             val nameId = builder.addConst(BytecodeConst.StringVal(ref.name))
             if (!ref.isOptional) {
@@ -4759,7 +4759,7 @@ class BytecodeCompiler(
         if (methodId != null && resolvedMember?.declaringClass?.className != "Obj") {
             val encodedMethodId = encodeMemberId(receiverClass, methodId) ?: methodId
             if (!ref.isOptional) {
-                val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
+                val args = compileCallArgs(ref.args, ref.tailBlock, ref.explicitTypeArgs) ?: return null
                 val encodedCount = encodeCallArgCount(args) ?: return null
                 setPos(callPos)
                 builder.emit(Opcode.CALL_MEMBER_SLOT, receiver.slot, encodedMethodId, args.base, encodedCount, dst)
@@ -4778,7 +4778,7 @@ class BytecodeCompiler(
                 Opcode.JMP_IF_TRUE,
                 listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
             )
-            val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
+            val args = compileCallArgs(ref.args, ref.tailBlock, ref.explicitTypeArgs) ?: return null
             val encodedCount = encodeCallArgCount(args) ?: return null
             setPos(callPos)
             builder.emit(Opcode.CALL_MEMBER_SLOT, receiver.slot, encodedMethodId, args.base, encodedCount, dst)
@@ -4796,7 +4796,7 @@ class BytecodeCompiler(
                 builder.emit(Opcode.GET_MEMBER_SLOT, receiver.slot, encodedFieldId, -1, calleeSlot)
             }
             if (!ref.isOptional) {
-                val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
+                val args = compileCallArgs(ref.args, ref.tailBlock, ref.explicitTypeArgs) ?: return null
                 val encodedCount = encodeCallArgCount(args) ?: return null
                 setPos(callPos)
                 builder.emit(Opcode.CALL_SLOT, calleeSlot, args.base, encodedCount, dst)
@@ -4812,7 +4812,7 @@ class BytecodeCompiler(
                     listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
                 )
                 builder.emit(Opcode.GET_MEMBER_SLOT, receiver.slot, encodedFieldId, -1, calleeSlot)
-                val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
+                val args = compileCallArgs(ref.args, ref.tailBlock, ref.explicitTypeArgs) ?: return null
                 val encodedCount = encodeCallArgCount(args) ?: return null
                 setPos(callPos)
                 builder.emit(Opcode.CALL_SLOT, calleeSlot, args.base, encodedCount, dst)
@@ -4845,7 +4845,7 @@ class BytecodeCompiler(
                 builder.emit(Opcode.CONST_NULL, memberSlot)
                 builder.mark(endLabel)
             }
-            val args = compileCallArgs(ref.args, ref.tailBlock) ?: return null
+            val args = compileCallArgs(ref.args, ref.tailBlock, ref.explicitTypeArgs) ?: return null
             val encodedCount = encodeCallArgCount(args) ?: return null
             setPos(callPos)
             builder.emit(Opcode.CALL_SLOT, memberSlot, args.base, encodedCount, dst)
@@ -4858,7 +4858,7 @@ class BytecodeCompiler(
             )
         val callee = ensureObjSlot(extSlot)
         if (!ref.isOptional) {
-            val args = compileCallArgsWithReceiver(receiver, ref.args, ref.tailBlock) ?: return null
+            val args = compileCallArgsWithReceiver(receiver, ref.args, ref.tailBlock, ref.explicitTypeArgs) ?: return null
             val encodedCount = encodeCallArgCount(args) ?: return null
             setPos(callPos)
             builder.emit(Opcode.CALL_SLOT, callee.slot, args.base, encodedCount, dst)
@@ -4874,7 +4874,7 @@ class BytecodeCompiler(
             Opcode.JMP_IF_TRUE,
             listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
         )
-        val args = compileCallArgsWithReceiver(receiver, ref.args, ref.tailBlock) ?: return null
+        val args = compileCallArgsWithReceiver(receiver, ref.args, ref.tailBlock, ref.explicitTypeArgs) ?: return null
         val encodedCount = encodeCallArgCount(args) ?: return null
         setPos(callPos)
         builder.emit(Opcode.CALL_SLOT, callee.slot, args.base, encodedCount, dst)
@@ -5067,13 +5067,14 @@ class BytecodeCompiler(
     private fun compileCallArgsWithReceiver(
         receiver: CompiledValue,
         args: List<ParsedArgument>,
-        tailBlock: Boolean
+        tailBlock: Boolean,
+        explicitTypeArgs: List<TypeDecl>? = null
     ): CallArgs? {
         val argSlots = IntArray(args.size + 1) { allocSlot() }
         val receiverObj = ensureObjSlot(receiver)
         builder.emit(Opcode.MOVE_OBJ, receiverObj.slot, argSlots[0])
         updateSlotType(argSlots[0], SlotType.OBJ)
-        val needPlan = tailBlock || args.any { it.isSplat || it.name != null }
+        val needPlan = tailBlock || args.any { it.isSplat || it.name != null } || !explicitTypeArgs.isNullOrEmpty()
         val specs = if (needPlan) ArrayList<BytecodeConst.CallArgSpec>(args.size + 1) else null
         specs?.add(BytecodeConst.CallArgSpec(null, false))
         for ((index, arg) in args.withIndex()) {
@@ -5086,7 +5087,13 @@ class BytecodeCompiler(
             specs?.add(BytecodeConst.CallArgSpec(arg.name, arg.isSplat))
         }
         val planId = if (needPlan) {
-            builder.addConst(BytecodeConst.CallArgsPlan(tailBlock, specs ?: emptyList()))
+            builder.addConst(
+                BytecodeConst.CallArgsPlan(
+                    tailBlock = tailBlock,
+                    specs = specs ?: emptyList(),
+                    explicitTypeArgs = explicitTypeArgs ?: emptyList()
+                )
+            )
         } else {
             null
         }

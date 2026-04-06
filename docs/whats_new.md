@@ -10,6 +10,7 @@ For a programmer-focused migration summary across 1.5.x, see `docs/whats_new_1_5
 - The 1.5 line now brings together richer ranges and loops, interpolation, math modules, immutable and observable collections, richer `lyngio`, and much better CLI/IDE support.
 - `1.5.4` specifically fixes user-visible issues around decimal arithmetic, mixed numeric flows, list behavior, and observable list hooks.
 - `1.5.4` also fixes extension-member registration for named singleton `object` declarations, so `fun X.foo()` and `val X.bar` now work as expected.
+- `1.5.4` also lets named singleton `object` declarations use scoped indexer extensions with bracket syntax, so patterns like `Storage["name"]` can be implemented with `override fun Storage.getAt(...)` / `putAt(...)`.
 - The docs, homepage samples, and release metadata now point at the current stable version.
 
 ## User Highlights Across 1.5.x

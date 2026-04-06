@@ -518,7 +518,7 @@ open class Obj {
                 if (rec.visibility == Visibility.Private && !rec.isAbstract) {
                     val resolved = resolveRecord(scope, rec, name, caller)
                     if (resolved.type == ObjRecord.Type.Fun)
-                        return resolved.copy(value = resolved.value.invoke(scope, this, Arguments.EMPTY, caller))
+                        return resolved.copy(value = invokeForFieldReadOrReturnCallable(scope, this, resolved, caller))
                     return resolved
                 }
             }
@@ -532,7 +532,7 @@ open class Obj {
                 val decl = rec.declaringClass ?: cls
                 val resolved = resolveRecord(scope, rec, name, decl)
                 if (resolved.type == ObjRecord.Type.Fun)
-                    return resolved.copy(value = resolved.value.invoke(scope, this, Arguments.EMPTY, decl))
+                    return resolved.copy(value = invokeForFieldReadOrReturnCallable(scope, this, resolved, decl))
                 return resolved
             }
         }
@@ -547,7 +547,7 @@ open class Obj {
                         scope.raiseError(ObjIllegalAccessException(scope, "can't access field ${name}: not visible (declared in ${decl.className}, caller ${caller?.className ?: "?"})"))
                     val resolved = resolveRecord(scope, rec, name, decl)
                     if (resolved.type == ObjRecord.Type.Fun)
-                        return resolved.copy(value = resolved.value.invoke(scope, this, Arguments.EMPTY, decl))
+                        return resolved.copy(value = invokeForFieldReadOrReturnCallable(scope, this, resolved, decl))
                     return resolved
                 }
             }
@@ -557,7 +557,7 @@ open class Obj {
                 val prop = ext.value as ObjProperty
                 ObjRecord(prop.callGetter(scope, this, ext.declaringClass), isMutable = false)
             } else {
-                ext.copy(value = ext.value.invoke(scope, this, Arguments.EMPTY, ext.declaringClass))
+                ext.copy(value = invokeForFieldReadOrReturnCallable(scope, this, ext, ext.declaringClass))
             }
         }
 
@@ -660,6 +660,14 @@ open class Obj {
         if (hasNonRootIndexerMember("getAt")) {
             return invokeInstanceMethod(scope, "getAt", Arguments(index))
         }
+        // Extension indexers are checked only after concrete class/indexer overrides.
+        // If this path becomes hot in benchmarks, add a small receiver-shape/member cache here
+        // rather than moving extension lookup ahead of the non-root member fast path.
+        scope.findExtension(objClass, "getAt")?.let { ext ->
+            if (ext.type != ObjRecord.Type.Delegated) {
+                return ext.value.invoke(scope, this, Arguments(index), ext.declaringClass)
+            }
+        }
         if (index is ObjString) {
             return readField(scope, index.value).value
         }
@@ -676,6 +684,20 @@ open class Obj {
             }
             hasNonRootIndexerMember("setAt") -> {
                 invokeInstanceMethod(scope, "setAt", Arguments(index, newValue))
+                return
+            }
+        }
+        // Same optimization note as in getAt(): extension indexers work here, but they are
+        // intentionally behind concrete overrides to keep normal class-defined indexers fast.
+        scope.findExtension(objClass, "putAt")?.let { ext ->
+            if (ext.type != ObjRecord.Type.Delegated) {
+                ext.value.invoke(scope, this, Arguments(index, newValue), ext.declaringClass)
+                return
+            }
+        }
+        scope.findExtension(objClass, "setAt")?.let { ext ->
+            if (ext.type != ObjRecord.Type.Delegated) {
+                ext.value.invoke(scope, this, Arguments(index, newValue), ext.declaringClass)
                 return
             }
         }
@@ -1130,3 +1152,24 @@ suspend fun <T>Obj.decodeSerializableWith(strategy: DeserializationStrategy<T>, 
  */
 suspend inline fun <reified T>Obj.decodeSerializable(scope: Scope= Scope()) =
     decodeSerializableWith<T>(serializer<T>(), scope)
+
+internal suspend fun invokeForFieldReadOrReturnCallable(
+    scope: Scope,
+    receiver: Obj,
+    record: ObjRecord,
+    decl: ObjClass?
+): Obj {
+    return try {
+        record.value.invoke(scope, receiver, Arguments.EMPTY, decl)
+    } catch (e: ExecutionError) {
+        if (e.message.isMissingArgsForAutoFieldInvoke()) record.value else throw e
+    } catch (e: ScriptError) {
+        if (e.message.isMissingArgsForAutoFieldInvoke()) record.value else throw e
+    }
+}
+
+private fun String?.isMissingArgsForAutoFieldInvoke(): Boolean {
+    val lower = this?.lowercase() ?: return false
+    if (!lower.contains("got 0")) return false
+    return lower.contains("expected") || lower.contains("missing required argument")
+}

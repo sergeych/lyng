@@ -3301,7 +3301,7 @@ private suspend fun resolveDynamicFieldValue(scope: Scope, receiver: Obj, name: 
     }
     if (rec.type == ObjRecord.Type.Fun && !rec.isAbstract) {
         val recv = rec.receiver ?: receiver
-        return rec.value.invoke(scope, recv, Arguments.EMPTY, rec.declaringClass)
+        return invokeForFieldReadOrReturnCallable(scope, recv, rec, rec.declaringClass)
     }
     return rec.value
 }

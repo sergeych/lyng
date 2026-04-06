@@ -16,10 +16,20 @@
  */
 
 import kotlinx.coroutines.test.runTest
+import net.sergeych.lyng.EvalSession
+import net.sergeych.lyng.ModuleScope
 import net.sergeych.lyng.Script
+import net.sergeych.lyng.bridge.bindObject
+import net.sergeych.lyng.bridge.data
 import net.sergeych.lyng.eval
+import net.sergeych.lyng.obj.ObjBool
+import net.sergeych.lyng.obj.ObjBuffer
+import net.sergeych.lyng.obj.ObjInt
 import net.sergeych.lyng.obj.ObjInstance
 import net.sergeych.lyng.obj.ObjList
+import net.sergeych.lyng.obj.ObjNull
+import net.sergeych.lyng.obj.ObjString
+import net.sergeych.lyng.obj.ObjVoid
 import net.sergeych.lyng.toSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -988,6 +998,108 @@ class OOTest {
         """.trimIndent())
         ms.eval("""
         """)
+    }
+
+    @Test
+    fun testExtendingObjectWithExternals() = runTest {
+        val s = EvalSession()
+        s.eval("""
+            extern object Storage {
+    
+                extern val spaceUsed: Int
+                extern val spaceAvailable: Int
+            
+                /*
+                    Return packed binary data or null
+                */
+                extern fun getPacked(key: String): Buffer?
+            
+                /*
+                    Upsert packed binary data
+                */
+                extern fun putPacked(key: String,value: Buffer)
+            
+                /*
+                    Delete data.
+                    @return true if data were actually deleted, false means
+                    there were no data for the key.
+                */
+                extern fun delete(key: String): Bool
+            }
+            """.trimIndent()
+        )
+        val scope = s.getScope() as ModuleScope
+        scope.bindObject("Storage") {
+            init { _ ->
+                data = mutableMapOf<String, ObjBuffer>()
+            }
+            addVal("spaceUsed") {
+                val storage = (thisObj as ObjInstance).data as MutableMap<String, ObjBuffer>
+                ObjInt(storage.values.sumOf { it.size }.toLong())
+            }
+            addVal("spaceAvailable") {
+                val storage = (thisObj as ObjInstance).data as MutableMap<String, ObjBuffer>
+                val capacity = 1_024
+                ObjInt((capacity - storage.values.sumOf { it.size }).toLong())
+            }
+            addFun("getPacked") {
+                val storage = (thisObj as ObjInstance).data as MutableMap<String, ObjBuffer>
+                val key = (args.list[0] as ObjString).value
+                storage[key] ?: ObjNull
+            }
+            addFun("putPacked") {
+                val storage = (thisObj as ObjInstance).data as MutableMap<String, ObjBuffer>
+                val key = (args.list[0] as ObjString).value
+                val value = args.list[1] as ObjBuffer
+                storage[key] = value
+                ObjVoid
+            }
+            addFun("delete") {
+                val storage = (thisObj as ObjInstance).data as MutableMap<String, ObjBuffer>
+                val key = (args.list[0] as ObjString).value
+                ObjBool(storage.remove(key) != null)
+            }
+        }
+        s.eval("""
+            import lyng.serialization
+            
+            // Use names that do not collide with Obj built-ins so extension dispatch is exercised.
+            override fun Storage.getAt(key: String): Object? {
+                Storage.getPacked(key)?.let {
+                    Lynon.decode(it.toBitInput())
+                }
+            }
+            
+            override fun Storage.putAt(key: String, value: Object) {
+                Storage.putPacked(key, Lynon.encode(value).toBuffer())
+            }
+            
+            assertEquals(0, Storage.spaceUsed)
+            assertEquals(1024, Storage.spaceAvailable)
+            val missing: String? = Storage["missing"]
+            assertEquals(null, missing)
+
+            Storage["name"] = "alice"
+            Storage["count"] = 42
+
+            val name: String? = Storage["name"]
+            val count: Int? = Storage["count"]
+            assertEquals("alice", name)
+            assertEquals(42, count)
+            assert(Storage.spaceUsed > 0)
+            assert(Storage.spaceAvailable < 1024)
+
+            val wrappedName: String? = __ext__Storage__getAt(Storage, "name")
+            assertEquals("alice", wrappedName)
+            __ext__Storage__putAt(Storage, "flag", true)
+            val flag: Bool? = Storage["flag"]
+            assertEquals(true, flag)
+
+            assert(Storage.delete("name"))
+            val deletedName: String? = Storage["name"]
+            assertEquals(null, deletedName)
+            assert(!Storage.delete("name"))
+        """.trimIndent())
     }
 
 }

@@ -483,6 +483,7 @@ class MethodCallRef(
     internal val args: List<ParsedArgument>,
     internal val tailBlock: Boolean,
     internal val isOptional: Boolean,
+    internal val explicitTypeArgs: List<TypeDecl>? = null,
 ) : ObjRef {
     // 4-entry PIC for method invocations (guarded by PerfFlags.METHOD_PIC)
     private var mKey1: Long = 0L; private var mVer1: Int = -1; private var mInvoker1: (suspend (Obj, Scope, Arguments) -> Obj)? = null
