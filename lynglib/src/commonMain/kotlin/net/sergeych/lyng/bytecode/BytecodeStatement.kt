@@ -92,6 +92,7 @@ class BytecodeStatement private constructor(
             scopeRefPosByName: Map<String, Pos> = emptyMap(),
             lambdaCaptureEntriesByRef: Map<ValueFnRef, List<LambdaCaptureEntry>> = emptyMap(),
             slotTypeDeclByScopeId: Map<Int, Map<Int, TypeDecl>> = emptyMap(),
+            implicitThisTypeName: String? = null,
         ): Statement {
             if (statement is BytecodeStatement) return statement
             val hasUnsupported = containsUnsupportedStatement(statement)
@@ -128,7 +129,8 @@ class BytecodeStatement private constructor(
                 externBindingNames = externBindingNames,
                 preparedModuleBindingNames = preparedModuleBindingNames,
                 scopeRefPosByName = scopeRefPosByName,
-                lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef
+                lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef,
+                implicitThisTypeName = implicitThisTypeName
             )
             val compiled = compiler.compileStatement(nameHint, statement)
             val fn = compiled ?: throw BytecodeCompileException(

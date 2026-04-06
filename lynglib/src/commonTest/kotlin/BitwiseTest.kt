@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,5 +46,47 @@ class BitwiseTest {
 
         // type mismatch should raise
         assertFails { e("1 & 2.0") }
+    }
+
+    @Test
+    fun testBitwiseInference() = runTest {
+        eval(
+            """
+                import lyng.buffer
+                class Foo() {
+                    val buf = Buffer(64).toMutable()
+                    fn fn2(): Int {
+                        val tmp = this.buf[1] & 127
+                        println("fn2: ", tmp)
+                        tmp
+                    }
+                }
+                
+                val foo = Foo()
+                assertEquals(0, foo.fn2())
+                """
+        )
+    }
+
+    @Test
+    fun testCustomIndexerIntInference() = runTest {
+        eval(
+            """
+                class TestBuffer() {
+                    override fn getAt(index): Int = index + 1
+                }
+
+                class Foo() {
+                    val buf = TestBuffer()
+                    fn fn2(): Int {
+                        val tmp = (this.buf[1] & 127) + this.buf[2] * 2 - 1
+                        tmp
+                    }
+                }
+
+                val foo = Foo()
+                assertEquals(7, foo.fn2())
+                """
+        )
     }
 }

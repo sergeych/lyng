@@ -46,6 +46,7 @@ class BytecodeCompiler(
     private val preparedModuleBindingNames: Set<String> = emptySet(),
     private val scopeRefPosByName: Map<String, Pos> = emptyMap(),
     private val lambdaCaptureEntriesByRef: Map<ValueFnRef, List<LambdaCaptureEntry>> = emptyMap(),
+    private val implicitThisTypeName: String? = null,
 ) {
     private val useScopeSlots: Boolean = allowedScopeNames != null || scopeSlotNameSet != null
     private var builder = CmdBuilder()
@@ -694,6 +695,8 @@ class BytecodeCompiler(
                 val receiver = ref.preferredThisTypeName()?.let { typeName ->
                     compileThisVariantRef(typeName) ?: return null
                 } ?: compileThisRef()
+                val ownerClass = ref.preferredThisTypeName()?.let { resolveTypeNameClass(it) }
+                    ?: implicitThisTypeName?.let { resolveTypeNameClass(it) }
                 val fieldId = ref.fieldId ?: -1
                 val methodId = ref.methodId ?: -1
                 if (fieldId < 0 && methodId < 0) {
@@ -710,11 +713,13 @@ class BytecodeCompiler(
                     val encodedCount = encodeCallArgCount(args) ?: return null
                     builder.emit(Opcode.CALL_SLOT, calleeObj.slot, args.base, encodedCount, dst)
                     updateSlotType(dst, SlotType.OBJ)
+                    annotateIndexedReceiverSlot(dst, ownerClass?.let { inferFieldReturnClass(it, ref.name) })
                     return CompiledValue(dst, SlotType.OBJ)
                 }
                 val slot = allocSlot()
                 builder.emit(Opcode.GET_MEMBER_SLOT, receiver.slot, fieldId, methodId, slot)
                 updateSlotType(slot, SlotType.OBJ)
+                annotateIndexedReceiverSlot(slot, ownerClass?.let { inferFieldReturnClass(it, ref.name) })
                 CompiledValue(slot, SlotType.OBJ)
             }
             is ImplicitThisMethodCallRef -> compileImplicitThisMethodCall(ref)
@@ -1423,6 +1428,23 @@ class BytecodeCompiler(
             BinOp.PLUS, BinOp.MINUS, BinOp.STAR, BinOp.SLASH, BinOp.PERCENT,
             BinOp.BAND, BinOp.BOR, BinOp.BXOR, BinOp.SHL, BinOp.SHR
         )
+        val intOnlyOps = setOf(BinOp.BAND, BinOp.BOR, BinOp.BXOR, BinOp.SHL, BinOp.SHR)
+        if (op in intOnlyOps) {
+            coerceToArithmeticInt(leftRef, a)?.let { a = it }
+            coerceToArithmeticInt(rightRef, b)?.let { b = it }
+            if (a.type == SlotType.OBJ) {
+                val intSlot = allocSlot()
+                builder.emit(Opcode.UNBOX_INT_OBJ, emitAssertObjSlotIsInt(a.slot), intSlot)
+                updateSlotType(intSlot, SlotType.INT)
+                a = CompiledValue(intSlot, SlotType.INT)
+            }
+            if (b.type == SlotType.OBJ) {
+                val intSlot = allocSlot()
+                builder.emit(Opcode.UNBOX_INT_OBJ, emitAssertObjSlotIsInt(b.slot), intSlot)
+                updateSlotType(intSlot, SlotType.INT)
+                b = CompiledValue(intSlot, SlotType.INT)
+            }
+        }
         val leftIsLoopVar = (leftRef as? LocalSlotRef)?.name?.let { intLoopVarNames.contains(it) } == true
         val rightIsLoopVar = (rightRef as? LocalSlotRef)?.name?.let { intLoopVarNames.contains(it) } == true
         if (a.type == SlotType.UNKNOWN && b.type == SlotType.INT && op in intOps && leftIsLoopVar) {
@@ -3503,6 +3525,7 @@ class BytecodeCompiler(
                 builder.mark(endLabel)
             }
             updateSlotType(dst, SlotType.OBJ)
+            annotateIndexedReceiverSlot(dst, inferFieldReturnClass(receiverClass, ref.name))
             return CompiledValue(dst, SlotType.OBJ)
         }
         val extSlot = resolveExtensionGetterSlot(receiverClass, ref.name)
@@ -3535,6 +3558,7 @@ class BytecodeCompiler(
             builder.mark(endLabel)
         }
         updateSlotType(dst, SlotType.OBJ)
+        annotateIndexedReceiverSlot(dst, inferFieldReturnClass(receiverClass, ref.name))
         return CompiledValue(dst, SlotType.OBJ)
     }
 
@@ -3558,6 +3582,7 @@ class BytecodeCompiler(
 
     private fun compileThisFieldSlotRef(ref: ThisFieldSlotRef): CompiledValue? {
         val receiver = compileThisRef()
+        val ownerClass = implicitThisTypeName?.let { resolveTypeNameClass(it) }
         val fieldId = ref.fieldId() ?: -1
         val methodId = ref.methodId() ?: -1
         if (fieldId < 0 && methodId < 0) {
@@ -3584,11 +3609,13 @@ class BytecodeCompiler(
             builder.mark(endLabel)
         }
         updateSlotType(dst, SlotType.OBJ)
+        annotateIndexedReceiverSlot(dst, ownerClass?.let { inferFieldReturnClass(it, ref.name) })
         return CompiledValue(dst, SlotType.OBJ)
     }
 
     private fun compileQualifiedThisFieldSlotRef(ref: QualifiedThisFieldSlotRef): CompiledValue? {
         val receiver = compileThisVariantRef(ref.receiverTypeName()) ?: return null
+        val ownerClass = resolveTypeNameClass(ref.receiverTypeName())
         val fieldId = ref.fieldId() ?: -1
         val methodId = ref.methodId() ?: -1
         if (fieldId < 0 && methodId < 0) {
@@ -3615,6 +3642,7 @@ class BytecodeCompiler(
             builder.mark(endLabel)
         }
         updateSlotType(dst, SlotType.OBJ)
+        annotateIndexedReceiverSlot(dst, ownerClass?.let { inferFieldReturnClass(it, ref.name) })
         return CompiledValue(dst, SlotType.OBJ)
     }
 
@@ -7843,16 +7871,25 @@ class BytecodeCompiler(
     }
 
     private fun listElementClassFromDecl(decl: TypeDecl): ObjClass? {
-        val generic = decl as? TypeDecl.Generic ?: return null
-        if (generic.name != "List" || generic.args.size != 1) return null
-        val arg = generic.args.first()
-        val cls = when (arg) {
-            is TypeDecl.Simple -> resolveTypeNameClass(arg.name)
-            is TypeDecl.Generic -> resolveTypeNameClass(arg.name)
-            else -> null
-        }
-        return when (cls) {
-            ObjInt.type, ObjReal.type, ObjString.type, ObjBool.type -> cls
+        return when (decl) {
+            is TypeDecl.Generic -> {
+                if (decl.name != "List" || decl.args.size != 1) return null
+                val arg = decl.args.first()
+                val cls = when (arg) {
+                    is TypeDecl.Simple -> resolveTypeNameClass(arg.name)
+                    is TypeDecl.Generic -> resolveTypeNameClass(arg.name)
+                    else -> null
+                }
+                when (cls) {
+                    ObjInt.type, ObjReal.type, ObjString.type, ObjBool.type -> cls
+                    else -> null
+                }
+            }
+            is TypeDecl.Simple -> when (decl.name.substringAfterLast('.')) {
+                "Buffer", "MutableBuffer", "BitBuffer" -> ObjInt.type
+                "String" -> ObjChar.type
+                else -> null
+            }
             else -> null
         }
     }
@@ -7865,12 +7902,67 @@ class BytecodeCompiler(
                 val decl = slotTypeDeclByScopeId[scopeId]?.get(slot) ?: return null
                 listElementClassFromDecl(decl)
             }
-            else -> null
+            is ImplicitThisMemberRef -> {
+                val ownerClass = ref.preferredThisTypeName()?.let { resolveTypeNameClass(it) } ?: return null
+                val fieldClass = inferFieldReturnClass(ownerClass, ref.name) ?: return null
+                when (fieldClass.className) {
+                    "Buffer", "MutableBuffer", "BitBuffer" -> ObjInt.type
+                    "String" -> ObjChar.type
+                    else -> null
+                }
+            }
+            is ThisFieldSlotRef -> {
+                val ownerClass = implicitThisTypeName?.let { resolveTypeNameClass(it) } ?: return null
+                val fieldClass = inferFieldReturnClass(ownerClass, ref.name) ?: return null
+                when (fieldClass.className) {
+                    "Buffer", "MutableBuffer", "BitBuffer" -> ObjInt.type
+                    "String" -> ObjChar.type
+                    else -> null
+                }
+            }
+            is QualifiedThisFieldSlotRef -> {
+                val ownerClass = resolveTypeNameClass(ref.receiverTypeName()) ?: return null
+                val fieldClass = inferFieldReturnClass(ownerClass, ref.name) ?: return null
+                when (fieldClass.className) {
+                    "Buffer", "MutableBuffer", "BitBuffer" -> ObjInt.type
+                    "String" -> ObjChar.type
+                    else -> null
+                }
+            }
+            is FieldRef -> {
+                val fieldClass = resolveReceiverClass(ref) ?: return null
+                when (fieldClass.className) {
+                    "Buffer", "MutableBuffer", "BitBuffer" -> ObjInt.type
+                    "String" -> ObjChar.type
+                    else -> listElementClassFromDecl(TypeDecl.Simple(fieldClass.className, false))
+                }
+            }
+            else -> {
+                val receiverClass = resolveReceiverClass(ref) ?: return null
+                when (receiverClass.className) {
+                    "Buffer", "MutableBuffer", "BitBuffer" -> ObjInt.type
+                    "String" -> ObjChar.type
+                    else -> null
+                }
+            }
         }
     }
 
-    private fun indexElementClass(receiverSlot: Int, targetRef: ObjRef): ObjClass? =
-        listElementClassBySlot[receiverSlot] ?: listElementClassFromReceiverRef(targetRef)
+    private fun annotateIndexedReceiverSlot(slot: Int, receiverClass: ObjClass?) {
+        if (receiverClass == null) return
+        slotObjClass[slot] = receiverClass
+        when (receiverClass.className) {
+            "Buffer", "MutableBuffer", "BitBuffer" -> listElementClassBySlot[slot] = ObjInt.type
+            "String" -> listElementClassBySlot[slot] = ObjChar.type
+        }
+    }
+
+    private fun indexElementClass(receiverSlot: Int, targetRef: ObjRef): ObjClass? {
+        listElementClassBySlot[receiverSlot]?.let { return it }
+        listElementClassFromReceiverRef(targetRef)?.let { return it }
+        val receiverClass = resolveReceiverClass(targetRef) ?: return null
+        return inferFieldReturnClass(receiverClass, "getAt")
+    }
 
     private fun indexElementSlotType(receiverSlot: Int, targetRef: ObjRef): SlotType? =
         slotTypeFromClass(indexElementClass(receiverSlot, targetRef))
@@ -8975,10 +9067,25 @@ class BytecodeCompiler(
 
     private fun coerceToArithmeticInt(ref: ObjRef, value: CompiledValue): CompiledValue? {
         if (value.type == SlotType.INT) return value
-        val refSuggestsInt = inferNumericKind(ref) == NumericKind.INT
+        val refSuggestsInt = isIntLikeRef(ref) || inferNumericKind(ref) == NumericKind.INT
         val stableNonTemp = !isTempSlot(value.slot) && isStablePrimitiveSourceSlot(value.slot)
-        if (!refSuggestsInt && !stableNonTemp) return null
-        return coerceToLoopInt(value)
+        return when (value.type) {
+            SlotType.UNKNOWN -> {
+                if (!refSuggestsInt) return null
+                updateSlotType(value.slot, SlotType.INT)
+                CompiledValue(value.slot, SlotType.INT)
+            }
+            SlotType.OBJ -> {
+                if (!refSuggestsInt && !stableNonTemp) return null
+                coerceToLoopInt(value)?.let { return it }
+                if (!refSuggestsInt) return null
+                val intSlot = allocSlot()
+                builder.emit(Opcode.UNBOX_INT_OBJ, emitAssertObjSlotIsInt(value.slot), intSlot)
+                updateSlotType(intSlot, SlotType.INT)
+                CompiledValue(intSlot, SlotType.INT)
+            }
+            else -> null
+        }
     }
 
     private fun emitAssertObjSlotIsInt(slot: Int): Int {

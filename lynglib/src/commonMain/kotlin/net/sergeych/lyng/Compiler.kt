@@ -1836,7 +1836,8 @@ class Compiler(
                         externBindingNames = externBindingNames,
                         preparedModuleBindingNames = importBindings.keys,
                         scopeRefPosByName = moduleReferencePosByName,
-                        lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef
+                        lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef,
+                        implicitThisTypeName = currentImplicitThisTypeName()
                     ) as BytecodeStatement
                     unwrapped to bytecodeStmt.bytecodeFunction()
                 } else {
@@ -2257,7 +2258,8 @@ class Compiler(
             externBindingNames = externBindingNames,
             preparedModuleBindingNames = importBindings.keys,
             scopeRefPosByName = moduleReferencePosByName,
-            lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef
+            lambdaCaptureEntriesByRef = lambdaCaptureEntriesByRef,
+            implicitThisTypeName = currentImplicitThisTypeName()
         )
     }
 
