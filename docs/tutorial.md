@@ -2094,6 +2094,30 @@ Example with custom accessors:
     "abc".firstChar
     >>> 'a'
 
+### Extension indexers
+
+Indexers can also be extended by overriding `getAt` and `putAt` on the receiver:
+
+```lyng
+object Storage
+
+var storageData = {}
+
+override fun Storage.getAt(key: String): Object? {
+    storageData[key]
+}
+
+override fun Storage.putAt(key: String, value: Object) {
+    storageData[key] = value
+}
+
+Storage["answer"] = 42
+val answer: Int? = Storage["answer"]
+assertEquals(42, answer)
+```
+
+This works for classes and named singleton `object` declarations. Bracket syntax is lowered to `getAt` / `putAt`, and multiple selectors are packed into one list-like index object the same way as other custom indexers.
+
 Extension members are **scope-isolated**: they are visible only in the scope where they are defined and its children. This prevents name collisions and improves security.
 
 To get details on OOP in Lyng, see [OOP notes](OOP.md).

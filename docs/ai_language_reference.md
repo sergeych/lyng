@@ -95,6 +95,7 @@ Primary sources used: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/{Parser,T
   - single selector: `a[i]`
   - multiple selectors: `a[i, j, k]`
   - language-level indexing with multiple selectors is passed to `getAt`/`putAt` as one list-like index object, not as multiple method arguments.
+  - indexers can also be supplied by extension members, including named singleton `object` receivers via `override fun Storage.getAt(...)` / `putAt(...)`.
   - example: `m[0..2, 2]`.
 
 ## 5. Declarations

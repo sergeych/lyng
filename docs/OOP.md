@@ -1058,6 +1058,95 @@ The same rules still apply:
 - They cannot access the object's `private` members.
 - Inside the extension body, `this` is the singleton object itself.
 
+## Extension indexers
+
+Bracket syntax is just another form of member dispatch. When you write `value[i]` or `value[i] = x`, Lyng lowers it to `getAt(...)` and `putAt(...)`.
+
+That means indexers can be extended in the same way as methods and properties.
+
+### Extending indexers on classes
+
+Use `override fun Type.getAt(...)` and `override fun Type.putAt(...)`:
+
+```lyng
+class BoxStore {
+    val data = {"name": "alice"}
+}
+
+override fun BoxStore.getAt(key: String): Object? {
+    data[key]
+}
+
+override fun BoxStore.putAt(key: String, value: Object) {
+    data[key] = value
+}
+
+val store = BoxStore()
+assertEquals("alice", store["name"])
+store["name"] = "bob"
+assertEquals("bob", store["name"])
+```
+
+As with other extension members, this does not modify the original class declaration. It adds indexer behavior only in the scope where the extension is visible.
+
+### Extending indexers on singleton `object` declarations
+
+Named singleton objects work the same way:
+
+```lyng
+object Storage
+
+var storageData = {}
+
+override fun Storage.getAt(key: String): Object? {
+    storageData[key]
+}
+
+override fun Storage.putAt(key: String, value: Object) {
+    storageData[key] = value
+}
+
+Storage["name"] = "alice"
+val name: String? = Storage["name"]
+assertEquals("alice", name)
+```
+
+This is the indexer equivalent of `fun Config.foo()`: the extension applies to that single named object, not to all instances of some class.
+
+### Selector packing
+
+Index syntax can contain more than one selector:
+
+```lyng
+value[i]
+value[i, j]
+```
+
+The same packing rules still apply for extension indexers:
+
+- `value[i]` calls `getAt(i)` or `putAt(i, value)`
+- `value[i, j]` passes `[i, j]` as one list-like index object
+- `value[i, j, k]` passes `[i, j, k]`
+
+So if you want multi-selector indexing, define the receiver to accept that packed index object.
+
+### About types and generics
+
+In practice, extension indexers are usually best declared with `Object?` for reads and `Object` for writes:
+
+```lyng
+override fun Storage.getAt(key: String): Object? { ... }
+override fun Storage.putAt(key: String, value: Object) { ... }
+```
+
+Then use the expected type at the call site:
+
+```lyng
+val name: String? = Storage["name"]
+```
+
+Explicit generic arguments do not fit naturally onto `[]` syntax, so typed assignment on read is usually the clearest approach.
+
 ## Extension properties
 
 Just like methods, you can extend existing classes with properties. These can be defined using simple initialization (for `val` only) or with custom accessors.
