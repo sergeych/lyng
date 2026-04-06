@@ -1001,9 +1001,9 @@ Static fields can be accessed from static methods via the class qualifier:
     assertEquals("bar", Test.getData() )
     >>> void
 
-# Extending classes
+# Extension members
 
-It sometimes happen that the class is missing some particular functionality that can be _added to it_ without rewriting its inner logic and using its private state. In this case _extension members_ could be used.
+Sometimes an existing type or named singleton object is missing some particular functionality that can be _added to it_ without rewriting its inner logic and without using its private state. In this case, _extension members_ can be used.
 
 ## Extension methods
 
@@ -1027,6 +1027,36 @@ static fun List<T>.fill(size: Int, block: (Int)->T): List<T> { ... }
 
 val tens = List.fill(5) { it * 10 }
 ```
+
+## Extending singleton `object` declarations
+
+Named singleton objects can also be extension receivers. Use the object name as the receiver type:
+
+```lyng
+object Config {
+    fun base() = "cfg"
+}
+
+fun Config.describe(value) {
+    this.base() + ":" + value.toString()
+}
+
+val Config.tag get() = this.base() + ":tag"
+
+assertEquals("cfg:42", Config.describe(42))
+assertEquals("cfg:tag", Config.tag)
+```
+
+This differs from extending a class in one important way:
+
+- `fun Point.foo()` adds a member-like extension for all `Point` instances.
+- `fun Config.foo()` adds a member-like extension only for the single named object `Config`.
+
+The same rules still apply:
+
+- Extensions on singleton objects are scope-isolated just like class extensions.
+- They cannot access the object's `private` members.
+- Inside the extension body, `this` is the singleton object itself.
 
 ## Extension properties
 
