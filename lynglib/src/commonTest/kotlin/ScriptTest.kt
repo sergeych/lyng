@@ -110,6 +110,19 @@ class ScriptTest {
     }
 
     @Test
+    fun testNullableLetKeepsReceiverMemberType() = runTest {
+        Script.newScope().eval(
+            """
+            import lyng.serialization
+
+            val packed: Buffer? = Lynon.encode("alice").toBuffer()
+            val decoded = packed?.let { Lynon.decode(it.toBitInput()) }
+            assertEquals("alice", decoded)
+            """.trimIndent()
+        )
+    }
+
+    @Test
     fun testNoInfiniteRecursionOnUnknownInNestedClosure() = runTest {
         val scope = Script.newScope()
         withTimeout(1.seconds) {
