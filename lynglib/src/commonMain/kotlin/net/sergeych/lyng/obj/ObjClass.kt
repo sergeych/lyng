@@ -926,11 +926,16 @@ open class ObjClass(
                     candidate.methodId
                 } else null
             }
-            methodId ?: inherited ?: methodIdMap[name]?.let { it } ?: run {
+            val id = methodId ?: inherited ?: methodIdMap[name]?.let { it } ?: run {
                 methodIdMap[name] = nextMethodId
                 nextMethodId++
                 methodIdMap[name]!!
             }
+            // Register the resolved ID so subsequent assignMethodId calls (e.g. for static
+            // methods) don't reuse the same numeric slot for a different member.
+            methodIdMap[name] = id
+            if (id >= nextMethodId) nextMethodId = id + 1
+            id
         } else {
             methodId
         }

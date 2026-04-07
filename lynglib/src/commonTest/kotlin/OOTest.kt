@@ -1199,4 +1199,22 @@ class OOTest {
         """.trimIndent())
     }
 
+    @Test
+    fun testForwardSymbolsUsageMustBeAllowed() = runTest {
+        eval("""
+            class Foo(x) {
+                fn fn2() {
+                    fn1()
+                    println("fn2")
+                }
+                fn fn1() {
+                    println("fn1")
+                }
+            }
+
+            val foo = Foo(33)
+            foo.fn2()
+        """.trimIndent())
+    }
+
 }

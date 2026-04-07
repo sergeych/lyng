@@ -456,7 +456,7 @@ class Compiler(
         }
     }
 
-    private fun predeclareClassMembers(target: MutableSet<String>, overrides: MutableMap<String, Boolean>) {
+    private fun predeclareClassMembers(target: MutableSet<String>, overrides: MutableMap<String, Boolean>, methodNames: MutableSet<String>? = null) {
         val saved = cc.savePos()
         var depth = 0
         val modifiers = setOf(
@@ -478,18 +478,22 @@ class Compiler(
                     Token.Type.RBRACE -> if (depth == 0) break else depth--
                     Token.Type.ID -> if (depth == 0) {
                         var sawOverride = false
+                        var sawStatic = false
                         while (t.type == Token.Type.ID && t.value in modifiers) {
                             if (t.value == "override") sawOverride = true
+                            if (t.value == "static") sawStatic = true
                             t = nextNonWs()
                         }
                         when (t.value) {
                             "fun", "fn", "val", "var" -> {
+                                val isMethod = t.value == "fun" || t.value == "fn"
                                 val nameToken = nextNonWs()
                                 if (nameToken.type == Token.Type.ID) {
                                     val afterName = cc.peekNextNonWhitespace()
                                     if (afterName.type != Token.Type.DOT) {
                                         target.add(nameToken.value)
                                         overrides[nameToken.value] = sawOverride
+                                        if (isMethod && !sawStatic) methodNames?.add(nameToken.value)
                                     }
                                 }
                             }
@@ -7757,7 +7761,7 @@ class Compiler(
                         classCtx?.let { ctx ->
                             val callableMembers = classScopeCallableMembersByClassName.getOrPut(qualifiedName) { mutableSetOf() }
                             predeclareClassScopeMembers(qualifiedName, ctx.classScopeMembers, callableMembers)
-                            predeclareClassMembers(ctx.declaredMembers, ctx.memberOverrides)
+                            predeclareClassMembers(ctx.declaredMembers, ctx.memberOverrides, ctx.declaredMethodNames)
                             val existingExternInfo = if (isExtern) resolveCompileClassInfo(qualifiedName) else null
                             if (existingExternInfo != null) {
                                 ctx.memberFieldIds.putAll(existingExternInfo.fieldIds)
@@ -7804,6 +7808,13 @@ class Compiler(
                                     if (param.accessType == null) return@forEach
                                     if (!ctx.memberFieldIds.containsKey(param.name)) {
                                         ctx.memberFieldIds[param.name] = ctx.nextFieldId++
+                                    }
+                                }
+                                // Pre-assign method IDs for all declared methods so forward
+                                // references within the class body resolve correctly.
+                                for (method in ctx.declaredMethodNames) {
+                                    if (!ctx.memberMethodIds.containsKey(method)) {
+                                        ctx.memberMethodIds[method] = ctx.nextMethodId++
                                     }
                                 }
                                 compileClassInfos[qualifiedName] = CompileClassInfo(

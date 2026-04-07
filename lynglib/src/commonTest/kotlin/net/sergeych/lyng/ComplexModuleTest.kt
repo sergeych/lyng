@@ -111,4 +111,22 @@ class ComplexModuleTest {
         )
     }
 
+    @Test
+    fun testOperatorSlotDispatch() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            import lyng.complex
+            val a = Complex(1.0, 2.0)
+            val b = Complex(3.0, -1.0)
+            val product = a * b
+            assertEquals(5.0, product.re)
+            assertEquals(5.0, product.im)
+            val sum = a + Complex(0.0, 0.0)
+            assertEquals(1.0, sum.re)
+            assertEquals(2.0, sum.im)
+            """.trimIndent()
+        )
+    }
+
 }
