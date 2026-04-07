@@ -75,6 +75,9 @@ Sources: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Script.kt`, `lynglib/s
   - `Matrix`, `Vector`, `matrix(rows)`, `vector(values)`, dense linear algebra, inversion, solving, and matrix slicing with `m[row, col]`.
 - `import lyng.buffer`
   - `Buffer`, `MutableBuffer`.
+- `import lyng.legacy_digest`
+  - `LegacyDigest.sha1(data): String` — SHA-1 hex digest; `data` may be `String` (UTF-8) or `Buffer` (raw bytes).
+  - ⚠️ Cryptographically broken. Use only for legacy protocol / file-format compatibility.
 - `import lyng.serialization`
   - `Lynon` serialization utilities.
 - `import lyng.time`

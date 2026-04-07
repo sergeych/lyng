@@ -164,6 +164,31 @@ println(z.exp())
 
 See [Complex](Complex.md).
 
+### Legacy Digest Module (`lyng.legacy_digest`)
+
+For situations where an external protocol or file format requires a SHA-1 value,
+Lyng now ships a `lyng.legacy_digest` module backed by a pure Kotlin/KMP
+implementation with no extra dependencies.
+
+> ⚠️ SHA-1 is cryptographically broken.  Use only for legacy-compatibility work.
+
+```lyng
+import lyng.legacy_digest
+
+val hex = LegacyDigest.sha1("abc")
+// → "a9993e364706816aba3e25717850c26c9cd0d89d"
+
+// Also accepts raw bytes:
+import lyng.buffer
+val buf = Buffer.decodeHex("616263")
+assertEquals(hex, LegacyDigest.sha1(buf))
+```
+
+The name `LegacyDigest` is intentional: it signals that these algorithms belong
+to a compatibility layer, not to a current security toolkit.
+
+See [LegacyDigest](LegacyDigest.md).
+
 ### Binary Operator Interop Registry
 Lyng now provides a general mechanism for mixed binary operators through `lyng.operators`.
 
