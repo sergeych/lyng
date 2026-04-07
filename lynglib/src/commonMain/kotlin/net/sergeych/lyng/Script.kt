@@ -29,6 +29,7 @@ import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.stdlib_included.complexLyng
 import net.sergeych.lyng.stdlib_included.decimalLyng
+import net.sergeych.lyng.stdlib_included.legacyDigestLyng
 import net.sergeych.lyng.stdlib_included.matrixLyng
 import net.sergeych.lyng.stdlib_included.observableLyng
 import net.sergeych.lyng.stdlib_included.operatorsLyng
@@ -895,6 +896,19 @@ class Script(
                 addPackage("lyng.complex") { module ->
                     module.eval(Source("lyng.complex", complexLyng))
                     ObjComplexSupport.bindTo(module)
+                }
+                addPackage("lyng.legacy_digest") { module ->
+                    module.eval(Source("lyng.legacy_digest", legacyDigestLyng))
+                    module.bindObject("LegacyDigest") {
+                        addFun("sha1") {
+                            val data = requiredArg<Obj>(0)
+                            val bytes = when (data) {
+                                is ObjBuffer -> data.byteArray.toByteArray()
+                                else -> data.toString().encodeToByteArray()
+                            }
+                            ObjString(LegacyDigest.sha1Hex(bytes))
+                        }
+                    }
                 }
                 addPackage("lyng.buffer") {
                     it.addConstDoc(

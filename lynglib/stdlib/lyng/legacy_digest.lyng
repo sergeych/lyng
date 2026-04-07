@@ -1,0 +1,33 @@
+package lyng.legacy_digest
+
+/*
+Legacy cryptographic digest functions.
+
+⚠️  WARNING: The functions in this module use algorithms that are
+    CRYPTOGRAPHICALLY BROKEN and must NOT be used for any security-sensitive
+    purpose, including:
+      - Password hashing
+      - Digital signatures or MACs
+      - Integrity verification against adversarial tampering
+
+    Use only for interoperability with legacy protocols, file formats, or
+    external systems that require these specific hash values.
+
+For secure hashing, use SHA-256 or better (not yet available in this stdlib).
+*/
+
+extern object LegacyDigest {
+    /*
+    Compute the SHA-1 digest of `data` and return it as a lowercase hex string.
+
+    `data` may be a String (hashed as UTF-8) or a Buffer (hashed as raw bytes).
+
+    ⚠️  SHA-1 is cryptographically broken. Use only for protocol compatibility.
+
+    Example:
+        import lyng.legacy_digest
+        val digest = LegacyDigest.sha1("hello world")
+        // "2aae6c69a64d7c8b96eacbbe0ced5df20f3a8e89" (note: known SHA-1 of "hello world")
+    */
+    extern fun sha1(data): String
+}
