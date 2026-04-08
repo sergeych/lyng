@@ -4,6 +4,7 @@ The Lyng CLI is the reference command-line tool for the Lyng language. It lets y
 
 - Run Lyng scripts from files or inline strings (shebangs accepted)
 - Use standard argument passing (`ARGV`) to your scripts.
+- Resolve local file imports from the executed script's directory tree.
 - Format Lyng source files via the built-in `fmt` subcommand.
 
 
@@ -73,6 +74,7 @@ lyng -- -my-script.lyng arg1 arg2
 ```
 
 - Execute inline code with `-x/--execute` and pass positional args to `ARGV`:
+  - Inline execution does not scan the filesystem for local modules; only file-based execution does.
 
 ```
 lyng -x "println(\"Hello\")" more args
@@ -84,6 +86,63 @@ lyng -x "println(\"Hello\")" more args
 lyng --version
 lyng --help
 ```
+
+##### Local imports for file execution
+
+When you execute a script file, the CLI builds a temporary local import manager rooted at the directory that contains the entry script.
+
+Formal structure:
+
+- Root directory: the parent directory of the script passed to `lyng`.
+- Scan scope: every `.lyng` file under that root directory, recursively.
+- Entry script: the executed file itself is not registered as an importable module.
+- Module name mapping: `relative/path/to/file.lyng` maps to import name `relative.path.to.file`.
+- Package declaration: if a scanned file starts with `package ...` as its first non-blank line, that package name must exactly match the relative path mapping.
+- Package omission: if there is no leading `package` declaration, the CLI uses the relative path mapping as the module name.
+- Duplicates: if two files resolve to the same module name, CLI execution fails before script execution starts.
+- Import visibility: only files inside the entry root subtree are considered. Parent directories and sibling projects are not searched.
+
+Examples:
+
+```
+project/
+  main.lyng
+  util/answer.lyng
+  math/add.lyng
+```
+
+`util/answer.lyng` is imported as `import util.answer`.
+
+`math/add.lyng` is imported as `import math.add`.
+
+Example contents:
+
+```lyng
+// util/answer.lyng
+package util.answer
+
+import math.add
+
+fun answer() = plus(40, 2)
+```
+
+```lyng
+// math/add.lyng
+fun plus(a, b) = a + b
+```
+
+```lyng
+// main.lyng
+import util.answer
+
+println(answer())
+```
+
+Rationale:
+
+- The module name is deterministic from the filesystem layout.
+- Explicit `package` remains available as a consistency check instead of a second, conflicting naming system.
+- The import search space stays local to the executed script, which avoids accidental cross-project resolution.
 
 ### Use in shell scripts
 

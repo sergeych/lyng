@@ -31,6 +31,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import net.sergeych.lyng.EvalSession
 import net.sergeych.lyng.LyngVersion
+import net.sergeych.lyng.Pos
+import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Script
 import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.Source
@@ -40,17 +42,15 @@ import net.sergeych.lyng.io.http.createHttpModule
 import net.sergeych.lyng.io.net.createNetModule
 import net.sergeych.lyng.io.ws.createWsModule
 import net.sergeych.lyng.obj.*
+import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyngio.console.security.PermitAllConsoleAccessPolicy
 import net.sergeych.lyngio.fs.security.PermitAllAccessPolicy
 import net.sergeych.lyngio.http.security.PermitAllHttpAccessPolicy
 import net.sergeych.lyngio.net.security.PermitAllNetAccessPolicy
 import net.sergeych.lyngio.ws.security.PermitAllWsAccessPolicy
 import net.sergeych.mp_tools.globalDefer
-import okio.FileSystem
+import okio.*
 import okio.Path.Companion.toPath
-import okio.SYSTEM
-import okio.buffer
-import okio.use
 
 // common code
 
@@ -72,21 +72,157 @@ data class CommandResult(
 
 val baseScopeDefer = globalDefer {
     Script.newScope().apply {
-        addFn("exit") {
-            exit(requireOnlyArg<ObjInt>().toInt())
-            ObjVoid
+        installCliBuiltins()
+        installCliModules(importManager)
+    }
+}
+
+private fun Scope.installCliBuiltins() {
+    addFn("exit") {
+        exit(requireOnlyArg<ObjInt>().toInt())
+        ObjVoid
+    }
+}
+
+private fun installCliModules(manager: ImportManager) {
+    // Scripts still need to import the modules they use explicitly.
+    createFs(PermitAllAccessPolicy, manager)
+    createConsoleModule(PermitAllConsoleAccessPolicy, manager)
+    createHttpModule(PermitAllHttpAccessPolicy, manager)
+    createWsModule(PermitAllWsAccessPolicy, manager)
+    createNetModule(PermitAllNetAccessPolicy, manager)
+}
+
+private data class LocalCliModule(
+    val packageName: String,
+    val source: Source
+)
+
+private fun readUtf8(path: Path): String =
+    FileSystem.SYSTEM.source(path).use { fileSource ->
+        fileSource.buffer().use { bs ->
+            bs.readUtf8()
         }
-        // Install lyng.io.fs module with full access by default for the CLI tool's Scope.
-        // Scripts still need to `import lyng.io.fs` to use Path API.
-        createFs(PermitAllAccessPolicy, this)
-        // Install console access by default for interactive CLI scripts.
-        // Scripts still need to `import lyng.io.console` to use it.
-        createConsoleModule(PermitAllConsoleAccessPolicy, this)
-        // Install network-oriented lyngio modules for CLI scripts.
-        // Scripts still need to import the modules they use explicitly.
-        createHttpModule(PermitAllHttpAccessPolicy, this)
-        createWsModule(PermitAllWsAccessPolicy, this)
-        createNetModule(PermitAllNetAccessPolicy, this)
+    }
+
+private fun stripShebang(text: String): String {
+    if (!text.startsWith("#!")) return text
+    val pos = text.indexOf('\n')
+    return if (pos >= 0) text.substring(pos + 1) else ""
+}
+
+private fun extractDeclaredPackageNameOrNull(source: Source): String? {
+    for (line in source.lines) {
+        if (line.isBlank()) continue
+        return if (line.startsWith("package ")) {
+            line.substring(8).trim()
+        } else {
+            null
+        }
+    }
+    return null
+}
+
+private fun canonicalPath(path: Path): Path = FileSystem.SYSTEM.canonicalize(path)
+
+private fun relativeModuleName(rootDir: Path, file: Path): String {
+    val rootText = rootDir.toString().trimEnd('/', '\\')
+    val fileText = file.toString()
+    val prefix = "$rootText/"
+    if (!fileText.startsWith(prefix)) {
+        throw ScriptError(Pos.builtIn, "local import root mismatch: $fileText is not under $rootText")
+    }
+    val relative = fileText.removePrefix(prefix)
+    val modulePath = relative.removeSuffix(".lyng")
+    return modulePath
+        .split('/', '\\')
+        .filter { it.isNotEmpty() }
+        .joinToString(".")
+}
+
+private fun scanLyngFiles(rootDir: Path): List<Path> {
+    val system = FileSystem.SYSTEM
+    val pending = ArrayDeque<Path>()
+    val visited = linkedSetOf<String>()
+    val files = mutableListOf<Path>()
+    pending.add(rootDir)
+    while (pending.isNotEmpty()) {
+        val dir = pending.removeLast()
+        val canonicalDir = canonicalPath(dir)
+        if (!visited.add(canonicalDir.toString())) continue
+        val children = try {
+            system.list(canonicalDir)
+        } catch (_: Exception) {
+            continue
+        }
+        for (child in children) {
+            val meta = try {
+                system.metadata(child)
+            } catch (_: Exception) {
+                continue
+            }
+            when {
+                meta.isDirectory -> pending.add(child)
+                child.name.endsWith(".lyng") -> {
+                    val canonicalFile = try {
+                        canonicalPath(child)
+                    } catch (_: Exception) {
+                        continue
+                    }
+                    files += canonicalFile
+                }
+            }
+        }
+    }
+    return files
+}
+
+private fun discoverLocalCliModules(entryFile: Path): List<LocalCliModule> {
+    val rootDir = entryFile.parent ?: ".".toPath()
+    val seenPackages = linkedMapOf<String, Path>()
+    return scanLyngFiles(rootDir)
+        .asSequence()
+        .filter { it != entryFile }
+        .map { file ->
+            val text = stripShebang(readUtf8(file))
+            val source = Source(file.toString(), text)
+            val expectedPackage = relativeModuleName(rootDir, file)
+            val declaredPackage = extractDeclaredPackageNameOrNull(source)
+            if (declaredPackage != null && declaredPackage != expectedPackage) {
+                throw ScriptError(
+                    source.startPos,
+                    "local module package mismatch: expected '$expectedPackage' for ${file.toString()} but found '$declaredPackage'"
+                )
+            }
+            val packageName = declaredPackage ?: expectedPackage
+            val previous = seenPackages.putIfAbsent(packageName, file)
+            if (previous != null) {
+                throw ScriptError(
+                    source.startPos,
+                    "duplicate local module '$packageName': ${previous.toString()} and ${file.toString()}"
+                )
+            }
+            LocalCliModule(packageName, source)
+        }
+        .toList()
+}
+
+private fun registerLocalCliModules(manager: ImportManager, entryFile: Path) {
+    for (module in discoverLocalCliModules(entryFile)) {
+        manager.addPackage(module.packageName) { scope ->
+            scope.eval(module.source)
+        }
+    }
+}
+
+private suspend fun newCliScope(argv: List<String>, entryFileName: String? = null): Scope {
+    val manager = baseScopeDefer.await().importManager.copy()
+    if (entryFileName != null) {
+        registerLocalCliModules(manager, canonicalPath(entryFileName.toPath()))
+    }
+    return manager.newStdScope().apply {
+        installCliBuiltins()
+        addConst("ARGV", ObjList(argv.map { ObjString(it) }.toMutableList()))
     }
 }
 
@@ -200,7 +336,6 @@ private class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() 
         if (currentContext.invokedSubcommand != null) return
 
         runBlocking {
-            val baseScope = baseScopeDefer.await()
             when {
                 version -> {
                     println("Lyng language version ${LyngVersion}")
@@ -210,15 +345,13 @@ private class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() 
                     val objargs = mutableListOf<String>()
                     script?.let { objargs += it }
                     objargs += args
-                    baseScope.addConst(
-                        "ARGV", ObjList(
-                            objargs.map { ObjString(it) }.toMutableList()
-                        )
-                    )
                     launcher {
                         // there is no script name, it is a first argument instead:
                         processErrors {
-                            executeSource(Source("<eval>", execute!!))
+                            executeSource(
+                                Source("<eval>", execute!!),
+                                newCliScope(objargs)
+                            )
                         }
                     }
                 }
@@ -228,8 +361,7 @@ private class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() 
                         println("Error: no script specified.\n")
                         echoFormattedHelp()
                     } else {
-                        baseScope.addConst("ARGV", ObjList(args.map { ObjString(it) }.toMutableList()))
-                        launcher { executeFile(script!!) }
+                        launcher { executeFile(script!!, args) }
                     }
                 }
             }
@@ -239,13 +371,12 @@ private class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() 
 
 fun executeFileWithArgs(fileName: String, args: List<String>) {
     runBlocking {
-        baseScopeDefer.await().addConst("ARGV", ObjList(args.map { ObjString(it) }.toMutableList()))
-        executeFile(fileName)
+        executeFile(fileName, args)
     }
 }
 
-suspend fun executeSource(source: Source) {
-    val session = EvalSession(baseScopeDefer.await())
+suspend fun executeSource(source: Source, initialScope: Scope? = null) {
+    val session = EvalSession(initialScope ?: baseScopeDefer.await())
     try {
         evalOnCliDispatcher(session, source)
     } finally {
@@ -258,19 +389,14 @@ internal suspend fun evalOnCliDispatcher(session: EvalSession, source: Source): 
         session.eval(source)
     }
 
-suspend fun executeFile(fileName: String) {
-    var text = FileSystem.SYSTEM.source(fileName.toPath()).use { fileSource ->
-        fileSource.buffer().use { bs ->
-            bs.readUtf8()
-        }
-    }
-    if( text.startsWith("#!") ) {
-        // skip shebang
-        val pos = text.indexOf('\n')
-        text = text.substring(pos + 1)
-    }
+suspend fun executeFile(fileName: String, args: List<String> = emptyList()) {
+    val canonicalFile = canonicalPath(fileName.toPath())
+    val text = stripShebang(readUtf8(canonicalFile))
     processErrors {
-        executeSource(Source(fileName, text))
+        executeSource(
+            Source(canonicalFile.toString(), text),
+            newCliScope(args, canonicalFile.toString())
+        )
     }
 }
 
