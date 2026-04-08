@@ -20,6 +20,10 @@ import kotlinx.browser.window
 import org.jetbrains.compose.web.dom.*
 import org.w3c.dom.HTMLElement
 
+private const val DESKTOP_TOC_BREAKPOINT_PX = 992
+
+fun isDesktopTocLayout(viewportWidthPx: Int): Boolean = viewportWidthPx >= DESKTOP_TOC_BREAKPOINT_PX
+
 @Composable
 fun App() {
     var route by remember { mutableStateOf(currentRoute()) }
@@ -29,6 +33,8 @@ fun App() {
     var activeTocId by remember { mutableStateOf<String?>(null) }
     var contentEl by remember { mutableStateOf<HTMLElement?>(null) }
     var navEl by remember { mutableStateOf<HTMLElement?>(null) }
+    var mobileTocExpanded by remember { mutableStateOf(false) }
+    var isDesktopToc by remember { mutableStateOf(isDesktopTocLayout(window.innerWidth)) }
     val isDocsRoute = route.startsWith("docs/")
     val docKey = stripFragment(route)
 
@@ -50,7 +56,11 @@ fun App() {
     }
 
     DisposableEffect(Unit) {
-        val handler: (org.w3c.dom.events.Event) -> Unit = { updateNavbarOffsetVar() }
+        val handler: (org.w3c.dom.events.Event) -> Unit = {
+            updateNavbarOffsetVar()
+            isDesktopToc = isDesktopTocLayout(window.innerWidth)
+        }
+        isDesktopToc = isDesktopTocLayout(window.innerWidth)
         window.addEventListener("resize", handler)
         onDispose { window.removeEventListener("resize", handler) }
     }
@@ -61,11 +71,16 @@ fun App() {
         onDispose { window.removeEventListener("hashchange", listener) }
     }
 
-    LaunchedEffect(activeTocId) {
+    LaunchedEffect(activeTocId, isDesktopToc) {
+        if (!isDesktopToc) return@LaunchedEffect
         val activeId = activeTocId ?: return@LaunchedEffect
         val nav = navEl ?: return@LaunchedEffect
         val activeLink = nav.querySelector("a[data-toc-id=\"$activeId\"]") as? HTMLElement
         activeLink?.scrollIntoView(js("({block: 'nearest', behavior: 'smooth'})"))
+    }
+
+    LaunchedEffect(docKey) {
+        mobileTocExpanded = false
     }
 
     PageTemplate(title = when {
@@ -78,40 +93,29 @@ fun App() {
         Div({ classes("row", "gy-4") }) {
             if (isDocsRoute) {
                 Div({ classes("col-12", "col-lg-3") }) {
-                    Nav({
-                        classes("position-sticky")
-                        attr("style", "top: calc(var(--navbar-offset) + 1rem); max-height: calc(100vh - var(--navbar-offset) - 2rem); overflow-y: auto;")
-                        ref {
-                            navEl = it
-                            onDispose { navEl = null }
+                    if (toc.isNotEmpty() && !isDesktopToc) {
+                        Button(attrs = {
+                            classes("btn", "btn-outline-secondary", "w-100", "mb-3", "d-lg-none")
+                            attr("type", "button")
+                            attr("aria-expanded", mobileTocExpanded.toString())
+                            attr("aria-controls", "docs-toc-nav")
+                            onClick { mobileTocExpanded = !mobileTocExpanded }
+                        }) {
+                            Text(if (mobileTocExpanded) "Hide contents" else "Show contents")
                         }
-                    }) {
-                        H2({ classes("h6", "text-uppercase", "text-muted") }) { Text("On this page") }
-                        Ul({ classes("list-unstyled") }) {
-                            toc.forEach { item ->
-                                Li({ classes("mb-1") }) {
-                                    val pad = when (item.level) { 1 -> "0"; 2 -> "0.75rem"; else -> "1.5rem" }
-                                    val routeNoFrag = route.substringBefore('#')
-                                    val tocHref = "#/$routeNoFrag#${item.id}"
-                                    A(attrs = {
-                                        attr("href", tocHref)
-                                        attr("data-toc-id", item.id)
-                                        attr("style", "padding-left: $pad")
-                                        classes("link-body-emphasis", "text-decoration-none")
-                                        if (activeTocId == item.id) {
-                                            classes("fw-semibold", "text-primary")
-                                            attr("aria-current", "true")
-                                        }
-                                        onClick {
-                                            it.preventDefault()
-                                            window.location.hash = tocHref
-                                            contentEl?.ownerDocument?.getElementById(item.id)
-                                                ?.let { (it as? HTMLElement)?.scrollIntoView() }
-                                        }
-                                    }) { Text(item.title) }
-                                }
-                            }
-                        }
+                    }
+                    if (toc.isNotEmpty() && (isDesktopToc || mobileTocExpanded)) {
+                        TocNav(
+                            toc = toc,
+                            route = route,
+                            activeTocId = activeTocId,
+                            isDesktopToc = isDesktopToc,
+                            contentEl = contentEl,
+                            onNavigate = {
+                                if (!isDesktopToc) mobileTocExpanded = false
+                            },
+                            onNavEl = { navEl = it }
+                        )
                     }
                 }
             }
@@ -136,6 +140,62 @@ fun App() {
                         activeTocId = activeTocId,
                         setActiveTocId = { activeTocId = it },
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TocNav(
+    toc: List<TocItem>,
+    route: String,
+    activeTocId: String?,
+    isDesktopToc: Boolean,
+    contentEl: HTMLElement?,
+    onNavigate: () -> Unit,
+    onNavEl: (HTMLElement?) -> Unit,
+) {
+    Nav({
+        id("docs-toc-nav")
+        classes(if (isDesktopToc) "position-sticky" else "docs-mobile-toc", "mb-3", "mb-lg-0")
+        attr(
+            "style",
+            if (isDesktopToc) {
+                "top: calc(var(--navbar-offset) + 1rem); max-height: calc(100vh - var(--navbar-offset) - 2rem); overflow-y: auto;"
+            } else {
+                "max-height: min(50vh, 24rem); overflow-y: auto;"
+            }
+        )
+        ref {
+            onNavEl(it)
+            onDispose { onNavEl(null) }
+        }
+    }) {
+        H2({ classes("h6", "text-uppercase", "text-muted", "mb-2") }) { Text("On this page") }
+        Ul({ classes("list-unstyled", "mb-0") }) {
+            toc.forEach { item ->
+                Li({ classes("mb-1") }) {
+                    val pad = when (item.level) { 1 -> "0"; 2 -> "0.75rem"; else -> "1.5rem" }
+                    val routeNoFrag = route.substringBefore('#')
+                    val tocHref = "#/$routeNoFrag#${item.id}"
+                    A(attrs = {
+                        attr("href", tocHref)
+                        attr("data-toc-id", item.id)
+                        attr("style", "display: block; padding-left: $pad")
+                        classes("link-body-emphasis", "text-decoration-none")
+                        if (activeTocId == item.id) {
+                            classes("fw-semibold", "text-primary")
+                            attr("aria-current", "true")
+                        }
+                        onClick {
+                            it.preventDefault()
+                            onNavigate()
+                            window.location.hash = tocHref
+                            contentEl?.ownerDocument?.getElementById(item.id)
+                                ?.let { heading -> (heading as? HTMLElement)?.scrollIntoView() }
+                        }
+                    }) { Text(item.title) }
                 }
             }
         }

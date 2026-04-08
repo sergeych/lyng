@@ -180,15 +180,32 @@ fun ensureDocsLayoutStyles() {
                 .markdown-body h1:first-child {
                   margin-top: 0 !important;
                 }
+                .docs-mobile-toc {
+                  position: static !important;
+                  padding: 0.875rem 1rem;
+                  border: 1px solid rgba(128, 128, 128, 0.2);
+                  border-radius: 0.75rem;
+                  background: var(--bs-body-bg, #fff);
+                }
                 /* Hide scrollbar for the TOC nav but allow scrolling */
                 nav.position-sticky::-webkit-scrollbar {
+                  width: 4px;
+                }
+                .docs-mobile-toc::-webkit-scrollbar {
                   width: 4px;
                 }
                 nav.position-sticky::-webkit-scrollbar-thumb {
                   background: rgba(128,128,128,0.2);
                   border-radius: 4px;
                 }
+                .docs-mobile-toc::-webkit-scrollbar-thumb {
+                  background: rgba(128,128,128,0.2);
+                  border-radius: 4px;
+                }
                 nav.position-sticky:hover::-webkit-scrollbar-thumb {
+                  background: rgba(128,128,128,0.5);
+                }
+                .docs-mobile-toc:hover::-webkit-scrollbar-thumb {
                   background: rgba(128,128,128,0.5);
                 }
                 """
