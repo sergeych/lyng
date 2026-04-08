@@ -171,7 +171,9 @@ open class ObjList(initialList: MutableList<Obj> = mutableListOf()) : Obj() {
     override suspend fun getAt(scope: Scope, index: Obj): Obj {
         return when (index) {
             is ObjInt -> {
-                getObjAtFast(index.toInt())
+                val i = index.toInt()
+                objListBoundsViolationMessageOrNull(sizeFast(), i)?.let { scope.raiseIndexOutOfBounds(it) }
+                getObjAtFast(i)
             }
 
             is ObjRange -> {
@@ -209,7 +211,9 @@ open class ObjList(initialList: MutableList<Obj> = mutableListOf()) : Obj() {
     }
 
     open override suspend fun putAt(scope: Scope, index: Obj, newValue: Obj) {
-        setObjAtFast(index.toInt(), newValue)
+        val i = index.toInt()
+        objListBoundsViolationMessageOrNull(sizeFast(), i)?.let { scope.raiseIndexOutOfBounds(it) }
+        setObjAtFast(i, newValue)
     }
 
     override suspend fun compareTo(scope: Scope, other: Obj): Int {

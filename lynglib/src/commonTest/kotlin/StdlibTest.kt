@@ -16,8 +16,16 @@
  */
 
 import kotlinx.coroutines.test.runTest
+import net.sergeych.lyng.Script
 import net.sergeych.lyng.eval
+import net.sergeych.lyng.evalNamed
+import net.sergeych.lyng.obj.ObjException
+import net.sergeych.lyng.obj.ObjInstance
+import net.sergeych.lyng.obj.getLyngExceptionMessage
+import net.sergeych.lyng.obj.getLyngExceptionStackTrace
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class StdlibTest {
     @Test
@@ -372,5 +380,60 @@ class StdlibTest {
                 clampedReal.toInt()
             """.trimIndent()
         )
+    }
+
+    @Test
+    fun testErrorCatching() = runTest {
+        val error = evalNamed("testErrorCatching", """
+            val src = [1,2,3]
+            val d = launch {
+                try {
+                    for( i in 0..3 ) src[i]
+                } catch(e) {
+                   e
+                }
+            }
+            d.await()
+        """.trimIndent()
+        )
+
+        val scope = when (error) {
+            is ObjException -> error.scope
+            is ObjInstance -> error.instanceScope
+            else -> Script.newScope()
+        }
+        val trace = error.getLyngExceptionStackTrace(scope)
+        val renderedTrace = trace.list.map { it.toString(scope).value }
+
+        assertEquals("Index 3 out of bounds for length 3", error.getLyngExceptionMessage(scope))
+        assertTrue(trace.list.size >= 2, "expected at least await and coroutine frames, got ${trace.list.size}")
+        assertTrue(
+            renderedTrace.all { it.contains("testErrorCatching:") },
+            "unexpected trace entries: $renderedTrace"
+        )
+        assertTrue(
+            renderedTrace.any { it.contains("launch") || it.contains("src[i]") },
+            "trace should include the coroutine body: $renderedTrace"
+        )
+        assertTrue(
+            renderedTrace.any { it.contains("d.await()") },
+            "trace should include await site: $renderedTrace"
+        )
+    }
+
+    @Test
+    fun testCatchToIt() = runTest {
+        eval("""
+            var x = 0
+            try {
+                throw "msg1"
+                x = 1
+            }
+            catch {
+                assert(it.message == "msg1")
+                x = 2
+            }
+            assertEquals(2, x)
+        """.trimIndent())
     }
 }

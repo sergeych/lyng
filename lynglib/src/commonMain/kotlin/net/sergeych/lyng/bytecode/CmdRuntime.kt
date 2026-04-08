@@ -3663,7 +3663,11 @@ class CmdGetIndex(
         val target = frame.storedSlotObj(targetSlot)
         val index = frame.storedSlotObj(indexSlot)
         if (target is ObjList && target::class == ObjList::class && index is ObjInt) {
-            frame.storeObjResult(dst, target.getObjAtFast(index.toInt()))
+            val i = index.toInt()
+            objListBoundsViolationMessageOrNull(target.sizeFast(), i)?.let {
+                frame.ensureScope().raiseIndexOutOfBounds(it)
+            }
+            frame.storeObjResult(dst, target.getObjAtFast(i))
             return
         }
         val result = target.getAt(frame.ensureScope(), index)
@@ -3682,7 +3686,11 @@ class CmdSetIndex(
         val index = frame.storedSlotObj(indexSlot)
         val value = frame.slotToObj(valueSlot)
         if (target is ObjList && target::class == ObjList::class && index is ObjInt) {
-            target.setObjAtFast(index.toInt(), value)
+            val i = index.toInt()
+            objListBoundsViolationMessageOrNull(target.sizeFast(), i)?.let {
+                frame.ensureScope().raiseIndexOutOfBounds(it)
+            }
+            target.setObjAtFast(i, value)
             return
         }
         target.putAt(frame.ensureScope(), index, value)
@@ -3699,6 +3707,9 @@ class CmdGetIndexInt(
         val target = frame.storedSlotObj(targetSlot)
         val index = frame.getInt(indexSlot).toInt()
         if (target is ObjList && target::class == ObjList::class) {
+            objListBoundsViolationMessageOrNull(target.sizeFast(), index)?.let {
+                frame.ensureScope().raiseIndexOutOfBounds(it)
+            }
             target.getIntAtFast(index)?.let {
                 frame.setInt(dst, it)
                 return
@@ -3722,6 +3733,9 @@ class CmdSetIndexInt(
         val target = frame.storedSlotObj(targetSlot)
         val index = frame.getInt(indexSlot).toInt()
         if (target is ObjList && target::class == ObjList::class) {
+            objListBoundsViolationMessageOrNull(target.sizeFast(), index)?.let {
+                frame.ensureScope().raiseIndexOutOfBounds(it)
+            }
             target.setIntAtFast(index, frame.getInt(valueSlot))
             return
         }
