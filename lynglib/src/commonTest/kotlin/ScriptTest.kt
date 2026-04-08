@@ -3233,6 +3233,7 @@ class ScriptTest {
             assertEquals( "hello", b.decodeUtf8() )
             
             println(b.base64)
+            println(b.base64std)
             println(b.hex)
 
             assertEquals( b, Buffer.decodeBase64(b.base64) )

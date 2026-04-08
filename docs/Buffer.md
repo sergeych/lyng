@@ -120,17 +120,18 @@ which is used in `toString`) and hex encoding:
 
 ## Members
 
-| name                       | meaning                                 | type          |
-|----------------------------|-----------------------------------------|---------------|
-| `size`                     | size                                    | Int           |
-| `decodeUtf8`               | decode to String using UTF8 rules       | Any           |
-| `+`                        | buffer concatenation                    | Any           |
-| `toMutable()`              | create a mutable copy                   | MutableBuffer |
-| `hex`                      | encode to hex strign                    | String        |
-| `Buffer.decodeHex(hexStr)  | decode hex string                       | Buffer        |
-| `base64`                   | encode to base64 (url flavor) (2)       | String        |
-| `Buffer.decodeBase64(str)` | decode base64 to new Buffer (2)         | Buffer        |
-| `toBitInput()`             | create bit input from a byte buffer (3) |               |
+| name                       | meaning                                        | type          |
+|----------------------------|------------------------------------------------|---------------|
+| `size`                     | size                                           | Int           |
+| `decodeUtf8`               | decode to String using UTF8 rules              | Any           |
+| `+`                        | buffer concatenation                           | Any           |
+| `toMutable()`              | create a mutable copy                          | MutableBuffer |
+| `hex`                      | encode to hex strign                           | String        |
+| `Buffer.decodeHex(hexStr)  | decode hex string                              | Buffer        |
+| `base64`                   | encode to base64 (url flavor) (2)              | String        |
+| `base64std`                | encode to base64 (default vocabulary, filling) | String        |
+| `Buffer.decodeBase64(str)` | decode base64 to new Buffer (2)                | Buffer        |
+| `toBitInput()`             | create bit input from a byte buffer (3)        |               |
 
 (1)
 : optimized implementation that override `Iterable` one

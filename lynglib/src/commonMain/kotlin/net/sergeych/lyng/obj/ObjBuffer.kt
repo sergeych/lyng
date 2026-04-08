@@ -30,6 +30,7 @@ import net.sergeych.lynon.LynonDecoder
 import net.sergeych.lynon.LynonEncoder
 import net.sergeych.lynon.LynonType
 import net.sergeych.mp_tools.decodeBase64Url
+import net.sergeych.mp_tools.encodeToBase64
 import net.sergeych.mp_tools.encodeToBase64Url
 import kotlin.math.min
 
@@ -39,6 +40,7 @@ open class ObjBuffer(val byteArray: UByteArray) : Obj() {
 
     val hex by lazy { byteArray.encodeToHex("")}
     val base64 by lazy { byteArray.toByteArray().encodeToBase64Url()}
+    val base64std  by lazy { byteArray.toByteArray().encodeToBase64()}
 
     fun checkIndex(scope: Scope, index: Obj): Int {
         if (index !is ObjInt)
@@ -195,6 +197,13 @@ open class ObjBuffer(val byteArray: UByteArray) : Obj() {
                 type = type("lyng.String"),
                 moduleName = "lyng.stdlib",
                 getter = { thisAs<ObjBuffer>().base64.toObj() }
+            )
+            addPropertyDoc(
+                name = "base64std",
+                doc = "Base64 standard string representation of the buffer.",
+                type = type("lyng.String"),
+                moduleName = "lyng.stdlib",
+                getter = { thisAs<ObjBuffer>().base64std.toObj() }
             )
             addFn("decodeUtf8") {
                 ObjString(
