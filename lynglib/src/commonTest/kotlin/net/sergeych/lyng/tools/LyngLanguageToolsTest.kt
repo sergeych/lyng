@@ -103,6 +103,27 @@ class LyngLanguageToolsTest {
     }
 
     @Test
+    fun languageTools_docs_for_builtin_string_replace() = runTest {
+        val code = """
+            val s = "a.b.c".replace(".", "-")
+        """.trimIndent()
+        val res = LyngLanguageTools.analyze(code, "replace_docs.lyng")
+        val replaceOffset = code.indexOf("replace")
+        val doc = LyngLanguageTools.docAt(res, replaceOffset)
+        assertNotNull(doc, "Docs should resolve for built-in String.replace")
+        assertEquals("replace", doc.target.name)
+        assertEquals("String", doc.target.containerName)
+        assertTrue(
+            doc.signature?.startsWith("fun String.replace(") == true,
+            "Expected String.replace signature, got ${doc.signature}"
+        )
+        assertTrue(
+            doc.doc?.summary?.contains("string with all literal or regex matches replaced") == true,
+            "Expected replace summary, got ${doc.doc?.summary}"
+        )
+    }
+
+    @Test
     fun languageTools_definition_and_usages() = runTest {
         val code = """
             val answer = 42

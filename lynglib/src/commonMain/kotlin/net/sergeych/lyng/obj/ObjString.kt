@@ -21,10 +21,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
-import net.sergeych.lyng.PerfFlags
-import net.sergeych.lyng.Pos
-import net.sergeych.lyng.RegexCache
-import net.sergeych.lyng.Scope
+import net.sergeych.lyng.*
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.requireScope
 import net.sergeych.lynon.LynonDecoder
@@ -130,6 +127,46 @@ data class ObjString(val value: String) : Obj() {
 
     override suspend fun toJson(scope: Scope): JsonElement {
         return JsonPrimitive(value)
+    }
+
+    private fun replaceLiteralChar(oldValue: Char, newValue: String, firstOnly: Boolean): ObjString {
+        if (!firstOnly) return ObjString(value.replace(oldValue.toString(), newValue))
+        val index = value.indexOf(oldValue)
+        if (index < 0) return this
+        return ObjString(value.substring(0, index) + newValue + value.substring(index + 1))
+    }
+
+    private fun replaceLiteralString(oldValue: String, newValue: String, firstOnly: Boolean): ObjString =
+        ObjString(
+            if (firstOnly) value.replaceFirst(oldValue, newValue)
+            else value.replace(oldValue, newValue)
+        )
+
+    private suspend fun replaceRegex(
+        scope: ScopeFacade,
+        pattern: Regex,
+        firstOnly: Boolean,
+        replacementProvider: suspend (ObjRegexMatch) -> String
+    ): ObjString {
+        val firstMatch = pattern.find(value) ?: return this
+        if (firstOnly) {
+            val replacement = replacementProvider(ObjRegexMatch(firstMatch))
+            val start = firstMatch.range.first
+            val endExclusive = start + firstMatch.value.length
+            return ObjString(value.substring(0, start) + replacement + value.substring(endExclusive))
+        }
+
+        val result = StringBuilder(value.length)
+        var lastIndex = 0
+        for (match in pattern.findAll(value)) {
+            val start = match.range.first
+            val endExclusive = start + match.value.length
+            result.append(value, lastIndex, start)
+            result.append(replacementProvider(ObjRegexMatch(match)))
+            lastIndex = endExclusive
+        }
+        result.append(value, lastIndex, value.length)
+        return ObjString(result.toString())
     }
 
     companion object {
@@ -340,6 +377,190 @@ data class ObjString(val value: String) : Obj() {
                             raiseIllegalArgument("can't match ${s.objClass.className}: required Regex or String")
                     }
                 )
+            }
+            addFnDoc(
+                name = "replace",
+                doc = "Return a copy of this string with all literal or regex matches replaced. String arguments are treated literally; use Regex for regular expressions.",
+                params = listOf(ParamDoc("old"), ParamDoc("new")),
+                returns = type("lyng.String"),
+                moduleName = "lyng.stdlib"
+            ) {
+                val source = thisAs<ObjString>()
+                val oldValue = requiredArg<Obj>(0)
+                val newValue = requiredArg<Obj>(1)
+                when (oldValue) {
+                    is ObjChar -> {
+                        val replacement = when (newValue) {
+                            is ObjChar -> newValue.value.toString()
+                            is ObjString -> newValue.value
+                            else -> raiseIllegalArgument("String.replace(Char, ...) requires Char or String replacement")
+                        }
+                        source.replaceLiteralChar(oldValue.value, replacement, firstOnly = false)
+                    }
+
+                    is ObjString -> {
+                        val replacement = (newValue as? ObjString)?.value
+                            ?: raiseIllegalArgument("String.replace(String, ...) requires String replacement")
+                        source.replaceLiteralString(oldValue.value, replacement, firstOnly = false)
+                    }
+
+                    is ObjRegex -> when {
+                        newValue is ObjString ->
+                            source.replaceRegex(this, oldValue.regex, firstOnly = false) { newValue.value }
+
+                        newValue.isInstanceOf("Callable") ->
+                            source.replaceRegex(this, oldValue.regex, firstOnly = false) { match ->
+                                val transformed = call(newValue, Arguments(match), ObjVoid)
+                                (transformed as? ObjString)?.value
+                                    ?: raiseIllegalArgument("String.replace(Regex, transform) callback must return String")
+                            }
+
+                        else ->
+                            raiseIllegalArgument("String.replace(Regex, ...) requires String replacement or a callable")
+                    }
+
+                    else ->
+                        raiseIllegalArgument("String.replace requires Char, String, or Regex as the first argument")
+                }
+            }
+            addFnDoc(
+                name = "replaceFirst",
+                doc = "Return a copy of this string with the first literal or regex match replaced. String arguments are treated literally; use Regex for regular expressions.",
+                params = listOf(ParamDoc("old"), ParamDoc("new")),
+                returns = type("lyng.String"),
+                moduleName = "lyng.stdlib"
+            ) {
+                val source = thisAs<ObjString>()
+                val oldValue = requiredArg<Obj>(0)
+                val newValue = requiredArg<Obj>(1)
+                when (oldValue) {
+                    is ObjChar -> {
+                        val replacement = when (newValue) {
+                            is ObjChar -> newValue.value.toString()
+                            is ObjString -> newValue.value
+                            else -> raiseIllegalArgument("String.replaceFirst(Char, ...) requires Char or String replacement")
+                        }
+                        source.replaceLiteralChar(oldValue.value, replacement, firstOnly = true)
+                    }
+
+                    is ObjString -> {
+                        val replacement = (newValue as? ObjString)?.value
+                            ?: raiseIllegalArgument("String.replaceFirst(String, ...) requires String replacement")
+                        source.replaceLiteralString(oldValue.value, replacement, firstOnly = true)
+                    }
+
+                    is ObjRegex -> when {
+                        newValue is ObjString ->
+                            source.replaceRegex(this, oldValue.regex, firstOnly = true) { newValue.value }
+
+                        newValue.isInstanceOf("Callable") ->
+                            source.replaceRegex(this, oldValue.regex, firstOnly = true) { match ->
+                                val transformed = call(newValue, Arguments(match), ObjVoid)
+                                (transformed as? ObjString)?.value
+                                    ?: raiseIllegalArgument("String.replaceFirst(Regex, transform) callback must return String")
+                            }
+
+                        else ->
+                            raiseIllegalArgument("String.replaceFirst(Regex, ...) requires String replacement or a callable")
+                    }
+
+                    else ->
+                        raiseIllegalArgument("String.replaceFirst requires Char, String, or Regex as the first argument")
+                }
+            }
+            BuiltinDocRegistry.module("lyng.stdlib") {
+                classDoc("String", doc = "") {
+                    method(
+                        name = "replace",
+                        doc = "Replace all occurrences of the given character with another character.",
+                        params = listOf(
+                            ParamDoc("old", type("lyng.Char")),
+                            ParamDoc("new", type("lyng.Char"))
+                        ),
+                        returns = type("lyng.String")
+                    )
+                    method(
+                        name = "replace",
+                        doc = "Replace all occurrences of the given character with another character or string.",
+                        params = listOf(
+                            ParamDoc("old", type("lyng.Char")),
+                            ParamDoc("new", type("lyng.String"))
+                        ),
+                        returns = type("lyng.String")
+                    )
+                    method(
+                        name = "replace",
+                        doc = "Replace all literal occurrences of the given string with another string.",
+                        params = listOf(
+                            ParamDoc("old", type("lyng.String")),
+                            ParamDoc("new", type("lyng.String"))
+                        ),
+                        returns = type("lyng.String")
+                    )
+                    method(
+                        name = "replace",
+                        doc = "Replace all regular-expression matches with the given replacement string.",
+                        params = listOf(
+                            ParamDoc("pattern", type("lyng.Regex")),
+                            ParamDoc("new", type("lyng.String"))
+                        ),
+                        returns = type("lyng.String")
+                    )
+                    method(
+                        name = "replace",
+                        doc = "Replace all regular-expression matches using the callback result for each RegexMatch.",
+                        params = listOf(
+                            ParamDoc("pattern", type("lyng.Regex")),
+                            ParamDoc("transform", funType(listOf(type("lyng.RegexMatch")), type("lyng.String")))
+                        ),
+                        returns = type("lyng.String")
+                    )
+                    method(
+                        name = "replaceFirst",
+                        doc = "Replace the first occurrence of the given character with another character.",
+                        params = listOf(
+                            ParamDoc("old", type("lyng.Char")),
+                            ParamDoc("new", type("lyng.Char"))
+                        ),
+                        returns = type("lyng.String")
+                    )
+                    method(
+                        name = "replaceFirst",
+                        doc = "Replace the first occurrence of the given character with another character or string.",
+                        params = listOf(
+                            ParamDoc("old", type("lyng.Char")),
+                            ParamDoc("new", type("lyng.String"))
+                        ),
+                        returns = type("lyng.String")
+                    )
+                    method(
+                        name = "replaceFirst",
+                        doc = "Replace the first literal occurrence of the given string with another string.",
+                        params = listOf(
+                            ParamDoc("old", type("lyng.String")),
+                            ParamDoc("new", type("lyng.String"))
+                        ),
+                        returns = type("lyng.String")
+                    )
+                    method(
+                        name = "replaceFirst",
+                        doc = "Replace the first regular-expression match with the given replacement string.",
+                        params = listOf(
+                            ParamDoc("pattern", type("lyng.Regex")),
+                            ParamDoc("new", type("lyng.String"))
+                        ),
+                        returns = type("lyng.String")
+                    )
+                    method(
+                        name = "replaceFirst",
+                        doc = "Replace the first regular-expression match using the callback result for the RegexMatch.",
+                        params = listOf(
+                            ParamDoc("pattern", type("lyng.Regex")),
+                            ParamDoc("transform", funType(listOf(type("lyng.RegexMatch")), type("lyng.String")))
+                        ),
+                        returns = type("lyng.String")
+                    )
+                }
             }
             createField(
                 name = "re",

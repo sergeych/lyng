@@ -1833,6 +1833,14 @@ Part match:
     assert( "foo" == ($~ as RegexMatch).value )
     >>> void
 
+Replacing text:
+
+    assertEquals("bonono", "banana".replace('a', 'o'))
+    assertEquals("a-b-c", "a.b.c".replace(".", "-"))   // string patterns are literal
+    assertEquals("v#.#.#", "v1.2.3".replace("\d+".re, "#"))
+    assertEquals("v[1].[2].[3]", "v1.2.3".replace("(\d+)".re) { m -> "[" + m[1] + "]" })
+    >>> void
+
 Repeating the fragment:
 
     assertEquals("hellohello", "hello"*2)
@@ -1868,6 +1876,8 @@ A typical set of String functions includes:
 | characters           | create [List] of characters (1)                            |
 | encodeUtf8()         | returns [Buffer] with characters encoded to utf8           |
 | matches(re)          | matches the regular expression (2)                         |
+| replace(old, new)    | replace all literal or regex matches; regex needs [Regex]  |
+| replaceFirst(old,new)| replace the first literal or regex match                   |
 |                      |                                                            |
 
 (1)

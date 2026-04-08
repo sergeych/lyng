@@ -18,7 +18,6 @@
 package net.sergeych.lyng.miniast
 
 import kotlinx.coroutines.runBlocking
-import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -96,6 +95,14 @@ class CompletionEngineLightTest {
         val ns = names(items)
         assertTrue(ns.isNotEmpty(), "String members should be suggested")
         assertFalse(ns.contains("Path"))
+        assertTrue(ns.contains("replace"), "Expected String.replace in completion items, got: $ns")
+        assertTrue(ns.contains("replaceFirst"), "Expected String.replaceFirst in completion items, got: $ns")
+        val replaceItem = items.firstOrNull { it.name == "replace" }
+        assertNotNull(replaceItem, "Expected to find replace in String members")
+        assertTrue(
+            replaceItem.tailText?.contains("overloads") == true,
+            "Expected replace completion to show overloads, got tailText=${replaceItem.tailText}"
+        )
     }
 
     @Test

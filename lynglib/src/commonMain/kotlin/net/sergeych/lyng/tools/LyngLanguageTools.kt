@@ -345,9 +345,30 @@ object LyngLanguageTools {
 
     fun docAt(analysis: LyngAnalysisResult, offset: Int): LyngSymbolInfo? {
         StdlibDocsBootstrap.ensure()
-        val target = definitionAt(analysis, offset) ?: return null
         val mini = analysis.mini
         val imported = analysis.importedModules
+        val target = definitionAt(analysis, offset) ?: run {
+            val word = DocLookupUtils.wordRangeAt(analysis.text, offset) ?: return null
+            val name = analysis.text.substring(word.first, word.second)
+            val dotPos = DocLookupUtils.prevNonWs(analysis.text, word.first - 1)
+            if (dotPos >= 0 && analysis.text[dotPos] == '.') {
+                val receiverClass = DocLookupUtils.guessReceiverClassViaMini(
+                    mini,
+                    analysis.text,
+                    dotPos,
+                    imported,
+                    analysis.binding
+                ) ?: DocLookupUtils.guessReceiverClass(analysis.text, dotPos, imported, mini)
+                if (receiverClass != null) {
+                    LyngSymbolTarget(
+                        name = name,
+                        kind = SymbolKind.Function,
+                        range = TextRange(word.first, word.second),
+                        containerName = receiverClass
+                    )
+                } else null
+            } else null
+        } ?: return null
         val name = target.name
 
         val local = mini?.let { findLocalDecl(it, analysis.text, name, target.range.start) }

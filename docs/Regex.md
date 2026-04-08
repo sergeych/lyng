@@ -64,6 +64,18 @@ Also, string indexing is Regex-aware, and works like `Regex.find` (_not findall!
     assert( "cd" == ("abcdef"[ "c.".re ] as RegexMatch).value )
     >>> void
 
+Regex replacement is exposed on `String.replace` and `String.replaceFirst`:
+
+    assertEquals( "v#.#.#", "v1.2.3".replace( "\d+".re, "#" ) )
+    assertEquals( "v[1].[2].[3]", "v1.2.3".replace( "(\d+)".re ) { m -> "[" + m[1] + "]" } )
+    assertEquals( "year-04-08", "2026-04-08".replaceFirst( "\d+".re, "year" ) )
+    >>> void
+
+When `replace` takes a plain `String`, it is treated literally, not as a regex pattern:
+
+    assertEquals( "a-b-c", "a.b.c".replace( ".", "-" ) )
+    >>> void
+
 
 # Regex class reference
 

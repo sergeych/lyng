@@ -4161,6 +4161,30 @@ class ScriptTest {
     }
 
     @Test
+    fun testStringReplaceVariants() = runTest {
+        eval(
+            """
+            assertEquals("bonono", "banana".replace('a', 'o'))
+            assertEquals("bxnxnx", "banana".replace('a', "x"))
+            assertEquals("a-b-c", "a.b.c".replace(".", "-"))
+            assertEquals("bonana", "banana".replaceFirst('a', 'o'))
+            assertEquals("bxnana", "banana".replaceFirst('a', "x"))
+            assertEquals("a-b.c", "a.b.c".replaceFirst(".", "-"))
+
+            assertEquals("foo-#-bar-#", "foo-42-bar-17".replace("\d+".re, "#"))
+            assertEquals("foo-[42]-bar-[17]", "foo-42-bar-17".replace("(\d+)".re) { m ->
+                "[" + m[1] + "]"
+            })
+            assertEquals("foo-[42]-bar-17", "foo-42-bar-17".replaceFirst("(\d+)".re) { m ->
+                "[" + m[1] + "]"
+            })
+            assertEquals("YEAR-04-08", "2026-04-08".replaceFirst("\d+".re, "YEAR"))
+            """
+                .trimIndent()
+        )
+    }
+
+    @Test
     fun extensionsMustBeLocalPerScope() = runTest {
         val scope1 = Script.newScope()
 
