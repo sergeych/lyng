@@ -1,4 +1,4 @@
-### Lyng CLI (`lyng`)
+# Lyng CLI (`lyng`)
 
 The Lyng CLI is the reference command-line tool for the Lyng language. It lets you:
 
@@ -8,7 +8,7 @@ The Lyng CLI is the reference command-line tool for the Lyng language. It lets y
 - Format Lyng source files via the built-in `fmt` subcommand.
 
 
-#### Building on Linux
+## Building on Linux
 
 Requirements:
 - JDK 17+ (for Gradle and the JVM distribution)
@@ -20,7 +20,7 @@ The repository provides convenience scripts in `bin/` for local builds and insta
 Note: In this repository the scripts are named `bin/local_release` and `bin/local_jrelease`. In some environments these may be aliased as `bin/release` and `bin/jrelease`. The steps below use the actual file names present here.
 
 
-##### Option A: Native linuxX64 executable (`lyng`)
+### Option A: Native linuxX64 executable (`lyng`)
 
 1) Build the native binary:
 
@@ -39,7 +39,7 @@ What this does:
 - Produces `distributables/lyng-linuxX64.zip` containing the `lyng` executable.
 
 
-##### Option B: JVM distribution (`jlyng` launcher)
+### Option B: JVM distribution (`jlyng` launcher)
 
 This creates a JVM distribution with a launcher script, packages it as a downloadable zip, and links it to `~/bin/jlyng`.
 
@@ -54,12 +54,12 @@ What this does:
 - Creates a symlink `~/bin/jlyng` pointing to the launcher script.
 
 
-#### Usage
+## Usage
 
 Once installed, ensure `~/bin` is on your `PATH`. You can then use either the native `lyng` or the JVM `jlyng` launcher (both have the same CLI surface).
 
 
-##### Running scripts
+### Running scripts
 
 - Run a script by file name and pass arguments to `ARGV`:
 
@@ -87,7 +87,7 @@ lyng --version
 lyng --help
 ```
 
-##### Local imports for file execution
+### Local imports for file execution
 
 When you execute a script file, the CLI builds a temporary local import manager rooted at the directory that contains the entry script.
 
@@ -144,7 +144,7 @@ Rationale:
 - Explicit `package` remains available as a consistency check instead of a second, conflicting naming system.
 - The import search space stays local to the executed script, which avoids accidental cross-project resolution.
 
-### Use in shell scripts
+## Use in shell scripts
 
 Standard unix shebangs (`#!`) are supported, so you can make Lyng scripts directly executable on Unix-like systems. For example:
 
@@ -152,7 +152,7 @@ Standard unix shebangs (`#!`) are supported, so you can make Lyng scripts direct
     println("Hello, world!")
 
 
-##### Formatting source: `fmt` subcommand
+### Formatting source: `fmt` subcommand
 
 Format Lyng files with the built-in formatter.
 
@@ -194,7 +194,7 @@ lyng fmt --spacing --wrap src/file.lyng
 ```
 
 
-#### Notes
+## Notes
 
 - Both native and JVM distributions expose the same CLI interface. Use whichever best fits your environment.
 - When executing scripts, all positional arguments after the script name are available in Lyng as `ARGV`.

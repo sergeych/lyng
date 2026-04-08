@@ -195,13 +195,14 @@ private fun discoverLocalCliModules(entryFile: Path): List<LocalCliModule> {
                 )
             }
             val packageName = declaredPackage ?: expectedPackage
-            val previous = seenPackages.putIfAbsent(packageName, file)
+            val previous = seenPackages[packageName]
             if (previous != null) {
                 throw ScriptError(
                     source.startPos,
                     "duplicate local module '$packageName': ${previous.toString()} and ${file.toString()}"
                 )
             }
+            seenPackages[packageName] = file
             LocalCliModule(packageName, source)
         }
         .toList()

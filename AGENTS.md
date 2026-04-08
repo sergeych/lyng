@@ -18,6 +18,7 @@
 - Avoid creating suspend lambdas for compiler runtime statements. Prefer explicit `object : Statement()` with `override suspend fun execute(...)`.
 - Do not use `statement { ... }` or other inline suspend lambdas in compiler hot paths (e.g., parsing/var declarations, initializer thunks).
 - If you need a wrapper for delegated properties, check for `getValue` explicitly and return a concrete `Statement` object when missing; avoid `onNotFoundResult` lambdas.
+- For any code in `commonMain`, verify it is Kotlin Multiplatform compatible before finishing. Do not use JVM-only APIs or Java-backed convenience methods such as `Map.putIfAbsent`; prefer stdlib/common equivalents and run at least the relevant compile/test task that exercises the `commonMain` source set.
 - If wasmJs browser tests hang, first run `:lynglib:wasmJsNodeTest` and look for wasm compilation errors; hangs usually mean module instantiation failed.
 - Do not increase test timeouts to mask wasm generation errors; fix the invalid IR instead.
 
