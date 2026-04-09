@@ -10,7 +10,7 @@ fun payloadFor(index: Int) = "$index:${Random.nextInt()}:${Random.nextInt()}"
 launch {
     try {
         while(true) {
-            val client = server.accept() as TcpSocket
+            val client = server.accept()
             launch {
                 try {
                     val source = client.readLine()
