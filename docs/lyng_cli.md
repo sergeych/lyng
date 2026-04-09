@@ -6,6 +6,7 @@ The Lyng CLI is the reference command-line tool for the Lyng language. It lets y
 - Use standard argument passing (`ARGV`) to your scripts.
 - Resolve local file imports from the executed script's directory tree.
 - Format Lyng source files via the built-in `fmt` subcommand.
+- Register synchronous process-exit handlers with `atExit(...)`.
 
 
 ## Building on Linux
@@ -85,6 +86,43 @@ lyng -x "println(\"Hello\")" more args
 ```
 lyng --version
 lyng --help
+```
+
+### Exit handlers: `atExit(...)`
+
+The CLI exposes a CLI-only builtin:
+
+```lyng
+extern fun atExit(append: Bool=true, handler: ()->Void)
+```
+
+Use it to register synchronous cleanup handlers that should run when the CLI process is leaving.
+
+Semantics:
+- `append=true` appends the handler to the end of the queue.
+- `append=false` inserts the handler at the front of the queue.
+- Handlers run one by one.
+- Exceptions thrown by a handler are ignored, and the next handler still runs.
+- Handlers are best-effort and run on:
+  - normal script completion
+  - script failure
+  - script `exit(code)`
+  - process shutdown such as `SIGTERM`
+
+Non-goals:
+- `SIGKILL`, hard crashes, and power loss cannot be intercepted.
+- `atExit` is currently a CLI feature only; it is not part of the general embedding/runtime surface.
+
+Examples:
+
+```lyng
+atExit {
+    println("closing resources")
+}
+
+atExit(false) {
+    println("runs first")
+}
 ```
 
 ### Local imports for file execution

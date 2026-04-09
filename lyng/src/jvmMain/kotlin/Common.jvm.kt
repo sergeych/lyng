@@ -24,6 +24,34 @@ import kotlin.system.exitProcess
 @PublishedApi
 internal var jvmExitImpl: (Int) -> Nothing = { code -> exitProcess(code) }
 
+internal actual class CliPlatformShutdownHooks private constructor(
+    private val shutdownHook: Thread?
+) {
+    actual fun uninstall() {
+        val hook = shutdownHook ?: return
+        runCatching {
+            Runtime.getRuntime().removeShutdownHook(hook)
+        }
+    }
+
+    actual companion object {
+        actual fun install(runtime: CliExecutionRuntime): CliPlatformShutdownHooks {
+            val hook = Thread(
+                {
+                    runtime.shutdownBlocking()
+                },
+                "lyng-cli-shutdown"
+            )
+            return runCatching {
+                Runtime.getRuntime().addShutdownHook(hook)
+                CliPlatformShutdownHooks(hook)
+            }.getOrElse {
+                CliPlatformShutdownHooks(null)
+            }
+        }
+    }
+}
+
 actual fun exit(code: Int) {
     jvmExitImpl(code)
 }

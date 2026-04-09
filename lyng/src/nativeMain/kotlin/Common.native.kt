@@ -22,10 +22,39 @@
 package net.sergeych
 
 import kotlinx.cinterop.*
+import kotlin.native.concurrent.ThreadLocal
 import platform.posix.fgets
 import platform.posix.pclose
 import platform.posix.popen
+import platform.posix.signal
+import platform.posix.atexit
+import platform.posix.SIGINT
+import platform.posix.SIGHUP
+import platform.posix.SIGTERM
 import kotlin.system.exitProcess
+
+@ThreadLocal
+private var activeCliRuntime: CliExecutionRuntime? = null
+
+@ThreadLocal
+private var nativeCliHooksInstalled: Boolean = false
+
+private fun installNativeCliHooksOnce() {
+    if (nativeCliHooksInstalled) return
+    nativeCliHooksInstalled = true
+    atexit(staticCFunction(::nativeCliAtExit))
+    signal(SIGTERM, staticCFunction(::nativeCliSignalHandler))
+    signal(SIGINT, staticCFunction(::nativeCliSignalHandler))
+    signal(SIGHUP, staticCFunction(::nativeCliSignalHandler))
+}
+
+private fun nativeCliAtExit() {
+    activeCliRuntime?.shutdownBlocking()
+}
+
+private fun nativeCliSignalHandler(signal: Int) {
+    exitProcess(128 + signal)
+}
 
 actual class ShellCommandExecutor() {
     actual fun executeCommand(command: String): CommandResult {
@@ -59,6 +88,24 @@ actual class ShellCommandExecutor() {
 
     actual companion object {
         actual fun create(): ShellCommandExecutor = ShellCommandExecutor()
+    }
+}
+
+internal actual class CliPlatformShutdownHooks private constructor(
+    private val runtime: CliExecutionRuntime
+) {
+    actual fun uninstall() {
+        if (activeCliRuntime === runtime) {
+            activeCliRuntime = null
+        }
+    }
+
+    actual companion object {
+        actual fun install(runtime: CliExecutionRuntime): CliPlatformShutdownHooks {
+            installNativeCliHooksOnce()
+            activeCliRuntime = runtime
+            return CliPlatformShutdownHooks(runtime)
+        }
     }
 }
 

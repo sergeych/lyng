@@ -28,6 +28,8 @@ import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import net.sergeych.lyng.EvalSession
 import net.sergeych.lyng.LyngVersion
@@ -36,6 +38,7 @@ import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Script
 import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.Source
+import net.sergeych.lyng.asFacade
 import net.sergeych.lyng.io.console.createConsoleModule
 import net.sergeych.lyng.io.fs.createFs
 import net.sergeych.lyng.io.http.createHttpModule
@@ -57,6 +60,14 @@ import okio.Path.Companion.toPath
 
 expect fun exit(code: Int)
 
+internal expect class CliPlatformShutdownHooks {
+    fun uninstall()
+
+    companion object {
+        fun install(runtime: CliExecutionRuntime): CliPlatformShutdownHooks
+    }
+}
+
 expect class ShellCommandExecutor {
     fun executeCommand(command: String): CommandResult
 
@@ -70,6 +81,51 @@ data class CommandResult(
     val output: String,
     val error: String
 )
+
+private const val cliBuiltinsDeclarations = """
+extern fun atExit(append: Bool=true, handler: ()->Void)
+"""
+
+private class CliExitRequested(val code: Int) : RuntimeException("CLI exit requested: $code")
+
+internal class CliExecutionRuntime(
+    private val session: EvalSession,
+    private val rootScope: Scope
+) {
+    private val shutdownMutex = Mutex()
+    private var shutdownStarted = false
+    private val exitHandlers = mutableListOf<Obj>()
+
+    fun registerAtExit(handler: Obj, append: Boolean) {
+        if (append) {
+            exitHandlers += handler
+        } else {
+            exitHandlers.add(0, handler)
+        }
+    }
+
+    suspend fun shutdown() {
+        shutdownMutex.withLock {
+            if (shutdownStarted) return
+            shutdownStarted = true
+        }
+        val handlers = exitHandlers.toList()
+        val facade = rootScope.asFacade()
+        for (handler in handlers) {
+            runCatching {
+                facade.call(handler)
+            }
+        }
+        session.cancelAndJoin()
+        shutdownSystemNetEngine()
+    }
+
+    fun shutdownBlocking() {
+        runBlocking {
+            shutdown()
+        }
+    }
+}
 
 private val baseCliImportManagerDefer = globalDefer {
     val manager = Script.defaultImportManager.copy().apply {
@@ -91,14 +147,76 @@ val baseScopeDefer = globalDefer {
     baseCliImportManagerDefer.await().copy().apply {
         invalidateCliModuleCaches()
     }.newStdScope().apply {
+        installCliDeclarations()
         installCliBuiltins()
         addConst("ARGV", ObjList(mutableListOf()))
     }
 }
 
-private fun Scope.installCliBuiltins() {
+private suspend fun Scope.installCliDeclarations() {
+    eval(Source("<cli-builtins>", cliBuiltinsDeclarations))
+}
+
+private fun Scope.installCliBuiltins(runtime: CliExecutionRuntime? = null) {
     addFn("exit") {
-        exit(requireOnlyArg<ObjInt>().toInt())
+        val code = requireOnlyArg<ObjInt>().toInt()
+        if (runtime == null) {
+            exit(code)
+        }
+        throw CliExitRequested(code)
+    }
+    addFn("atExit") {
+        if (runtime == null) {
+            raiseIllegalState("atExit is only available while running a CLI script")
+        }
+        if (args.list.size > 2) {
+            raiseError("Expected at most 2 positional arguments, got ${args.list.size}")
+        }
+        var append = true
+        var appendSet = false
+        var handler: Obj? = null
+
+        when (args.list.size) {
+            1 -> {
+                val only = args.list[0]
+                if (only.isInstanceOf("Callable")) {
+                    handler = only
+                } else {
+                    append = only.toBool()
+                    appendSet = true
+                }
+            }
+            2 -> {
+                append = args.list[0].toBool()
+                appendSet = true
+                handler = args.list[1]
+            }
+        }
+
+        for ((name, value) in args.named) {
+            when (name) {
+                "append" -> {
+                    if (appendSet) {
+                        raiseIllegalArgument("argument 'append' is already set")
+                    }
+                    append = value.toBool()
+                    appendSet = true
+                }
+                "handler" -> {
+                    if (handler != null) {
+                        raiseIllegalArgument("argument 'handler' is already set")
+                    }
+                    handler = value
+                }
+                else -> raiseIllegalArgument("unknown argument '$name'")
+            }
+        }
+
+        val handlerValue = handler ?: raiseError("argument 'handler' is required")
+        if (!handlerValue.isInstanceOf("Callable")) {
+            raiseClassCastError("Expected handler to be callable")
+        }
+        runtime.registerAtExit(handlerValue, append)
         ObjVoid
     }
 }
@@ -237,6 +355,7 @@ private fun registerLocalCliModules(manager: ImportManager, modules: List<LocalC
 
 private suspend fun ImportManager.newCliScope(argv: List<String>): Scope =
     newStdScope().apply {
+        installCliDeclarations()
         installCliBuiltins()
         addConst("ARGV", ObjList(argv.map { ObjString(it) }.toMutableList()))
     }
@@ -408,12 +527,22 @@ fun executeFileWithArgs(fileName: String, args: List<String>) {
 
 suspend fun executeSource(source: Source, initialScope: Scope? = null) {
     val session = EvalSession(initialScope ?: baseScopeDefer.await())
+    val rootScope = session.getScope()
+    val runtime = CliExecutionRuntime(session, rootScope)
+    rootScope.installCliBuiltins(runtime)
+    val shutdownHooks = CliPlatformShutdownHooks.install(runtime)
+    var requestedExitCode: Int? = null
     try {
-        evalOnCliDispatcher(session, source)
+        try {
+            evalOnCliDispatcher(session, source)
+        } catch (e: CliExitRequested) {
+            requestedExitCode = e.code
+        }
     } finally {
-        session.cancelAndJoin()
-        shutdownSystemNetEngine()
+        shutdownHooks.uninstall()
+        runtime.shutdown()
     }
+    requestedExitCode?.let { exit(it) }
 }
 
 internal suspend fun evalOnCliDispatcher(session: EvalSession, source: Source): Obj =

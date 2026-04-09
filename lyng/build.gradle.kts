@@ -19,6 +19,8 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
 }
 
+import org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest
+
 group = "net.sergeych"
 version = "unspecified"
 
@@ -83,6 +85,9 @@ kotlin {
                 implementation(libs.okio.fakefilesystem)
             }
         }
+        val linuxTest by creating {
+            dependsOn(commonTest)
+        }
         val nativeMain by creating {
             dependsOn(commonMain)
         }
@@ -100,5 +105,16 @@ kotlin {
         val linuxX64Main by getting {
             dependsOn(nativeMain)
         }
+        val linuxX64Test by getting {
+            dependsOn(linuxTest)
+        }
     }
+}
+
+tasks.named<KotlinNativeTest>("linuxX64Test") {
+    dependsOn(tasks.named("linkDebugExecutableLinuxX64"))
+    environment(
+        "LYNG_CLI_NATIVE_BIN",
+        layout.buildDirectory.file("bin/linuxX64/debugExecutable/lyng.kexe").get().asFile.absolutePath
+    )
 }
