@@ -2,7 +2,7 @@ import lyng.io.net
 
 val host = "127.0.0.1"
 val clientCount = 1000
-val server = Net.tcpListen(0, host, clientCount, true) as TcpServer
+val server = Net.tcpListen(0, host, clientCount, true)
 val port = server.localAddress().port
 
 fun payloadFor(index: Int) = "$index:${Random.nextInt()}:${Random.nextInt()}"
