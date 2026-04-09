@@ -121,6 +121,25 @@ class TestCoroutines {
     }
 
     @Test
+    fun testJoinAll() = runTest {
+        eval(
+            """
+            val replies = (1..6).map { n ->
+                launch {
+                    delay((7 - n) * 5)
+                    "done:${'$'}n"
+                }
+            }.joinAll()
+
+            assertEquals(
+                ["done:1", "done:2", "done:3", "done:4", "done:5", "done:6"],
+                replies
+            )
+            """.trimIndent()
+        )
+    }
+
+    @Test
     fun testFlows() = runTest {
         eval("""
             val f = flow {

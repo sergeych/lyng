@@ -29,6 +29,16 @@ extern class Deferred {
     val isCancelled: Bool
 }
 
+/* Await every task in order and return collected results. */
+fun Iterable<Deferred>.joinAll(): List<Object> {
+    var results: List<Object> = List()
+    for( task in this ) {
+        val deferred = task as Deferred
+        results += deferred.await()
+    }
+    results
+}
+
 /* A deferred result that can be completed manually. */
 extern class CompletableDeferred : Deferred {
     fun complete(value: Object): void
