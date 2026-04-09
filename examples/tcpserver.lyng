@@ -5,28 +5,22 @@ val clientCount = 1000
 val server = Net.tcpListen(0, host, clientCount, true) as TcpServer
 val port = server.localAddress().port
 
-fun payloadFor(index: Int): String {
-    "$index:${Random.nextInt()}:${Random.nextInt()}"
-}
-
-fun handleClient(client: TcpSocket) {
-    try {
-        val source = client.readLine()
-        if( source != null ) {
-            client.writeUtf8("pong: $source\n")
-            client.flush()
-        }
-    } finally {
-        client.close()
-    }
-}
+fun payloadFor(index: Int) = "$index:${Random.nextInt()}:${Random.nextInt()}"
 
 launch {
     try {
-        for( i in 0..<clientCount ) {
+        while(true) {
             val client = server.accept() as TcpSocket
             launch {
-                handleClient(client)
+                try {
+                    val source = client.readLine()
+                    if( source != null ) {
+                        client.writeUtf8("pong: $source\n")
+                        client.flush()
+                    }
+                } finally {
+                    client.close()
+                }
             }
         }
     } finally {
@@ -51,7 +45,4 @@ val replies = (0..<clientCount).map { index ->
 }.joinAll()
 
 assertEquals(clientCount, replies.size)
-
-val summary = "OK: $clientCount concurrent tcp clients"
-println(summary)
-summary
+println("OK: $clientCount concurrent tcp clients")
