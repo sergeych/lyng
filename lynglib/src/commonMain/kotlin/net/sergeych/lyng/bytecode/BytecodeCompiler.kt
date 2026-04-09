@@ -7820,7 +7820,9 @@ class BytecodeCompiler(
                 scopeSlotRefPosByKey[scopeKey] = ref.pos()
             }
         }
-        return resolved
+        if (resolved != null) return resolved
+        localSlotIndexByName[ref.name]?.let { return scopeSlotCount + it }
+        return null
     }
 
     private fun resolveLocalSlotByRefOrName(ref: LocalSlotRef): Int? {
@@ -8672,6 +8674,11 @@ class BytecodeCompiler(
                 collectLoopVarNamesRef(ref.targetRef)
                 collectLoopVarNamesRef(ref.indexRef)
             }
+            is RangeRef -> {
+                ref.left?.let { collectLoopVarNamesRef(it) }
+                ref.right?.let { collectLoopVarNamesRef(it) }
+                ref.step?.let { collectLoopVarNamesRef(it) }
+            }
             else -> {}
         }
     }
@@ -8797,6 +8804,11 @@ class BytecodeCompiler(
             is IndexRef -> {
                 collectScopeSlotsRef(ref.targetRef)
                 collectScopeSlotsRef(ref.indexRef)
+            }
+            is RangeRef -> {
+                ref.left?.let { collectScopeSlotsRef(it) }
+                ref.right?.let { collectScopeSlotsRef(it) }
+                ref.step?.let { collectScopeSlotsRef(it) }
             }
             is ClassOperatorRef -> {
                 collectScopeSlotsRef(ref.target)

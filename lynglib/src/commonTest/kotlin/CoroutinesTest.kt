@@ -200,6 +200,25 @@ class TestCoroutines {
     }
 
     @Test
+    fun testLaunchCanUseCapturedRangeBoundInForLoop() = runTest {
+        eval(
+            """
+            val count = 8
+            val outer = launch {
+                val jobs = []
+                for( i in 0..<count ) {
+                    val x = i
+                    jobs += launch { x }
+                }
+                jobs.joinAll()
+            }
+
+            assertEquals([0,1,2,3,4,5,6,7], outer.await())
+            """.trimIndent()
+        )
+    }
+
+    @Test
     fun testFlows() = runTest {
         eval("""
             val f = flow {

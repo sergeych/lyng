@@ -2,70 +2,55 @@ import lyng.io.net
 
 val host = "127.0.0.1"
 val clientCount = 1000
-val server: TcpServer = Net.tcpListen(0, host, clientCount, true) as TcpServer
-val port: Int = server.localAddress().port
+val server = Net.tcpListen(0, host, clientCount, true) as TcpServer
+val port = server.localAddress().port
 
 fun payloadFor(index: Int): String {
     "$index:${Random.nextInt()}:${Random.nextInt()}"
 }
 
-fun handleClient(client: TcpSocket): String {
+fun handleClient(client: TcpSocket) {
     try {
         val source = client.readLine()
-        if( source == null ) {
-            return "server-eof"
+        if( source != null ) {
+            client.writeUtf8("pong: $source\n")
+            client.flush()
         }
-        val reply = "pong: $source"
-        client.writeUtf8(reply + "\n")
-        client.flush()
-        reply
     } finally {
         client.close()
     }
 }
 
-val serverJob: Deferred = launch {
-    var handlers: List<Deferred> = List()
+launch {
     try {
-        for( i in 0..<1000 ) {
-            val client: TcpSocket = server.accept() as TcpSocket
-            handlers += launch {
+        for( i in 0..<clientCount ) {
+            val client = server.accept() as TcpSocket
+            launch {
                 handleClient(client)
             }
         }
-        handlers.joinAll()
     } finally {
         server.close()
     }
 }
 
-val clientJobs: List<Deferred> = (0..<clientCount).map { index ->
+val replies = (0..<clientCount).map { index ->
     val payload = payloadFor(index)
     launch {
-        val socket: TcpSocket = Net.tcpConnect(host, port) as TcpSocket
+        val socket = Net.tcpConnect(host, port) as TcpSocket
         try {
             socket.writeUtf8(payload + "\n")
             socket.flush()
             val reply = socket.readLine()
-            if( reply == null ) {
-                "client-eof:$payload"
-            }
-            else {
-                assertEquals("pong: $payload", reply)
-                reply
-            }
+            assertEquals("pong: $payload", reply)
+            reply
         } finally {
             socket.close()
         }
     }
-}
-
-val replies = clientJobs.joinAll()
-val serverReplies = serverJob.await() as List<Object>
+}.joinAll()
 
 assertEquals(clientCount, replies.size)
-assertEquals(clientCount, serverReplies.size)
-assertEquals(replies.toSet, serverReplies.toSet)
 
 val summary = "OK: $clientCount concurrent tcp clients"
 println(summary)
