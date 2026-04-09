@@ -13,8 +13,7 @@ launch {
             val client = server.accept()
             launch {
                 try {
-                    val source = client.readLine()
-                    if( source != null ) {
+                    client.readLine()?.let { source ->
                         client.writeUtf8("pong: $source\n")
                         client.flush()
                     }
@@ -37,7 +36,6 @@ val replies = (0..<clientCount).map { index ->
             socket.flush()
             val reply = socket.readLine()
             assertEquals("pong: $payload", reply)
-            reply
         } finally {
             socket.close()
         }
