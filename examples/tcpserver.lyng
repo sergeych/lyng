@@ -2,14 +2,15 @@ import lyng.io.net
 
 val host = "127.0.0.1"
 val clientCount = 1000
-val server = Net.tcpListen(0, host, clientCount, true)
+val clientWindow = 128
+val server = Net.tcpListen(0, host, clientWindow, true)
 val port = server.localAddress().port
 
 fun payloadFor(index: Int) = "$index:${Random.nextInt()}:${Random.nextInt()}"
 
-launch {
+val serverJob = launch {
     try {
-        while(true) {
+        while (true) {
             val client = server.accept()
             launch {
                 try {
@@ -22,25 +23,38 @@ launch {
                 }
             }
         }
+    } catch (e) {
+        if (server.isOpen()) {
+            throw e
+        }
     } finally {
-        server.close()
+        if (server.isOpen()) {
+            server.close()
+        }
     }
 }
 
-val replies = (0..<clientCount).map { index ->
-    val payload = payloadFor(index)
-    launch {
-        val socket = Net.tcpConnect(host, port) as TcpSocket
-        try {
-            socket.writeUtf8(payload + "\n")
-            socket.flush()
-            val reply = socket.readLine()
-            assertEquals("pong: $payload", reply)
-        } finally {
-            socket.close()
+var completed = 0
+for (batchStart in 0..<clientCount step clientWindow) {
+    val batchEnd = if (batchStart + clientWindow < clientCount) batchStart + clientWindow else clientCount
+    val replies = (batchStart..<batchEnd).map { index ->
+        val payload = payloadFor(index)
+        launch {
+            val socket = Net.tcpConnect(host, port) as TcpSocket
+            try {
+                socket.writeUtf8(payload + "\n")
+                socket.flush()
+                val reply = socket.readLine()
+                assertEquals("pong: $payload", reply)
+            } finally {
+                socket.close()
+            }
         }
-    }
-}.joinAll()
+    }.joinAll()
+    completed += replies.size
+}
 
-assertEquals(clientCount, replies.size)
+assertEquals(clientCount, completed)
+server.close()
+serverJob.await()
 println("OK: $clientCount concurrent tcp clients")

@@ -3,6 +3,12 @@
 This module provides minimal raw transport networking for Lyng scripts. It is implemented in `lyngio` and backed by Ktor sockets on the JVM and Linux Native, and by Node networking APIs on JS/Node runtimes.
 
 > **Note:** `lyngio` is a separate library module. It must be explicitly added as a dependency to your host application and initialized in your Lyng scopes.
+>
+> **Important native platform limit:** current native TCP/UDP support is backed by a selector with a per-process file descriptor ceiling. On Linux/macOS native targets this makes high-connection-count servers and same-process load tests unsuitable once the process approaches that limit.
+>
+> **Recommendation:** for serious HTTP/TCP servers, prefer the JVM target today. On native targets, keep concurrency bounded, batch local load tests in waves, and use multiple worker processes behind a reverse proxy if you need more throughput before the backend is reworked.
+>
+> **Need this fixed?** Please open or upvote an issue at <https://github.com/sergeych/lyng/issues> so native high-concurrency networking can be prioritized.
 
 ---
 

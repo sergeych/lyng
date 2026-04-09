@@ -2,6 +2,8 @@
 
 `lyngio` is a separate library that extends the Lyng core (`lynglib`) with powerful, multiplatform, and secure I/O capabilities.
 
+> **Important native networking limit:** `lyng.io.net` on current native targets is suitable for modest workloads, local tools, and test servers, but not yet for high-connection-count production servers. For serious HTTP/TCP serving, prefer the JVM target for now. If native high-concurrency networking matters for your use case, please open or upvote an issue at <https://github.com/sergeych/lyng/issues>.
+
 #### Why a separate module?
 
 1. **Security:** I/O and process execution are sensitive operations. By keeping them in a separate module, we ensure that the Lyng core remains 100% safe by default. You only enable what you explicitly need.

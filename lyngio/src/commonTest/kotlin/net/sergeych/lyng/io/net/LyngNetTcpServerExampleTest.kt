@@ -30,12 +30,13 @@ import kotlin.test.assertEquals
 
 class LyngNetTcpServerExampleTest {
 
-    private fun concurrentTcpScript(clientCount: Int): String = """
+    private fun concurrentTcpScript(clientCount: Int, clientWindow: Int): String = """
         import lyng.io.net
 
         val host = "127.0.0.1"
         val clientCount = $clientCount
-        val server: TcpServer = Net.tcpListen(0, host, clientCount, true) as TcpServer
+        val clientWindow = $clientWindow
+        val server: TcpServer = Net.tcpListen(0, host, clientWindow, true) as TcpServer
         val port: Int = server.localAddress().port
 
         fun payloadFor(index: Int): String {
@@ -72,28 +73,32 @@ class LyngNetTcpServerExampleTest {
             }
         }
 
-        val clientJobs: List<Deferred> = (0..<clientCount).map { index ->
-            val payload = payloadFor(index)
-            launch {
-                val socket: TcpSocket = Net.tcpConnect(host, port) as TcpSocket
-                try {
-                    socket.writeUtf8(payload + "\n")
-                    socket.flush()
-                    val reply = socket.readLine()
-                    if( reply == null ) {
-                        "client-eof:${'$'}payload"
+        var replies: List<Object> = List()
+        for (batchStart in 0..<clientCount step clientWindow) {
+            val batchEnd = if (batchStart + clientWindow < clientCount) batchStart + clientWindow else clientCount
+            val clientJobs: List<Deferred> = (batchStart..<batchEnd).map { index ->
+                val payload = payloadFor(index)
+                launch {
+                    val socket: TcpSocket = Net.tcpConnect(host, port) as TcpSocket
+                    try {
+                        socket.writeUtf8(payload + "\n")
+                        socket.flush()
+                        val reply = socket.readLine()
+                        if( reply == null ) {
+                            "client-eof:${'$'}payload"
+                        }
+                        else {
+                            assertEquals("pong: ${'$'}payload", reply)
+                            reply
+                        }
+                    } finally {
+                        socket.close()
                     }
-                    else {
-                    assertEquals("pong: ${'$'}payload", reply)
-                    reply
-                    }
-                } finally {
-                    socket.close()
                 }
             }
+            replies += clientJobs.joinAll()
         }
 
-        val replies = clientJobs.joinAll()
         val serverReplies = serverJob.await() as List<Object>
 
         assertEquals(clientCount, replies.size)
@@ -112,10 +117,10 @@ class LyngNetTcpServerExampleTest {
 
         val result = withContext(Dispatchers.Default) {
             withTimeout(20_000) {
-                Compiler.compile(concurrentTcpScript(clientCount = 32)).execute(scope).inspect(scope)
+                Compiler.compile(concurrentTcpScript(clientCount = 1_000, clientWindow = 128)).execute(scope).inspect(scope)
             }
         }
 
-        assertEquals("\"OK:32\"", result)
+        assertEquals("\"OK:1000\"", result)
     }
 }
