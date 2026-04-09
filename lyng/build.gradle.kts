@@ -56,8 +56,8 @@ kotlin {
             executable()
             all {
                 if (buildType == org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType.RELEASE) {
-                    debuggable = true
-                    optimized = false
+                    debuggable = false
+                    optimized = true
                 }
             }
         }
