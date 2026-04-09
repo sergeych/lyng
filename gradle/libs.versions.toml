@@ -18,6 +18,7 @@ slf4j = "2.0.17"
 
 [libraries]
 clikt = { module = "com.github.ajalt.clikt:clikt", version.ref = "clikt" }
+clikt-core = { module = "com.github.ajalt.clikt:clikt-core", version.ref = "clikt" }
 clikt-markdown = { module = "com.github.ajalt.clikt:clikt-markdown", version.ref = "clikt" }
 mordant-core = { module = "com.github.ajalt.mordant:mordant-core", version.ref = "mordant" }
 mordant-jvm-jna = { module = "com.github.ajalt.mordant:mordant-jvm-jna", version.ref = "mordant" }

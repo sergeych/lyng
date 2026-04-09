@@ -17,7 +17,7 @@
 
 package net.sergeych
 
-import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.clikt.core.CoreCliktCommand
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.core.main
 import com.github.ajalt.clikt.core.subcommands
@@ -43,6 +43,7 @@ import net.sergeych.lyng.io.net.createNetModule
 import net.sergeych.lyng.io.ws.createWsModule
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
+import net.sergeych.lyngio.net.shutdownSystemNetEngine
 import net.sergeych.lyngio.console.security.PermitAllConsoleAccessPolicy
 import net.sergeych.lyngio.fs.security.PermitAllAccessPolicy
 import net.sergeych.lyngio.http.security.PermitAllHttpAccessPolicy
@@ -70,10 +71,18 @@ data class CommandResult(
     val error: String
 )
 
+private val baseCliImportManagerDefer = globalDefer {
+    val manager = Script.defaultImportManager.copy().apply {
+        installCliModules(this)
+    }
+    manager.newStdScope()
+    manager
+}
+
 val baseScopeDefer = globalDefer {
-    Script.newScope().apply {
+    baseCliImportManagerDefer.await().copy().newStdScope().apply {
         installCliBuiltins()
-        installCliModules(importManager)
+        addConst("ARGV", ObjList(mutableListOf()))
     }
 }
 
@@ -208,23 +217,33 @@ private fun discoverLocalCliModules(entryFile: Path): List<LocalCliModule> {
         .toList()
 }
 
-private fun registerLocalCliModules(manager: ImportManager, entryFile: Path) {
-    for (module in discoverLocalCliModules(entryFile)) {
+private fun registerLocalCliModules(manager: ImportManager, modules: List<LocalCliModule>) {
+    for (module in modules) {
         manager.addPackage(module.packageName) { scope ->
             scope.eval(module.source)
         }
     }
 }
 
-private suspend fun newCliScope(argv: List<String>, entryFileName: String? = null): Scope {
-    val manager = baseScopeDefer.await().importManager.copy()
-    if (entryFileName != null) {
-        registerLocalCliModules(manager, canonicalPath(entryFileName.toPath()))
-    }
-    return manager.newStdScope().apply {
+private suspend fun ImportManager.newCliScope(argv: List<String>): Scope =
+    newStdScope().apply {
         installCliBuiltins()
         addConst("ARGV", ObjList(argv.map { ObjString(it) }.toMutableList()))
     }
+
+internal suspend fun newCliScope(argv: List<String>, entryFileName: String? = null): Scope {
+    val baseManager = baseCliImportManagerDefer.await()
+    if (entryFileName == null) {
+        return baseManager.newCliScope(argv)
+    }
+    val entryFile = canonicalPath(entryFileName.toPath())
+    val localModules = discoverLocalCliModules(entryFile)
+    if (localModules.isEmpty()) {
+        return baseManager.newCliScope(argv)
+    }
+    val manager = baseManager.copy()
+    registerLocalCliModules(manager, localModules)
+    return manager.newCliScope(argv)
 }
 
 fun runMain(args: Array<String>) {
@@ -248,7 +267,7 @@ fun runMain(args: Array<String>) {
         .main(args)
 }
 
-private class Fmt : CliktCommand(name = "fmt") {
+private class Fmt : CoreCliktCommand(name = "fmt") {
     private val checkOnly by option("--check", help = "Check only; print files that would change").flag()
     private val inPlace by option("-i", "--in-place", help = "Write changes back to files").flag()
     private val enableSpacing by option("--spacing", help = "Apply spacing normalization").flag()
@@ -306,7 +325,7 @@ private class Fmt : CliktCommand(name = "fmt") {
     }
 }
 
-private class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CliktCommand() {
+private class Lyng(val launcher: (suspend () -> Unit) -> Unit) : CoreCliktCommand() {
 
     override val invokeWithoutSubcommand = true
     override val printHelpOnEmptyArgs = true
@@ -382,6 +401,7 @@ suspend fun executeSource(source: Source, initialScope: Scope? = null) {
         evalOnCliDispatcher(session, source)
     } finally {
         session.cancelAndJoin()
+        shutdownSystemNetEngine()
     }
 }
 

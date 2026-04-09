@@ -151,7 +151,9 @@ class ImportManager(
     fun copy(): ImportManager =
         op.withLock {
             ImportManager(rootScope, securityManager).apply {
-                imports.putAll(this@ImportManager.imports)
+                for ((name, entry) in this@ImportManager.imports) {
+                    imports[name] = Entry(entry.packageName, entry.builder, entry.cachedScope)
+                }
             }
         }
 

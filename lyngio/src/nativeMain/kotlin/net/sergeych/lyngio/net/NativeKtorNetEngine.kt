@@ -40,7 +40,10 @@ private class NativeKtorNetEngine(
     override val isTcpServerAvailable: Boolean,
     override val isUdpAvailable: Boolean,
 ) : LyngNetEngine {
-    private val selectorManager: SelectorManager by lazy { SelectorManager(Dispatchers.Default) }
+    private var selectorManager: SelectorManager? = null
+
+    private fun selectorManager(): SelectorManager =
+        selectorManager ?: SelectorManager(Dispatchers.Default).also { selectorManager = it }
 
     override suspend fun resolve(host: String, port: Int): List<LyngSocketAddress> {
         val rawAddress = InetSocketAddress(host, port).resolveAddress()
@@ -62,7 +65,7 @@ private class NativeKtorNetEngine(
         noDelay: Boolean,
     ): LyngTcpSocket {
         val connectBlock: suspend () -> Socket = {
-            aSocket(selectorManager).tcp().connect(host, port) {
+            aSocket(selectorManager()).tcp().connect(host, port) {
                 this.noDelay = noDelay
             }
         }
@@ -77,7 +80,7 @@ private class NativeKtorNetEngine(
         reuseAddress: Boolean,
     ): LyngTcpServer {
         val bindHost = host ?: "0.0.0.0"
-        val server = aSocket(selectorManager).tcp().bind(bindHost, port) {
+        val server = aSocket(selectorManager()).tcp().bind(bindHost, port) {
             backlogSize = backlog
             this.reuseAddress = reuseAddress
         }
@@ -86,10 +89,15 @@ private class NativeKtorNetEngine(
 
     override suspend fun udpBind(host: String?, port: Int, reuseAddress: Boolean): LyngUdpSocket {
         val bindHost = host ?: "0.0.0.0"
-        val socket = aSocket(selectorManager).udp().bind(bindHost, port) {
+        val socket = aSocket(selectorManager()).udp().bind(bindHost, port) {
             this.reuseAddress = reuseAddress
         }
         return NativeLyngUdpSocket(socket)
+    }
+
+    fun shutdown() {
+        selectorManager?.close()
+        selectorManager = null
     }
 }
 
@@ -213,4 +221,8 @@ private fun ByteArray.toIpHostString(): String = when (size) {
         ((hi shl 8) or lo).toString(16)
     }
     else -> error("Unsupported IP address length: $size")
+}
+
+internal fun shutdownNativeKtorNetEngine(engine: LyngNetEngine) {
+    (engine as? NativeKtorNetEngine)?.shutdown()
 }

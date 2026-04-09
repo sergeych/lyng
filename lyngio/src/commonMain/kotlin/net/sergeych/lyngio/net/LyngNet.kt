@@ -97,3 +97,5 @@ internal object UnsupportedLyngNetEngine : LyngNetEngine {
 }
 
 expect fun getSystemNetEngine(): LyngNetEngine
+
+expect fun shutdownSystemNetEngine()

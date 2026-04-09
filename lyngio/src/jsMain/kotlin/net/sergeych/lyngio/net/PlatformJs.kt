@@ -13,6 +13,8 @@ import org.khronos.webgl.Uint8Array
 
 actual fun getSystemNetEngine(): LyngNetEngine = jsNodeNetEngineOrNull ?: UnsupportedLyngNetEngine
 
+actual fun shutdownSystemNetEngine() {}
+
 private val jsNodeNetEngineOrNull: LyngNetEngine? by lazy {
     if (!isNodeRuntime()) return@lazy null
     val net = requireNodeModule("net") ?: return@lazy null

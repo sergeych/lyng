@@ -52,6 +52,12 @@ kotlin {
     linuxX64 {
         binaries {
             executable()
+            all {
+                if (buildType == org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType.RELEASE) {
+                    debuggable = true
+                    optimized = false
+                }
+            }
         }
     }
     sourceSets {
@@ -63,7 +69,7 @@ kotlin {
                 // filesystem access into the execution Scope by default.
                 implementation(project(":lyngio"))
                 implementation(libs.okio)
-                implementation(libs.clikt)
+                implementation(libs.clikt.core)
                 implementation(kotlin("stdlib-common"))
                 // optional support for rendering markdown in help messages
 //                implementation(libs.clikt.markdown)

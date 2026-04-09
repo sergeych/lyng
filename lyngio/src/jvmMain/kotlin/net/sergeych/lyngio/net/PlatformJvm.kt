@@ -45,6 +45,8 @@ import java.net.InetAddress
 
 actual fun getSystemNetEngine(): LyngNetEngine = JvmKtorNetEngine
 
+actual fun shutdownSystemNetEngine() {}
+
 private object JvmKtorNetEngine : LyngNetEngine {
     private val selectorManager: SelectorManager by lazy { ActorSelectorManager(Dispatchers.IO) }
 

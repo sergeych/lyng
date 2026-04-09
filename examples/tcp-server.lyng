@@ -1,0 +1,68 @@
+import lyng.buffer
+import lyng.io.net
+
+val host = "127.0.0.1"
+val port = 8092
+val N = 5
+val server = Net.tcpListen(port, host)
+println("start tcp server at $host:$port")
+
+fun serveClient(client: TcpSocket) = launch {
+    try {
+        while (true) {
+            val data = client.read()
+            if (data == null) break
+            var line = (data as Buffer).decodeUtf8()
+            line = "[" + client.remoteAddress() + "]> " + line
+            println(line)
+        }
+    } catch (e) {
+        println("ERROR [reader]: " + e)
+    }
+}
+
+fun serveRequests(server: TcpServer) = launch {
+    val readers = []
+    try {
+        for (i in 0..<5) {
+            val client = server.accept()
+            println("accept new connection: " + client.remoteAddress())
+            readers.add(serveClient(client as TcpSocket))
+        }
+    } catch (e) {
+        println("ERROR [listener]: " + e)
+    } finally {
+        server.close()
+    }
+    for (i in 0..<readers.size) {
+        val reader = readers[i]
+        (reader as Deferred).await()
+    }
+}
+
+val srv = serveRequests(server as TcpServer)
+
+var clients = []
+for (i in 0..<N) {
+    //delay(500)
+    clients.add(launch {
+        try{
+            val socket = Net.tcpConnect(host, port)
+            socket.writeUtf8("ping1ping2ping3ping4ping5")
+            socket.flush()
+            socket.close()
+        } catch (e) {
+            println("ERROR [client]: " + e)
+        }
+    })
+}
+
+for (i in 0..<clients.size) {
+    val c = clients[i]
+    (c as Deferred).await()
+    println("client done")
+}
+
+srv.await()
+delay(10000)
+println("FIN")

@@ -28,6 +28,8 @@ import java.net.InetAddress
 
 actual fun getSystemNetEngine(): LyngNetEngine = AndroidKtorNetEngine
 
+actual fun shutdownSystemNetEngine() {}
+
 private object AndroidKtorNetEngine : LyngNetEngine {
     private val selectorManager: SelectorManager by lazy { ActorSelectorManager(Dispatchers.IO) }
 
