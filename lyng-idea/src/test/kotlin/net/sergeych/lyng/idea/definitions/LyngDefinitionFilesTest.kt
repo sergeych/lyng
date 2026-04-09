@@ -179,4 +179,20 @@ class LyngDefinitionFilesTest : BasePlatformTestCase() {
         assertTrue("Should not report unresolved name for PlainDeclared", messages.none { it.contains("unresolved name: PlainDeclared") })
         assertTrue("Should not report unresolved member for hello", messages.none { it.contains("unresolved member: hello") })
     }
+
+    fun test_DiagnosticsResolveOptionalNetModuleSymbols() {
+        val code = """
+            import lyng.io.net
+
+            val server = Net.tcpListen(0, "127.0.0.1")
+            val port = server.localAddress().port
+        """.trimIndent()
+        myFixture.configureByText("main.lyng", code)
+        val analysis = LyngAstManager.getAnalysis(myFixture.file)
+        val messages = analysis?.diagnostics?.map { it.message } ?: emptyList()
+        assertTrue("Should not report unresolved name for Net, got=$messages", messages.none { it.contains("unresolved name: Net") })
+        assertTrue("Should not report unresolved member for tcpListen, got=$messages", messages.none { it.contains("unresolved member: tcpListen") })
+        assertTrue("Should not report unresolved member for localAddress, got=$messages", messages.none { it.contains("unresolved member: localAddress") })
+        assertTrue("Should not report unresolved member for port, got=$messages", messages.none { it.contains("unresolved member: port") })
+    }
 }

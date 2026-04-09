@@ -27,9 +27,9 @@ import kotlinx.coroutines.runBlocking
 import net.sergeych.lyng.highlight.offsetOf
 import net.sergeych.lyng.idea.LyngFileType
 import net.sergeych.lyng.idea.util.LyngAstManager
+import net.sergeych.lyng.idea.util.LyngIdeaImportProvider
 import net.sergeych.lyng.idea.util.TextCtx
 import net.sergeych.lyng.miniast.*
-import net.sergeych.lyng.tools.IdeLenientImportProvider
 import net.sergeych.lyng.tools.LyngAnalysisRequest
 import net.sergeych.lyng.tools.LyngLanguageTools
 
@@ -273,7 +273,7 @@ class LyngPsiReference(element: PsiElement) : PsiPolyVariantReferenceBase<PsiEle
     private fun loadMini(file: PsiFile): MiniScript? {
         LyngAstManager.getMiniAst(file)?.let { return it }
         return try {
-            val provider = IdeLenientImportProvider.create()
+            val provider = LyngIdeaImportProvider.create()
             runBlocking {
                 LyngLanguageTools.analyze(
                     LyngAnalysisRequest(text = file.text, fileName = file.name, importProvider = provider)

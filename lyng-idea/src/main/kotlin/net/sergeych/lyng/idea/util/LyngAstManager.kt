@@ -28,7 +28,10 @@ import kotlinx.coroutines.runBlocking
 import net.sergeych.lyng.binding.BindingSnapshot
 import net.sergeych.lyng.idea.LyngFileType
 import net.sergeych.lyng.miniast.*
-import net.sergeych.lyng.tools.*
+import net.sergeych.lyng.tools.LyngAnalysisRequest
+import net.sergeych.lyng.tools.LyngAnalysisResult
+import net.sergeych.lyng.tools.LyngDiagnostic
+import net.sergeych.lyng.tools.LyngLanguageTools
 
 object LyngAstManager {
     private val MINI_KEY = Key.create<MiniScript>("lyng.mini.cache")
@@ -142,7 +145,8 @@ object LyngAstManager {
 
         val text = file.viewProvider.contents.toString()
         val built = try {
-            val provider = IdeLenientImportProvider.create()
+            DocsBootstrap.ensure()
+            val provider = LyngIdeaImportProvider.create()
             runBlocking {
                 LyngLanguageTools.analyze(
                     LyngAnalysisRequest(text = text, fileName = file.name, importProvider = provider)
@@ -165,7 +169,7 @@ object LyngAstManager {
                     val dMini = getAnalysis(df)?.mini ?: run {
                         val dText = df.viewProvider.contents.toString()
                         try {
-                            val provider = IdeLenientImportProvider.create()
+                            val provider = LyngIdeaImportProvider.create()
                             runBlocking {
                                 LyngLanguageTools.analyze(
                                     LyngAnalysisRequest(text = dText, fileName = df.name, importProvider = provider)
