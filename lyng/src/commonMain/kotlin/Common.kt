@@ -79,8 +79,18 @@ private val baseCliImportManagerDefer = globalDefer {
     manager
 }
 
+private fun ImportManager.invalidateCliModuleCaches() {
+    invalidatePackageCache("lyng.io.fs")
+    invalidatePackageCache("lyng.io.console")
+    invalidatePackageCache("lyng.io.http")
+    invalidatePackageCache("lyng.io.ws")
+    invalidatePackageCache("lyng.io.net")
+}
+
 val baseScopeDefer = globalDefer {
-    baseCliImportManagerDefer.await().copy().newStdScope().apply {
+    baseCliImportManagerDefer.await().copy().apply {
+        invalidateCliModuleCaches()
+    }.newStdScope().apply {
         installCliBuiltins()
         addConst("ARGV", ObjList(mutableListOf()))
     }
@@ -232,7 +242,9 @@ private suspend fun ImportManager.newCliScope(argv: List<String>): Scope =
     }
 
 internal suspend fun newCliScope(argv: List<String>, entryFileName: String? = null): Scope {
-    val baseManager = baseCliImportManagerDefer.await()
+    val baseManager = baseCliImportManagerDefer.await().copy().apply {
+        invalidateCliModuleCaches()
+    }
     if (entryFileName == null) {
         return baseManager.newCliScope(argv)
     }
@@ -241,9 +253,8 @@ internal suspend fun newCliScope(argv: List<String>, entryFileName: String? = nu
     if (localModules.isEmpty()) {
         return baseManager.newCliScope(argv)
     }
-    val manager = baseManager.copy()
-    registerLocalCliModules(manager, localModules)
-    return manager.newCliScope(argv)
+    registerLocalCliModules(baseManager, localModules)
+    return baseManager.newCliScope(argv)
 }
 
 fun runMain(args: Array<String>) {

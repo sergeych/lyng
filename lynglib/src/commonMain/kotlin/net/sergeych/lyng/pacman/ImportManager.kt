@@ -157,4 +157,10 @@ class ImportManager(
             }
         }
 
+    fun invalidatePackageCache(name: String) {
+        op.withLock {
+            imports[name]?.cachedScope = null
+        }
+    }
+
 }

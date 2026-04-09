@@ -24,6 +24,7 @@ import net.sergeych.lyng.bridge.bind
 import net.sergeych.lyng.bridge.bindObject
 import net.sergeych.lyng.bytecode.CmdFunction
 import net.sergeych.lyng.bytecode.CmdVm
+import net.sergeych.lyng.bytecode.BytecodeLambdaCallable
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
@@ -635,16 +636,20 @@ class Script(
             addConst("MapEntry", ObjMapEntry.type)
 
             addFn("launch") {
-                val callable = requireOnlyArg<Obj>()
-                val captured = this
+                val rawCallable = requireOnlyArg<Obj>()
+                val currentScope = requireScope()
+                // Freeze non-module lexical state at launch time so each coroutine gets
+                // its own view of loop locals and other transient frame values.
+                val captured = if (currentScope is ModuleScope) currentScope else currentScope.snapshotForClosure()
+                val callable = (rawCallable as? BytecodeLambdaCallable)?.freezeForLaunch(captured) ?: rawCallable
                 val session = EvalSession.currentOrNull()
                 val deferred = if (session != null) {
                     session.launchTrackedDeferred {
-                        captured.call(callable)
+                        ScopeBridge(captured).call(callable)
                     }
                 } else {
                     globalDefer {
-                        captured.call(callable)
+                        ScopeBridge(captured).call(callable)
                     }
                 }
                 ObjDeferred(deferred)

@@ -18,7 +18,7 @@
 package net.sergeych.lyng.io.net
 
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import net.sergeych.lyng.Compiler
@@ -30,44 +30,92 @@ import kotlin.test.assertEquals
 
 class LyngNetTcpServerExampleTest {
 
+    private fun concurrentTcpScript(clientCount: Int): String = """
+        import lyng.io.net
+
+        val host = "127.0.0.1"
+        val clientCount = $clientCount
+        val server: TcpServer = Net.tcpListen(0, host, clientCount, true) as TcpServer
+        val port: Int = server.localAddress().port
+
+        fun payloadFor(index: Int): String {
+            "${'$'}index:${'$'}{Random.nextInt()}:${'$'}{Random.nextInt()}"
+        }
+
+        fun handleClient(client: TcpSocket): String {
+            try {
+                val source = client.readLine()
+                if( source == null ) {
+                    return "server-eof"
+                }
+                val reply = "pong: ${'$'}source"
+                client.writeUtf8(reply + "\n")
+                client.flush()
+                reply
+            } finally {
+                client.close()
+            }
+        }
+
+        val serverJob: Deferred = launch {
+            var handlers: List<Deferred> = List()
+            try {
+                for( i in 0..<${clientCount} ) {
+                    val client: TcpSocket = server.accept() as TcpSocket
+                    handlers += launch {
+                        handleClient(client)
+                    }
+                }
+                handlers.joinAll()
+            } finally {
+                server.close()
+            }
+        }
+
+        val clientJobs: List<Deferred> = (0..<clientCount).map { index ->
+            val payload = payloadFor(index)
+            launch {
+                val socket: TcpSocket = Net.tcpConnect(host, port) as TcpSocket
+                try {
+                    socket.writeUtf8(payload + "\n")
+                    socket.flush()
+                    val reply = socket.readLine()
+                    if( reply == null ) {
+                        "client-eof:${'$'}payload"
+                    }
+                    else {
+                    assertEquals("pong: ${'$'}payload", reply)
+                    reply
+                    }
+                } finally {
+                    socket.close()
+                }
+            }
+        }
+
+        val replies = clientJobs.joinAll()
+        val serverReplies = serverJob.await() as List<Object>
+
+        assertEquals(clientCount, replies.size)
+        assertEquals(clientCount, serverReplies.size)
+        assertEquals(replies.toSet, serverReplies.toSet)
+        "OK:${'$'}clientCount"
+    """.trimIndent()
+
     @Test
-    fun tcpServerExampleRoundTripsOverLoopback() = runTest {
+    fun tcpServerExampleSurvivesConcurrentLoopbackLoad() = runBlocking {
         val engine = getSystemNetEngine()
-        if (!engine.isSupported || !engine.isTcpAvailable || !engine.isTcpServerAvailable) return@runTest
+        if (!engine.isSupported || !engine.isTcpAvailable || !engine.isTcpServerAvailable) return@runBlocking
 
         val scope = Script.newScope()
         createNetModule(PermitAllNetAccessPolicy, scope)
 
-        val code = """
-            import lyng.buffer
-            import lyng.io.net
-
-            val server = Net.tcpListen(0, "127.0.0.1")
-            val port = server.localAddress().port
-            val accepted = launch {
-                val client = server.accept()
-                val line = (client.read(4) as Buffer).decodeUtf8()
-                client.writeUtf8("echo:" + line)
-                client.flush()
-                client.close()
-                server.close()
-                line
-            }
-
-            val socket = Net.tcpConnect("127.0.0.1", port)
-            socket.writeUtf8("ping")
-            socket.flush()
-            val reply = (socket.read(16) as Buffer).decodeUtf8()
-            socket.close()
-            "${'$'}{accepted.await()}: ${'$'}reply"
-        """.trimIndent()
-
         val result = withContext(Dispatchers.Default) {
-            withTimeout(5_000) {
-                Compiler.compile(code).execute(scope).inspect(scope)
+            withTimeout(20_000) {
+                Compiler.compile(concurrentTcpScript(clientCount = 32)).execute(scope).inspect(scope)
             }
         }
 
-        assertEquals("\"ping: echo:ping\"", result)
+        assertEquals("\"OK:32\"", result)
     }
 }

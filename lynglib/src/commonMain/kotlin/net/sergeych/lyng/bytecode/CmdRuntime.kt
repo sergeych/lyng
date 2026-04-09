@@ -3783,11 +3783,48 @@ class BytecodeLambdaCallable(
     private val returnLabels: Set<String>,
     override val pos: Pos,
 ) : Statement(), BytecodeCallable {
+    private fun freezeRecord(record: ObjRecord): ObjRecord {
+        val frozenValue = when (val raw = record.value) {
+            is net.sergeych.lyng.FrameSlotRef -> raw.read()
+            is net.sergeych.lyng.RecordSlotRef -> raw.read()
+            is net.sergeych.lyng.ScopeSlotRef -> raw.read()
+            else -> raw
+        }
+        return record.copy(value = frozenValue)
+    }
+
+    private fun resolveCaptureRecords(base: Scope): List<ObjRecord>? {
+        if (captureNames.isEmpty()) return null
+        return captureNames.map { name ->
+            base.chainLookupIgnoreClosure(
+                name,
+                followClosure = true,
+                caller = base.currentClassCtx
+            ) ?: base.raiseSymbolNotFound("symbol $name not found")
+        }
+    }
+
     fun rebindClosure(newClosureScope: Scope): BytecodeLambdaCallable {
         return BytecodeLambdaCallable(
             fn = fn,
             closureScope = newClosureScope,
-            captureRecords = captureRecords,
+            captureRecords = resolveCaptureRecords(newClosureScope) ?: captureRecords,
+            captureNames = captureNames,
+            paramSlotPlan = paramSlotPlan,
+            argsDeclaration = argsDeclaration,
+            preferredThisType = preferredThisType,
+            returnLabels = returnLabels,
+            pos = pos
+        )
+    }
+
+    fun freezeForLaunch(newClosureScope: Scope): BytecodeLambdaCallable {
+        val frozenCaptures = captureRecords?.map(::freezeRecord)
+            ?: resolveCaptureRecords(newClosureScope)?.map(::freezeRecord)
+        return BytecodeLambdaCallable(
+            fn = fn,
+            closureScope = newClosureScope,
+            captureRecords = frozenCaptures,
             captureNames = captureNames,
             paramSlotPlan = paramSlotPlan,
             argsDeclaration = argsDeclaration,

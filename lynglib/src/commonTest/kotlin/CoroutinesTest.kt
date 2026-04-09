@@ -140,6 +140,66 @@ class TestCoroutines {
     }
 
     @Test
+    fun testLaunchCapturesDistinctLoopValues() = runTest {
+        eval(
+            """
+            val jobs = []
+            for( i in 0..<8 ) {
+                val x = i
+                jobs += launch {
+                    delay(5)
+                    x
+                }
+            }
+
+            assertEquals([0,1,2,3,4,5,6,7], jobs.joinAll())
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testNestedLaunchCapturesDistinctLoopValues() = runTest {
+        eval(
+            """
+            val outer = launch {
+                val jobs = []
+                for( i in 0..<8 ) {
+                    val x = i
+                    jobs += launch {
+                        delay(5)
+                        x
+                    }
+                }
+                jobs.joinAll()
+            }
+
+            assertEquals([0,1,2,3,4,5,6,7], outer.await())
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testLaunchCapturesDistinctObjectValues() = runTest {
+        eval(
+            """
+            val jobs = []
+            for( i in 0..<8 ) {
+                val box = ["item:${'$'}i"]
+                jobs += launch {
+                    delay(5)
+                    box[0]
+                }
+            }
+
+            assertEquals(
+                ["item:0", "item:1", "item:2", "item:3", "item:4", "item:5", "item:6", "item:7"],
+                jobs.joinAll()
+            )
+            """.trimIndent()
+        )
+    }
+
+    @Test
     fun testFlows() = runTest {
         eval("""
             val f = flow {
