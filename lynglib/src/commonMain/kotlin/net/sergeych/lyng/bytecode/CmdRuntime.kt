@@ -3784,6 +3784,7 @@ class BytecodeLambdaCallable(
     override val pos: Pos,
 ) : Statement(), BytecodeCallable {
     private fun freezeRecord(record: ObjRecord): ObjRecord {
+        if (record.isMutable) return record
         val frozenValue = when (val raw = record.value) {
             is net.sergeych.lyng.FrameSlotRef -> raw.read()
             is net.sergeych.lyng.RecordSlotRef -> raw.read()
@@ -3808,7 +3809,7 @@ class BytecodeLambdaCallable(
         return BytecodeLambdaCallable(
             fn = fn,
             closureScope = newClosureScope,
-            captureRecords = resolveCaptureRecords(newClosureScope) ?: captureRecords,
+            captureRecords = captureRecords ?: resolveCaptureRecords(newClosureScope),
             captureNames = captureNames,
             paramSlotPlan = paramSlotPlan,
             argsDeclaration = argsDeclaration,

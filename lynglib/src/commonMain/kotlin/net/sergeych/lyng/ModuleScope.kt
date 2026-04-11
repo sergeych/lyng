@@ -19,6 +19,8 @@ package net.sergeych.lyng
 
 import net.sergeych.lyng.bytecode.BytecodeFrame
 import net.sergeych.lyng.bytecode.CmdFunction
+import net.sergeych.lyng.obj.ObjClass
+import net.sergeych.lyng.obj.ObjExternCallable
 import net.sergeych.lyng.obj.ObjRecord
 import net.sergeych.lyng.obj.ObjString
 import net.sergeych.lyng.pacman.ImportProvider
@@ -32,6 +34,20 @@ class ModuleScope(
     pos: Pos = Pos.builtIn,
     override val packageName: String
 ) : Scope(importProvider.rootScope, Arguments.EMPTY, pos) {
+
+    private fun ObjRecord.isEquivalentStdlibAlias(other: ObjRecord): Boolean {
+        val leftOrigin = importedFrom?.packageName
+        val rightOrigin = other.importedFrom?.packageName
+        val origins = setOf(leftOrigin, rightOrigin)
+        val rootStdlibAlias =
+            "lyng.stdlib" in origins &&
+                origins.all { it == null || it == "<anonymous package>" || it == "lyng.stdlib" }
+        if (!rootStdlibAlias) return false
+        if (value !== other.value) return false
+        if (receiver !== other.receiver || delegate !== other.delegate) return false
+        if (memberName != other.memberName || fieldId != other.fieldId || methodId != other.methodId) return false
+        return value is ObjExternCallable || value is ObjClass
+    }
 
     constructor(importProvider: ImportProvider, source: Source) : this(importProvider, source.startPos, source.fileName)
 
@@ -96,8 +112,8 @@ class ModuleScope(
                     if (existing != null) {
                         val sameBinding =
                             existing === record ||
-                            existing.importedFrom == record.importedFrom ||
-                            existing.value === record.value
+                                existing.importedFrom == record.importedFrom ||
+                                existing.isEquivalentStdlibAlias(record)
                         if (!sameBinding)
                             scope.raiseError("symbol ${existing.importedFrom?.packageName}.$newName already exists, redefinition on import is not allowed")
                         // already imported
