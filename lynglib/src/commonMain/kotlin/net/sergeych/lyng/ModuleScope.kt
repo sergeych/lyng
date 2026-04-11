@@ -94,7 +94,11 @@ class ModuleScope(
                 if (newName != null) {
                     val existing = scope.objects[newName]
                     if (existing != null) {
-                        if (existing.importedFrom != record.importedFrom)
+                        val sameBinding =
+                            existing === record ||
+                            existing.importedFrom == record.importedFrom ||
+                            existing.value === record.value
+                        if (!sameBinding)
                             scope.raiseError("symbol ${existing.importedFrom?.packageName}.$newName already exists, redefinition on import is not allowed")
                         // already imported
                     } else {
