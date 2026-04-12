@@ -64,6 +64,73 @@ class CliLocalImportsJvmTest {
         return CliResult(outBuf.toString("UTF-8"), errBuf.toString("UTF-8"), exitCode)
     }
 
+    private fun writeTransitiveImportTree(root: java.nio.file.Path) {
+        val packageDir = Files.createDirectories(root.resolve("package1"))
+        val nestedDir = Files.createDirectories(packageDir.resolve("nested"))
+
+        Files.writeString(
+            packageDir.resolve("alpha.lyng"),
+            """
+            package package1.alpha
+
+            import lyng.stdlib
+            import lyng.io.net
+
+            class Alpha {
+                val headers = Map<String, String>()
+
+                fun makeTask(port: Int, host: String): Deferred = launch {
+                    host + ":" + port
+                }
+
+                fun netModule() = Net
+            }
+
+            fun alphaValue() = "alpha"
+            """.trimIndent()
+        )
+        Files.writeString(
+            packageDir.resolve("beta.lyng"),
+            """
+            package package1.beta
+
+            import lyng.stdlib
+            import package1.alpha
+
+            fun betaValue() = alphaValue() + "|beta"
+            """.trimIndent()
+        )
+        Files.writeString(
+            nestedDir.resolve("gamma.lyng"),
+            """
+            package package1.nested.gamma
+
+            import lyng.io.net
+            import package1.alpha
+            import package1.beta
+
+            val String.gammaTag get() = this + "|gamma"
+
+            fun gammaValue() = betaValue().gammaTag
+            fun netModule() = Net
+            """.trimIndent()
+        )
+        Files.writeString(
+            packageDir.resolve("entry.lyng"),
+            """
+            package package1.entry
+
+            import lyng.stdlib
+            import lyng.io.net
+            import package1.alpha
+            import package1.beta
+            import package1.nested.gamma
+
+            fun report() = gammaValue() + "|entry"
+            """.trimIndent()
+        )
+    }
+
     @Test
     fun cliDiscoversSiblingAndNestedLocalImportsFromEntryRoot() {
         val dir = Files.createTempDirectory("lyng_cli_local_imports_")
@@ -130,6 +197,39 @@ class CliLocalImportsJvmTest {
             val result = runCli(mainFile.toString())
             assertTrue(result.out, result.out.contains("local module package mismatch"))
             assertTrue(result.out, result.out.contains("expected 'util.answer'"))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun cliHandlesOverlappingDirectoryImportsWithTransitiveStdlibAndNetSymbols() {
+        val dir = Files.createTempDirectory("lyng_cli_local_imports_transitive_")
+        try {
+            val mainFile = dir.resolve("main.lyng")
+            writeTransitiveImportTree(dir)
+            Files.writeString(
+                mainFile,
+                """
+                import package1.entry
+                import package1.beta
+                import package1.nested.gamma
+
+                println(report())
+                println(gammaValue())
+                """.trimIndent()
+            )
+
+            val result = runCli(mainFile.toString())
+            assertTrue(result.err, result.err.isBlank())
+            assertTrue(
+                result.out,
+                result.out.contains("alpha|beta|gamma|entry")
+            )
+            assertTrue(
+                result.out,
+                result.out.contains("alpha|beta|gamma")
+            )
         } finally {
             dir.toFile().deleteRecursively()
         }

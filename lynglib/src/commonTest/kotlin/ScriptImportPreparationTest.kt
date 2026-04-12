@@ -16,16 +16,59 @@
 
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.Compiler
+import net.sergeych.lyng.EvalSession
 import net.sergeych.lyng.Script
 import net.sergeych.lyng.Source
+import net.sergeych.lyng.obj.ObjString
 import net.sergeych.lyng.obj.toInt
 import net.sergeych.lyng.pacman.ImportManager
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 
 class ScriptImportPreparationTest {
+
+    private fun nestedImportSources(prefix: String): Array<String> =
+        arrayOf(
+            """
+            package $prefix.alpha
+
+            class Alpha {
+                val headers = Map<String, String>()
+
+                fun tagged(port: Int, host: String): String {
+                    val task: Deferred = launch {
+                        host + ":" + port + ":" + headers.size
+                    }
+                    return task.await()
+                }
+            }
+
+            fun alphaValue() = Alpha().tagged(7, "alpha")
+            """.trimIndent(),
+            """
+            package $prefix.beta
+            import $prefix.alpha
+
+            fun betaValue() = alphaValue() + "|" + Alpha().tagged(8, "beta")
+            """.trimIndent(),
+            """
+            package $prefix.gamma
+            import $prefix.alpha
+            import $prefix.beta
+
+            val String.gammaTag get() = this + ":gamma"
+
+            fun gammaValue() = betaValue() + "|" + "done".gammaTag
+            """.trimIndent()
+        )
+
+    private fun nestedImportManager(prefix: String = "tree"): ImportManager =
+        Script.defaultImportManager.copy().apply {
+            addTextPackages(*nestedImportSources(prefix))
+        }
 
     @Test
     fun scriptImportIntoExplicitlyPreparesExistingScope() = runTest {
@@ -83,5 +126,68 @@ class ScriptImportPreparationTest {
 
         val record = assertNotNull(module["answer"])
         assertEquals(42, module.resolve(record, "answer").toInt())
+    }
+
+    @Test
+    fun repeatedImportIntoOnSameScopeIsIdempotentForNestedPackageGraph() = runTest {
+        val manager = nestedImportManager()
+        val script = Compiler.compile(
+            Source(
+                "<repeat-import-into>",
+                """
+                import tree.gamma
+                import tree.beta
+                import tree.alpha
+
+                gammaValue()
+                """.trimIndent()
+            ),
+            manager
+        )
+        val scope = manager.newStdScope()
+
+        script.importInto(scope)
+        val importedGammaValue = assertNotNull(scope["gammaValue"])
+        val importedAlpha = assertNotNull(scope["Alpha"])
+
+        repeat(5) {
+            script.importInto(scope)
+        }
+
+        assertSame(importedGammaValue, scope["gammaValue"])
+        assertSame(importedAlpha, scope["Alpha"])
+        assertEquals(
+            "alpha:7:0|beta:8:0|done:gamma",
+            (script.execute(scope) as ObjString).value
+        )
+    }
+
+    @Test
+    fun repeatedEvalOnSameSessionCanReimportNestedPackageGraph() = runTest {
+        val prefix = "repeattree"
+        val manager = nestedImportManager(prefix)
+        val scope = manager.newModule()
+        val session = EvalSession(scope)
+
+        try {
+            repeat(5) { index ->
+                val result = session.eval(
+                    Source(
+                        "<repeat-eval-$index>",
+                        """
+                        import $prefix.gamma
+                        import $prefix.beta
+                        import $prefix.alpha
+
+                        gammaValue()
+                        """.trimIndent()
+                    )
+                ) as ObjString
+
+                assertEquals("alpha:7:0|beta:8:0|done:gamma", result.value)
+            }
+        } finally {
+            session.cancelAndJoin()
+        }
     }
 }
