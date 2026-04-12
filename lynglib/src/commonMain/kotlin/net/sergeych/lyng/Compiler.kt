@@ -3436,12 +3436,12 @@ class Compiler(
                             val resolvedRecords = ArrayList<ObjRecord>(captureSlots.size)
                             val resolvedNames = ArrayList<String>(captureSlots.size)
                             for (capture in captureSlots) {
-                                val rec = closureScope.chainLookupIgnoreClosure(
+                                val rec = resolveStableCaptureRecord(
+                                    closureScope,
                                     capture.name,
-                                    followClosure = true,
-                                    caller = context.currentClassCtx
+                                    context.currentClassCtx
                                 ) ?: closureScope.raiseSymbolNotFound("symbol ${capture.name} not found")
-                                resolvedRecords.add(rec)
+                                resolvedRecords.add(freezeImmutableCaptureRecord(rec))
                                 resolvedNames.add(capture.name)
                             }
                             context.captureRecords = resolvedRecords
@@ -8766,6 +8766,46 @@ class Compiler(
         }
     }
 
+    private fun freezeImmutableCaptureRecord(record: ObjRecord): ObjRecord {
+        val value = record.value as Obj?
+        if (record.isMutable || record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || value is ObjProperty) {
+            return record
+        }
+        return when (value) {
+            is FrameSlotRef -> value.resolvedCaptureValueOrNull()?.let { record.copy(value = it) } ?: record
+            is RecordSlotRef -> value.resolvedCaptureValueOrNull()?.let { record.copy(value = it) } ?: record
+            is ScopeSlotRef -> value.resolvedCaptureValueOrNull()?.let { record.copy(value = it) } ?: record
+            null -> record
+            else -> record.copy()
+        }
+    }
+
+    private fun isTransientCapturePlaceholder(value: Obj?): Boolean {
+        return when (value) {
+            null, ObjVoid -> true
+            is FrameSlotRef -> value.resolvedCaptureValueOrNull().let { it == null || it === ObjVoid }
+            is RecordSlotRef -> value.resolvedCaptureValueOrNull().let { it == null || it === ObjVoid }
+            is ScopeSlotRef -> value.resolvedCaptureValueOrNull().let { it == null || it === ObjVoid }
+            else -> false
+        }
+    }
+
+    private fun resolveStableCaptureRecord(scope: Scope, name: String, caller: ObjClass?): ObjRecord? {
+        val direct = scope.chainLookupIgnoreClosure(name, followClosure = true, caller = caller) ?: scope.get(name)
+        if (direct != null && !isTransientCapturePlaceholder(direct.value as Obj?)) {
+            return direct
+        }
+        var parent = scope.parent
+        while (parent != null) {
+            val candidate = parent.chainLookupIgnoreClosure(name, followClosure = true, caller = caller) ?: parent.get(name)
+            if (candidate != null && !isTransientCapturePlaceholder(candidate.value as Obj?)) {
+                return candidate
+            }
+            parent = parent.parent
+        }
+        return direct
+    }
+
     private suspend fun parseFunctionDeclaration(
         visibility: Visibility = Visibility.Public,
         isAbstract: Boolean = false,
@@ -9147,12 +9187,12 @@ class Compiler(
                     } else if (captureBase != null && captureNames.isNotEmpty()) {
                         val resolvedRecords = ArrayList<ObjRecord>(captureNames.size)
                         for (name in captureNames) {
-                            val rec = captureBase.chainLookupIgnoreClosure(
+                            val rec = resolveStableCaptureRecord(
+                                captureBase,
                                 name,
-                                followClosure = true,
-                                caller = context.currentClassCtx
+                                context.currentClassCtx
                             ) ?: captureBase.raiseSymbolNotFound("symbol $name not found")
-                            resolvedRecords.add(rec)
+                            resolvedRecords.add(freezeImmutableCaptureRecord(rec))
                         }
                         context.captureRecords = resolvedRecords
                         context.captureNames = captureNames
@@ -9193,7 +9233,12 @@ class Compiler(
                             val value = if (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || record.value is ObjProperty) {
                                 context.resolve(record, localName)
                             } else {
-                                record.value
+                                when (val direct = record.value) {
+                                    is FrameSlotRef -> direct.read()
+                                    is RecordSlotRef -> direct.read(context, localName)
+                                    is ScopeSlotRef -> direct.read()
+                                    else -> direct
+                                }
                             }
                             frame.frame.setObj(i, value)
                         }

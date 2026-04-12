@@ -19,8 +19,6 @@ package net.sergeych.lyng
 
 import net.sergeych.lyng.bytecode.BytecodeFrame
 import net.sergeych.lyng.bytecode.CmdFunction
-import net.sergeych.lyng.obj.ObjClass
-import net.sergeych.lyng.obj.ObjExternCallable
 import net.sergeych.lyng.obj.ObjRecord
 import net.sergeych.lyng.obj.ObjString
 import net.sergeych.lyng.pacman.ImportProvider
@@ -34,20 +32,7 @@ class ModuleScope(
     pos: Pos = Pos.builtIn,
     override val packageName: String
 ) : Scope(importProvider.rootScope, Arguments.EMPTY, pos) {
-
-    private fun ObjRecord.isEquivalentStdlibAlias(other: ObjRecord): Boolean {
-        val leftOrigin = importedFrom?.packageName
-        val rightOrigin = other.importedFrom?.packageName
-        val origins = setOf(leftOrigin, rightOrigin)
-        val rootStdlibAlias =
-            "lyng.stdlib" in origins &&
-                origins.all { it == null || it == "<anonymous package>" || it == "lyng.stdlib" }
-        if (!rootStdlibAlias) return false
-        if (value !== other.value) return false
-        if (receiver !== other.receiver || delegate !== other.delegate) return false
-        if (memberName != other.memberName || fieldId != other.fieldId || methodId != other.methodId) return false
-        return value is ObjExternCallable || value is ObjClass
-    }
+    private fun ObjRecord.importedCopy(source: Scope): ObjRecord = copy(importedFrom = source)
 
     constructor(importProvider: ImportProvider, source: Source) : this(importProvider, source.startPos, source.fileName)
 
@@ -100,7 +85,7 @@ class ModuleScope(
     override suspend fun importInto(scope: Scope, symbols: Map<String, String>?) {
         val symbolsToImport = symbols?.keys?.toMutableSet()
         for ((symbol, record) in this.objects) {
-            if (record.visibility.isPublic) {
+            if (record.visibility.isPublic && record.importedFrom == null) {
                 val newName = symbols?.let { ss: Map<String, String> ->
                     ss[symbol]
                         ?.also { symbolsToImport!!.remove(symbol) }
@@ -110,25 +95,21 @@ class ModuleScope(
                 if (newName != null) {
                     val existing = scope.objects[newName]
                     if (existing != null) {
-                        val sameBinding =
-                            existing === record ||
-                                existing.importedFrom == record.importedFrom ||
-                                existing.isEquivalentStdlibAlias(record)
+                        val sameBinding = existing.importedFrom == this
                         if (!sameBinding)
                             scope.raiseError("symbol ${existing.importedFrom?.packageName}.$newName already exists, redefinition on import is not allowed")
                         // already imported
                     } else {
-                        // when importing records, we keep track of its package (not otherwise needed)
-                        if (record.importedFrom == null) record.importedFrom = this
-                        scope.objects[newName] = record
-                        scope.updateSlotFor(newName, record)
+                        val imported = record.importedCopy(this)
+                        scope.objects[newName] = imported
+                        scope.updateSlotFor(newName, imported)
                     }
                 }
             }
         }
         for ((cls, map) in this.extensions) {
             for ((symbol, record) in map) {
-                if (record.visibility.isPublic) {
+                if (record.visibility.isPublic && record.importedFrom == null) {
                     val newName = symbols?.let { ss: Map<String, String> ->
                         ss[symbol]
                             ?.also { symbolsToImport!!.remove(symbol) }
@@ -136,7 +117,7 @@ class ModuleScope(
                     } ?: if (symbols == null) symbol else null
 
                     if (newName != null) {
-                        scope.addExtension(cls, newName, record)
+                        scope.addExtension(cls, newName, record.importedCopy(this))
                     }
                 }
             }

@@ -27,6 +27,8 @@ class CliLocalModuleImportRegressionJvmTest {
                 import lyng.io.net
 
                 class Alpha {
+                    val headers = Map<String, String>()
+
                     fn startListen(port, host) {
                         launch {
                             println(port, host)

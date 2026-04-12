@@ -2560,6 +2560,46 @@ private fun captureNamesForStatement(stmt: Statement?): List<String> {
     return ordered.toList()
 }
 
+private fun freezeImmutableCaptureRecord(record: ObjRecord): ObjRecord {
+    val value = record.value as Obj?
+    if (record.isMutable || record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || value is ObjProperty) {
+        return record
+    }
+    return when (value) {
+        is FrameSlotRef -> value.resolvedCaptureValueOrNull()?.let { record.copy(value = it) } ?: record
+        is RecordSlotRef -> value.resolvedCaptureValueOrNull()?.let { record.copy(value = it) } ?: record
+        is ScopeSlotRef -> value.resolvedCaptureValueOrNull()?.let { record.copy(value = it) } ?: record
+        null -> record
+        else -> record.copy()
+    }
+}
+
+private fun isTransientCapturePlaceholder(value: Obj?): Boolean {
+    return when (value) {
+        null, ObjVoid -> true
+        is FrameSlotRef -> value.resolvedCaptureValueOrNull().let { it == null || it === ObjVoid }
+        is RecordSlotRef -> value.resolvedCaptureValueOrNull().let { it == null || it === ObjVoid }
+        is ScopeSlotRef -> value.resolvedCaptureValueOrNull().let { it == null || it === ObjVoid }
+        else -> false
+    }
+}
+
+private fun resolveStableCaptureRecord(scope: Scope, name: String): ObjRecord? {
+    val direct = scope.chainLookupIgnoreClosure(name, followClosure = true) ?: scope.get(name)
+    if (direct != null && !isTransientCapturePlaceholder(direct.value as Obj?)) {
+        return direct
+    }
+    var parent = scope.parent
+    while (parent != null) {
+        val candidate = parent.chainLookupIgnoreClosure(name, followClosure = true) ?: parent.get(name)
+        if (candidate != null && !isTransientCapturePlaceholder(candidate.value as Obj?)) {
+            return candidate
+        }
+        parent = parent.parent
+    }
+    return direct
+}
+
 private fun buildFunctionCaptureRecords(frame: CmdFrame, captureNames: List<String>): List<ObjRecord>? {
     if (captureNames.isEmpty()) return null
     val records = ArrayList<ObjRecord>(captureNames.size)
@@ -2575,12 +2615,16 @@ private fun buildFunctionCaptureRecords(frame: CmdFrame, captureNames: List<Stri
                 }
             } else {
                 val raw = frame.frame.getRawObj(localIndex)
-                val scoped = frame.scope.chainLookupIgnoreClosure(name, followClosure = true) ?: frame.scope.get(name)
-                if (scoped != null && scoped.value !== ObjUnset) {
-                    records += scoped
+                val captureRecord = if (isTransientCapturePlaceholder(raw)) {
+                    resolveStableCaptureRecord(frame.scope.parent ?: frame.scope, name)
+                } else {
+                    resolveStableCaptureRecord(frame.scope, name)
+                }
+                if (captureRecord != null) {
+                    records += freezeImmutableCaptureRecord(captureRecord)
                     continue
                 }
-                records += ObjRecord(FrameSlotRef(frame.frame, localIndex), isMutable)
+                records += freezeImmutableCaptureRecord(ObjRecord(FrameSlotRef(frame.frame, localIndex), isMutable))
             }
             continue
         }
@@ -2588,7 +2632,7 @@ private fun buildFunctionCaptureRecords(frame: CmdFrame, captureNames: List<Stri
         if (scopeSlot >= 0) {
             val target = frame.scopeTarget(scopeSlot)
             val index = frame.fn.scopeSlotIndices[scopeSlot]
-            records += target.getSlotRecord(index)
+            records += freezeImmutableCaptureRecord(target.getSlotRecord(index))
             continue
         }
         val scopeCaptures = frame.scope.captureRecords
@@ -2605,7 +2649,7 @@ private fun buildFunctionCaptureRecords(frame: CmdFrame, captureNames: List<Stri
         }
         val scoped = frame.scope.chainLookupIgnoreClosure(name, followClosure = true) ?: frame.scope.get(name)
         if (scoped != null) {
-            records += scoped
+            records += freezeImmutableCaptureRecord(scoped)
             continue
         }
         frame.ensureScope().raiseSymbolNotFound("capture $name not found")
@@ -3377,7 +3421,12 @@ class CmdGetMemberSlot(
                     resolved.declaringClass
                 )
             } else {
-                resolved.value
+                when (val value = resolved.value) {
+                    is FrameSlotRef -> value.read()
+                    is RecordSlotRef -> value.read(frame.ensureScope(), name)
+                    is ScopeSlotRef -> value.read()
+                    else -> value
+                }
             }
         }
         if (receiver is ObjQualifiedView) {
@@ -3785,13 +3834,14 @@ class BytecodeLambdaCallable(
 ) : Statement(), BytecodeCallable {
     private fun freezeRecord(record: ObjRecord): ObjRecord {
         if (record.isMutable) return record
-        val frozenValue = when (val raw = record.value) {
-            is net.sergeych.lyng.FrameSlotRef -> raw.read()
-            is net.sergeych.lyng.RecordSlotRef -> raw.read()
-            is net.sergeych.lyng.ScopeSlotRef -> raw.read()
-            else -> raw
+        val raw = record.value as Obj?
+        return when (raw) {
+            is net.sergeych.lyng.FrameSlotRef -> raw.resolvedCaptureValueOrNull()?.let { record.copy(value = it) } ?: record
+            is net.sergeych.lyng.RecordSlotRef -> raw.resolvedCaptureValueOrNull()?.let { record.copy(value = it) } ?: record
+            is net.sergeych.lyng.ScopeSlotRef -> raw.resolvedCaptureValueOrNull()?.let { record.copy(value = it) } ?: record
+            null -> record
+            else -> record.copy()
         }
-        return record.copy(value = frozenValue)
     }
 
     private fun resolveCaptureRecords(base: Scope): List<ObjRecord>? {
@@ -3924,7 +3974,12 @@ class BytecodeLambdaCallable(
                         if (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || record.value is ObjProperty) {
                             context.resolve(record, name)
                         } else {
-                            record.value
+                            when (val direct = record.value) {
+                                is FrameSlotRef -> direct.read()
+                                is RecordSlotRef -> direct.read(context, name)
+                                is ScopeSlotRef -> direct.read()
+                                else -> direct
+                            }
                         }
                     frame.frame.setObj(i, value)
                 }
@@ -4091,7 +4146,31 @@ class CmdFrame(
                 frame.setObj(localIndex, record.delegate ?: ObjNull)
             } else {
                 val value = record.value
-                if (value is FrameSlotRef) {
+                if (!record.isMutable && value is FrameSlotRef) {
+                    val resolved = value.peekValue()
+                    if (resolved != null) {
+                        if (value.refersTo(frame, localIndex)) continue
+                        frame.setObj(localIndex, value.read())
+                    } else {
+                        frame.setObj(localIndex, value)
+                    }
+                } else if (!record.isMutable && value is RecordSlotRef) {
+                    val resolved = value.peekValue()
+                    if (resolved != null) {
+                        frame.setObj(localIndex, value.read())
+                    } else {
+                        frame.setObj(localIndex, value)
+                    }
+                } else if (!record.isMutable && value is ScopeSlotRef) {
+                    val resolved = value.peekValue()
+                    if (resolved != null) {
+                        frame.setObj(localIndex, value.read())
+                    } else {
+                        frame.setObj(localIndex, value)
+                    }
+                } else if (!record.isMutable) {
+                    frame.setObj(localIndex, value)
+                } else if (value is FrameSlotRef) {
                     if (value.refersTo(frame, localIndex)) continue
                     frame.setObj(localIndex, value)
                 } else {
@@ -4106,7 +4185,30 @@ class CmdFrame(
                     frame.setObj(idx, record.delegate ?: ObjNull)
                 } else {
                     val value = record.value
-                    if (value is FrameSlotRef) {
+                    if (!record.isMutable && value is FrameSlotRef) {
+                        val resolved = value.peekValue()
+                        if (resolved != null) {
+                            frame.setObj(idx, value.read())
+                        } else {
+                            frame.setObj(idx, value)
+                        }
+                    } else if (!record.isMutable && value is RecordSlotRef) {
+                        val resolved = value.peekValue()
+                        if (resolved != null) {
+                            frame.setObj(idx, value.read())
+                        } else {
+                            frame.setObj(idx, value)
+                        }
+                    } else if (!record.isMutable && value is ScopeSlotRef) {
+                        val resolved = value.peekValue()
+                        if (resolved != null) {
+                            frame.setObj(idx, value.read())
+                        } else {
+                            frame.setObj(idx, value)
+                        }
+                    } else if (!record.isMutable) {
+                        frame.setObj(idx, value)
+                    } else if (value is FrameSlotRef) {
                         frame.setObj(idx, value)
                     } else {
                         frame.setObj(idx, RecordSlotRef(record))
@@ -5085,6 +5187,7 @@ class CmdFrame(
                 when (obj) {
                     is FrameSlotRef -> obj.read()
                     is RecordSlotRef -> obj.read(scope, localName)
+                    is ScopeSlotRef -> obj.read()
                     is ObjProperty -> resolvePropertyLikeLocal(localName, obj)
                     ObjUnset -> resolveUnsetLocal(localName)
                     else -> obj
@@ -5096,6 +5199,7 @@ class CmdFrame(
                 when (obj) {
                     is FrameSlotRef -> obj.read()
                     is RecordSlotRef -> obj.read(scope, localName)
+                    is ScopeSlotRef -> obj.read()
                     is ObjProperty -> resolvePropertyLikeLocal(localName, obj)
                     ObjUnset -> resolveUnsetLocal(localName)
                     else -> obj
@@ -5120,7 +5224,24 @@ class CmdFrame(
         if (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || record.value is ObjProperty) {
             return scope.resolve(record, localName)
         }
-        return record.value
+        return when (val value = record.value) {
+            is FrameSlotRef -> value.read()
+            is RecordSlotRef -> value.read(scope, localName)
+            is ScopeSlotRef -> value.read()
+            else -> value
+        }
+    }
+
+    private suspend fun readResolvedScopeRecord(target: Scope, name: String, record: ObjRecord): Obj {
+        val value = record.value
+        return when {
+            record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || value is ObjProperty ->
+                target.resolve(record, name)
+            value is FrameSlotRef -> value.read()
+            value is RecordSlotRef -> value.read(target, name)
+            value is ScopeSlotRef -> value.read()
+            else -> value
+        }
     }
 
     private suspend fun getScopeSlotValue(slot: Int): Obj {
@@ -5135,10 +5256,7 @@ class CmdFrame(
         if (name != null && record.memberName != null && record.memberName != name) {
             val resolved = target.get(name)
             if (resolved != null) {
-                val resolvedValue = resolved.value
-                if (resolved.type == ObjRecord.Type.Delegated || resolved.type == ObjRecord.Type.Property || resolvedValue is ObjProperty) {
-                    return target.resolve(resolved, name)
-                }
+                val resolvedValue = readResolvedScopeRecord(target, name, resolved)
                 if (resolvedValue !== ObjUnset) {
                     target.updateSlotFor(name, resolved)
                 }
@@ -5157,12 +5275,13 @@ class CmdFrame(
             failMissingPreparedModuleBinding(slot, name, hadNamedBinding, record)
             return record.value
         }
-        if (resolved.value !== ObjUnset) {
+        val resolvedValue = readResolvedScopeRecord(target, name, resolved)
+        if (resolvedValue !== ObjUnset) {
             target.updateSlotFor(name, resolved)
         } else {
             failMissingPreparedModuleBinding(slot, name, hadNamedBinding, resolved)
         }
-        return resolved.value
+        return resolvedValue
     }
 
     private suspend fun getScopeSlotValueAtAddr(addrSlot: Int): Obj {
@@ -5178,10 +5297,7 @@ class CmdFrame(
         if (name != null && record.memberName != null && record.memberName != name) {
             val resolved = target.get(name)
             if (resolved != null) {
-                val resolvedValue = resolved.value
-                if (resolved.type == ObjRecord.Type.Delegated || resolved.type == ObjRecord.Type.Property || resolvedValue is ObjProperty) {
-                    return target.resolve(resolved, name)
-                }
+                val resolvedValue = readResolvedScopeRecord(target, name, resolved)
                 if (resolvedValue !== ObjUnset) {
                     target.updateSlotFor(name, resolved)
                 }
@@ -5200,12 +5316,13 @@ class CmdFrame(
             failMissingPreparedModuleBinding(slotId, name, hadNamedBinding, record)
             return record.value
         }
-        if (resolved.value !== ObjUnset) {
+        val resolvedValue = readResolvedScopeRecord(target, name, resolved)
+        if (resolvedValue !== ObjUnset) {
             target.updateSlotFor(name, resolved)
         } else {
             failMissingPreparedModuleBinding(slotId, name, hadNamedBinding, resolved)
         }
-        return resolved.value
+        return resolvedValue
     }
 
     private suspend fun setScopeSlotValueAtAddr(addrSlot: Int, value: Obj) {

@@ -34,7 +34,12 @@ internal suspend fun seedFrameLocalsFromScope(frame: CmdFrame, scope: Scope) {
         val value = if (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || record.value is net.sergeych.lyng.obj.ObjProperty) {
             scope.resolve(record, name)
         } else {
-            record.value
+            when (val direct = record.value) {
+                is net.sergeych.lyng.FrameSlotRef -> direct.resolvedCaptureValueOrNull() ?: direct
+                is net.sergeych.lyng.RecordSlotRef -> direct.resolvedCaptureValueOrNull() ?: direct
+                is net.sergeych.lyng.ScopeSlotRef -> direct.resolvedCaptureValueOrNull() ?: direct
+                else -> direct
+            }
         }
         if (value is net.sergeych.lyng.FrameSlotRef && value.refersTo(frame.frame, i)) {
             continue

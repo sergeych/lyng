@@ -79,6 +79,13 @@ class FrameSlotRef(
         }
     }
 
+    internal fun resolvedCaptureValueOrNull(): Obj? {
+        return when (frame.getSlotTypeCode(slot)) {
+            SlotType.INT.code, SlotType.REAL.code, SlotType.BOOL.code -> read()
+            else -> peekValue()?.let { read() }
+        }
+    }
+
     fun write(value: Obj) {
         when (value) {
             is ObjInt -> frame.setInt(slot, value.value)
@@ -128,6 +135,16 @@ class ScopeSlotRef(
             is FrameSlotRef -> direct.peekValue()
             is RecordSlotRef -> direct.peekValue()
             is ScopeSlotRef -> direct.peekValue()
+            else -> direct
+        }
+    }
+
+    internal fun resolvedCaptureValueOrNull(): Obj? {
+        val record = scope.getSlotRecord(slot)
+        return when (val direct = record.value as Obj?) {
+            is FrameSlotRef -> direct.resolvedCaptureValueOrNull()
+            is RecordSlotRef -> direct.resolvedCaptureValueOrNull()
+            is ScopeSlotRef -> direct.resolvedCaptureValueOrNull()
             else -> direct
         }
     }
@@ -194,6 +211,15 @@ class RecordSlotRef(
             is FrameSlotRef -> direct.peekValue()
             is RecordSlotRef -> direct.peekValue()
             is ScopeSlotRef -> direct.peekValue()
+            else -> direct
+        }
+    }
+
+    internal fun resolvedCaptureValueOrNull(): Obj? {
+        return when (val direct = record.value as Obj?) {
+            is FrameSlotRef -> direct.resolvedCaptureValueOrNull()
+            is RecordSlotRef -> direct.resolvedCaptureValueOrNull()
+            is ScopeSlotRef -> direct.resolvedCaptureValueOrNull()
             else -> direct
         }
     }

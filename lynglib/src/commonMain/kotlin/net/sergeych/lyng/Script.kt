@@ -181,37 +181,42 @@ class Script(
         }
     }
 
+    private fun importedBindingRecord(record: ObjRecord, source: Scope): ObjRecord =
+        record.copy(importedFrom = source)
+
     private suspend fun seedImportBindings(scope: Scope, seedScope: Scope) {
         val provider = scope.currentImportProvider
         val importedModules = LinkedHashSet<ModuleScope>()
         for (moduleRef in this.importedModules) {
             importedModules.add(provider.prepareImport(moduleRef.pos, moduleRef.name, null))
         }
-        if (scope is ModuleScope) {
-            scope.importedModules = importedModules.toList()
-        }
         for (module in importedModules) {
             module.importInto(scope, null)
         }
         for ((name, binding) in importBindings) {
-            val record = when (val source = binding.source) {
+            val sourceScope: Scope
+            val baseRecord = when (val source = binding.source) {
                 is ImportBindingSource.Module -> {
                     val module = provider.prepareImport(source.pos, source.name, null)
                     importedModules.add(module)
+                    sourceScope = module
                     module.objects[binding.symbol]?.takeIf { it.visibility.isPublic }
                         ?: scope.raiseSymbolNotFound("symbol ${source.name}.${binding.symbol} not found")
                 }
                 ImportBindingSource.Root -> {
+                    sourceScope = provider.rootScope
                     provider.rootScope.objects[binding.symbol]?.takeIf { it.visibility.isPublic }
                         ?: scope.raiseSymbolNotFound("symbol ${binding.symbol} not found")
                 }
                 ImportBindingSource.Seed -> {
+                    sourceScope = seedScope
                     findSeedRecord(seedScope, binding.symbol)
                         ?: scope.raiseSymbolNotFound("symbol ${binding.symbol} not found")
                 }
             }
+            val record = importedBindingRecord(baseRecord, sourceScope)
             if (name == "Exception" && record.value !is ObjClass) {
-                scope.updateSlotFor(name, ObjRecord(ObjException.Root, isMutable = false))
+                scope.updateSlotFor(name, ObjRecord(ObjException.Root, isMutable = false, importedFrom = sourceScope))
             } else {
                 scope.updateSlotFor(name, record)
             }
@@ -219,11 +224,14 @@ class Script(
         for (module in importedModules) {
             for ((cls, map) in module.extensions) {
                 for ((symbol, record) in map) {
-                    if (record.visibility.isPublic) {
-                        scope.addExtension(cls, symbol, record)
+                    if (record.visibility.isPublic && record.importedFrom == null) {
+                        scope.addExtension(cls, symbol, importedBindingRecord(record, module))
                     }
                 }
             }
+        }
+        if (scope is ModuleScope) {
+            scope.importedModules = importedModules.toList()
         }
     }
 

@@ -53,7 +53,12 @@ class BytecodeStatement private constructor(
                 val value = if (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || record.value is net.sergeych.lyng.obj.ObjProperty) {
                     scope.resolve(record, name)
                 } else {
-                    record.value
+                    when (val direct = record.value) {
+                        is FrameSlotRef -> direct.read()
+                        is RecordSlotRef -> direct.read(scope, name)
+                        is ScopeSlotRef -> direct.read()
+                        else -> direct
+                    }
                 }
                 frame.frame.setObj(i, value)
             }
