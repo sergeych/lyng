@@ -361,7 +361,7 @@ private class Parser(fromPos: Pos, private val interpolationEnabled: Boolean = t
                     Token(":", from, Token.Type.COLON)
             }
 
-            '"' -> loadStringTokens(from)
+            '"', '`' -> loadStringTokens(from, ch)
 
             in digitsSet -> {
                 pos.back()
@@ -550,11 +550,11 @@ private class Parser(fromPos: Pos, private val interpolationEnabled: Boolean = t
         return fixed.joinToString("\n")
     }
 
-    private fun loadStringToken(): Token {
+    private fun loadStringToken(delimiter: Char): Token {
         val start = currentPos
         val sb = StringBuilder()
         var newlineDetected = false
-        while (currentChar != '"') {
+        while (currentChar != delimiter) {
             if (pos.end) throw ScriptError(start, "unterminated string started there")
             when (currentChar) {
                 '\\' -> {
@@ -572,8 +572,8 @@ private class Parser(fromPos: Pos, private val interpolationEnabled: Boolean = t
                             sb.append('\t'); pos.advance()
                         }
 
-                        '"' -> {
-                            sb.append('"'); pos.advance()
+                        delimiter -> {
+                            sb.append(delimiter); pos.advance()
                         }
 
                         '\\' -> {
@@ -615,8 +615,8 @@ private class Parser(fromPos: Pos, private val interpolationEnabled: Boolean = t
         data class Expr(val tokens: List<Token>, val pos: Pos) : StringChunk
     }
 
-    private fun loadStringTokens(startQuotePos: Pos): Token {
-        if (!interpolationEnabled) return loadStringToken()
+    private fun loadStringTokens(startQuotePos: Pos, delimiter: Char): Token {
+        if (!interpolationEnabled) return loadStringToken(delimiter)
         val tokenPos = currentPos
 
         val chunks = mutableListOf<StringChunk>()
@@ -631,7 +631,7 @@ private class Parser(fromPos: Pos, private val interpolationEnabled: Boolean = t
             }
         }
 
-        while (currentChar != '"') {
+        while (currentChar != delimiter) {
             if (pos.end) throw ScriptError(startQuotePos, "unterminated string started there")
             when (currentChar) {
                 '\\' -> {
@@ -649,8 +649,8 @@ private class Parser(fromPos: Pos, private val interpolationEnabled: Boolean = t
                             literal.append('\t'); pos.advance()
                         }
 
-                        '"' -> {
-                            literal.append('"'); pos.advance()
+                        delimiter -> {
+                            literal.append(delimiter); pos.advance()
                         }
 
                         '\\' -> {
@@ -788,8 +788,8 @@ private class Parser(fromPos: Pos, private val interpolationEnabled: Boolean = t
         var depth = 1
         while (!pos.end) {
             val ch = currentChar
-            if (ch == '"') {
-                appendQuoted(out, '"')
+            if (ch == '"' || ch == '`') {
+                appendQuoted(out, ch)
                 continue
             }
             if (ch == '\'') {

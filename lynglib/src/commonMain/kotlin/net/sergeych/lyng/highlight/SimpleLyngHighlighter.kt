@@ -143,7 +143,10 @@ class SimpleLyngHighlighter : LyngHighlighter {
             val k = kindOf(t.type, t.value) ?: continue
             val start0 = src.offsetOf(t.pos)
             val range = when (t.type) {
-                Type.STRING, Type.STRING2 -> adjustQuoteSpan(start0, '"')
+                Type.STRING, Type.STRING2 -> {
+                    val quote = text.getOrNull(start0)?.takeIf { it == '"' || it == '`' } ?: '"'
+                    adjustQuoteSpan(start0, quote)
+                }
                 Type.CHAR -> adjustQuoteSpan(start0, '\'')
                 Type.HEX -> {
                     // Parser returns HEX token value without the leading "0x"; include it in highlight span

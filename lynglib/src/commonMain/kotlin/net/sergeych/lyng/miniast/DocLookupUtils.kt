@@ -530,7 +530,7 @@ object DocLookupUtils {
         var inString = false
         while (i < text.length) {
             val ch = text[i]
-            if (ch == '"' && (i == 0 || text[i - 1] != '\\')) {
+            if ((ch == '"' || ch == '`') && (i == 0 || text[i - 1] != '\\')) {
                 inString = !inString
             }
             if (!inString && ch == '/' && i + 1 < text.length) {

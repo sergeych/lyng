@@ -274,7 +274,9 @@ object LyngFormatter {
     fun format(text: String, config: LyngFormatConfig = LyngFormatConfig()): String {
         // Phase 1: indentation
         val indented = reindent(text, config)
-        if (!config.applySpacing && !config.applyWrapping) return indented
+        if (!config.applySpacing && !config.applyWrapping &&
+            config.stringDelimiterPolicy == LyngStringDelimiterPolicy.Preserve
+        ) return indented
 
         // Phase 2: minimal, safe spacing (PSI-free).
         val lines = indented.split('\n')
@@ -286,13 +288,26 @@ object LyngFormatter {
                 val (parts, nextInBlockComment) = splitIntoParts(rawLine, inBlockComment)
                 val sb = StringBuilder()
                 for (part in parts) {
-                    if (part.type == PartType.Code) {
-                        sb.append(applyMinimalSpacingRules(part.text))
-                    } else {
-                        sb.append(part.text)
+                    val normalizedPart = when (part.type) {
+                        PartType.Code -> if (config.applySpacing) applyMinimalSpacingRules(part.text) else part.text
+                        PartType.StringLiteral -> applyStringLiteralPolicy(part.text, config.stringDelimiterPolicy)
+                        else -> part.text
                     }
+                    sb.append(normalizedPart)
                 }
                 line = sb.toString()
+                inBlockComment = nextInBlockComment
+            } else if (config.stringDelimiterPolicy != LyngStringDelimiterPolicy.Preserve) {
+                val (parts, nextInBlockComment) = splitIntoParts(rawLine, inBlockComment)
+                line = buildString(rawLine.length) {
+                    for (part in parts) {
+                        append(
+                            if (part.type == PartType.StringLiteral) {
+                                applyStringLiteralPolicy(part.text, config.stringDelimiterPolicy)
+                            } else part.text
+                        )
+                    }
+                }
                 inBlockComment = nextInBlockComment
             }
             out.append(line.trimEnd())
@@ -463,6 +478,84 @@ object LyngFormatter {
 private enum class PartType { Code, StringLiteral, BlockComment, LineComment }
 private data class Part(val text: String, val type: PartType)
 
+private fun applyStringLiteralPolicy(text: String, policy: LyngStringDelimiterPolicy): String {
+    if (policy == LyngStringDelimiterPolicy.Preserve) return text
+    if (text.length < 2) return text
+    val delimiter = text.first()
+    if (delimiter != '"' && delimiter != '`') return text
+    if (text.last() != delimiter) return text
+    val other = if (delimiter == '"') '`' else '"'
+    val rewritten = rewriteStringLiteralDelimiter(text, other) ?: return text
+    return when (policy) {
+        LyngStringDelimiterPolicy.Preserve -> text
+        LyngStringDelimiterPolicy.PreferFewerEscapes -> {
+            val currentCost = delimiterEscapeCost(text, delimiter)
+            val rewrittenCost = delimiterEscapeCost(rewritten, other)
+            if (rewrittenCost < currentCost) rewritten else text
+        }
+    }
+}
+
+private fun delimiterEscapeCost(text: String, delimiter: Char): Int {
+    var cost = 0
+    var i = 1
+    while (i < text.length - 1) {
+        val ch = text[i]
+        if (ch == '\\' && i + 1 < text.length - 1) {
+            val next = text[i + 1]
+            if (next == delimiter) cost++
+            i += 2
+            continue
+        }
+        if (ch == delimiter) cost++
+        i++
+    }
+    return cost
+}
+
+private fun rewriteStringLiteralDelimiter(text: String, targetDelimiter: Char): String? {
+    if (text.length < 2) return null
+    val sourceDelimiter = text.first()
+    if ((sourceDelimiter != '"' && sourceDelimiter != '`') || text.last() != sourceDelimiter) return null
+    if (sourceDelimiter == targetDelimiter) return text
+    val body = StringBuilder(text.length + 8)
+    var i = 1
+    val end = text.length - 1
+    while (i < end) {
+        val ch = text[i]
+        if (ch == '\\' && i + 1 < end) {
+            val next = text[i + 1]
+            when {
+                next == sourceDelimiter -> {
+                    if (sourceDelimiter == targetDelimiter) body.append('\\').append(targetDelimiter)
+                    else body.append(next)
+                    i += 2
+                }
+                next == targetDelimiter -> {
+                    body.append('\\').append('\\').append('\\').append(targetDelimiter)
+                    i += 2
+                }
+                else -> {
+                    body.append(ch).append(next)
+                    i += 2
+                }
+            }
+            continue
+        }
+        if (ch == targetDelimiter) {
+            body.append('\\').append(targetDelimiter)
+        } else {
+            body.append(ch)
+        }
+        i++
+    }
+    return buildString(body.length + 2) {
+        append(targetDelimiter)
+        append(body)
+        append(targetDelimiter)
+    }
+}
+
 /**
  * Split a line into parts: code, string literals, and comments.
  * Tracks [inBlockComment] state across lines.
@@ -514,7 +607,7 @@ private fun splitIntoParts(
                 inBlockComment = true
                 last = i
                 i += 2
-            } else if (text[i] == '"' || text[i] == '\'') {
+            } else if (text[i] == '"' || text[i] == '\'' || text[i] == '`') {
                 if (i > last) result.add(Part(text.substring(last, i), PartType.Code))
                 inString = true
                 quoteChar = text[i]

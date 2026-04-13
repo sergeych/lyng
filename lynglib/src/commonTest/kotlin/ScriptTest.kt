@@ -4396,6 +4396,30 @@ class ScriptTest {
     }
 
     @Test
+    fun backtickStringsMatchRegularStringSemantics() = runTest {
+        val d = '$'
+        eval(
+            """
+            val name = "Lyng"
+            val simple = `hello, $d{name}`
+            assertEquals("hello, Lyng", simple)
+            assertEquals("{\"name\":\"Lyng\"}", `{"name":"Lyng"}`)
+            assertEquals("use the `code` style", `use the \`code\` style`)
+            assertEquals("\\\"", `\"`)
+            assertEquals("\"", `"`)
+            assertEquals(
+                "first\n\"second\"\nthird",
+                `
+                    first
+                    "second"
+                    third
+                `
+            )
+        """.trimIndent()
+        )
+    }
+
+    @Test
     fun testInlineArrayLiteral() = runTest {
         eval(
             """

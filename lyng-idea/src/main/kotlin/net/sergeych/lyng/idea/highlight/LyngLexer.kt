@@ -101,8 +101,8 @@ class LyngLexer : LexerBase() {
             return
         }
 
-        // String "..." or '...' with simple escape handling
-        if (ch == '"' || ch == '\'') {
+        // String "...", `...`, or '...' with simple escape handling
+        if (ch == '"' || ch == '\'' || ch == '`') {
             val quote = ch
             i++
             while (i < endOffset) {

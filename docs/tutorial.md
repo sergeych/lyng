@@ -1654,14 +1654,26 @@ The type for the character objects is `Char`.
 
 ### String literal escapes
 
+Lyng string literals can use either double quotes or backticks:
+
+    val a = "hello"
+    val b = `hello`
+    assert(a == b)
+
 | escape | ASCII value           |
 |--------|-----------------------|
 | \n     | 0x10, newline         |
 | \r     | 0x13, carriage return |
 | \t     | 0x07, tabulation      |
 | \\     | \ slash character     |
-| \"     | " double quote        |
 | \uXXXX | unicode code point    |
+
+Delimiter-specific escapes:
+
+| form   | escape | value            |
+|--------|--------|------------------|
+| `"..."` | \"    | " double quote   |
+| `` `...` `` | \` | ` backtick       |
 
 Unicode escape form is exactly 4 hex digits, e.g. `"\u263A"` -> `☺`.
 
@@ -1695,10 +1707,15 @@ Example:
 
     val name = "Lyng"
     assertEquals("hello, Lyng!", "hello, $name!")
+    assertEquals("hello, Lyng!", `hello, $name!`)
     assertEquals("sum=3", "sum=${1+2}")
+    assertEquals("sum=3", `sum=${1+2}`)
     assertEquals("\$name", "\$name")
     assertEquals("\$name", "$$name")
+    assertEquals("\$name", `\$name`)
+    assertEquals("\$name", `$$name`)
     assertEquals("\\Lyng", "\\$name")
+    assertEquals("\\Lyng", `\\$name`)
     >>> void
 
 Interpolation and `printf`-style formatting can be combined when needed:

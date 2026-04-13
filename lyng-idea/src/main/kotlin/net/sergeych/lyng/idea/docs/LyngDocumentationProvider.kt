@@ -310,7 +310,7 @@ class LyngDocumentationProvider : AbstractDocumentationProvider() {
                 // Try literal and call-based receiver inference around the dot
                 val i = TextCtx.prevNonWs(text, dotPos - 1)
                 val className: String? = when {
-                    i >= 0 && text[i] == '"' -> "String"
+                    i >= 0 && (text[i] == '"' || text[i] == '`') -> "String"
                     i >= 0 && text[i] == ']' -> "List"
                     i >= 0 && text[i] == '}' -> "Dict"
                     i >= 0 && text[i] == ')' -> {

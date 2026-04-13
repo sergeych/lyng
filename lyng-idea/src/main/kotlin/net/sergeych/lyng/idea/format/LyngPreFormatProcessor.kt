@@ -24,6 +24,7 @@ import com.intellij.psi.codeStyle.CodeStyleManager
 import com.intellij.psi.impl.source.codeStyle.PreFormatProcessor
 import net.sergeych.lyng.format.LyngFormatConfig
 import net.sergeych.lyng.format.LyngFormatter
+import net.sergeych.lyng.format.LyngStringDelimiterPolicy
 import net.sergeych.lyng.idea.LyngLanguage
 
 /**
@@ -170,6 +171,7 @@ class LyngPreFormatProcessor : PreFormatProcessor {
                 continuationIndentSize = options.CONTINUATION_INDENT_SIZE.coerceAtLeast(options.INDENT_SIZE.coerceAtLeast(1)),
                 applySpacing = true,
                 applyWrapping = false,
+                stringDelimiterPolicy = LyngStringDelimiterPolicy.PreferFewerEscapes,
             )
             val r = if (runFullFileIndent) currentLocalRange() else workingRangeLocal.intersection(currentLocalRange()) ?: currentLocalRange()
             val text = doc.getText(r)
@@ -189,6 +191,7 @@ class LyngPreFormatProcessor : PreFormatProcessor {
                 continuationIndentSize = options.CONTINUATION_INDENT_SIZE.coerceAtLeast(options.INDENT_SIZE.coerceAtLeast(1)),
                 applySpacing = settings.enableSpacing,
                 applyWrapping = true,
+                stringDelimiterPolicy = LyngStringDelimiterPolicy.PreferFewerEscapes,
             )
             val r = if (runFullFileIndent) currentLocalRange() else workingRangeLocal.intersection(currentLocalRange()) ?: currentLocalRange()
             val text = doc.getText(r)

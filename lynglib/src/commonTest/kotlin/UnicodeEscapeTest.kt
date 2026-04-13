@@ -32,6 +32,13 @@ class UnicodeEscapeTest {
     }
 
     @Test
+    fun parserDecodesUnicodeEscapeInBacktickStringLiteral() {
+        val token = parseLyng("`\\u263A`".toSource()).first()
+        assertEquals(Token.Type.STRING, token.type)
+        assertEquals("☺", token.value)
+    }
+
+    @Test
     fun parserDecodesUnicodeEscapeInCharLiteral() {
         val token = parseLyng("'\\u263A'".toSource()).first()
         assertEquals(Token.Type.CHAR, token.type)
@@ -55,6 +62,7 @@ class UnicodeEscapeTest {
     @Test
     fun evalDecodesUnicodeEscapes() = runTest {
         assertEquals(ObjString("☺"), eval("\"\\u263A\""))
+        assertEquals(ObjString("☺"), eval("`\\u263A`"))
         assertEquals(ObjChar('☺'), eval("'\\u263A'"))
     }
 }

@@ -18,8 +18,35 @@ package net.sergeych.lyng.format
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class LyngFormatterTest {
+
+    @Test
+    fun preferBackticksForQuoteHeavyStrings() {
+        val src = "val json = \"{\\\"name\\\":\\\"lyng\\\",\\\"kind\\\":\\\"lang\\\"}\""
+        val cfg = LyngFormatConfig(
+            applySpacing = true,
+            stringDelimiterPolicy = LyngStringDelimiterPolicy.PreferFewerEscapes
+        )
+
+        val out = LyngFormatter.format(src, cfg)
+
+        assertEquals("""val json = `{"name":"lyng","kind":"lang"}`""", out)
+        assertEquals(out, LyngFormatter.format(out, cfg))
+    }
+
+    @Test
+    fun preserveStringsWhenAlternativeWouldNotHelp() {
+        val src = "val sample = \"use `ticks` and keep \\` literal\""
+        val cfg = LyngFormatConfig(
+            stringDelimiterPolicy = LyngStringDelimiterPolicy.PreferFewerEscapes
+        )
+
+        val out = LyngFormatter.format(src, cfg)
+
+        assertEquals(src, out)
+    }
 
     @Test
     fun labelFormatting() {
@@ -79,9 +106,9 @@ class LyngFormatterTest {
 
         val formatted = LyngFormatter.format(src, LyngFormatConfig(applyWrapping = true, maxLineLength = 40, continuationIndentSize = 4))
         // Ensure the string literal remains intact
-        kotlin.test.assertTrue(formatted.contains(arg2), "String literal must be preserved")
+        assertTrue(formatted.contains(arg2), "String literal must be preserved")
         // Ensure end-of-line comment remains
-        kotlin.test.assertTrue(formatted.contains("// end comment"), "EOL comment must be preserved")
+        assertTrue(formatted.contains("// end comment"), "EOL comment must be preserved")
         // Idempotency
         val formatted2 = LyngFormatter.format(formatted, LyngFormatConfig(applyWrapping = true, maxLineLength = 40, continuationIndentSize = 4))
         assertEquals(formatted, formatted2)

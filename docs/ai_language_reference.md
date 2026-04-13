@@ -15,15 +15,16 @@ Primary sources used: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/{Parser,T
 
 ## 2. Lexical Syntax
 - Comments: `// line`, `/* block */`.
-- Strings: `"..."` (supports escapes). Multiline string content is normalized by indentation logic.
-  - Supported escapes: `\n`, `\r`, `\t`, `\"`, `\\`, `\uXXXX` (4 hex digits).
+- Strings: `"..."` or `` `...` `` (supports escapes). Multiline string content is normalized by indentation logic.
+  - Shared escapes: `\n`, `\r`, `\t`, `\\`, `\uXXXX` (4 hex digits).
+  - Delimiter escapes: `\"` inside `"..."`, ``\` `` inside `` `...` ``.
   - Unicode escapes use exactly 4 hex digits (for example: `"\u0416"` -> `Ж`).
   - Unknown `\x` escapes in strings are preserved literally as two characters (`\` and `x`).
   - String interpolation is supported:
-    - identifier form: `"$name"`
-    - expression form: `"${expr}"`
-    - escaped dollar: `"\$"` and `"$$"` both produce literal `$`.
-    - `\\$x` means backslash + interpolated `x`.
+    - identifier form: `"$name"` or `` `$name` ``
+    - expression form: `"${expr}"` or `` `${expr}` ``
+    - escaped dollar: `"\$"`, `"$$"`, `` `\$` ``, and `` `$$` `` all produce literal `$`.
+    - `\\$x` means backslash + interpolated `x` in either delimiter form.
   - Per-file opt-out is supported via leading comment directive:
     - `// feature: interpolation: off`
     - with this directive, `$...` stays literal text.

@@ -420,6 +420,7 @@ private class Fmt : CoreCliktCommand(name = "fmt") {
         val cfg = net.sergeych.lyng.format.LyngFormatConfig(
             applySpacing = enableSpacing,
             applyWrapping = enableWrapping,
+            stringDelimiterPolicy = net.sergeych.lyng.format.LyngStringDelimiterPolicy.PreferFewerEscapes,
         )
 
         var anyChanged = false

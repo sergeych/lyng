@@ -16,6 +16,11 @@
  */
 package net.sergeych.lyng.format
 
+enum class LyngStringDelimiterPolicy {
+    Preserve,
+    PreferFewerEscapes,
+}
+
 /**
  * Formatting configuration for Lyng source code.
  * Defaults are Kotlin-like.
@@ -28,6 +33,7 @@ data class LyngFormatConfig(
     val applySpacing: Boolean = false,
     val applyWrapping: Boolean = false,
     val trailingComma: Boolean = false,
+    val stringDelimiterPolicy: LyngStringDelimiterPolicy = LyngStringDelimiterPolicy.Preserve,
 ) {
     init {
         require(indentSize > 0) { "indentSize must be > 0" }
