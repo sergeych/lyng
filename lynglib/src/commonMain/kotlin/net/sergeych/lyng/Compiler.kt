@@ -220,6 +220,38 @@ class Compiler(
         return result
     }
 
+    private fun captureNamesForBytecodeFunction(
+        bytecodeFn: CmdFunction,
+        declaredCaptureNames: List<String> = emptyList()
+    ): List<String> {
+        val ordered = LinkedHashSet<String>()
+        ordered.addAll(declaredCaptureNames)
+        val names = bytecodeFn.localSlotNames
+        val captures = bytecodeFn.localSlotCaptures
+        for (i in names.indices) {
+            if (captures.getOrNull(i) != true) continue
+            val name = names[i] ?: continue
+            ordered.add(name)
+        }
+        collectNestedModuleCaptureNames(bytecodeFn, ordered)
+        return ordered.toList()
+    }
+
+    private fun collectNestedModuleCaptureNames(bytecodeFn: CmdFunction, out: LinkedHashSet<String>) {
+        for (constant in bytecodeFn.constants) {
+            val lambda = constant as? BytecodeConst.LambdaFn ?: continue
+            val table = lambda.captureTableId?.let { bytecodeFn.constants.getOrNull(it) as? BytecodeConst.CaptureTable }
+            if (table != null) {
+                for ((index, entry) in table.entries.withIndex()) {
+                    if (entry.ownerKind != CaptureOwnerFrameKind.MODULE) continue
+                    val name = lambda.captureNames.getOrNull(index) ?: continue
+                    out.add(name)
+                }
+            }
+            collectNestedModuleCaptureNames(lambda.fn, out)
+        }
+    }
+
     private fun seedSlotPlanFromScope(scope: Scope, includeParents: Boolean = false) {
         val plan = moduleSlotPlan() ?: return
         seedingSlotPlan = true
@@ -9166,20 +9198,10 @@ class Compiler(
                     val declaredNames = bytecodeFn.constants
                         .mapNotNull { it as? BytecodeConst.LocalDecl }
                         .mapTo(mutableSetOf()) { it.name }
-                    val captureNames = if (captureSlots.isNotEmpty()) {
+                    val captureNames = captureNamesForBytecodeFunction(
+                        bytecodeFn,
                         captureSlots.map { it.name }
-                    } else {
-                        val fn = bytecodeFn
-                        val names = fn.localSlotNames
-                        val captures = fn.localSlotCaptures
-                        val ordered = LinkedHashSet<String>()
-                        for (i in names.indices) {
-                            if (captures.getOrNull(i) != true) continue
-                            val name = names[i] ?: continue
-                            ordered.add(name)
-                        }
-                        ordered.toList()
-                    }
+                    )
                     val prebuiltCaptures = closureBox.captureRecords
                     if (prebuiltCaptures != null && captureNames.isNotEmpty()) {
                         context.captureRecords = prebuiltCaptures

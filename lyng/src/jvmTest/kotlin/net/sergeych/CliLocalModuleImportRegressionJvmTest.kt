@@ -1,15 +1,74 @@
+/*
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
 package net.sergeych
 
+import kotlinx.coroutines.runBlocking
 import net.sergeych.lyng.EvalSession
 import net.sergeych.lyng.Source
 import net.sergeych.lyng.obj.ObjString
-import kotlinx.coroutines.runBlocking
+import org.junit.After
+import org.junit.Before
+import java.io.ByteArrayOutputStream
+import java.io.PrintStream
 import java.nio.file.Files
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class CliLocalModuleImportRegressionJvmTest {
+    private val originalOut: PrintStream = System.out
+    private val originalErr: PrintStream = System.err
+
+    private class TestExit(val code: Int) : RuntimeException()
+
+    @Before
+    fun setUp() {
+        jvmExitImpl = { code -> throw TestExit(code) }
+    }
+
+    @After
+    fun tearDown() {
+        System.setOut(originalOut)
+        System.setErr(originalErr)
+        jvmExitImpl = { code -> kotlin.system.exitProcess(code) }
+    }
+
+    private data class CliResult(val out: String, val err: String, val exitCode: Int?)
+
+    private fun runCli(vararg args: String): CliResult {
+        val outBuf = ByteArrayOutputStream()
+        val errBuf = ByteArrayOutputStream()
+        System.setOut(PrintStream(outBuf, true, Charsets.UTF_8))
+        System.setErr(PrintStream(errBuf, true, Charsets.UTF_8))
+
+        var exitCode: Int? = null
+        try {
+            runMain(arrayOf(*args))
+        } catch (e: TestExit) {
+            exitCode = e.code
+        } finally {
+            System.out.flush()
+            System.err.flush()
+        }
+        return CliResult(outBuf.toString("UTF-8"), errBuf.toString("UTF-8"), exitCode)
+    }
 
     private fun writeTransitiveImportTree(root: java.nio.file.Path) {
         val packageDir = Files.createDirectories(root.resolve("package1"))
@@ -74,6 +133,49 @@ class CliLocalModuleImportRegressionJvmTest {
         )
     }
 
+    private fun writeNestedLaunchImportBugTree(root: java.nio.file.Path) {
+        val packageDir = Files.createDirectories(root.resolve("package1"))
+
+        packageDir.resolve("alpha.lyng").writeText(
+            """
+            import lyng.io.net
+            import package1.bravo
+
+            class Alpha {
+                val tcpServer: TcpServer
+                val headers = Map<String, String>()
+
+                fn startListen(port, host) {
+                    tcpServer = Net.tcpListen(port, host)
+            //        println("tcpServer.isOpen: " + tcpServer.isOpen())     // historical workaround; should not be needed
+                    launch {
+                        try {
+                            while (true) {
+                                val tcpSocket = tcpServer.accept()
+                                var bravo = Bravo()
+                                bravo.doSomething()
+                                tcpSocket.close()
+                                break
+                            }
+                        } finally {
+                            tcpServer.close()
+                        }
+                    }
+                }
+            }
+            """.trimIndent()
+        )
+        packageDir.resolve("bravo.lyng").writeText(
+            """
+            class Bravo {
+                fn doSomething() {
+                    println("Bravo.doSomething")
+                }
+            }
+            """.trimIndent()
+        )
+    }
+
     @Test
     fun localModuleUsingLaunchAndNetImportsWithoutStdlibRedefinition() = runBlocking {
         val root = Files.createTempDirectory("lyng-cli-import-regression")
@@ -130,6 +232,45 @@ class CliLocalModuleImportRegressionJvmTest {
             } finally {
                 session.cancelAndJoin()
             }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun localModuleImportUsedOnlyInsideMethodLaunchClosureRemainsPrepared() = runBlocking {
+        val root = Files.createTempDirectory("lyng-cli-import-regression-launch")
+        try {
+            val mainFile = root.resolve("main.lyng")
+            val port = java.net.ServerSocket(0).let {
+                val selected = it.localPort
+                it.close()
+                selected
+            }
+            writeNestedLaunchImportBugTree(root)
+            mainFile.writeText(
+                """
+                import lyng.io.net
+                import package1.alpha
+
+                val alpha = Alpha()
+                alpha.startListen($port, "127.0.0.1")
+
+                delay(50)
+
+                val socket = Net.tcpConnect("127.0.0.1", $port)
+                socket.writeUtf8("ping")
+                socket.flush()
+                socket.close()
+
+                delay(50)
+                """.trimIndent()
+            )
+
+            val result = runCli(mainFile.toString())
+            assertTrue(result.err.isBlank(), result.err)
+            assertFalse(result.out.contains("module capture 'Bravo'"), result.out)
+            assertTrue(result.out.contains("Bravo.doSomething"), result.out)
         } finally {
             root.toFile().deleteRecursively()
         }

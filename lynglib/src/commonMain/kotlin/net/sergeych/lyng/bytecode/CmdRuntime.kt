@@ -2536,10 +2536,8 @@ class CmdDeclFunction(internal val constId: Int, internal val slot: Int) : Cmd()
 }
 
 private fun captureNamesForFunctionDecl(spec: net.sergeych.lyng.FunctionDeclSpec): List<String> {
-    if (spec.captureSlots.isNotEmpty()) {
-        return spec.captureSlots.map { it.name }
-    }
-    return captureNamesForStatement(spec.fnBody)
+    val declaredCaptures = spec.captureSlots.map { it.name }
+    return mergeCaptureNames(declaredCaptures, captureNamesForStatement(spec.fnBody))
 }
 
 private fun captureNamesForStatement(stmt: Statement?): List<String> {
@@ -2549,6 +2547,10 @@ private fun captureNamesForStatement(stmt: Statement?): List<String> {
         is BytecodeBodyProvider -> stmt.bytecodeBody()?.bytecodeFunction()
         else -> null
     } ?: return emptyList()
+    return captureNamesForBytecode(bytecode)
+}
+
+private fun captureNamesForBytecode(bytecode: CmdFunction): List<String> {
     val names = bytecode.localSlotNames
     val captures = bytecode.localSlotCaptures
     val ordered = LinkedHashSet<String>()
@@ -2557,7 +2559,31 @@ private fun captureNamesForStatement(stmt: Statement?): List<String> {
         val name = names[i] ?: continue
         ordered.add(name)
     }
+    collectNestedModuleCaptureNames(bytecode, ordered)
     return ordered.toList()
+}
+
+private fun collectNestedModuleCaptureNames(bytecode: CmdFunction, out: LinkedHashSet<String>) {
+    for (constant in bytecode.constants) {
+        val lambda = constant as? BytecodeConst.LambdaFn ?: continue
+        val table = lambda.captureTableId?.let { bytecode.constants.getOrNull(it) as? BytecodeConst.CaptureTable }
+        if (table != null) {
+            for ((index, entry) in table.entries.withIndex()) {
+                if (entry.ownerKind != CaptureOwnerFrameKind.MODULE) continue
+                val name = lambda.captureNames.getOrNull(index) ?: continue
+                out.add(name)
+            }
+        }
+        collectNestedModuleCaptureNames(lambda.fn, out)
+    }
+}
+
+private fun findInheritedCaptureRecord(scope: Scope, name: String): ObjRecord? {
+    val inheritedNames = scope.captureNames ?: return null
+    val inheritedRecords = scope.captureRecords ?: return null
+    val inheritedIndex = inheritedNames.indexOf(name)
+    if (inheritedIndex < 0) return null
+    return inheritedRecords.getOrNull(inheritedIndex)
 }
 
 private fun freezeImmutableCaptureRecord(record: ObjRecord): ObjRecord {
@@ -4230,24 +4256,17 @@ class CmdFrame(
                     }
                     val name = captureNames?.getOrNull(index)
                     if (name != null) {
-                        val inheritedNames = scope.captureNames
-                        val inheritedRecords = scope.captureRecords
-                        if (inheritedNames != null && inheritedRecords != null) {
-                            val inheritedIndex = inheritedNames.indexOf(name)
-                            if (inheritedIndex >= 0) {
-                                val inherited = inheritedRecords.getOrNull(inheritedIndex)
-                                if (inherited != null) {
-                                    val copied = ObjRecord(
-                                        value = inherited.value,
-                                        isMutable = inherited.isMutable,
-                                        visibility = inherited.visibility,
-                                        isTransient = inherited.isTransient,
-                                        type = inherited.type
-                                    )
-                                    copied.delegate = inherited.delegate
-                                    return@mapIndexed copied
-                                }
-                            }
+                        val inherited = findInheritedCaptureRecord(scope, name)
+                        if (inherited != null) {
+                            val copied = ObjRecord(
+                                value = inherited.value,
+                                isMutable = inherited.isMutable,
+                                visibility = inherited.visibility,
+                                isTransient = inherited.isTransient,
+                                type = inherited.type
+                            )
+                            copied.delegate = inherited.delegate
+                            return@mapIndexed copied
                         }
                     }
                     val isMutable = fn.localSlotMutables.getOrNull(localIndex) ?: false
@@ -4293,6 +4312,7 @@ class CmdFrame(
                         // Fallback to current scope in case the module scope isn't in the parent chain
                         // or doesn't carry the imported symbol yet.
                         findNamedExistingRecord(scope, name)?.let { return@mapIndexed it }
+                        findInheritedCaptureRecord(scope, name)?.let { return@mapIndexed it }
                     }
                     if (slotId < target.slotCount) {
                         val existing = target.getSlotRecord(slotId)
