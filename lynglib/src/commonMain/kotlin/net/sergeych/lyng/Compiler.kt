@@ -2086,7 +2086,7 @@ class Compiler(
             return null
         }
         if (scopeSeedNames.contains(name)) {
-            val isModuleSlot = modulePlan != null && slotLoc.scopeId == modulePlan.id
+            val isModuleSlot = resolvesToModuleSeedSlot(name, slotLoc)
             if (!isModuleSlot || useScopeSlots) return null
         }
         recordCaptureSlot(name, slotLoc)
@@ -2103,6 +2103,24 @@ class Compiler(
             captureOwnerScopeId = slotLoc.scopeId,
             captureOwnerSlot = slotLoc.slot
         )
+    }
+
+    private fun resolvesToModuleSeedSlot(name: String, slotLoc: SlotLocation): Boolean {
+        val modulePlan = moduleSlotPlan() ?: return false
+        var current: SlotLocation? = slotLoc
+        val visitedScopeIds = HashSet<Int>()
+        while (current != null && visitedScopeIds.add(current.scopeId)) {
+            if (current.scopeId == modulePlan.id) {
+                return true
+            }
+            val owner = capturePlanStack
+                .firstOrNull { it.slotPlan.id == current.scopeId }
+                ?.captureOwners
+                ?.get(name)
+                ?: return false
+            current = owner
+        }
+        return false
     }
 
     private fun captureSlotRef(name: String, pos: Pos): ObjRef? {

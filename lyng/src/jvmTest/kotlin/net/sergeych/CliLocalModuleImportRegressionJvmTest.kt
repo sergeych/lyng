@@ -146,18 +146,27 @@ class CliLocalModuleImportRegressionJvmTest {
                 val headers = Map<String, String>()
 
                 fn startListen(port, host) {
+                    var eager = Bravo()
+                    eager.doSomething()
                     tcpServer = Net.tcpListen(port, host)
-            //        println("tcpServer.isOpen: " + tcpServer.isOpen())     // historical workaround; should not be needed
+                    println("tcpServer.isOpen: " + tcpServer.isOpen())
                     launch {
                         try {
                             while (true) {
+                                println("wait for accept...")
                                 val tcpSocket = tcpServer.accept()
+                                println("var bravo = Bravo()")
                                 var bravo = Bravo()
+                                println("bravo.doSomething()...")
                                 bravo.doSomething()
+                                println("bravo.doSomething()... OK")
                                 tcpSocket.close()
                                 break
                             }
+                        } catch (e) {
+                            println("ERR [Alpha.startListen]: '", e, "'")
                         } finally {
+                            println("FIN [Alpha.startListen]")
                             tcpServer.close()
                         }
                     }
@@ -259,6 +268,7 @@ class CliLocalModuleImportRegressionJvmTest {
                 delay(50)
 
                 val socket = Net.tcpConnect("127.0.0.1", $port)
+                println("send ping...")
                 socket.writeUtf8("ping")
                 socket.flush()
                 socket.close()
@@ -269,8 +279,10 @@ class CliLocalModuleImportRegressionJvmTest {
 
             val result = runCli(mainFile.toString())
             assertTrue(result.err.isBlank(), result.err)
+            assertFalse(result.out.contains("ERR [Alpha.startListen]"), result.out)
             assertFalse(result.out.contains("module capture 'Bravo'"), result.out)
-            assertTrue(result.out.contains("Bravo.doSomething"), result.out)
+            assertTrue(result.out.contains("bravo.doSomething()... OK"), result.out)
+            assertEquals(2, Regex("Bravo\\.doSomething").findAll(result.out).count(), result.out)
         } finally {
             root.toFile().deleteRecursively()
         }

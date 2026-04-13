@@ -28,3 +28,4 @@ debug.log
 /compile_metadata_output.txt
 test_output*.txt
 /site/src/version-template/lyng-version.js
+/bugs/
