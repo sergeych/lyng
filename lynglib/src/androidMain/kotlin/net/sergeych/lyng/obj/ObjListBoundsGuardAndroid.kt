@@ -17,4 +17,5 @@
 
 package net.sergeych.lyng.obj
 
-internal actual fun objListBoundsViolationMessageOrNull(size: Int, index: Int): String? = null
+internal actual fun objListBoundsViolationMessageOrNull(size: Int, index: Int): String? =
+    if (index < 0 || index >= size) "Index $index out of bounds for length $size" else null

@@ -106,16 +106,18 @@ open class ObjException(
                     val pos = s.pos
                     if (pos != lastPos && !pos.currentLine.isEmpty()) {
                         if (lastPos == null || (lastPos.source != pos.source || lastPos.line != pos.line)) {
+                            val sourceLine = pos.currentLineTrimmedStart
+                            val visualColumn = pos.visualColumn
                             val fallback =
-                                ObjString("#${pos.source.objSourceName}:${pos.line+1}:${pos.column+1}: ${pos.currentLine}")
+                                ObjString("#${pos.source.objSourceName}:${pos.line+1}:${visualColumn+1}: $sourceLine")
                             if (maybeCls != null) {
                                 try {
                                     result.list += maybeCls.callWithArgs(
                                         scope,
                                         pos.source.objSourceName,
                                         ObjInt(pos.line.toLong()),
-                                        ObjInt(pos.column.toLong()),
-                                        ObjString(pos.currentLine)
+                                        ObjInt(visualColumn.toLong()),
+                                        ObjString(sourceLine)
                                     )
                                 } catch (e: Throwable) {
                                     // Fallback textual entry if StackTraceEntry fails to instantiate

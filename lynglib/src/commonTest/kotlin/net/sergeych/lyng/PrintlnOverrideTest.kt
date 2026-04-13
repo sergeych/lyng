@@ -22,6 +22,8 @@ import net.sergeych.lyng.bridge.globalBinder
 import net.sergeych.lyng.obj.ObjVoid
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class PrintlnOverrideTest {
 
@@ -83,5 +85,47 @@ class PrintlnOverrideTest {
         """.trimIndent())
 
         assertEquals(listOf("gb top level", "gb inside function"), output)
+    }
+
+    @Test
+    fun testExceptionPrintStackTraceFormatsPrimaryFrameBlock() = runTest {
+        val scope = Script.newScope()
+        val output = mutableListOf<String>()
+
+        scope.globalBinder().bindGlobalFun("println") {
+            val sb = StringBuilder()
+            for (i in 0 until args.size) {
+                if (i > 0) sb.append(" ")
+                sb.append(string(i))
+            }
+            output.add(sb.toString())
+            ObjVoid
+        }
+
+        scope.eval(
+            """
+            fun boom() {
+                val arr = [10, 20, 30]
+                var a = 10
+                var b = arr[a]
+                b
+            }
+            try {
+                boom()
+            } catch (e) {
+                e.printStackTrace()
+            }
+            """.trimIndent()
+        )
+
+        assertTrue(output.isNotEmpty())
+        assertEquals(
+            "IndexOutOfBoundsException: Index 10 out of bounds for length 3 at eval:4:9:",
+            output[0]
+        )
+        assertEquals("var b = arr[a]", output[1])
+        assertEquals("--------^", output[2])
+        assertTrue(output.size >= 4)
+        assertFalse(output.any { it == "        at eval:4:9: var b = arr[a]" })
     }
 }

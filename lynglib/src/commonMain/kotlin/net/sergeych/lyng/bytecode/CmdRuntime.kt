@@ -43,9 +43,10 @@ class CmdVm {
                 }
                 break
             } catch (e: Throwable) {
-                if (!frame.handleException(e)) {
+                val throwable = frame.normalizeThrowable(e)
+                if (!frame.handleException(throwable)) {
                     frame.cancelIterators()
-                    throw e
+                    throw throwable
                 }
             }
         }
@@ -4430,6 +4431,19 @@ class CmdFrame(
             lastScopePosIp = ip
         }
         return scope
+    }
+
+    suspend fun normalizeThrowable(t: Throwable): Throwable {
+        if (t is ExecutionError || t is ReturnException || t is LoopBreakContinueException) return t
+        val parentScope = ensureScope()
+        val pos = (t as? ScriptError)?.pos ?: currentErrorPos() ?: parentScope.pos
+        val throwScope = parentScope.createChildScope(pos = pos)
+        val message = when (t) {
+            is ScriptError -> t.errorMessage
+            else -> t.message ?: t.toString()
+        }
+        val errorObject = ObjUnknownException(throwScope, message).apply { getStackTrace() }
+        return ExecutionError(errorObject, pos, message, t)
     }
 
     suspend fun handleException(t: Throwable): Boolean {

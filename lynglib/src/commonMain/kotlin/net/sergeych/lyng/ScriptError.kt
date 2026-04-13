@@ -25,14 +25,15 @@ open class ScriptError(val pos: Pos, val errorMessage: String, cause: Throwable?
     """
         $pos: Error: $errorMessage
         
-        ${pos.currentLine}
-        ${if( pos.column >= 0 ) "-".repeat(pos.column) + "^" else ""}
+        ${pos.currentLineTrimmedStart}
+        ${if( pos.column >= 0 ) "-".repeat(pos.visualColumn) + "^" else ""}
     """.trimIndent(),
     cause
 )
 
 class ScriptFlowIsNoMoreCollected: Exception()
 
-class ExecutionError(val errorObject: Obj, pos: Pos, message: String) : ScriptError(pos, message)
+class ExecutionError(val errorObject: Obj, pos: Pos, message: String, cause: Throwable? = null) :
+    ScriptError(pos, message, cause)
 
 class ImportException(pos: Pos, message: String) : ScriptError(pos, message)

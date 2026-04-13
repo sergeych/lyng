@@ -5262,6 +5262,35 @@ class ScriptTest {
     }
 
     @Test
+    fun testUnexpectedThrowablePreservesThrowSiteStackTrace() = runTest {
+        val caught = evalNamed(
+            "baderrorstack", """
+            fun boom() {
+                val arr = [10, 20, 30]
+                arr[10]
+            }
+            try {
+                boom()
+                "unreachable"
+            } catch (e) {
+                e
+            }
+        """.trimIndent()
+        )
+        val trace = caught.getLyngExceptionMessageWithStackTrace()
+        assertContains(trace, "\n    at baderrorstack:3:1: arr[10]")
+        assertContains(trace, "\n    at baderrorstack:6:1: boom()")
+        assertFalse(trace.contains("catch (e)"))
+    }
+
+    @Test
+    fun testScriptErrorMessageTrimsSourceIndent() = runTest {
+        val x = ScriptError(Pos(Source("trimraw", "    arr[10]"), 0, 4), "boom")
+        assertContains(x.message!!, "\narr[10]\n")
+        assertFalse(x.message!!.contains("\n    arr[10]\n"))
+    }
+
+    @Test
     fun testMapIteralAmbiguity() = runTest {
         eval(
             """

@@ -441,9 +441,25 @@ static fun List<T>.fill(size: Int, block: (Int)->T): List<T> {
 
 /* Print this exception and its stack trace to standard output. */
 fun Exception.printStackTrace(): void {
-    println(this)
+    if( stackTrace.size == 0 ) {
+        println(this)
+        return
+    }
+    val first = stackTrace[0] as StackTraceEntry
+    var arrow = "^"
+    for( i in 0..<first.column ) {
+        arrow = "-" + arrow
+    }
+    println("%s: %s at %s:"(this::class.className, message, first.at))
+    println(first.sourceString)
+    println(arrow)
+    var skipFirst = true
     for( entry in stackTrace ) {
-        println("\tat "+entry.toString())
+        if( skipFirst ) {
+            skipFirst = false
+        } else {
+            println("        at " + entry.toString())
+        }
     }
 }
 

@@ -33,6 +33,17 @@ data class Pos(val source: Source, val line: Int, val column: Int) {
         if( end ) "EOF"
         else if( line >= 0 ) source.lines[line] else "<no line information>"
 
+    val currentLineTrimmedStart: String get() = currentLine.trimStart()
+
+    val currentLineIndentWidth: Int
+        get() {
+            val lineText = currentLine
+            val firstNonWhitespace = lineText.indexOfFirst { !it.isWhitespace() }
+            return if (firstNonWhitespace >= 0) firstNonWhitespace else 0
+        }
+
+    val visualColumn: Int get() = (column - currentLineIndentWidth).coerceAtLeast(0)
+
     val end: Boolean get() = line >= source.lines.size
 
     companion object {

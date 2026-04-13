@@ -3650,11 +3650,14 @@ class BytecodeCompiler(
     }
 
     private fun compileIndexRef(ref: IndexRef): CompiledValue? {
+        val indexPos = refPosOrCurrent(ref.targetRef)
+        setPos(indexPos)
         val receiver = compileRefWithFallback(ref.targetRef, null, Pos.builtIn) ?: return null
         val elementSlotType = indexElementSlotType(receiver.slot, ref.targetRef)
         val dst = allocSlot()
         if (!ref.optionalRef) {
             val index = compileRefWithFallback(ref.indexRef, null, Pos.builtIn) ?: return null
+            setPos(indexPos)
             if (elementSlotType == SlotType.INT && index.type == SlotType.INT) {
                 builder.emit(Opcode.GET_INDEX_INT, receiver.slot, index.slot, dst)
                 updateSlotType(dst, SlotType.INT)
