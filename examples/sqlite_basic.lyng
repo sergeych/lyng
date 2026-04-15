@@ -1,0 +1,93 @@
+import lyng.io.db
+import lyng.io.db.sqlite
+import lyng.time
+
+println("SQLite demo: typed open, generic open, result sets, generated keys, nested rollback")
+
+// The typed helper is the simplest entry point when you know you want SQLite.
+val db = openSqlite(":memory:")
+
+db.transaction { tx ->
+    // Keep schema creation and data changes inside one transaction block.
+    tx.execute("create table task(id integer primary key autoincrement, title text not null, done integer not null, due_date date not null)")
+
+    // execute(...) is for side-effect statements. Generated keys are read from
+    // ExecutionResult rather than from a synthetic row-returning INSERT.
+    val firstInsert = tx.execute(
+        "insert into task(title, done, due_date) values(?, ?, ?)",
+        "Write a SQLite example",
+        false,
+        Date(2026, 4, 15)
+    )
+    val firstGeneratedKeys = firstInsert.getGeneratedKeys()
+    val firstId = firstGeneratedKeys.toList()[0][0]
+    assertEquals(1, firstId)
+
+    tx.execute(
+        "insert into task(title, done, due_date) values(?, ?, ?)",
+        "Review the DB API",
+        true,
+        Date(2026, 4, 16)
+    )
+
+    // Nested transactions are real savepoints. If the inner block fails,
+    // only the nested work is rolled back.
+    try {
+        tx.transaction { inner ->
+            inner.execute(
+                "insert into task(title, done, due_date) values(?, ?, ?)",
+                "This row is rolled back",
+                false,
+                Date(2026, 4, 17)
+            )
+            throw IllegalStateException("demonstrate nested rollback")
+        }
+    } catch (_: IllegalStateException) {
+        println("Nested transaction rolled back as expected")
+    }
+
+    // select(...) is for row-producing statements. ResultSet exposes metadata,
+    // cheap emptiness checks, iteration, and conversion to a plain list.
+    val tasks = tx.select("select id, title, done, due_date from task order by id")
+    assertEquals(false, tasks.isEmpty())
+    assertEquals(2, tasks.size())
+
+    println("Columns:")
+    for (column in tasks.columns) {
+        println("  " + column.name + " -> " + column.sqlType + " (native " + column.nativeType + ")")
+    }
+
+    val taskRows = tasks.toList()
+
+    println("Rows:")
+    for (row in taskRows) {
+        // Name lookups are case-insensitive and values are already converted.
+        println("  #" + row["ID"] + " " + row["title"] + " done=" + row["done"] + " due=" + row["due_date"])
+    }
+
+    // If values need to survive after the transaction closes, copy them now.
+    val snapshot = tx.select("select title, due_date from task order by id").toList()
+    assertEquals("Write a SQLite example", snapshot[0]["title"])
+    assertEquals(Date(2026, 4, 16), snapshot[1]["due_date"])
+
+    val count = tx.select("select count(*) as count from task").toList()[0]["count"]
+    assertEquals(2, count)
+    println("Visible rows after nested rollback: $count")
+}
+
+// The generic entry point stays useful for config-driven code.
+val genericDb = openDatabase(
+    "sqlite::memory:",
+    Map(
+        "foreignKeys" => true,
+        "busyTimeoutMillis" => 1000
+    )
+)
+
+val answer = genericDb.transaction { tx ->
+    tx.select("select 42 as answer").toList()[0]["answer"]
+}
+
+assertEquals(42, answer)
+println("Generic openDatabase(...) also works: answer=$answer")
+println("OK")

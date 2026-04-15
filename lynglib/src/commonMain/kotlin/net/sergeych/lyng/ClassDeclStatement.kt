@@ -85,6 +85,15 @@ internal suspend fun executeClassDecl(
     }
 
     if (spec.isExtern) {
+        val parentClasses = spec.baseSpecs.mapNotNull { baseSpec ->
+            val rec = scope[baseSpec.name]
+            val cls = rec?.value as? ObjClass
+            when {
+                cls != null -> cls
+                baseSpec.name == "Exception" -> ObjException.Root
+                else -> null
+            }
+        }
         val rec = scope[spec.className]
         val existing = rec?.value as? ObjClass
         val resolved = if (existing != null) {
@@ -94,8 +103,42 @@ internal suspend fun executeClassDecl(
         } else {
             null
         }
-        val stub = resolved ?: ObjInstanceClass(spec.className).apply { this.isAbstract = true }
-        spec.declaredName?.let { scope.addItem(it, false, stub) }
+        val stub = resolved ?: ObjInstanceClass(spec.className, *parentClasses.toTypedArray()).apply {
+            this.isAbstract = true
+            constructorMeta = spec.constructorArgs
+            spec.constructorArgs?.params?.forEach { p ->
+                if (p.accessType != null) {
+                    createField(
+                        p.name,
+                        ObjNull,
+                        isMutable = p.accessType == AccessType.Var,
+                        visibility = p.visibility ?: Visibility.Public,
+                        declaringClass = this,
+                        pos = Pos.builtIn,
+                        isTransient = p.isTransient,
+                        type = ObjRecord.Type.ConstructorField,
+                        fieldId = spec.constructorFieldIds?.get(p.name)
+                    )
+                }
+            }
+        }
+        spec.declaredName?.let { name ->
+            if (scope.getLocalRecordDirect(name)?.value !== stub) {
+                scope.addItem(name, false, stub)
+            }
+        }
+        if (resolved == null && (spec.bodyInit != null || spec.initScope.isNotEmpty())) {
+            val classScope = stub.classScope ?: scope.createChildScope(newThisObj = stub).also {
+                it.currentClassCtx = stub
+                stub.classScope = it
+            }
+            spec.bodyInit?.let { executeBytecodeWithSeed(classScope, it, "extern class body init") }
+            if (spec.initScope.isNotEmpty()) {
+                for (s in spec.initScope) {
+                    executeBytecodeWithSeed(classScope, s, "extern class init")
+                }
+            }
+        }
         return stub
     }
 

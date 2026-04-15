@@ -18,32 +18,24 @@
 package net.sergeych.lyng.io.db.sqlite
 
 import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.TimeZone
+import net.sergeych.lyng.Compiler
 import net.sergeych.lyng.ExecutionError
 import net.sergeych.lyng.ModuleScope
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Script
-import net.sergeych.lyng.obj.Obj
-import net.sergeych.lyng.obj.ObjBuffer
-import net.sergeych.lyng.obj.ObjBool
-import net.sergeych.lyng.obj.ObjDateTime
-import net.sergeych.lyng.obj.ObjExternCallable
-import net.sergeych.lyng.obj.ObjInt
-import net.sergeych.lyng.obj.ObjInstant
-import net.sergeych.lyng.obj.ObjMap
-import net.sergeych.lyng.obj.ObjNull
-import net.sergeych.lyng.obj.ObjString
-import net.sergeych.lyng.obj.raiseAsExecutionError
+import net.sergeych.lyng.Source
+import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.obj.requiredArg
 import net.sergeych.lyng.requireScope
-import kotlinx.datetime.TimeZone
 import java.nio.file.Files
 import kotlin.io.path.deleteIfExists
-import kotlin.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 class LyngSqliteModuleTest {
 
@@ -98,6 +90,51 @@ class LyngSqliteModuleTest {
         ) as ObjInt
 
         assertEquals(2L, count.value)
+    }
+
+    @Test
+    fun testImportedDatabaseOpenersPreserveDeclaredReturnTypesForInference() = runTest {
+        val scope = Script.newScope()
+        createSqliteModule(scope.importManager)
+
+        val code = """
+            import lyng.io.db
+            import lyng.io.db.sqlite
+
+            val typedDb = openSqlite(":memory:")
+            typedDb.transaction { 1 }
+
+            val genericDb = openDatabase("sqlite::memory:", Map())
+            genericDb.transaction { 2 }
+        """.trimIndent()
+
+        Compiler.compile(Source("<sqlite-inference>", code), scope.importManager).execute(scope)
+    }
+
+    @Test
+    fun testTransactionLambdaParameterTypeIsInferredFromDatabaseSignature() = runTest {
+        val scope = Script.newScope()
+        createSqliteModule(scope.importManager)
+
+        val code = """
+            import lyng.io.db
+            import lyng.io.db.sqlite
+            import lyng.time
+
+            val db = openSqlite(":memory:")
+            db.transaction { tx ->
+                tx.execute("create table item(id integer primary key autoincrement, name text not null, due_date date not null)")
+                tx.execute("insert into item(name, due_date) values(?, ?)", "outer", Date(2026, 4, 16))
+                tx.transaction { inner ->
+                    inner.execute("insert into item(name, due_date) values(?, ?)", "inner", Date(2026, 4, 17))
+                    1
+                }
+                2
+            }
+        """.trimIndent()
+
+        val result = Compiler.compile(Source("<sqlite-lambda-inference>", code), scope.importManager).execute(scope) as ObjInt
+        assertEquals(2L, result.value)
     }
 
     @Test

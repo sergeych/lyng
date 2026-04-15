@@ -803,12 +803,19 @@ open class Scope(
     fun addFn(vararg names: String, callSignature: CallSignature? = null, fn: suspend ScopeFacade.() -> Obj) {
         val newFn = net.sergeych.lyng.obj.ObjExternCallable.fromBridge { fn() }
         for (name in names) {
+            val existing = objects[name]
             addItem(
                 name,
-                false,
+                existing?.isMutable ?: false,
                 newFn,
+                visibility = existing?.visibility ?: Visibility.Public,
+                writeVisibility = existing?.writeVisibility,
                 recordType = ObjRecord.Type.Fun,
-                callSignature = callSignature
+                isAbstract = false,
+                isClosed = existing?.isClosed ?: false,
+                isOverride = existing?.isOverride ?: false,
+                callSignature = callSignature ?: existing?.callSignature,
+                typeDecl = existing?.typeDecl
             )
         }
     }

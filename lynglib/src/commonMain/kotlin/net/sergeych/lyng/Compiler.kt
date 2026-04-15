@@ -191,6 +191,7 @@ class Compiler(
     private val lambdaCaptureEntriesByRef: MutableMap<ValueFnRef, List<net.sergeych.lyng.bytecode.LambdaCaptureEntry>> =
         mutableMapOf()
     private val classFieldTypesByName: MutableMap<String, MutableMap<String, ObjClass>> = mutableMapOf()
+    private val classMemberTypeDeclByName: MutableMap<String, MutableMap<String, TypeDecl>> = mutableMapOf()
     private val classMethodReturnTypeByName: MutableMap<String, MutableMap<String, ObjClass>> = mutableMapOf()
     private val classMethodReturnTypeDeclByName: MutableMap<String, MutableMap<String, TypeDecl>> = mutableMapOf()
     private val classScopeMembersByClassName: MutableMap<String, MutableSet<String>> = mutableMapOf()
@@ -652,10 +653,31 @@ class Compiler(
         val cls = clsFromScope ?: clsFromImports ?: resolveClassByName(name) ?: return null
         val fieldIds = cls.instanceFieldIdMap()
         val methodIds = cls.instanceMethodIdMap(includeAbstract = true)
+        val memberTypeDecls = collectClassMemberTypeDecls(cls)
         val baseNames = cls.directParents.map { it.className }
         val nextFieldId = (fieldIds.values.maxOrNull() ?: -1) + 1
         val nextMethodId = (methodIds.values.maxOrNull() ?: -1) + 1
-        return CompileClassInfo(name, cls.logicalPackageName, fieldIds, methodIds, nextFieldId, nextMethodId, baseNames)
+        return CompileClassInfo(
+            name,
+            cls.logicalPackageName,
+            fieldIds,
+            methodIds,
+            nextFieldId,
+            nextMethodId,
+            baseNames,
+            memberTypeDecls = memberTypeDecls
+        )
+    }
+
+    private fun collectClassMemberTypeDecls(cls: ObjClass): Map<String, TypeDecl> {
+        val result = mutableMapOf<String, TypeDecl>()
+        for (name in cls.instanceFieldIdMap().keys) {
+            cls.getInstanceMemberOrNull(name, includeAbstract = true)?.typeDecl?.let { result[name] = it }
+        }
+        for (name in cls.instanceMethodIdMap(includeAbstract = true).keys) {
+            cls.getInstanceMemberOrNull(name, includeAbstract = true)?.typeDecl?.let { result[name] = it }
+        }
+        return result
     }
 
     private data class BaseMemberIds(
@@ -1672,7 +1694,8 @@ class Compiler(
         val methodIds: Map<String, Int>,
         val nextFieldId: Int,
         val nextMethodId: Int,
-        val baseNames: List<String>
+        val baseNames: List<String>,
+        val memberTypeDecls: Map<String, TypeDecl> = emptyMap()
     )
 
     private val compileClassInfos = mutableMapOf<String, CompileClassInfo>()
@@ -2934,7 +2957,15 @@ class Compiler(
                                         inferReceiverTypeFromRef(left)
                                     } else null
                                     val itType = implicitItTypeForMemberLambda(left, next.value)
-                                    val lambda = parseLambdaExpression(receiverType, implicitItType = itType)
+                                    val expectedCallableType = expectedCallableArgumentType(
+                                        FieldRef(left, next.value, isOptional),
+                                        0
+                                    )
+                                    val lambda = parseLambdaExpression(
+                                        receiverType,
+                                        implicitItType = itType,
+                                        expectedCallableType = expectedCallableType
+                                    )
                                     val argPos = next.pos
                                     val args = listOf(ParsedArgument(ExpressionStatement(lambda, argPos), next.pos))
                                     operand = when (left) {
@@ -3341,7 +3372,8 @@ class Compiler(
     private suspend fun parseLambdaExpression(
         expectedReceiverType: String? = null,
         wrapAsExtensionCallable: Boolean = false,
-        implicitItType: TypeDecl? = null
+        implicitItType: TypeDecl? = null,
+        expectedCallableType: TypeDecl.Function? = null
     ): ObjRef {
         // lambda args are different:
         val startPos = cc.currentPos()
@@ -3357,16 +3389,36 @@ class Compiler(
         val hasImplicitIt = argsDeclaration == null
         val slotParamNames = if (hasImplicitIt) paramNames + "it" else paramNames
         val paramSlotPlan = buildParamSlotPlan(slotParamNames)
-        if (implicitItType != null) {
-            val cls = resolveTypeDeclObjClass(implicitItType)
-            val itSlot = paramSlotPlan.slots["it"]?.index
-            if (itSlot != null) {
-                if (cls != null) {
-                    val paramTypeMap = slotTypeByScopeId.getOrPut(paramSlotPlan.id) { mutableMapOf() }
-                    paramTypeMap[itSlot] = cls
+        fun seedLambdaParamType(name: String, typeDecl: TypeDecl?) {
+            if (typeDecl == null) return
+            val slot = paramSlotPlan.slots[name]?.index ?: return
+            resolveTypeDeclObjClass(typeDecl)?.let { cls ->
+                val paramTypeMap = slotTypeByScopeId.getOrPut(paramSlotPlan.id) { mutableMapOf() }
+                paramTypeMap[slot] = cls
+            }
+            val paramTypeDeclMap = slotTypeDeclByScopeId.getOrPut(paramSlotPlan.id) { mutableMapOf() }
+            paramTypeDeclMap[slot] = typeDecl
+        }
+
+        if (argsDeclaration != null) {
+            val expectedParams = expectedCallableType?.params.orEmpty()
+            argsDeclaration.params.forEachIndexed { index, param ->
+                val effectiveType = if ((param.type == TypeDecl.TypeAny || param.type == TypeDecl.TypeNullableAny) &&
+                    index < expectedParams.size
+                ) {
+                    expectedParams[index]
+                } else {
+                    param.type
                 }
-                val paramTypeDeclMap = slotTypeDeclByScopeId.getOrPut(paramSlotPlan.id) { mutableMapOf() }
-                paramTypeDeclMap[itSlot] = implicitItType
+                if (effectiveType != TypeDecl.TypeAny && effectiveType != TypeDecl.TypeNullableAny) {
+                    seedLambdaParamType(param.name, effectiveType)
+                }
+            }
+        } else {
+            val effectiveImplicitItType = implicitItType
+                ?: expectedCallableType?.params?.singleOrNull()
+            if (effectiveImplicitItType != null) {
+                seedLambdaParamType("it", effectiveImplicitItType)
             }
         }
 
@@ -4807,6 +4859,23 @@ class Compiler(
         return null
     }
 
+    private fun classMemberTypeDecl(targetClass: ObjClass?, name: String): TypeDecl? {
+        if (targetClass == null) return null
+        if (targetClass == ObjDynamic.type) return TypeDecl.TypeAny
+        val member = targetClass.getInstanceMemberOrNull(name, includeAbstract = true)
+        val declaringName = member?.declaringClass?.className
+        val declaringClass = member?.declaringClass
+        declaringClass?.classScope?.getLocalRecordDirect(name)?.typeDecl?.let { return it }
+        targetClass.classScope?.getLocalRecordDirect(name)?.typeDecl?.let { return it }
+        if (declaringName != null) {
+            classMemberTypeDeclByName[declaringName]?.get(name)?.let { return it }
+            resolveCompileClassInfo(declaringName)?.memberTypeDecls?.get(name)?.let { return it }
+        }
+        classMemberTypeDeclByName[targetClass.className]?.get(name)?.let { return it }
+        resolveCompileClassInfo(targetClass.className)?.memberTypeDecls?.get(name)?.let { return it }
+        return member?.typeDecl
+    }
+
     private fun classMethodReturnClass(targetClass: ObjClass?, name: String): ObjClass? {
         if (targetClass == null) return null
         if (targetClass == ObjDynamic.type) return ObjDynamic.type
@@ -4896,7 +4965,7 @@ class Compiler(
             is ImplicitThisMemberRef -> {
                 val typeName = ref.preferredThisTypeName() ?: currentImplicitThisTypeName()
                 val targetClass = typeName?.let { resolveClassByName(it) } ?: return null
-                targetClass.getInstanceMemberOrNull(ref.name, includeAbstract = true)?.typeDecl?.let { return it }
+                classMemberTypeDecl(targetClass, ref.name)?.let { return it }
                 classFieldTypesByName[targetClass.className]?.get(ref.name)
                     ?.let { return TypeDecl.Simple(it.className, false) }
                 classMethodReturnTypeDeclByName[targetClass.className]?.get(ref.name)?.let { return it }
@@ -4905,7 +4974,7 @@ class Compiler(
             is FieldRef -> {
                 val targetDecl = resolveReceiverTypeDecl(ref.target) ?: return null
                 val targetClass = resolveTypeDeclObjClass(targetDecl) ?: resolveReceiverClassForMember(ref.target)
-                targetClass?.getInstanceMemberOrNull(ref.name, includeAbstract = true)?.typeDecl?.let { return it }
+                classMemberTypeDecl(targetClass, ref.name)?.let { return it }
                 classFieldTypesByName[targetClass?.className]?.get(ref.name)
                     ?.let { return TypeDecl.Simple(it.className, false) }
                 when (targetDecl) {
@@ -5848,7 +5917,7 @@ class Compiler(
             return
         }
         val seededCallable = lookupNamedCallableRecord(target)
-        if (seededCallable != null && seededCallable.type == ObjRecord.Type.Fun && seededCallable.value !is ObjExternCallable) {
+        if (seededCallable != null && seededCallable.type == ObjRecord.Type.Fun) {
             return
         }
         val decl = (resolveReceiverTypeDecl(target) as? TypeDecl.Function)
@@ -6426,7 +6495,8 @@ class Compiler(
      */
     private suspend fun parseArgs(
         expectedTailBlockReceiver: String? = null,
-        implicitItType: TypeDecl? = null
+        implicitItType: TypeDecl? = null,
+        expectedTailBlockTarget: ObjRef? = null
     ): Pair<List<ParsedArgument>, Boolean> {
 
         val args = mutableListOf<ParsedArgument>()
@@ -6484,7 +6554,11 @@ class Compiler(
         var lastBlockArgument = false
         if (end.type == Token.Type.LBRACE) {
             // last argument - callable
-            val callableAccessor = parseLambdaExpression(expectedTailBlockReceiver, implicitItType = implicitItType)
+            val callableAccessor = parseLambdaExpression(
+                expectedTailBlockReceiver,
+                implicitItType = implicitItType,
+                expectedCallableType = expectedTailBlockTarget?.let { expectedCallableArgumentType(it, args.size) }
+            )
             args += ParsedArgument(
                 ExpressionStatement(callableAccessor, end.pos),
                 end.pos
@@ -6560,6 +6634,7 @@ class Compiler(
     ): ObjRef {
         var detectedBlockArgument = blockArgument
         val expectedReceiver = tailBlockReceiverType(left)
+        val expectedTailCallable = expectedCallableArgumentType(left, 0)
         val withReceiver = when (left) {
             is LocalVarRef -> if (left.name == "with") left.name else null
             is LocalSlotRef -> if (left.name == "with") left.name else null
@@ -6571,7 +6646,10 @@ class Compiler(
             // allow any subsequent selectors (like ".last()") to be absorbed
             // into the lambda body. This ensures expected order:
             //   foo { ... }.bar()  ==  (foo { ... }).bar()
-            val callableAccessor = parseLambdaExpression(expectedReceiver)
+            val callableAccessor = parseLambdaExpression(
+                expectedReceiver,
+                expectedCallableType = expectedTailCallable
+            )
             listOf(ParsedArgument(ExpressionStatement(callableAccessor, cc.currentPos()), cc.currentPos()))
         } else {
             if (withReceiver != null) {
@@ -6580,7 +6658,11 @@ class Compiler(
                 val end = cc.next()
                 if (end.type == Token.Type.LBRACE) {
                     val receiverType = inferReceiverTypeFromArgs(parsedArgs)
-                    val callableAccessor = parseLambdaExpression(receiverType, wrapAsExtensionCallable = true)
+                    val callableAccessor = parseLambdaExpression(
+                        receiverType,
+                        wrapAsExtensionCallable = true,
+                        expectedCallableType = expectedCallableArgumentType(left, parsedArgs.size)
+                    )
                     parsedArgs += ParsedArgument(ExpressionStatement(callableAccessor, end.pos), end.pos)
                     detectedBlockArgument = true
                 } else {
@@ -6588,7 +6670,7 @@ class Compiler(
                 }
                 parsedArgs
             } else {
-                val r = parseArgs(expectedReceiver)
+                val r = parseArgs(expectedReceiver, expectedTailBlockTarget = left)
                 detectedBlockArgument = r.second
                 r.first
             }
@@ -6708,6 +6790,26 @@ class Compiler(
         val byName = (ref as? LocalVarRef)?.let { nameObjClass[it.name] }
         val cls = bySlot ?: byName ?: resolveInitializerObjClass(stmt)
         return cls?.className
+    }
+
+    private fun expectedCallableArgumentType(target: ObjRef, argIndex: Int): TypeDecl.Function? {
+        val decl = (resolveReceiverTypeDecl(target) ?: seedTypeDeclFromRef(target)) as? TypeDecl.Function
+            ?: return null
+        val params = when (target) {
+            is FieldRef,
+            is ImplicitThisMemberRef,
+            is ThisFieldSlotRef,
+            is ClassScopeMemberRef -> decl.params
+            else -> buildList {
+                decl.receiver?.let { add(it) }
+                addAll(decl.params)
+            }
+        }
+        if (argIndex < params.size) {
+            return params[argIndex] as? TypeDecl.Function
+        }
+        val ellipsis = params.lastOrNull() as? TypeDecl.Ellipsis ?: return null
+        return ellipsis.elementType as? TypeDecl.Function
     }
 
     private fun inferReceiverTypeFromRef(ref: ObjRef): String? {
@@ -7928,7 +8030,8 @@ class Compiler(
                                     methodIds = ctx.memberMethodIds.toMap(),
                                     nextFieldId = ctx.nextFieldId,
                                     nextMethodId = ctx.nextMethodId,
-                                    baseNames = baseSpecs.map { it.name }
+                                    baseNames = baseSpecs.map { it.name },
+                                    memberTypeDecls = classMemberTypeDeclByName[qualifiedName]?.toMap() ?: emptyMap()
                                 )
                             }
                         }
@@ -7944,7 +8047,8 @@ class Compiler(
                                     methodIds = ctx.memberMethodIds.toMap(),
                                     nextFieldId = ctx.nextFieldId,
                                     nextMethodId = ctx.nextMethodId,
-                                    baseNames = baseSpecs.map { it.name }
+                                    baseNames = baseSpecs.map { it.name },
+                                    memberTypeDecls = classMemberTypeDeclByName[qualifiedName]?.toMap() ?: emptyMap()
                                 )
                             }
                         }
@@ -8031,10 +8135,11 @@ class Compiler(
                                     methodIds = ctx.memberMethodIds.toMap(),
                                     nextFieldId = ctx.nextFieldId,
                                     nextMethodId = ctx.nextMethodId,
-                                    baseNames = baseSpecs.map { it.name }
+                                    baseNames = baseSpecs.map { it.name },
+                                    memberTypeDecls = classMemberTypeDeclByName[qualifiedName]?.toMap() ?: emptyMap()
                                 )
+                            }
                         }
-                    }
                     registerClassScopeFieldType(outerClassName, declaredName, qualifiedName)
                     // restore if no body starts here
                     cc.restorePos(saved)
@@ -9036,6 +9141,15 @@ class Compiler(
             pendingTypeParamStack.removeLast()
         }
 
+        if (parentContext is CodeContext.ClassBody && !isStatic && extTypeName == null) {
+            classMemberTypeDeclByName.getOrPut(parentContext.name) { mutableMapOf() }[name] = TypeDecl.Function(
+                receiver = receiverTypeDecl,
+                params = argsDeclaration.params.map { it.type },
+                returnType = returnTypeDecl ?: TypeDecl.TypeAny,
+                nullable = false
+            )
+        }
+
         var isDelegated = false
         var delegateExpression: Statement? = null
         if (cc.peekNextNonWhitespace().type == Token.Type.BY) {
@@ -9195,9 +9309,19 @@ class Compiler(
             val rawFnStatements = parsedFnStatements?.let { unwrapBytecodeDeep(it) }
             val inferredReturnClass = returnTypeDecl?.let { resolveTypeDeclObjClass(it) }
                 ?: inferReturnClassFromStatement(rawFnStatements)
-            if (declKind == SymbolKind.MEMBER && extTypeName == null) {
-                val ownerClassName = (parentContext as? CodeContext.ClassBody)?.name
-                if (ownerClassName != null) {
+            if (parentContext is CodeContext.ClassBody && !isStatic && extTypeName == null) {
+                val ownerClassName = parentContext.name
+                run {
+                    val memberTypeDecl = TypeDecl.Function(
+                        receiver = receiverTypeDecl,
+                        params = argsDeclaration.params.map { it.type },
+                        returnType = returnTypeDecl
+                            ?: inferredReturnClass?.let { TypeDecl.Simple(it.className, false) }
+                            ?: TypeDecl.TypeAny,
+                        nullable = false
+                    )
+                    classMemberTypeDeclByName
+                        .getOrPut(ownerClassName) { mutableMapOf() }[name] = memberTypeDecl
                     val returnDecl = returnTypeDecl
                         ?: inferredReturnClass?.let { TypeDecl.Simple(it.className, false) }
                     if (returnDecl != null) {
@@ -9771,7 +9895,8 @@ class Compiler(
                         pos = Pos.builtIn,
                         declaringClass = stub,
                         type = ObjRecord.Type.Field,
-                        fieldId = fieldId
+                        fieldId = fieldId,
+                        typeDecl = info.memberTypeDecls[fieldName]
                     )
                 }
             }
@@ -9786,7 +9911,8 @@ class Compiler(
                         declaringClass = stub,
                         isAbstract = true,
                         type = ObjRecord.Type.Fun,
-                        methodId = methodId
+                        methodId = methodId,
+                        typeDecl = info.memberTypeDecls[methodName]
                     )
                 }
             }

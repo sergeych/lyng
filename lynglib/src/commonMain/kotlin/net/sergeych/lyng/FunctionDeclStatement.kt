@@ -73,6 +73,35 @@ internal suspend fun executeFunctionDecl(
             return value
         }
     }
+    if (spec.actualExtern && spec.extTypeName == null && spec.parentIsClassBody) {
+        val cls = scope.thisObj as? ObjClass
+        if (cls != null) {
+            val existing = cls.members[spec.name]
+            if (existing != null) {
+                cls.members[spec.name] = existing.copy(
+                    typeDecl = existing.typeDecl ?: spec.typeDecl
+                )
+                val memberValue = cls.members[spec.name]?.value ?: existing.value
+                val local = scope.getLocalRecordDirect(spec.name)
+                if (local != null) {
+                    scope.objects[spec.name] = local.copy(
+                        value = memberValue,
+                        typeDecl = local.typeDecl ?: spec.typeDecl
+                    )
+                } else {
+                    scope.addItem(
+                        spec.name,
+                        false,
+                        memberValue,
+                        spec.visibility,
+                        callSignature = spec.externCallSignature,
+                        typeDecl = spec.typeDecl
+                    )
+                }
+                return memberValue
+            }
+        }
+    }
 
     if (spec.isDelegated) {
         val delegateExpr = spec.delegateExpression ?: scope.raiseError("delegated function missing delegate")
