@@ -19,10 +19,38 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
 }
 
+import org.gradle.api.Project
 import org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest
 
 group = "net.sergeych"
 version = "unspecified"
+
+private fun Project.sqliteLinuxLinkerOpts(vararg defaultDirs: String): List<String> {
+    val overrideDir = providers.gradleProperty("sqlite3.lib.dir").orNull
+        ?: providers.environmentVariable("SQLITE3_LIB_DIR").orNull
+    val candidateDirs = buildList {
+        if (!overrideDir.isNullOrBlank()) {
+            add(file(overrideDir))
+        }
+        defaultDirs.forEach { add(file(it)) }
+    }.distinctBy { it.absolutePath }
+
+    val discoveredLib = sequenceOf("libsqlite3.so", "libsqlite3.so.0")
+        .mapNotNull { libraryName ->
+            candidateDirs.firstOrNull { it.resolve(libraryName).isFile }?.let { dir ->
+                listOf("-L${dir.absolutePath}", "-l:$libraryName")
+            }
+        }
+        .firstOrNull()
+        ?: listOf("-lsqlite3")
+
+    return discoveredLib + listOf(
+        "-ldl",
+        "-lpthread",
+        "-lm",
+        "-Wl,--allow-shlib-undefined"
+    )
+}
 
 repositories {
     mavenCentral()
@@ -56,12 +84,14 @@ kotlin {
             executable()
             all {
                 linkerOpts(
-                    "-L/lib/x86_64-linux-gnu",
-                    "-l:libsqlite3.so.0",
-                    "-ldl",
-                    "-lpthread",
-                    "-lm",
-                    "-Wl,--allow-shlib-undefined"
+                    *project.sqliteLinuxLinkerOpts(
+                        "/lib/x86_64-linux-gnu",
+                        "/usr/lib/x86_64-linux-gnu",
+                        "/lib64",
+                        "/usr/lib64",
+                        "/lib",
+                        "/usr/lib"
+                    ).toTypedArray()
                 )
                 if (buildType == org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType.RELEASE) {
                     debuggable = false

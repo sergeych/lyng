@@ -19,6 +19,7 @@
  * LyngIO: Compose Multiplatform library module depending on :lynglib
  */
 
+import org.gradle.api.Project
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -30,6 +31,33 @@ plugins {
 
 group = "net.sergeych"
 version = "0.0.1-SNAPSHOT"
+
+private fun Project.sqliteLinuxLinkerOpts(vararg defaultDirs: String): List<String> {
+    val overrideDir = providers.gradleProperty("sqlite3.lib.dir").orNull
+        ?: providers.environmentVariable("SQLITE3_LIB_DIR").orNull
+    val candidateDirs = buildList {
+        if (!overrideDir.isNullOrBlank()) {
+            add(file(overrideDir))
+        }
+        defaultDirs.forEach { add(file(it)) }
+    }.distinctBy { it.absolutePath }
+
+    val discoveredLib = sequenceOf("libsqlite3.so", "libsqlite3.so.0")
+        .mapNotNull { libraryName ->
+            candidateDirs.firstOrNull { it.resolve(libraryName).isFile }?.let { dir ->
+                listOf("-L${dir.absolutePath}", "-l:$libraryName")
+            }
+        }
+        .firstOrNull()
+        ?: listOf("-lsqlite3")
+
+    return discoveredLib + listOf(
+        "-ldl",
+        "-lpthread",
+        "-lm",
+        "-Wl,--allow-shlib-undefined"
+    )
+}
 
 kotlin {
     jvmToolchain(17)
@@ -67,12 +95,24 @@ kotlin {
         binaries.all {
             when (konanTarget.name) {
                 "linux_x64" -> linkerOpts(
-                    "-L/lib/x86_64-linux-gnu",
-                    "-l:libsqlite3.so.0",
-                    "-ldl",
-                    "-lpthread",
-                    "-lm",
-                    "-Wl,--allow-shlib-undefined"
+                    *project.sqliteLinuxLinkerOpts(
+                        "/lib/x86_64-linux-gnu",
+                        "/usr/lib/x86_64-linux-gnu",
+                        "/lib64",
+                        "/usr/lib64",
+                        "/lib",
+                        "/usr/lib"
+                    ).toTypedArray()
+                )
+                "linux_arm64" -> linkerOpts(
+                    *project.sqliteLinuxLinkerOpts(
+                        "/lib/aarch64-linux-gnu",
+                        "/usr/lib/aarch64-linux-gnu",
+                        "/lib64",
+                        "/usr/lib64",
+                        "/lib",
+                        "/usr/lib"
+                    ).toTypedArray()
                 )
                 else -> linkerOpts("-lsqlite3")
             }
