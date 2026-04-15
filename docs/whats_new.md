@@ -18,8 +18,9 @@ For a programmer-focused migration summary across 1.5.x, see `docs/whats_new_1_5
 - Descending ranges and loops with `downTo` / `downUntil`
 - String interpolation with `$name` and `${expr}`
 - Decimal arithmetic, matrices/vectors, and complex numbers
+- Calendar `Date` support in `lyng.time`
 - Immutable collections and opt-in `ObservableList`
-- Rich `lyngio` modules for console, HTTP, WebSocket, TCP, and UDP
+- Rich `lyngio` modules for SQLite databases, console, HTTP, WebSocket, TCP, and UDP
 - CLI improvements including the built-in formatter `lyng fmt`
 - Better IDE support and stronger docs around the released feature set
 
@@ -579,7 +580,7 @@ ws.close()
 
 These modules are capability-gated and host-installed, keeping Lyng safe by default while making networked scripts practical when enabled.
 
-See [lyngio overview](lyngio.md), [lyng.io.http](lyng.io.http.md), [lyng.io.ws](lyng.io.ws.md), and [lyng.io.net](lyng.io.net.md).
+See [lyngio overview](lyngio.md), [lyng.io.db](lyng.io.db.md), [lyng.io.http](lyng.io.http.md), [lyng.io.ws](lyng.io.ws.md), and [lyng.io.net](lyng.io.net.md).
 
 ### CLI: Formatting Command
 A new `fmt` subcommand has been added to the Lyng CLI.

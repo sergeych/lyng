@@ -268,13 +268,18 @@ class ObjInstant(val instant: Instant,val truncateMode: LynonSettings.InstantTru
                 returns = type("lyng.DateTime"),
                 moduleName = "lyng.time"
             ) {
-                val tz = when (val a = args.list.getOrNull(0)) {
-                    null -> TimeZone.currentSystemDefault()
-                    is ObjString -> TimeZone.of(a.value)
-                    is ObjInt -> UtcOffset(seconds = a.value.toInt()).asTimeZone()
-                    else -> raiseIllegalArgument("invalid timezone: $a")
-                }
+                val tz = parseTimeZoneArg(this, args.list.getOrNull(0), TimeZone.currentSystemDefault())
                 ObjDateTime(thisAs<ObjInstant>().instant, tz)
+            }
+            addFnDoc(
+                name = "toDate",
+                doc = "Convert this instant to a calendar Date in the specified time zone. If omitted, the system default time zone is used.",
+                params = listOf(net.sergeych.lyng.miniast.ParamDoc("tz", type = type("lyng.Any", true))),
+                returns = type("lyng.Date"),
+                moduleName = "lyng.time"
+            ) {
+                val tz = parseTimeZoneArg(this, args.list.getOrNull(0), TimeZone.currentSystemDefault())
+                ObjDate(toDate(thisAs<ObjInstant>().instant, tz))
             }
 
             // class members

@@ -64,10 +64,12 @@ object StdlibDocsBootstrap {
             val _buffer = net.sergeych.lyng.obj.ObjBuffer.type
 
             // Also touch time module types so their docs (moduleName = "lyng.time") are registered
-            // This enables completion/quick docs for symbols imported via `import lyng.time` (e.g., Instant, DateTime, Duration)
+            // This enables completion/quick docs for symbols imported via `import lyng.time` (e.g., Instant, Date, DateTime, Duration)
             try {
                 @Suppress("UNUSED_VARIABLE")
                 val _instant = net.sergeych.lyng.obj.ObjInstant.type
+                @Suppress("UNUSED_VARIABLE")
+                val _date = net.sergeych.lyng.obj.ObjDate.type
                 @Suppress("UNUSED_VARIABLE")
                 val _datetime = net.sergeych.lyng.obj.ObjDateTime.type
                 @Suppress("UNUSED_VARIABLE")

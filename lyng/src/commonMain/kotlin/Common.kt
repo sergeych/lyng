@@ -40,6 +40,8 @@ import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.Source
 import net.sergeych.lyng.asFacade
 import net.sergeych.lyng.io.console.createConsoleModule
+import net.sergeych.lyng.io.db.createDbModule
+import net.sergeych.lyng.io.db.sqlite.createSqliteModule
 import net.sergeych.lyng.io.fs.createFs
 import net.sergeych.lyng.io.http.createHttpModule
 import net.sergeych.lyng.io.net.createNetModule
@@ -138,6 +140,7 @@ private val baseCliImportManagerDefer = globalDefer {
 private fun ImportManager.invalidateCliModuleCaches() {
     invalidatePackageCache("lyng.io.fs")
     invalidatePackageCache("lyng.io.console")
+    invalidatePackageCache("lyng.io.db.sqlite")
     invalidatePackageCache("lyng.io.http")
     invalidatePackageCache("lyng.io.ws")
     invalidatePackageCache("lyng.io.net")
@@ -225,6 +228,8 @@ private fun installCliModules(manager: ImportManager) {
     // Scripts still need to import the modules they use explicitly.
     createFs(PermitAllAccessPolicy, manager)
     createConsoleModule(PermitAllConsoleAccessPolicy, manager)
+    createDbModule(manager)
+    createSqliteModule(manager)
     createHttpModule(PermitAllHttpAccessPolicy, manager)
     createWsModule(PermitAllWsAccessPolicy, manager)
     createNetModule(PermitAllNetAccessPolicy, manager)

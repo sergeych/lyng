@@ -36,7 +36,8 @@ enum class LynonType(val objClass: ObjClass, val defaultFrequency: Int = 1) {
     Buffer(ObjBuffer.type, 50),
     Instant(ObjInstant.type, 30),
     Duration(ObjDuration.type),
-    Other(Obj.rootObjectType, 60);
+    Other(Obj.rootObjectType, 60),
+    Date(ObjDate.type, 20);
 
     fun generalizeTo(other: LynonType): LynonType? {
         if (this == other) return this

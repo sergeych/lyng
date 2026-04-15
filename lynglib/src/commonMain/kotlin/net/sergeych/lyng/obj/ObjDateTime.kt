@@ -202,9 +202,14 @@ class ObjDateTime(val instant: Instant, val timeZone: TimeZone) : Obj() {
                 getter = { thisAs<ObjDateTime>().localDateTime.dayOfWeek.isoDayNumber.toObj() })
             addPropertyDoc("timeZone", "The time zone ID (e.g. 'Z', '+02:00', 'Europe/Prague').", type("lyng.String"), moduleName = "lyng.time",
                 getter = { thisAs<ObjDateTime>().timeZone.id.toObj() })
+            addPropertyDoc("date", "The calendar date component of this DateTime.", type("lyng.Date"), moduleName = "lyng.time",
+                getter = { ObjDate(toDate(thisAs<ObjDateTime>().instant, thisAs<ObjDateTime>().timeZone)) })
 
             addFnDoc("toInstant", "Convert this localized date time back to an absolute Instant.", returns = type("lyng.Instant"), moduleName = "lyng.time") {
                 ObjInstant(thisAs<ObjDateTime>().instant)
+            }
+            addFnDoc("toDate", "Return the calendar date component of this DateTime.", returns = type("lyng.Date"), moduleName = "lyng.time") {
+                ObjDate(toDate(thisAs<ObjDateTime>().instant, thisAs<ObjDateTime>().timeZone))
             }
             addFnDoc("toEpochSeconds", "Return the number of full seconds since the Unix epoch (UTC).", returns = type("lyng.Int"), moduleName = "lyng.time") {
                 thisAs<ObjDateTime>().instant.epochSeconds.toObj()
@@ -223,11 +228,7 @@ class ObjDateTime(val instant: Instant, val timeZone: TimeZone) : Obj() {
                     "Accepts a timezone ID string (e.g., 'UTC', '+02:00') or an integer offset in seconds.",
                 params = listOf(net.sergeych.lyng.miniast.ParamDoc("tz", type = type("lyng.Any"))),
                 returns = type("lyng.DateTime"), moduleName = "lyng.time") {
-                val tz = when (val a = args.list.getOrNull(0)) {
-                    is ObjString -> TimeZone.of(a.value)
-                    is ObjInt -> UtcOffset(seconds = a.value.toInt()).asTimeZone()
-                    else -> raiseIllegalArgument("invalid timezone: $a")
-                }
+                val tz = parseTimeZoneArg(this, args.list.getOrNull(0), TimeZone.currentSystemDefault())
                 ObjDateTime(thisAs<ObjDateTime>().instant, tz)
             }
             addFnDoc("toUTC", "Shortcut to convert this date time to the UTC time zone.", returns = type("lyng.DateTime"), moduleName = "lyng.time") {

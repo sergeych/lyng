@@ -953,6 +953,12 @@ class Script(
                         type = type("lyng.Class")
                     )
                     it.addConstDoc(
+                        name = "Date",
+                        value = ObjDate.type,
+                        doc = "Calendar date without time-of-day or time zone.",
+                        type = type("lyng.Class")
+                    )
+                    it.addConstDoc(
                         name = "DateTime",
                         value = ObjDateTime.type,
                         doc = "Point in time in a specific time zone.",

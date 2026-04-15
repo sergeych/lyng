@@ -1171,14 +1171,16 @@ class BytecodeCompiler(
             ObjMap.type,
             ObjBuffer.type,
             ObjInstant.type,
-            ObjDateTime.type
+            ObjDateTime.type,
+            ObjDate.type
         )
         BinOp.MINUS -> receiverClass in setOf(
             ObjInt.type,
             ObjReal.type,
             ObjSet.type,
             ObjInstant.type,
-            ObjDateTime.type
+            ObjDateTime.type,
+            ObjDate.type
         )
         BinOp.STAR -> receiverClass in setOf(ObjInt.type, ObjReal.type, ObjString.type)
         BinOp.SLASH, BinOp.PERCENT -> receiverClass in setOf(ObjInt.type, ObjReal.type)
@@ -7290,7 +7292,7 @@ class BytecodeCompiler(
                 if (targetClass == ObjString.type && ref.name == "re" && ref.args.isEmpty() && !ref.isOptional) {
                     ObjRegex.type
                 } else {
-                    inferMethodCallReturnClass(ref.name)
+                    inferMethodCallReturnClass(targetClass, ref.name)
                 }
             }
             is CallRef -> inferCallReturnClass(ref)
@@ -7463,7 +7465,7 @@ class BytecodeCompiler(
                 if (targetClass == ObjString.type && ref.name == "re" && ref.args.isEmpty() && !ref.isOptional) {
                     ObjRegex.type
                 } else {
-                    inferMethodCallReturnClass(ref.name)
+                    inferMethodCallReturnClass(targetClass, ref.name)
                 }
             }
             is CallRef -> inferCallReturnClass(ref)
@@ -7546,6 +7548,7 @@ class BytecodeCompiler(
             "ObservableList" -> ObjObservableList.type
             "ChangeRejectionException" -> ObjChangeRejectionExceptionClass
             "Instant" -> ObjInstant.type
+            "Date" -> ObjDate.type
             "DateTime" -> ObjDateTime.type
             "Duration" -> ObjDuration.type
             "Exception" -> ObjException.Root
@@ -7584,6 +7587,36 @@ class BytecodeCompiler(
         }
     }
 
+    private fun inferMethodCallReturnClass(targetClass: ObjClass?, name: String): ObjClass? {
+        when (targetClass) {
+            ObjDate.type -> {
+                return when (name) {
+                    "toIsoString", "toSortableString", "toString" -> ObjString.type
+                    "toDateTime", "atStartOfDay" -> ObjDateTime.type
+                    "addDays", "addMonths", "addYears", "today", "parseIso" -> ObjDate.type
+                    "daysUntil", "daysSince" -> ObjInt.type
+                    else -> inferMethodCallReturnClass(name)
+                }
+            }
+            ObjInstant.type -> {
+                return when (name) {
+                    "toDateTime" -> ObjDateTime.type
+                    "toDate" -> ObjDate.type
+                    else -> inferMethodCallReturnClass(name)
+                }
+            }
+            ObjDateTime.type -> {
+                return when (name) {
+                    "toDate" -> ObjDate.type
+                    "toInstant" -> ObjInstant.type
+                    "toUTC", "toTimeZone", "parseRFC3339", "addYears", "addMonths" -> ObjDateTime.type
+                    else -> inferMethodCallReturnClass(name)
+                }
+            }
+            else -> return inferMethodCallReturnClass(name)
+        }
+    }
+
     private fun inferMethodCallReturnClass(name: String): ObjClass? = when (name) {
         "map",
         "mapNotNull",
@@ -7616,13 +7649,13 @@ class BytecodeCompiler(
         "truncateToSecond",
         "truncateToMinute",
         "truncateToMillisecond" -> ObjInstant.type
-        "toDateTime",
+        "today",
+        "parseIso" -> ObjDate.type
+        "daysUntil",
+        "daysSince" -> ObjInt.type
         "toTimeZone",
         "toUTC",
         "parseRFC3339",
-        "addYears",
-        "addMonths",
-        "addDays",
         "addHours",
         "addMinutes",
         "addSeconds" -> ObjDateTime.type
@@ -7667,6 +7700,20 @@ class BytecodeCompiler(
         if (targetClass == ObjInstant.type && (name == "distantFuture" || name == "distantPast")) {
             return ObjInstant.type
         }
+        if (targetClass == ObjDate.type) {
+            return when (name) {
+                "year",
+                "month",
+                "day",
+                "dayOfMonth",
+                "dayOfWeek",
+                "dayOfYear",
+                "lengthOfMonth",
+                "lengthOfYear" -> ObjInt.type
+                "isLeapYear" -> ObjBool.type
+                else -> null
+            }
+        }
         if (targetClass == ObjString.type && name == "re") {
             return ObjRegex.type
         }
@@ -7710,6 +7757,7 @@ class BytecodeCompiler(
         }
         if (targetClass == ObjDateTime.type) {
             return when (name) {
+                "date" -> ObjDate.type
                 "year",
                 "month",
                 "day",

@@ -12,6 +12,7 @@
 
 #### Included Modules
 
+- **[lyng.io.db](lyng.io.db.md):** Portable SQL database access. Provides `Database`, `SqlTransaction`, `ResultSet`, and SQLite support through `lyng.io.db.sqlite`.
 - **[lyng.io.fs](lyng.io.fs.md):** Async filesystem access. Provides the `Path` class for file/directory operations, streaming, and globbing.
 - **[lyng.io.process](lyng.io.process.md):** External process execution and shell commands. Provides `Process`, `RunningProcess`, and `Platform` information.
 - **[lyng.io.console](lyng.io.console.md):** Rich console/TTY access. Provides `Console` capability detection, geometry, output, and iterable events.
@@ -43,6 +44,8 @@ To use `lyngio` modules in your scripts, you must install them into your Lyng sc
 
 ```kotlin
 import net.sergeych.lyng.EvalSession
+import net.sergeych.lyng.io.db.createDbModule
+import net.sergeych.lyng.io.db.sqlite.createSqliteModule
 import net.sergeych.lyng.io.fs.createFs
 import net.sergeych.lyng.io.process.createProcessModule
 import net.sergeych.lyng.io.console.createConsoleModule
@@ -61,6 +64,8 @@ suspend fun runMyScript() {
     val scope = session.getScope()
     
     // Install modules with policies
+    createDbModule(scope)
+    createSqliteModule(scope)
     createFs(PermitAllAccessPolicy, scope)
     createProcessModule(PermitAllProcessAccessPolicy, scope)
     createConsoleModule(PermitAllConsoleAccessPolicy, scope)
@@ -70,6 +75,8 @@ suspend fun runMyScript() {
     
     // Now scripts can import them
     session.eval("""
+        import lyng.io.db
+        import lyng.io.db.sqlite
         import lyng.io.fs
         import lyng.io.process
         import lyng.io.console
@@ -77,6 +84,7 @@ suspend fun runMyScript() {
         import lyng.io.net
         import lyng.io.ws
         
+        println("SQLite available: " + (openSqlite(":memory:") != null))
         println("Working dir: " + Path(".").readUtf8())
         println("OS: " + Platform.details().name)
         println("TTY: " + Console.isTty())
@@ -94,6 +102,7 @@ suspend fun runMyScript() {
 `lyngio` is built with a "Secure by Default" philosophy. Every I/O or process operation is checked against a policy.
 
 - **Filesystem Security:** Implement `FsAccessPolicy` to restrict access to specific paths or operations (e.g., read-only access to a sandbox directory).
+- **Database Installation:** Database access is still explicit-capability style. The host must install `lyng.io.db` and at least one provider such as `lyng.io.db.sqlite`; otherwise scripts cannot open databases.
 - **Process Security:** Implement `ProcessAccessPolicy` to restrict which executables can be run or to disable shell execution entirely.
 - **Console Security:** Implement `ConsoleAccessPolicy` to control output writes, event reads, and raw mode switching.
 - **HTTP Security:** Implement `HttpAccessPolicy` to restrict which requests scripts may send.
@@ -101,6 +110,7 @@ suspend fun runMyScript() {
 - **WebSocket Security:** Implement `WsAccessPolicy` to restrict websocket connects and message flow.
 
 For more details, see the specific module documentation:
+- [Database Module Details](lyng.io.db.md)
 - [Filesystem Security Details](lyng.io.fs.md#access-policy-security)
 - [Process Security Details](lyng.io.process.md#security-policy)
 - [Console Module Details](lyng.io.console.md)
@@ -112,16 +122,16 @@ For more details, see the specific module documentation:
 
 #### Platform Support Overview
 
-| Platform | lyng.io.fs | lyng.io.process | lyng.io.console | lyng.io.http | lyng.io.ws | lyng.io.net |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **JVM** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Linux Native** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Apple Native** | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ |
-| **Windows Native** | ✅ | ❌ | ✅ | ✅ | ✅ | ❌ |
-| **Android** | ✅ | ❌ | ⚠️ | ✅ | ✅ | ✅ |
-| **JS / Node** | ✅ | ❌ | ⚠️ | ✅ | ✅ | ✅ |
-| **JS / Browser** | ✅ (in-memory) | ❌ | ⚠️ | ✅ | ✅ | ❌ |
-| **Wasm** | ✅ (in-memory) | ❌ | ⚠️ | ❌ | ❌ | ❌ |
+| Platform | lyng.io.db/sqlite | lyng.io.fs | lyng.io.process | lyng.io.console | lyng.io.http | lyng.io.ws | lyng.io.net |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **JVM** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Linux Native** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Apple Native** | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ |
+| **Windows Native** | ❌ | ✅ | ❌ | ✅ | ✅ | ✅ | ❌ |
+| **Android** | ⚠️ | ✅ | ❌ | ⚠️ | ✅ | ✅ | ✅ |
+| **JS / Node** | ❌ | ✅ | ❌ | ⚠️ | ✅ | ✅ | ✅ |
+| **JS / Browser** | ❌ | ✅ (in-memory) | ❌ | ⚠️ | ✅ | ✅ | ❌ |
+| **Wasm** | ❌ | ✅ (in-memory) | ❌ | ⚠️ | ❌ | ❌ | ❌ |
 
 Legend:
 - `✅` supported

@@ -7,6 +7,27 @@ History note:
 - Entries below are synchronized and curated for `1.5.x`.
 - Earlier history may be incomplete and should be cross-checked with git tags/commits when needed.
 
+## Unreleased
+
+### Database access
+- Added the portable `lyng.io.db` SQL contract and the first concrete provider, `lyng.io.db.sqlite`.
+- Added SQLite support on JVM and Linux Native with:
+  - generic `openDatabase("sqlite:...")` dispatch
+  - typed `openSqlite(...)` helper
+  - real nested transactions via savepoints
+  - generated keys through `ExecutionResult.getGeneratedKeys()`
+  - strict schema-driven value conversion for `Bool`, `Decimal`, `Date`, `DateTime`, and `Instant`
+  - documented option handling for `readOnly`, `createIfMissing`, `foreignKeys`, and `busyTimeoutMillis`
+- Added public docs for database usage and SQLite provider behavior.
+
+### Time
+- Added `Date` to `lyng.time` and the core library as a first-class calendar-date type.
+- Added `Instant.toDate(...)`, `DateTime.date`, `DateTime.toDate()`, `Date.toDateTime(...)`, and related date arithmetic.
+- Added docs, stdlib reference updates, serialization support, and comprehensive tests for `Date`.
+
+### Release notes
+- Full `:lyngio:jvmTest` and `:lyngio:linuxX64Test` pass on the release tree after SQLite hardening.
+
 ## 1.5.4 (2026-04-03)
 
 ### Runtime and compiler stability

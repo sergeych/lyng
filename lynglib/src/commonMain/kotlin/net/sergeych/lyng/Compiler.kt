@@ -5003,9 +5003,16 @@ class Compiler(
             is QualifiedThisRef -> resolveClassByName(ref.typeName)
             is StatementRef -> (ref.statement as? ExpressionStatement)?.let { resolveReceiverClassForMember(it.ref) }
             is MethodCallRef -> inferMethodCallReturnClass(ref)
-            is ImplicitThisMethodCallRef -> inferMethodCallReturnClass(ref.methodName())
-            is ThisMethodSlotCallRef -> inferMethodCallReturnClass(ref.methodName())
-            is QualifiedThisMethodSlotCallRef -> inferMethodCallReturnClass(ref.methodName())
+            is ImplicitThisMethodCallRef -> {
+                val typeName = ref.preferredThisTypeName() ?: currentImplicitThisTypeName()
+                inferMethodCallReturnClass(typeName?.let { resolveClassByName(it) }, ref.methodName())
+            }
+            is ThisMethodSlotCallRef -> {
+                val typeName = currentImplicitThisTypeName()
+                inferMethodCallReturnClass(typeName?.let { resolveClassByName(it) }, ref.methodName())
+            }
+            is QualifiedThisMethodSlotCallRef ->
+                inferMethodCallReturnClass(resolveClassByName(ref.receiverTypeName()), ref.methodName())
             is CallRef -> inferCallReturnTypeDecl(ref)?.let { resolveTypeDeclObjClass(it) } ?: inferCallReturnClass(ref)
             is BinaryOpRef -> inferBinaryOpReturnClass(ref)
             is FieldRef -> {
@@ -5127,6 +5134,8 @@ class Compiler(
                 leftClass == ObjInstant.type && rightClass == ObjDuration.type -> ObjInstant.type
                 leftClass == ObjDuration.type && rightClass == ObjInstant.type && ref.op == BinOp.PLUS -> ObjInstant.type
                 leftClass == ObjDuration.type && rightClass == ObjDuration.type -> ObjDuration.type
+                leftClass == ObjDate.type && rightClass == ObjDate.type && ref.op == BinOp.MINUS -> ObjInt.type
+                leftClass == ObjDate.type && rightClass == ObjDuration.type -> ObjDate.type
                 (leftClass == ObjBuffer.type || leftClass.allParentsSet.contains(ObjBuffer.type)) &&
                     (rightClass == ObjBuffer.type || rightClass.allParentsSet.contains(ObjBuffer.type)) &&
                     ref.op == BinOp.PLUS -> ObjBuffer.type
@@ -5198,7 +5207,37 @@ class Compiler(
         if (receiverClass != null && isClassScopeCallableMember(receiverClass.className, ref.name)) {
             resolveClassByName("${receiverClass.className}.${ref.name}")?.let { return it }
         }
-        return inferMethodCallReturnClass(ref.name)
+        return inferMethodCallReturnClass(receiverClass, ref.name)
+    }
+
+    private fun inferMethodCallReturnClass(targetClass: ObjClass?, name: String): ObjClass? {
+        when (targetClass) {
+            ObjDate.type -> {
+                return when (name) {
+                    "toIsoString", "toSortableString", "toString" -> ObjString.type
+                    "toDateTime", "atStartOfDay" -> ObjDateTime.type
+                    "addDays", "addMonths", "addYears", "today", "parseIso" -> ObjDate.type
+                    "daysUntil", "daysSince" -> ObjInt.type
+                    else -> inferMethodCallReturnClass(name)
+                }
+            }
+            ObjInstant.type -> {
+                return when (name) {
+                    "toDateTime" -> ObjDateTime.type
+                    "toDate" -> ObjDate.type
+                    else -> inferMethodCallReturnClass(name)
+                }
+            }
+            ObjDateTime.type -> {
+                return when (name) {
+                    "toDate" -> ObjDate.type
+                    "toInstant" -> ObjInstant.type
+                    "toUTC", "toTimeZone", "parseRFC3339", "addYears", "addMonths" -> ObjDateTime.type
+                    else -> inferMethodCallReturnClass(name)
+                }
+            }
+            else -> return inferMethodCallReturnClass(name)
+        }
     }
 
     private fun inferMethodCallReturnTypeDecl(ref: MethodCallRef): TypeDecl? {
@@ -5423,13 +5462,13 @@ class Compiler(
         "truncateToSecond",
         "truncateToMinute",
         "truncateToMillisecond" -> ObjInstant.type
-        "toDateTime",
+        "today",
+        "parseIso" -> ObjDate.type
+        "daysUntil",
+        "daysSince" -> ObjInt.type
         "toTimeZone",
         "toUTC",
         "parseRFC3339",
-        "addYears",
-        "addMonths",
-        "addDays",
         "addHours",
         "addMinutes",
         "addSeconds" -> ObjDateTime.type
@@ -5486,6 +5525,20 @@ class Compiler(
         if (targetClass == ObjInstant.type && (name == "distantFuture" || name == "distantPast")) {
             return ObjInstant.type
         }
+        if (targetClass == ObjDate.type) {
+            return when (name) {
+                "year",
+                "month",
+                "day",
+                "dayOfMonth",
+                "dayOfWeek",
+                "dayOfYear",
+                "lengthOfMonth",
+                "lengthOfYear" -> ObjInt.type
+                "isLeapYear" -> ObjBool.type
+                else -> null
+            }
+        }
         if (targetClass == ObjInstant.type && name in listOf(
                 "truncateToMinute",
                 "truncateToSecond",
@@ -5538,6 +5591,7 @@ class Compiler(
         }
         if (targetClass == ObjDateTime.type) {
             return when (name) {
+                "date" -> ObjDate.type
                 "year",
                 "month",
                 "day",
@@ -9677,6 +9731,7 @@ class Compiler(
             "ChangeRejectionException" -> ObjChangeRejectionExceptionClass
             "Exception" -> ObjException.Root
             "Instant" -> ObjInstant.type
+            "Date" -> ObjDate.type
             "DateTime" -> ObjDateTime.type
             "Duration" -> ObjDuration.type
             "Buffer" -> ObjBuffer.type

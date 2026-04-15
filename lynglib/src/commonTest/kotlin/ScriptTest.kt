@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.datetime.LocalDate
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -3477,6 +3478,68 @@ class ScriptTest {
             assertEquals(dt.toInstant(), t1)
             """.trimIndent()
         )
+    }
+
+    @Test
+    fun testDateComprehensive() = runTest {
+        eval(
+            """
+            import lyng.time
+            import lyng.serialization
+
+            val d1 = Date(2026, 4, 15)
+            assertEquals(2026, d1.year)
+            assertEquals(4, d1.month)
+            assertEquals(15, d1.day)
+            assertEquals(15, d1.dayOfMonth)
+            assertEquals("2026-04-15", d1.toIsoString())
+            assertEquals("2026-04-15", d1.toSortableString())
+
+            val d2 = Date.parseIso("2024-02-29")
+            assertEquals(true, d2.isLeapYear)
+            assertEquals(29, d2.lengthOfMonth)
+            assertEquals(366, d2.lengthOfYear)
+            assertEquals(60, d2.dayOfYear)
+            assertEquals(4, d2.dayOfWeek) // Thursday
+
+            val d3 = d2.addYears(1)
+            assertEquals(Date(2025, 2, 28), d3)
+
+            val d4 = Date(2024, 1, 31).addMonths(1)
+            assertEquals(Date(2024, 2, 29), d4)
+
+            val d5 = d1.addDays(10)
+            assertEquals(Date(2026, 4, 25), d5)
+            assertEquals(Date(2026, 4, 18), d1 + 3.days)
+            assertEquals(Date(2026, 4, 12), d1 - 3.days)
+            assertEquals(10, d1.daysUntil(d5))
+            assertEquals(10, d5.daysSince(d1))
+            assertEquals(10, d5 - d1)
+
+            val i = Instant("2024-01-01T23:30:00Z")
+            assertEquals(Date(2024, 1, 1), i.toDate("Z"))
+            assertEquals(Date(2024, 1, 2), i.toDate("+02:00"))
+
+            val dt = DateTime(2024, 5, 20, 15, 30, 45, "+02:00")
+            assertEquals(Date(2024, 5, 20), dt.date)
+            assertEquals(Date(2024, 5, 20), dt.toDate())
+            assertEquals(DateTime(2024, 5, 20, 0, 0, 0, "Z"), Date(2024, 5, 20).toDateTime("Z"))
+            assertEquals(DateTime(2024, 5, 20, 0, 0, 0, "+02:00"), Date(2024, 5, 20).atStartOfDay("+02:00"))
+
+            val roundTrip = Lynon.decode(Lynon.encode(d1))
+            assertEquals(d1, roundTrip)
+            assertEquals("\"2026-04-15\"", d1.toJsonString())
+            """.trimIndent()
+        )
+
+        val decoded = eval(
+            """
+            import lyng.time
+            Date(2026, 4, 15)
+            """.trimIndent()
+        ).decodeSerializable<LocalDate>()
+
+        assertEquals(LocalDate(2026, 4, 15), decoded)
     }
 
     @Test

@@ -81,7 +81,7 @@ Sources: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Script.kt`, `lynglib/s
 - `import lyng.serialization`
   - `Lynon` serialization utilities.
 - `import lyng.time`
-  - `Instant`, `DateTime`, `Duration`, and module `delay`.
+  - `Instant`, `Date`, `DateTime`, `Duration`, and module `delay`.
 
 ## 6. Optional (lyngio) Modules
 Requires installing `lyngio` into the import manager from host code.
