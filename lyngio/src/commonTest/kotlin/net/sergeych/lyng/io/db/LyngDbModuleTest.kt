@@ -74,13 +74,14 @@ class LyngDbModuleTest {
 
     @Test
     fun testDuplicateSchemeRegistrationFailsCaseInsensitively() = runTest {
-        val importManager = Script.defaultImportManager.copy()
+        val importManager = ImportManager()
         createDbModule(importManager)
         val module = importManager.createModuleScope(Pos.builtIn, "lyng.io.db")
+        val scheme = "provider_test"
 
-        module.callFn("registerDatabaseProvider", ObjString("sqlite"), trivialOpener())
+        module.callFn("registerDatabaseProvider", ObjString(scheme), trivialOpener())
         val error = try {
-            module.callFn("registerDatabaseProvider", ObjString("SQLITE"), trivialOpener())
+            module.callFn("registerDatabaseProvider", ObjString(scheme.uppercase()), trivialOpener())
             kotlin.test.fail("expected duplicate registration to fail")
         } catch (e: ExecutionError) {
             e
