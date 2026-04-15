@@ -55,6 +55,14 @@ kotlin {
         binaries {
             executable()
             all {
+                linkerOpts(
+                    "-L/lib/x86_64-linux-gnu",
+                    "-l:libsqlite3.so.0",
+                    "-ldl",
+                    "-lpthread",
+                    "-lm",
+                    "-Wl,--allow-shlib-undefined"
+                )
                 if (buildType == org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType.RELEASE) {
                     debuggable = false
                     optimized = true
