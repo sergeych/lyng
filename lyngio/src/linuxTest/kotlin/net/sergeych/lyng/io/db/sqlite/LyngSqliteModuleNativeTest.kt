@@ -186,6 +186,30 @@ class LyngSqliteModuleNativeTest {
     }
 
     @Test
+    fun testRowFailsAfterTransactionEnds() = runTest {
+        val scope = Script.newScope()
+        val db = openMemoryDb(scope)
+        var leakedRow: Obj = ObjNull
+
+        db.invokeInstanceMethod(
+            scope,
+            "transaction",
+            ObjExternCallable.fromBridge {
+                val tx = requiredArg<Obj>(0)
+                leakedRow = rowsOf(requireScope(), tx.invokeInstanceMethod(requireScope(), "select", ObjString("select 42 as answer")))[0]
+                ObjNull
+            }
+        )
+
+        val error = assertFailsWith<ExecutionError> {
+            leakedRow.getAt(scope, ObjString("answer"))
+        }
+
+        assertEquals("SqlUsageException", error.errorObject.objClass.className)
+        assertTrue(error.errorMessage.contains("transaction is active"), error.errorMessage)
+    }
+
+    @Test
     fun testExecuteRejectsReturningButSelectSupportsIt() = runTest {
         val scope = Script.newScope()
         withTempDb(scope) { db ->
@@ -490,6 +514,145 @@ class LyngSqliteModuleNativeTest {
     }
 
     @Test
+    fun testMissingFileWithCreateIfMissingFalseFailsWithDatabaseException() = runTest {
+        val scope = Script.newScope()
+        createSqliteModule(scope.importManager)
+        val sqliteModule = scope.importManager.createModuleScope(Pos.builtIn, "lyng.io.db.sqlite")
+        val missingDir = "/tmp/lyng-sqlite-missing-${Random.nextInt(Int.MAX_VALUE)}".toPath()
+        val missingFile = (missingDir.toString() + "/missing.db").toPath()
+        try {
+            FileSystem.SYSTEM.delete(missingFile, mustExist = false)
+            FileSystem.SYSTEM.delete(missingDir, mustExist = false)
+            val db = sqliteModule.callFn(
+                "openSqlite",
+                ObjString(missingFile.toString()),
+                net.sergeych.lyng.obj.ObjFalse,
+                net.sergeych.lyng.obj.ObjFalse
+            )
+
+            val error = assertFailsWith<ExecutionError> {
+                db.invokeInstanceMethod(
+                    scope,
+                    "transaction",
+                    ObjExternCallable.fromBridge { ObjNull }
+                )
+            }
+
+            assertEquals("DatabaseException", error.errorObject.objClass.className)
+        } finally {
+            FileSystem.SYSTEM.delete(missingFile, mustExist = false)
+            FileSystem.SYSTEM.delete(missingDir, mustExist = false)
+        }
+    }
+
+    @Test
+    fun testGenericOpenDatabaseReadOnlyOptionMatchesTypedHelper() = runTest {
+        val scope = Script.newScope()
+        createSqliteModule(scope.importManager)
+        scope.importManager.createModuleScope(Pos.builtIn, "lyng.io.db.sqlite")
+        val dbModule = scope.importManager.createModuleScope(Pos.builtIn, "lyng.io.db")
+
+        withTempPath { tempPath ->
+            val writableDb = dbModule.callFn("openDatabase", ObjString("sqlite:${tempPath}"), sqliteOptions(scope))
+            writableDb.invokeInstanceMethod(
+                scope,
+                "transaction",
+                ObjExternCallable.fromBridge {
+                    val tx = requiredArg<Obj>(0)
+                    tx.invokeInstanceMethod(
+                        requireScope(),
+                        "execute",
+                        ObjString("create table item(id integer primary key autoincrement, name text not null)")
+                    )
+                }
+            )
+
+            val readOnlyDb = dbModule.callFn(
+                "openDatabase",
+                ObjString("sqlite:${tempPath}"),
+                sqliteOptions(
+                    scope,
+                    "readOnly" to net.sergeych.lyng.obj.ObjTrue,
+                    "createIfMissing" to net.sergeych.lyng.obj.ObjFalse
+                )
+            )
+
+            val error = assertFailsWith<ExecutionError> {
+                readOnlyDb.invokeInstanceMethod(
+                    scope,
+                    "transaction",
+                    ObjExternCallable.fromBridge {
+                        val tx = requiredArg<Obj>(0)
+                        tx.invokeInstanceMethod(
+                            requireScope(),
+                            "execute",
+                            ObjString("insert into item(name) values(?)"),
+                            ObjString("blocked")
+                        )
+                    }
+                )
+            }
+
+            assertEquals("SqlExecutionException", error.errorObject.objClass.className)
+        }
+    }
+
+    @Test
+    fun testForeignKeysOptionControlsConstraintEnforcement() = runTest {
+        val scope = Script.newScope()
+        createSqliteModule(scope.importManager)
+        val sqliteModule = scope.importManager.createModuleScope(Pos.builtIn, "lyng.io.db.sqlite")
+
+        withTempPath { tempPath ->
+            val dbNoFk = sqliteModule.callFn(
+                "openSqlite",
+                ObjString(tempPath.toString()),
+                net.sergeych.lyng.obj.ObjFalse,
+                net.sergeych.lyng.obj.ObjTrue,
+                net.sergeych.lyng.obj.ObjFalse
+            )
+            dbNoFk.invokeInstanceMethod(
+                scope,
+                "transaction",
+                ObjExternCallable.fromBridge {
+                    val tx = requiredArg<Obj>(0)
+                    tx.invokeInstanceMethod(requireScope(), "execute", ObjString("create table parent(id integer primary key)"))
+                    tx.invokeInstanceMethod(
+                        requireScope(),
+                        "execute",
+                        ObjString("create table child(parent_id integer not null references parent(id))")
+                    )
+                    tx.invokeInstanceMethod(
+                        requireScope(),
+                        "execute",
+                        ObjString("insert into child(parent_id) values(?)"),
+                        ObjInt.One
+                    )
+                }
+            )
+
+            val dbWithFk = sqliteModule.callFn("openSqlite", ObjString(tempPath.toString()))
+            val error = assertFailsWith<ExecutionError> {
+                dbWithFk.invokeInstanceMethod(
+                    scope,
+                    "transaction",
+                    ObjExternCallable.fromBridge {
+                        val tx = requiredArg<Obj>(0)
+                        tx.invokeInstanceMethod(
+                            requireScope(),
+                            "execute",
+                            ObjString("insert into child(parent_id) values(?)"),
+                            ObjInt.of(2)
+                        )
+                    }
+                )
+            }
+
+            assertEquals("SqlConstraintException", error.errorObject.objClass.className)
+        }
+    }
+
+    @Test
     fun testCommitFailureBecomesPrimaryAfterNormalCompletion() = runTest {
         val scope = Script.newScope()
         val db = openMemoryDb(scope)
@@ -551,6 +714,14 @@ class LyngSqliteModuleNativeTest {
     private suspend fun ModuleScope.callFn(name: String, vararg args: Obj): Obj {
         val callee = get(name)?.value ?: error("Missing $name in module")
         return callee.invoke(this, ObjNull, *args)
+    }
+
+    private suspend fun sqliteOptions(scope: Scope, vararg entries: Pair<String, Obj>): ObjMap {
+        val result = ObjMap()
+        for ((key, value) in entries) {
+            result.putAt(scope, ObjString(key), value)
+        }
+        return result
     }
 
     private suspend fun openMemoryDb(scope: Scope): Obj {

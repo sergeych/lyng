@@ -8,6 +8,22 @@ import lyng.io.db
     Importing this module registers the `sqlite:` URL scheme for
     `openDatabase(...)`.
 
+    Accepted generic URL forms:
+    - `sqlite::memory:`
+    - `sqlite:relative/path.db`
+    - `sqlite:/absolute/path.db`
+
+    Provider-specific `openDatabase(..., extraParams)` options:
+    - `readOnly: Bool`
+    - `createIfMissing: Bool`
+    - `foreignKeys: Bool`
+    - `busyTimeoutMillis: Int`
+
+    Open-time URL/config validation failures should surface as
+    `IllegalArgumentException`.
+    Runtime SQLite open failures such as opening a missing file with
+    `createIfMissing = false` should surface as `DatabaseException`.
+
     SQLite provider defaults:
     - `Bool` is written as `0` / `1`
     - `Decimal` is written as canonical text

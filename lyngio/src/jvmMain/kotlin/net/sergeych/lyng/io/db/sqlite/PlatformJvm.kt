@@ -465,7 +465,12 @@ private fun mapOpenException(scope: ScopeFacade, core: SqliteCoreModule, e: SQLE
     if ("malformed" in lower || "no such access mode" in lower || "invalid uri" in lower) {
         scope.raiseIllegalArgument(message)
     }
-    throw mapSqlException(scope, core, e)
+    throw ExecutionError(
+        ObjException(core.databaseException, scope.requireScope(), ObjString(message)),
+        scope.pos,
+        message,
+        e,
+    )
 }
 
 private fun mapSqlException(scope: ScopeFacade, core: SqliteCoreModule, e: SQLException): ExecutionError {
