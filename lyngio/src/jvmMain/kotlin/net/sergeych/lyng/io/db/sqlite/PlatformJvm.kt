@@ -23,6 +23,7 @@ import net.sergeych.lyng.ScopeFacade
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjBool
 import net.sergeych.lyng.obj.ObjBuffer
+import net.sergeych.lyng.obj.ObjDate
 import net.sergeych.lyng.obj.ObjDateTime
 import net.sergeych.lyng.obj.ObjEnumEntry
 import net.sergeych.lyng.obj.ObjException
@@ -32,6 +33,7 @@ import net.sergeych.lyng.obj.ObjNull
 import net.sergeych.lyng.obj.ObjReal
 import net.sergeych.lyng.obj.ObjString
 import net.sergeych.lyng.requireScope
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
@@ -124,7 +126,7 @@ private class JdbcSqliteTransactionBackend(
     override suspend fun select(scope: ScopeFacade, clause: String, params: List<Obj>): SqliteResultSetData {
         try {
             connection.prepareStatement(clause).use { statement ->
-                bindParams(statement, params, scope)
+                bindParams(statement, params, scope, core)
                 statement.executeQuery().use { rs ->
                     return readResultSet(scope, core, rs)
                 }
@@ -146,7 +148,7 @@ private class JdbcSqliteTransactionBackend(
         }
         try {
             connection.prepareStatement(clause, Statement.RETURN_GENERATED_KEYS).use { statement ->
-                bindParams(statement, params, scope)
+                bindParams(statement, params, scope, core)
                 val hasResultSet = statement.execute()
                 if (hasResultSet) {
                     scope.raiseError(
@@ -189,12 +191,12 @@ private class JdbcSqliteTransactionBackend(
     }
 }
 
-private suspend fun bindParams(statement: PreparedStatement, params: List<Obj>, scope: ScopeFacade) {
+private suspend fun bindParams(statement: PreparedStatement, params: List<Obj>, scope: ScopeFacade, core: SqliteCoreModule) {
     params.forEachIndexed { index, value ->
         val jdbcIndex = index + 1
         when (value) {
             ObjNull -> statement.setObject(jdbcIndex, null)
-            is ObjBool -> statement.setBoolean(jdbcIndex, value.value)
+            is ObjBool -> statement.setLong(jdbcIndex, if (value.value) 1L else 0L)
             is ObjInt -> statement.setLong(jdbcIndex, value.value)
             is ObjReal -> statement.setDouble(jdbcIndex, value.value)
             is ObjString -> statement.setString(jdbcIndex, value.value)
@@ -203,7 +205,13 @@ private suspend fun bindParams(statement: PreparedStatement, params: List<Obj>, 
             is ObjDateTime -> statement.setString(jdbcIndex, value.localDateTime.toString())
             else -> when (value.objClass.className) {
                 "Date", "Decimal" -> statement.setString(jdbcIndex, scope.toStringOf(value).value)
-                else -> scope.raiseClassCastError("Unsupported SQLite parameter type: ${value.objClass.className}")
+                else -> scope.raiseError(
+                    ObjException(
+                        core.sqlUsageException,
+                        scope.requireScope(),
+                        ObjString("Unsupported SQLite parameter type: ${value.objClass.className}")
+                    )
+                )
             }
         }
     }
@@ -240,40 +248,69 @@ private suspend fun readColumnValue(
     nativeType: String,
 ): Obj {
     val value = resultSet.getObject(index) ?: return ObjNull
-    if (isDecimalNativeType(nativeType) && value is Number) {
+    val normalizedNativeType = normalizeDeclaredTypeName(nativeType)
+    if (isDecimalNativeType(normalizedNativeType) && value is Number) {
         return decimalFromString(scope, value.toString())
     }
     return when (value) {
-        is Boolean -> ObjBool(value)
-        is Byte, is Short, is Int -> ObjInt.of((value as Number).toLong())
-        is Long -> ObjInt.of(value)
+        is Boolean -> if (isBooleanNativeType(normalizedNativeType)) ObjBool(value) else ObjInt.of(if (value) 1 else 0)
+        is Byte, is Short, is Int -> convertIntegerValue(scope, core, normalizedNativeType, (value as Number).toLong())
+        is Long -> convertIntegerValue(scope, core, normalizedNativeType, value)
         is Float, is Double -> ObjReal.of((value as Number).toDouble())
         is ByteArray -> ObjBuffer(value.toUByteArray())
-        is String -> convertStringValue(scope, core, nativeType, value)
+        is String -> convertStringValue(scope, core, normalizedNativeType, value)
         is java.math.BigDecimal -> decimalFromString(scope, value.toPlainString())
         else -> ObjString(value.toString())
+    }
+}
+
+private fun convertIntegerValue(
+    scope: ScopeFacade,
+    core: SqliteCoreModule,
+    normalizedNativeType: String,
+    value: Long,
+): Obj {
+    if (!isBooleanNativeType(normalizedNativeType)) {
+        return ObjInt.of(value)
+    }
+    return when (value) {
+        0L -> ObjBool(false)
+        1L -> ObjBool(true)
+        else -> sqlExecutionFailure(scope, core, "Invalid SQLite boolean value: $value")
     }
 }
 
 private suspend fun convertStringValue(
     scope: ScopeFacade,
     core: SqliteCoreModule,
-    nativeType: String,
+    normalizedNativeType: String,
     value: String,
 ): Obj {
-    val normalized = nativeType.trim().uppercase()
     return when {
-        normalized == "DECIMAL" || normalized == "NUMERIC" -> decimalFromString(scope, value)
-        normalized == "DATETIME" || normalized == "TIMESTAMP" -> dateTimeFromString(value)
-        normalized == "TIMESTAMP WITH TIME ZONE" || normalized == "TIMESTAMPTZ" ->
-            ObjInstant(Instant.parse(value))
+        isBooleanNativeType(normalizedNativeType) -> booleanFromString(scope, core, value)
+        isDecimalNativeType(normalizedNativeType) -> decimalFromString(scope, value.trim())
+        normalizedNativeType == "DATE" -> ObjDate(LocalDate.parse(value.trim()))
+        normalizedNativeType == "DATETIME" || normalizedNativeType == "TIMESTAMP" ->
+            dateTimeFromString(scope, core, value)
+        normalizedNativeType == "TIMESTAMP WITH TIME ZONE" ||
+            normalizedNativeType == "TIMESTAMPTZ" ||
+            normalizedNativeType == "DATETIME WITH TIME ZONE" -> ObjInstant(Instant.parse(value.trim()))
         else -> ObjString(value)
     }
 }
 
-private fun isDecimalNativeType(nativeType: String): Boolean {
-    val normalized = nativeType.trim().uppercase()
-    return normalized == "DECIMAL" || normalized == "NUMERIC"
+private fun isDecimalNativeType(normalizedNativeType: String): Boolean =
+    normalizedNativeType == "DECIMAL" || normalizedNativeType == "NUMERIC"
+
+private fun isBooleanNativeType(normalizedNativeType: String): Boolean =
+    normalizedNativeType == "BOOLEAN" || normalizedNativeType == "BOOL"
+
+private fun booleanFromString(scope: ScopeFacade, core: SqliteCoreModule, value: String): Obj {
+    return when (value.trim().lowercase()) {
+        "true", "t" -> ObjBool(true)
+        "false", "f" -> ObjBool(false)
+        else -> sqlExecutionFailure(scope, core, "Invalid SQLite boolean value: $value")
+    }
 }
 
 private suspend fun decimalFromString(scope: ScopeFacade, value: String): Obj {
@@ -282,15 +319,13 @@ private suspend fun decimalFromString(scope: ScopeFacade, value: String): Obj {
     return decimalClass.invokeInstanceMethod(scope.requireScope(), "fromString", ObjString(value))
 }
 
-private fun dateTimeFromString(value: String): ObjDateTime {
+private fun dateTimeFromString(scope: ScopeFacade, core: SqliteCoreModule, value: String): ObjDateTime {
     val trimmed = value.trim()
-    return if (hasExplicitTimeZone(trimmed)) {
-        val instant = Instant.parse(trimmed)
-        ObjDateTime(instant, parseTimeZoneOrUtc(trimmed))
-    } else {
-        val local = LocalDateTime.parse(trimmed)
-        ObjDateTime(local.toInstant(TimeZone.UTC), TimeZone.UTC)
+    if (hasExplicitTimeZone(trimmed)) {
+        sqlExecutionFailure(scope, core, "SQLite TIMESTAMP/DATETIME value must not contain a timezone offset: $value")
     }
+    val local = LocalDateTime.parse(trimmed)
+    return ObjDateTime(local.toInstant(TimeZone.UTC), TimeZone.UTC)
 }
 
 private fun hasExplicitTimeZone(value: String): Boolean {
@@ -306,28 +341,23 @@ private fun hasExplicitTimeZone(value: String): Boolean {
 private fun containsRowReturningClause(clause: String): Boolean =
     Regex("""\breturning\b""", RegexOption.IGNORE_CASE).containsMatchIn(clause)
 
-private fun parseTimeZoneOrUtc(value: String): TimeZone {
-    if (value.endsWith("Z", ignoreCase = true)) return TimeZone.UTC
-    val tIndex = value.indexOf('T')
-    if (tIndex < 0) return TimeZone.UTC
-    val plus = value.lastIndexOf('+')
-    val minus = value.lastIndexOf('-')
-    val offsetStart = maxOf(plus, minus)
-    if (offsetStart <= tIndex) return TimeZone.UTC
-    return try {
-        TimeZone.of(value.substring(offsetStart))
-    } catch (_: IllegalArgumentException) {
-        TimeZone.UTC
-    }
+private fun normalizeDeclaredTypeName(nativeTypeName: String): String {
+    val strippedSuffix = nativeTypeName.trim().replace(Regex("""\s*\(.*\)\s*$"""), "")
+    return strippedSuffix.uppercase().replace(Regex("""\s+"""), " ").trim()
 }
 
 private fun mapSqlType(core: SqliteCoreModule, nativeTypeName: String, jdbcType: Int): ObjEnumEntry {
-    val normalized = nativeTypeName.trim().uppercase()
+    val normalized = normalizeDeclaredTypeName(nativeTypeName)
     return when {
-        normalized == "BOOLEAN" -> core.sqlTypes.require("Bool")
+        normalized == "BOOLEAN" || normalized == "BOOL" -> core.sqlTypes.require("Bool")
         normalized == "DATE" -> core.sqlTypes.require("Date")
         normalized == "DATETIME" || normalized == "TIMESTAMP" -> core.sqlTypes.require("DateTime")
-        normalized == "TIMESTAMP WITH TIME ZONE" || normalized == "TIMESTAMPTZ" -> core.sqlTypes.require("Instant")
+        normalized == "TIMESTAMP WITH TIME ZONE" ||
+            normalized == "TIMESTAMPTZ" ||
+            normalized == "DATETIME WITH TIME ZONE" -> core.sqlTypes.require("Instant")
+        normalized == "TIME" ||
+            normalized == "TIME WITHOUT TIME ZONE" ||
+            normalized == "TIME WITH TIME ZONE" -> core.sqlTypes.require("String")
         normalized == "DECIMAL" || normalized == "NUMERIC" -> core.sqlTypes.require("Decimal")
         normalized.contains("BLOB") -> core.sqlTypes.require("Binary")
         normalized.contains("INT") -> core.sqlTypes.require("Int")
@@ -344,6 +374,14 @@ private fun mapSqlType(core: SqliteCoreModule, nativeTypeName: String, jdbcType:
 }
 
 private fun emptyResultSet(core: SqliteCoreModule): SqliteResultSetData = SqliteResultSetData(emptyList(), emptyList())
+
+private fun sqlExecutionFailure(scope: ScopeFacade, core: SqliteCoreModule, message: String): Nothing {
+    throw ExecutionError(
+        ObjException(core.sqlExecutionException, scope.requireScope(), ObjString(message)),
+        scope.pos,
+        message,
+    )
+}
 
 private fun rollbackQuietly(connection: Connection, savepoint: java.sql.Savepoint? = null) {
     try {

@@ -25,6 +25,7 @@ import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Script
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjBuffer
+import net.sergeych.lyng.obj.ObjBool
 import net.sergeych.lyng.obj.ObjDateTime
 import net.sergeych.lyng.obj.ObjExternCallable
 import net.sergeych.lyng.obj.ObjInt
@@ -355,6 +356,62 @@ class LyngSqliteModuleTest {
     }
 
     @Test
+    fun testDateAndBooleanConversionRules() = runTest {
+        val scope = Script.newScope()
+        val db = openMemoryDb(scope)
+
+        val summary = db.invokeInstanceMethod(
+            scope,
+            "transaction",
+            ObjExternCallable.fromBridge {
+                val tx = requiredArg<Obj>(0)
+                tx.invokeInstanceMethod(
+                    requireScope(),
+                    "execute",
+                    ObjString(
+                        "create table sample(" +
+                            "flag BOOL not null, " +
+                            "day DATE not null, " +
+                            "clock TIME not null)"
+                    )
+                )
+                tx.invokeInstanceMethod(
+                    requireScope(),
+                    "execute",
+                    ObjString("insert into sample(flag, day, clock) values(?, ?, ?)"),
+                    ObjBool(true),
+                    dateOf(requireScope(), "2026-04-15"),
+                    ObjString("12:34:56")
+                )
+                tx.invokeInstanceMethod(
+                    requireScope(),
+                    "execute",
+                    ObjString("insert into sample(flag, day, clock) values(?, ?, ?)"),
+                    ObjString("t"),
+                    ObjString("2026-04-16"),
+                    ObjString("23:59:59")
+                )
+                val resultSet = tx.invokeInstanceMethod(
+                    requireScope(),
+                    "select",
+                    ObjString("select flag, day, clock from sample order by day")
+                )
+                val rows = rowsOf(requireScope(), resultSet)
+                ObjString(
+                    listOf(
+                        rows[0].getAt(requireScope(), ObjString("flag")).objClass.className,
+                        rows[0].getAt(requireScope(), ObjString("day")).objClass.className,
+                        stringValue(requireScope(), rows[0].getAt(requireScope(), ObjString("clock"))),
+                        rows[1].getAt(requireScope(), ObjString("flag")).objClass.className,
+                    ).joinToString("|")
+                )
+            }
+        ) as ObjString
+
+        assertEquals("Bool|Date|12:34:56|Bool", summary.value)
+    }
+
+    @Test
     fun testReadOnlyOpenPreventsWrites() = runTest {
         val scope = Script.newScope()
         createSqliteModule(scope.importManager)
@@ -446,6 +503,12 @@ class LyngSqliteModuleTest {
         val decimalModule = scope.currentImportProvider.createModuleScope(scope.pos, "lyng.decimal")
         val decimalClass = decimalModule.requireClass("Decimal")
         return decimalClass.invokeInstanceMethod(scope, "fromString", ObjString(value))
+    }
+
+    private suspend fun dateOf(scope: Scope, value: String): Obj {
+        val timeModule = scope.currentImportProvider.createModuleScope(scope.pos, "lyng.time")
+        val dateClass = timeModule.requireClass("Date")
+        return dateClass.invoke(scope, ObjNull, ObjString(value))
     }
 
     private fun emptyMapObj(): Obj = ObjMap()
