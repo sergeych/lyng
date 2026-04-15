@@ -1,0 +1,2 @@
+headers = sqlite3_lyng.h
+package = net.sergeych.lyng.io.db.sqlite.cinterop

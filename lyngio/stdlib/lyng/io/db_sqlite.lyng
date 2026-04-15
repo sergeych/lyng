@@ -1,0 +1,24 @@
+package lyng.io.db.sqlite
+
+import lyng.io.db
+
+/*
+    SQLite provider for `lyng.io.db`.
+
+    Importing this module registers the `sqlite:` URL scheme for
+    `openDatabase(...)`.
+
+    SQLite provider defaults:
+    - `Bool` is written as `0` / `1`
+    - `Decimal` is written as canonical text
+    - `Date` is written as `YYYY-MM-DD`
+    - `DateTime` is written as an ISO local timestamp without timezone
+    - `Instant` is written as an ISO UTC timestamp with explicit timezone marker
+*/
+extern fun openSqlite(
+    path: String,
+    readOnly: Bool = false,
+    createIfMissing: Bool = true,
+    foreignKeys: Bool = true,
+    busyTimeoutMillis: Int = 5000
+): Database

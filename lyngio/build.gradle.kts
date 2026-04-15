@@ -58,6 +58,27 @@ kotlin {
 //        nodejs()
 //    }
 
+    targets.withType(org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget::class.java).configureEach {
+        compilations.getByName("main").cinterops.create("sqlite3") {
+            defFile(project.file("src/nativeInterop/cinterop/sqlite/sqlite3.def"))
+            packageName("net.sergeych.lyng.io.db.sqlite.cinterop")
+            includeDirs(project.file("src/nativeInterop/cinterop/sqlite"))
+        }
+        binaries.all {
+            when (konanTarget.name) {
+                "linux_x64" -> linkerOpts(
+                    "-L/lib/x86_64-linux-gnu",
+                    "-l:libsqlite3.so.0",
+                    "-ldl",
+                    "-lpthread",
+                    "-lm",
+                    "-Wl,--allow-shlib-undefined"
+                )
+                else -> linkerOpts("-lsqlite3")
+            }
+        }
+    }
+
     // Keep expect/actual warning suppressed consistently with other modules
     targets.configureEach {
         compilations.configureEach {
@@ -155,6 +176,7 @@ kotlin {
                 implementation("org.jline:jline-terminal:3.29.0")
                 implementation(libs.ktor.client.cio)
                 implementation(libs.ktor.network)
+                implementation(libs.sqlite.jdbc)
             }
         }
 //        // For Wasm we use in-memory VFS for now

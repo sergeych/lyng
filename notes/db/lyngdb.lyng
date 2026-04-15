@@ -1,0 +1,213 @@
+/*
+    Portable value categories exposed by the Lyng SQL layer and used in
+    [SqlColumn].
+*/
+enum SqlType {
+    Binary, String, Int, Double, Decimal,
+    Bool, Instant, Date, DateTime
+}
+
+class SqlColumn(
+        val name: String,
+        val sqlType: SqlType,
+        val nullable: Bool,
+        /*
+            Original database type name as reported by the backend, such as
+            VARCHAR, TEXT, INT8, TIMESTAMPTZ, or BYTEA.
+        */
+        val nativeType: String
+)
+
+class SqlRow(
+        /* Number of columns in the row */
+        val size: Int,
+        val values: ImmutableList<Object?>
+) {
+    /*
+        Return the already converted Lyng value for a column addressed by
+        index or output column label. SQL NULL is returned as null.
+
+        Name lookup uses result-column labels. If several columns share the same
+        label, name-based access is ambiguous and should fail. Missing column
+        names and invalid indexes should also fail.
+    */
+    abstract override fun getAt(indexOrName: String|Int): Object?
+}
+
+/*
+    A result set is valid only while its owning transaction is active.
+
+    Implementations may stream rows or buffer them internally, but:
+    - rows must be exposed through normal iteration
+    - iteration to the end or canceled iteration should close the underlying
+      resources automatically
+    - using the result set after its transaction ends is invalid
+    - rows obtained from the result set are also invalid after the owning
+      transaction ends, even if the implementation had already buffered them
+
+    If user code wants row data to survive independently, it should copy the
+    values it needs into ordinary Lyng objects while the transaction is active.
+*/
+interface ResultSet : Iterable<SqlRow> {
+    /*
+        Column metadata for the result rows, in positional order.
+    */
+    abstract val columns: ImmutableList<SqlColumn>
+
+    /*
+        Number of rows if the implementation can determine it. Implementations
+        may need to consume or buffer the whole result in order to answer.
+    */
+    abstract override fun size(): Int
+
+    /*
+        Fast emptiness check when the implementation can provide it without
+        consuming the result.
+    */
+    abstract override fun isEmpty(): Bool
+}
+
+abstract class ExecutionResult(
+        val affectedRowsCount: Int
+) {
+    /*
+        Return implementation-supported auto-generated values produced by
+        [execute]. This is intentionally stricter than arbitrary SQL result
+        sets: statements such as INSERT/UPDATE/DELETE ... RETURNING should be
+        executed with [select], not exposed here.
+
+        If the statement produced no generated values, the returned result set
+        is empty.
+    */
+    abstract fun getGeneratedKeys(): ResultSet
+}
+
+/*
+    Base exception for the SQL database module.
+*/
+open class DatabaseException: Exception
+
+/*
+    The SQL statement could not be executed successfully by the backend.
+*/
+open class SqlExecutionException: DatabaseException
+
+/*
+    Execution failed because of a constraint violation, such as UNIQUE,
+    FOREIGN KEY, CHECK, or NOT NULL.
+*/
+class SqlConstraintException: SqlExecutionException
+
+/*
+    The DB API was used incorrectly, such as invalid transaction state,
+    ambiguous column-name access, or invalid row indexes.
+*/
+class SqlUsageException: DatabaseException
+
+/*
+    Transaction represents a database transaction (non-transactional operations
+    we intentionally do not support).
+
+    Important: a transaction has __no commit__; instead it commits when
+    leaving the transaction block normally.
+
+    If the transaction block throws any exception not caught inside the calling
+    code, it will be rolled back.
+*/
+interface SqlTransaction {
+    /*
+        Execute a SQL statement that returns rows. This includes plain SELECT
+        queries and database-specific DML statements with row-returning clauses
+        such as RETURNING or OUTPUT.
+
+        Portable SQL uses positional ? placeholders only.
+
+        Parameters are already-converted Lyng values bound positionally to the
+        statement. Portable bindable values are:
+        - null
+        - Bool
+        - Int, Double, Decimal
+        - String
+        - Buffer
+        - Date, DateTime, Instant
+
+        Backends may support additional parameter types, but portable code
+        should limit itself to the values above.
+    */
+    abstract fun select(clause: String,params: Object...): ResultSet
+
+    /*
+        Execute a SQL statement for side effects. Use [select] for any statement
+        whose primary result is a row set.
+
+        Parameters follow the same binding rules as [select].
+    */
+    abstract fun execute(clause: String,params: Object...): ExecutionResult
+
+    /*
+        Create a nested transaction with real nested semantics, typically using
+        database savepoints.
+
+        If the backend cannot provide real nested transaction semantics, this
+        call should fail with SqlUsageException rather than flattening into the
+        outer transaction.
+
+        Failure inside the nested transaction rolls back only the nested scope;
+        the outer transaction remains active unless the exception is allowed to
+        propagate further.
+    */
+    abstract fun transaction<T>( block: (SqlTransaction)->T): T
+}
+
+/*
+    Special exception to be thrown from SqlTransaction.transaction
+    when nothing else matters/needed (DRY).
+
+    It causes rollback and is propagated to the caller, but should not be
+    treated as a backend/driver failure.
+
+    If rollback itself fails, that rollback failure becomes the primary backend
+    error instead.
+*/
+class RollbackException: Exception
+
+interface Database {
+    /*
+        Open a transaction. Any pooling, physical connection lifecycle, and implementation-specific configuration are owned by the database implementation and hidden from the user.
+        The transaction commits when the block finishes normally,
+        and rolls back if the block exits with an uncaught exception.
+    */
+    abstract fun transaction<T>(block: (SqlTransaction) -> T): T
+}
+
+/*
+    Register a database provider for a URL scheme.
+
+    Provider modules should call this during module initialization when first
+    imported. Scheme matching is case-insensitive and normalized to lowercase.
+
+    Registering the same scheme more than once should fail.
+*/
+fun registerDatabaseProvider(
+        scheme: String,
+        opener: (connectionUrl: String, extraParams: Map<String,Object?>) -> Database
+)
+
+/*
+    The mandatory generic entry point for all providers. It opens a database
+    handle from a provider-specific connection URL plus extra parameters.
+
+    Providers may expose additional typed constructors such as openSqlite(...)
+    or openPostgres(...), but openDatabase(...) should remain available for
+    configuration-driven usage.
+
+    It should throw IllegalArgumentException for malformed connection URLs or
+    invalid extra parameter shapes detected before opening the backend.
+    Runtime opening failures such as authentication, connectivity, or provider
+    initialization errors should be reported as DatabaseException.
+
+    The matching provider must already be registered, normally because its
+    module was imported and executed. Unknown schemes or missing providers
+    should fail with DatabaseException.
+*/
+extern fun openDatabase(connectionUrl: String,extraParams: Map<String,Object?>): Database
