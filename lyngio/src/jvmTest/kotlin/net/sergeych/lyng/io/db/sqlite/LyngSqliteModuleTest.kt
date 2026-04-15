@@ -412,6 +412,88 @@ class LyngSqliteModuleTest {
     }
 
     @Test
+    fun testUnsupportedParameterTypeFailsWithSqlUsageException() = runTest {
+        val scope = Script.newScope()
+        val db = openMemoryDb(scope)
+
+        val error = assertFailsWith<ExecutionError> {
+            db.invokeInstanceMethod(
+                scope,
+                "transaction",
+                ObjExternCallable.fromBridge {
+                    val tx = requiredArg<Obj>(0)
+                    tx.invokeInstanceMethod(
+                        requireScope(),
+                        "execute",
+                        ObjString("create table sample(value text not null)")
+                    )
+                    tx.invokeInstanceMethod(
+                        requireScope(),
+                        "execute",
+                        ObjString("insert into sample(value) values(?)"),
+                        emptyMapObj()
+                    )
+                }
+            )
+        }
+
+        assertEquals("SqlUsageException", error.errorObject.objClass.className)
+        assertTrue(error.errorMessage.contains("Unsupported SQLite parameter type"), error.errorMessage)
+    }
+
+    @Test
+    fun testTimestampAndDatetimeRejectTimezoneBearingText() = runTest {
+        val scope = Script.newScope()
+        withTempDb(scope) { db ->
+            db.invokeInstanceMethod(
+                scope,
+                "transaction",
+                ObjExternCallable.fromBridge {
+                    val tx = requiredArg<Obj>(0)
+                    tx.invokeInstanceMethod(
+                        requireScope(),
+                        "execute",
+                        ObjString("create table sample(ts TIMESTAMP not null, dt DATETIME not null)")
+                    )
+                    tx.invokeInstanceMethod(
+                        requireScope(),
+                        "execute",
+                        ObjString("insert into sample(ts, dt) values(?, ?)"),
+                        ObjString("2024-05-06T07:08:09Z"),
+                        ObjString("2024-05-06T10:11:12+03:00")
+                    )
+                }
+            )
+
+            val timestampError = assertFailsWith<ExecutionError> {
+                db.invokeInstanceMethod(
+                    scope,
+                    "transaction",
+                    ObjExternCallable.fromBridge {
+                        val tx = requiredArg<Obj>(0)
+                        tx.invokeInstanceMethod(requireScope(), "select", ObjString("select ts from sample"))
+                    }
+                )
+            }
+            assertEquals("SqlExecutionException", timestampError.errorObject.objClass.className)
+            assertTrue(timestampError.errorMessage.contains("must not contain a timezone offset"), timestampError.errorMessage)
+
+            val datetimeError = assertFailsWith<ExecutionError> {
+                db.invokeInstanceMethod(
+                    scope,
+                    "transaction",
+                    ObjExternCallable.fromBridge {
+                        val tx = requiredArg<Obj>(0)
+                        tx.invokeInstanceMethod(requireScope(), "select", ObjString("select dt from sample"))
+                    }
+                )
+            }
+            assertEquals("SqlExecutionException", datetimeError.errorObject.objClass.className)
+            assertTrue(datetimeError.errorMessage.contains("must not contain a timezone offset"), datetimeError.errorMessage)
+        }
+    }
+
+    @Test
     fun testReadOnlyOpenPreventsWrites() = runTest {
         val scope = Script.newScope()
         createSqliteModule(scope.importManager)

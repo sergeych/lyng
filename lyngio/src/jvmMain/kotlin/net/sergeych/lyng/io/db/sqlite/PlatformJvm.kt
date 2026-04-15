@@ -68,14 +68,19 @@ private class JdbcSqliteDatabaseBackend(
         try {
             connection.autoCommit = false
             val tx = JdbcSqliteTransactionBackend(core, connection)
-            return try {
-                val result = block(tx)
-                connection.commit()
-                result
+            val result = try {
+                block(tx)
             } catch (e: Throwable) {
-                rollbackQuietly(connection)
-                throw e
+                throw finishFailedTransaction(scope, core, e) {
+                    rollbackOrThrow(scope, core, connection)
+                }
             }
+            try {
+                connection.commit()
+            } catch (e: SQLException) {
+                throw mapSqlException(scope, core, e)
+            }
+            return result
         } catch (e: SQLException) {
             throw mapSqlException(scope, core, e)
         } finally {
@@ -180,14 +185,21 @@ private class JdbcSqliteTransactionBackend(
         } catch (e: SQLException) {
             throw mapSqlUsage(scope, core, "Nested transactions are not supported by this SQLite backend", e)
         }
-        return try {
-            val result = block(JdbcSqliteTransactionBackend(core, connection))
-            connection.releaseSavepoint(savepoint)
-            result
+        val nested = JdbcSqliteTransactionBackend(core, connection)
+        val result = try {
+            block(nested)
         } catch (e: Throwable) {
-            rollbackQuietly(connection, savepoint)
-            throw e
+            throw finishFailedTransaction(scope, core, e) {
+                rollbackToSavepointOrThrow(scope, core, connection, savepoint)
+                releaseSavepointOrThrow(scope, core, connection, savepoint)
+            }
         }
+        try {
+            connection.releaseSavepoint(savepoint)
+        } catch (e: SQLException) {
+            throw mapSqlException(scope, core, e)
+        }
+        return result
     }
 }
 
@@ -383,11 +395,68 @@ private fun sqlExecutionFailure(scope: ScopeFacade, core: SqliteCoreModule, mess
     )
 }
 
-private fun rollbackQuietly(connection: Connection, savepoint: java.sql.Savepoint? = null) {
+private fun rollbackOrThrow(scope: ScopeFacade, core: SqliteCoreModule, connection: Connection) {
     try {
-        if (savepoint == null) connection.rollback() else connection.rollback(savepoint)
-    } catch (_: SQLException) {
+        connection.rollback()
+    } catch (e: SQLException) {
+        throw mapSqlException(scope, core, e)
     }
+}
+
+private fun rollbackToSavepointOrThrow(
+    scope: ScopeFacade,
+    core: SqliteCoreModule,
+    connection: Connection,
+    savepoint: java.sql.Savepoint,
+) {
+    try {
+        connection.rollback(savepoint)
+    } catch (e: SQLException) {
+        throw mapSqlException(scope, core, e)
+    }
+}
+
+private fun releaseSavepointOrThrow(
+    scope: ScopeFacade,
+    core: SqliteCoreModule,
+    connection: Connection,
+    savepoint: java.sql.Savepoint,
+) {
+    try {
+        connection.releaseSavepoint(savepoint)
+    } catch (e: SQLException) {
+        throw mapSqlException(scope, core, e)
+    }
+}
+
+private inline fun finishFailedTransaction(
+    scope: ScopeFacade,
+    core: SqliteCoreModule,
+    failure: Throwable,
+    rollback: () -> Unit,
+): Throwable {
+    return try {
+        rollback()
+        failure
+    } catch (rollbackFailure: Throwable) {
+        if (isRollbackSignal(failure, core)) {
+            attachSecondaryFailure(rollbackFailure, failure)
+            rollbackFailure
+        } else {
+            attachSecondaryFailure(failure, rollbackFailure)
+            failure
+        }
+    }
+}
+
+private fun isRollbackSignal(failure: Throwable, core: SqliteCoreModule): Boolean {
+    val errorObject = (failure as? ExecutionError)?.errorObject ?: return false
+    return errorObject.isInstanceOf(core.rollbackException)
+}
+
+private fun attachSecondaryFailure(primary: Throwable, secondary: Throwable) {
+    if (primary === secondary) return
+    primary.addSuppressed(secondary)
 }
 
 private fun mapOpenException(scope: ScopeFacade, core: SqliteCoreModule, e: SQLException): Nothing {

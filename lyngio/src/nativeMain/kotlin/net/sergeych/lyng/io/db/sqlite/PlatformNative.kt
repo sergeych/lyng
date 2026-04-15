@@ -119,14 +119,15 @@ private class NativeSqliteDatabaseBackend(
         try {
             handle.execUnit(scope, core, "begin")
             val tx = NativeSqliteTransactionBackend(core, handle, savepoints)
-            return try {
-                val result = block(tx)
-                handle.execUnit(scope, core, "commit")
-                result
+            val result = try {
+                block(tx)
             } catch (e: Throwable) {
-                handle.execUnitQuietly("rollback")
-                throw e
+                throw finishFailedTransaction(scope, core, e) {
+                    handle.execUnit(scope, core, "rollback")
+                }
             }
+            handle.execUnit(scope, core, "commit")
+            return result
         } finally {
             handle.close()
         }
@@ -149,15 +150,17 @@ private class NativeSqliteTransactionBackend(
     override suspend fun <T> transaction(scope: ScopeFacade, block: suspend (SqliteTransactionBackend) -> T): T {
         val savepoint = "lyng_sp_${savepoints.next()}"
         handle.execUnit(scope, core, "savepoint $savepoint")
-        return try {
-            val result = block(NativeSqliteTransactionBackend(core, handle, savepoints))
-            handle.execUnit(scope, core, "release savepoint $savepoint")
-            result
+        val nested = NativeSqliteTransactionBackend(core, handle, savepoints)
+        val result = try {
+            block(nested)
         } catch (e: Throwable) {
-            handle.execUnitQuietly("rollback to savepoint $savepoint")
-            handle.execUnitQuietly("release savepoint $savepoint")
-            throw e
+            throw finishFailedTransaction(scope, core, e) {
+                handle.execUnit(scope, core, "rollback to savepoint $savepoint")
+                handle.execUnit(scope, core, "release savepoint $savepoint")
+            }
         }
+        handle.execUnit(scope, core, "release savepoint $savepoint")
+        return result
     }
 }
 
@@ -223,17 +226,6 @@ private class NativeSqliteHandle(
                     SQLITE_DONE, SQLITE_ROW -> Unit
                     else -> throw sqlError(scope, core, rc)
                 }
-            } finally {
-                sqlite3_finalize(stmt)
-            }
-        }
-    }
-
-    fun execUnitQuietly(sql: String) {
-        memScoped {
-            val stmt = lyng_sqlite3_prepare(db, sql) ?: return@memScoped
-            try {
-                sqlite3_step(stmt)
             } finally {
                 sqlite3_finalize(stmt)
             }
@@ -599,4 +591,34 @@ private fun sqlExecutionError(scope: ScopeFacade, core: SqliteCoreModule, messag
         scope.pos,
         message,
     )
+}
+
+private inline fun finishFailedTransaction(
+    scope: ScopeFacade,
+    core: SqliteCoreModule,
+    failure: Throwable,
+    rollback: () -> Unit,
+): Throwable {
+    return try {
+        rollback()
+        failure
+    } catch (rollbackFailure: Throwable) {
+        if (isRollbackSignal(failure, core)) {
+            attachSecondaryFailure(rollbackFailure, failure)
+            rollbackFailure
+        } else {
+            attachSecondaryFailure(failure, rollbackFailure)
+            failure
+        }
+    }
+}
+
+private fun isRollbackSignal(failure: Throwable, core: SqliteCoreModule): Boolean {
+    val errorObject = (failure as? ExecutionError)?.errorObject ?: return false
+    return errorObject.isInstanceOf(core.rollbackException)
+}
+
+private fun attachSecondaryFailure(primary: Throwable, secondary: Throwable) {
+    if (primary === secondary) return
+    primary.addSuppressed(secondary)
 }
