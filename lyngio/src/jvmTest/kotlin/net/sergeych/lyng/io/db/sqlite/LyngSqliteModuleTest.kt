@@ -33,6 +33,7 @@ import net.sergeych.lyng.obj.ObjInstant
 import net.sergeych.lyng.obj.ObjMap
 import net.sergeych.lyng.obj.ObjNull
 import net.sergeych.lyng.obj.ObjString
+import net.sergeych.lyng.obj.raiseAsExecutionError
 import net.sergeych.lyng.obj.requiredArg
 import net.sergeych.lyng.requireScope
 import kotlinx.datetime.TimeZone
@@ -132,6 +133,56 @@ class LyngSqliteModuleTest {
         ) as ObjInt
 
         assertEquals(1L, count.value)
+    }
+
+    @Test
+    fun testRollbackExceptionRollsBackAndPropagates() = runTest {
+        val scope = Script.newScope()
+        withTempDb(scope) { db ->
+            db.invokeInstanceMethod(
+                scope,
+                "transaction",
+                ObjExternCallable.fromBridge {
+                    val tx = requiredArg<Obj>(0)
+                    tx.invokeInstanceMethod(
+                        requireScope(),
+                        "execute",
+                        ObjString("create table items(id integer primary key autoincrement, name text not null)")
+                    )
+                }
+            )
+
+            val error = assertFailsWith<ExecutionError> {
+                db.invokeInstanceMethod(
+                    scope,
+                    "transaction",
+                    ObjExternCallable.fromBridge {
+                        val tx = requiredArg<Obj>(0)
+                        tx.invokeInstanceMethod(
+                            requireScope(),
+                            "execute",
+                            ObjString("insert into items(name) values(?)"),
+                            ObjString("rolled-back")
+                        )
+                        rollbackException(requireScope(), "stop here").raiseAsExecutionError(requireScope())
+                    }
+                )
+            }
+
+            assertEquals("RollbackException", error.errorObject.objClass.className)
+
+            val count = db.invokeInstanceMethod(
+                scope,
+                "transaction",
+                ObjExternCallable.fromBridge {
+                    val tx = requiredArg<Obj>(0)
+                    val resultSet = tx.invokeInstanceMethod(requireScope(), "select", ObjString("select count(*) as count from items"))
+                    rowsOf(requireScope(), resultSet)[0].getAt(requireScope(), ObjString("count"))
+                }
+            ) as ObjInt
+
+            assertEquals(0L, count.value)
+        }
     }
 
     @Test
@@ -543,6 +594,65 @@ class LyngSqliteModuleTest {
         }
     }
 
+    @Test
+    fun testCommitFailureBecomesPrimaryAfterNormalCompletion() = runTest {
+        val scope = Script.newScope()
+        val db = openMemoryDb(scope)
+
+        val error = assertFailsWith<ExecutionError> {
+            db.invokeInstanceMethod(
+                scope,
+                "transaction",
+                ObjExternCallable.fromBridge {
+                    val tx = requiredArg<Obj>(0)
+                    tx.invokeInstanceMethod(requireScope(), "execute", ObjString("rollback"))
+                }
+            )
+        }
+
+        assertEquals("SqlExecutionException", error.errorObject.objClass.className)
+    }
+
+    @Test
+    fun testUserExceptionStaysPrimaryWhenRollbackFails() = runTest {
+        val scope = Script.newScope()
+        val db = openMemoryDb(scope)
+
+        val error = assertFailsWith<IllegalStateException> {
+            db.invokeInstanceMethod(
+                scope,
+                "transaction",
+                ObjExternCallable.fromBridge {
+                    val tx = requiredArg<Obj>(0)
+                    tx.invokeInstanceMethod(requireScope(), "execute", ObjString("rollback"))
+                    throw IllegalStateException("boom")
+                }
+            )
+        }
+
+        assertEquals("boom", error.message)
+    }
+
+    @Test
+    fun testRollbackFailureBecomesPrimaryAfterRollbackException() = runTest {
+        val scope = Script.newScope()
+        val db = openMemoryDb(scope)
+
+        val error = assertFailsWith<ExecutionError> {
+            db.invokeInstanceMethod(
+                scope,
+                "transaction",
+                ObjExternCallable.fromBridge {
+                    val tx = requiredArg<Obj>(0)
+                    tx.invokeInstanceMethod(requireScope(), "execute", ObjString("rollback"))
+                    rollbackException(requireScope(), "rollback requested").raiseAsExecutionError(requireScope())
+                }
+            )
+        }
+
+        assertEquals("SqlExecutionException", error.errorObject.objClass.className)
+    }
+
     private suspend fun ModuleScope.callFn(name: String, vararg args: Obj): Obj {
         val callee = get(name)?.value ?: error("Missing $name in module")
         return callee.invoke(this, ObjNull, *args)
@@ -585,6 +695,12 @@ class LyngSqliteModuleTest {
         val decimalModule = scope.currentImportProvider.createModuleScope(scope.pos, "lyng.decimal")
         val decimalClass = decimalModule.requireClass("Decimal")
         return decimalClass.invokeInstanceMethod(scope, "fromString", ObjString(value))
+    }
+
+    private suspend fun rollbackException(scope: Scope, message: String): net.sergeych.lyng.obj.ObjException {
+        val dbModule = scope.currentImportProvider.createModuleScope(scope.pos, "lyng.io.db")
+        val rollbackClass = dbModule.requireClass("RollbackException")
+        return rollbackClass.invoke(scope, ObjNull, ObjString(message)) as net.sergeych.lyng.obj.ObjException
     }
 
     private suspend fun dateOf(scope: Scope, value: String): Obj {
