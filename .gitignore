@@ -29,3 +29,4 @@ debug.log
 test_output*.txt
 /site/src/version-template/lyng-version.js
 /bugcontents.db
+/bugs/

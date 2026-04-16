@@ -1,6 +1,6 @@
 ### lyng.io.db — SQL database access for Lyng scripts
 
-This module provides the portable SQL database contract for Lyng. The first shipped provider is SQLite via `lyng.io.db.sqlite`.
+This module provides the portable SQL database contract for Lyng. The current shipped providers are SQLite via `lyng.io.db.sqlite` and a JVM-only JDBC bridge via `lyng.io.db.jdbc`.
 
 > **Note:** `lyngio` is a separate library module. It must be explicitly added as a dependency to your host application and initialized in your Lyng scopes.
 
@@ -29,6 +29,28 @@ suspend fun bootstrapDb() {
 ```
 
 `createSqliteModule(...)` also registers the `sqlite:` scheme for generic `openDatabase(...)`.
+
+For JVM JDBC-backed access, install the JDBC provider as well:
+
+```kotlin
+import net.sergeych.lyng.EvalSession
+import net.sergeych.lyng.Scope
+import net.sergeych.lyng.io.db.createDbModule
+import net.sergeych.lyng.io.db.jdbc.createJdbcModule
+
+suspend fun bootstrapJdbc() {
+    val session = EvalSession()
+    val scope: Scope = session.getScope()
+    createDbModule(scope)
+    createJdbcModule(scope)
+    session.eval("""
+        import lyng.io.db
+        import lyng.io.db.jdbc
+    """.trimIndent())
+}
+```
+
+`createJdbcModule(...)` registers `jdbc:`, `h2:`, `postgres:`, and `postgresql:` for `openDatabase(...)`.
 
 ---
 
@@ -64,6 +86,63 @@ val db = openDatabase(
         "busyTimeoutMillis" => 5000
     )
 )
+```
+
+JVM JDBC open with H2:
+
+```lyng
+import lyng.io.db.jdbc
+
+val db = openH2("mem:demo;DB_CLOSE_DELAY=-1")
+
+val names = db.transaction { tx ->
+    tx.execute("create table person(id bigint auto_increment primary key, name varchar(120) not null)")
+    tx.execute("insert into person(name) values(?)", "Ada")
+    tx.execute("insert into person(name) values(?)", "Linus")
+    tx.select("select name from person order by id").toList()
+}
+
+assertEquals("Ada", names[0]["name"])
+assertEquals("Linus", names[1]["name"])
+```
+
+Generic JDBC open through `openDatabase(...)`:
+
+```lyng
+import lyng.io.db
+import lyng.io.db.jdbc
+
+val db = openDatabase(
+    "jdbc:h2:mem:demo2;DB_CLOSE_DELAY=-1",
+    Map()
+)
+
+val answer = db.transaction { tx ->
+    tx.select("select 42 as answer").toList()[0]["answer"]
+}
+
+assertEquals(42, answer)
+```
+
+PostgreSQL typed open:
+
+```lyng
+import lyng.io.db.jdbc
+
+val db = openPostgres(
+    "jdbc:postgresql://127.0.0.1/appdb",
+    "appuser",
+    "secret"
+)
+
+val titles = db.transaction { tx ->
+    tx.execute("create table if not exists task(id bigserial primary key, title text not null)")
+    tx.execute("insert into task(title) values(?)", "Ship JDBC provider")
+    tx.execute("insert into task(title) values(?)", "Test PostgreSQL path")
+    tx.select("select title from task order by id").toList()
+}
+
+assertEquals("Ship JDBC provider", titles[0]["title"])
 ```
 
 Nested transactions use real savepoint semantics:
@@ -217,6 +296,76 @@ Open-time validation failures:
 - malformed URL or bad option shape -> `IllegalArgumentException`
 - runtime open failure -> `DatabaseException`
 
+#### JDBC provider
+
+`lyng.io.db.jdbc` is currently implemented on the JVM target only. The `lyngio-jvm` artifact bundles and explicitly loads these JDBC drivers:
+
+- SQLite
+- H2
+- PostgreSQL
+
+Typed helpers:
+
+```lyng
+openJdbc(
+    connectionUrl: String,
+    user: String? = null,
+    password: String? = null,
+    driverClass: String? = null,
+    properties: Map<String, Object?>? = null
+): Database
+
+openH2(
+    connectionUrl: String,
+    user: String? = null,
+    password: String? = null,
+    properties: Map<String, Object?>? = null
+): Database
+
+openPostgres(
+    connectionUrl: String,
+    user: String? = null,
+    password: String? = null,
+    properties: Map<String, Object?>? = null
+): Database
+```
+
+Accepted generic URL forms:
+
+- `jdbc:h2:mem:test;DB_CLOSE_DELAY=-1`
+- `h2:mem:test;DB_CLOSE_DELAY=-1`
+- `jdbc:postgresql://localhost/app`
+- `postgres://localhost/app`
+- `postgresql://localhost/app`
+
+Supported `openDatabase(..., extraParams)` keys for JDBC:
+
+- `driverClass: String`
+- `user: String`
+- `password: String`
+- `properties: Map<String, Object?>`
+
+Behavior notes for the JDBC bridge:
+
+- the portable `Database` / `SqlTransaction` API stays the same as for SQLite
+- nested transactions use JDBC savepoints
+- JDBC connection properties are built from `user`, `password`, and `properties`
+- `properties` values are stringified before being passed to JDBC
+- statements with row-returning clauses still must use `select(...)`, not `execute(...)`
+
+Platform support for this provider:
+
+- `lyng.io.db.jdbc` — JVM only
+- `openH2(...)` — works out of the box with `lyngio-jvm`
+- `openPostgres(...)` — driver included, but an actual PostgreSQL server is still required
+
+PostgreSQL-specific notes:
+
+- `openPostgres(...)` accepts either a full JDBC URL or shorthand forms such as `//localhost/app`
+- local peer/trust setups may use an empty password string
+- generated keys work with PostgreSQL `bigserial` / identity columns through `ExecutionResult.getGeneratedKeys()`
+- for reproducible automated tests, prefer a disposable PostgreSQL instance such as Docker/Testcontainers instead of a long-lived shared server
+
 ---
 
 #### Lifetime rules
@@ -236,5 +385,6 @@ The same lifetime rule applies to generated keys returned by `ExecutionResult.ge
 
 - `lyng.io.db` — generic contract, available when host code installs it
 - `lyng.io.db.sqlite` — implemented on JVM and Linux Native in the current release tree
+- `lyng.io.db.jdbc` — implemented on JVM in the current release tree
 
 For the broader I/O overview, see [lyngio overview](lyngio.md).

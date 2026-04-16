@@ -1,0 +1,57 @@
+package lyng.io.db.jdbc
+
+import lyng.io.db
+
+/*
+    Generic JDBC provider for `lyng.io.db` on the JVM target.
+
+    Importing this module registers:
+    - `jdbc:` for raw JDBC URLs such as `jdbc:h2:mem:test`
+    - `h2:` as a shorthand alias for `jdbc:h2:...`
+    - `postgres:` / `postgresql:` as shorthand aliases for `jdbc:postgresql:...`
+
+    The JVM artifact bundles and explicitly loads the SQLite, H2, and
+    PostgreSQL JDBC drivers, so `openJdbc(...)`, `openH2(...)`, and
+    `openPostgres(...)` work under the standard `jlyng` launcher without extra
+    classpath setup.
+
+    Supported `openDatabase(..., extraParams)` keys for JDBC:
+    - `driverClass: String`
+    - `user: String`
+    - `password: String`
+    - `properties: Map<String, Object?>`
+
+    The optional `properties` map is converted to JDBC connection properties by
+    stringifying each non-null value.
+*/
+extern fun openJdbc(
+    connectionUrl: String,
+    user: String? = null,
+    password: String? = null,
+    driverClass: String? = null,
+    properties: Map<String, Object?>? = null
+): Database
+
+/*
+    Open an H2 database. `connectionUrl` may be a full JDBC URL such as
+    `jdbc:h2:mem:test`, or the shorter H2-specific tail such as
+    `mem:test;DB_CLOSE_DELAY=-1`.
+*/
+extern fun openH2(
+    connectionUrl: String,
+    user: String? = null,
+    password: String? = null,
+    properties: Map<String, Object?>? = null
+): Database
+
+/*
+    Open a PostgreSQL database. `connectionUrl` may be a full JDBC URL such as
+    `jdbc:postgresql://localhost/app`, or the shorter provider tail such as
+    `//localhost/app`.
+*/
+extern fun openPostgres(
+    connectionUrl: String,
+    user: String? = null,
+    password: String? = null,
+    properties: Map<String, Object?>? = null
+): Database

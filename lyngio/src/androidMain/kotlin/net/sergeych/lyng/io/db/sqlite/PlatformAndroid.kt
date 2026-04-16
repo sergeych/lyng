@@ -18,15 +18,17 @@
 package net.sergeych.lyng.io.db.sqlite
 
 import net.sergeych.lyng.ScopeFacade
+import net.sergeych.lyng.io.db.SqlCoreModule
+import net.sergeych.lyng.io.db.SqlDatabaseBackend
 import net.sergeych.lyng.requireScope
 import net.sergeych.lyng.obj.ObjException
 import net.sergeych.lyng.obj.ObjString
 
 internal actual suspend fun openSqliteBackend(
     scope: ScopeFacade,
-    core: SqliteCoreModule,
+    core: SqlCoreModule,
     options: SqliteOpenOptions,
-): SqliteDatabaseBackend {
+): SqlDatabaseBackend {
     scope.raiseError(
         ObjException(
             core.databaseException,

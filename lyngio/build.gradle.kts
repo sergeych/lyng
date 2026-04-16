@@ -181,6 +181,12 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.test)
             }
         }
+        val jvmTest by getting {
+            dependencies {
+                implementation(libs.testcontainers)
+                implementation(libs.testcontainers.postgresql)
+            }
+        }
         val linuxTest by creating {
             dependsOn(commonTest)
         }
@@ -217,6 +223,8 @@ kotlin {
                 implementation(libs.ktor.client.cio)
                 implementation(libs.ktor.network)
                 implementation(libs.sqlite.jdbc)
+                implementation(libs.h2)
+                implementation(libs.postgresql)
             }
         }
 //        // For Wasm we use in-memory VFS for now

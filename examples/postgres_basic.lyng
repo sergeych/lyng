@@ -1,0 +1,71 @@
+import lyng.io.db.jdbc
+
+/*
+    PostgreSQL JDBC demo.
+
+    Usage:
+    lyng examples/postgres_basic.lyng [jdbc-url] [user] [password]
+
+    Typical local URL:
+    jdbc:postgresql://127.0.0.1/postgres
+*/
+
+fun cliArgs(): List<String> {
+    val result: List<String> = []
+    for (raw in ARGV as List) {
+        result.add(raw as String)
+    }
+    return result
+}
+
+val argv = cliArgs()
+val URL = if (argv.size > 0) argv[0] else "jdbc:postgresql://127.0.0.1/postgres"
+val USER = if (argv.size > 1) argv[1] else ""
+val PASSWORD = if (argv.size > 2) argv[2] else ""
+
+println("PostgreSQL JDBC demo: typed open, generated keys, nested transaction")
+
+val db = openPostgres(URL, USER, PASSWORD)
+
+db.transaction { tx ->
+    tx.execute("create table if not exists lyng_pg_demo(id bigserial primary key, title text not null, done boolean not null)")
+    tx.execute("delete from lyng_pg_demo")
+
+    val firstInsert = tx.execute(
+        "insert into lyng_pg_demo(title, done) values(?, ?)",
+        "Verify PostgreSQL JDBC support",
+        false
+    )
+    val firstId = firstInsert.getGeneratedKeys().toList()[0][0]
+    println("First generated id=" + firstId)
+
+    tx.execute(
+        "insert into lyng_pg_demo(title, done) values(?, ?)",
+        "Review documentation",
+        true
+    )
+
+    try {
+        tx.transaction { inner ->
+            inner.execute(
+                "insert into lyng_pg_demo(title, done) values(?, ?)",
+                "This row is rolled back",
+                false
+            )
+            throw IllegalStateException("rollback nested")
+        }
+    } catch (_: IllegalStateException) {
+        println("Nested transaction rolled back as expected")
+    }
+
+    val rows = tx.select("select id, title, done from lyng_pg_demo order by id").toList()
+    for (row in rows) {
+        println("#" + row["id"] + " " + row["title"] + " done=" + row["done"])
+    }
+
+    val count = tx.select("select count(*) as count from lyng_pg_demo").toList()[0]["count"]
+    assertEquals(2, count)
+    println("Visible rows after nested rollback: " + count)
+}
+
+println("OK")

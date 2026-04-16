@@ -1,0 +1,43 @@
+import lyng.io.db
+import lyng.io.db.jdbc
+
+println("H2 JDBC demo: typed open, generic open, generated keys")
+
+val db = openH2("mem:lyng_h2_demo;DB_CLOSE_DELAY=-1")
+
+db.transaction { tx ->
+    tx.execute("create table if not exists person(id bigint auto_increment primary key, name varchar(120) not null, active boolean not null)")
+    tx.execute("delete from person")
+
+    val firstInsert = tx.execute(
+        "insert into person(name, active) values(?, ?)",
+        "Ada",
+        true
+    )
+    val firstId = firstInsert.getGeneratedKeys().toList()[0][0]
+    assertEquals(1, firstId)
+
+    tx.execute(
+        "insert into person(name, active) values(?, ?)",
+        "Linus",
+        false
+    )
+
+    val rows = tx.select("select id, name, active from person order by id").toList()
+    assertEquals(2, rows.size)
+    println("#" + rows[0]["id"] + " " + rows[0]["name"] + " active=" + rows[0]["active"])
+    println("#" + rows[1]["id"] + " " + rows[1]["name"] + " active=" + rows[1]["active"])
+}
+
+val genericDb = openDatabase(
+    "jdbc:h2:mem:lyng_h2_generic;DB_CLOSE_DELAY=-1",
+    Map()
+)
+
+val answer = genericDb.transaction { tx ->
+    tx.select("select 42 as answer").toList()[0]["answer"]
+}
+
+assertEquals(42, answer)
+println("Generic JDBC openDatabase(...) also works: answer=$answer")
+println("OK")

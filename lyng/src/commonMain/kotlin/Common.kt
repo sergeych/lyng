@@ -41,6 +41,7 @@ import net.sergeych.lyng.Source
 import net.sergeych.lyng.asFacade
 import net.sergeych.lyng.io.console.createConsoleModule
 import net.sergeych.lyng.io.db.createDbModule
+import net.sergeych.lyng.io.db.jdbc.createJdbcModule
 import net.sergeych.lyng.io.db.sqlite.createSqliteModule
 import net.sergeych.lyng.io.fs.createFs
 import net.sergeych.lyng.io.http.createHttpModule
@@ -140,6 +141,7 @@ private val baseCliImportManagerDefer = globalDefer {
 private fun ImportManager.invalidateCliModuleCaches() {
     invalidatePackageCache("lyng.io.fs")
     invalidatePackageCache("lyng.io.console")
+    invalidatePackageCache("lyng.io.db.jdbc")
     invalidatePackageCache("lyng.io.db.sqlite")
     invalidatePackageCache("lyng.io.http")
     invalidatePackageCache("lyng.io.ws")
@@ -229,6 +231,7 @@ private fun installCliModules(manager: ImportManager) {
     createFs(PermitAllAccessPolicy, manager)
     createConsoleModule(PermitAllConsoleAccessPolicy, manager)
     createDbModule(manager)
+    createJdbcModule(manager)
     createSqliteModule(manager)
     createHttpModule(PermitAllHttpAccessPolicy, manager)
     createWsModule(PermitAllWsAccessPolicy, manager)

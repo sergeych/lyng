@@ -41,6 +41,12 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import net.sergeych.lyng.ExecutionError
 import net.sergeych.lyng.ScopeFacade
+import net.sergeych.lyng.io.db.SqlColumnMeta
+import net.sergeych.lyng.io.db.SqlCoreModule
+import net.sergeych.lyng.io.db.SqlDatabaseBackend
+import net.sergeych.lyng.io.db.SqlExecutionResultData
+import net.sergeych.lyng.io.db.SqlResultSetData
+import net.sergeych.lyng.io.db.SqlTransactionBackend
 import net.sergeych.lyng.io.db.sqlite.cinterop.SQLITE_BLOB
 import net.sergeych.lyng.io.db.sqlite.cinterop.SQLITE_CONSTRAINT
 import net.sergeych.lyng.io.db.sqlite.cinterop.SQLITE_DONE
@@ -100,25 +106,25 @@ import kotlin.time.Instant
 
 internal actual suspend fun openSqliteBackend(
     scope: ScopeFacade,
-    core: SqliteCoreModule,
+    core: SqlCoreModule,
     options: SqliteOpenOptions,
-): SqliteDatabaseBackend {
+): SqlDatabaseBackend {
     if (options.busyTimeoutMillis < 0) {
         scope.raiseIllegalArgument("busyTimeoutMillis must be >= 0")
     }
-    return NativeSqliteDatabaseBackend(core, options)
+    return NativeSqlDatabaseBackend(core, options)
 }
 
-private class NativeSqliteDatabaseBackend(
-    private val core: SqliteCoreModule,
+private class NativeSqlDatabaseBackend(
+    private val core: SqlCoreModule,
     private val options: SqliteOpenOptions,
-) : SqliteDatabaseBackend {
-    override suspend fun <T> transaction(scope: ScopeFacade, block: suspend (SqliteTransactionBackend) -> T): T {
+) : SqlDatabaseBackend {
+    override suspend fun <T> transaction(scope: ScopeFacade, block: suspend (SqlTransactionBackend) -> T): T {
         val handle = openHandle(scope, core, options)
         val savepoints = SavepointCounter()
         try {
             handle.execUnit(scope, core, "begin")
-            val tx = NativeSqliteTransactionBackend(core, handle, savepoints)
+            val tx = NativeSqlTransactionBackend(core, handle, savepoints)
             val result = try {
                 block(tx)
             } catch (e: Throwable) {
@@ -134,23 +140,23 @@ private class NativeSqliteDatabaseBackend(
     }
 }
 
-private class NativeSqliteTransactionBackend(
-    private val core: SqliteCoreModule,
+private class NativeSqlTransactionBackend(
+    private val core: SqlCoreModule,
     private val handle: NativeSqliteHandle,
     private val savepoints: SavepointCounter,
-) : SqliteTransactionBackend {
-    override suspend fun select(scope: ScopeFacade, clause: String, params: List<Obj>): SqliteResultSetData {
+) : SqlTransactionBackend {
+    override suspend fun select(scope: ScopeFacade, clause: String, params: List<Obj>): SqlResultSetData {
         return handle.select(scope, core, clause, params)
     }
 
-    override suspend fun execute(scope: ScopeFacade, clause: String, params: List<Obj>): SqliteExecutionResultData {
+    override suspend fun execute(scope: ScopeFacade, clause: String, params: List<Obj>): SqlExecutionResultData {
         return handle.execute(scope, core, clause, params)
     }
 
-    override suspend fun <T> transaction(scope: ScopeFacade, block: suspend (SqliteTransactionBackend) -> T): T {
+    override suspend fun <T> transaction(scope: ScopeFacade, block: suspend (SqlTransactionBackend) -> T): T {
         val savepoint = "lyng_sp_${savepoints.next()}"
         handle.execUnit(scope, core, "savepoint $savepoint")
-        val nested = NativeSqliteTransactionBackend(core, handle, savepoints)
+        val nested = NativeSqlTransactionBackend(core, handle, savepoints)
         val result = try {
             block(nested)
         } catch (e: Throwable) {
@@ -178,10 +184,10 @@ private class NativeSqliteHandle(
 ) {
     suspend fun select(
         scope: ScopeFacade,
-        core: SqliteCoreModule,
+        core: SqlCoreModule,
         clause: String,
         params: List<Obj>,
-    ): SqliteResultSetData = memScoped {
+    ): SqlResultSetData = memScoped {
         val stmt = prepare(scope, core, clause)
         try {
             bindParams(scope, core, stmt, params, this)
@@ -193,10 +199,10 @@ private class NativeSqliteHandle(
 
     suspend fun execute(
         scope: ScopeFacade,
-        core: SqliteCoreModule,
+        core: SqlCoreModule,
         clause: String,
         params: List<Obj>,
-    ): SqliteExecutionResultData = memScoped {
+    ): SqlExecutionResultData = memScoped {
         if (containsRowReturningClause(clause)) {
             raiseExecuteReturningUsage(scope, core)
         }
@@ -207,7 +213,7 @@ private class NativeSqliteHandle(
                 SQLITE_DONE -> {
                     val affectedRows = sqlite3_changes(db)
                     val generatedKeys = readGeneratedKeys(core, clause, affectedRows)
-                    SqliteExecutionResultData(affectedRows, generatedKeys)
+                    SqlExecutionResultData(affectedRows, generatedKeys)
                 }
                 SQLITE_ROW -> raiseExecuteReturningUsage(scope, core)
                 else -> throw sqlError(scope, core, rc)
@@ -218,7 +224,7 @@ private class NativeSqliteHandle(
         }
     }
 
-    fun execUnit(scope: ScopeFacade, core: SqliteCoreModule, sql: String) {
+    fun execUnit(scope: ScopeFacade, core: SqlCoreModule, sql: String) {
         memScoped {
             val stmt = prepare(scope, core, sql)
             try {
@@ -236,13 +242,13 @@ private class NativeSqliteHandle(
         sqlite3_close_v2(db)
     }
 
-    private fun MemScope.prepare(scope: ScopeFacade, core: SqliteCoreModule, sql: String): CPointer<sqlite3_stmt> {
+    private fun MemScope.prepare(scope: ScopeFacade, core: SqlCoreModule, sql: String): CPointer<sqlite3_stmt> {
         return lyng_sqlite3_prepare(db, sql) ?: throw sqlError(scope, core, sqlite3_extended_errcode(db))
     }
 
     private suspend fun bindParams(
         scope: ScopeFacade,
-        core: SqliteCoreModule,
+        core: SqlCoreModule,
         stmt: CPointer<sqlite3_stmt>,
         params: List<Obj>,
         memScope: MemScope,
@@ -308,13 +314,13 @@ private class NativeSqliteHandle(
 
     private suspend fun readResultSet(
         scope: ScopeFacade,
-        core: SqliteCoreModule,
+        core: SqlCoreModule,
         stmt: CPointer<sqlite3_stmt>,
-    ): SqliteResultSetData {
+    ): SqlResultSetData {
         val columnCount = sqlite3_column_count(stmt)
         val columns = (0 until columnCount).map { index ->
             val nativeType = sqlite3_column_decltype(stmt, index)?.toKString().orEmpty()
-            SqliteColumnMeta(
+            SqlColumnMeta(
                 name = sqlite3_column_name(stmt, index)?.toKString().orEmpty(),
                 sqlType = mapSqlType(core, nativeType, SQLITE_NULL),
                 nullable = true,
@@ -338,7 +344,7 @@ private class NativeSqliteHandle(
                     }
                     rows += row
                 }
-                SQLITE_DONE -> return SqliteResultSetData(columns, rows)
+                SQLITE_DONE -> return SqlResultSetData(columns, rows)
                 else -> throw sqlError(scope, core, rc)
             }
         }
@@ -346,7 +352,7 @@ private class NativeSqliteHandle(
 
     private suspend fun readColumnValue(
         scope: ScopeFacade,
-        core: SqliteCoreModule,
+        core: SqlCoreModule,
         stmt: CPointer<sqlite3_stmt>,
         index: Int,
         nativeType: String,
@@ -383,7 +389,7 @@ private class NativeSqliteHandle(
 
     private suspend fun convertStringValue(
         scope: ScopeFacade,
-        core: SqliteCoreModule,
+        core: SqlCoreModule,
         normalizedNativeType: String,
         value: String,
     ): Obj {
@@ -401,16 +407,16 @@ private class NativeSqliteHandle(
     }
 
     private fun readGeneratedKeys(
-        core: SqliteCoreModule,
+        core: SqlCoreModule,
         clause: String,
         affectedRows: Int,
-    ): SqliteResultSetData {
+    ): SqlResultSetData {
         if (affectedRows <= 0 || !looksLikeInsert(clause)) {
             return emptyResultSet()
         }
-        return SqliteResultSetData(
+        return SqlResultSetData(
             columns = listOf(
-                SqliteColumnMeta(
+                SqlColumnMeta(
                     name = "generated_key",
                     sqlType = core.sqlTypes.require("Int"),
                     nullable = false,
@@ -425,7 +431,7 @@ private class NativeSqliteHandle(
         return sqlite3_column_text(stmt, index)?.reinterpret<ByteVar>()?.toKString().orEmpty()
     }
 
-    private fun sqlError(scope: ScopeFacade, core: SqliteCoreModule, rc: Int): ExecutionError {
+    private fun sqlError(scope: ScopeFacade, core: SqlCoreModule, rc: Int): ExecutionError {
         val code = sqlite3_extended_errcode(db)
         val message = sqlite3_errmsg(db)?.toKString() ?: "SQLite error ($rc)"
         val exceptionClass = if ((code and 0xff) == SQLITE_CONSTRAINT) core.sqlConstraintException else core.sqlExecutionException
@@ -439,7 +445,7 @@ private class NativeSqliteHandle(
 
 private fun openHandle(
     scope: ScopeFacade,
-    core: SqliteCoreModule,
+    core: SqlCoreModule,
     options: SqliteOpenOptions,
 ): NativeSqliteHandle = memScoped {
     val flags = buildOpenFlags(options)
@@ -488,9 +494,9 @@ private fun looksLikeInsert(clause: String): Boolean = clause.trimStart().starts
 
 private val SQLITE_TRANSIENT = (-1L).toCPointer<CFunction<(COpaquePointer?) -> Unit>>()
 
-private fun emptyResultSet(): SqliteResultSetData = SqliteResultSetData(emptyList(), emptyList())
+private fun emptyResultSet(): SqlResultSetData = SqlResultSetData(emptyList(), emptyList())
 
-private fun mapSqlType(core: SqliteCoreModule, nativeType: String, sqliteType: Int): ObjEnumEntry = when (val normalized = normalizeDeclaredTypeName(nativeType)) {
+private fun mapSqlType(core: SqlCoreModule, nativeType: String, sqliteType: Int): ObjEnumEntry = when (val normalized = normalizeDeclaredTypeName(nativeType)) {
     "BOOLEAN", "BOOL" -> core.sqlTypes.require("Bool")
     "DATE" -> core.sqlTypes.require("Date")
     "DATETIME", "TIMESTAMP" -> core.sqlTypes.require("DateTime")
@@ -521,7 +527,7 @@ private suspend fun decimalFromString(scope: ScopeFacade, value: String): Obj {
     return decimalClass.invokeInstanceMethod(scope.requireScope(), "fromString", ObjString(value))
 }
 
-private fun dateTimeFromString(scope: ScopeFacade, core: SqliteCoreModule, value: String): ObjDateTime {
+private fun dateTimeFromString(scope: ScopeFacade, core: SqlCoreModule, value: String): ObjDateTime {
     val trimmed = value.trim()
     if (hasExplicitTimeZone(trimmed)) {
         throw sqlExecutionError(scope, core, "SQLite TIMESTAMP/DATETIME value must not contain a timezone offset: $value")
@@ -540,7 +546,7 @@ private fun hasExplicitTimeZone(value: String): Boolean {
     return offsetStart > tIndex
 }
 
-private fun raiseExecuteReturningUsage(scope: ScopeFacade, core: SqliteCoreModule): Nothing {
+private fun raiseExecuteReturningUsage(scope: ScopeFacade, core: SqlCoreModule): Nothing {
     scope.raiseError(
         ObjException(
             core.sqlUsageException,
@@ -550,7 +556,7 @@ private fun raiseExecuteReturningUsage(scope: ScopeFacade, core: SqliteCoreModul
     )
 }
 
-private fun usageError(scope: ScopeFacade, core: SqliteCoreModule, message: String): ExecutionError {
+private fun usageError(scope: ScopeFacade, core: SqlCoreModule, message: String): ExecutionError {
     return ExecutionError(
         ObjException(core.sqlUsageException, scope.requireScope(), ObjString(message)),
         scope.pos,
@@ -558,7 +564,7 @@ private fun usageError(scope: ScopeFacade, core: SqliteCoreModule, message: Stri
     )
 }
 
-private fun databaseError(scope: ScopeFacade, core: SqliteCoreModule, message: String): ExecutionError {
+private fun databaseError(scope: ScopeFacade, core: SqlCoreModule, message: String): ExecutionError {
     return ExecutionError(
         ObjException(core.databaseException, scope.requireScope(), ObjString(message)),
         scope.pos,
@@ -566,14 +572,14 @@ private fun databaseError(scope: ScopeFacade, core: SqliteCoreModule, message: S
     )
 }
 
-private fun integerToBool(scope: ScopeFacade, core: SqliteCoreModule, value: Long): Obj =
+private fun integerToBool(scope: ScopeFacade, core: SqlCoreModule, value: Long): Obj =
     when (value) {
         0L -> ObjBool(false)
         1L -> ObjBool(true)
         else -> throw sqlExecutionError(scope, core, "Invalid SQLite boolean value: $value")
     }
 
-private fun stringToBool(scope: ScopeFacade, core: SqliteCoreModule, value: String): Obj =
+private fun stringToBool(scope: ScopeFacade, core: SqlCoreModule, value: String): Obj =
     when (value.trim().lowercase()) {
         "true", "t" -> ObjBool(true)
         "false", "f" -> ObjBool(false)
@@ -585,7 +591,7 @@ private fun normalizeDeclaredTypeName(nativeTypeName: String): String {
     return strippedSuffix.uppercase().replace(Regex("""\s+"""), " ").trim()
 }
 
-private fun sqlExecutionError(scope: ScopeFacade, core: SqliteCoreModule, message: String): ExecutionError {
+private fun sqlExecutionError(scope: ScopeFacade, core: SqlCoreModule, message: String): ExecutionError {
     return ExecutionError(
         ObjException(core.sqlExecutionException, scope.requireScope(), ObjString(message)),
         scope.pos,
@@ -595,7 +601,7 @@ private fun sqlExecutionError(scope: ScopeFacade, core: SqliteCoreModule, messag
 
 private inline fun finishFailedTransaction(
     scope: ScopeFacade,
-    core: SqliteCoreModule,
+    core: SqlCoreModule,
     failure: Throwable,
     rollback: () -> Unit,
 ): Throwable {
@@ -613,7 +619,7 @@ private inline fun finishFailedTransaction(
     }
 }
 
-private fun isRollbackSignal(failure: Throwable, core: SqliteCoreModule): Boolean {
+private fun isRollbackSignal(failure: Throwable, core: SqlCoreModule): Boolean {
     val errorObject = (failure as? ExecutionError)?.errorObject ?: return false
     return errorObject.isInstanceOf(core.rollbackException)
 }
