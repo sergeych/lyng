@@ -53,10 +53,10 @@ object ObjMatrixSupport {
         }
         hooks += { _, instance -> instance.kotlinInstanceData = defaultVector }
 
-        vectorClass.addProperty("size", getter = {
+        vectorClass.bindProperty("size", getter = {
             ObjInt.of(vectorOf(thisObj).size.toLong())
         })
-        vectorClass.addProperty("length", getter = {
+        vectorClass.bindProperty("length", getter = {
             ObjInt.of(vectorOf(thisObj).size.toLong())
         })
         vectorClass.addFn("toList") {
@@ -99,10 +99,10 @@ object ObjMatrixSupport {
             ObjInt.of(vectorOf(thisObj).compareTo(coerceVectorArg(requireScope(), args.firstAndOnly())).toLong())
         }
 
-        vectorClass.addClassFn("fromList") {
+        vectorClass.bindClassFn("fromList") {
             newVector(vectorClass, parseVector(requireScope(), requiredArg(0)))
         }
-        vectorClass.addClassFn("zeros") {
+        vectorClass.bindClassFn("zeros") {
             val size = requiredArg<ObjInt>(0).value.toInt()
             if (size <= 0) requireScope().raiseIllegalArgument("vector size must be positive")
             newVector(vectorClass, VectorData(DoubleArray(size)))
@@ -119,13 +119,13 @@ object ObjMatrixSupport {
         }
         hooks += { _, instance -> instance.kotlinInstanceData = defaultMatrix }
 
-        matrixClass.addProperty("rows", getter = {
+        matrixClass.bindProperty("rows", getter = {
             ObjInt.of(matrixOf(thisObj).rows.toLong())
         })
-        matrixClass.addProperty("cols", getter = {
+        matrixClass.bindProperty("cols", getter = {
             ObjInt.of(matrixOf(thisObj).cols.toLong())
         })
-        matrixClass.addProperty("shape", getter = {
+        matrixClass.bindProperty("shape", getter = {
             ObjList(
                 mutableListOf(
                     ObjInt.of(matrixOf(thisObj).rows.toLong()),
@@ -133,7 +133,7 @@ object ObjMatrixSupport {
                 )
             )
         })
-        matrixClass.addProperty("isSquare", getter = {
+        matrixClass.bindProperty("isSquare", getter = {
             matrixOf(thisObj).isSquare.toObj()
         })
 
@@ -208,17 +208,17 @@ object ObjMatrixSupport {
             ObjInt.of(matrixOf(thisObj).compareTo(coerceMatrixArg(requireScope(), args.firstAndOnly())).toLong())
         }
 
-        matrixClass.addClassFn("fromRows") {
+        matrixClass.bindClassFn("fromRows") {
             newMatrix(matrixClass, parseRows(requireScope(), requiredArg(0)))
         }
-        matrixClass.addClassFn("zeros") {
+        matrixClass.bindClassFn("zeros") {
             val rows = requiredArg<ObjInt>(0).value.toInt()
             val cols = requiredArg<ObjInt>(1).value.toInt()
             if (rows <= 0) requireScope().raiseIllegalArgument("matrix must have at least one row")
             if (cols <= 0) requireScope().raiseIllegalArgument("matrix must have at least one column")
             newMatrix(matrixClass, MatrixData(rows, cols, DoubleArray(rows * cols)))
         }
-        matrixClass.addClassFn("identity") {
+        matrixClass.bindClassFn("identity") {
             val size = requiredArg<ObjInt>(0).value.toInt()
             if (size <= 0) requireScope().raiseIllegalArgument("identity matrix size must be positive")
             val values = DoubleArray(size * size)

@@ -18,13 +18,10 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.*
-import net.sergeych.lyng.miniast.addPropertyDoc
-import net.sergeych.lyng.miniast.type
 import net.sergeych.lyng.requiredArg
 
 object ObjComplexSupport {
     private object BoundMarker
-    private val complexTypeDecl = TypeDecl.Simple("lyng.complex.Complex", false)
 
     suspend fun bindTo(module: ModuleScope) {
         val complexClass = module.requireClass("Complex")
@@ -33,36 +30,20 @@ object ObjComplexSupport {
 
         val decimalModule = module.currentImportProvider.createModuleScope(module.pos, "lyng.decimal")
         val decimalClass = decimalModule.requireClass("Decimal")
-
-        decimalClass.addPropertyDoc(
-            name = "re",
-            doc = "Convert this Decimal to a Complex with zero imaginary part.",
-            type = type("lyng.complex.Complex"),
-            moduleName = "lyng.complex",
-            getter = {
-                newComplex(
-                    complexClass,
-                    decimalToReal(thisObj),
-                    0.0
-                )
-            }
-        )
-        decimalClass.members["re"] = decimalClass.members.getValue("re").copy(typeDecl = complexTypeDecl)
-
-        decimalClass.addPropertyDoc(
-            name = "i",
-            doc = "Convert this Decimal to a pure imaginary Complex after rounding to Real.",
-            type = type("lyng.complex.Complex"),
-            moduleName = "lyng.complex",
-            getter = {
-                newComplex(
-                    complexClass,
-                    0.0,
-                    decimalToReal(thisObj)
-                )
-            }
-        )
-        decimalClass.members["i"] = decimalClass.members.getValue("i").copy(typeDecl = complexTypeDecl)
+        decimalClass.bindProperty("re", getter = {
+            newComplex(
+                complexClass,
+                decimalToReal(thisObj),
+                0.0
+            )
+        })
+        decimalClass.bindProperty("i", getter = {
+            newComplex(
+                complexClass,
+                0.0,
+                decimalToReal(thisObj)
+            )
+        })
 
         OperatorInteropRegistry.register(
             leftClass = decimalClass,

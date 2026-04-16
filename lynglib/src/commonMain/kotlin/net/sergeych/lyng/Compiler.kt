@@ -10679,8 +10679,12 @@ class Compiler(
                 )
             }
             if (getter != null || setter != null) {
-                val prop = ObjProperty(name, getter, setter)
-                val initStmt = if (!isAbstract) {
+                val prop = if (actualExtern) {
+                    ObjProperty(name, null, null)
+                } else {
+                    ObjProperty(name, getter, setter)
+                }
+                val initStmt = if (!isAbstract && !actualExtern) {
                     val initStatement = InstancePropertyInitStatement(
                         storageName = storageName,
                         isMutable = isMutable,

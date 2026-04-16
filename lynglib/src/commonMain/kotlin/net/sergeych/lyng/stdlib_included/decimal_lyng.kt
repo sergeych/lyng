@@ -201,14 +201,7 @@ extern class Decimal() {
  *
  * Contexts are dynamic and block-local. After the block finishes, the previous context is restored.
  */
-extern fun withDecimalContext<T>(context: DecimalContext, block: ()->T): T
-
-/**
- * Convenience overload for changing only precision.
- *
- * Equivalent to `withDecimalContext(DecimalContext(precision, DecimalRounding.HalfEven), block)`.
- */
-extern fun withDecimalContext<T>(precision: Int, block: ()->T): T
+extern fun withDecimalContext<T>(context: Object, block: ()->T): T
 
 /**
  * Convenience overload for changing precision and rounding explicitly.

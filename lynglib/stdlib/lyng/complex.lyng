@@ -1,5 +1,6 @@
 package lyng.complex
 
+import lyng.decimal
 import lyng.operators
 
 /*
@@ -112,8 +113,10 @@ fun cis(angle: Real): Complex = Complex.fromPolar(1.0, angle)
 
 val Int.re: Complex get() = Complex.fromInt(this)
 val Real.re: Complex get() = Complex.fromReal(this)
+val Decimal.re: Complex get() = Complex(this.toReal(), 0.0)
 val Int.i: Complex get() = Complex.imaginary(this + 0.0)
 val Real.i: Complex get() = Complex.imaginary(this)
+val Decimal.i: Complex get() = Complex(0.0, this.toReal())
 
 OperatorInterop.register(
     Int,

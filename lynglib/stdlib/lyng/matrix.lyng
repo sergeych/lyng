@@ -6,9 +6,11 @@ type MatrixScalar = Real | Int
 extern class Vector() {
     /** Number of elements. */
     val size: Int
+        get() = 0
 
     /** Alias to `size`. */
     val length: Int
+        get() = 0
 
     /** Convert to a plain list. */
     extern fun toList(): List<Real>
@@ -61,15 +63,19 @@ extern class Vector() {
 extern class Matrix() {
     /** Number of rows. */
     val rows: Int
+        get() = 0
 
     /** Number of columns. */
     val cols: Int
+        get() = 0
 
     /** Two-element shape `[rows, cols]`. */
     val shape: List<Int>
+        get() = []
 
     /** Whether `rows == cols`. */
     val isSquare: Bool
+        get() = false
 
     /** Element-wise addition. Shapes must match. */
     extern fun plus(other: Matrix): Matrix

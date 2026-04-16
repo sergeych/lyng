@@ -106,15 +106,15 @@ object ObjDecimalSupport {
         decimalClass.addFn("toStringExpanded") {
             ObjString(valueOf(thisObj).toStringExpanded())
         }
-        decimalClass.addClassFn("fromInt") {
+        decimalClass.bindClassFn("fromInt") {
             val value = requiredArg<ObjInt>(0).value
             newInstance(decimalClass, IonBigDecimal.fromLong(value))
         }
-        decimalClass.addClassFn("fromReal") {
+        decimalClass.bindClassFn("fromReal") {
             val value = requiredArg<ObjReal>(0).value
             newInstanceFromFiniteReal(decimalClass, value)
         }
-        decimalClass.addClassFn("fromString") {
+        decimalClass.bindClassFn("fromString") {
             val value = requiredArg<ObjString>(0).value
             try {
                 newInstance(decimalClass, IonBigDecimal.parseStringWithMode(value))
