@@ -1,0 +1,325 @@
+#!/usr/bin/env lyng
+
+import lyng.io.db
+import lyng.io.db.sqlite
+import lyng.io.fs
+
+val DB_FILE_NAME = "contents.db"
+val ANSI_ESC = "\u001b["
+val NEWLINE = "\n"
+val WINDOWS_SEPARATOR = "\\"
+val SQLITE_JOURNAL_SUFFIXES = ["-wal", "-shm", "-journal"]
+
+val USAGE_TEXT = "
+Lyng content index
+Scan a directory tree, diff it against a SQLite snapshot, and optionally refresh the snapshot.
+
+usage:
+lyng examples/content_index_db.lyng <root> [-u|--update]
+
+options:
+-u, --update   write the current scan back to $DB_FILE_NAME
+
+notes:
+- the database lives inside <root>/$DB_FILE_NAME
+- on first run the snapshot is created automatically
+- the script ignores its own SQLite sidecar files
+"
+
+val CREATE_FILE_INDEX_SQL = "
+create table if not exists file_index(
+    path text primary key not null,
+    size integer not null,
+    mtime integer not null
+)
+"
+
+val CREATE_CURRENT_SCAN_SQL = "
+create temp table current_scan(
+    path text primary key not null,
+    size integer not null,
+    mtime integer not null
+)
+"
+
+val SELECT_ADDED_SQL = "
+select
+c.path,
+c.size,
+c.mtime
+from current_scan c
+left join file_index f on f.path = c.path
+where f.path is null
+order by c.path
+"
+
+val SELECT_REMOVED_SQL = "
+select f.path, f.size, f.mtime
+from file_index f
+left join current_scan c on c.path = f.path
+where c.path is null
+order by f.path
+"
+
+val SELECT_CHANGED_SQL = "
+select c.path, f.size as old_size, c.size as new_size, f.mtime as old_mtime,
+       c.mtime as new_mtime
+from current_scan c
+join file_index f on f.path = c.path
+where c.size != f.size or c.mtime != f.mtime
+order by c.path
+"
+
+val DELETE_MISSING_SQL = "
+delete from file_index
+where not exists (
+    select 1
+    from current_scan c
+    where c.path = file_index.path
+)
+"
+
+val UPSERT_SCAN_SQL = "
+insert or replace into file_index(path, size, mtime)
+select path, size, mtime
+from current_scan
+"
+
+val INSERT_SCAN_ROW_SQL = "
+insert into current_scan(path, size, mtime)
+values(?, ?, ?)
+"
+
+val USE_COLOR = true
+
+class CliOptions(val rootText: String, val updateSnapshot: Bool) {}
+
+fun out(text: String? = null): Void {
+    if (text == null) {
+        print(NEWLINE)
+        return
+    }
+    print(text + NEWLINE)
+}
+
+fun paint(code: String, text: String): String {
+    if (!USE_COLOR) return text
+    ANSI_ESC + code + "m" + text + ANSI_ESC + "0m"
+}
+
+fun bold(text: String): String = paint("1", text)
+fun dim(text: String): String = paint("2", text)
+fun cyan(text: String): String = paint("36", text)
+fun green(text: String): String = paint("32", text)
+fun yellow(text: String): String = paint("33", text)
+fun red(text: String): String = paint("31", text)
+
+fun signed(value: Int): String = if (value > 0) "+" + value else value.toString()
+
+fun plural(count: Int, one: String, many: String): String {
+    if (count == 1) return one
+    many
+}
+
+fun childPath(parent: Path, name: String): Path {
+    val base = parent.toString()
+    if (base.endsWith("/") || base.endsWith(WINDOWS_SEPARATOR)) {
+        return Path(base + name)
+    }
+    Path(base + "/" + name)
+}
+
+fun relativePath(root: Path, file: Path): String {
+    val parts: List<String> = []
+    for (i in root.segments.size..<file.segments.size) {
+        parts.add(file.segments[i] as String)
+    }
+    parts.joinToString("/")
+}
+
+fun isDatabaseArtifact(relative: String): Bool {
+    relative == DB_FILE_NAME || SQLITE_JOURNAL_SUFFIXES.any { relative == DB_FILE_NAME + (it as String) }
+}
+
+fun printUsage(message: String? = null): Void {
+    if (message != null && message.trim().isNotEmpty()) {
+        out(red("error: ") + message)
+        out()
+    }
+
+    out(bold(USAGE_TEXT))
+}
+
+fun parseArgs(argv: List<String>): CliOptions? {
+    var rootText: String? = null
+    var updateSnapshot = false
+
+    for (arg in argv) {
+        when (arg) {
+            "-u", "--update" -> updateSnapshot = true
+            "-h", "--help" -> {
+                printUsage()
+                return null
+            }
+            else -> {
+                if (arg.startsWith("-")) {
+                    printUsage("unknown option: " + arg)
+                    return null
+                }
+                if (rootText != null) {
+                    printUsage("only one root path is allowed")
+                    return null
+                }
+                rootText = arg
+            }
+        }
+    }
+
+    if (rootText == null) {
+        printUsage("missing required <root> argument")
+        return null
+    }
+
+    CliOptions(rootText as String, updateSnapshot)
+}
+
+fun printBanner(root: Path, dbFile: Path, dbWasCreated: Bool, updateSnapshot: Bool): Void {
+    val mode =
+            if (dbWasCreated) "bootstrap snapshot"
+        else if (updateSnapshot) "scan + refresh snapshot"
+        else "scan only"
+
+    out(cyan("== Lyng content index =="))
+    out(dim("root: " + root))
+    out(dim("db:   " + dbFile))
+    out(dim("mode: " + mode))
+    out()
+}
+
+fun printSection(title: String, accent: (String)->String, rows: List<SqlRow>, render: (SqlRow)->String): Void {
+    out(accent(title + " (" + rows.size + ")"))
+    if (rows.isEmpty()) {
+        out(dim("  none"))
+        out()
+        return
+    }
+
+    for (row in rows) {
+        out(render(row))
+    }
+    out()
+}
+
+fun renderAdded(row: SqlRow): String {
+    val path = row["path"] as String
+    val size = row["size"] as Int
+    val mtime = row["mtime"] as Int
+    "  " + green("+") + " " + bold(path) + dim("  %12d B  mtime %d"(size, mtime))
+}
+
+fun renderRemoved(row: SqlRow): String {
+    val path = row["path"] as String
+    val size = row["size"] as Int
+    val mtime = row["mtime"] as Int
+    "  " + red("-") + " " + bold(path) + dim("  %12d B  mtime %d"(size, mtime))
+}
+
+fun renderChanged(row: SqlRow): String {
+    val path = row["path"] as String
+    val oldSize = row["old_size"] as Int
+    val newSize = row["new_size"] as Int
+    val oldMtime = row["old_mtime"] as Int
+    val newMtime = row["new_mtime"] as Int
+    val sizeDelta = newSize - oldSize
+    val mtimeDelta = newMtime - oldMtime
+
+    "  " + yellow("~") + " " + bold(path) +
+    dim(
+        "  size %d -> %d (%s B), mtime %d -> %d (%s ms)"(
+            oldSize,
+            newSize,
+            signed(sizeDelta),
+            oldMtime,
+            newMtime,
+            signed(mtimeDelta)
+    )
+    )
+}
+
+fun loadRows(tx: SqlTransaction, query: String): List<SqlRow> = tx.select(query).toList()
+
+fun main() {
+    val argv: List<String> = []
+    for (raw in ARGV as List) {
+        argv.add(raw as String)
+    }
+    val options = parseArgs(argv)
+    if (options == null) {
+        return
+    }
+
+    val root = Path(options.rootText)
+    if (!root.exists()) {
+        printUsage("root does not exist: " + root)
+        return
+    }
+    if (!root.isDirectory()) {
+        printUsage("root is not a directory: " + root)
+        return
+    }
+
+    val dbFile = childPath(root, DB_FILE_NAME)
+    val dbWasCreated = !dbFile.exists()
+    val shouldUpdateSnapshot = dbWasCreated || options.updateSnapshot
+
+    printBanner(root, dbFile, dbWasCreated, shouldUpdateSnapshot)
+
+    val db = openSqlite(dbFile.toString())
+
+    db.transaction { tx ->
+        tx.execute(CREATE_FILE_INDEX_SQL)
+
+        tx.execute("drop table if exists temp.current_scan")
+        tx.execute(CREATE_CURRENT_SCAN_SQL)
+
+        var scannedFiles = 0
+        for (rawEntry in root.glob("**")) {
+            val entry = rawEntry as Path
+            if (!entry.isFile()) continue
+
+            val relative = relativePath(root, entry)
+            if (isDatabaseArtifact(relative)) continue
+
+            val size = entry.size() ?: 0
+            val mtime = entry.modifiedAtMillis() ?: 0
+            tx.execute(INSERT_SCAN_ROW_SQL, relative, size, mtime)
+            scannedFiles++
+        }
+
+        val added = loadRows(tx, SELECT_ADDED_SQL)
+        val removed = loadRows(tx, SELECT_REMOVED_SQL)
+        val changed = loadRows(tx, SELECT_CHANGED_SQL)
+
+        val totalChanges = added.size + removed.size + changed.size
+
+        out(dim("scanned %d %s under %s"(scannedFiles, plural(scannedFiles, "file", "files"), root.toString())))
+        out(dim("detected %d %s"(totalChanges, plural(totalChanges, "change", "changes"))))
+        out()
+
+        printSection("Added", { green(it) }, added) { renderAdded(it) }
+        printSection("Removed", { red(it) }, removed) { renderRemoved(it) }
+        printSection("Changed", { yellow(it) }, changed) { renderChanged(it) }
+
+        if (shouldUpdateSnapshot) {
+            tx.execute(DELETE_MISSING_SQL)
+            tx.execute(UPSERT_SCAN_SQL)
+
+            val action = if (dbWasCreated) "created" else "updated"
+            out(cyan("snapshot " + action + " in " + dbFile.name))
+        } else {
+            out(dim("snapshot unchanged; re-run with -u or --update to persist the scan"))
+        }
+    }
+}
+
+main()

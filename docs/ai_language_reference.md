@@ -16,6 +16,7 @@ Primary sources used: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/{Parser,T
 ## 2. Lexical Syntax
 - Comments: `// line`, `/* block */`.
 - Strings: `"..."` or `` `...` `` (supports escapes). Multiline string content is normalized by indentation logic.
+  - AI generation preference: use `"..."` by default, including multiline strings; `"` strings are also multiline-capable and should be preferred for ordinary code/doc/SQL text. Use backtick strings mainly when the content contains many double quotes and backticks would make the source clearer.
   - Shared escapes: `\n`, `\r`, `\t`, `\\`, `\uXXXX` (4 hex digits).
   - Delimiter escapes: `\"` inside `"..."`, ``\` `` inside `` `...` ``.
   - Unicode escapes use exactly 4 hex digits (for example: `"\u0416"` -> `Ж`).
