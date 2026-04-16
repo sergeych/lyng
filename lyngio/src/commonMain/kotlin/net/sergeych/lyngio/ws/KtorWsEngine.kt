@@ -17,35 +17,46 @@ import kotlinx.coroutines.channels.ClosedReceiveChannelException
 
 internal fun createKtorWsEngine(
     engineFactory: HttpClientEngineFactory<HttpClientEngineConfig>,
-): LyngWsEngine = KtorLyngWsEngine(engineFactory)
+    shareClient: Boolean = true,
+): LyngWsEngine = KtorLyngWsEngine(engineFactory, shareClient)
 
 private class KtorLyngWsEngine(
     engineFactory: HttpClientEngineFactory<HttpClientEngineConfig>,
+    private val shareClient: Boolean,
 ) : LyngWsEngine {
-    private val clientResult = runCatching {
+    private val clientFactory: () -> HttpClient = {
         HttpClient(engineFactory) {
             install(WebSockets)
         }
     }
+    private val sharedClientResult = if (shareClient) runCatching { clientFactory() } else null
+    private val supportProbe = if (!shareClient) runCatching { clientFactory().close() } else null
 
     override val isSupported: Boolean
-        get() = clientResult.isSuccess
+        get() = sharedClientResult?.isSuccess ?: supportProbe?.isSuccess ?: true
 
     override suspend fun connect(url: String, headers: Map<String, String>): LyngWsSession {
-        val client = clientResult.getOrElse {
+        val client = (sharedClientResult?.getOrElse {
             throw UnsupportedOperationException(it.message ?: "WebSocket client is not supported")
-        }
+        } ?: runCatching { clientFactory() }.getOrElse {
+            throw UnsupportedOperationException(it.message ?: "WebSocket client is not supported")
+        })
         val session = client.webSocketSession {
             url(url)
             headers.forEach { (name, value) -> header(name, value) }
         }
-        return KtorLyngWsSession(url, session)
+        return KtorLyngWsSession(
+            targetUrl = url,
+            session = session,
+            ownedClient = client.takeUnless { shareClient },
+        )
     }
 }
 
 private class KtorLyngWsSession(
     private val targetUrl: String,
     private val session: DefaultWebSocketSession,
+    private val ownedClient: HttpClient? = null,
 ) : LyngWsSession {
     private var closed = false
 
@@ -55,12 +66,22 @@ private class KtorLyngWsSession(
 
     override suspend fun sendText(text: String) {
         ensureOpen()
-        session.send(text)
+        try {
+            session.send(text)
+        } catch (e: Throwable) {
+            release()
+            throw e
+        }
     }
 
     override suspend fun sendBytes(data: ByteArray) {
         ensureOpen()
-        session.send(data)
+        try {
+            session.send(data)
+        } catch (e: Throwable) {
+            release()
+            throw e
+        }
     }
 
     override suspend fun receive(): LyngWsMessage? {
@@ -68,14 +89,17 @@ private class KtorLyngWsSession(
         val frame = try {
             session.incoming.receive()
         } catch (_: ClosedReceiveChannelException) {
-            closed = true
+            release()
             return null
+        } catch (e: Throwable) {
+            release()
+            throw e
         }
         return when (frame) {
             is Frame.Text -> LyngWsMessage(isText = true, text = frame.readText())
             is Frame.Binary -> LyngWsMessage(isText = false, data = frame.data.copyOf())
             is Frame.Close -> {
-                closed = true
+                release()
                 null
             }
             else -> receive()
@@ -84,11 +108,20 @@ private class KtorLyngWsSession(
 
     override suspend fun close(code: Int, reason: String) {
         if (closed) return
-        closed = true
-        session.close(CloseReason(code.toShort(), reason))
+        try {
+            session.close(CloseReason(code.toShort(), reason))
+        } finally {
+            release()
+        }
     }
 
     private fun ensureOpen() {
         if (closed) throw IllegalStateException("websocket session is closed")
+    }
+
+    private fun release() {
+        if (closed) return
+        closed = true
+        ownedClient?.close()
     }
 }

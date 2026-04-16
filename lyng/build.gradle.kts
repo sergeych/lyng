@@ -151,8 +151,13 @@ kotlin {
 
 tasks.named<KotlinNativeTest>("linuxX64Test") {
     dependsOn(tasks.named("linkDebugExecutableLinuxX64"))
+    dependsOn(tasks.named("linkReleaseExecutableLinuxX64"))
     environment(
         "LYNG_CLI_NATIVE_BIN",
         layout.buildDirectory.file("bin/linuxX64/debugExecutable/lyng.kexe").get().asFile.absolutePath
+    )
+    environment(
+        "LYNG_CLI_NATIVE_RELEASE_BIN",
+        layout.buildDirectory.file("bin/linuxX64/releaseExecutable/lyng.kexe").get().asFile.absolutePath
     )
 }

@@ -119,8 +119,9 @@ internal class CliExecutionRuntime(
                 facade.call(handler)
             }
         }
-        session.cancelAndJoin()
+        session.cancel()
         shutdownSystemNetEngine()
+        session.join()
     }
 
     fun shutdownBlocking() {
