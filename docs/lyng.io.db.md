@@ -205,7 +205,8 @@ assertThrows(RollbackException) {
 - `columns` — positional `SqlColumn` metadata, available before iteration.
 - `size()` — result row count.
 - `isEmpty()` — fast emptiness check where possible.
-- `iterator()` / `toList()` — normal row iteration.
+- `iterator()` — normal row iteration while the transaction is active.
+- `toList()` — materialize detached `SqlRow` snapshots that may be used after the transaction ends.
 
 ##### `SqlRow`
 
@@ -370,14 +371,24 @@ PostgreSQL-specific notes:
 
 #### Lifetime rules
 
-Result sets and rows are valid only while their owning transaction is active.
+`ResultSet` is valid only while its owning transaction is active.
+
+`SqlRow` values are detached snapshots once materialized, so this pattern is valid:
+
+```lyng
+val rows = db.transaction { tx ->
+    tx.select("select name from person order by id").toList()
+}
+
+assertEquals("Ada", rows[0]["name"])
+```
 
 This means:
 
-- do not keep `ResultSet` or `SqlRow` objects after the transaction block returns
-- copy the values you need into ordinary Lyng objects inside the transaction
+- do not keep `ResultSet` objects after the transaction block returns
+- materialize rows with `toList()` inside the transaction when they must outlive it
 
-The same lifetime rule applies to generated keys returned by `ExecutionResult.getGeneratedKeys()`.
+The same rule applies to generated keys from `ExecutionResult.getGeneratedKeys()`: the `ResultSet` is transaction-scoped, but rows returned by `toList()` are detached.
 
 ---
 

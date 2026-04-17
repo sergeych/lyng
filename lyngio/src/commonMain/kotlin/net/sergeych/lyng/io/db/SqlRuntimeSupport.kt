@@ -21,7 +21,6 @@ import net.sergeych.lyng.Arguments
 import net.sergeych.lyng.ModuleScope
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.ScopeFacade
-import net.sergeych.lyng.asFacade
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjBool
 import net.sergeych.lyng.obj.ObjClass
@@ -234,12 +233,10 @@ internal class SqlRuntimeTypes private constructor(
 
         rowClass.addProperty("size", getter = {
             val self = thisAs<SqlRowObj>()
-            self.lifetime.ensureActive(this)
             ObjInt.of(self.values.size.toLong())
         })
         rowClass.addProperty("values", getter = {
             val self = thisAs<SqlRowObj>()
-            self.lifetime.ensureActive(this)
             ObjImmutableList(self.values)
         })
 
@@ -302,14 +299,13 @@ internal class SqlResultSetObj(
     data: SqlResultSetData,
 ) : Obj() {
     val columns: List<Obj> = data.columns.map { SqlColumnObj(types, it) }
-    val rows: List<Obj> = buildRows(types, lifetime, data)
+    val rows: List<Obj> = buildRows(types, data)
 
     override val objClass: ObjClass
         get() = types.resultSetClass
 
     private fun buildRows(
         types: SqlRuntimeTypes,
-        lifetime: SqlTransactionLifetime,
         data: SqlResultSetData,
     ): List<Obj> {
         val indexByName = linkedMapOf<String, MutableList<Int>>()
@@ -317,14 +313,13 @@ internal class SqlResultSetObj(
             indexByName.getOrPut(column.name.lowercase()) { mutableListOf() }.add(index)
         }
         return data.rows.map { rowValues ->
-            SqlRowObj(types, lifetime, rowValues, indexByName)
+            SqlRowObj(types, rowValues, indexByName)
         }
     }
 }
 
 internal class SqlRowObj(
     val types: SqlRuntimeTypes,
-    val lifetime: SqlTransactionLifetime,
     val values: List<Obj>,
     private val indexByName: Map<String, List<Int>>,
 ) : Obj() {
@@ -332,7 +327,6 @@ internal class SqlRowObj(
         get() = types.rowClass
 
     override suspend fun getAt(scope: Scope, index: Obj): Obj {
-        lifetime.ensureActive(scope.asFacade())
         return when (index) {
             is ObjInt -> {
                 val idx = index.value.toInt()

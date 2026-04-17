@@ -96,8 +96,8 @@ row-id behavior are all connection-local.
 The provider may stream rows or buffer them, but it must preserve the core
 contract:
 - result sets are valid only while the owning transaction is active
-- rows obtained from a result set are also invalid after the owning
-  transaction ends, even if they were already buffered
+- rows obtained from a result set should stay usable after the owning
+  transaction ends once they were materialized, e.g. with `toList()`
 - iteration closes underlying resources when finished or canceled
 - `isEmpty()` should be cheap where possible
 - `size()` may consume or buffer the full result

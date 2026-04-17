@@ -250,7 +250,7 @@ class LyngSqliteModuleTest {
     }
 
     @Test
-    fun testRowFailsAfterTransactionEnds() = runTest {
+    fun testMaterializedRowSurvivesAfterTransactionEnds() = runTest {
         val scope = Script.newScope()
         val db = openMemoryDb(scope)
         var leakedRow: Obj = ObjNull
@@ -265,12 +265,34 @@ class LyngSqliteModuleTest {
             }
         )
 
-        val error = assertFailsWith<ExecutionError> {
-            leakedRow.getAt(scope, ObjString("answer"))
-        }
+        val answer = leakedRow.getAt(scope, ObjString("answer")) as ObjInt
+        assertEquals(42L, answer.value)
+    }
 
-        assertEquals("SqlUsageException", error.errorObject.objClass.className)
-        assertTrue(error.errorMessage.contains("transaction is active"), error.errorMessage)
+    @Test
+    fun testMaterializedRowsListCanBeReturnedFromTransaction() = runTest {
+        val scope = Script.newScope()
+        val db = openMemoryDb(scope)
+
+        val rows = db.invokeInstanceMethod(
+            scope,
+            "transaction",
+            ObjExternCallable.fromBridge {
+                val tx = requiredArg<Obj>(0)
+                tx.invokeInstanceMethod(
+                    requireScope(),
+                    "execute",
+                    ObjString("create table items(id integer primary key autoincrement, name text not null)")
+                )
+                tx.invokeInstanceMethod(requireScope(), "execute", ObjString("insert into items(name) values(?)"), ObjString("alpha"))
+                tx.invokeInstanceMethod(requireScope(), "execute", ObjString("insert into items(name) values(?)"), ObjString("beta"))
+                tx.invokeInstanceMethod(requireScope(), "select", ObjString("select name from items order by id"))
+                    .invokeInstanceMethod(requireScope(), "toList")
+            }
+        )
+
+        assertEquals("alpha", stringValue(scope, rows.getAt(scope, ObjInt.Zero).getAt(scope, ObjString("name"))))
+        assertEquals("beta", stringValue(scope, rows.getAt(scope, ObjInt.of(1)).getAt(scope, ObjString("name"))))
     }
 
     @Test

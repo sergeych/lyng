@@ -112,6 +112,34 @@ class LyngJdbcModuleTest {
         assertEquals(3L, result.value)
     }
 
+    @Test
+    fun testMaterializedRowsListCanBeReturnedFromTransaction() = runTest {
+        val scope = Script.newScope()
+        createJdbcModule(scope.importManager)
+        val jdbcModule = scope.importManager.createModuleScope(Pos.builtIn, "lyng.io.db.jdbc")
+        val db = jdbcModule.callFn("openH2", ObjString("mem:rows_return_${System.nanoTime()};DB_CLOSE_DELAY=-1"))
+
+        val rows = db.invokeInstanceMethod(
+            scope,
+            "transaction",
+            ObjExternCallable.fromBridge {
+                val tx = requiredArg<Obj>(0)
+                tx.invokeInstanceMethod(
+                    requireScope(),
+                    "execute",
+                    ObjString("create table person(id bigint auto_increment primary key, name varchar(120) not null)")
+                )
+                tx.invokeInstanceMethod(requireScope(), "execute", ObjString("insert into person(name) values(?)"), ObjString("Ada"))
+                tx.invokeInstanceMethod(requireScope(), "execute", ObjString("insert into person(name) values(?)"), ObjString("Linus"))
+                tx.invokeInstanceMethod(requireScope(), "select", ObjString("select name from person order by id"))
+                    .invokeInstanceMethod(requireScope(), "toList")
+            }
+        )
+
+        assertEquals("Ada", (rows.getAt(scope, ObjInt.Zero).getAt(scope, ObjString("name")) as ObjString).value)
+        assertEquals("Linus", (rows.getAt(scope, ObjInt.of(1)).getAt(scope, ObjString("name")) as ObjString).value)
+    }
+
     private suspend fun scalarSelect(scope: net.sergeych.lyng.Scope, db: Obj, sql: String): Long {
         val result = db.invokeInstanceMethod(
             scope,

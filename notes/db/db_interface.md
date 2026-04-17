@@ -61,10 +61,10 @@ Notes:
   rather than silently degrading to some other visible type.
 - `ResultSet` should stay iterable, but also expose `isEmpty()` for cheap
   emptiness checks where possible and `size()` as a separate operation.
-- `ResultSet` and all `SqlRow` instances obtained from it are valid only while
-  the owning transaction is active. After transaction end, any further row or
-  result-set access should fail with `SqlUsageException`, even if the provider
-  had buffered data internally.
+- `ResultSet` is valid only while the owning transaction is active.
+- Materialized `SqlRow` values should be detached snapshots, so
+  `transaction { tx.select(...).toList() }` is a valid pattern and the rows
+  remain usable after transaction end.
 - Portable SQL parameter values should match the row conversion set: `null`,
   `Bool`, `Int`, `Double`, `Decimal`, `String`, `Buffer`,
   `Date`, `DateTime`, and `Instant`.

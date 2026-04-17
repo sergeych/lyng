@@ -42,11 +42,11 @@ class SqlRow(
     - iteration to the end or canceled iteration should close the underlying
       resources automatically
     - using the result set after its transaction ends is invalid
-    - rows obtained from the result set are also invalid after the owning
-      transaction ends, even if the implementation had already buffered them
+    - rows obtained from the result set stay usable after the owning
+      transaction ends once they have been materialized
 
-    If user code wants row data to survive independently, it should copy the
-    values it needs into ordinary Lyng objects while the transaction is active.
+    Calling [toList] while the transaction is active is the normal way to
+    detach rows for use after the transaction block returns.
 */
 interface ResultSet : Iterable<SqlRow> {
     /*

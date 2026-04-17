@@ -65,7 +65,7 @@ db.transaction { tx ->
         println("  #" + row["ID"] + " " + row["title"] + " done=" + row["done"] + " due=" + row["due_date"])
     }
 
-    // If values need to survive after the transaction closes, copy them now.
+    // toList() materializes detached rows that stay usable after transaction close.
     val snapshot = tx.select("select title, due_date from task order by id").toList()
     assertEquals("Write a SQLite example", snapshot[0]["title"])
     assertEquals(Date(2026, 4, 16), snapshot[1]["due_date"])
