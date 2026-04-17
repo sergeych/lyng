@@ -219,6 +219,58 @@ Flows allow easy transforming of any [Iterable]. See how the standard Lyng libra
         }
     }
 
+## Channel
+
+A [Channel] is a **hot pipe** between coroutines: values are pushed in by a producer and pulled out by a consumer, with each value consumed exactly once.
+
+Unlike a `Flow` (which is cold and re-runs its generator on every collection), a `Channel` is stateful — the right tool for classic _producer / consumer_ work.
+
+    val ch = Channel()        // rendezvous: sender waits for receiver
+
+    val producer = launch {
+        for (i in 1..5) ch.send(i)
+        ch.close()            // signal: no more values
+    }
+
+    var item = ch.receive()   // suspends until a value is ready
+    while (item != null) {
+        println(item)
+        item = ch.receive()
+    }
+    >>> 1
+    >>> 2
+    >>> 3
+    >>> 4
+    >>> 5
+    >>> void
+
+`receive()` returns `null` when the channel is both closed and fully drained — that is the idiomatic loop termination condition.
+
+Channels can also be buffered so the producer can run ahead:
+
+    val ch = Channel(4)       // buffer up to 4 items without blocking
+
+    ch.send(10)
+    ch.send(20)
+    ch.send(30)
+    ch.close()
+
+    assertEquals(10, ch.receive())
+    assertEquals(20, ch.receive())
+    assertEquals(30, ch.receive())
+    assertEquals(null, ch.receive())   // drained
+    >>> void
+
+For the full API — including `tryReceive`, `Channel.UNLIMITED`, and the fan-out / ping-pong patterns — see the [Channel] reference page.
+
+| | Flow | Channel |
+|---|---|---|
+| **temperature** | cold (lazy) | hot (eager) |
+| **replay** | every collector gets a fresh run | each item consumed once |
+| **consumers** | any number, each gets all items | one receiver per item |
+| **typical use** | transform pipelines, sequences | producer–consumer, fan-out |
+
+[Channel]: Channel.md
 
 [Iterable]: Iterable.md
 

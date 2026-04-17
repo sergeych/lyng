@@ -634,6 +634,7 @@ class Script(
             addConst("Deferred", ObjDeferred.type)
             addConst("CompletableDeferred", ObjCompletableDeferred.type)
             addConst("Mutex", ObjMutex.type)
+            addConst("Channel", ObjChannel.type)
             addConst("Flow", ObjFlow.type)
             addConst("FlowBuilder", ObjFlowBuilder.type)
             addConst("Delegate", ObjDynamic.type)
