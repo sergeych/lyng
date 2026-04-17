@@ -33,6 +33,21 @@ import net.sergeych.lyng.obj.ObjNull
 import net.sergeych.lyng.obj.ObjString
 import net.sergeych.lyng.obj.thisAs
 import net.sergeych.lyng.requireScope
+import kotlin.collections.List
+import kotlin.collections.Map
+import kotlin.collections.MutableList
+import kotlin.collections.associateWith
+import kotlin.collections.drop
+import kotlin.collections.first
+import kotlin.collections.forEachIndexed
+import kotlin.collections.getOrNull
+import kotlin.collections.getOrPut
+import kotlin.collections.indices
+import kotlin.collections.linkedMapOf
+import kotlin.collections.listOf
+import kotlin.collections.map
+import kotlin.collections.mutableListOf
+import kotlin.text.lowercase
 
 internal data class SqlColumnMeta(
     val name: String,
@@ -53,6 +68,7 @@ internal data class SqlExecutionResultData(
 
 internal interface SqlDatabaseBackend {
     suspend fun <T> transaction(scope: ScopeFacade, block: suspend (SqlTransactionBackend) -> T): T
+    fun close() {}
 }
 
 internal interface SqlTransactionBackend {
@@ -156,6 +172,11 @@ internal class SqlRuntimeTypes private constructor(
     }
 
     private fun bind() {
+        databaseClass.addFn("close") {
+            thisAs<SqlDatabaseObj>().backend.close()
+            ObjNull
+        }
+
         databaseClass.addFn("transaction") {
             val self = thisAs<SqlDatabaseObj>()
             val block = args.list.getOrNull(0) ?: raiseError("Expected exactly 1 argument, got ${args.list.size}")

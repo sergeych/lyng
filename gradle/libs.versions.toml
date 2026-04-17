@@ -19,6 +19,7 @@ sqlite-jdbc = "3.50.3.0"
 h2 = "2.4.240"
 postgresql = "42.7.8"
 testcontainers = "1.20.6"
+hikaricp = "6.2.1"
 
 [libraries]
 clikt = { module = "com.github.ajalt.clikt:clikt", version.ref = "clikt" }
@@ -52,6 +53,7 @@ h2 = { module = "com.h2database:h2", version.ref = "h2" }
 postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
 testcontainers = { module = "org.testcontainers:testcontainers", version.ref = "testcontainers" }
 testcontainers-postgresql = { module = "org.testcontainers:postgresql", version.ref = "testcontainers" }
+hikaricp = { module = "com.zaxxer:HikariCP", version.ref = "hikaricp" }
 
 [plugins]
 androidLibrary = { id = "com.android.library", version.ref = "agp" }

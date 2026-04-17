@@ -19,7 +19,6 @@
  * LyngIO: Compose Multiplatform library module depending on :lynglib
  */
 
-import org.gradle.api.Project
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -225,6 +224,7 @@ kotlin {
                 implementation(libs.sqlite.jdbc)
                 implementation(libs.h2)
                 implementation(libs.postgresql)
+                implementation(libs.hikaricp)
             }
         }
 //        // For Wasm we use in-memory VFS for now

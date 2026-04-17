@@ -236,7 +236,7 @@ suspend fun runDocTests(fileName: String, bookMode: Boolean = false) {
     val bookScope = Scope()
     var count = 0
     parseDocTests(fileName, bookMode).collect { dt ->
-        if (bookMode) dt.test(bookScope)
+        if (bookMode)imp dt.test(bookScope)
         else dt.test()
         count++
     }

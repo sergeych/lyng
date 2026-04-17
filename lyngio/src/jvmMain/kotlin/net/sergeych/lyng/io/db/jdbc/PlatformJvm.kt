@@ -17,41 +17,19 @@
 
 package net.sergeych.lyng.io.db.jdbc
 
-import net.sergeych.lyng.ExecutionError
-import net.sergeych.lyng.ScopeFacade
-import net.sergeych.lyng.io.db.SqlColumnMeta
-import net.sergeych.lyng.io.db.SqlCoreModule
-import net.sergeych.lyng.io.db.SqlDatabaseBackend
-import net.sergeych.lyng.io.db.SqlExecutionResultData
-import net.sergeych.lyng.io.db.SqlResultSetData
-import net.sergeych.lyng.io.db.SqlTransactionBackend
-import net.sergeych.lyng.obj.Obj
-import net.sergeych.lyng.obj.ObjBool
-import net.sergeych.lyng.obj.ObjBuffer
-import net.sergeych.lyng.obj.ObjDate
-import net.sergeych.lyng.obj.ObjDateTime
-import net.sergeych.lyng.obj.ObjEnumEntry
-import net.sergeych.lyng.obj.ObjException
-import net.sergeych.lyng.obj.ObjInstant
-import net.sergeych.lyng.obj.ObjInt
-import net.sergeych.lyng.obj.ObjNull
-import net.sergeych.lyng.obj.ObjReal
-import net.sergeych.lyng.obj.ObjString
-import net.sergeych.lyng.requireScope
+import com.zaxxer.hikari.HikariConfig
+import com.zaxxer.hikari.HikariDataSource
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
+import net.sergeych.lyng.ExecutionError
+import net.sergeych.lyng.ScopeFacade
+import net.sergeych.lyng.io.db.*
+import net.sergeych.lyng.obj.*
+import net.sergeych.lyng.requireScope
 import java.math.BigDecimal
-import java.sql.Connection
-import java.sql.DriverManager
-import java.sql.PreparedStatement
-import java.sql.ResultSet
-import java.sql.SQLException
-import java.sql.SQLIntegrityConstraintViolationException
-import java.sql.SQLNonTransientConnectionException
-import java.sql.Statement
-import java.util.Properties
+import java.sql.*
 import kotlin.time.Instant
 
 private val knownJdbcDrivers = listOf(
@@ -65,17 +43,42 @@ internal actual suspend fun openJdbcBackend(
     core: SqlCoreModule,
     options: JdbcOpenOptions,
 ): SqlDatabaseBackend {
-    return JdbcDatabaseBackend(core, options)
+    ensureJdbcDriversLoaded(scope, core, options.driverClass)
+    val dataSource = try {
+        val config = HikariConfig().apply {
+            jdbcUrl = options.connectionUrl
+            options.user?.let { username = it }
+            options.password?.let { password = it }
+            options.driverClass?.let { driverClassName = it }
+            options.properties.forEach { (key, value) -> addDataSourceProperty(key, value) }
+            // Statement caching: avoids re-parsing identical SQL on every call
+            addDataSourceProperty("cachePrepStmts", "true")
+            addDataSourceProperty("prepStmtCacheSize", "250")
+            addDataSourceProperty("prepStmtCacheSqlLimit", "2048")
+            // Connections from the pool are already in autoCommit=false territory;
+            // we manage commits explicitly in transaction().
+            isAutoCommit = false
+        }
+        HikariDataSource(config)
+    } catch (e: Exception) {
+        val cause = e.cause as? SQLException ?: (e as? SQLException)
+        if (cause != null) throw mapOpenException(scope, core, cause)
+        throw e
+    }
+    return JdbcDatabaseBackend(core, dataSource)
 }
 
 private class JdbcDatabaseBackend(
     private val core: SqlCoreModule,
-    private val options: JdbcOpenOptions,
+    private val dataSource: HikariDataSource,
 ) : SqlDatabaseBackend {
     override suspend fun <T> transaction(scope: ScopeFacade, block: suspend (SqlTransactionBackend) -> T): T {
-        val connection = openConnection(scope)
+        val connection = try {
+            dataSource.connection
+        } catch (e: SQLException) {
+            throw mapOpenException(scope, core, e)
+        }
         try {
-            connection.autoCommit = false
             val tx = JdbcTransactionBackend(core, connection)
             val result = try {
                 block(tx)
@@ -90,27 +93,16 @@ private class JdbcDatabaseBackend(
                 throw mapSqlException(scope, core, e)
             }
             return result
-        } catch (e: SQLException) {
-            throw mapSqlException(scope, core, e)
         } finally {
             try {
-                connection.close()
+                connection.close()  // returns connection to pool
             } catch (_: SQLException) {
             }
         }
     }
 
-    private fun openConnection(scope: ScopeFacade): Connection {
-        ensureJdbcDriversLoaded(scope, core, options.driverClass)
-        val properties = Properties()
-        options.user?.let { properties.setProperty("user", it) }
-        options.password?.let { properties.setProperty("password", it) }
-        options.properties.forEach { (key, value) -> properties.setProperty(key, value) }
-        return try {
-            DriverManager.getConnection(options.connectionUrl, properties)
-        } catch (e: SQLException) {
-            throw mapOpenException(scope, core, e)
-        }
+    override fun close() {
+        dataSource.close()
     }
 }
 
