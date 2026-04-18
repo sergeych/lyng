@@ -19,7 +19,7 @@ extern class Deferred {
     /* Cancel the task if it is still active. Safe to call multiple times. */
     fun cancel(): void
     /* Suspend until the task finishes and return its value.
-       Throws `CancellationException` if the task was cancelled. */
+        Throws `CancellationException` if the task was cancelled. */
     fun await(): Object
     /* True when the task has finished, failed, or otherwise reached a terminal state. */
     val isCompleted: Bool
@@ -241,10 +241,10 @@ fun Iterable<T>.drop(n: Int): List<T> {
 
 /* Return the first element or throw if the iterable is empty. */
 val Iterable<T>.first: T get() {
-    val i: Iterator<T> = iterator()
-    if( !i.hasNext() ) throw NoSuchElementException()
-        i.next().also { i.cancelIteration() }
-}
+        val i: Iterator<T> = iterator()
+        if( !i.hasNext() ) throw NoSuchElementException()
+            i.next().also { i.cancelIteration() }
+    }
 
 /*
     Return the first element that matches the predicate or throws
@@ -272,15 +272,15 @@ fun Iterable<T>.findFirstOrNull(predicate: (T)->Bool): T? {
 
 /* Return the last element or throw if the iterable is empty. */
 val Iterable<T>.last: T get() {
-    var found = false
-    var element: Object = Unset
-    for( i in this ) {
-        element = i
-        found = true
+        var found = false
+        var element: Object = Unset
+        for( i in this ) {
+            element = i
+            found = true
+        }
+        if( !found ) throw NoSuchElementException()
+            element as T
     }
-    if( !found ) throw NoSuchElementException()
-        element as T
-}
 
 /* Emit all but the last N elements of this iterable. */
 fun Iterable<T>.dropLast(n: Int): Flow<T> {
@@ -542,4 +542,49 @@ class StackTraceEntry(
     override fun toString() {
         "%s: %s"(at, sourceString)
     }
+}
+/*
+    A pool of coroutines that execute submitted tasks with bounded concurrency.
+
+    `maxWorkers` limits how many tasks run in parallel.
+    `maxQueueSize` limits how many tasks may be queued waiting for a free worker;
+    when the queue is full, `launch` suspends the caller until space becomes available.
+    Use `Channel.UNLIMITED` (the default) for an unbounded queue.
+
+    Any exception thrown inside a submitted lambda is captured in the returned
+    `Deferred` and never escapes the pool itself.
+
+    Once `cancel()` or `closeAndJoin()` is called, any further `launch` call
+    (including one suspended waiting for queue space) throws `IllegalStateException`.
+*/
+extern class LaunchPool(maxWorkers: Int, maxQueueSize: Int = Channel.UNLIMITED) {
+    /*
+        Schedule a lambda for execution and return a Deferred for its result.
+        Suspends the caller if the queue is full.
+        Throws `IllegalStateException` if the pool is cancelled or closing.
+    */
+    extern fun launch<T>( lambda: ()->T ): Deferred<T>
+
+    /*
+        Immediately cancel all workers and discard any queued tasks.
+        Running tasks are interrupted via coroutine cancellation.
+        After this call, `launch` throws `IllegalStateException`.
+    */
+    extern fun cancel()
+
+    /*
+        Like `cancel`, but also waits until any currently-running task has
+        finished (they will not be interrupted mid-execution).
+        Useful when workers hold resources (connections, file handles) that
+        must be released before the caller continues.
+        After this call, `launch` throws `IllegalStateException`.
+    */
+    extern fun cancelAndJoin()
+
+    /*
+        Stop accepting new tasks and suspend until all queued and running
+        tasks have completed normally.
+        After this call, `launch` throws `IllegalStateException`.
+    */
+    extern fun closeAndJoin()
 }

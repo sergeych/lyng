@@ -59,6 +59,38 @@ class TestCoroutines {
     }
 
     @Test
+    fun testCompletableExceptionally() = runTest {
+        eval(
+            """
+            val done = CompletableDeferred()
+
+            launch {
+                delay(10)
+                done.completeExceptionally(IllegalStateException("boom"))
+            }
+
+            assert(!done.isCompleted)
+            assertThrows(IllegalStateException) { done.await() }
+            assert(done.isCompleted)
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testCompletableExceptionallyWithCustomException() = runTest {
+        eval(
+            """
+            class MyError(msg) : Exception(msg) {}
+
+            val done = CompletableDeferred()
+            done.completeExceptionally(MyError("custom failure"))
+
+            assertThrows(MyError) { done.await() }
+        """.trimIndent()
+        )
+    }
+
+    @Test
     fun testDeferredCancel() = runTest {
         eval(
             """

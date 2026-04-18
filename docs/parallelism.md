@@ -237,12 +237,7 @@ Unlike a `Flow` (which is cold and re-runs its generator on every collection), a
         println(item)
         item = ch.receive()
     }
-    >>> 1
-    >>> 2
-    >>> 3
-    >>> 4
-    >>> 5
-    >>> void
+    // prints 1 2 3 4 5
 
 `receive()` returns `null` when the channel is both closed and fully drained — that is the idiomatic loop termination condition.
 
@@ -259,7 +254,6 @@ Channels can also be buffered so the producer can run ahead:
     assertEquals(20, ch.receive())
     assertEquals(30, ch.receive())
     assertEquals(null, ch.receive())   // drained
-    >>> void
 
 For the full API — including `tryReceive`, `Channel.UNLIMITED`, and the fan-out / ping-pong patterns — see the [Channel] reference page.
 

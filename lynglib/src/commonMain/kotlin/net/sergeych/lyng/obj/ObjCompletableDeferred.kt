@@ -18,6 +18,7 @@
 package net.sergeych.lyng.obj
 
 import kotlinx.coroutines.CompletableDeferred
+import net.sergeych.lyng.ExecutionError
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.miniast.ParamDoc
 import net.sergeych.lyng.miniast.addFnDoc
@@ -41,6 +42,30 @@ class ObjCompletableDeferred(val completableDeferred: CompletableDeferred<Obj>):
                 moduleName = "lyng.stdlib"
             ) {
                 thisAs<ObjCompletableDeferred>().completableDeferred.complete(args.firstAndOnly())
+                ObjVoid
+            }
+            addFnDoc(
+                name = "completeExceptionally",
+                doc = "Fail this deferred with the given exception. Awaiting it will then throw that exception. " +
+                    "Subsequent calls have no effect. The argument must be an `Exception` instance.",
+                params = listOf(ParamDoc("exception", type("lyng.Exception"))),
+                returns = type("lyng.Void"),
+                moduleName = "lyng.stdlib"
+            ) {
+                val ex = requiredArg<Obj>(0)
+                val scope = requireScope()
+                val msg = when (ex) {
+                    is ObjException -> ex.message.value
+                    else -> ex.toString(scope).value
+                }
+                val pos = when (ex) {
+                    is ObjException -> ex.scope.pos
+                    else -> scope.pos
+                }
+                // Always carry the original Lyng object as errorObject so that
+                // assertThrows / catch clauses see the correct exception class.
+                val cause = ExecutionError(ex, pos, msg)
+                thisAs<ObjCompletableDeferred>().completableDeferred.completeExceptionally(cause)
                 ObjVoid
             }
         }
