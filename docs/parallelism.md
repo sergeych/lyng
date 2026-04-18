@@ -257,6 +257,27 @@ Channels can also be buffered so the producer can run ahead:
 
 For the full API — including `tryReceive`, `Channel.UNLIMITED`, and the fan-out / ping-pong patterns — see the [Channel] reference page.
 
+## LaunchPool
+
+When you need **bounded concurrency** — run at most *N* tasks at the same time without spawning a new coroutine per task — use [LaunchPool]:
+
+```lyng
+val pool = LaunchPool(4)          // at most 4 tasks run in parallel
+
+val jobs = (1..20).map { n ->
+    pool.launch { expensiveCompute(n) }
+}
+pool.closeAndJoin()               // wait for all tasks to complete
+
+val results = jobs.map { (it as Deferred).await() }
+```
+
+Exceptions thrown inside a submitted lambda are captured in the returned `Deferred` and do not crash the pool, so other tasks continue running normally.
+
+See [LaunchPool] for the full API including bounded queues and cancellation.
+
+[LaunchPool]: LaunchPool.md
+
 | | Flow | Channel |
 |---|---|---|
 | **temperature** | cold (lazy) | hot (eager) |

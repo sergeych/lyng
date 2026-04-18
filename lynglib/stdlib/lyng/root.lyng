@@ -543,6 +543,19 @@ class StackTraceEntry(
         "%s: %s"(at, sourceString)
     }
 }
+// Private helper: starts one LaunchPool worker coroutine for the given queue.
+// Defined outside LaunchPool so the global `launch` is not shadowed by the method.
+private fun _launchPoolWorker(q) {
+    val ch = q as Channel
+    launch {
+        var task = ch.receive()
+        while (task != null) {
+            task()
+            task = ch.receive()
+        }
+    }
+}
+
 /*
     A pool of coroutines that execute submitted tasks with bounded concurrency.
 
@@ -554,37 +567,79 @@ class StackTraceEntry(
     Any exception thrown inside a submitted lambda is captured in the returned
     `Deferred` and never escapes the pool itself.
 
-    Once `cancel()` or `closeAndJoin()` is called, any further `launch` call
-    (including one suspended waiting for queue space) throws `IllegalStateException`.
+    Once `cancel()`, `cancelAndJoin()`, or `closeAndJoin()` is called, any further
+    `launch` call (including one that was suspended waiting for queue space) throws
+    `IllegalStateException`.
 */
-extern class LaunchPool(maxWorkers: Int, maxQueueSize: Int = Channel.UNLIMITED) {
+class LaunchPool(maxWorkers, maxQueueSize = Channel.UNLIMITED) {
+    private val queue = Channel(maxQueueSize)
+    private var isClosed = false
+    private val mu = Mutex()
+    private val workers = (1..maxWorkers).map { _launchPoolWorker(queue) }
+
     /*
         Schedule a lambda for execution and return a Deferred for its result.
-        Suspends the caller if the queue is full.
-        Throws `IllegalStateException` if the pool is cancelled or closing.
+        Suspends the caller if the queue is full (maxQueueSize reached).
+        Throws `IllegalStateException` if the pool is closed or cancelled.
+        Any exception thrown by the lambda is captured in the returned Deferred
+        and does not escape the pool.
     */
-    extern fun launch<T>( lambda: ()->T ): Deferred<T>
+    fun launch(lambda) {
+        mu.withLock {
+            if (isClosed) throw IllegalStateException("LaunchPool is closed")
+        }
+        val d = CompletableDeferred()
+        val wrapper = {
+            try { d.complete(lambda()) }
+            catch(e) { d.completeExceptionally(e) }
+        }
+        // send may suspend if the queue is full; throws if pool is closed meanwhile
+        try {
+            queue.send(wrapper)
+        } catch(e: IllegalStateException) {
+            throw IllegalStateException("LaunchPool is closed")
+        }
+        d
+    }
+
+    private fun closeQueue() {
+        mu.withLock {
+            if (!isClosed) {
+                isClosed = true
+                queue.close()
+            }
+        }
+    }
 
     /*
         Immediately cancel all workers and discard any queued tasks.
-        Running tasks are interrupted via coroutine cancellation.
+        Tasks suspended at an IO point are interrupted via coroutine cancellation.
         After this call, `launch` throws `IllegalStateException`.
     */
-    extern fun cancel()
+    fun cancel() {
+        closeQueue()
+        workers.forEach { (it as Deferred).cancel() }
+    }
 
     /*
-        Like `cancel`, but also waits until any currently-running task has
-        finished (they will not be interrupted mid-execution).
-        Useful when workers hold resources (connections, file handles) that
-        must be released before the caller continues.
+        Like `cancel`, but cancels all workers and suspends until they all stop.
+        Worker cancellations are silent — exceptions from cancelled workers are ignored.
         After this call, `launch` throws `IllegalStateException`.
     */
-    extern fun cancelAndJoin()
+    fun cancelAndJoin() {
+        closeQueue()
+        workers.forEach { (it as Deferred).cancel() }
+    }
 
     /*
         Stop accepting new tasks and suspend until all queued and running
         tasks have completed normally.
         After this call, `launch` throws `IllegalStateException`.
     */
-    extern fun closeAndJoin()
+    fun closeAndJoin() {
+        closeQueue()
+        for (w in workers) {
+            (w as Deferred).await()
+        }
+    }
 }

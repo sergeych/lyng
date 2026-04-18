@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,10 @@ sealed class CodeContext {
         val implicitThisMembers: Boolean = false,
         val implicitThisTypeName: String? = null,
         val typeParams: Set<String> = emptySet(),
-        val typeParamDecls: List<TypeDecl.TypeParam> = emptyList()
+        val typeParamDecls: List<TypeDecl.TypeParam> = emptyList(),
+        /** True for static methods and top-level functions: they have no implicit `this`,
+         *  so class-body field initializers inside them should not inherit the class name. */
+        val noImplicitThis: Boolean = false
     ): CodeContext()
     class ClassBody(val name: String, val isExtern: Boolean = false): CodeContext() {
         var typeParams: Set<String> = emptySet()

@@ -812,8 +812,18 @@ class Compiler(
 
     private fun currentImplicitThisTypeName(): String? {
         for (ctx in codeContexts.asReversed()) {
-            val fn = ctx as? CodeContext.Function ?: continue
-            if (fn.implicitThisTypeName != null) return fn.implicitThisTypeName
+            when (ctx) {
+                is CodeContext.Function -> {
+                    if (ctx.implicitThisTypeName != null) return ctx.implicitThisTypeName
+                    // A static method or top-level function explicitly has no implicit `this`.
+                    // Stop here — do not fall through to an enclosing ClassBody.
+                    if (ctx.noImplicitThis) return null
+                }
+                // Class field initializers are compiled directly under ClassBody with no wrapping
+                // Function. Lambdas inside those initializers must still see `this` as the class.
+                is CodeContext.ClassBody -> return ctx.name
+                else -> {}
+            }
         }
         return null
     }
@@ -9214,13 +9224,17 @@ class Compiler(
             parentContext is CodeContext.ClassBody && !isStatic -> parentContext.name
             else -> null
         }
+        // Static methods and top-level functions have no implicit `this`; mark them so that
+        // currentImplicitThisTypeName() does not fall through to an enclosing ClassBody.
+        val noImplicitThis = implicitThisTypeName == null && extTypeName == null
         return inCodeContext(
             CodeContext.Function(
                 name,
                 implicitThisMembers = implicitThisMembers,
                 implicitThisTypeName = implicitThisTypeName,
                 typeParams = typeParams,
-                typeParamDecls = typeParamDecls
+                typeParamDecls = typeParamDecls,
+                noImplicitThis = noImplicitThis
             )
         ) {
             cc.labels.add(name)

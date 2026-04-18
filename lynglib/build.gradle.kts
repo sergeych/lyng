@@ -345,7 +345,6 @@ tasks.withType<org.gradle.api.tasks.testing.Test> {
 
     // Make the flag visible inside tests if they want to branch on it
     systemProperty("LYNG_BENCHMARKS", benchmarksEnabled.toString())
-
     if (!benchmarksEnabled) {
         // Exclude all JVM tests whose class name ends with or contains BenchmarkTest
         // This keeps CI fast and avoids noisy timing logs by default.

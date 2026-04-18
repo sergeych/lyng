@@ -5869,17 +5869,22 @@ class BytecodeCompiler(
     }
 
     private fun compileCatchClassSlot(name: String): CompiledValue? {
-        val ref = LocalVarRef(name, Pos.builtIn)
-        val compiled = compileRef(ref)
-        if (compiled != null) {
-            return ensureObjSlot(compiled)
+        // resolveTypeNameClass always returns the correct Lyng class for built-in type names.
+        // nameObjClass[name] tracks variable type inference — for class declarations it stores
+        // ObjClassType (the "Class" meta-type), NOT the actual class object. Using nameObjClass
+        // for catch clause matching would cause CHECK_IS to compare against the wrong class,
+        // silently failing to catch exceptions. Always prefer resolveTypeNameClass first.
+        val cls = resolveTypeNameClass(name) ?: nameObjClass[name]?.takeIf { it != ObjClassType }
+        if (cls != null) {
+            val id = builder.addConst(BytecodeConst.ObjRef(cls))
+            val slot = allocSlot()
+            builder.emit(Opcode.CONST_OBJ, id, slot)
+            updateSlotType(slot, SlotType.OBJ)
+            return CompiledValue(slot, SlotType.OBJ)
         }
-        val cls = nameObjClass[name] ?: resolveTypeNameClass(name) ?: return null
-        val id = builder.addConst(BytecodeConst.ObjRef(cls))
-        val slot = allocSlot()
-        builder.emit(Opcode.CONST_OBJ, id, slot)
-        updateSlotType(slot, SlotType.OBJ)
-        return CompiledValue(slot, SlotType.OBJ)
+        val ref = LocalVarRef(name, Pos.builtIn)
+        val compiled = compileRef(ref) ?: return null
+        return ensureObjSlot(compiled)
     }
 
     private fun emitInlineStatements(statements: List<Statement>, needResult: Boolean): CompiledValue? {
