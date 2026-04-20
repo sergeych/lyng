@@ -545,8 +545,7 @@ class StackTraceEntry(
 }
 // Private helper: starts one LaunchPool worker coroutine for the given queue.
 // Defined outside LaunchPool so the global `launch` is not shadowed by the method.
-private fun _launchPoolWorker(q) {
-    val ch = q as Channel
+private fun _launchPoolWorker(ch: Channel): Deferred {
     launch {
         var task = ch.receive()
         while (task != null) {
@@ -618,7 +617,7 @@ class LaunchPool(maxWorkers, maxQueueSize = Channel.UNLIMITED) {
     */
     fun cancel() {
         closeQueue()
-        workers.forEach { (it as Deferred).cancel() }
+        workers.forEach { it.cancel() }
     }
 
     /*
@@ -628,7 +627,7 @@ class LaunchPool(maxWorkers, maxQueueSize = Channel.UNLIMITED) {
     */
     fun cancelAndJoin() {
         closeQueue()
-        workers.forEach { (it as Deferred).cancel() }
+        workers.forEach { it.cancel() }
     }
 
     /*
@@ -639,7 +638,7 @@ class LaunchPool(maxWorkers, maxQueueSize = Channel.UNLIMITED) {
     fun closeAndJoin() {
         closeQueue()
         for (w in workers) {
-            (w as Deferred).await()
+            w.await()
         }
     }
 }

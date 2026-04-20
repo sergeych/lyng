@@ -2096,12 +2096,19 @@ class Compiler(
         plan.captureOwners[name] = slotLoc
         plan.captures += capture
         if (!plan.slotPlan.slots.containsKey(name)) {
+            val newSlot = plan.slotPlan.nextIndex
             plan.slotPlan.slots[name] = SlotEntry(
-                plan.slotPlan.nextIndex,
+                newSlot,
                 isMutable = slotLoc.isMutable,
                 isDelegated = slotLoc.isDelegated
             )
             plan.slotPlan.nextIndex += 1
+            slotTypeByScopeId[slotLoc.scopeId]?.get(slotLoc.slot)?.let { cls ->
+                slotTypeByScopeId.getOrPut(plan.slotPlan.id) { mutableMapOf() }[newSlot] = cls
+            }
+            slotTypeDeclByScopeId[slotLoc.scopeId]?.get(slotLoc.slot)?.let { decl ->
+                slotTypeDeclByScopeId.getOrPut(plan.slotPlan.id) { mutableMapOf() }[newSlot] = decl
+            }
         }
     }
 
@@ -10345,6 +10352,9 @@ class Compiler(
             }
             if (initClass != null) {
                 classFieldTypesByName.getOrPut(declaringClassNameCaptured) { mutableMapOf() }[name] = initClass
+            }
+            if (!isDelegate && varTypeDecl is TypeDecl.Generic) {
+                classMemberTypeDeclByName.getOrPut(declaringClassNameCaptured) { mutableMapOf() }[name] = varTypeDecl
             }
         }
 
