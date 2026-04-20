@@ -188,6 +188,7 @@ class Compiler(
     private val callableReturnTypeByName: MutableMap<String, ObjClass> = mutableMapOf()
     private val callableReturnTypeDeclByName: MutableMap<String, TypeDecl> = mutableMapOf()
     private val lambdaReturnTypeByRef: MutableMap<ObjRef, ObjClass> = mutableMapOf()
+    private val exactLambdaRefByScopeId: MutableMap<Int, MutableMap<Int, LambdaFnRef>> = mutableMapOf()
     private val lambdaCaptureEntriesByRef: MutableMap<ValueFnRef, List<net.sergeych.lyng.bytecode.LambdaCaptureEntry>> =
         mutableMapOf()
     private val classFieldTypesByName: MutableMap<String, MutableMap<String, ObjClass>> = mutableMapOf()
@@ -1894,6 +1895,7 @@ class Compiler(
                         forcedLocalSlotInfo = forcedLocalInfo,
                         forcedLocalScopeId = forcedLocalScopeId,
                         slotTypeByScopeId = slotTypeByScopeId,
+                        exactLambdaRefByScopeId = exactLambdaRefByScopeId,
                         slotTypeDeclByScopeId = slotTypeDeclByScopeId,
                         knownNameObjClass = knownClassMapForBytecode(),
                         knownClassNames = knownClassNamesForBytecode(),
@@ -2249,6 +2251,7 @@ class Compiler(
             scopeSlotNameSet = scopeSlotNameSet,
             moduleScopeId = moduleScopeId,
             slotTypeByScopeId = slotTypeByScopeId,
+            exactLambdaRefByScopeId = exactLambdaRefByScopeId,
             slotTypeDeclByScopeId = slotTypeDeclByScopeId,
             knownNameObjClass = knownClassMapForBytecode(),
             knownClassNames = knownClassNamesForBytecode(),
@@ -2282,6 +2285,7 @@ class Compiler(
             scopeSlotNameSet = scopeSlotNameSet,
             moduleScopeId = moduleScopeId,
             slotTypeByScopeId = slotTypeByScopeId,
+            exactLambdaRefByScopeId = exactLambdaRefByScopeId,
             slotTypeDeclByScopeId = slotTypeDeclByScopeId,
             knownNameObjClass = knownClassMapForBytecode(),
             knownClassNames = knownClassNamesForBytecode(),
@@ -2340,6 +2344,7 @@ class Compiler(
             globalSlotInfo = globalSlotInfo,
             globalSlotScopeId = globalSlotScopeId,
             slotTypeByScopeId = slotTypeByScopeId,
+            exactLambdaRefByScopeId = exactLambdaRefByScopeId,
             slotTypeDeclByScopeId = slotTypeDeclByScopeId,
             knownNameObjClass = knownNames,
             knownClassNames = knownClassNamesForBytecode(),
@@ -3539,6 +3544,7 @@ class Compiler(
             body
         }
         val bytecodeFn = (fnStatements as? BytecodeStatement)?.bytecodeFunction()
+        val inlineBodyRef = argsDeclaration?.let { null } ?: extractInlineLambdaBodyRef(body)
         val ref = LambdaFnRef(
             valueFn = { closureScope ->
             val captureRecords = closureScope.captureRecords
@@ -3621,6 +3627,7 @@ class Compiler(
             argsDeclaration = argsDeclaration,
             captureEntries = captureEntries,
             inferredReturnClass = returnClass,
+            inlineBodyRef = inlineBodyRef,
             preferredThisType = expectedReceiverType,
             wrapAsExtensionCallable = wrapAsExtensionCallable,
             returnLabels = returnLabels,
@@ -3633,6 +3640,18 @@ class Compiler(
             lambdaCaptureEntriesByRef[ref] = captureEntries
         }
         return ref
+    }
+
+    private fun extractInlineLambdaBodyRef(statement: Statement): ObjRef? {
+        val target = if (statement is BytecodeStatement) statement.original else statement
+        return when (target) {
+            is ExpressionStatement -> target.ref
+            is BlockStatement -> {
+                val statements = target.statements()
+                if (statements.size == 1) extractInlineLambdaBodyRef(statements[0]) else null
+            }
+            else -> null
+        }
     }
 
     private suspend fun parseArrayLiteral(): List<ListEntry> {
@@ -4966,6 +4985,26 @@ class Compiler(
         val slotLoc = lookupSlotLocation(name, includeModule = true) ?: return null
         return slotTypeByScopeId[slotLoc.scopeId]?.get(slotLoc.slot)
             ?: slotTypeDeclByScopeId[slotLoc.scopeId]?.get(slotLoc.slot)?.let { resolveTypeDeclObjClass(it) }
+    }
+
+    private fun lookupExactLambdaRefByName(name: String): LambdaFnRef? {
+        val slotLoc = lookupSlotLocation(name, includeModule = true) ?: return null
+        return exactLambdaRefByScopeId[slotLoc.scopeId]?.get(slotLoc.slot)
+    }
+
+    private fun resolveExactLambdaRef(ref: ObjRef?): LambdaFnRef? {
+        return when (ref) {
+            is LambdaFnRef -> ref
+            is LocalVarRef -> lookupExactLambdaRefByName(ref.name)
+            is FastLocalVarRef -> lookupExactLambdaRefByName(ref.name)
+            is LocalSlotRef -> {
+                val ownerScopeId = ref.captureOwnerScopeId ?: ref.scopeId
+                val ownerSlot = ref.captureOwnerSlot ?: ref.slot
+                exactLambdaRefByScopeId[ownerScopeId]?.get(ownerSlot)
+                    ?: ref.name.takeIf { it.isNotEmpty() }?.let(::lookupExactLambdaRefByName)
+            }
+            else -> null
+        }
     }
 
     private fun resolveReceiverTypeDecl(ref: ObjRef): TypeDecl? {
@@ -10413,6 +10452,15 @@ class Compiler(
                         encodedPayloadTypeByScopeId.getOrPut(scopeId) { mutableMapOf() }[slotIndex] = payloadClass
                     }
                     encodedPayloadTypeByName[name] = payloadClass
+                }
+            }
+            if (slotIndex != null && scopeId != null) {
+                val exactLambdaRef = if (!isMutable) resolveExactLambdaRef(directRef) else null
+                val scopeMap = exactLambdaRefByScopeId.getOrPut(scopeId) { mutableMapOf() }
+                if (exactLambdaRef != null) {
+                    scopeMap[slotIndex] = exactLambdaRef
+                } else {
+                    scopeMap.remove(slotIndex)
                 }
             }
             if (initObjClass != null) {

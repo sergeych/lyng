@@ -17,8 +17,10 @@
 
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.*
+import net.sergeych.lyng.obj.ObjNull
 import net.sergeych.lyng.obj.toInt
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
@@ -161,7 +163,7 @@ class BytecodeRecentOpsTest {
     }
 
     @Test
-    fun listFillIntUsesPrimitiveFillBytecode() = runTest {
+    fun listFillConstantExpressionUsesInlineBytecode() = runTest {
         val scope = Script.newScope()
         scope.eval(
             """
@@ -172,24 +174,331 @@ class BytecodeRecentOpsTest {
             """.trimIndent()
         )
         val disasm = scope.disassembleSymbol("calc")
-        assertTrue(disasm.contains("LIST_FILL_INT"), disasm)
+        assertTrue(disasm.contains("LIST_NEW_INT"), disasm)
+        assertFalse(disasm.contains("LIST_FILL_INT"), disasm)
         assertEquals(4, scope.eval("calc()").toInt())
     }
 
     @Test
-    fun listFillIntWithIndexLambdaKeepsSemantics() = runTest {
+    fun listFillCapturedExpressionUsesInlineBytecode() = runTest {
         val scope = Script.newScope()
         scope.eval(
             """
             fun calc() {
-                val xs = List.fill(5) { it * 3 }
+                val k = 3
+                val xs = List.fill(5) { it * k }
                 xs[0] + xs[4]
             }
             """.trimIndent()
         )
         val disasm = scope.disassembleSymbol("calc")
-        assertTrue(disasm.contains("LIST_FILL_INT"), disasm)
+        assertTrue(disasm.contains("LIST_NEW_INT"), disasm)
+        assertFalse(disasm.contains("LIST_FILL_INT"), disasm)
         assertEquals(12, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun listFillIdentityUsesIotaBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                val xs = List.fill(5) { it }
+                xs[0] + xs[4]
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertTrue(disasm.contains("LIST_IOTA_INT"), disasm)
+        assertEquals(4, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun directLambdaLiteralCallUsesInlineBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                { x -> x + 1 }(10)
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertFalse(disasm.contains("MAKE_LAMBDA_FN"), disasm)
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(11, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun directLambdaLiteralCallWithCaptureUsesInlineBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                val k = 3
+                { x -> x * k }(4)
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertFalse(disasm.contains("MAKE_LAMBDA_FN"), disasm)
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(12, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun localImmutableLambdaCallUsesInlineBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                val f = { x -> x + 1 }
+                f(10)
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(11, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun localImmutableCapturedLambdaCallUsesInlineBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                val k = 3
+                val f = { x -> x * k }
+                f(4)
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(12, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun aliasedImmutableLambdaCallUsesInlineBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                val f = { x -> x + 1 }
+                val g = f
+                g(10)
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(11, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun topLevelImmutableLambdaCallUsesInlineBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            val f = { x -> x + 1 }
+            fun calc() {
+                f(10)
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(11, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun topLevelAliasedImmutableLambdaCallUsesInlineBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            val f = { x -> x + 1 }
+            val g = f
+            fun calc() {
+                g(10)
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(11, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun topLevelCapturedLambdaCallUsesInlineBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            val k = 3
+            val f = { x -> x * k }
+            fun calc() {
+                f(4)
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(12, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun letLiteralUsesInlineBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                10.let { it + 1 }
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertFalse(disasm.contains("CALL_DYNAMIC_MEMBER"), disasm)
+        assertEquals(11, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun letAliasedLambdaUsesInlineBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                val k = 3
+                val f = { x -> x * k }
+                4.let(f)
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertFalse(disasm.contains("CALL_DYNAMIC_MEMBER"), disasm)
+        assertEquals(12, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun alsoLiteralUsesInlineBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                var acc = 0
+                val result = 10.also { x ->
+                    acc = x + 1
+                }
+                acc + result
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertFalse(disasm.contains("CALL_DYNAMIC_MEMBER"), disasm)
+        assertEquals(21, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun optionalLetLiteralUsesInlineBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc(flag: Bool) {
+                val x: Int? = if(flag) 10 else null
+                x?.let { it + 1 }
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertFalse(disasm.contains("CALL_DYNAMIC_MEMBER"), disasm)
+        assertEquals(11, scope.eval("calc(true)").toInt())
+        assertEquals(ObjNull, scope.eval("calc(false)"))
+    }
+
+    @Test
+    fun applyReceiverLambdaUsesInlineBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            class Box(value: Int)
+
+            fun calc() {
+                val box = Box(10).apply { value += 1 }
+                box.value
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertFalse(disasm.contains("CALL_DYNAMIC_MEMBER"), disasm)
+        assertEquals(11, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun runReceiverLambdaUsesInlineBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            class Box(value: Int)
+
+            fun calc() {
+                Box(10).run { value + 1 }
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertFalse(disasm.contains("CALL_DYNAMIC_MEMBER"), disasm)
+        assertEquals(11, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun forEachUsesInlineLoopBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                [1, 2, 3, 4].forEach { it + 1 }
+                5
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertTrue(disasm.contains("ITER_PUSH"), disasm)
+        assertFalse(disasm.contains("CALL_DYNAMIC_MEMBER"), disasm)
+        assertEquals(5, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun mapUsesInlineLoopBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                val f = { x -> x * 2 }
+                val xs = [1, 2, 3].map(f)
+                xs[0] + xs[2]
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertTrue(disasm.contains("ITER_PUSH"), disasm)
+        assertFalse(disasm.contains("CALL_DYNAMIC_MEMBER"), disasm)
+        assertEquals(8, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun filterUsesInlineLoopBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                val xs = [1, 2, 3, 4].filter { it % 2 == 0 }
+                xs[0] + xs[1]
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertTrue(disasm.contains("ITER_PUSH"), disasm)
+        assertFalse(disasm.contains("CALL_DYNAMIC_MEMBER"), disasm)
+        assertEquals(6, scope.eval("calc()").toInt())
     }
 
     @Test

@@ -18,10 +18,7 @@
 package net.sergeych.lyng.bytecode
 
 import net.sergeych.lyng.*
-import net.sergeych.lyng.obj.Obj
-import net.sergeych.lyng.obj.ObjClass
-import net.sergeych.lyng.obj.ObjRecord
-import net.sergeych.lyng.obj.ValueFnRef
+import net.sergeych.lyng.obj.*
 
 class BytecodeStatement private constructor(
     val original: Statement,
@@ -84,6 +81,7 @@ class BytecodeStatement private constructor(
             globalSlotInfo: Map<String, ForcedLocalSlotInfo> = emptyMap(),
             globalSlotScopeId: Int? = null,
             slotTypeByScopeId: Map<Int, Map<Int, ObjClass>> = emptyMap(),
+            exactLambdaRefByScopeId: Map<Int, Map<Int, LambdaFnRef>> = emptyMap(),
             knownNameObjClass: Map<String, ObjClass> = emptyMap(),
             knownClassNames: Set<String> = emptySet(),
             knownObjectNames: Set<String> = emptySet(),
@@ -122,6 +120,7 @@ class BytecodeStatement private constructor(
                 globalSlotInfo = globalSlotInfo,
                 globalSlotScopeId = globalSlotScopeId,
                 slotTypeByScopeId = slotTypeByScopeId,
+                exactLambdaRefByScopeId = exactLambdaRefByScopeId,
                 slotTypeDeclByScopeId = slotTypeDeclByScopeId,
                 knownNameObjClass = knownNameObjClass,
                 knownClassNames = knownClassNames,

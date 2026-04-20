@@ -3730,6 +3730,34 @@ class CmdCallMemberSlot(
     }
 }
 
+class CmdListIotaInt(
+    internal val sizeSlot: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val size = frame.getInt(sizeSlot).toInt()
+        if (size < 0) frame.ensureScope().raiseIllegalArgument("list size must be non-negative")
+        val values = LongArray(size)
+        for (i in 0 until size) {
+            values[i] = i.toLong()
+        }
+        frame.storeObjResult(dst, ObjList(values))
+        return
+    }
+}
+
+class CmdListNewInt(
+    internal val sizeSlot: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val size = frame.getInt(sizeSlot).toInt()
+        if (size < 0) frame.ensureScope().raiseIllegalArgument("list size must be non-negative")
+        frame.storeObjResult(dst, ObjList(LongArray(size)))
+        return
+    }
+}
+
 class CmdGetIndex(
     internal val targetSlot: Int,
     internal val indexSlot: Int,

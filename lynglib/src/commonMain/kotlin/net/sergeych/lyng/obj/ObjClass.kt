@@ -959,7 +959,7 @@ open class ObjClass(
     }
 
     private fun initClassScope(): Scope {
-        if (classScope == null) classScope = Scope()
+        if (classScope == null) classScope = Scope(parent = null)
         return classScope!!
     }
 

@@ -30,6 +30,7 @@ class LambdaFnRef(
     val argsDeclaration: ArgsDeclaration?,
     val captureEntries: List<LambdaCaptureEntry>,
     val inferredReturnClass: ObjClass?,
+    val inlineBodyRef: ObjRef?,
     val preferredThisType: String?,
     val wrapAsExtensionCallable: Boolean,
     val returnLabels: Set<String>,

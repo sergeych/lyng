@@ -434,7 +434,7 @@ fun List<T>.sort(): void {
 
 /*
     Build a new list of `size` elements by calling `block(index)` for each index.
-    `capacity` less size is ignored (size will be used as capacity).
+    `capacity` less than size is ignored (size will be used as capacity).
 */
 static fun List<T>.fill(size: Int, capacity = -1, block: (Int)->T): List<T> {
     require(size >= 0, "size must not be negative")

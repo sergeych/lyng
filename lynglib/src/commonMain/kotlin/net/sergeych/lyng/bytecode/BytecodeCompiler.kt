@@ -33,6 +33,7 @@ class BytecodeCompiler(
     private val globalSlotInfo: Map<String, ForcedLocalSlotInfo> = emptyMap(),
     private val globalSlotScopeId: Int? = null,
     private val slotTypeByScopeId: Map<Int, Map<Int, ObjClass>> = emptyMap(),
+    private val exactLambdaRefByScopeId: Map<Int, Map<Int, LambdaFnRef>> = emptyMap(),
     private val slotTypeDeclByScopeId: Map<Int, Map<Int, TypeDecl>> = emptyMap(),
     private val knownNameObjClass: Map<String, ObjClass> = emptyMap(),
     private val knownClassNames: Set<String> = emptySet(),
@@ -89,6 +90,9 @@ class BytecodeCompiler(
     private val slotInitClassByKey = mutableMapOf<ScopeSlotKey, ObjClass>()
     private val intLoopVarNames = LinkedHashSet<String>()
     private val valueFnRefs = LinkedHashSet<ValueFnRef>()
+    private val exactLambdaRefBySlot = LinkedHashMap<Int, LambdaFnRef>()
+    private val activeInlineLambdas = LinkedHashSet<LambdaFnRef>()
+    private val inlineThisBindings = ArrayDeque<InlineThisBinding>()
     private val loopVarKeys = LinkedHashSet<ScopeSlotKey>()
     private val loopVarSlots = HashSet<Int>()
     private val loopStack = ArrayDeque<LoopContext>()
@@ -103,6 +107,8 @@ class BytecodeCompiler(
         val resultSlot: Int?,
         val hasIterator: Boolean,
     )
+
+    private data class InlineThisBinding(val slot: Int, val typeName: String?)
 
     fun compileStatement(name: String, stmt: net.sergeych.lyng.Statement): CmdFunction? {
         prepareCompilation(stmt)
@@ -559,7 +565,10 @@ class BytecodeCompiler(
                 val mapped = resolveSlot(ref) ?: return null
                 var resolved = slotTypes[mapped] ?: SlotType.UNKNOWN
                 if (resolved == SlotType.UNKNOWN) {
-                    val key = ScopeSlotKey(refScopeId(ref), refSlot(ref))
+                    val key = ScopeSlotKey(
+                        ref.captureOwnerScopeId ?: refScopeId(ref),
+                        ref.captureOwnerSlot ?: refSlot(ref)
+                    )
                     val inferred = slotTypeFromClass(slotInitClassByKey[key])
                     if (inferred != null) {
                         updateSlotType(mapped, inferred)
@@ -696,7 +705,7 @@ class BytecodeCompiler(
                     compileThisVariantRef(typeName) ?: return null
                 } ?: compileThisRef()
                 val ownerClass = ref.preferredThisTypeName()?.let { resolveTypeNameClass(it) }
-                    ?: implicitThisTypeName?.let { resolveTypeNameClass(it) }
+                    ?: currentImplicitThisTypeName()?.let { resolveTypeNameClass(it) }
                 val fieldId = ref.fieldId ?: -1
                 val methodId = ref.methodId ?: -1
                 if (fieldId < 0 && methodId < 0) {
@@ -804,6 +813,9 @@ class BytecodeCompiler(
     }
 
     private fun compileThisRef(): CompiledValue {
+        inlineThisBindings.lastOrNull()?.let { binding ->
+            return CompiledValue(binding.slot, SlotType.OBJ)
+        }
         val slot = allocSlot()
         builder.emit(Opcode.LOAD_THIS, slot)
         updateSlotType(slot, SlotType.OBJ)
@@ -811,12 +823,19 @@ class BytecodeCompiler(
     }
 
     private fun compileThisVariantRef(typeName: String): CompiledValue? {
+        inlineThisBindings.lastOrNull { it.typeName == typeName }?.let { binding ->
+            return CompiledValue(binding.slot, SlotType.OBJ)
+        }
         val typeId = builder.addConst(BytecodeConst.StringVal(typeName))
         if (typeId > 0xFFFF) return null
         val slot = allocSlot()
         builder.emit(Opcode.LOAD_THIS_VARIANT, typeId, slot)
         updateSlotType(slot, SlotType.OBJ)
         return CompiledValue(slot, SlotType.OBJ)
+    }
+
+    private fun currentImplicitThisTypeName(): String? {
+        return inlineThisBindings.lastOrNull()?.typeName ?: implicitThisTypeName
     }
 
     private fun compileConst(obj: Obj): CompiledValue? {
@@ -2509,6 +2528,7 @@ class BytecodeCompiler(
             }
             updateSlotType(slot, value.type)
             propagateObjClass(value.type, value.slot, slot)
+            trackExactLambdaAtSlot(slot, null)
             updateNameObjClassFromSlot(localTarget.name, slot)
             return value
         }
@@ -2552,6 +2572,7 @@ class BytecodeCompiler(
             }
             updateSlotType(slot, value.type)
             propagateObjClass(value.type, value.slot, slot)
+            trackExactLambdaAtSlot(slot, null)
             updateNameObjClassFromSlot(nameTarget, slot)
             return value
         }
@@ -3587,7 +3608,7 @@ class BytecodeCompiler(
 
     private fun compileThisFieldSlotRef(ref: ThisFieldSlotRef): CompiledValue? {
         val receiver = compileThisRef()
-        val ownerClass = implicitThisTypeName?.let { resolveTypeNameClass(it) }
+        val ownerClass = currentImplicitThisTypeName()?.let { resolveTypeNameClass(it) }
         val fieldId = ref.fieldId() ?: -1
         val methodId = ref.methodId() ?: -1
         if (fieldId < 0 && methodId < 0) {
@@ -4566,6 +4587,10 @@ class BytecodeCompiler(
 
     private fun compileCall(ref: CallRef): CompiledValue? {
         val callPos = callSitePos()
+        val lambdaTarget = resolveInlineCallableLambda(ref.target)
+        if (lambdaTarget != null) {
+            compileInlineDirectLambdaCall(ref, lambdaTarget)?.let { return it }
+        }
         val fieldTarget = ref.target as? FieldRef
         if (fieldTarget != null && isKnownClassReceiver(fieldTarget.target)) {
             val receiverClass = resolveReceiverClass(fieldTarget.target)
@@ -4715,6 +4740,9 @@ class BytecodeCompiler(
 
     private fun compileMethodCall(ref: MethodCallRef): CompiledValue? {
         compileListFillIntCall(ref)?.let { return it }
+        compileInlineUnaryLambdaMethodCall(ref)?.let { return it }
+        compileInlineReceiverLambdaMethodCall(ref)?.let { return it }
+        compileInlineIterableLambdaMethodCall(ref)?.let { return it }
         val callPos = callSitePos()
         val receiverClass = resolveReceiverClass(ref.receiver) ?: ObjDynamic.type
         val receiver = compileRefWithFallback(ref.receiver, null, refPosOrCurrent(ref.receiver)) ?: return null
@@ -4893,6 +4921,151 @@ class BytecodeCompiler(
         return CompiledValue(dst, SlotType.OBJ)
     }
 
+    private fun compileInlineUnaryLambdaMethodCall(ref: MethodCallRef): CompiledValue? {
+        val behavior = when (ref.name) {
+            "let" -> InlineUnaryLambdaMethodBehavior.RETURN_BLOCK_RESULT
+            "also" -> InlineUnaryLambdaMethodBehavior.RETURN_RECEIVER
+            else -> return null
+        }
+        if (ref.args.size != 1 || ref.args.any { it.isSplat || it.name != null }) return null
+        if (!ref.explicitTypeArgs.isNullOrEmpty()) return null
+        val lambdaRef = extractExactLambdaRef(ref.args.first().value) ?: return null
+        if (hasModuleCapture(lambdaRef)) return null
+        val inlineRef = lambdaRef.inlineBodyRef ?: return null
+        if (!isMethodInlineSafe(lambdaRef, inlineRef, allowReceiverRefs = false, allowCaptures = true)) return null
+        val paramName = lambdaRef.inlineParamNames()?.singleOrNull() ?: return null
+        val receiver = compileRefWithFallback(ref.receiver, null, refPosOrCurrent(ref.receiver)) ?: return null
+        return if (!ref.isOptional) {
+            val receiverSlot = materializeInlineBinding(receiver)
+            when (behavior) {
+                InlineUnaryLambdaMethodBehavior.RETURN_BLOCK_RESULT ->
+                    compileInlineLambdaBody(lambdaRef, inlineRef, listOf(paramName to receiverSlot))
+                InlineUnaryLambdaMethodBehavior.RETURN_RECEIVER -> {
+                    compileInlineLambdaBody(lambdaRef, inlineRef, listOf(paramName to receiverSlot)) ?: return null
+                    CompiledValue(receiverSlot, receiver.type)
+                }
+            }
+        } else {
+            val receiverObj = ensureObjSlot(receiver)
+            val dst = allocSlot()
+            val nullSlot = allocSlot()
+            builder.emit(Opcode.CONST_NULL, nullSlot)
+            val cmpSlot = allocSlot()
+            builder.emit(Opcode.CMP_REF_EQ_OBJ, receiverObj.slot, nullSlot, cmpSlot)
+            val nullLabel = builder.label()
+            val endLabel = builder.label()
+            builder.emit(
+                Opcode.JMP_IF_TRUE,
+                listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
+            )
+            val receiverSlot = materializeInlineBinding(receiver)
+            when (behavior) {
+                InlineUnaryLambdaMethodBehavior.RETURN_BLOCK_RESULT -> {
+                    val inlineResult =
+                        compileInlineLambdaBody(lambdaRef, inlineRef, listOf(paramName to receiverSlot)) ?: return null
+                    val inlineObj = ensureObjSlot(inlineResult)
+                    builder.emit(Opcode.MOVE_OBJ, inlineObj.slot, dst)
+                }
+                InlineUnaryLambdaMethodBehavior.RETURN_RECEIVER -> {
+                    compileInlineLambdaBody(lambdaRef, inlineRef, listOf(paramName to receiverSlot)) ?: return null
+                    builder.emit(Opcode.MOVE_OBJ, receiverObj.slot, dst)
+                }
+            }
+            builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
+            builder.mark(nullLabel)
+            builder.emit(Opcode.CONST_NULL, dst)
+            builder.mark(endLabel)
+            updateSlotType(dst, SlotType.OBJ)
+            CompiledValue(dst, SlotType.OBJ)
+        }
+    }
+
+    private fun compileInlineReceiverLambdaMethodCall(ref: MethodCallRef): CompiledValue? {
+        val behavior = when (ref.name) {
+            "apply" -> InlineReceiverLambdaMethodBehavior.RETURN_RECEIVER
+            "run" -> InlineReceiverLambdaMethodBehavior.RETURN_BLOCK_RESULT
+            else -> return null
+        }
+        if (ref.args.size != 1 || ref.args.any { it.isSplat || it.name != null }) return null
+        if (!ref.explicitTypeArgs.isNullOrEmpty()) return null
+        val lambdaRef = extractExactLambdaRef(ref.args.first().value) ?: return null
+        if (hasModuleCapture(lambdaRef)) return null
+        val receiverInfo = receiverInlineInfo(lambdaRef) ?: return null
+        val inlineRef = lambdaRef.inlineBodyRef ?: return null
+        if (!isMethodInlineSafe(lambdaRef, inlineRef, allowReceiverRefs = true, allowCaptures = true)) return null
+        val receiver = compileRefWithFallback(ref.receiver, null, refPosOrCurrent(ref.receiver)) ?: return null
+        val receiverObj = ensureObjSlot(receiver)
+        return if (!ref.isOptional) {
+            compileInlineReceiverLambdaInvocation(receiverObj, lambdaRef, behavior, receiverInfo)
+        } else {
+            val dst = allocSlot()
+            val nullSlot = allocSlot()
+            builder.emit(Opcode.CONST_NULL, nullSlot)
+            val cmpSlot = allocSlot()
+            builder.emit(Opcode.CMP_REF_EQ_OBJ, receiverObj.slot, nullSlot, cmpSlot)
+            val nullLabel = builder.label()
+            val endLabel = builder.label()
+            builder.emit(
+                Opcode.JMP_IF_TRUE,
+                listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
+            )
+            val nonNullResult =
+                compileInlineReceiverLambdaInvocation(receiverObj, lambdaRef, behavior, receiverInfo) ?: return null
+            val nonNullObj = ensureObjSlot(nonNullResult)
+            builder.emit(Opcode.MOVE_OBJ, nonNullObj.slot, dst)
+            builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
+            builder.mark(nullLabel)
+            builder.emit(Opcode.CONST_NULL, dst)
+            builder.mark(endLabel)
+            updateSlotType(dst, SlotType.OBJ)
+            CompiledValue(dst, SlotType.OBJ)
+        }
+    }
+
+    private fun compileInlineIterableLambdaMethodCall(ref: MethodCallRef): CompiledValue? {
+        val behavior = when (ref.name) {
+            "forEach" -> InlineIterableLambdaMethodBehavior.FOR_EACH
+            "map" -> InlineIterableLambdaMethodBehavior.MAP
+            "filter" -> InlineIterableLambdaMethodBehavior.FILTER
+            else -> return null
+        }
+        if (ref.args.size != 1 || ref.args.any { it.isSplat || it.name != null }) return null
+        if (!ref.explicitTypeArgs.isNullOrEmpty()) return null
+        val lambdaRef = extractExactLambdaRef(ref.args.first().value) ?: return null
+        if (hasAnyCapture(lambdaRef)) return null
+        val inlineRef = lambdaRef.inlineBodyRef ?: return null
+        if (!isMethodInlineSafe(lambdaRef, inlineRef, allowReceiverRefs = false, allowCaptures = false)) return null
+        val paramNames = lambdaRef.inlineParamNames() ?: return null
+        if (paramNames.size != 1) return null
+        val receiver = compileRefWithFallback(ref.receiver, null, refPosOrCurrent(ref.receiver)) ?: return null
+        val receiverObj = ensureObjSlot(receiver)
+        return if (!ref.isOptional) {
+            compileInlineIterableLambdaLoop(receiverObj, ref, lambdaRef, inlineRef, paramNames[0], behavior)
+        } else {
+            val dst = allocSlot()
+            val nullSlot = allocSlot()
+            builder.emit(Opcode.CONST_NULL, nullSlot)
+            val cmpSlot = allocSlot()
+            builder.emit(Opcode.CMP_REF_EQ_OBJ, receiverObj.slot, nullSlot, cmpSlot)
+            val nullLabel = builder.label()
+            val endLabel = builder.label()
+            builder.emit(
+                Opcode.JMP_IF_TRUE,
+                listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
+            )
+            val nonNullResult =
+                compileInlineIterableLambdaLoop(receiverObj, ref, lambdaRef, inlineRef, paramNames[0], behavior) ?: return null
+            val nonNullObj = ensureObjSlot(nonNullResult)
+            builder.emit(Opcode.MOVE_OBJ, nonNullObj.slot, dst)
+            builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
+            builder.mark(nullLabel)
+            builder.emit(Opcode.CONST_NULL, dst)
+            builder.mark(endLabel)
+            updateSlotType(dst, SlotType.OBJ)
+            CompiledValue(dst, SlotType.OBJ)
+        }
+    }
+
     private fun compileListFillIntCall(ref: MethodCallRef): CompiledValue? {
         if (ref.name != "fill" || !isListTypeRef(ref.receiver)) return null
         if (ref.args.size != 2 || ref.args.any { it.isSplat || it.name != null }) return null
@@ -4900,13 +5073,497 @@ class BytecodeCompiler(
         if (lambdaRef.inferredReturnClass != ObjInt.type) return null
         val size = compileArgValue(ref.args[0].value) ?: return null
         if (size.type != SlotType.INT) return null
-        val callable = ensureObjSlot(compileArgValue(ref.args[1].value) ?: return null)
+        lambdaRef.inlineBodyRef?.let { inlineRef ->
+            return compileInlineListFillInt(size, lambdaRef, inlineRef)
+        }
+        run {
+            val callable = ensureObjSlot(compileArgValue(ref.args[1].value) ?: return null)
+            val dst = allocSlot()
+            builder.emit(Opcode.LIST_FILL_INT, size.slot, callable.slot, dst)
+            updateSlotType(dst, SlotType.OBJ)
+            slotObjClass[dst] = ObjList.type
+            listElementClassBySlot[dst] = ObjInt.type
+            return CompiledValue(dst, SlotType.OBJ)
+        }
+    }
+
+    private fun compileInlineDirectLambdaCall(ref: CallRef, lambdaRef: LambdaFnRef): CompiledValue? {
+        if (ref.isOptionalInvoke) return null
+        if (ref.tailBlock) return null
+        if (!ref.explicitTypeArgs.isNullOrEmpty()) return null
+        val inlineRef = lambdaRef.inlineBodyRef ?: return null
+        val bindings = prepareInlineLambdaBindings(lambdaRef, ref.args) ?: return null
+        return compileInlineLambdaBody(lambdaRef, inlineRef, bindings)
+    }
+
+    private fun prepareInlineLambdaBindings(
+        lambdaRef: LambdaFnRef,
+        args: List<ParsedArgument>
+    ): List<Pair<String, Int>>? {
+        if (args.any { it.isSplat || it.name != null }) return null
+        val paramNames = lambdaRef.inlineParamNames() ?: return null
+        if (args.size != paramNames.size) return null
+        if (args.isEmpty()) return emptyList()
+        val bindings = ArrayList<Pair<String, Int>>(args.size)
+        for ((index, arg) in args.withIndex()) {
+            val compiled = compileArgValue(arg.value) ?: return null
+            bindings += paramNames[index] to materializeInlineBinding(compiled)
+        }
+        return bindings
+    }
+
+    private fun LambdaFnRef.inlineParamNames(): List<String>? {
+        val declaration = argsDeclaration
+        if (declaration == null) {
+            return listOf("it")
+        }
+        if (declaration.params.any { it.isEllipsis || it.defaultValue != null }) return null
+        return declaration.params.map { it.name }
+    }
+
+    private fun materializeInlineBinding(value: CompiledValue): Int {
+        val slot = allocSlot()
+        emitMove(value, slot)
+        updateSlotType(slot, value.type)
+        if (value.type == SlotType.OBJ) {
+            slotObjClass[value.slot]?.let { slotObjClass[slot] = it }
+        }
+        return slot
+    }
+
+    private enum class InlineUnaryLambdaMethodBehavior {
+        RETURN_BLOCK_RESULT,
+        RETURN_RECEIVER
+    }
+
+    private enum class InlineReceiverLambdaMethodBehavior {
+        RETURN_BLOCK_RESULT,
+        RETURN_RECEIVER
+    }
+
+    private enum class InlineIterableLambdaMethodBehavior {
+        FOR_EACH,
+        MAP,
+        FILTER
+    }
+
+    private data class InlineReceiverInfo(
+        val explicitBindings: List<Pair<String, Int>>,
+        val thisTypeName: String?
+    )
+
+    private fun hasModuleCapture(lambdaRef: LambdaFnRef): Boolean {
+        val captures = (lambdaCaptureEntriesByRef[lambdaRef] ?: lambdaRef.captureEntries).orEmpty()
+        return captures.any { it.ownerKind == CaptureOwnerFrameKind.MODULE }
+    }
+
+    private fun hasAnyCapture(lambdaRef: LambdaFnRef): Boolean {
+        val captures = (lambdaCaptureEntriesByRef[lambdaRef] ?: lambdaRef.captureEntries).orEmpty()
+        return captures.isNotEmpty()
+    }
+
+    private fun isMethodInlineSafe(
+        lambdaRef: LambdaFnRef,
+        inlineRef: ObjRef,
+        allowReceiverRefs: Boolean,
+        allowCaptures: Boolean
+    ): Boolean {
+        val allowedLocalNames = LinkedHashSet<String>()
+        lambdaRef.inlineParamNames()?.let { allowedLocalNames.addAll(it) }
+        if (allowCaptures) {
+            val captures = (lambdaCaptureEntriesByRef[lambdaRef] ?: lambdaRef.captureEntries).orEmpty()
+            allowedLocalNames.addAll(captures.map { it.ownerName })
+        }
+
+        fun isAllowedName(name: String): Boolean {
+            return name == "this" || allowedLocalNames.contains(name)
+        }
+
+        fun scan(ref: ObjRef): Boolean {
+            return when (ref) {
+                is ConstRef,
+                is TypeDeclRef,
+                is ClassOperatorRef -> true
+                is LambdaFnRef -> false
+                is LocalSlotRef -> isAllowedName(ref.name)
+                is LocalVarRef -> isAllowedName(ref.name)
+                is FastLocalVarRef -> isAllowedName(ref.name)
+                is BoundLocalVarRef -> false
+                is FieldRef -> scan(ref.target)
+                is MethodCallRef -> scan(ref.receiver) && ref.args.all { arg ->
+                    val expr = arg.value as? ExpressionStatement ?: return@all false
+                    scan(expr.ref)
+                }
+                is CallRef -> scan(ref.target) && ref.args.all { arg ->
+                    val expr = arg.value as? ExpressionStatement ?: return@all false
+                    scan(expr.ref)
+                }
+                is BinaryOpRef -> scan(ref.left) && scan(ref.right)
+                is UnaryOpRef -> scan(ref.a)
+                is LogicalAndRef -> scan(ref.left()) && scan(ref.right())
+                is LogicalOrRef -> scan(ref.left()) && scan(ref.right())
+                is ConditionalRef -> scan(ref.condition) && scan(ref.ifTrue) && scan(ref.ifFalse)
+                is ElvisRef -> scan(ref.left) && scan(ref.right)
+                is CastRef -> scan(ref.castValueRef()) && scan(ref.castTypeRef())
+                is RangeRef -> listOfNotNull(ref.left, ref.right, ref.step).all(::scan)
+                is AssignRef -> scan(ref.target) && scan(ref.value)
+                is AssignOpRef -> scan(ref.target) && scan(ref.value)
+                is AssignIfNullRef -> scan(ref.target) && scan(ref.value)
+                is IncDecRef -> scan(ref.target)
+                is IndexRef -> scan(ref.targetRef) && scan(ref.indexRef)
+                is ListLiteralRef -> ref.entries().all { entry ->
+                    when (entry) {
+                        is ListEntry.Element -> scan(entry.ref)
+                        is ListEntry.Spread -> scan(entry.ref)
+                    }
+                }
+                is MapLiteralRef -> ref.entries().all { entry ->
+                    when (entry) {
+                        is MapLiteralEntry.Named -> scan(entry.value)
+                        is MapLiteralEntry.Spread -> scan(entry.ref)
+                    }
+                }
+                is StatementRef -> {
+                    val expr = ref.statement as? ExpressionStatement ?: return false
+                    scan(expr.ref)
+                }
+                is ImplicitThisMemberRef,
+                is ImplicitThisMethodCallRef,
+                is ThisFieldSlotRef,
+                is ThisMethodSlotCallRef,
+                is QualifiedThisFieldSlotRef,
+                is QualifiedThisMethodSlotCallRef,
+                is QualifiedThisRef -> allowReceiverRefs
+                else -> false
+            }
+        }
+
+        return scan(inlineRef)
+    }
+
+    private fun receiverInlineInfo(lambdaRef: LambdaFnRef): InlineReceiverInfo? {
+        val declaration = lambdaRef.argsDeclaration
+        return if (declaration == null) {
+            InlineReceiverInfo(listOf("it" to ensureVoidSlot()), lambdaRef.preferredThisType)
+        } else {
+            if (declaration.params.any { it.isEllipsis || it.defaultValue != null }) return null
+            if (declaration.params.isNotEmpty()) return null
+            InlineReceiverInfo(emptyList(), lambdaRef.preferredThisType)
+        }
+    }
+
+    private fun compileInlineReceiverLambdaInvocation(
+        receiverObj: CompiledValue,
+        lambdaRef: LambdaFnRef,
+        behavior: InlineReceiverLambdaMethodBehavior,
+        receiverInfo: InlineReceiverInfo
+    ): CompiledValue? {
+        val inlineRef = lambdaRef.inlineBodyRef ?: return null
+        val receiverSlot = materializeInlineBinding(receiverObj)
+        val previousBinding = InlineThisBinding(receiverSlot, receiverInfo.thisTypeName)
+        inlineThisBindings.addLast(previousBinding)
+        return try {
+            when (behavior) {
+                InlineReceiverLambdaMethodBehavior.RETURN_BLOCK_RESULT ->
+                    compileInlineLambdaBody(lambdaRef, inlineRef, receiverInfo.explicitBindings)
+                InlineReceiverLambdaMethodBehavior.RETURN_RECEIVER -> {
+                    compileInlineLambdaBody(lambdaRef, inlineRef, receiverInfo.explicitBindings) ?: return null
+                    CompiledValue(receiverSlot, SlotType.OBJ)
+                }
+            }
+        } finally {
+            inlineThisBindings.removeLast()
+        }
+    }
+
+    private fun createEmptyMutableList(): CompiledValue? {
+        val calleeId = builder.addConst(BytecodeConst.ObjRef(ObjList.type))
+        val calleeSlot = allocSlot()
+        builder.emit(Opcode.CONST_OBJ, calleeId, calleeSlot)
+        updateSlotType(calleeSlot, SlotType.OBJ)
         val dst = allocSlot()
-        builder.emit(Opcode.LIST_FILL_INT, size.slot, callable.slot, dst)
+        builder.emit(Opcode.CALL_SLOT, calleeSlot, 0, 0, dst)
+        updateSlotType(dst, SlotType.OBJ)
+        slotObjClass[dst] = ObjList.type
+        return CompiledValue(dst, SlotType.OBJ)
+    }
+
+    private fun compileInlineIterableLambdaLoop(
+        receiverObj: CompiledValue,
+        ref: MethodCallRef,
+        lambdaRef: LambdaFnRef,
+        inlineRef: ObjRef,
+        paramName: String,
+        behavior: InlineIterableLambdaMethodBehavior
+    ): CompiledValue? {
+        val iterableMethods = ObjIterable.instanceMethodIdMap(includeAbstract = true)
+        val iteratorMethodId = iterableMethods["iterator"]
+            ?: throw BytecodeCompileException("Missing member id for Iterable.iterator", refPosOrCurrent(ref.receiver))
+        val iteratorMethods = ObjIterator.instanceMethodIdMap(includeAbstract = true)
+        val hasNextMethodId = iteratorMethods["hasNext"]
+            ?: throw BytecodeCompileException("Missing member id for Iterator.hasNext", refPosOrCurrent(ref.receiver))
+        val nextMethodId = iteratorMethods["next"]
+            ?: throw BytecodeCompileException("Missing member id for Iterator.next", refPosOrCurrent(ref.receiver))
+
+        val iterSlot = allocSlot()
+        builder.emit(Opcode.CALL_MEMBER_SLOT, receiverObj.slot, iteratorMethodId, 0, 0, iterSlot)
+        builder.emit(Opcode.ITER_PUSH, iterSlot)
+
+        val result = when (behavior) {
+            InlineIterableLambdaMethodBehavior.FOR_EACH -> CompiledValue(ensureVoidSlot(), SlotType.OBJ)
+            InlineIterableLambdaMethodBehavior.MAP,
+            InlineIterableLambdaMethodBehavior.FILTER -> createEmptyMutableList() ?: return null
+        }
+        if (behavior == InlineIterableLambdaMethodBehavior.FILTER) {
+            listElementClassFromReceiverRef(ref.receiver)?.let { listElementClassBySlot[result.slot] = it }
+        }
+        if (behavior == InlineIterableLambdaMethodBehavior.MAP) {
+            lambdaRef.inferredReturnClass?.let { listElementClassBySlot[result.slot] = it }
+        }
+
+        val loopLabel = builder.label()
+        val endLabel = builder.label()
+        builder.mark(loopLabel)
+        val hasNextSlot = allocSlot()
+        builder.emit(Opcode.CALL_MEMBER_SLOT, iterSlot, hasNextMethodId, 0, 0, hasNextSlot)
+        val condSlot = allocSlot()
+        builder.emit(Opcode.OBJ_TO_BOOL, hasNextSlot, condSlot)
+        builder.emit(
+            Opcode.JMP_IF_FALSE,
+            listOf(CmdBuilder.Operand.IntVal(condSlot), CmdBuilder.Operand.LabelRef(endLabel))
+        )
+        val nextSlot = allocSlot()
+        builder.emit(Opcode.CALL_MEMBER_SLOT, iterSlot, nextMethodId, 0, 0, nextSlot)
+        val nextObj = ensureObjSlot(CompiledValue(nextSlot, SlotType.UNKNOWN))
+        when (behavior) {
+            InlineIterableLambdaMethodBehavior.FOR_EACH -> {
+                compileInlineLambdaBody(lambdaRef, inlineRef, listOf(paramName to nextObj.slot)) ?: return null
+            }
+            InlineIterableLambdaMethodBehavior.MAP -> {
+                val mapped = compileInlineLambdaBody(lambdaRef, inlineRef, listOf(paramName to nextObj.slot)) ?: return null
+                appendToList(result, mapped) ?: return null
+            }
+            InlineIterableLambdaMethodBehavior.FILTER -> {
+                val predicate = compileInlineLambdaBody(lambdaRef, inlineRef, listOf(paramName to nextObj.slot)) ?: return null
+                val predicateBool = compileValueAsBool(predicate)
+                val skipLabel = builder.label()
+                builder.emit(
+                    Opcode.JMP_IF_FALSE,
+                    listOf(CmdBuilder.Operand.IntVal(predicateBool.slot), CmdBuilder.Operand.LabelRef(skipLabel))
+                )
+                appendToList(result, nextObj) ?: return null
+                builder.mark(skipLabel)
+            }
+        }
+        builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(loopLabel)))
+        builder.mark(endLabel)
+        builder.emit(Opcode.ITER_POP)
+        return result
+    }
+
+    private fun appendToList(listValue: CompiledValue, itemValue: CompiledValue): CompiledValue? {
+        val addMethodId = ObjList.type.instanceMethodIdMap(includeAbstract = true)["add"]
+            ?: throw BytecodeCompileException("Missing member id for List.add", Pos.builtIn)
+        val listObj = ensureObjSlot(listValue)
+        val itemObj = ensureObjSlot(itemValue)
+        val argSlot = allocSlot()
+        builder.emit(Opcode.MOVE_OBJ, itemObj.slot, argSlot)
+        updateSlotType(argSlot, SlotType.OBJ)
+        val dst = allocSlot()
+        builder.emit(Opcode.CALL_MEMBER_SLOT, listObj.slot, addMethodId, argSlot, 1, dst)
+        noteListElementClassMutation(listObj.slot, itemObj)
+        updateSlotType(dst, SlotType.OBJ)
+        return CompiledValue(dst, SlotType.OBJ)
+    }
+
+    private fun compileValueAsBool(value: CompiledValue): CompiledValue {
+        if (value.type == SlotType.BOOL) return value
+        val dst = allocSlot()
+        when (value.type) {
+            SlotType.INT -> builder.emit(Opcode.INT_TO_BOOL, value.slot, dst)
+            SlotType.OBJ, SlotType.UNKNOWN, SlotType.REAL -> {
+                val obj = ensureObjSlot(value)
+                builder.emit(Opcode.OBJ_TO_BOOL, obj.slot, dst)
+            }
+        }
+        updateSlotType(dst, SlotType.BOOL)
+        return CompiledValue(dst, SlotType.BOOL)
+    }
+
+    private fun compileInlineLambdaBody(
+        lambdaRef: LambdaFnRef,
+        inlineRef: ObjRef,
+        explicitBindings: List<Pair<String, Int>>
+    ): CompiledValue? {
+        if (!activeInlineLambdas.add(lambdaRef)) return null
+        val previousOverrides = ArrayList<Pair<String, Int?>>(lambdaRef.captureEntries.size + explicitBindings.size)
+        for (capture in lambdaRef.captureEntries) {
+            val slot = resolveInlineCaptureSlot(capture) ?: continue
+            previousOverrides += capture.ownerName to loopSlotOverrides.put(capture.ownerName, slot)
+        }
+        for ((name, slot) in explicitBindings) {
+            previousOverrides += name to loopSlotOverrides.put(name, slot)
+        }
+        return try {
+            compileRefWithFallback(inlineRef, null, refPosOrCurrent(inlineRef))
+        } finally {
+            for ((name, previous) in previousOverrides.asReversed()) {
+                if (previous == null) loopSlotOverrides.remove(name) else loopSlotOverrides[name] = previous
+            }
+            activeInlineLambdas.remove(lambdaRef)
+        }
+    }
+
+    private fun resolveInlineCallableLambda(target: ObjRef): LambdaFnRef? {
+        val lambdaRef = when (target) {
+            is LambdaFnRef -> target
+            is LocalSlotRef -> {
+                val ownerScopeId = target.captureOwnerScopeId ?: target.scopeId
+                val ownerSlot = target.captureOwnerSlot ?: target.slot
+                exactLambdaRefByScopeId[ownerScopeId]?.get(ownerSlot)
+                    ?: resolveLocalSlotByRefOrName(target)?.let { exactLambdaRefBySlot[it] }
+            }
+            is LocalVarRef -> resolveDirectNameSlot(target.name)?.slot?.let { exactLambdaRefBySlot[it] }
+            is FastLocalVarRef -> resolveDirectNameSlot(target.name)?.slot?.let { exactLambdaRefBySlot[it] }
+            is BoundLocalVarRef -> exactLambdaRefBySlot[target.slotIndex()]
+            else -> null
+        }
+        return lambdaRef?.takeUnless { activeInlineLambdas.contains(it) }
+    }
+
+    private fun trackExactLambdaAtSlot(slot: Int, lambdaRef: LambdaFnRef?) {
+        if (lambdaRef == null) {
+            exactLambdaRefBySlot.remove(slot)
+        } else {
+            exactLambdaRefBySlot[slot] = lambdaRef
+        }
+    }
+
+    private fun preloadExactLambdaRefs() {
+        if (exactLambdaRefByScopeId.isEmpty()) return
+        for ((scopeId, slots) in exactLambdaRefByScopeId) {
+            for ((slotIndex, lambdaRef) in slots) {
+                val key = ScopeSlotKey(scopeId, slotIndex)
+                val localIndex = localSlotIndexByKey[key]
+                if (localIndex != null) {
+                    trackExactLambdaAtSlot(scopeSlotCount + localIndex, lambdaRef)
+                    continue
+                }
+                val scopeIndex = scopeSlotMap[key]
+                if (scopeIndex != null) {
+                    trackExactLambdaAtSlot(scopeIndex, lambdaRef)
+                }
+            }
+        }
+    }
+
+    private fun collectExactLambdaModuleCaptures() {
+        if (exactLambdaRefByScopeId.isEmpty()) return
+        val seen = LinkedHashSet<LambdaFnRef>()
+        for (slots in exactLambdaRefByScopeId.values) {
+            for (lambdaRef in slots.values) {
+                if (!seen.add(lambdaRef)) continue
+                val captures = (lambdaCaptureEntriesByRef[lambdaRef] ?: lambdaRef.captureEntries).orEmpty()
+                for (entry in captures) {
+                    if (entry.ownerKind != CaptureOwnerFrameKind.MODULE) continue
+                    val key = ScopeSlotKey(entry.ownerScopeId, entry.ownerSlotId)
+                    if (useScopeSlots) {
+                        if (!scopeSlotMap.containsKey(key)) {
+                            scopeSlotMap[key] = scopeSlotMap.size
+                        }
+                        if (!scopeSlotNameMap.containsKey(key)) {
+                            scopeSlotNameMap[key] = entry.ownerName
+                        }
+                        if (!scopeSlotMutableMap.containsKey(key)) {
+                            scopeSlotMutableMap[key] = entry.ownerIsMutable
+                        }
+                    } else if (globalSlotInfo.isNotEmpty() && globalSlotScopeId != null) {
+                        if (!localSlotInfoMap.containsKey(key)) {
+                            localSlotInfoMap[key] = LocalSlotInfo(
+                                entry.ownerName,
+                                entry.ownerIsMutable,
+                                entry.ownerIsDelegated
+                            )
+                        }
+                        captureSlotKeys.add(key)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun extractExactLambdaRef(value: Obj?): LambdaFnRef? {
+        val expr = value as? ExpressionStatement ?: return null
+        return when (val ref = expr.ref) {
+            is LambdaFnRef -> ref
+            is LocalSlotRef -> resolveLocalSlotByRefOrName(ref)?.let { exactLambdaRefBySlot[it] }
+            is LocalVarRef -> resolveDirectNameSlot(ref.name)?.slot?.let { exactLambdaRefBySlot[it] }
+            is FastLocalVarRef -> resolveDirectNameSlot(ref.name)?.slot?.let { exactLambdaRefBySlot[it] }
+            is BoundLocalVarRef -> exactLambdaRefBySlot[ref.slotIndex()]
+            else -> null
+        }
+    }
+
+    private fun compileInlineListFillInt(size: CompiledValue, lambdaRef: LambdaFnRef, inlineRef: ObjRef): CompiledValue {
+        if (isImplicitItIdentityRef(inlineRef)) {
+            val dst = allocSlot()
+            builder.emit(Opcode.LIST_IOTA_INT, size.slot, dst)
+            updateSlotType(dst, SlotType.OBJ)
+            slotObjClass[dst] = ObjList.type
+            listElementClassBySlot[dst] = ObjInt.type
+            return CompiledValue(dst, SlotType.OBJ)
+        }
+
+        val dst = allocSlot()
+        builder.emit(Opcode.LIST_NEW_INT, size.slot, dst)
         updateSlotType(dst, SlotType.OBJ)
         slotObjClass[dst] = ObjList.type
         listElementClassBySlot[dst] = ObjInt.type
+
+        val iSlot = allocSlot()
+        val zeroId = builder.addConst(BytecodeConst.IntVal(0))
+        builder.emit(Opcode.CONST_INT, zeroId, iSlot)
+        updateSlotType(iSlot, SlotType.INT)
+
+        val loopLabel = builder.label()
+        val endLabel = builder.label()
+        builder.mark(loopLabel)
+        builder.emit(
+            Opcode.JMP_IF_GTE_INT,
+            listOf(
+                CmdBuilder.Operand.IntVal(iSlot),
+                CmdBuilder.Operand.IntVal(size.slot),
+                CmdBuilder.Operand.LabelRef(endLabel)
+            )
+        )
+
+        val paramName = lambdaRef.inlineParamNames()?.singleOrNull()
+            ?: throw BytecodeCompileException("unsupported List.fill lambda parameters", refPosOrCurrent(inlineRef))
+        val compiledValue = compileInlineLambdaBody(lambdaRef, inlineRef, listOf(paramName to iSlot))
+            ?: throw BytecodeCompileException("failed to inline List.fill lambda", refPosOrCurrent(inlineRef))
+        val intValue = coerceToLoopInt(compiledValue)
+            ?: throw BytecodeCompileException("inlined List.fill lambda must produce Int", refPosOrCurrent(inlineRef))
+        builder.emit(Opcode.SET_INDEX_INT, dst, iSlot, intValue.slot)
+        builder.emit(Opcode.INC_INT, iSlot)
+        builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(loopLabel)))
+        builder.mark(endLabel)
         return CompiledValue(dst, SlotType.OBJ)
+    }
+
+    private fun resolveInlineCaptureSlot(entry: LambdaCaptureEntry): Int? {
+        if (entry.ownerKind != CaptureOwnerFrameKind.LOCAL) return null
+        val key = ScopeSlotKey(entry.ownerScopeId, entry.ownerSlotId)
+        localSlotIndexByKey[key]?.let { return scopeSlotCount + it }
+        return null
+    }
+
+    private fun isImplicitItIdentityRef(ref: ObjRef): Boolean {
+        return when (ref) {
+            is LocalVarRef -> ref.name == "it"
+            is FastLocalVarRef -> ref.name == "it"
+            is LocalSlotRef -> ref.name == "it"
+            else -> false
+        }
     }
 
     private fun compileThisMethodSlotCall(ref: ThisMethodSlotCallRef): CompiledValue? {
@@ -5991,6 +6648,7 @@ class BytecodeCompiler(
                 ?: updateSlotObjClass(localSlot, stmt.initializer, stmt.initializerObjClass)
             updateListElementClassFromDecl(localSlot, scopeId, stmt.slotIndex)
             updateListElementClassFromInitializer(localSlot, stmt.initializer)
+            trackExactLambdaAtSlot(localSlot, if (!stmt.isMutable) extractExactLambdaRef(stmt.initializer) else null)
             updateNameObjClassFromSlot(stmt.name, localSlot)
             val shadowedScopeSlot = scopeSlotIndexByName.containsKey(stmt.name)
             val isModuleScope = moduleScopeId != null && scopeId == moduleScopeId
@@ -6024,6 +6682,7 @@ class BytecodeCompiler(
                 ?: updateSlotObjClass(scopeSlot, stmt.initializer, stmt.initializerObjClass)
             updateListElementClassFromDecl(scopeSlot, scopeId, stmt.slotIndex)
             updateListElementClassFromInitializer(scopeSlot, stmt.initializer)
+            trackExactLambdaAtSlot(scopeSlot, if (!stmt.isMutable) extractExactLambdaRef(stmt.initializer) else null)
             val declId = builder.addConst(
                 BytecodeConst.LocalDecl(
                     stmt.name,
@@ -7859,7 +8518,9 @@ class BytecodeCompiler(
                     scopeSlotRefPosByKey[scopeKey] = ref.pos()
                 }
             }
-            return resolved
+            if (resolved != null) return resolved
+            resolveCapturedOwnerSlot(ref)?.let { return it }
+            return null
         }
         if (ref.isDelegated) {
             val localKey = ScopeSlotKey(refScopeId(ref), refSlot(ref))
@@ -7890,6 +8551,14 @@ class BytecodeCompiler(
         val ownerScopeId = ref.captureOwnerScopeId ?: return null
         val ownerSlot = ref.captureOwnerSlot ?: return null
         val key = ScopeSlotKey(ownerScopeId, ownerSlot)
+        return scopeSlotMap[key]
+    }
+
+    private fun resolveCapturedOwnerSlot(ref: LocalSlotRef): Int? {
+        val ownerScopeId = ref.captureOwnerScopeId ?: return null
+        val ownerSlot = ref.captureOwnerSlot ?: return null
+        val key = ScopeSlotKey(ownerScopeId, ownerSlot)
+        localSlotIndexByKey[key]?.let { return scopeSlotCount + it }
         return scopeSlotMap[key]
     }
 
@@ -7980,7 +8649,7 @@ class BytecodeCompiler(
                 }
             }
             is ThisFieldSlotRef -> {
-                val ownerClass = implicitThisTypeName?.let { resolveTypeNameClass(it) } ?: return null
+                val ownerClass = currentImplicitThisTypeName()?.let { resolveTypeNameClass(it) } ?: return null
                 val fieldClass = inferFieldReturnClass(ownerClass, ref.name) ?: return null
                 when (fieldClass.className) {
                     "Buffer", "MutableBuffer", "BitBuffer" -> ObjInt.type
@@ -8070,6 +8739,8 @@ class BytecodeCompiler(
         loopVarKeys.clear()
         loopVarSlots.clear()
         valueFnRefs.clear()
+        exactLambdaRefBySlot.clear()
+        activeInlineLambdas.clear()
         addrSlotByScopeSlot.clear()
         loopStack.clear()
         if (slotTypeByScopeId.isNotEmpty()) {
@@ -8102,6 +8773,7 @@ class BytecodeCompiler(
             collectLoopVarNames(stmt)
         }
         collectScopeSlots(stmt)
+        collectExactLambdaModuleCaptures()
         if (allowLocalSlots) {
             collectLoopSlotPlans(stmt, 0)
         }
@@ -8293,6 +8965,7 @@ class BytecodeCompiler(
                 }
             }
         }
+        preloadExactLambdaRefs()
         if (allowLocalSlots && captureSlotKeys.isNotEmpty() && slotInitClassByKey.isNotEmpty()) {
             val scopeSlotsBase = scopeSlotMap.size
             for (key in captureSlotKeys) {

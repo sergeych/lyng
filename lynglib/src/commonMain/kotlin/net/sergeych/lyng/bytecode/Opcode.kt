@@ -175,6 +175,8 @@ enum class Opcode(val code: Int) {
     CALL_SLOT(0x93),
     CALL_BRIDGE_SLOT(0x94),
 
+    LIST_NEW_INT(0xA0),
+    LIST_IOTA_INT(0xA1),
     GET_INDEX(0xA2),
     SET_INDEX(0xA3),
     GET_INDEX_INT(0xA4),
